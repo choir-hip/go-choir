@@ -1,16 +1,18 @@
 /**
  * Gateway end-to-end test for VAL-GATEWAY-001
- * Tests: Authenticated requests receive a Bedrock or Z.AI response through the gateway
+ * Tests: Authenticated requests receive a provider response through the gateway
  *
  * Target: https://draft.choir-ip.com (deployed origin)
- * Path: login → proxy → user runtime/VM → gateway → Bedrock or Z.AI → UI response
+ * Path: login -> proxy -> user runtime/VM -> gateway -> provider -> UI response
  */
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 import { registerPasskey, getSession } from './helpers/auth.js';
 
 const BASE_URL = 'https://draft.choir-ip.com';
-const EVIDENCE_DIR = '/Users/wiz/.factory/missions/969491ec-3df3-47c7-b9bf-8e384615819d/evidence/gateway-vm/gateway-e2e';
+const EVIDENCE_DIR = process.env.CHOIR_EVIDENCE_DIR || 'test-results/gateway-e2e-deployed';
+fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 function uniqueEmail() {
   return `gateway-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -18,7 +20,7 @@ function uniqueEmail() {
 
 const testResults = {
   assertionId: 'VAL-GATEWAY-001',
-  title: 'Authenticated requests receive a Bedrock or Z.AI response through the gateway',
+  title: 'Authenticated requests receive a provider response through the gateway',
   status: 'pending',
   steps: [],
   evidence: {
@@ -273,7 +275,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
         if (finalStatus?.state === 'completed') {
           testResults.status = 'pass';
           if (finalStatus.result?.content?.includes('Echo') || finalStatus.result?.content?.includes('stub')) {
-            testResults.issues = 'Response appears to be from stub provider, not real Bedrock/Z.AI';
+            testResults.issues = 'Response appears to be from stub provider, not a real gateway provider';
           }
         } else {
           testResults.status = 'fail';
@@ -304,7 +306,6 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
   testResults.evidence.network = networkRequests.slice(0, 20); // Limit to first 20
 
   // Write results to file for the test report
-  const fs = await import('fs');
   fs.writeFileSync(`${EVIDENCE_DIR}/test-results.json`, JSON.stringify(testResults, null, 2));
 
   expect(testResults.status).toBe('pass');

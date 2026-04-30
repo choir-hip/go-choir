@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy provider credentials to Node B for the go-choir-gateway service.
 #
-# This script reads API keys from ~/.factory/settings.json (customModels entries)
+# This script reads optional API-key provider settings from
+# ${CHOIR_PROVIDER_SETTINGS:-$HOME/.config/go-choir/provider-settings.json}
 # and writes them to /var/lib/go-choir/gateway-provider.env on Node B via SSH.
 # The gateway systemd service loads this file via EnvironmentFile.
 #
@@ -16,7 +17,7 @@
 set -euo pipefail
 
 HOST="${1:-node-b}"
-SETTINGS="${HOME}/.factory/settings.json"
+SETTINGS="${CHOIR_PROVIDER_SETTINGS:-${HOME}/.config/go-choir/provider-settings.json}"
 CODEX_AUTH="${CODEX_AUTH_PATH:-${HOME}/.codex/auth.json}"
 REMOTE_ENV_FILE="/var/lib/go-choir/gateway-provider.env"
 REMOTE_CODEX_AUTH="/var/lib/go-choir/codex-auth.json"
@@ -69,6 +70,7 @@ if [ -f "$SETTINGS" ]; then
   done
 else
   echo "warning: $SETTINGS not found; skipping API-key provider credentials" >&2
+  echo "         set CHOIR_PROVIDER_SETTINGS to use another provider settings file" >&2
 fi
 
 if [ ${#ENVS[@]} -eq 0 ]; then

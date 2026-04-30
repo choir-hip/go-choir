@@ -2,17 +2,20 @@
 
 Distributed multiagent living-document desktop -- Go rewrite of ChoirOS, informed by Cogent runtime patterns. Five services, Caddy edge proxy, Svelte SPA, per-user appagent runtime, and `vmctl`-managed microVM capacity.
 
-Choir is not primarily a chat app or a generic coding-agent runner. It is a multitenant web desktop where appagents use a dark factory of researchers, supers, cosupers, and VMs to produce durable living documents, evidence, artifacts, and eventually publishable citation-network contributions.
+Choir is the deployed Automatic Computer: a multitenant web desktop where apps, appagents, researchers, supers, cosupers, and VM forks produce durable living documents, evidence, artifacts, and eventually publishable citation-network contributions.
+
+Choir is not primarily a chat app or a generic coding-agent runner. Its first product unit is `vtext`: a versioned living document that accumulates user edits, appagent synthesis, worker findings, artifacts, publication state, and later citations.
 
 ## North Star
 
 Read these before changing runtime, `vtext`, Trace, Dolt, `vmctl`, worker tools, or appagent behavior:
 
-- `docs/north-star.md` -- Automatic Computer context, publishing/citation/CHIPS phase boundaries, and why the architecture must not collapse to chat/tasks.
+- `docs/current-architecture.md` -- current architecture memo: deployed reality, vtext contract, VM fork/promotion model, state placement, publication sequencing, and anti-collapse rules.
+- `docs/north-star.md` -- Automatic Computer context, priority order, and short invariants.
 - `docs/runtime-invariants.md` -- agent roles, VM classes, Dolt layers, hot-path message delivery plus durable handoff records, and the development-tooling boundary.
-- `docs/implementation-scope.md` -- current Layer 1 implementation target, current non-goals, and data that must be preserved for later publication/citation/compute economics.
+- `docs/implementation-scope.md` -- near-term implementation order and current non-goals.
 
-Current phase: ship Layer 1 end to end. Do not implement CHIPS, wallets, staking, public citation scoring, or token-denominated billing yet. Do preserve provenance, evidence, citations/citation candidates, artifacts, VM/model attribution, and compute usage where available.
+Current phase: stabilize the already-deployed Automatic Computer around machine-verifiable `vtext`, researcher/super behavior, user edits, Trace, and background VM execution. Do not implement CHIPS, wallets, staking, public citation scoring, or token-denominated billing yet. Do preserve provenance, evidence, citations/citation candidates, artifacts, VM/model attribution, publication boundaries, and compute usage where available.
 
 ## Architecture
 
@@ -33,7 +36,7 @@ sandbox (8085) -- local runtime + desktop apps + agent/tool loop; host-process f
 | auth      | 8081 | Email/passkey registration + login, JWT access + refresh token sessions, SQLite persistence |
 | proxy     | 8082 | Auth-gated HTTP and WebSocket proxying to the sandbox, user-context injection |
 | vmctl     | 8083 | VM ownership + lifecycle control, host-process fallback locally, Firecracker lifecycle on supported hosts |
-| gateway   | 8084 | Multi-provider LLM gateway (Fireworks, Z.AI, Bedrock) with SSE streaming |
+| gateway   | 8084 | Provider-neutral LLM/search gateway with adapter-specific auth and SSE streaming |
 | sandbox   | 8085 | Local runtime: desktop shell APIs, `vtext`, agent tool loop, files, terminal, and event streaming |
 
 **Frontend:** Svelte SPA with email auth UI, desktop shell, `vtext`, and an early trace/debugging app for the MAS.
@@ -73,11 +76,11 @@ Prior milestones still in place:
 - Go unit tests (all packages passing)
 
 Next:
-- make Trace readable enough to inspect full trajectories, not isolated loops
-- converge runtime coordination on hot-path actor delivery plus durable handoff/provenance records
-- stabilize per-user embedded Dolt for private desktop/appagent state
-- use platform Dolt for factory/publication/routing state when platform scope appears
-- treat `vmctl` as factory capacity management: active VMs, background VMs, and shared worker VMs
+- make `vtext` machine-verifiable: `v0` user input, `v1` conductor framing, user edit versions, worker updates, and causality in Trace
+- ensure researcher and super work produce typed updates/artifacts rather than direct document patches
+- run risky mutable super/cosuper work in background VM forks, then merge or promote back to active state
+- clarify embedded Dolt versus snapshot filesystem ownership for `vtext`, artifacts, uploads, and aliases
+- add ingestion skills, media display apps, publication, Pretext transclusion, citations, then CHIPS economics
 
 ## Current Prompt Flow
 
@@ -87,11 +90,12 @@ This is the live prompt path today:
 2. `frontend/src/lib/Desktop.svelte` handles that event
 3. The desktop always submits top-level input to `conductor` via `frontend/src/lib/conductor.js`
 4. The desktop waits for the conductor decision JSON and then either shows a toast or opens the chosen app
-5. When conductor opens `vtext`, the runtime materializes a real document, writes a user-authored `v0`, and spawns the first `vtext` child run
-6. The `vtext` window opens on that real `doc_id`, watches the initial run, and surfaces recent worker/delegation activity inline
-7. The `vtext` agent writes canonical later revisions, while the Revise button saves one user-authored revision and submits a plain revise event to `/api/vtext/documents/{id}/agent-revision`
-8. The runtime compiles each backend-owned `vtext` request from document state, revision metadata, and diff context in `internal/runtime/vtext.go`
-9. Role system prompts load from editable sandbox prompt files with per-user overrides through `internal/runtime/prompt_store.go`
+5. When conductor opens `vtext`, the runtime materializes a real document, writes `v0` from user input, and writes `v1` from the conductor's short framing note
+6. The `vtext` window opens on that real `doc_id` with `v1` displayed as current state
+7. Worker updates attach to the document trajectory as findings, evidence, artifacts, tests, refs, questions, or proposals; they are not document patches
+8. The `vtext` agent writes canonical later revisions, while the Revise button saves one user-authored revision and submits a plain revise event to `/api/vtext/documents/{id}/agent-revision`
+9. The runtime compiles each backend-owned `vtext` request from document state, revision metadata, worker updates, and diff context in `internal/runtime/vtext.go`
+10. Role system prompts load from editable sandbox prompt files with per-user overrides through `internal/runtime/prompt_store.go`
 
 This means prompt policy now lives in the sandbox, and conductor owns the route result that the desktop follows.
 
@@ -113,10 +117,16 @@ Those are the main places to edit when you want to change orchestration behavior
 ## Run Locally
 
 ```sh
-# Install dependencies and generate local signing keys
-# Note: this still uses legacy .factory bootstrap scripts and should be cleaned up.
-bash .factory/init.sh
+# Install frontend dependencies once.
+cd frontend && pnpm install && cd ..
 
+# Start the local stack. This generates local signing keys if needed.
+./start-services.sh
+```
+
+Manual service startup:
+
+```sh
 # Keep auth and proxy on the same local signing key if you restart either one.
 export CHOIR_AUTH_SIGNING_KEY_PATH="${CHOIR_AUTH_SIGNING_KEY_PATH:-/tmp/go-choir-m2/auth-signing-key}"
 
@@ -133,9 +143,7 @@ PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085" \
   PROXY_VMCTL_URL="http://127.0.0.1:8083" \
   go run ./cmd/proxy
 
-GATEWAY_PORT=8084 \
-  FIREWORKS_API_KEY="your-key" ZAI_API_KEY="your-key" BEDROCK_ACCESS_KEY="your-key" BEDROCK_SECRET_KEY="your-key" BEDROCK_REGION="us-east-1" \
-  go run ./cmd/gateway
+GATEWAY_PORT=8084 go run ./cmd/gateway
 
 SANDBOX_PORT=8085 SANDBOX_ID="sandbox-dev" go run ./cmd/sandbox
 
@@ -171,7 +179,7 @@ cmd/
   auth/         Auth service entry point
   proxy/        Proxy service entry point
   vmctl/        VM controller entry point
-  gateway/      LLM gateway entry point (Fireworks, Z.AI, Bedrock, SSE streaming)
+  gateway/      Provider-neutral LLM/search gateway entry point
   sandbox/      Sandbox entry point
 internal/
   server/       Shared HTTP server, health endpoint, graceful shutdown
@@ -190,9 +198,10 @@ nix/
   hardware.nix  Hardware configuration for Node B
   disks.nix     Disk layout for Node B
 docs/
+  current-architecture.md           Current canonical architecture memo
   north-star.md                      Product north star: living documents, publishing, citations, CHIPS phase boundaries
   runtime-invariants.md              Agent, VM, Dolt, mailbox, and tooling invariants
-  implementation-scope.md            Current Layer 1 scope and non-goals
+  implementation-scope.md            Near-term implementation order and non-goals
   architecture.md                    Full architecture spec
   mission-1-deploy-pipeline.md       Mission 1 brief (complete)
   mission-2-build-system.md          Mission 2 brief (Milestone 1 complete)

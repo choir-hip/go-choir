@@ -209,7 +209,7 @@ Apply GLM-5.1's long-horizon refinement approach: establish framework, then iter
 - GLM-5.1 blog post on long-horizon generation
 - Choiros UI screenshots (user provided)
 - Current go-choir UI screenshots (user provided)
-- Mission 3 artifacts in `.factory/missions/969491ec-3df3-47c7-b9bf-8e384615819d/`
+- Mission 3 artifacts in deleted Factory-era mission directory
 
 ---
 

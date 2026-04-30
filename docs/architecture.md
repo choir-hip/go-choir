@@ -4,11 +4,13 @@
 > **Status**: Draft — design sketch for review (revised: microservices architecture)
 > **Sources**: choiros-rs architecture analysis, cogent architecture analysis, Dolt integration research, Go agent runtime ecosystem research
 
-> **Current context:** Before implementing from this sketch, read `docs/north-star.md`,
+> **Current context:** Before implementing from this older sketch, read
+> `docs/current-architecture.md`, `docs/north-star.md`,
 > `docs/runtime-invariants.md`, and `docs/implementation-scope.md`. Those files
-> define the current product north star, VM/Dolt/agent invariants, and phase
-> boundaries. Where this older sketch over-focuses local runtime mechanics or
-> stale authority/lease ideas, the newer docs take precedence.
+> define the current product north star, vtext contract, active/background VM
+> model, Dolt boundaries, and phase boundaries. Where this older sketch
+> over-focuses local runtime mechanics, scheduler abstractions, shared-worker
+> assumptions, or stale authority/lease ideas, the newer docs take precedence.
 
 ---
 

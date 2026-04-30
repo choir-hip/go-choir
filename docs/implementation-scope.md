@@ -1,29 +1,72 @@
 # Implementation Scope
 
-Current implementation target: make Layer 1 work end to end while preserving the data needed for publication, citations, and later compute economics.
+**Last updated:** 2026-04-30
 
-## Layer 1 Target
+This is the near-term build order. For the complete current architecture, read
+[docs/current-architecture.md](current-architecture.md).
 
-The near-term product loop is:
+## First Priority: Verifiable VText
+
+The current product bottleneck is:
 
 ```text
-prompt -> conductor -> vtext -> researcher/super -> document versions -> Trace
+prompt -> conductor -> vtext -> researcher/super/cosuper -> user edits -> versions
 ```
 
-This means:
+Required behavior:
 
-- prompt-bar and connector input route through conductor
-- `vtext` owns the living document state
-- user edits become user-authored versions and diffs
-- `vtext` writes appagent-authored versions
-- researchers produce durable evidence and findings
-- super/cosupers handle broad execution work when needed
-- risky mutation happens in background VMs when available
-- Trace explains the trajectory
+- The prompt bar routes through `conductor`.
+- `conductor` opens `vtext` by creating `v0` from user input and `v1` from a
+  short conductor framing note.
+- `vtext` does not need an extra initial answer-from-priors call before the
+  window opens.
+- User edits create user-authored versions.
+- Workers emit updates, not patches.
+- `vtext` decides whether worker updates become new document versions.
+- Initial revision policy can be one version per meaningful worker update, with
+  later debouncing/batching allowed.
+- Trace explains the causal path during development/debugging.
+
+Machine-verifiable tests should use fake providers, fake workers, and fake time
+before relying on browser/e2e coverage.
+
+## Second Priority: Ingestion
+
+After the vtext loop is reliable, add ingestion skills and apps:
+
+- URL to extracted text/content
+- YouTube transcript pulling
+- text and Markdown upload
+- PDF upload
+- EPUB upload
+- later audio, video, and image display apps
+
+These should feed `vtext` through typed app/worker updates and durable artifacts,
+not ad hoc prompt stuffing. Media display apps do not need to be appagents at
+first; they become appagents only if they need durable prompts, dynamic UI, or
+domain ownership.
+
+## Third Priority: Publication
+
+Publication starts as an immutable event over selected private `vtext`
+version/artifact refs. Local private history can continue beyond what is
+published.
+
+Do not decide the whole publication economy now. Preserve forward compatibility
+for publishing selected snapshots, ranges, all versions up to N, redacted
+projections, later editions, collaboration submissions, paywalls, and CHIPS
+incentives.
+
+## Later Priorities
+
+1. Pretext-based rendering/transclusion for text, published `vtext`, web content,
+   and multimedia references.
+2. Citation graph mechanics over published immutable refs.
+3. CHIPS and citation/compute economics.
 
 ## Current Non-Goals
 
-Do not implement:
+Do not implement now:
 
 - CHIPS token mechanics
 - wallets
@@ -32,48 +75,20 @@ Do not implement:
 - token-denominated billing
 - decentralized inference markets
 - automated carry/revenue accounting
+- backend-browser replacement for Playwright
 
-These concepts explain why the architecture must preserve provenance, citations, artifacts, and compute usage, but they are not current product code.
+These concepts explain why the architecture must preserve provenance, citations,
+artifacts, versions, and compute usage. They are not the next code target.
 
-## Data To Capture Now
-
-Capture these facts even before publication and CHIPS exist:
-
-- actor ID and role for each meaningful action
-- VM ID, VM class, and epoch where work ran
-- model/provider where available
-- compute usage where available
-- input message and output event linkage
-- document version authorship
-- findings and evidence provenance
-- artifact producer and source trajectory
-- citation candidates
-- publication/private boundary
-
-## Simplification Rules For Agents
+## Simplification Rules
 
 Future coding agents must not simplify Choir into:
 
 - chat plus task runner
 - one global agent with tools
-- parent/child runs as the main architecture
+- workers patching `vtext` directly
+- mutable work on the live desktop
 - SQLite-only runtime truth
 - single-VM-only assumptions
-- local-development-only behavior
-- platform-Dolt-as-global-message-bus designs
-
-If a change touches runtime, `vtext`, Trace, Dolt, `vmctl`, worker tools, or appagent behavior, read:
-
-- `docs/north-star.md`
-- `docs/runtime-invariants.md`
-- `PROJECT-GOALS.md`
-- `PROJECT-GLOSSARY.md`
-
-## Build Order
-
-1. Make the current `vtext` living-document loop reliable.
-2. Make researcher and super/cosuper work visible and trustworthy in Trace.
-3. Move runtime truth toward hot-path actor delivery plus durable handoff records and Dolt-backed product state.
-4. Use `vmctl` as factory capacity management, not just deployment plumbing.
-5. Add publication and citation graph mechanics after enough living-document content exists.
-6. Add CHIPS/accounting mechanics only after publication/citation data exists.
+- platform Dolt as a global message bus
+- provider-specific product behavior

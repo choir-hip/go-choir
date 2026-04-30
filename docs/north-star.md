@@ -1,83 +1,48 @@
 # Choir North Star
 
-Choir is a multitenant living-document desktop backed by a dark factory of agents and microVMs.
+**Last updated:** 2026-04-30
 
-The product is not chat and not a generic coding-agent runner. The first visible unit of value is a living document: a durable, versioned work surface that can accumulate user edits, appagent synthesis, research evidence, execution artifacts, citations, and later publication history.
+The Automatic Computer already exists in deployed form: web desktop, backend
+services, appagents, and NixOS-on-NixOS VM infrastructure. The current task is to
+stabilize the deployed system around versioned living documents, background VM
+execution, publication, and later citation/compute economics.
 
-The long-term system is the Automatic Computer:
+Read [docs/current-architecture.md](current-architecture.md) first. It is the
+streamlined architecture memo for the current phase.
 
-1. **Publishing:** private and publishable living documents.
-2. **Global memory:** a citation graph connecting published artifacts across users.
-3. **Compute economy:** compute accounting, CHIPS, staking, and tokenized ownership in the productive capacity of the network.
+## Product Frame
 
-Current implementation is Layer 1, but Layer 1 must preserve the facts needed for Layers 2 and 3.
+Choir is a web desktop with apps. Some apps grow into appagents; most can remain
+plain display/control surfaces. The first appagent is `vtext`: a durable,
+versioned living document that accumulates user edits, appagent synthesis, worker
+findings, evidence, artifacts, and later publication history.
 
-## Current Scope Guard
+The dark factory behind the desktop contains researchers, supers, cosupers,
+background VMs, evidence, artifacts, tests, previews, and Trace. Its job is to
+advance living documents and produce publishable artifacts without making raw
+agent orchestration the primary UI.
 
-Do not implement CHIPS yet.
+## Sequence
 
-Do not implement wallets, staking, token yield, public citation scoring, or token-denominated compute billing yet.
+1. Stabilize `vtext`, researcher, super, user edits, and Trace.
+2. Add ingestion skills for URLs, YouTube transcripts, text/Markdown/PDF/EPUB
+   uploads, and later multimedia display apps whose content can be transcluded
+   into `vtext`.
+3. Add publication.
+4. Add Pretext-based rendering/transclusion.
+5. Add citation mechanics.
+6. Add CHIPS and citation/compute economics.
 
-Do preserve:
+Do not implement CHIPS, wallets, staking, token billing, or public citation
+scoring yet. Do preserve document versions, provenance, evidence, artifacts,
+citations/citation candidates, VM/model attribution, publication boundaries, and
+compute accounting where available.
 
-- document versions
-- user-authored and agent-authored provenance
-- worker findings and evidence
-- artifact authorship
-- citations and citation candidates
-- trajectory and causal history
-- model/provider/VM attribution
-- compute usage per agent turn where available
-- publication boundaries between private user state and platform-visible state
+## Anti-Collapse Rules
 
-## Product Shape
-
-The user sees a web desktop with apps. Apps are backed by appagents.
-
-`vtext` is the primary appagent today. It replaces chat as the control plane. A prompt creates or updates a versioned document. User edits are committed as user-authored versions. Worker messages are synthesized into later appagent-authored versions.
-
-The dark factory is mostly hidden. It contains researchers, supers, cosupers, worker pools, background VMs, shared worker VMs, and platform routing. The factory exists to advance living documents and produce publishable artifacts, not to expose raw orchestration as the main product.
-
-## Dolt Layers
-
-Choir needs both platform Dolt and per-user embedded Dolt.
-
-- **Platform Dolt:** multitenant control-plane and network state: users, VM pool state, routing, worker availability, publication records, shared artifacts, citation graph, compute accounting, and later CHIPS economics.
-- **Per-user embedded Dolt:** private user state inside the active desktop VM: desktop/app graph, appagent state, `vtext` versions, prompts, local trajectories, private findings, and unpublished artifacts.
-- **Temporary VM state:** forked or hydrated state used for risky development and execution. It reports results back as artifacts, diffs, events, findings, or publication candidates.
-
-Publication is the bridge from private user state to platform-visible network state.
-
-```text
-private user Dolt -> publish event -> platform Dolt publication/citation graph
-```
-
-Platform Dolt is a ledger, not the hot-path message bus. Cross-VM work should use direct transport or relays for live delivery, while platform Dolt records compact facts needed for routing, recovery, provenance, artifact tracking, publications, citations, and compute accounting.
-
-## Why The Runtime Must Not Collapse
-
-Common LLM simplifications are wrong for Choir:
-
-- Chat history is not canonical state; document versions are.
-- A run is not the product unit; a trajectory is the causal path through appagents, workers, evidence, artifacts, and versions.
-- Researchers are not optional helpers; evidence and citations are the future economic substrate.
-- Worker output should be traceable and potentially citeable later, even when private today.
-- VM placement is part of product economics: free users, paid users, background work, 24/7 work, and shared workers all depend on it.
-
-The architecture should optimize for end-to-end productive flow first:
-
-```text
-prompt -> conductor -> vtext -> researcher/super -> versions -> publishable artifact -> Trace
-```
-
-Then:
-
-```text
-published artifacts -> citation graph -> global memory
-```
-
-Then:
-
-```text
-citation/compute accounting -> CHIPS
-```
+- Chat history is not canonical state; `vtext` versions are.
+- Worker updates are not document patches; `vtext` owns document synthesis.
+- Mutable super/cosuper work belongs in background VM forks, not the live desktop.
+- Platform Dolt is a ledger for platform-visible facts, not a hot-path message
+  bus.
+- Providers are adapters; no LLM or search provider is architecturally required.

@@ -1,6 +1,6 @@
 # Project Glossary
 
-**Last Updated:** 2026-04-16  
+**Last Updated:** 2026-04-30
 **Purpose:** Canonical terminology for `go-choir`, including prior names and nearby synonyms that still appear in code, docs, or conversation.
 
 ---
@@ -9,7 +9,7 @@
 
 ### Automatic Computer
 
-**Definition:** The long-term economic frame for Choir: a living-document publishing network, global citation workspace, and compute economy.
+**Definition:** The deployed product frame for Choir: a living-document desktop, publishing network, global citation workspace, and later compute economy.
 
 **Current implementation rule:** do not build CHIPS mechanics yet. Preserve the provenance, citation, artifact, trajectory, model, VM, and compute-usage data that the later economy needs.
 
@@ -22,7 +22,7 @@
 **What it contains:**
 - researchers
 - `super` and `cosuper`
-- active, background, and shared worker VMs
+- active and background VMs
 - hot-path agent delivery plus durable handoff records
 - artifacts, findings, diffs, tests, publications, and Trace events
 
@@ -52,7 +52,7 @@
 
 **What it does:**
 - owns canonical document state
-- turns prompts, edits, and worker messages into new versions
+- turns prompts, edits, and worker updates into new versions
 - is the main cumulative work surface for the user
 
 **Prior / nearby names:**
@@ -91,7 +91,7 @@
 **What it does:**
 - writes canonical versions
 - spawns workers when needed
-- receives addressed worker deliveries threaded in by the runtime
+- receives addressed worker updates threaded in by the runtime
 - synthesizes new document versions
 
 **Prior / nearby names:**
@@ -103,12 +103,14 @@
 
 ### `appagent`
 
-**Definition:** A user-facing agent responsible for an app-level domain and its canonical state.
+**Definition:** A user-facing app that has grown into an agent-owned domain with durable state, prompts, or dynamic behavior.
 
 **Examples:**
 - `vtext` appagent
-- (future) email, calendar, ebook, pdf reader, youtube or other video player, audio or podcast player, any app
-- upgrade trace app to appagent (agentic tracing, reviewing and analyzing and visualizing past trajectories)
+- future browser appagent, if URL-bar prompts or conductor control need durable agent behavior
+- future mail appagent
+- future calendar appagent
+- possible future Trace appagent if trajectory volume requires agentic search and dynamic UI
 
 **Topology rule:** many appagents may coexist as peers in one user microVM, each with its own durable perspective.
 
@@ -118,20 +120,35 @@
 
 ---
 
+### app
+
+**Definition:** A user-facing desktop surface.
+
+**Important rule:** not every app is an appagent. Apps can remain simple display/control surfaces until they need durable domain ownership, prompts, dynamic UI, or agentic behavior.
+
+**Examples:**
+- browser
+- file browser
+- terminal
+- audio/video/image display apps
+- PDF/EPUB readers
+
+---
+
 ### `super`
 
-**Definition:** The execution-oriented agent with the broadest tool surface in a microVM.
+**Definition:** The per-user execution-oriented agent with the broadest tool surface.
 
 **What it does:**
 - handles execution-heavy or tool-heavy work
 - can delegate further with coagent tools
 - can coordinate with researchers and appagents
-- (most agents lack bash tools; least privilege principle)
+- can request `vmctl` resources such as background VM forks and promotions
 
 **Topology rule:**
-- there should generally be one singleton `super` per user microVM
-- `super` is the privileged orchestration root for execution-heavy concurrency in that VM
-- future co-supers or execution descendants should remain under `super` by default rather than becoming free peers immediately
+- there should generally be one top-level `super` per user
+- `super` is the privileged orchestration root for mutable execution
+- mutable work should happen in background VMs, not by editing the live desktop directly
 
 **Prior / nearby names:**
 - supervisor
@@ -153,7 +170,7 @@
 - gathers current/external information
 - reads local context
 - persists evidentiary material into embedded Dolt
-- sends findings back as addressed deliveries, usually through a typed findings handoff tool
+- sends findings back as addressed updates, usually through a typed findings handoff tool
 - does not own canonical document text
 
 **Topology rule:** researchers should usually come from a shared pool within a user microVM.
@@ -171,14 +188,15 @@
 **What it does:**
 - reads context
 - performs assigned work
-- sends back messages/results/findings
+- sends back structured updates/results/findings
 
-**Important rule:** workers do not directly author canonical `vtext` document text.
+**Important rule:** workers do not directly author canonical `vtext` document text and do not send document patches to `vtext`.
 
 **Examples:**
 - `researcher`
-- `super` when acting as a delegated execution worker
-- we will make other types of workers with specific tools, roles and capabilities
+- `super`
+- `cosuper`
+- future specialized workers with specific tools, roles, and capabilities
 
 ---
 
@@ -253,7 +271,8 @@
 
 **Examples:**
 - `v0` = initial user-prompt-created document
-- `v1` = first appagent-produced best-effort completion from the `vtext` agent's current perspective
+- `v1` = conductor framing note included in the `vtext` spawn/delegation call
+- `v2+` = later user edits and `vtext`-authored revisions
 
 **Important rule:** versions are the main state transitions, not chat turns.
 
@@ -281,11 +300,23 @@
 
 ---
 
-### `best-effort completion`
+### worker update
 
-**Definition:** The default mode where the `vtext` agent tries to complete the document objectively from currently available context, without waiting for all delegated work to finish first.
+**Definition:** Structured output from a worker to an appagent or super.
 
-**Important rule:** this is not the same as conversational self-reporting. The agent should generally complete the work as well as it can, then revise when more evidence arrives.
+**Examples:**
+- findings
+- evidence
+- source references
+- artifact refs
+- branch or commit refs
+- preview refs
+- test results
+- questions
+- constraints
+- proposal summaries
+
+**Important rule:** worker updates are inputs to document synthesis. They are not canonical document text and not patches to be blindly applied.
 
 ---
 
@@ -369,7 +400,7 @@
 
 **Definition:** The app/surface used to inspect trajectories, loops, delegations, tool calls, and message flow in the MAS.
 
-**Important rule:** Trace should center the trajectory as the primary unit and show individual loops as children inside it.
+**Important rule:** Trace is a development/debugging helper, not part of the core product loop. It should center the trajectory as the primary unit and show individual loops as children inside it.
 
 **What it is not:**
 - not the same thing as old Rust Trace
@@ -385,7 +416,7 @@
 - support filtering, querying, and agentic inspection
 
 **Future direction:**
-- Trace should likely become an appagent after we find the right visualization model.
+- Trace may become an appagent after trajectory volume is high enough to require agentic search and dynamic UI.
 
 ---
 
@@ -445,7 +476,7 @@
 
 ### `worker VM`
 
-**Definition:** A microVM used for delegated/background worker execution when the architecture requires separate worker isolation.
+**Definition:** A fork of the user's active VM used for delegated/background worker execution.
 
 **Prior / nearby names:**
 - child VM
@@ -461,19 +492,20 @@
 - embedded Dolt = per-user runtime storage
 - platform/server Dolt = possible later shared/published storage
 
-**Important rule:** even when a `vtext` lives canonically in Dolt, it should also have a filesystem manifestation or shortcut so it appears naturally in the file browser and opens into a new `vtext` window.
+**Important rule:** `vtext` content and version metadata live canonically in embedded Dolt, but the filesystem should expose a manifestation, alias, or shortcut so the document appears naturally in the file browser and opens into a new `vtext` window.
 
 ---
 
 ### platform Dolt
 
-**Definition:** The multitenant platform-level Dolt database for factory and network state.
+**Definition:** The platform-level Dolt database for platform-visible state.
 
 **What it should own:**
-- VM pool/routing state
-- worker availability
+- account/user/tenant metadata
+- VM lifecycle, capacity, and routing records
+- platform VM pool records
 - publication records
-- shared artifacts
+- public artifact metadata
 - citation graph
 - compute accounting
 - later CHIPS/token economy state
@@ -490,6 +522,7 @@
 
 **What it hosts:**
 - web desktop runtime
+- visible apps
 - visible appagents
 - per-user embedded Dolt
 - private app and document state
@@ -500,23 +533,34 @@
 
 ### background VM
 
-**Definition:** A user-owned VM for requested background or risky work.
+**Definition:** A fork of the user's active VM for requested background or risky work.
 
 **What it does:**
 - runs development, testing, package installs, filesystem mutation, deploy preparation, and other work that could destabilize the active desktop
 - can run while the user is offline
 - may be 24/7 for higher paid tiers
+- can merge back into active state or be promoted to active while the previous active snapshot remains available for rollback
 
 ---
 
 ### shared worker VM
 
-**Definition:** A platform-owned pooled VM used for cost-efficient background work.
+**Definition:** Deferred cost-optimization idea, not a current architecture primitive.
+
+**Current rule:** do not design near-term runtime behavior around shared worker VMs. Use active VMs and capacity-gated background VM forks first.
+
+---
+
+### platform VM pool
+
+**Definition:** Platform-level VM capacity for public/unauthenticated and shared serving work.
 
 **What it does:**
-- supports lower-tier 24/7 work
-- runs packaged or typed-API-mediated jobs
-- should not receive open-ended private workspace access by default
+- serves published `vtext` artifacts
+- hosts public readers/previews/renderers
+- avoids hydrating private user active VMs for public publication reads
+
+**Current rule:** add this during the publication pass, not before vtext stabilization.
 
 ---
 
@@ -581,9 +625,9 @@ If we need the shortest consistent language:
 - one prompt-bar request starts one `trajectory`
 - `conductor` usually spawns `vtext`
 - the user prompt becomes `v0`
-- the `vtext` agent writes `v1`
+- the conductor's framing note becomes `v1`
 - `vtext` spawns workers like `researcher` or `super` as needed
-- workers send messages back over coagent tools
+- workers send structured updates back over coagent tools
 - those worker and appagent executions are `loops` inside the trajectory
 - the `vtext` agent writes new canonical versions
 - users can always edit and hit Revise to create a new user-authored version

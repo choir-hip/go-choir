@@ -1,7 +1,11 @@
 # go-choir Project State
 
-**Last Updated:** 2026-04-15  
+**Last Updated:** 2026-04-15
 **Current Mission:** Make local `vtext` + MAS real before `vmctl` deepening
+
+> Historical snapshot. For current architecture, read
+> `docs/current-architecture.md`, `docs/runtime-invariants.md`, and
+> `docs/implementation-scope.md`.
 
 ---
 
@@ -46,9 +50,9 @@ Cogent remains important as a source of runtime patterns and temporary bootstrap
 
 ### Agent Hierarchy (Current Direction)
 
-**`vtext` AppAgent** - User-facing, owns canonical document state and rewrites versions  
-**`super` Agent** - LLM-driven execution coordinator, delegates and may spawn coagents  
-**Workers** - Execute tasks, report results, may spawn coagents where allowed  
+**`vtext` AppAgent** - User-facing, owns canonical document state and rewrites versions
+**`super` Agent** - LLM-driven execution coordinator, delegates and may spawn coagents
+**Workers** - Execute tasks, report results, may spawn coagents where allowed
 **Verifiers** - Check work quality before attestation where verification matters
 
 **Key principle:** the document is the living state of the work. Users and the `vtext` appagent are canonical editors; workers read and report but do not directly edit canonical text.
@@ -113,8 +117,8 @@ Cogent remains important as a source of runtime patterns and temporary bootstrap
 ## External Repositories
 
 ### ~/choiros-rs (Rust reference implementation)
-**What it is:** Original ChoirOS in Rust with actor model (ractor), BAML, Dioxus UI  
-**Why it matters:** UX patterns, architecture reference, conductor/scheduler concepts  
+**What it is:** Original ChoirOS in Rust with actor model (ractor), BAML, Dioxus UI
+**Why it matters:** UX patterns, architecture reference, conductor/scheduler concepts
 **Key locations:**
 - `dioxus-desktop/src/` - UI patterns to port to Svelte
 - `sandbox/src/` - Actor runtime patterns
@@ -130,8 +134,8 @@ sqlite3 .cogent/cogent-private.db "SELECT title, content FROM private_notes WHER
 ```
 
 ### ~/cogent (Go work control plane reference)
-**What it is:** Local work control plane for governed agent software engineering  
-**Why it matters:** Tool loop pattern, work graph, co-agent spawning  
+**What it is:** Local work control plane for governed agent software engineering
+**Why it matters:** Tool loop pattern, work graph, co-agent spawning
 **Key locations:**
 - `internal/adapters/native/` - Tool calling loop implementation
 - `internal/service/` - Work graph orchestration
@@ -380,7 +384,7 @@ These are the important prompt/system-prompt surfaces right now:
 2. **Docs are still partly aspirational**
    - several mission docs still describe stale implementation paths
 3. **Factory Droid residue still exists**
-   - `.factory` bootstrap assumptions
+   - deleted Factory-era bootstrap assumptions
    - old mission artifacts and references
    - stale comments and docs that imply Factory-era workflows
 4. **README is stale in a few important ways**
@@ -480,7 +484,7 @@ sqlite3 .cogent/cogent-private.db "SELECT title, content FROM private_notes WHER
 - **ChoirOS-RS reference:** `~/choiros-rs/docs/`
 - **Cogent reference:** `~/cogent/docs/architecture.md`
 - **Node B:** https://draft.choir-ip.com (147.135.70.196)
-- **Mission artifacts:** `~/.factory/missions/0411ccd8-943c-4cab-92ab-9528cccd79b5/`
+- **Mission artifacts:** deleted Factory-era mission directory
 
 ---
 

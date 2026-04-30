@@ -1,21 +1,24 @@
 # Project Goals
 
-**Last Updated:** 2026-04-16  
-**Scope:** Canonical near-term implementation plan for local `vtext` + MAS completion, while preserving the publishing/citation/compute-economics facts that later layers require.
+**Last Updated:** 2026-04-30
+**Scope:** Canonical near-term implementation plan for deployed `vtext` + MAS stabilization, while preserving the publishing/citation/compute-economics facts that later layers require.
 
 ---
 
 ## Core Goal
 
-Make the local system coherent before doing more infrastructure work, without losing the larger product shape.
+Make the deployed system coherent before doing more broad infrastructure work, without losing the larger product shape.
 
-Choir is a living-document desktop backed by a dark factory of agents and microVMs. The long-term sequence is:
+Choir is the Automatic Computer in deployed form: a living-document desktop backed by a dark factory of agents and microVMs. The product sequence is:
 
-1. **Publishing:** private and publishable living documents.
-2. **Global memory:** a citation graph connecting artifacts across users.
-3. **Compute economy:** compute accounting and CHIPS economics.
+1. **Stabilized `vtext`:** researcher, super, user edits, versions, and Trace work reliably.
+2. **Ingestion:** URL/content extraction, YouTube transcripts, uploads, PDFs, EPUBs, and later multimedia display apps whose content can be transcluded into `vtext`.
+3. **Publication:** selected private versions/artifacts become immutable platform-visible records.
+4. **Transclusion:** Pretext-backed text rendering and embedded referenced content.
+5. **Citation:** citation graph over published immutable refs.
+6. **Compute economy:** compute accounting and CHIPS economics.
 
-Current implementation is Layer 1. Do not implement token mechanics yet. Do preserve the provenance, evidence, artifact, citation, trajectory, VM, model, and compute-usage facts needed by later layers.
+Do not implement token mechanics yet. Do preserve the provenance, evidence, artifact, citation, trajectory, VM, model, publication-boundary, and compute-usage facts needed by later layers.
 
 That means:
 - the prompt bar always goes through `conductor`
@@ -24,16 +27,17 @@ That means:
 - `vtext` versions become the canonical state of work
 - generic work state stays simple and legible under a `dumb data, smart models` principle
 - workers and `super` become visibly real and debuggable
-- Trace becomes understandable enough to debug runs, then evolves into a real appagent
+- Trace becomes understandable enough to debug trajectories, with a possible later appagent upgrade only if scale requires agentic search/dynamic UI
 - prompts become easy to inspect and edit inside Choir as per-user sandbox state
 - embedded Dolt becomes the real storage model
-- `vmctl` is understood as factory capacity management, not just deployment plumbing
+- `vmctl` is understood as active/background VM fork, merge, promotion, and rollback machinery, not just deployment plumbing
 
 Canonical context docs:
 
 - `docs/north-star.md`
 - `docs/runtime-invariants.md`
 - `docs/implementation-scope.md`
+- `docs/current-architecture.md`
 
 ---
 
@@ -49,28 +53,28 @@ flowchart TD
     C -->|later| E["Other appagent(s) or composed flow"]
 
     D --> F["Open VText window"]
-    F --> G["Create V0 from the user prompt"]
-    G --> H["VText agent receives V0 and current work context"]
+    F --> G["Create v0 from the user prompt"]
+    G --> H["Create v1 from conductor framing note"]
+    H --> I["VText displayed at v1 immediately"]
 
-    H --> I["VText agent writes V1"]
-    H --> J{"Need outside info or execution?"}
+    I --> J{"Need outside info or execution?"}
     J -->|yes| K["Spawn workers as needed"]
-    J -->|no| I
+    J -->|no| V["Document remains current canonical state"]
 
     K --> L["Researcher agents<br/>read document, gather current/external info"]
     K --> M["Super agent<br/>execution-oriented coordinator with full tool surface"]
 
-    L --> N["Workers send messages back to VText agent<br/>via coagent tools / addressed coordination channels"]
+    L --> N["Workers emit structured updates<br/>findings, evidence, artifacts, refs, tests, questions, proposals"]
     M --> N
-    N --> O["VText agent synthesizes messages into new document versions"]
-    O --> P["V2, V3, V4..."]
+    N --> O["VText decides whether/how updates become new versions"]
+    O --> P["v2, v3, v4..."]
 
     P --> Q{"User edits document?"}
     Q -->|yes| R["User edits text directly"]
     R --> S["User hits Revise button"]
     S --> T["Create one new user-authored version from the edit batch"]
     T --> U["Send diff/context message to VText agent"]
-    U --> H
+    U --> J
     Q -->|no| V["Document remains current canonical state"]
 ```
 
@@ -81,13 +85,14 @@ flowchart TD
 3. By default, `conductor` should spawn `appagent=vtext`.
 4. Opening the `vtext` window should be a consequence of the conductor/appagent flow, not a deterministic desktop shortcut.
 5. The user prompt becomes `v0`.
-6. The `vtext` agent writes `v1` promptly, even if it is also delegating.
-7. `v1` should reflect the agent's best-effort completion from its current perspective before outside evidence arrives.
-8. The `vtext` agent spawns workers when needed.
-9. Workers never directly author canonical document text.
-10. Workers read the document and send messages back to the `vtext` agent.
-11. Later worker evidence can drive `v2`, `v3`, and further revisions.
-12. User edits are batched into one user-authored version when the user hits Revise.
+6. The conductor's short spawn/delegation framing note becomes `v1`.
+7. `v1` replaces the old pattern where `vtext` used an extra initial answer-from-priors call.
+8. The `vtext` window should open quickly with `v1` displayed as current.
+9. `vtext` spawns workers when needed.
+10. Workers never directly author canonical document text and do not send document patches.
+11. Workers emit structured updates: findings, evidence, artifacts, refs, tests, questions, or proposals.
+12. `vtext` decides whether and how worker updates become `v2`, `v3`, and further revisions.
+13. User edits are batched into one user-authored version when the user hits Revise.
 
 ---
 
@@ -137,26 +142,38 @@ That means:
 - `super` should actually appear for execution-oriented work
 - messages between `vtext`, `researcher`, and `super` should be visible in Trace
 - the system should not merely “hint” at delegation in prompts while behaving like a single-shot rewrite
-- `vtext` should not stall waiting for workers before producing its own best-effort next version
-- worker evidence should revise and enrich the document after that first completion
+- `vtext` should open immediately with `v0` user input and `v1` conductor framing
+- worker updates should revise and enrich the document after that first conductor-framed state
 
-### Agent topology
+### Apps and agent topology
 
-Within one user microVM:
+Not every app is an appagent. Apps can remain plain display/control surfaces.
+They become appagents when they need durable domain ownership, prompts, dynamic
+UI, or agentic behavior.
+
+Likely app sequence:
+- `vtext` as the first appagent
+- browser next, potentially promptable through the URL bar or controlled by conductor
+- mail after that, starting with a Choir desktop email address before optional user email import
+- calendar for scheduled tasks
+- media display apps for uploaded, linked, or agent-retrieved audio/video/image content
+
+For one user:
 - there can be many durable `vtext` agents, one per `vtext`
 - researchers should come from a shared pool
-- there should be one singleton `super`
+- there should generally be one top-level `super`
 
 Why:
 - many `vtext` agents let many document contexts stay durable and wakeable
 - shared researchers are relatively safe because they are read-mostly evidence workers
-- a singleton `super` reduces conflicting high-privilege execution in one user VM
+- a top-level `super` gives one place to request `vmctl` resources such as background VM forks and promotions
 
 Execution concurrency should deepen before it broadens:
 - appagents can be peers
-- `super` acts as the privileged orchestration root
-- `super` may create supervised execution subtrees such as co-supers later
-- those descendants should remain under `super` by default rather than immediately becoming open peers to the rest of the system
+- `super` acts as the privileged orchestration root for mutable work
+- `super` creates or coordinates cosupers in background VMs
+- cosupers may spawn cosupers
+- mutable super/cosuper work should not edit the live desktop directly
 
 This encourages dense supervised concurrency rather than sparse overlapping privileged concurrency.
 
@@ -167,8 +184,8 @@ Tool access should enforce these boundaries directly. If an agent should not do 
 The default `vtext` mode should not be chatty or psychologically self-reporting.
 
 By default, the `vtext` agent should:
-- produce the best objective completion it can from the current state
-- write the next version as if it were trying to complete the work well, not narrate its own process
+- synthesize the best current document state from user edits and available worker updates
+- write the next version as if it were trying to advance the work well, not narrate its own process
 - delegate in the background when delegation is useful
 - update the document again when workers return evidence
 
@@ -256,9 +273,10 @@ These are the real next runs, in order.
 #### Phase 5. Make the `vtext` process real
 
 - [x] The user prompt should create `v0`.
-- [x] The `vtext` agent should write `v1` promptly, even while delegating if needed.
+- [ ] The conductor spawn/delegation call should create `v1` from a short framing note without a separate vtext answer-from-priors call.
 - [x] The `vtext` agent should spawn workers as needed.
-- [x] Worker messages should cause later canonical versions rather than blocking the first one.
+- [ ] Worker updates should be structured as findings, evidence, artifacts, refs, tests, questions, or proposals, not document patches.
+- [ ] Worker updates should cause later canonical versions according to an explicit revision policy.
 - [x] User edit batches should create one user-authored version and produce a diff/context message for `vtext`.
 - [x] This should work naturally as an iterative document loop, not like chat turns.
 
@@ -268,7 +286,7 @@ These are the real next runs, in order.
 - [x] `super` should appear for execution-oriented work.
 - [x] Both should be able to message `vtext` and each other through coagent tools.
 - [x] The user should be able to tell whether delegation actually happened.
-- [ ] The runtime should converge on one singleton `super` per user microVM, with shared researchers and many durable appagents.
+- [ ] The runtime should converge on one top-level `super` per user, with background-VM cosupers, shared researchers, and many durable appagents.
 - [x] Researchers should persist retrieved and evidentiary material into embedded Dolt rather than ad hoc writable filesystems.
 
 #### Phase 7. Improve Trace
@@ -290,12 +308,15 @@ These are the real next runs, in order.
   - color
 - [ ] Avoid requiring the user to read every message just to understand what happened.
 - [ ] Make it easy to query, filter, and inspect runs agentically.
-- [ ] After we find the right visualization, Trace should become a real appagent rather than just a passive debug surface.
+- [ ] Keep Trace out of the default `vtext` writing UI; use a hidden deep link/menu path from `vtext` to the relevant Trace trajectory if needed.
+- [ ] After trajectory volume is high enough, Trace may become a real appagent rather than just a passive debug surface.
 
-#### Phase 8. Stabilize Dolt as user and factory truth
+#### Phase 8. Stabilize Dolt and snapshot filesystem boundaries
 
 - [ ] Embedded per-user Dolt should be the real private desktop/appagent state model.
-- [ ] Platform Dolt should become the multitenant factory/publication/routing state model when platform scope appears.
+- [ ] Per-user snapshot filesystem state should be clearly separated from embedded Dolt state.
+- [ ] Platform Dolt should own platform-visible facts: accounts, VM lifecycle/capacity/routing records, publications, public artifact metadata, citations, and compute accounting.
+- [ ] The publication pass should add a platform VM pool for public/unauthenticated serving of published `vtext` artifacts without hydrating private user VMs.
 - [ ] `vtext` versions should feel native to that model.
 - [ ] Work/version state should be aligned with the document-centered product.
 - [ ] `vtext` should have a filesystem manifestation or shortcut model that makes sense in the file browser.
@@ -308,7 +329,7 @@ These are the real next runs, in order.
 - [ ] Review `go-choir` `vmctl` + `vmmanager` + `microvm.nix`.
 - [ ] Review `choiros-rs` user-VM / worker-VM lifecycle patterns.
 - [ ] Learn from the good parts while rejecting the “hibernate too aggressively” behavior.
-- [ ] Design the right active/background/shared-worker VM lifecycle for fast login, bounded cost, paid background work, lower-tier shared 24/7 work, and sensible hibernation.
+- [ ] Design the active/background VM fork, merge, promotion, rollback, and hibernation lifecycle.
 
 ---
 
@@ -335,14 +356,12 @@ These are the real next runs, in order.
 
 - Some docs are still aspirational rather than descriptive.
 - Some docs still assume Cogent as an external control plane.
-- Some docs still contain Factory-era assumptions and references.
 - README and state docs need continued maintenance as the implementation moves.
 
 ### Factory / Workflow Debt
 
-- `.factory` bootstrap assumptions still exist.
-- Mission artifacts and old references still point to Factory-era workflows.
-- We should remove Factory Droid residue instead of letting it quietly shape local development.
+- Some old mission notes and ad hoc frontend scripts still reference deleted Factory-era paths.
+- Remove or quarantine that residue instead of letting it quietly shape local development.
 
 ### Infrastructure Debt
 

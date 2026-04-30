@@ -23,8 +23,6 @@ export default defineConfig({
       },
     },
   ],
-  // Do NOT start the webServer here — the harness assumes the local service
-  // stack (auth + frontend dev) is already running per .factory/services.yaml.
-  // Validators start services deterministically via the manifest before
-  // invoking playwright.
+  // Do NOT start the webServer here. The harness assumes the local service
+  // stack is already running, usually via ../start-services.sh.
 });

@@ -5,7 +5,8 @@
 **What:** Evaluate and sequence moving more durable product state from SQLite to
 Dolt once Trace, VText, and early super verification are stable. Treat this as
 two Dolt layers: per-user embedded Dolt for private desktop/appagent state, and
-platform Dolt for multitenant factory/publication/routing state.
+platform Dolt for platform-visible accounts, VM lifecycle/capacity/routing,
+publication, citation, artifact metadata, and compute/accounting state.
 
 **Why:** The current SQLite/Dolt split creates awkward boundaries. It makes trace
 contracts, cross-store reasoning, and long-term product-state ownership more

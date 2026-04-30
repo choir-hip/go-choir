@@ -2,11 +2,12 @@
 
 > Last updated: 2026-04-20. Reflects the hard cutover state: durable agents, addressed coordination channels, runtime-owned inbox delivery, loop-oriented execution, and backend-owned vtext lifecycle.
 >
-> Current product context lives in `docs/north-star.md`,
-> `docs/runtime-invariants.md`, and `docs/implementation-scope.md`. This file
-> describes the current local runtime shape; the newer docs explain why that
-> runtime must preserve publishing, citation, VM, artifact, and compute-accounting
-> facts even before those later layers are implemented.
+> Current product context lives in `docs/current-architecture.md`,
+> `docs/north-star.md`, `docs/runtime-invariants.md`, and
+> `docs/implementation-scope.md`. This file describes an older local runtime
+> shape. The newer docs take precedence for the vtext version contract,
+> worker-update contract, active/background VM model, publication sequencing, and
+> Dolt boundaries.
 
 ---
 

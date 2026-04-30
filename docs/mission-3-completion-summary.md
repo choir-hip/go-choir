@@ -2,7 +2,7 @@
 
 **Status:** Partial Completion - Transitioning to Mission 4
 **Date:** 2026-04-12
-**Missions Directory:** `/Users/wiz/.factory/missions/969491ec-3df3-47c7-b9bf-8e384615819d`
+**Missions Directory:** `deleted Factory-era mission directory`
 
 ---
 
@@ -118,21 +118,21 @@ Apply this to go-choir's web desktop: don't build everything at once, but establ
 
 ## Files to Preserve
 
-### Mission Artifacts (in `/Users/wiz/.factory/missions/969491ec-3df3-47c7-b9bf-8e384615819d/`)
+### Mission Artifacts (in `deleted Factory-era mission directory/`)
 - `mission.md` - mission proposal
 - `validation-contract.md` - 98 assertions (27 passed in gateway-vm)
 - `validation-state.json` - current assertion status
 - `features.json` - 21 features (mostly completed)
 - `AGENTS.md` - worker guidance
 
-### Repository Artifacts (in `.factory/`)
-- `.factory/skills/go-worker/SKILL.md`
-- `.factory/skills/frontend-worker/SKILL.md`
-- `.factory/skills/infra-worker/SKILL.md`
-- `.factory/services.yaml`
-- `.factory/library/architecture.md`
-- `.factory/library/user-testing.md`
-- `.factory/library/mission-3-references.md`
+### Repository Artifacts (deleted Factory-era repo folder)
+- deleted Factory-era go-worker skill
+- deleted Factory-era frontend-worker skill
+- deleted Factory-era infra-worker skill
+- deleted Factory-era services manifest
+- deleted Factory-era architecture notes
+- deleted Factory-era user-testing notes
+- deleted Factory-era mission references
 
 ---
 
