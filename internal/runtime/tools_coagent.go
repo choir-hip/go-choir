@@ -24,11 +24,12 @@ func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime) error {
 
 func newSpawnAgentTool(rt *Runtime) Tool {
 	type args struct {
-		Objective string `json:"objective"`
-		Role      string `json:"role"`
-		Profile   string `json:"profile,omitempty"`
-		ChannelID string `json:"channel_id,omitempty"`
-		Model     string `json:"model,omitempty"`
+		Objective      string `json:"objective"`
+		Role           string `json:"role"`
+		Profile        string `json:"profile,omitempty"`
+		ChannelID      string `json:"channel_id,omitempty"`
+		Model          string `json:"model,omitempty"`
+		InitialContent string `json:"initial_content,omitempty"`
 	}
 	return Tool{
 		Name:        "spawn_agent",
@@ -39,6 +40,10 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 			"profile":    map[string]any{"type": "string"},
 			"channel_id": map[string]any{"type": "string"},
 			"model":      map[string]any{"type": "string"},
+			"initial_content": map[string]any{
+				"type":        "string",
+				"description": "For role=vtext from conductor only: the complete first document revision to store as v1.",
+			},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
@@ -81,7 +86,10 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 						AgentProfile: callerProfile,
 					}
 				}
-				decision, err := rt.ensureConductorVTextRoute(ctx, parentRec, in.Objective)
+				if strings.TrimSpace(in.InitialContent) == "" {
+					return "", fmt.Errorf("conductor spawn_agent role=vtext requires initial_content containing the first document revision")
+				}
+				decision, err := rt.ensureConductorVTextRoute(ctx, parentRec, in.Objective, in.InitialContent)
 				if err != nil {
 					return "", err
 				}

@@ -1172,7 +1172,7 @@ type AgentMutation struct {
 	DocID               string     `json:"doc_id"`
 	RunID               string     `json:"loop_id"`
 	OwnerID             string     `json:"owner_id"`
-	State               string     `json:"state"` // "pending", "completed", "failed"
+	State               string     `json:"state"` // "pending", "completed", "failed", "deferred"
 	ScheduledMessageSeq int64      `json:"scheduled_message_seq,omitempty"`
 	RevisionID          string     `json:"revision_id,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -1268,6 +1268,25 @@ func (s *Store) CompleteAgentMutation(ctx context.Context, runID, revisionID str
 	}
 	if rows == 0 {
 		return ErrMutationAlreadyCompleted
+	}
+	return nil
+}
+
+// DeferAgentMutation marks a VText run as intentionally completed without a
+// document write because it delegated to workers and is waiting for their
+// updates to wake the next revision run.
+func (s *Store) DeferAgentMutation(ctx context.Context, runID string) error {
+	now := time.Now().UTC()
+	_, err := s.vtextHandle().ExecContext(ctx,
+		`UPDATE vtext_agent_mutations
+		    SET state = 'deferred',
+		        completed_at = ?
+		  WHERE loop_id = ? AND state = 'pending'`,
+		now.Format(time.RFC3339Nano),
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("defer vtext agent mutation: %w", err)
 	}
 	return nil
 }

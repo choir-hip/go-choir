@@ -567,10 +567,17 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	conductorRegistry := rt.ToolRegistryForProfile(AgentProfileConductor)
+	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+		"objective":"create v0 and own the document",
+		"role":"vtext"
+	}`)); err == nil {
+		t.Fatal("conductor spawn vtext without initial_content should fail")
+	}
 	vtextSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"vtext",
-		"channel_id":"doc-work"
+		"channel_id":"doc-work",
+		"initial_content":"# Routed document\n\nInitial conductor-authored abstract."
 	}`))
 	if err != nil {
 		t.Fatalf("conductor spawn vtext: %v", err)
@@ -713,7 +720,7 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileConductor)
-	rawArgs := json.RawMessage(`{"objective":"Create one durable vtext document.","role":"vtext"}`)
+	rawArgs := json.RawMessage(`{"objective":"Create one durable vtext document.","role":"vtext","initial_content":"# Durable vtext document\n\nInitial conductor-authored abstract."}`)
 	results := make([]string, 2)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup

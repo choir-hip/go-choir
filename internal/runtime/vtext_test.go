@@ -146,10 +146,20 @@ func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopR
 		case <-timer.C:
 		}
 	}
+	if messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
+	}
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
 	if messagesContainToolCall(req.Messages, "edit_vtext") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
-	lastUser := extractLastUserMessage(req.Messages)
 	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "vtext turn complete", Model: "test-model"}, nil
 	}
@@ -167,6 +177,20 @@ func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopR
 		ToolCalls:  []types.ToolCall{call},
 		Model:      "test-model",
 	}, nil
+}
+
+func conductorSpawnVTextToolCall(prompt string) types.ToolCall {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = "Create a working document."
+	}
+	title := buildInitialVTextTitle(prompt, "")
+	args, _ := json.Marshal(map[string]any{
+		"objective":       prompt,
+		"role":            AgentProfileVText,
+		"initial_content": "# " + title + "\n\n" + prompt,
+	})
+	return types.ToolCall{ID: "spawn-vtext-test-call", Name: "spawn_agent", Arguments: args}
 }
 
 type finalTextProvider struct {
@@ -1015,10 +1039,20 @@ func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.Ru
 }
 
 func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	if messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow conductor handoff complete", Model: "test-model"}, nil
+	}
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnVTextToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
 	if messagesContainToolCall(req.Messages, "edit_vtext") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
-	lastUser := extractLastUserMessage(req.Messages)
 	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "edit_vtext") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
@@ -1357,14 +1391,14 @@ func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
 	}
 }
 
-func TestVTextAgentRevisionAllowsPriorsFirstDraft(t *testing.T) {
-	provider := newVTextEditToolProvider(vtextReplaceAllResult("Here is a polished answer from priors alone."))
+func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testing.T) {
+	provider := newVTextEditToolProvider(vtextReplaceAllResult("Hello, edited document.\n\nPolished structure."))
 
 	h, s, _ := vtextAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
 
 	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
-		map[string]string{"prompt": "What's the latest with AI?"})
+		map[string]string{"prompt": "Make the supplied text more formal."})
 	w := httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
 
@@ -1391,13 +1425,73 @@ func TestVTextAgentRevisionAllowsPriorsFirstDraft(t *testing.T) {
 	}
 	foundAppAgent := false
 	for _, rev := range revs {
-		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "priors alone") {
+		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "Polished structure") {
 			foundAppAgent = true
 			break
 		}
 	}
 	if !foundAppAgent {
-		t.Fatalf("expected priors draft appagent revision, got %+v", revs)
+		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
+	}
+}
+
+func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
+	provider := newVTextEditToolProvider(vtextReplaceAllResult("Stale AI briefing from model weights only."))
+
+	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's new in AI?"}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create vtext route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial vtext state = %q, want completed", state)
+	}
+	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-1")
+	if err != nil {
+		t.Fatalf("get initial vtext run: %v", err)
+	}
+	if !metadataBoolValue(initialRun.Metadata, "requires_worker_grounding") {
+		t.Fatalf("initial vtext run requires_worker_grounding = false, metadata=%+v", initialRun.Metadata)
+	}
+
+	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("revision count = %d, want only v0/v1", len(revs))
+	}
+	for _, rev := range revs {
+		if strings.Contains(rev.Content, "Stale AI briefing") {
+			t.Fatalf("vtext prior answer materialized as revision: %+v", rev)
+		}
+	}
+	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
+	if err != nil {
+		t.Fatalf("get initial mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "failed" {
+		t.Fatalf("initial vtext mutation = %+v, want failed no-write mutation", mutation)
 	}
 }
 

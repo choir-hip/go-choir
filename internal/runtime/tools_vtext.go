@@ -227,6 +227,15 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("get base revision: %w", err)
 	}
+	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
+		grounded, err := rt.channelHasGroundedHistory(ctx, rec.OwnerID, docID, time.Time{})
+		if err != nil {
+			return types.Revision{}, fmt.Errorf("check worker grounding: %w", err)
+		}
+		if !grounded {
+			return types.Revision{}, fmt.Errorf("edit_vtext requires worker grounding for this document seed; request researcher or super work first")
+		}
+	}
 
 	materialized, err := materializeVTextToolEdit(in, currentRevision)
 	if err != nil {

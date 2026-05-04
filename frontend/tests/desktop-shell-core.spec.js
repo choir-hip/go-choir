@@ -302,11 +302,12 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   expect(framingRevision.author_kind).toBe('appagent');
   expect(framingRevision.author_label).toBe('conductor');
   expect(framingRevision.parent_revision_id).toBe(userRevision.revision_id);
-  expect(framingRevision.content).toContain('Current requirements:');
   expect(framingRevision.content).toContain(prompt);
   expect(framingRevision.content).not.toContain('Conductor framing');
   expect(framingRevision.content).not.toContain('Use this vtext');
   expect(framingRevision.content).not.toContain('User request:');
+  expect(framingRevision.content).not.toContain('Current requirements:');
+  expect(framingRevision.content).not.toContain('Grounding status:');
   expect(framingRevision.metadata.source).toBe('initial_vtext_seed');
   expect(framingRevision.metadata.vtext_version).toBe('v1');
   expect(framingRevision.metadata.user_revision_id).toBe(userRevision.revision_id);
@@ -318,8 +319,7 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
   await expect(page.locator('[data-vtext-app]')).toHaveCount(initialVTextCount + 1);
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Current requirements:/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText(/^v[1-9][0-9]*$/);
   await expect(vtextWindow.locator('[data-vtext-prev]')).toBeEnabled();
   await expect(vtextWindow.locator('[data-vtext-next]')).toBeDisabled();

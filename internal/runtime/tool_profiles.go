@@ -277,6 +277,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nFor lightweight acknowledgements with no app handoff, return one compact JSON object like {\"action\":\"toast\",\"message\":\"...\"}.")
 		b.WriteString("\nIf you already opened the next owner with a tool call, you may finish tersely; the runtime will surface the opened app from the routed result.")
 		b.WriteString("\nDefault to opening vtext unless there is a strong reason to do otherwise.")
+		b.WriteString("\nWhen opening vtext, spawn_agent must include initial_content containing the complete v1 document text.")
+		b.WriteString("\nThat v1 should be a brief document abstract, initial hypotheses, proposed shape, or whatever first version best fits the prompt. Do not write task instructions, do not label it conductor framing, and do not present factual/current claims as researched unless workers produced evidence.")
 		if requestedApp != "" {
 			b.WriteString("\nRequested default app: ")
 			b.WriteString(requestedApp)
@@ -292,7 +294,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
 		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id and either a precise edit list or a complete replacement document.")
-		b.WriteString("\nWrite the best current version promptly from the canonical document, current context, and your priors by using edit_vtext.")
+		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
+		b.WriteString("\nThe conductor-created v1 is the initial abstract. If there are no worker messages yet, start the needed researcher and/or super work, then end the run without edit_vtext.")
 		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next VText run and trigger another revision.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
 		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")

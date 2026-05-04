@@ -18,6 +18,32 @@ function uniqueEmail() {
   return `gateway-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
+async function fetchJSON(page, path) {
+  return page.evaluate(async (requestPath) => {
+    const res = await fetch(requestPath, { credentials: 'include' });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(`${requestPath} failed: ${res.status} ${JSON.stringify(body)}`);
+    }
+    return body;
+  }, path);
+}
+
+async function waitForPromptSubmissionDecision(page, submissionId, timeout = 120000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const status = await fetchJSON(page, `/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`);
+    if (status.decision) {
+      return { status, decision: status.decision };
+    }
+    if (['failed', 'blocked', 'cancelled'].includes(status.state)) {
+      throw new Error(status.error || `prompt submission ${submissionId} ended as ${status.state}`);
+    }
+    await page.waitForTimeout(1000);
+  }
+  throw new Error(`prompt submission ${submissionId} did not produce a decision`);
+}
+
 const testResults = {
   assertionId: 'VAL-GATEWAY-001',
   title: 'Authenticated requests receive a provider response through the gateway',
@@ -32,7 +58,11 @@ const testResults = {
 };
 
 test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({
+    viewport: { width: 430, height: 932 },
+    isMobile: true,
+    hasTouch: true
+  });
   const page = await context.newPage();
 
   // Capture network requests
@@ -148,142 +178,77 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     await page.screenshot({ path: `${EVIDENCE_DIR}/09-playwright-shell.png` });
     testResults.evidence.screenshots.push('gateway-vm/gateway-e2e/09-playwright-shell.png');
 
-    // Step 6: Submit a prompt through the runtime API
+    // Step 6: Submit through the visible prompt bar and verify VText opens.
     testResults.steps.push({
-      action: 'Submit runtime prompt: "What is 2+2?"',
-      expected: 'Task submission returns stable handle, flows through gateway to provider',
+      action: 'Submit prompt through visible prompt bar',
+      expected: 'Prompt bar posts /api/prompt-bar, conductor opens VText, and VText materializes v0/v1',
       observed: 'In progress...'
     });
 
-    // Check if task runner is available
-    const taskRunner = page.locator('[data-task-runner]');
-    const hasTaskRunner = await taskRunner.isVisible().catch(() => false);
+    const prompt = `Draft a vtext abstract for deployed prompt-bar verification ${Date.now()}`;
+    const promptInput = page.locator('[data-prompt-input]');
+    await expect(promptInput).toBeVisible({ timeout: 10000 });
+    await expect(promptInput).toBeEnabled();
 
-    if (hasTaskRunner) {
-      const promptInput = page.locator('[data-prompt-input]');
-      await promptInput.fill('What is 2+2?');
+    const promptBarResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
+    );
+    await promptInput.fill(prompt);
+    await promptInput.press('Enter');
 
-      const submitBtn = page.locator('[data-prompt-submit]');
-      await submitBtn.click();
-
-      // Wait for task status
-      const taskStatus = page.locator('[data-task-status]');
-      await taskStatus.waitFor({ state: 'visible', timeout: 10000 });
-
-      const taskId = await page.locator('[data-task-id]').textContent();
-      testResults.steps[5].observed = `Task submitted, ID: ${taskId}`;
-
-      // Step 7: Wait for completion and verify real provider response
-      testResults.steps.push({
-        action: 'Wait for task completion',
-        expected: 'Task reaches Completed state with real provider response',
-        observed: 'In progress...'
-      });
-
-      const taskState = page.locator('[data-task-state]');
-      await taskState.waitFor({ state: 'visible' });
-
-      // Wait up to 30 seconds for completion
-      let attempts = 0;
-      let stateText = '';
-      while (attempts < 30) {
-        stateText = await taskState.textContent() || '';
-        if (stateText.includes('Completed') || stateText.includes('Failed')) {
-          break;
-        }
-        await page.waitForTimeout(1000);
-        attempts++;
-      }
-
-      testResults.steps[6].observed = `Task state after ${attempts}s: ${stateText}`;
-
-      if (stateText.includes('Completed')) {
-        const taskResult = page.locator('[data-task-result]');
-        const resultText = await taskResult.textContent().catch(() => 'No result visible');
-        testResults.steps.push({
-          action: 'Verify real provider response',
-          expected: 'Response contains real AI-generated content (not echo/stub)',
-          observed: `Result: ${resultText?.substring(0, 200)}...`
-        });
-
-        // Check that result is not just an echo
-        if (resultText && resultText.includes('4') && !resultText.includes('Echo')) {
-          testResults.status = 'pass';
-        } else if (resultText && resultText.includes('Echo')) {
-          testResults.status = 'fail';
-          testResults.issues = 'Task returned echo/stub response instead of real provider response';
-        } else {
-          testResults.status = 'pass';
-        }
-      } else if (stateText.includes('Failed')) {
-        testResults.status = 'fail';
-        testResults.issues = 'Task failed to complete';
-      } else {
-        testResults.status = 'fail';
-        testResults.issues = `Task did not complete in time. Final state: ${stateText}`;
-      }
-    } else {
-      // Try direct API call approach
-      testResults.steps[5].observed = 'Task runner UI not visible, trying direct API';
-
-      const taskRes = await page.evaluate(async (baseURL) => {
-        const res = await fetch(`${baseURL}/api/prompt-bar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ text: 'What is 2+2? Answer with just the number.' })
-        });
-        return { status: res.status, body: await res.json().catch(() => null) };
-      }, BASE_URL);
-
-      testResults.steps[5].observed = `Direct API response: ${taskRes.status}, body: ${JSON.stringify(taskRes.body)?.substring(0, 200)}`;
-
-      if (taskRes.status === 202 && taskRes.body?.submission_id) {
-        testResults.steps.push({
-          action: 'Poll for task completion',
-          expected: 'Task completes with real provider response',
-          observed: 'Polling...'
-        });
-
-        // Poll for status
-        let taskComplete = false;
-        let pollAttempts = 0;
-        let finalStatus = null;
-
-        while (!taskComplete && pollAttempts < 30) {
-          const statusRes = await page.evaluate(async ({ baseURL, submissionId }) => {
-            const res = await fetch(`${baseURL}/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`, {
-              credentials: 'include'
-            });
-            return res.json();
-          }, { baseURL: BASE_URL, submissionId: taskRes.body.submission_id });
-
-          finalStatus = statusRes;
-
-          if (statusRes.decision || statusRes.state === 'failed' || statusRes.state === 'blocked' || statusRes.state === 'cancelled') {
-            taskComplete = true;
-          } else {
-            await page.waitForTimeout(1000);
-            pollAttempts++;
-          }
-        }
-
-        testResults.steps[6].observed = `Final status after ${pollAttempts}s: ${JSON.stringify(finalStatus)?.substring(0, 300)}`;
-
-        if (finalStatus?.state === 'completed' && finalStatus?.decision) {
-          testResults.status = 'pass';
-          if (JSON.stringify(finalStatus.decision).includes('Echo') || JSON.stringify(finalStatus.decision).includes('stub')) {
-            testResults.issues = 'Response appears to be from stub provider, not a real gateway provider';
-          }
-        } else {
-          testResults.status = 'fail';
-          testResults.issues = `Task did not complete. Final state: ${finalStatus?.state}`;
-        }
-      } else {
-        testResults.status = 'fail';
-        testResults.issues = `Task submission failed with status ${taskRes.status}`;
-      }
+    const response = await promptBarResponse;
+    const responseBody = await response.json().catch(() => null);
+    if (response.status() !== 202 || !responseBody?.submission_id) {
+      throw new Error(`Prompt bar submission failed: ${response.status()} ${JSON.stringify(responseBody)}`);
     }
+    const posted = response.request().postDataJSON();
+    expect(posted).toEqual({ text: prompt });
+
+    testResults.steps[5].observed = `Prompt bar returned submission ${responseBody.submission_id}`;
+
+    testResults.steps.push({
+      action: 'Wait for conductor decision and VText window',
+      expected: 'Conductor decision opens VText with a durable document id',
+      observed: 'In progress...'
+    });
+
+    const { status: finalStatus, decision } = await waitForPromptSubmissionDecision(page, responseBody.submission_id);
+    expect(decision.action).toBe('open_app');
+    expect(decision.app).toBe('vtext');
+    expect(decision.doc_id).toBeTruthy();
+    expect(decision.user_revision_id).toBeTruthy();
+    expect(decision.framing_revision_id).toBeTruthy();
+    expect(decision.initial_loop_id).toBeTruthy();
+
+    const vtextWindow = page.locator('[data-vtext-app]').last();
+    await expect(vtextWindow).toBeVisible({ timeout: 30000 });
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(prompt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+
+    testResults.steps[6].observed = `Conductor decision: ${JSON.stringify(finalStatus.decision)?.substring(0, 300)}`;
+
+    testResults.steps.push({
+      action: 'Verify durable VText revisions and trace projection',
+      expected: 'Document has user v0, conductor v1, and Trace sees the VText trajectory',
+      observed: 'In progress...'
+    });
+
+    const revisionsResponse = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}/revisions`);
+    const revisions = revisionsResponse.revisions || [];
+    const userRevision = revisions.find((revision) => revision.revision_id === decision.user_revision_id);
+    const framingRevision = revisions.find((revision) => revision.revision_id === decision.framing_revision_id);
+    expect(userRevision?.author_kind).toBe('user');
+    expect(userRevision?.content).toBe(prompt);
+    expect(framingRevision?.author_kind).toBe('appagent');
+    expect(framingRevision?.author_label).toBe('conductor');
+    expect(framingRevision?.content || '').toContain(prompt);
+    expect(framingRevision?.content || '').not.toMatch(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+
+    const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(responseBody.submission_id)}`);
+    expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
+
+    testResults.steps[7].observed = `VText revisions=${revisions.length}, trace agents=${(trace.agents || []).length}`;
+    testResults.status = 'pass';
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/10-playwright-completed.png` });
     testResults.evidence.screenshots.push('gateway-vm/gateway-e2e/10-playwright-completed.png');

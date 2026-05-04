@@ -193,8 +193,8 @@ test('dry-run vtext plumbing demo uses seeded worker updates and artifacts', asy
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 10000 });
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Current requirements:[\s\S]*cellular automata/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/cellular automata/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
   const beforeManualRevision = await listRevisions(page, conductorDecision.doc_id);
   const editor = vtextWindow.locator('[data-vtext-editor-area]');

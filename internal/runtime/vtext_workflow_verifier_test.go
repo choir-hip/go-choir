@@ -360,9 +360,17 @@ func waitForVerifierConsumedWorkerSeq(t *testing.T, rt *Runtime, ownerID, docID 
 		revisions, err := rt.store.ListRevisionsByDoc(context.Background(), docID, ownerID, 50)
 		if err == nil {
 			for _, revision := range revisions {
-				for _, consumed := range consumedWorkerSeqs(decodeRevisionMetadata(revision.Metadata)) {
+				meta := decodeRevisionMetadata(revision.Metadata)
+				for _, consumed := range consumedWorkerSeqs(meta) {
 					if consumed == seq {
-						return
+						loopID := metadataString(meta, "loop_id")
+						if loopID == "" {
+							return
+						}
+						eventsForRun, err := rt.store.ListEvents(context.Background(), loopID, 200)
+						if err == nil && len(successfulToolResultPayloadsForRun(eventsForRun, loopID, "edit_vtext")) > 0 {
+							return
+						}
 					}
 				}
 			}

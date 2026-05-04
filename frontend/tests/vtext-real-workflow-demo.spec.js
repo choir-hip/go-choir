@@ -169,8 +169,7 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
   const initialState = await loadVTextState(page, conductorDecision.doc_id);
   const v1 = (initialState.revisions.revisions || []).find((revision) => revision.revision_id === conductorDecision.framing_revision_id);
   expect(v1?.content || '').toContain(marker);
-  expect(v1?.content || '').toContain('Current requirements:');
-  expect(v1?.content || '').not.toMatch(/Conductor framing|Use this vtext|User request:/);
+  expect(v1?.content || '').not.toMatch(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 15000 });

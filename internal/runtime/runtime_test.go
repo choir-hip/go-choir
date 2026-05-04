@@ -158,11 +158,12 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.SeedPrompt != "hi" {
 		t.Fatalf("seed_prompt: got %q, want hi", result.SeedPrompt)
 	}
-	if !strings.Contains(result.InitialContent, "Current requirements:") ||
+	if !strings.Contains(result.InitialContent, "hi") ||
 		strings.Contains(result.InitialContent, "Conductor framing") ||
 		strings.Contains(result.InitialContent, "Use this vtext") ||
 		strings.Contains(result.InitialContent, "User request:") ||
-		strings.Contains(result.InitialContent, "This document will develop") {
+		strings.Contains(result.InitialContent, "Current requirements:") ||
+		strings.Contains(result.InitialContent, "Grounding status:") {
 		t.Fatalf("initial_content should be useful document content, got: %q", result.InitialContent)
 	}
 	if !result.CreateInitialVersion {
@@ -223,11 +224,12 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if v1.ParentRevisionID != v0.RevisionID {
 		t.Fatalf("v1 parent: got %q, want v0 %q", v1.ParentRevisionID, v0.RevisionID)
 	}
-	if !strings.Contains(v1.Content, "Current requirements:") ||
+	if !strings.Contains(v1.Content, "hi") ||
 		strings.Contains(v1.Content, "Conductor framing") ||
 		strings.Contains(v1.Content, "Use this vtext") ||
 		strings.Contains(v1.Content, "User request:") ||
-		strings.Contains(v1.Content, "This document will develop") {
+		strings.Contains(v1.Content, "Current requirements:") ||
+		strings.Contains(v1.Content, "Grounding status:") {
 		t.Fatalf("v1 content should be a useful document seed, got %q", v1.Content)
 	}
 	v1Meta := decodeRevisionMetadata(v1.Metadata)
@@ -289,10 +291,10 @@ func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.
 	}
 }
 
-func TestConductorPromptBarToastMaterializesVTextRoute(t *testing.T) {
+func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T) {
 	rt, s := testRuntime(t)
 	provider := rt.provider.(*StubProvider)
-	provider.Result = `{"action":"toast","message":"I will create the document."}`
+	provider.Result = `{"action":"open_app","app":"vtext","title":"Durable document","initial_content":"# Durable document\n\nInitial conductor-authored abstract."}`
 	rt.Start(context.Background())
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "make a durable document", "user-alice", map[string]any{
@@ -317,6 +319,9 @@ func TestConductorPromptBarToastMaterializesVTextRoute(t *testing.T) {
 	}
 	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
 		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
+	}
+	if result.InitialContent != "# Durable document\n\nInitial conductor-authored abstract." {
+		t.Fatalf("initial_content = %q", result.InitialContent)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {

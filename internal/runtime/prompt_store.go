@@ -154,14 +154,14 @@ func (ps *PromptStore) ensureDefaults() error {
 	}
 	for _, role := range promptRoles() {
 		path := ps.defaultPromptPath(role)
-		if _, err := os.Stat(path); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("stat prompt default %s: %w", role, err)
-		}
 		content, err := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", role+".md")))
 		if err != nil {
 			return fmt.Errorf("load embedded prompt default %s: %w", role, err)
+		}
+		if current, err := os.ReadFile(path); err == nil && string(current) == string(content) {
+			continue
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("read prompt default %s: %w", role, err)
 		}
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			return fmt.Errorf("seed prompt default %s: %w", role, err)
