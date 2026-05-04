@@ -54,7 +54,7 @@ flowchart TD
 
     D --> F["Open VText window"]
     F --> G["Create v0 from the user prompt"]
-    G --> H["Create v1 from conductor framing note"]
+    G --> H["Create v1 from conductor-provided document seed"]
     H --> I["VText displayed at v1 immediately"]
 
     I --> J{"Need outside info or execution?"}
@@ -85,7 +85,7 @@ flowchart TD
 3. By default, `conductor` should spawn `appagent=vtext`.
 4. Opening the `vtext` window should be a consequence of the conductor/appagent flow, not a deterministic desktop shortcut.
 5. The user prompt becomes `v0`.
-6. The conductor's short spawn/delegation framing note becomes `v1`.
+6. The conductor-provided document seed becomes `v1`.
 7. `v1` replaces the old pattern where `vtext` used an extra initial answer-from-priors call.
 8. The `vtext` window should open quickly with `v1` displayed as current.
 9. `vtext` spawns workers when needed.
@@ -132,6 +132,8 @@ flowchart TD
 - choose toast vs appagent routing
 - default to spawning `vtext`
 - later route to or compose other appagents
+- never spawn `researcher`, `super`, or `cosuper`; document work begins after
+  `vtext` owns the document
 
 ### Multiagent Runtime
 
@@ -142,8 +144,8 @@ That means:
 - `super` should actually appear for execution-oriented work
 - messages between `vtext`, `researcher`, and `super` should be visible in Trace
 - the system should not merely “hint” at delegation in prompts while behaving like a single-shot rewrite
-- `vtext` should open immediately with `v0` user input and `v1` conductor framing
-- worker updates should revise and enrich the document after that first conductor-framed state
+- `vtext` should open immediately with `v0` user input and `v1` as the initial document seed
+- worker updates should revise and enrich the document after that first seeded state
 
 ### Apps and agent topology
 
@@ -273,7 +275,7 @@ These are the real next runs, in order.
 #### Phase 5. Make the `vtext` process real
 
 - [x] The user prompt should create `v0`.
-- [x] The conductor spawn/delegation call should create `v1` from a short framing note without a separate vtext answer-from-priors call.
+- [x] The conductor VText handoff should create `v1` from a short document seed without a separate vtext answer-from-priors call.
 - [x] The `vtext` agent should spawn workers as needed.
 - [x] Worker updates should be structured as findings, evidence, artifacts, refs, tests, questions, or proposals, not document patches.
 - [x] Worker updates should cause later canonical versions according to an explicit revision policy.

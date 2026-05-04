@@ -9,12 +9,15 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime) error {
-	for _, tool := range []Tool{
-		newSpawnAgentTool(rt),
+func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
+	tools := []Tool{
 		newCastAgentTool(rt),
 		newCancelAgentTool(rt),
-	} {
+	}
+	if len(spec.AllowedDelegateTargets) > 0 {
+		tools = append([]Tool{newSpawnAgentTool(rt, spec)}, tools...)
+	}
+	for _, tool := range tools {
 		if err := registry.Register(tool); err != nil {
 			return err
 		}
@@ -22,7 +25,7 @@ func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime) error {
 	return nil
 }
 
-func newSpawnAgentTool(rt *Runtime) Tool {
+func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	type args struct {
 		Objective      string `json:"objective"`
 		Role           string `json:"role"`
@@ -31,13 +34,19 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 		Model          string `json:"model,omitempty"`
 		InitialContent string `json:"initial_content,omitempty"`
 	}
+	allowedTargets := canonicalAllowedDelegateTargets(spec.AllowedDelegateTargets)
+	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowedTargets, ", ") + "."
+	description := "Spawn an allowed child agent run for the current " + spec.Profile + " profile."
+	if spec.Profile == AgentProfileConductor {
+		description = "Open a VText document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
+	}
 	return Tool{
 		Name:        "spawn_agent",
-		Description: "Spawn a child agent run with a specific role/profile and optional coordination channel.",
+		Description: description,
 		Parameters: jsonSchemaObject(map[string]any{
 			"objective":  map[string]any{"type": "string"},
-			"role":       map[string]any{"type": "string", "description": "Canonical role/profile name. Use one of: vtext, researcher, super, co-super."},
-			"profile":    map[string]any{"type": "string", "description": "Optional canonical profile override. Usually omit; when set, use one of: vtext, researcher, super, co-super."},
+			"role":       map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
+			"profile":    map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id": map[string]any{"type": "string"},
 			"model":      map[string]any{"type": "string"},
 			"initial_content": map[string]any{
@@ -127,6 +136,20 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func canonicalAllowedDelegateTargets(targets []string) []string {
+	out := make([]string, 0, len(targets))
+	seen := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		target = canonicalAgentProfile(target)
+		if target == "" || seen[target] {
+			continue
+		}
+		seen[target] = true
+		out = append(out, target)
+	}
+	return out
 }
 
 func newCastAgentTool(rt *Runtime) Tool {

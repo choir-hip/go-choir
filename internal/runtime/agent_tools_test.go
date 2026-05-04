@@ -19,6 +19,23 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
+func toolSchemaStringEnum(schema map[string]any, property string) []string {
+	props, _ := schema["properties"].(map[string]any)
+	prop, _ := props[property].(map[string]any)
+	rawEnum, _ := prop["enum"].([]string)
+	if len(rawEnum) > 0 {
+		return rawEnum
+	}
+	rawAny, _ := prop["enum"].([]any)
+	out := make([]string, 0, len(rawAny))
+	for _, item := range rawAny {
+		if s, _ := item.(string); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -74,10 +91,13 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("edit_vtext"); ok {
 		t.Fatalf("researcher should not have edit_vtext")
 	}
-	for _, name := range []string{"read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
+	for _, name := range []string{"read_file", "web_search", "cast_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
+	}
+	if _, ok := researcher.Lookup("spawn_agent"); ok {
+		t.Fatalf("researcher should not have spawn_agent")
 	}
 	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
@@ -567,6 +587,17 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	conductorRegistry := rt.ToolRegistryForProfile(AgentProfileConductor)
+	if spawnTool, ok := conductorRegistry.Lookup("spawn_agent"); !ok {
+		t.Fatal("conductor missing spawn_agent")
+	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileVText {
+		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileVText)
+	}
+	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+		"objective":"research should be owned by vtext, not conductor",
+		"role":"researcher"
+	}`)); err == nil {
+		t.Fatal("conductor should not be allowed to spawn researcher")
+	}
 	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"vtext"

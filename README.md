@@ -64,7 +64,7 @@ Deferred to Mission 7:
 
 - **Settings backend** -- Runtime LLM provider CRUD with AES-GCM encrypted API keys, provider reload mechanism.
 - **Settings frontend** -- Settings UI for managing providers (add/edit/delete, toggle active, inline validation).
-  (Deferred pending the conductor agent, which will provide the orchestration context for provider management.)
+  (Deferred until prompt-bar routing and provider policy have a clean product surface.)
 
 Prior milestones still in place:
 
@@ -98,6 +98,7 @@ This is the live prompt path today:
 10. Role system prompts load from editable sandbox prompt files with per-user overrides through `internal/runtime/prompt_store.go`
 
 This means prompt policy now lives in the sandbox, and conductor owns the route result that the desktop follows.
+Conductor is not the document workflow orchestrator: its current delegation target is `vtext` only. Research, execution, and verification requests start from the owning appagent (`vtext`) or from `super`-owned execution paths.
 
 ## Main Editable Prompt Surfaces
 

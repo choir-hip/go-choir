@@ -23,7 +23,8 @@ land through git and the GitHub Actions deploy flow.
 ## Agent Roles
 
 `conductor` routes top-level user and connector input. It does not mutate
-workspace state.
+workspace state and does not orchestrate document workers. In the current VText
+path, its only agent delegation target is `vtext`.
 
 `app` is a user-facing desktop surface. It does not have to be an appagent.
 

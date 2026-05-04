@@ -62,7 +62,20 @@ User (desktop shell)
 | CoAgent tools     |     Y     |   Y   |   Y   |    Y     |     Y      |
 | Role-specific tools |         |       |       |          | submit_research_findings |
 
-CoAgent tools (available to all profiles): `spawn_agent`, `cast_agent`, `cancel_agent`.
+CoAgent tools are role-shaped. Profiles with delegate targets get `spawn_agent`
+limited to those targets in the tool schema and runtime allowlist. All coagent
+profiles may use addressed coordination tools such as `cast_agent` and
+`cancel_agent`.
+
+Current `spawn_agent` affordances:
+
+| Caller     | `spawn_agent` targets |
+|------------|-----------------------|
+| conductor  | vtext                 |
+| vtext      | researcher            |
+| super      | researcher, co-super  |
+| co-super   | researcher            |
+| researcher | none                  |
 
 Role-specific tools layer semantic handoffs on top of coagent messaging. Today
 the researcher gets `submit_research_findings`, which persists evidence and

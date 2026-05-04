@@ -177,7 +177,7 @@ func roleSpec(profile string) AgentRoleSpec {
 		return AgentRoleSpec{
 			Profile:                AgentProfileConductor,
 			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileVText, AgentProfileResearcher},
+			AllowedDelegateTargets: []string{AgentProfileVText},
 		}
 	case AgentProfileResearcher:
 		return AgentRoleSpec{
@@ -411,7 +411,7 @@ func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchCl
 		}
 	}
 	if spec.AllowCoAgentTools {
-		if err := RegisterCoAgentTools(registry, rt); err != nil {
+		if err := RegisterCoAgentTools(registry, rt, spec); err != nil {
 			return nil, err
 		}
 	}

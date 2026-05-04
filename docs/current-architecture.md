@@ -122,7 +122,9 @@ a fake clock.
 
 `conductor` receives top-level user and connector input. It decides whether to
 open an app, show a toast, or route to another flow. It does not mutate workspace
-state.
+state. In the current VText path, its only agent delegation target is `vtext`;
+it does not spawn `researcher`, `super`, or `cosuper`. Those document-work
+requests begin after `vtext` owns the document.
 
 `app` means a user-facing desktop surface. An app does not have to be an
 appagent.
