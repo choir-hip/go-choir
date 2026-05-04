@@ -72,6 +72,11 @@ type SearchProviderAttempt struct {
 	Error     string `json:"error,omitempty"`
 }
 
+type searchProviderBatch struct {
+	provider string
+	results  []SearchResult
+}
+
 // SearchRequest is the incoming search request payload.
 type SearchRequest struct {
 	// Query is the search query string (required).
@@ -155,8 +160,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 	var lastErr error
 	var providers []string
 	attempts := make([]SearchProviderAttempt, 0, len(c.providers))
-	results := make([]SearchResult, 0, maxResults)
-	seenURLs := make(map[string]struct{})
+	batches := make([]searchProviderBatch, 0, targetProviders)
 	for i := range c.providers {
 		idx := (start + i) % len(c.providers)
 		provider := c.providers[idx]
@@ -173,23 +177,12 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 			providerName := provider.Name()
 			providers = append(providers, providerName)
 			for _, result := range providerResults {
-				key := normalizeSearchResultURL(result.URL)
-				if key == "" {
-					continue
-				}
-				if _, exists := seenURLs[key]; exists {
-					continue
-				}
-				seenURLs[key] = struct{}{}
 				result.Provider = providerName
-				results = append(results, result)
-				if len(results) >= maxResults {
-					break
-				}
+				batches = appendSearchBatchResult(batches, providerName, result)
 			}
 			attempt.Results = len(providerResults)
 			attempts = append(attempts, attempt)
-			if len(providers) >= targetProviders || len(results) >= maxResults {
+			if len(providers) >= targetProviders {
 				break
 			}
 			continue
@@ -205,6 +198,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 	if len(providers) == 0 {
 		return nil, fmt.Errorf("all search providers failed: %w", lastErr)
 	}
+	results := mergeSearchBatches(batches, maxResults)
 	return &SearchResponse{
 		Results:   results,
 		Provider:  providers[0],
@@ -212,6 +206,52 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		Attempts:  attempts,
 		Query:     req.Query,
 	}, nil
+}
+
+func appendSearchBatchResult(batches []searchProviderBatch, provider string, result SearchResult) []searchProviderBatch {
+	for i := range batches {
+		if batches[i].provider == provider {
+			batches[i].results = append(batches[i].results, result)
+			return batches
+		}
+	}
+	return append(batches, searchProviderBatch{provider: provider, results: []SearchResult{result}})
+}
+
+func mergeSearchBatches(batches []searchProviderBatch, maxResults int) []SearchResult {
+	if maxResults <= 0 || len(batches) == 0 {
+		return nil
+	}
+	results := make([]SearchResult, 0, maxResults)
+	seenURLs := make(map[string]struct{})
+	positions := make([]int, len(batches))
+	for len(results) < maxResults {
+		advanced := false
+		for i := range batches {
+			for positions[i] < len(batches[i].results) {
+				result := batches[i].results[positions[i]]
+				positions[i]++
+				key := normalizeSearchResultURL(result.URL)
+				if key == "" {
+					continue
+				}
+				if _, exists := seenURLs[key]; exists {
+					continue
+				}
+				seenURLs[key] = struct{}{}
+				results = append(results, result)
+				advanced = true
+				break
+			}
+			if len(results) >= maxResults {
+				break
+			}
+		}
+		if !advanced {
+			break
+		}
+	}
+	return results
 }
 
 // AvailableProviders returns the names of configured search providers.

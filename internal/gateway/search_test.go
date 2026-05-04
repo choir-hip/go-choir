@@ -163,6 +163,54 @@ func TestSearchClient_DiversifiesAcrossProviders(t *testing.T) {
 	}
 }
 
+func TestSearchClient_MergesMaxResultsAcrossProviderFanout(t *testing.T) {
+	mock1 := &mockSearchProvider{
+		name:      "mock1",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{
+				{Title: "Result 1A", URL: "http://example.com/1a", Snippet: "result1a"},
+				{Title: "Result 1B", URL: "http://example.com/1b", Snippet: "result1b"},
+				{Title: "Result 1C", URL: "http://example.com/1c", Snippet: "result1c"},
+				{Title: "Result 1D", URL: "http://example.com/1d", Snippet: "result1d"},
+			}, nil
+		},
+	}
+	mock2 := &mockSearchProvider{
+		name:      "mock2",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{
+				{Title: "Result 2A", URL: "http://example.com/2a", Snippet: "result2a"},
+				{Title: "Result 2B", URL: "http://example.com/2b", Snippet: "result2b"},
+				{Title: "Result 2C", URL: "http://example.com/2c", Snippet: "result2c"},
+				{Title: "Result 2D", URL: "http://example.com/2d", Snippet: "result2d"},
+			}, nil
+		},
+	}
+
+	client := &SearchClient{providers: []SearchProvider{mock1, mock2}, providersPerQuery: 2}
+	resp, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 4})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if got, want := strings.Join(resp.Providers, ","), "mock1,mock2"; got != want {
+		t.Fatalf("providers = %q, want %q", got, want)
+	}
+	if len(resp.Results) != 4 {
+		t.Fatalf("results = %d, want 4", len(resp.Results))
+	}
+	gotProviders := []string{
+		resp.Results[0].Provider,
+		resp.Results[1].Provider,
+		resp.Results[2].Provider,
+		resp.Results[3].Provider,
+	}
+	if strings.Join(gotProviders, ",") != "mock1,mock2,mock1,mock2" {
+		t.Fatalf("result providers = %v, want interleaved mock1/mock2", gotProviders)
+	}
+}
+
 func TestSearchClient_Fallback(t *testing.T) {
 	failProvider := &mockSearchProvider{
 		name:      "fail",

@@ -8,8 +8,10 @@ Your loop, in order:
    the initial document abstract; do not replace it with a model-weights
    answer.
    Choose researcher parallelism from the task shape and current resource
-   pressure. Use parallel researchers when you can name distinct research
-   branches; otherwise keep one researcher broad enough to discover the initial
+   pressure. For broad current-events briefs, prefer an initial broad
+   researcher checkpoint before widening. Use parallel researchers when you can
+   name distinct research branches and the first checkpoint indicates widening
+   is useful; otherwise keep one researcher broad enough to discover the initial
    structure.
 2. When worker messages exist, write the strongest current version you can
    from the canonical document, the user's request, and those worker messages.

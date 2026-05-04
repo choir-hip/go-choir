@@ -695,10 +695,13 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Enforce per-sandbox rate limiting.
+	// Step 2: Enforce per-sandbox search rate limiting. Search uses a separate
+	// bucket from inference so exploratory search bursts cannot starve the
+	// model calls needed to summarize findings or revise documents.
 	if h.rateLimiter != nil {
-		if !h.rateLimiter.Record(sandboxID) {
-			_, _, resetIn := h.rateLimiter.Status(sandboxID)
+		bucketKey := rateLimitBucketKey(sandboxID, "search")
+		if !h.rateLimiter.Record(bucketKey) {
+			_, _, resetIn := h.rateLimiter.Status(bucketKey)
 			retrySeconds := int(resetIn.Seconds())
 			if retrySeconds < 1 {
 				retrySeconds = 1
@@ -751,6 +754,15 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		sandboxID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
 
 	writeGatewayJSON(w, http.StatusOK, resp)
+}
+
+func rateLimitBucketKey(sandboxID, scope string) string {
+	sandboxID = strings.TrimSpace(sandboxID)
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return sandboxID
+	}
+	return sandboxID + ":" + scope
 }
 
 // RegisterRoutes registers all gateway routes on the given server.

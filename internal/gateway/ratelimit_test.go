@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -254,6 +255,53 @@ func TestHandleInference_RateLimited(t *testing.T) {
 	}
 	if !strings.Contains(errResp.Error, "rate limit") {
 		t.Errorf("error = %q, want rate limit message", errResp.Error)
+	}
+}
+
+func TestSearchRateLimitDoesNotConsumeInferenceBudget(t *testing.T) {
+	h, reg, _ := setupHandlerWithRateLimit(t, 1, 1*time.Minute)
+	h.searchClient = &SearchClient{providers: []SearchProvider{&mockSearchProvider{
+		name:      "search",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{{Title: "Result", URL: "http://example.com", Snippet: "snippet"}}, nil
+		},
+	}}}
+
+	cred, err := reg.IssueCredential("sandbox-mixed-rate")
+	if err != nil {
+		t.Fatalf("issue credential: %v", err)
+	}
+
+	searchReq := httptest.NewRequest(http.MethodPost, "/provider/v1/search", strings.NewReader(`{"query":"ai news"}`))
+	searchReq.Header.Set("Authorization", "Bearer "+cred.RawToken)
+	searchReq.Header.Set("Content-Type", "application/json")
+	searchResp := httptest.NewRecorder()
+	h.HandleSearch(searchResp, searchReq)
+	if searchResp.Code != http.StatusOK {
+		t.Fatalf("search status = %d, want %d; body: %s", searchResp.Code, http.StatusOK, searchResp.Body.String())
+	}
+
+	body, _ := json.Marshal(ProviderRequest{
+		Provider: "bedrock",
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
+	})
+	inferenceReq := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
+	inferenceReq.Header.Set("Authorization", "Bearer "+cred.RawToken)
+	inferenceReq.Header.Set("Content-Type", "application/json")
+	inferenceResp := httptest.NewRecorder()
+	h.HandleInference(inferenceResp, inferenceReq)
+	if inferenceResp.Code != http.StatusOK {
+		t.Fatalf("inference status = %d, want %d; body: %s", inferenceResp.Code, http.StatusOK, inferenceResp.Body.String())
+	}
+
+	secondInferenceReq := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
+	secondInferenceReq.Header.Set("Authorization", "Bearer "+cred.RawToken)
+	secondInferenceReq.Header.Set("Content-Type", "application/json")
+	secondInferenceResp := httptest.NewRecorder()
+	h.HandleInference(secondInferenceResp, secondInferenceReq)
+	if secondInferenceResp.Code != http.StatusTooManyRequests {
+		t.Fatalf("second inference status = %d, want %d", secondInferenceResp.Code, http.StatusTooManyRequests)
 	}
 }
 

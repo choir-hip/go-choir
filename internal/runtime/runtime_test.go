@@ -375,7 +375,7 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 	if !strings.Contains(prompt, "Open researcher work first") {
 		t.Fatalf("vtext system prompt should bias toward spawning researchers first, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Use parallel researchers when you can name distinct research branches") {
+	if !strings.Contains(prompt, "prefer one broad researcher checkpoint before widening") {
 		t.Fatalf("vtext system prompt should make researcher parallelism contextual, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
@@ -410,6 +410,9 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "provider endpoints, latency, errors, rate limits, and result counts") {
 		t.Fatalf("researcher system prompt should allow sequential follow-up after findings checkpoints, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "rate-limit errors as backpressure") {
+		t.Fatalf("researcher system prompt should treat rate limits as backpressure, got %q", prompt)
 	}
 }
 
