@@ -274,11 +274,13 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 			case types.EventToolInvoked:
 				toolInvoked = true
 				// Verify the payload contains the tool name.
-				var payload map[string]string
+				var payload map[string]any
 				if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 					t.Errorf("unmarshal tool.invoked payload: %v", err)
 				} else if payload["tool"] != "file_read" {
 					t.Errorf("tool.invoked tool: got %q, want file_read", payload["tool"])
+				} else if payload["arguments"] == nil {
+					t.Error("tool.invoked payload should include full arguments")
 				}
 			case types.EventToolResult:
 				toolResult = true

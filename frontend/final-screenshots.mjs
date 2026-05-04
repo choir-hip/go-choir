@@ -30,37 +30,37 @@ import { chromium } from '@playwright/test';
   });
   console.log('Shell page screenshot saved');
 
-  // Screenshot 3: Submit task and show result
+  // Screenshot 3: Submit prompt-bar intent and show result
   await page.goto('https://draft.choir-ip.com/');
   await page.waitForTimeout(2000);
 
-  // Submit task via console to show the flow
+  // Submit prompt-bar intent via console to show the flow
   const result = await page.evaluate(async () => {
-    const res = await fetch('https://draft.choir-ip.com/api/agent/loop', {
+    const res = await fetch('https://draft.choir-ip.com/api/prompt-bar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'Explain quantum computing in one sentence' })
+      body: JSON.stringify({ text: 'Explain quantum computing in one sentence' })
     });
     const data = await res.json();
 
     // Wait for completion
     let status;
     for (let i = 0; i < 10; i++) {
-      const s = await fetch(`https://draft.choir-ip.com/api/agent/status?task_id=${data.task_id}`);
+      const s = await fetch(`https://draft.choir-ip.com/api/prompt-bar/submissions/${data.submission_id}`);
       status = await s.json();
-      if (status.state === 'completed') break;
+      if (status.decision || status.state === 'completed' || status.state === 'failed') break;
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    return { task: data, status };
+    return { submission: data, status };
   });
 
-  console.log('Final task result:', JSON.stringify(result, null, 2));
+  console.log('Final prompt result:', JSON.stringify(result, null, 2));
 
   // Save result to file
   const fs = await import('fs');
   fs.writeFileSync(
-    'test-results/legacy-gateway-e2e-round5/task-result.json',
+    'test-results/legacy-gateway-e2e-round5/prompt-result.json',
     JSON.stringify(result, null, 2)
   );
 

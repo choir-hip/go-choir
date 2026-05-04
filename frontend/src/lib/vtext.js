@@ -16,10 +16,7 @@
  *   GET    /api/vtext/diff?from=X&to=Y            — diff two revisions
  *   GET    /api/vtext/revisions/{id}/blame        — blame revision
  *   GET    /api/vtext/documents/{id}/stream       — document-scoped stream
- *   POST   /api/vtext/documents/{id}/agent-revision — submit agent revision
- *
- * Conductor and worker loops still use /api/agent/* because those APIs are
- * runtime-wide rather than document-specific.
+ *   POST   /api/vtext/documents/{id}/revise        — request a VText revision
  */
 
 import { fetchWithRenewal } from './auth.js';
@@ -222,14 +219,14 @@ export async function getBlame(revisionId) {
 }
 
 export async function createAgentRevision(docId, payload = {}) {
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/agent-revision`), {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/revise`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
-    await decodeError(res, `Agent revision failed (${res.status})`);
+    await decodeError(res, `VText revise failed (${res.status})`);
   }
 
   return res.json();

@@ -273,10 +273,10 @@ These are the real next runs, in order.
 #### Phase 5. Make the `vtext` process real
 
 - [x] The user prompt should create `v0`.
-- [ ] The conductor spawn/delegation call should create `v1` from a short framing note without a separate vtext answer-from-priors call.
+- [x] The conductor spawn/delegation call should create `v1` from a short framing note without a separate vtext answer-from-priors call.
 - [x] The `vtext` agent should spawn workers as needed.
-- [ ] Worker updates should be structured as findings, evidence, artifacts, refs, tests, questions, or proposals, not document patches.
-- [ ] Worker updates should cause later canonical versions according to an explicit revision policy.
+- [x] Worker updates should be structured as findings, evidence, artifacts, refs, tests, questions, or proposals, not document patches.
+- [x] Worker updates should cause later canonical versions according to an explicit revision policy.
 - [x] User edit batches should create one user-authored version and produce a diff/context message for `vtext`.
 - [x] This should work naturally as an iterative document loop, not like chat turns.
 

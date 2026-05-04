@@ -14,7 +14,7 @@ test('prompt button submits a vtext agent revision request', async ({ desktopSes
 
   const revisionRequest = page.waitForResponse((response) => {
     return response.request().method() === 'POST' &&
-      /\/api\/vtext\/documents\/[^/]+\/agent-revision$/.test(new URL(response.url()).pathname);
+      /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname);
   });
 
   await page.locator('[data-vtext-prompt]').click();

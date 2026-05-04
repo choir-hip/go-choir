@@ -63,9 +63,12 @@ See `docs/architecture.md` for the full spec. Key sections:
 
 **Sandbox HTTP API:**
 - `/health` — health check
-- `/api/agent/task` — submit a task to an agent
-- `/api/agent/status` — agent status
-- `/api/events` — SSE event stream
+- `/api/prompt-bar` — submit browser prompt intent
+- `/api/prompt-bar/submissions/{id}` — product submission status
+- `/api/trace/trajectories/{id}` — read-only run trajectory
+- `/api/trace/trajectories/{id}/events` — trajectory-scoped SSE event stream
+
+Browser-public orchestration is product-owned; `/api/agent/*` remains internal/tool-owned.
 
 **Note:** In this milestone, sandbox runs as a regular process on the host (no VM yet). VM isolation comes in Milestone 4.
 

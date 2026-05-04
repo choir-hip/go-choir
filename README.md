@@ -76,7 +76,7 @@ Prior milestones still in place:
 - Go unit tests (all packages passing)
 
 Next:
-- make `vtext` machine-verifiable: `v0` user input, `v1` conductor framing, user edit versions, worker updates, and causality in Trace
+- make `vtext` machine-verifiable: `v0` user input, `v1` initial document seed, user edit versions, worker updates, and event-log causality
 - ensure researcher and super work produce typed updates/artifacts rather than direct document patches
 - run risky mutable super/cosuper work in background VM forks, then merge or promote back to active state
 - clarify embedded Dolt versus snapshot filesystem ownership for `vtext`, artifacts, uploads, and aliases
@@ -88,12 +88,12 @@ This is the live prompt path today:
 
 1. Bottom bar input emits `promptsubmit` from `frontend/src/lib/BottomBar.svelte`
 2. `frontend/src/lib/Desktop.svelte` handles that event
-3. The desktop always submits top-level input to `conductor` via `frontend/src/lib/conductor.js`
+3. The desktop submits top-level input as plain user intent to `POST /api/prompt-bar` via `frontend/src/lib/conductor.js`
 4. The desktop waits for the conductor decision JSON and then either shows a toast or opens the chosen app
-5. When conductor opens `vtext`, the runtime materializes a real document, writes `v0` from user input, and writes `v1` from the conductor's short framing note
+5. When conductor opens `vtext`, the runtime materializes a real document, writes `v0` from user input, and writes `v1` as an initial document seed
 6. The `vtext` window opens on that real `doc_id` with `v1` displayed as current state
 7. Worker updates attach to the document trajectory as findings, evidence, artifacts, tests, refs, questions, or proposals; they are not document patches
-8. The `vtext` agent writes canonical later revisions, while the Revise button saves one user-authored revision and submits a plain revise event to `/api/vtext/documents/{id}/agent-revision`
+8. The `vtext` agent writes canonical later revisions, while the Revise button saves one user-authored revision and submits a plain revise event to `/api/vtext/documents/{id}/revise`
 9. The runtime compiles each backend-owned `vtext` request from document state, revision metadata, worker updates, and diff context in `internal/runtime/vtext.go`
 10. Role system prompts load from editable sandbox prompt files with per-user overrides through `internal/runtime/prompt_store.go`
 
@@ -102,7 +102,7 @@ This means prompt policy now lives in the sandbox, and conductor owns the route 
 ## Main Editable Prompt Surfaces
 
 - sandbox prompt files under the runtime prompt root, loaded by `internal/runtime/prompt_store.go`
-- `frontend/src/lib/PromptManager.svelte` and `/api/prompts` for in-product prompt editing
+- backend-only/test-gated prompt APIs for engineering diagnostics; browser product UI cannot mutate prompts
 - `internal/runtime/vtext.go` for backend `vtext` revise request compilation
 - `internal/runtime/tool_profiles.go` for role-aware system prompt composition around the sandbox prompt files
 

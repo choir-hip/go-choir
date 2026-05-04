@@ -34,7 +34,6 @@
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
   import TerminalApp from './TerminalApp.svelte';
-  import PromptManager from './PromptManager.svelte';
   import {
     windows,
     activeWindowId,
@@ -361,13 +360,9 @@
     const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
 
     try {
-      const task = await submitConductorPrompt(text, {
-        inputSource: 'prompt_bar',
-        requestedApp: 'vtext',
-        initialDocumentTitle: fallbackWindowTitle,
-      });
-      const conductorLoopId = task.loop_id || '';
-      const decision = await waitForConductorDecision(conductorLoopId);
+      const submission = await submitConductorPrompt(text);
+      const conductorSubmissionId = submission.submission_id || '';
+      const decision = await waitForConductorDecision(conductorSubmissionId);
 
       if (decision.action === 'toast') {
         showToast(decision.message || 'Conductor acknowledged the request');
@@ -385,7 +380,7 @@
         seedPrompt: decision.seed_prompt || text,
         initialContent: decision.initial_content || decision.seed_prompt || text,
         createInitialVersion: decision.create_initial_version !== false,
-        conductorLoopId,
+        conductorLoopId: conductorSubmissionId,
       });
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -536,7 +531,9 @@
               </div>
             {:else if win.appId === 'settings'}
               <div class="app-content settings-content" data-settings-window>
-                <PromptManager on:authexpired={() => dispatch('authexpired')} />
+                <div class="app-header">
+                  <span class="app-label">Settings</span>
+                </div>
               </div>
             {:else if win.appId === 'vtext'}
               <div class="app-content vtext-content" data-vtext-app>

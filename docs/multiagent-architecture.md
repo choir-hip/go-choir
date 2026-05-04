@@ -180,27 +180,28 @@ agent_evidence
 User types prompt
   -> BottomBar.svelte emits promptsubmit
   -> Desktop.svelte: submitConductorPrompt()
-       POST /api/agent/loop { prompt, metadata: { agent_profile: "conductor" } }
+       POST /api/prompt-bar { text }
   -> Proxy validates auth, forwards to sandbox :8081
-  -> Runtime creates RunRecord (profile=conductor, channel_id=loop_id)
+  -> Runtime creates server-owned RunRecord (profile=conductor, channel_id=loop_id)
   -> executeWithToolLoop() with conductor tool registry
   -> Conductor LLM returns JSON decision:
        { "action": "open_app", "app": "vtext", "title": "Essay on X",
          "seed_prompt": "write about X", "initial_content": "optional draft" }
   -> handleRunCompletion() -> materializeConductorDecision():
        1. CreateDocument(doc_id, title, owner)
-       2. CreateRevision(v0, author_type="user", content=initial_content)
-       3. submitVTextAgentRevisionRun(doc_id, v0_id, parentRunID=conductor_loop_id)
+       2. CreateRevision(v0, author_type="user", content=seed_prompt)
+       3. CreateRevision(v1, source="initial_vtext_seed")
+       4. submitVTextAgentRevisionRun(doc_id, v1_id, parentRunID=conductor_loop_id)
             -> vtext RunRecord: profile=vtext, agent_id="vtext:<doc_id>",
                channel_id=doc_id, parent_loop_id=conductor_loop_id
-       4. Enriches conductor result:
+       5. Enriches conductor result:
             { ...decision, doc_id, initial_revision_id, initial_loop_id }
   -> Frontend receives enriched result
   -> Desktop.svelte opens VTextEditor({ docId, initialRunId })
-  -> VTextEditor polls (document-scoped, not global):
-       GET /api/agent/status?loop_id=<initialRunId>
-       GET /api/agent/loops?channel_id=<docId>
-       GET /api/agent/events?channel_id=<docId>
+  -> Prompt status is product-scoped:
+       GET /api/prompt-bar/submissions/<submissionId>
+  -> Trace is read-only:
+       GET /api/trace/trajectories/<submissionId>
 ```
 
 ### 2. VText revision run execution
@@ -233,7 +234,7 @@ Agent final answer = complete next document version (plain text)
 
 ```
 User edits in VTextEditor -> clicks Revise
--> POST /api/vtext/documents/{id}/agent-revision { content, intent }
+-> POST /api/vtext/documents/{id}/revise { content, intent }
 -> HandleVTextAgentRevision():
      1. CreateRevision(author_type="user", content=userEdit)   -- user checkpoint
      2. submitVTextAgentRevisionRun(doc_id, new_revision_id)   -- single emitter
@@ -283,19 +284,18 @@ VText:
 
 All routes registered in `internal/runtime/api.go`, forwarded by `internal/proxy/handlers.go`.
 
-### Agent / run execution
+### Product prompt and Trace
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/agent/loop` | Submit a new run |
-| GET | `/api/agent/status?loop_id=` | Poll run state + result |
-| GET | `/api/agent/{id}/status` | Same, path-based |
-| GET | `/api/agent/loops?channel_id=&limit=` | List runs (channel-scoped) |
-| GET | `/api/agent/events?channel_id=&limit=` | List events (channel-scoped) |
-| GET | `/api/agent/topology` | Active run family graph |
-| POST | `/api/agent/spawn` | API-level child run spawn |
-| POST | `/api/agent/cancel` | Cancel a run |
-| GET | `/api/events` | SSE stream of real-time events |
+| POST | `/api/prompt-bar` | Submit user prompt-bar intent |
+| GET | `/api/prompt-bar/submissions/{id}` | Product-level prompt submission status |
+| GET | `/api/trace/trajectories` | Read-only owner-scoped trajectory list |
+| GET | `/api/trace/trajectories/{id}` | Read-only trajectory snapshot |
+| GET | `/api/trace/trajectories/{id}/events` | Read-only trajectory event stream |
+
+`/api/agent/*` is not browser-public product API. Runtime orchestration is
+server-owned or tool-internal.
 
 ### VText documents
 
@@ -304,24 +304,23 @@ All routes registered in `internal/runtime/api.go`, forwarded by `internal/proxy
 | GET/POST | `/api/vtext/documents` | List / create documents |
 | GET/PUT/DELETE | `/api/vtext/documents/{id}` | Get / update / delete |
 | GET/POST | `/api/vtext/documents/{id}/revisions` | List / create revisions |
-| POST | `/api/vtext/documents/{id}/agent-revision` | Trigger agent revision run |
+| POST | `/api/vtext/documents/{id}/revise` | Request a VText revision |
 | GET | `/api/vtext/documents/{id}/history` | Full revision history |
 | GET | `/api/vtext/revisions/{id}` | Revision snapshot |
 | GET | `/api/vtext/revisions/{id}/blame` | Blame by author type |
 | GET | `/api/vtext/diff?a=&b=` | Diff two revisions |
 
-### Prompts
+### Prompt policy
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET/POST | `/api/prompts` | List / create role prompts |
-| GET/PUT/DELETE | `/api/prompts/{role}` | Get / update / delete role prompt |
+Role prompts are backend policy. Prompt APIs are dev/test-gated until an
+intentional admin product exists; the browser product UI cannot mutate runtime
+role prompts.
 
 ---
 
 ## Prompt Store
 
-Default prompts embedded via `//go:embed` from `internal/runtime/prompt_defaults/*.md`, seeded to disk on first run, overridable per user via `/api/prompts` or the Settings UI.
+Default prompts embedded via `//go:embed` from `internal/runtime/prompt_defaults/*.md`, seeded to disk on first run, and managed as backend policy.
 
 | File | Core instruction |
 |------|--------------------|
@@ -341,16 +340,12 @@ Desktop.svelte
   conductor.js                 submitConductorPrompt, waitForConductorDecision
   Window.svelte                window chrome (minimize / maximize / close)
     VTextEditor.svelte         main writing surface
-      Activity panel           polls /api/agent/loops?channel_id=<doc_id>
-                               polls /api/agent/events?channel_id=<doc_id>
+      Activity panel           reads /api/trace/trajectories/<trajectory_id>
       Version nav              floating vN navigator (v0 to vLatest)
-      Revise button            POST .../agent-revision
+      Revise button            POST .../revise
       vtext.js                 VText CRUD + agent revision API calls
-      runtime.js               submitRun, fetchRunStatus, connectEventStream
-      trace.js                 getRunsByChannel, getEventsByChannel
+      trace.js                 read-only trajectory projections
   TraceApp.svelte              full run family inspector + event timeline
-  PromptManager.svelte         role prompt editing UI (/api/prompts)
-  TaskRunner.svelte            generic run submit + status widget
 ```
 
 ---
@@ -362,7 +357,7 @@ Browser / Electron frontend  (frontend/dist/)
          | HTTP :8080
          v
   [proxy :8080] --auth check--> [auth server]
-  forwards: /api/agent/* /api/vtext/* /api/prompts/* /api/files/* /api/events
+  forwards authenticated /api/* requests; sandbox route registration owns which product APIs exist
          | HTTP :8081 (authenticated)
          v
   [sandbox :8081]
@@ -390,4 +385,4 @@ Browser / Electron frontend  (frontend/dist/)
 
 5. **Single-emission vtext revise.** `submitVTextAgentRevisionRun()` is the one site that creates the pending mutation and emits `vtext.agent_revision.started`. `HandleVTextAgentRevision` only calls this helper and does not repeat side effects.
 
-6. **Activity panels are channel-scoped.** `/api/agent/loops` and `/api/agent/events` both accept `?channel_id=` so VTextEditor sees only its document family regardless of unrelated global history volume.
+6. **Activity panels are trajectory-scoped.** The browser reads `/api/trace/trajectories/<trajectory_id>` and related read-only Trace projections, so VTextEditor sees its document family without depending on browser-public `/api/agent/*` routes.

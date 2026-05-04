@@ -117,6 +117,9 @@ func main() {
 	// is no longer required.
 	if os.Getenv("RUNTIME_DISABLE_TOOLS") == "" {
 		toolCWD := os.Getenv("RUNTIME_TOOL_CWD")
+		if strings.TrimSpace(toolCWD) == "" {
+			toolCWD = filesRoot
+		}
 		if err := rt.InstallDefaultAgentTools(toolCWD); err != nil {
 			log.Fatalf("sandbox: install default agent tools: %v", err)
 		}

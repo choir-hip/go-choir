@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,12 +31,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "fork_desktop", "publish_desktop", "request_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "fork_desktop", "publish_desktop", "request_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -70,12 +71,15 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("edit_file"); ok {
 		t.Fatalf("researcher should not have edit_file")
 	}
-	for _, name := range []string{"read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_research_findings"} {
+	if _, ok := researcher.Lookup("edit_vtext"); ok {
+		t.Fatalf("researcher should not have edit_vtext")
+	}
+	for _, name := range []string{"read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent", "save_evidence", "read_evidence"} {
+	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
 			t.Fatalf("vtext missing tool %q", name)
 		}
@@ -88,6 +92,15 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := vtext.Lookup("submit_research_findings"); ok {
 		t.Fatalf("vtext should not have submit_research_findings")
+	}
+	if _, ok := vtext.Lookup("submit_worker_update"); ok {
+		t.Fatalf("vtext should not have submit_worker_update")
+	}
+	if _, ok := conductor.Lookup("edit_vtext"); ok {
+		t.Fatalf("conductor should not have edit_vtext")
+	}
+	if _, ok := super.Lookup("edit_vtext"); ok {
+		t.Fatalf("super should not have edit_vtext")
 	}
 }
 
@@ -203,27 +216,38 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	superSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"role":"super",
 		"channel_id":"doc-exec-work"
+	}`)); err == nil {
+		t.Fatalf("vtext should not be allowed to spawn super")
+	}
+
+	superRequestRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "request_super_execution", json.RawMessage(`{
+		"objective":"handle execution-heavy follow-up",
+		"channel_id":"doc-exec-work"
 	}`))
 	if err != nil {
-		t.Fatalf("vtext spawn super: %v", err)
+		t.Fatalf("vtext request super execution: %v", err)
 	}
-	var superSpawn struct {
+	var superRequest struct {
+		AgentID   string `json:"agent_id"`
 		RunID     string `json:"loop_id"`
 		Profile   string `json:"profile"`
 		ChannelID string `json:"channel_id"`
 	}
-	if err := json.Unmarshal([]byte(superSpawnRaw), &superSpawn); err != nil {
-		t.Fatalf("decode super spawn: %v", err)
+	if err := json.Unmarshal([]byte(superRequestRaw), &superRequest); err != nil {
+		t.Fatalf("decode super request: %v", err)
 	}
-	if superSpawn.Profile != AgentProfileSuper {
-		t.Fatalf("super spawn profile = %q, want %q", superSpawn.Profile, AgentProfileSuper)
+	if superRequest.Profile != AgentProfileSuper {
+		t.Fatalf("super request profile = %q, want %q", superRequest.Profile, AgentProfileSuper)
 	}
-	if superSpawn.ChannelID != "doc-exec-work" {
-		t.Fatalf("super spawn channel_id = %q, want doc-exec-work", superSpawn.ChannelID)
+	if superRequest.AgentID != persistentSuperAgentID("user-alice") {
+		t.Fatalf("super request agent_id = %q, want %q", superRequest.AgentID, persistentSuperAgentID("user-alice"))
+	}
+	if superRequest.ChannelID != "doc-exec-work" {
+		t.Fatalf("super request channel_id = %q, want doc-exec-work", superRequest.ChannelID)
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
@@ -552,12 +576,20 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("conductor spawn vtext: %v", err)
 	}
 	var vtextSpawn struct {
-		RunID     string `json:"loop_id"`
-		Profile   string `json:"profile"`
-		ChannelID string `json:"channel_id"`
+		AgentID           string `json:"agent_id"`
+		RunID             string `json:"loop_id"`
+		Profile           string `json:"profile"`
+		ChannelID         string `json:"channel_id"`
+		State             string `json:"state"`
+		UserRevisionID    string `json:"user_revision_id"`
+		FramingRevisionID string `json:"framing_revision_id"`
+		InitialRevisionID string `json:"initial_revision_id"`
 	}
 	if err := json.Unmarshal([]byte(vtextSpawnRaw), &vtextSpawn); err != nil {
 		t.Fatalf("decode vtext spawn: %v", err)
+	}
+	if vtextSpawn.AgentID != "vtext:"+vtextSpawn.ChannelID {
+		t.Fatalf("vtext spawn agent_id = %q, want vtext:%s", vtextSpawn.AgentID, vtextSpawn.ChannelID)
 	}
 	if vtextSpawn.Profile != AgentProfileVText {
 		t.Fatalf("vtext spawn profile = %q, want %q", vtextSpawn.Profile, AgentProfileVText)
@@ -565,12 +597,21 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if vtextSpawn.ChannelID == "" {
 		t.Fatal("vtext spawn channel_id should not be empty")
 	}
-	vtextTask, err := s.GetRun(context.Background(), vtextSpawn.RunID)
-	if err != nil {
-		t.Fatalf("get vtext task: %v", err)
+	if vtextSpawn.RunID == "" {
+		t.Fatal("vtext spawn loop_id should point to the initial product-path vtext run")
 	}
-	if vtextTask.Metadata["doc_id"] != vtextSpawn.ChannelID {
-		t.Fatalf("vtext task doc_id = %v, want %q", vtextTask.Metadata["doc_id"], vtextSpawn.ChannelID)
+	if vtextSpawn.State != "open" {
+		t.Fatalf("vtext spawn state = %q, want open", vtextSpawn.State)
+	}
+	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID == "" || vtextSpawn.InitialRevisionID != vtextSpawn.FramingRevisionID {
+		t.Fatalf("unexpected vtext spawn revision ids: %+v", vtextSpawn)
+	}
+	vtextAgent, err := s.GetAgent(context.Background(), vtextSpawn.AgentID)
+	if err != nil {
+		t.Fatalf("get vtext agent: %v", err)
+	}
+	if vtextAgent.ChannelID != vtextSpawn.ChannelID {
+		t.Fatalf("vtext agent channel_id = %q, want %q", vtextAgent.ChannelID, vtextSpawn.ChannelID)
 	}
 	parentAfterSpawn, err := s.GetRun(context.Background(), conductorTask.RunID)
 	if err != nil {
@@ -588,6 +629,8 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 		DocID             string `json:"doc_id"`
 		InitialRunID      string `json:"initial_loop_id"`
 		InitialRevisionID string `json:"initial_revision_id"`
+		UserRevisionID    string `json:"user_revision_id"`
+		FramingRevisionID string `json:"framing_revision_id"`
 	}
 	if err := json.Unmarshal([]byte(parentAfterSpawn.Result), &parentDecision); err != nil {
 		t.Fatalf("decode conductor result: %v", err)
@@ -598,18 +641,28 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if parentDecision.DocID != vtextSpawn.ChannelID {
 		t.Fatalf("conductor result doc_id = %q, want %q", parentDecision.DocID, vtextSpawn.ChannelID)
 	}
-	if parentDecision.InitialRunID != vtextTask.RunID {
-		t.Fatalf("conductor result initial_loop_id = %q, want %q", parentDecision.InitialRunID, vtextTask.RunID)
+	if parentDecision.InitialRunID != vtextSpawn.RunID {
+		t.Fatalf("conductor result initial_loop_id = %q, want %q", parentDecision.InitialRunID, vtextSpawn.RunID)
 	}
-	if parentDecision.InitialRevisionID == "" {
-		t.Fatal("conductor result initial_revision_id should not be empty")
+	if parentDecision.UserRevisionID != vtextSpawn.UserRevisionID || parentDecision.FramingRevisionID != vtextSpawn.FramingRevisionID || parentDecision.InitialRevisionID != vtextSpawn.FramingRevisionID {
+		t.Fatalf("unexpected conductor result revision ids: %+v; spawn=%+v", parentDecision, vtextSpawn)
 	}
 
+	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own a later document step", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      vtextSpawn.AgentID,
+		runMetadataChannelID:    vtextSpawn.ChannelID,
+		"doc_id":                vtextSpawn.ChannelID,
+	})
+	if err != nil {
+		t.Fatalf("start vtext run for delegation: %v", err)
+	}
 	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	researchSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), &vtextTask), "spawn_agent", json.RawMessage(`{
+	researchSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research background facts for the document",
 		"role":"researcher",
-		"channel_id":"doc-work"
+		"channel_id":"`+vtextSpawn.ChannelID+`"
 	}`))
 	if err != nil {
 		t.Fatalf("vtext spawn researcher: %v", err)
@@ -625,8 +678,107 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if researchSpawn.Profile != AgentProfileResearcher {
 		t.Fatalf("research spawn profile = %q, want %q", researchSpawn.Profile, AgentProfileResearcher)
 	}
-	if researchSpawn.ChannelID != "doc-work" {
-		t.Fatalf("research spawn channel_id = %q, want doc-work", researchSpawn.ChannelID)
+	if researchSpawn.ChannelID != vtextSpawn.ChannelID {
+		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, vtextSpawn.ChannelID)
+	}
+}
+
+func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	conductorTask := &types.RunRecord{
+		RunID:        "conductor-concurrent-vtext",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Create one durable vtext document.",
+		ChannelID:    "conductor-concurrent-vtext",
+		AgentProfile: AgentProfileConductor,
+		AgentRole:    AgentProfileConductor,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileConductor,
+			runMetadataAgentRole:    AgentProfileConductor,
+			"requested_app":         AgentProfileVText,
+			"seed_prompt":           "Create one durable vtext document.",
+		},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateRun(ctx, *conductorTask); err != nil {
+		t.Fatalf("create conductor run: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileConductor)
+	rawArgs := json.RawMessage(`{"objective":"Create one durable vtext document.","role":"vtext"}`)
+	results := make([]string, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = registry.Execute(WithToolExecutionContext(ctx, conductorTask), "spawn_agent", rawArgs)
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("spawn %d: %v", i, err)
+		}
+	}
+
+	var first struct {
+		DocID   string `json:"doc_id"`
+		LoopID  string `json:"loop_id"`
+		AgentID string `json:"agent_id"`
+	}
+	if err := json.Unmarshal([]byte(results[0]), &first); err != nil {
+		t.Fatalf("decode first spawn: %v", err)
+	}
+	for i, raw := range results[1:] {
+		var got struct {
+			DocID   string `json:"doc_id"`
+			LoopID  string `json:"loop_id"`
+			AgentID string `json:"agent_id"`
+		}
+		if err := json.Unmarshal([]byte(raw), &got); err != nil {
+			t.Fatalf("decode spawn %d: %v", i+1, err)
+		}
+		if got.DocID != first.DocID || got.LoopID != first.LoopID || got.AgentID != first.AgentID {
+			t.Fatalf("concurrent spawn returned different routes: first=%+v got=%+v", first, got)
+		}
+	}
+
+	docs, err := s.ListDocumentsByOwner(ctx, "user-alice", 10)
+	if err != nil {
+		t.Fatalf("list documents: %v", err)
+	}
+	if len(docs) != 1 || docs[0].DocID != first.DocID {
+		t.Fatalf("documents = %+v, want exactly the shared vtext doc %q", docs, first.DocID)
+	}
+	runs, err := s.ListRunsByChannel(ctx, "user-alice", first.DocID, 10)
+	if err != nil {
+		t.Fatalf("list runs by channel: %v", err)
+	}
+	vtextRuns := 0
+	for _, run := range runs {
+		if run.AgentProfile == AgentProfileVText {
+			vtextRuns++
+		}
+	}
+	if vtextRuns != 1 {
+		t.Fatalf("vtext runs on shared route = %d, want 1; runs=%+v", vtextRuns, runs)
+	}
+	parentAfter, err := s.GetRun(ctx, conductorTask.RunID)
+	if err != nil {
+		t.Fatalf("get parent run: %v", err)
+	}
+	if parentAfter.Metadata["doc_id"] != first.DocID || parentAfter.Metadata["initial_loop_id"] != first.LoopID {
+		t.Fatalf("parent route metadata = %+v, want doc %q loop %q", parentAfter.Metadata, first.DocID, first.LoopID)
 	}
 }
 
@@ -754,6 +906,439 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 	}
 	if findingsMessage == nil {
 		t.Fatalf("expected findings packet in channel messages, got %+v", messages)
+	}
+}
+
+func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-structured-worker-update"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Structured Worker Update",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert vtext agent: %v", err)
+	}
+
+	superRun, err := rt.StartRunWithMetadata(ctx, "Generate and verify the toy model artifact", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataChannelID:    docID,
+		runMetadataTrajectoryID: "traj-structured-worker-update",
+	})
+	if err != nil {
+		t.Fatalf("start super run: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	rawArgs := json.RawMessage(`{
+		"update_id":"super-update-1",
+		"agent_id":"vtext:doc-structured-worker-update",
+		"channel_id":"doc-structured-worker-update",
+		"findings":["A deterministic seed keeps the cellular automata visualization reproducible."],
+		"artifacts":["artifacts/evolution-ca.html"],
+		"refs":["git:abc123"],
+		"tests":["node artifacts/evolution-ca.verify.js passed"],
+		"questions":["Should mutation rate be user-adjustable in the UI?"],
+		"proposals":["Expose generation count, population, and mean fitness as visible controls."],
+		"notes":["This is a structured worker update, not a document patch."]
+	}`)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", rawArgs)
+	if err != nil {
+		t.Fatalf("submit_worker_update: %v", err)
+	}
+	var resp struct {
+		UpdateID     string `json:"update_id"`
+		AgentID      string `json:"agent_id"`
+		ChannelID    string `json:"channel_id"`
+		Cursor       int64  `json:"cursor"`
+		TrajectoryID string `json:"trajectory_id"`
+		Status       string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode submit_worker_update response: %v", err)
+	}
+	if resp.UpdateID != "super-update-1" || resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
+		t.Fatalf("unexpected submit_worker_update response: %+v", resp)
+	}
+	if resp.TrajectoryID != "traj-structured-worker-update" {
+		t.Fatalf("trajectory_id = %q, want traj-structured-worker-update", resp.TrajectoryID)
+	}
+
+	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-update-1")
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if update.AgentID != "super:primary" || update.TargetAgentID != "vtext:"+docID || update.Role != AgentProfileSuper {
+		t.Fatalf("unexpected worker update identity: %+v", update)
+	}
+	if len(update.Artifacts) != 1 || update.Artifacts[0] != "artifacts/evolution-ca.html" {
+		t.Fatalf("artifacts = %+v", update.Artifacts)
+	}
+	if len(update.Tests) != 1 || !strings.Contains(update.Tests[0], "passed") {
+		t.Fatalf("tests = %+v", update.Tests)
+	}
+	if !strings.Contains(update.Content, "Artifacts:") || !strings.Contains(update.Content, "Tests:") || !strings.Contains(update.Content, "Proposals:") {
+		t.Fatalf("worker update content is not structured: %q", update.Content)
+	}
+
+	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1: %+v", len(messages), messages)
+	}
+	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "vtext:"+docID || messages[0].Role != AgentProfileSuper {
+		t.Fatalf("unexpected channel message: %+v", messages[0])
+	}
+	if !strings.Contains(messages[0].Content, "Worker update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
+		t.Fatalf("channel message should be a structured update, not a patch: %q", messages[0].Content)
+	}
+
+	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	if err != nil {
+		t.Fatalf("list inbox deliveries: %v", err)
+	}
+	if len(deliveries) != 1 || deliveries[0].FromAgentID != "super:primary" || deliveries[0].ChannelID != docID {
+		t.Fatalf("unexpected inbox deliveries: %+v", deliveries)
+	}
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(ctx, ownerID, "traj-structured-worker-update", 10)
+	if err != nil {
+		t.Fatalf("list worker updates by trajectory: %v", err)
+	}
+	if len(updates) != 1 || updates[0].UpdateID != "super-update-1" {
+		t.Fatalf("trajectory updates = %+v", updates)
+	}
+
+	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", rawArgs)
+	if err != nil {
+		t.Fatalf("repeat submit_worker_update: %v", err)
+	}
+	var repeat struct {
+		Cursor int64  `json:"cursor"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(rawAgain), &repeat); err != nil {
+		t.Fatalf("decode repeat response: %v", err)
+	}
+	if repeat.Status != "existing" || repeat.Cursor != resp.Cursor {
+		t.Fatalf("repeat response = %+v, want existing cursor %d", repeat, resp.Cursor)
+	}
+	messages, err = s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages after repeat: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("repeat submit should not duplicate messages, got %+v", messages)
+	}
+
+	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+		"update_id":"super-update-1",
+		"agent_id":"vtext:doc-structured-worker-update",
+		"tests":["different test payload"]
+	}`))
+	if err == nil {
+		t.Fatal("same update_id with different payload should fail")
+	}
+}
+
+func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-authoritative-channel"
+	wrongChannelID := "not-the-vtext-doc-channel"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Authoritative Channel",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert vtext agent: %v", err)
+	}
+
+	superRun, err := rt.StartRunWithMetadata(ctx, "Report an artifact", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:authoritative",
+		runMetadataChannelID:    wrongChannelID,
+		runMetadataTrajectoryID: "traj-authoritative-channel",
+	})
+	if err != nil {
+		t.Fatalf("start super run: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+		"update_id":"super-authoritative-channel",
+		"agent_id":"vtext:doc-authoritative-channel",
+		"channel_id":"not-the-vtext-doc-channel",
+		"artifacts":["artifacts/authoritative.txt"],
+		"tests":["verified authoritative channel routing"]
+	}`))
+	if err != nil {
+		t.Fatalf("submit_worker_update: %v", err)
+	}
+	var resp struct {
+		ChannelID string `json:"channel_id"`
+		Cursor    int64  `json:"cursor"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode submit_worker_update response: %v", err)
+	}
+	if resp.ChannelID != docID || resp.Cursor == 0 {
+		t.Fatalf("response routed to channel %q cursor %d, want %q with cursor", resp.ChannelID, resp.Cursor, docID)
+	}
+
+	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list target channel messages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].ChannelID != docID || messages[0].ToAgentID != "vtext:"+docID {
+		t.Fatalf("unexpected target channel messages: %+v", messages)
+	}
+	wrongMessages, err := s.ListChannelMessages(ctx, ownerID, wrongChannelID, 0, 10)
+	if err != nil {
+		t.Fatalf("list wrong channel messages: %v", err)
+	}
+	if len(wrongMessages) != 0 {
+		t.Fatalf("worker update leaked onto explicit wrong channel: %+v", wrongMessages)
+	}
+}
+
+func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-authoritative-parent"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Authoritative Parent",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert vtext agent: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "researcher:decoy",
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileResearcher,
+		Role:      AgentProfileResearcher,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert decoy agent: %v", err)
+	}
+
+	vtextRun, err := rt.StartRunWithMetadata(ctx, "Own this document", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:" + docID,
+		runMetadataChannelID:    docID,
+	})
+	if err != nil {
+		t.Fatalf("start vtext run: %v", err)
+	}
+	superRun, err := rt.StartChildRun(ctx, vtextRun.RunID, "Report a result", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:authoritative-parent",
+		runMetadataChannelID:    docID,
+	})
+	if err != nil {
+		t.Fatalf("start super child: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+		"update_id":"super-authoritative-parent",
+		"agent_id":"researcher:decoy",
+		"artifacts":["artifacts/parent.txt"],
+		"tests":["verified parent target routing"]
+	}`))
+	if err != nil {
+		t.Fatalf("submit_worker_update: %v", err)
+	}
+	var resp struct {
+		AgentID   string `json:"agent_id"`
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode submit_worker_update response: %v", err)
+	}
+	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
+		t.Fatalf("response target = %q channel = %q, want parent vtext target/channel", resp.AgentID, resp.ChannelID)
+	}
+
+	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-authoritative-parent")
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+		t.Fatalf("worker update target/channel = %q/%q, want parent vtext", update.TargetAgentID, update.ChannelID)
+	}
+	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	found := false
+	for _, message := range messages {
+		if message.ToAgentID == "vtext:"+docID && message.FromRunID == superRun.RunID && message.Role == AgentProfileSuper {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("unexpected addressed messages: %+v", messages)
+	}
+}
+
+func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-requester-target"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Requester Target",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert vtext agent: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "researcher:decoy-requester",
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileResearcher,
+		Role:      AgentProfileResearcher,
+		ChannelID: "decoy-channel",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert decoy agent: %v", err)
+	}
+
+	superRun, err := rt.StartRunWithMetadata(ctx, "Report requester-scoped work", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:requester-target",
+		runMetadataChannelID:    docID,
+		"requested_by_agent_id": "vtext:" + docID,
+		"requested_by_profile":  AgentProfileVText,
+		"request_source":        "vtext",
+	})
+	if err != nil {
+		t.Fatalf("start requester super run: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+		"update_id":"super-requester-target",
+		"agent_id":"researcher:decoy-requester",
+		"artifacts":["artifacts/requester.txt"],
+		"tests":["verified requester target routing"]
+	}`))
+	if err != nil {
+		t.Fatalf("submit_worker_update: %v", err)
+	}
+	var resp struct {
+		AgentID   string `json:"agent_id"`
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode submit_worker_update response: %v", err)
+	}
+	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
+		t.Fatalf("response target = %q channel = %q, want vtext requester target/channel", resp.AgentID, resp.ChannelID)
+	}
+
+	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-requester-target")
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+		t.Fatalf("worker update target/channel = %q/%q, want vtext requester", update.TargetAgentID, update.ChannelID)
 	}
 }
 

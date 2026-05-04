@@ -205,7 +205,7 @@ func roleSpec(profile string) AgentRoleSpec {
 			Profile:                AgentProfileVText,
 			AllowEvidenceTools:     true,
 			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileResearcher, AgentProfileSuper},
+			AllowedDelegateTargets: []string{AgentProfileResearcher},
 		}
 	case AgentProfileCoSuper:
 		return AgentRoleSpec{
@@ -290,14 +290,18 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == AgentProfileVText {
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
-		b.WriteString("\nWrite the best current version promptly from the canonical document, current context, and your priors.")
+		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
+		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id and either a precise edit list or a complete replacement document.")
+		b.WriteString("\nWrite the best current version promptly from the canonical document, current context, and your priors by using edit_vtext.")
 		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next VText run and trigger another revision.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
 		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")
 		b.WriteString("\nWhen research is needed, default to one focused researcher first instead of speculative parallel fan-out.")
 		b.WriteString("\nOnly spawn multiple researchers when the work has clearly independent branches and the first researcher cannot cover them efficiently.")
 		b.WriteString("\nPrefer sequential grounded passes over opening several broad researchers at once.")
-		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, write the next revision instead of waiting for perfect coverage.")
+		b.WriteString("\nIf the request needs live evidence, spawn a researcher on the document channel.")
+		b.WriteString("\nIf it needs generated artifacts, execution, or verification, call request_super_execution. Do not spawn super directly.")
+		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, call edit_vtext for the next revision instead of waiting for perfect coverage.")
 	}
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")
@@ -417,8 +421,14 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterVMControlTools(superRegistry, rt); err != nil {
 		return err
 	}
+	if err := RegisterWorkerUpdateTools(superRegistry, rt); err != nil {
+		return err
+	}
 	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, httpClient)
 	if err != nil {
+		return err
+	}
+	if err := RegisterWorkerUpdateTools(coSuperRegistry, rt); err != nil {
 		return err
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, httpClient)
@@ -428,12 +438,18 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterResearcherTools(researcherRegistry, rt); err != nil {
 		return err
 	}
+	if err := RegisterWorkerUpdateTools(researcherRegistry, rt); err != nil {
+		return err
+	}
 	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileConductor), cwd, searchClient, httpClient)
 	if err != nil {
 		return err
 	}
 	vtextRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVText), cwd, searchClient, httpClient)
 	if err != nil {
+		return err
+	}
+	if err := RegisterVTextTools(vtextRegistry, rt); err != nil {
 		return err
 	}
 

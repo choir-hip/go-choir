@@ -18,7 +18,8 @@
 
 ### Sandbox-Runtime Milestone ✅ (13/13 assertions)
 - `internal/types`, `internal/events`, `internal/store` packages
-- Runtime API: `/api/agent/task`, `/api/agent/status`, `/api/events` (SSE)
+- Product runtime API: `/api/prompt-bar`, `/api/prompt-bar/submissions/{id}`, `/api/trace/*`
+- Browser-public runtime orchestration is product-owned; `/api/agent/*` is internal/tool-owned.
 - SQLite persistence with restart recovery
 - BedrockProvider + ZAIProvider with BridgeAdapter
 - ToolRegistry + RunToolLoop

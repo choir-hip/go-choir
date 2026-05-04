@@ -144,6 +144,12 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if req.DesktopID != PrimaryDesktopID {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{
+			Error: "resolve can provision only the primary desktop; use lookup for published desktops or fork/publish for new desktops",
+		})
+		return
+	}
 
 	own, err := h.registry.ResolveOrAssignDesktop(req.UserID, req.DesktopID)
 	if err != nil {

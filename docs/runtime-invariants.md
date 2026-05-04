@@ -41,8 +41,9 @@ and does not own document text.
 `super` is the per-user privileged orchestration root. It can request `vmctl`
 resources such as background VM forks and promotions.
 
-`cosuper` is a durable execution co-agent, usually in a background VM. Cosupers
-can spawn other cosupers and coordinate while running.
+`cosuper` is a durable execution co-agent, usually in a background VM. Only
+`super` can spawn cosupers; cosupers coordinate within their assigned work but
+do not create more privileged execution roots.
 
 `worker` is the general category for delegated agents such as researcher, super,
 cosuper, and future specialized workers with their own tools.

@@ -38,6 +38,32 @@ async function openAppViaIcon(page, appId) {
   await icon.dblclick();
 }
 
+async function fetchJSON(page, path) {
+  return page.evaluate(async (requestPath) => {
+    const res = await fetch(requestPath, { credentials: 'include' });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${requestPath} failed: ${res.status} ${body}`);
+    }
+    return res.json();
+  }, path);
+}
+
+async function waitForPromptSubmissionDecision(page, submissionId, timeout = 10000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const status = await fetchJSON(page, `/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`);
+    if (status.decision) {
+      return status.decision;
+    }
+    if (['failed', 'blocked', 'cancelled'].includes(status.state)) {
+      throw new Error(status.error || `prompt submission ${submissionId} ended as ${status.state}`);
+    }
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`prompt submission ${submissionId} did not produce a decision`);
+}
+
 // ---------------------------------------------------------------
 // Test: no top bar present after rewrite (VAL-SHELL-001)
 // ---------------------------------------------------------------
@@ -231,29 +257,72 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
+  const prompt = 'Draft a project outline';
   const promptInput = page.locator('[data-prompt-input]');
   const initialVTextCount = await page.locator('[data-vtext-app]').count();
   const responsePromise = page.waitForResponse((response) =>
-    response.url().includes('/api/agent/loop') && response.request().method() === 'POST'
+    response.url().includes('/api/prompt-bar') && response.request().method() === 'POST'
   );
 
-  await promptInput.fill('Draft a project outline');
+  await promptInput.fill(prompt);
   await promptInput.press('Enter');
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);
+  const submitted = await response.json();
 
   const payload = response.request().postDataJSON();
-  expect(payload.prompt).toBe('Draft a project outline');
-  expect(payload.metadata.agent_profile).toBe('conductor');
-  expect(payload.metadata.agent_role).toBe('conductor');
-  expect(payload.metadata.input_source).toBe('prompt_bar');
-  expect(payload.metadata.requested_app).toBe('vtext');
+  expect(payload).toEqual({ text: prompt });
+
+  const decision = await waitForPromptSubmissionDecision(page, submitted.submission_id);
+  expect(decision.action).toBe('open_app');
+  expect(decision.app).toBe('vtext');
+  expect(decision.doc_id).toBeTruthy();
+  expect(decision.user_revision_id).toBeTruthy();
+  expect(decision.framing_revision_id).toBeTruthy();
+  expect(decision.initial_revision_id).toBe(decision.framing_revision_id);
+  expect(decision.initial_loop_id || '').toBeTruthy();
+
+  const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}`);
+  expect(doc.current_revision_id).toBeTruthy();
+
+  const revisionsResponse = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}/revisions`);
+  const revisions = revisionsResponse.revisions;
+  expect(revisions.length).toBeGreaterThanOrEqual(2);
+
+  const userRevision = revisions.find((revision) => revision.revision_id === decision.user_revision_id);
+  const framingRevision = revisions.find((revision) => revision.revision_id === decision.framing_revision_id);
+  expect(userRevision).toBeTruthy();
+  expect(framingRevision).toBeTruthy();
+  expect(userRevision.author_kind).toBe('user');
+  expect(userRevision.content).toBe(prompt);
+  expect(userRevision.metadata.source).toBe('user_prompt');
+  expect(userRevision.metadata.vtext_version).toBe('v0');
+
+  expect(framingRevision.author_kind).toBe('appagent');
+  expect(framingRevision.author_label).toBe('conductor');
+  expect(framingRevision.parent_revision_id).toBe(userRevision.revision_id);
+  expect(framingRevision.content).toContain('Current requirements:');
+  expect(framingRevision.content).toContain(prompt);
+  expect(framingRevision.content).not.toContain('Conductor framing');
+  expect(framingRevision.content).not.toContain('Use this vtext');
+  expect(framingRevision.content).not.toContain('User request:');
+  expect(framingRevision.metadata.source).toBe('initial_vtext_seed');
+  expect(framingRevision.metadata.vtext_version).toBe('v1');
+  expect(framingRevision.metadata.user_revision_id).toBe(userRevision.revision_id);
+
+  const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
+  expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
 
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
   await expect(page.locator('[data-vtext-app]')).toHaveCount(initialVTextCount + 1);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue('Draft a project outline');
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Current requirements:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText(/^v[1-9][0-9]*$/);
+  await expect(vtextWindow.locator('[data-vtext-prev]')).toBeEnabled();
+  await expect(vtextWindow.locator('[data-vtext-next]')).toBeDisabled();
 });
 
 test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in vtext', async ({ page, authenticator }) => {
@@ -267,7 +336,8 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
   const editor = vtextWindow.locator('[data-vtext-editor-area]');
-  await expect(editor).toHaveValue('Ahaha');
+  await expect(editor).toHaveValue(/Ahaha/);
+  await expect(editor).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
 
   const fileNameHandle = await page.waitForFunction(async () => {
     const res = await fetch('/api/files', { credentials: 'include' });
@@ -322,7 +392,7 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
 
   const promptInput = page.locator('[data-prompt-input]');
   const responsePromise = page.waitForResponse((response) =>
-    response.url().includes('/api/agent/loop') && response.request().method() === 'POST'
+    response.url().includes('/api/prompt-bar') && response.request().method() === 'POST'
   );
   await promptInput.fill('hi');
   await promptInput.press('Enter');
@@ -331,15 +401,12 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
   expect(response.status()).toBe(202);
 
   const payload = response.request().postDataJSON();
-  expect(payload.prompt).toBe('hi');
-  expect(payload.metadata.agent_profile).toBe('conductor');
-  expect(payload.metadata.agent_role).toBe('conductor');
-  expect(payload.metadata.input_source).toBe('prompt_bar');
-  expect(payload.metadata.requested_app).toBe('vtext');
+  expect(payload).toEqual({ text: 'hi' });
 
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue('hi');
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/hi/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
 });
 
 // ---------------------------------------------------------------

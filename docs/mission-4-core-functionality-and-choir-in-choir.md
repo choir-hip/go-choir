@@ -120,11 +120,11 @@
 The vtext app becomes a control plane for spawning agents. Users write tasks in vtext, and agents execute them in parallel microVMs.
 
 ### Deliverables
-1. **Agent orchestration API**
-   - POST /api/agent/spawn - create new agent
-   - GET /api/agent/:id/status - check agent progress
-   - POST /api/agent/:id/cancel - stop agent
-   - GET /api/agents - list user's agents
+1. **Product-owned orchestration API**
+   - POST /api/prompt-bar - submit browser prompt intent
+   - GET /api/prompt-bar/submissions/{id} - check product submission status
+   - GET /api/trace/trajectories/{id} - inspect read-only agent progress
+   - Tool-internal delegation APIs create researcher/super/co-super work; browser-public `/api/agent/*` routes stay closed.
 
 2. **Researcher agent template**
    - Takes research query as input

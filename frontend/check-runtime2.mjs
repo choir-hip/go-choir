@@ -16,10 +16,10 @@ import { chromium } from '@playwright/test';
   // Check all relevant APIs with full URLs
   const endpoints = [
     'https://draft.choir-ip.com/api/health',
-    'https://draft.choir-ip.com/api/agent/health',
     'https://draft.choir-ip.com/api/sandbox/health',
     'https://draft.choir-ip.com/api/shell/bootstrap',
     'https://draft.choir-ip.com/api/vm/status',
+    'https://draft.choir-ip.com/api/trace/trajectories',
   ];
 
   for (const endpoint of endpoints) {
@@ -35,21 +35,21 @@ import { chromium } from '@playwright/test';
     console.log('Response:', JSON.stringify(response));
   }
 
-  // Try to submit a task
-  console.log('\n\nTrying to submit a task...');
-  const taskResponse = await page.evaluate(async () => {
+  // Try to submit prompt-bar intent
+  console.log('\n\nTrying to submit prompt-bar intent...');
+  const submissionResponse = await page.evaluate(async () => {
     try {
-      const res = await fetch('https://draft.choir-ip.com/api/agent/loop', {
+      const res = await fetch('https://draft.choir-ip.com/api/prompt-bar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Say hello world' })
+        body: JSON.stringify({ text: 'Say hello world' })
       });
       return { status: res.status, text: await res.text() };
     } catch (e) {
       return { error: e.message };
     }
   });
-  console.log('Task submission response:', JSON.stringify(taskResponse));
+  console.log('Prompt submission response:', JSON.stringify(submissionResponse));
 
   await browser.close();
 })();

@@ -141,6 +141,8 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		InitialContent       string `json:"initial_content"`
 		CreateInitialVersion bool   `json:"create_initial_version"`
 		DocID                string `json:"doc_id"`
+		UserRevisionID       string `json:"user_revision_id"`
+		FramingRevisionID    string `json:"framing_revision_id"`
 		InitialRevisionID    string `json:"initial_revision_id"`
 		InitialRunID         string `json:"initial_loop_id"`
 	}
@@ -156,8 +158,12 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.SeedPrompt != "hi" {
 		t.Fatalf("seed_prompt: got %q, want hi", result.SeedPrompt)
 	}
-	if result.InitialContent != "hi" {
-		t.Fatalf("initial_content: got %q, want hi", result.InitialContent)
+	if !strings.Contains(result.InitialContent, "Current requirements:") ||
+		strings.Contains(result.InitialContent, "Conductor framing") ||
+		strings.Contains(result.InitialContent, "Use this vtext") ||
+		strings.Contains(result.InitialContent, "User request:") ||
+		strings.Contains(result.InitialContent, "This document will develop") {
+		t.Fatalf("initial_content should be useful document content, got: %q", result.InitialContent)
 	}
 	if !result.CreateInitialVersion {
 		t.Fatal("create_initial_version: got false, want true")
@@ -165,24 +171,30 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.DocID == "" {
 		t.Fatal("doc_id should not be empty")
 	}
-	if result.InitialRevisionID == "" {
-		t.Fatal("initial_revision_id should not be empty")
+	if result.UserRevisionID == "" {
+		t.Fatal("user_revision_id should not be empty")
+	}
+	if result.FramingRevisionID == "" {
+		t.Fatal("framing_revision_id should not be empty")
+	}
+	if result.InitialRevisionID != result.FramingRevisionID {
+		t.Fatalf("initial_revision_id: got %q, want framing revision %q", result.InitialRevisionID, result.FramingRevisionID)
 	}
 	if result.InitialRunID == "" {
-		t.Fatal("initial_loop_id should not be empty")
+		t.Fatal("initial_loop_id should point to the product-path vtext run")
 	}
 
 	doc, err := s.GetDocument(ctx, result.DocID, "user-alice")
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
-	if doc.CurrentRevisionID == "" {
-		t.Fatal("document head should not be empty")
+	if doc.CurrentRevisionID != result.FramingRevisionID {
+		t.Fatalf("document head: got %q, want v1 framing revision %q", doc.CurrentRevisionID, result.FramingRevisionID)
 	}
 
-	v0, err := s.GetRevision(ctx, result.InitialRevisionID, "user-alice")
+	v0, err := s.GetRevision(ctx, result.UserRevisionID, "user-alice")
 	if err != nil {
-		t.Fatalf("get initial revision: %v", err)
+		t.Fatalf("get v0 revision: %v", err)
 	}
 	if v0.AuthorKind != types.AuthorUser {
 		t.Fatalf("v0 author_kind: got %q, want %q", v0.AuthorKind, types.AuthorUser)
@@ -194,22 +206,124 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if metadataString(meta, "conductor_loop_id") != rec.RunID {
 		t.Fatalf("v0 conductor_loop_id: got %q, want %q", metadataString(meta, "conductor_loop_id"), rec.RunID)
 	}
+	if metadataString(meta, "vtext_version") != "v0" {
+		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "vtext_version"))
+	}
 
-	initialTask, err := s.GetRun(ctx, result.InitialRunID)
+	v1, err := s.GetRevision(ctx, result.FramingRevisionID, "user-alice")
 	if err != nil {
-		t.Fatalf("get initial vtext task: %v", err)
+		t.Fatalf("get v1 revision: %v", err)
 	}
-	if initialTask.Metadata["parent_id"] != rec.RunID {
-		t.Fatalf("initial task parent_id: got %v, want %q", initialTask.Metadata["parent_id"], rec.RunID)
+	if v1.AuthorKind != types.AuthorAppAgent {
+		t.Fatalf("v1 author_kind: got %q, want %q", v1.AuthorKind, types.AuthorAppAgent)
 	}
-	if initialTask.Metadata["doc_id"] != result.DocID {
-		t.Fatalf("initial task doc_id: got %v, want %q", initialTask.Metadata["doc_id"], result.DocID)
+	if v1.AuthorLabel != AgentProfileConductor {
+		t.Fatalf("v1 author_label: got %q, want %q", v1.AuthorLabel, AgentProfileConductor)
 	}
-	if initialTask.ChannelID != result.DocID {
-		t.Fatalf("initial task channel_id: got %q, want %q", initialTask.ChannelID, result.DocID)
+	if v1.ParentRevisionID != v0.RevisionID {
+		t.Fatalf("v1 parent: got %q, want v0 %q", v1.ParentRevisionID, v0.RevisionID)
 	}
-	if initialTask.Metadata["current_revision_id"] != result.InitialRevisionID {
-		t.Fatalf("initial task current_revision_id: got %v, want %q", initialTask.Metadata["current_revision_id"], result.InitialRevisionID)
+	if !strings.Contains(v1.Content, "Current requirements:") ||
+		strings.Contains(v1.Content, "Conductor framing") ||
+		strings.Contains(v1.Content, "Use this vtext") ||
+		strings.Contains(v1.Content, "User request:") ||
+		strings.Contains(v1.Content, "This document will develop") {
+		t.Fatalf("v1 content should be a useful document seed, got %q", v1.Content)
+	}
+	v1Meta := decodeRevisionMetadata(v1.Metadata)
+	if metadataString(v1Meta, "vtext_version") != "v1" {
+		t.Fatalf("v1 metadata version: got %q, want v1", metadataString(v1Meta, "vtext_version"))
+	}
+	if metadataString(v1Meta, "source") != "initial_vtext_seed" {
+		t.Fatalf("v1 source: got %q, want initial_vtext_seed", metadataString(v1Meta, "source"))
+	}
+
+	runs, err := s.ListRunsByOwner(ctx, "user-alice", 20)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	foundInitialVTextRun := false
+	for _, run := range runs {
+		if run.AgentProfile == AgentProfileVText && run.RunID == result.InitialRunID {
+			foundInitialVTextRun = true
+		}
+	}
+	if !foundInitialVTextRun {
+		t.Fatalf("prompt creation should start a product-path vtext run %q; runs=%+v", result.InitialRunID, runs)
+	}
+	waitForRunTerminalState(t, rt, result.InitialRunID, "user-alice", 5*time.Second)
+	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, result.DocID, "user-alice"); err != nil {
+		t.Fatalf("get pending mutation: %v", err)
+	} else if mutation != nil {
+		t.Fatalf("initial vtext run should not leave a dangling pending mutation after completion, got %+v", mutation)
+	}
+}
+
+func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.T) {
+	rec := &types.RunRecord{
+		RunID:   "run-conductor-toast-after-route",
+		OwnerID: "user-alice",
+		Result:  `{"action":"toast","message":"Opened the document."}`,
+		Metadata: map[string]any{
+			runMetadataAgentProfile:  AgentProfileConductor,
+			runMetadataAgentRole:     AgentProfileConductor,
+			"requested_app":          AgentProfileVText,
+			"seed_prompt":            "create a vtext document",
+			"initial_document_title": "create a vtext document",
+			"doc_id":                 "doc-vtext-route",
+			"user_revision_id":       "rev-user",
+			"framing_revision_id":    "rev-framing",
+			"initial_revision_id":    "rev-framing",
+		},
+	}
+
+	var result conductorDecision
+	if err := json.Unmarshal([]byte(normalizeConductorDecision(rec)), &result); err != nil {
+		t.Fatalf("decode normalized decision: %v", err)
+	}
+	if result.Action != "open_app" || result.App != AgentProfileVText {
+		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, AgentProfileVText)
+	}
+	if result.DocID != "doc-vtext-route" || result.InitialRevisionID != "rev-framing" {
+		t.Fatalf("normalized decision lost route metadata: %+v", result)
+	}
+}
+
+func TestConductorPromptBarToastMaterializesVTextRoute(t *testing.T) {
+	rt, s := testRuntime(t)
+	provider := rt.provider.(*StubProvider)
+	provider.Result = `{"action":"toast","message":"I will create the document."}`
+	rt.Start(context.Background())
+
+	rec, err := rt.StartRunWithMetadata(context.Background(), "make a durable document", "user-alice", map[string]any{
+		runMetadataAgentProfile:  AgentProfileConductor,
+		runMetadataAgentRole:     AgentProfileConductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          AgentProfileVText,
+		"seed_prompt":            "make a durable document",
+		"initial_document_title": "make a durable document",
+	})
+	if err != nil {
+		t.Fatalf("start conductor run: %v", err)
+	}
+
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
+	if stored.State != types.RunCompleted {
+		t.Fatalf("state = %q error=%q", stored.State, stored.Error)
+	}
+	var result conductorDecision
+	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, stored.Result)
+	}
+	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
+		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
+	}
+	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get materialized document: %v", err)
+	}
+	if doc.CurrentRevisionID == "" {
+		t.Fatalf("materialized document has no current revision: %+v", doc)
 	}
 }
 
@@ -1049,7 +1163,7 @@ func TestHealthReportsActiveProvider(t *testing.T) {
 // conductor_loop_id from the parent revision metadata so subsequent
 // revise requests retain the original user context.
 func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
-	_, s := testRuntime(t)
+	rt, s := testRuntime(t)
 
 	ctx := context.Background()
 	ownerID := "test-user"
@@ -1092,7 +1206,7 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 		Metadata: map[string]any{"type": "vtext_agent_revision"},
 	}
 
-	result := buildAppagentRevisionMetadata(rec, doc, ownerID, s)
+	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
 	var resultMap map[string]any
 	if err := json.Unmarshal(result, &resultMap); err != nil {
 		t.Fatalf("unmarshal result metadata: %v", err)
@@ -1110,8 +1224,8 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 
 	// Verify agent-specific fields are also present.
-	if resultMap["source"] != "agent_revision" {
-		t.Errorf("source: got %v, want 'agent_revision'", resultMap["source"])
+	if resultMap["source"] != "edit_vtext" {
+		t.Errorf("source: got %v, want 'edit_vtext'", resultMap["source"])
 	}
 	if resultMap["loop_id"] != "task-agent-1" {
 		t.Errorf("loop_id: got %v, want 'task-agent-1'", resultMap["loop_id"])

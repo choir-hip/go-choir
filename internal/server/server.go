@@ -26,13 +26,13 @@ type healthResponse struct {
 
 // Server wraps an http.Server with go-choir service configuration.
 type Server struct {
-	serviceName  string
-	httpServer   *http.Server
-	mux          *http.ServeMux
-	addr         string
-	listener     net.Listener
-	once         sync.Once
-	done         chan struct{}
+	serviceName   string
+	httpServer    *http.Server
+	mux           *http.ServeMux
+	addr          string
+	listener      net.Listener
+	once          sync.Once
+	done          chan struct{}
 	healthHandler http.HandlerFunc
 }
 
@@ -91,6 +91,12 @@ func (s *Server) SetHealthHandler(handler http.HandlerFunc) {
 // This must be called before Start.
 func (s *Server) HandleFunc(pattern string, handler http.HandlerFunc) {
 	s.mux.HandleFunc(pattern, handler)
+}
+
+// ServeHTTP exposes the server mux for package tests and in-process callers
+// that need to exercise the registered route table without binding a port.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
 }
 
 // defaultHealthHandler is the default HTTP handler for the /health endpoint.

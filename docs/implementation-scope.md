@@ -10,14 +10,14 @@ This is the near-term build order. For the complete current architecture, read
 The current product bottleneck is:
 
 ```text
-prompt -> conductor -> vtext -> researcher/super/cosuper -> user edits -> versions
+prompt -> conductor -> vtext -> researcher/persistent super -> cosuper -> user edits -> versions
 ```
 
 Required behavior:
 
 - The prompt bar routes through `conductor`.
-- `conductor` opens `vtext` by creating `v0` from user input and `v1` from a
-  short conductor framing note.
+- `conductor` opens `vtext` by creating `v0` from user input and `v1` as an
+  initial document seed.
 - `vtext` does not need an extra initial answer-from-priors call before the
   window opens.
 - User edits create user-authored versions.

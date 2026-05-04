@@ -92,14 +92,17 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 					"seed_prompt":            decision.SeedPrompt,
 					"initial_content":        decision.InitialContent,
 					"create_initial_version": decision.CreateInitialVersion != nil && *decision.CreateInitialVersion,
+					"agent_id":               "vtext:" + decision.DocID,
 					"doc_id":                 decision.DocID,
+					"user_revision_id":       decision.UserRevisionID,
+					"framing_revision_id":    decision.FramingRevisionID,
 					"initial_revision_id":    decision.InitialRevisionID,
 					"initial_loop_id":        decision.InitialLoopID,
 					"loop_id":                decision.InitialLoopID,
 					"channel_id":             decision.DocID,
 					"role":                   role,
 					"profile":                profile,
-					"state":                  types.RunPending,
+					"state":                  "open",
 				})
 			}
 			child, err := rt.StartChildRun(ctx, parentID, in.Objective, ownerID, constraints)

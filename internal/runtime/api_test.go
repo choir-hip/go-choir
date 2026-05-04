@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -77,7 +78,122 @@ func authenticatedRequest(method, path, body, user string) *http.Request {
 	return req
 }
 
+func registeredRuntimeRequest(t *testing.T, handler *APIHandler, method, path, body, user string) *httptest.ResponseRecorder {
+	t.Helper()
+	srv := server.NewServer("runtime-api-test", "0")
+	RegisterRoutes(srv, handler)
+	req := authenticatedRequest(method, path, body, user)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	return w
+}
+
 // --- Task Submission Tests ---
+
+func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Draft a research plan"}`, "user-alice")
+	w := httptest.NewRecorder()
+
+	handler.HandlePromptBar(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status: got %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.SubmissionID == "" {
+		t.Fatal("submission_id should not be empty")
+	}
+	if resp.StatusURL != "/api/prompt-bar/submissions/"+resp.SubmissionID {
+		t.Fatalf("status_url: got %q", resp.StatusURL)
+	}
+
+	rec, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if rec.AgentProfile != AgentProfileConductor || rec.AgentRole != AgentProfileConductor {
+		t.Fatalf("server-owned conductor identity not set: profile=%q role=%q", rec.AgentProfile, rec.AgentRole)
+	}
+	if got := metadataStringValue(rec.Metadata, "input_source"); got != "prompt_bar" {
+		t.Fatalf("input_source: got %q, want prompt_bar", got)
+	}
+	if got := metadataStringValue(rec.Metadata, "requested_app"); got != AgentProfileVText {
+		t.Fatalf("requested_app: got %q, want %q", got, AgentProfileVText)
+	}
+	if got := metadataStringValue(rec.Metadata, "seed_prompt"); got != "Draft a research plan" {
+		t.Fatalf("seed_prompt: got %q", got)
+	}
+	superAgent, err := rt.store.GetAgent(context.Background(), persistentSuperAgentID("user-alice"))
+	if err != nil {
+		t.Fatalf("persistent super agent missing: %v", err)
+	}
+	if superAgent.Profile != AgentProfileSuper || superAgent.Role != AgentProfileSuper {
+		t.Fatalf("persistent super identity = %q/%q, want %q/%q", superAgent.Profile, superAgent.Role, AgentProfileSuper, AgentProfileSuper)
+	}
+}
+
+func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	body := `{"text":"do work","metadata":{"agent_profile":"super"},"agent_role":"super","model":"x"}`
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-alice")
+	w := httptest.NewRecorder()
+
+	handler.HandlePromptBar(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/api/agent/loop", `{"prompt":"old"}`},
+		{http.MethodPost, "/api/agent/spawn", `{"parent_id":"p","objective":"old"}`},
+		{http.MethodGet, "/api/agent/status?loop_id=old", ""},
+		{http.MethodGet, "/api/agent/loops", ""},
+		{http.MethodGet, "/api/agent/events", ""},
+		{http.MethodGet, "/api/agent/channel-messages?channel_id=doc", ""},
+		{http.MethodGet, "/api/agent/topology", ""},
+		{http.MethodGet, "/api/events", ""},
+		{http.MethodGet, "/api/prompts", ""},
+		{http.MethodPost, "/api/test/vtext/research-findings", `{"doc_id":"doc","finding_id":"f"}`},
+		{http.MethodPost, "/api/vtext/documents/doc-1/agent-revision", `{"intent":"revise"}`},
+	}
+
+	for _, tc := range cases {
+		w := registeredRuntimeRequest(t, handler, tc.method, tc.path, tc.body, "user-alice")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: got status %d, want 404; body=%s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	ok := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build a document"}`, "user-alice")
+	if ok.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status: got %d, want %d; body=%s", ok.Code, http.StatusAccepted, ok.Body.String())
+	}
+
+	bad := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build","agent_profile":"super"}`, "user-alice")
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("prompt-bar metadata status: got %d, want %d", bad.Code, http.StatusBadRequest)
+	}
+}
 
 func TestHandleRunSubmissionReturnsStableHandle(t *testing.T) {
 	// VAL-RUNTIME-003: accepted run submission returns a stable handle.

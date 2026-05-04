@@ -93,7 +93,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(sandboxURL)
 
-	// Flush immediately for SSE streaming responses (/api/events) and
+	// Flush immediately for SSE streaming responses (for example Trace) and
 	// other streaming endpoints. A value of -1 means flush after each
 	// write to the client, which ensures SSE events arrive incrementally
 	// rather than being buffered (VAL-RUNTIME-005).
@@ -548,9 +548,28 @@ func (h *Handler) resolveSandboxURL(ctx interface{}, userID, desktopID string) (
 		return h.cfg.SandboxURL, nil
 	}
 
-	resp, err := h.vmctlClient.ResolveDesktop(userID, desktopID)
+	desktopID = strings.TrimSpace(desktopID)
+	if desktopID == "" {
+		desktopID = vmctl.PrimaryDesktopID
+	}
+
+	if desktopID == vmctl.PrimaryDesktopID {
+		resp, err := h.vmctlClient.ResolveDesktop(userID, desktopID)
+		if err != nil {
+			return "", err
+		}
+		if !resp.Published {
+			return "", fmt.Errorf("desktop %s is not published", desktopID)
+		}
+		return resp.SandboxURL, nil
+	}
+
+	resp, err := h.vmctlClient.LookupDesktop(userID, desktopID)
 	if err != nil {
 		return "", err
+	}
+	if resp == nil {
+		return "", fmt.Errorf("desktop %s is not published", desktopID)
 	}
 	if !resp.Published {
 		return "", fmt.Errorf("desktop %s is not published", desktopID)

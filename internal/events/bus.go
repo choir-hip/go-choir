@@ -3,7 +3,7 @@
 //
 // The event bus supports in-process pub/sub for runtime lifecycle events,
 // task progress, and health state changes. Events are published by the runtime
-// loop and consumed by the event streaming surface (/api/events) and
+// loop and consumed by Trace projections, internal workflow verification, and
 // supervisor components.
 //
 // Adapted from Cogent's event bus pattern but simplified for go-choir's

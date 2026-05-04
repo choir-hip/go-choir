@@ -116,6 +116,26 @@ func TestHandleTraceTrajectoryIndexOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestRegisteredTraceRoutesAreReadOnly(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/trace/trajectories"},
+		{http.MethodPut, "/api/trace/trajectories/trajectory-1"},
+		{http.MethodPost, "/api/trace/trajectories/trajectory-1/events"},
+		{http.MethodDelete, "/api/trace/trajectories/trajectory-1/moments/moment-1"},
+	}
+	for _, tc := range cases {
+		w := registeredRuntimeRequest(t, handler, tc.method, tc.path, `{}`, "user-alice")
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s %s: got status %d, want 405; body=%s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	rt, handler := testAPISetup(t)
 

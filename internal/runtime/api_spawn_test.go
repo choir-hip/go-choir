@@ -426,19 +426,14 @@ func TestSpawnEmptyObjectiveRejected(t *testing.T) {
 	}
 }
 
-// TestSpawnRouteRegistered verifies that /api/agent/spawn is registered
-// as a route in the API handler.
-func TestSpawnRouteRegistered(t *testing.T) {
+// TestSpawnRouteNotBrowserRegistered verifies that /api/agent/spawn remains
+// available as an internal handler/tool path but is not registered on the
+// browser-public route table.
+func TestSpawnRouteNotBrowserRegistered(t *testing.T) {
 	_, handler := testAPISetup(t)
 
-	// Submit a request to /api/agent/spawn — should not get 404.
-	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", "{}", "user-alice")
-	w := httptest.NewRecorder()
-
-	handler.HandleSpawn(w, req)
-
-	// Should get 400 (bad request) not 404 (not found).
-	if w.Code == http.StatusNotFound {
-		t.Error("/api/agent/spawn should be registered as a route")
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/agent/spawn", "{}", "user-alice")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("/api/agent/spawn registered publicly: got status %d, want 404", w.Code)
 	}
 }

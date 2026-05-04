@@ -106,8 +106,11 @@ done:
 		return p.FailErr
 	}
 
-	emit(types.EventRunDelta, "execution",
-		json.RawMessage(`{"text":"`+p.Result+`","provider":"stub"}`))
+	payload, _ := json.Marshal(map[string]string{
+		"text":     p.Result,
+		"provider": "stub",
+	})
+	emit(types.EventRunDelta, "execution", payload)
 
 	return nil
 }

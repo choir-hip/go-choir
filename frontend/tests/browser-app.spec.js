@@ -122,6 +122,22 @@ test('go button triggers navigation', async ({ page, authenticator }) => {
   expect(src).toContain('example.com');
 });
 
+test('browser app preserves data urls for generated local artifacts', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+  await openBrowserApp(page);
+
+  const artifactUrl = 'data:text/html;charset=utf-8,%3Ch1%3ELocal%20artifact%3C%2Fh1%3E';
+  const urlInput = page.locator('[data-browser-url-input]');
+  await urlInput.clear();
+  await urlInput.fill(artifactUrl);
+  await page.locator('[data-browser-go-btn]').click();
+
+  const iframe = page.locator('[data-browser-iframe]');
+  await expect(iframe).toBeVisible({ timeout: 10000 });
+  await expect(iframe).toHaveAttribute('src', artifactUrl);
+});
+
 // ---------------------------------------------------------------
 // Test: Back/forward navigation works
 // ---------------------------------------------------------------

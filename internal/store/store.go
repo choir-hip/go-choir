@@ -12,7 +12,7 @@
 //   - Single database file per sandbox (host-process milestone) rather than
 //     per-user Dolt databases (that comes in the vtext milestone).
 //   - Event sequence numbers are per-task, enabling incremental cursors for
-//     the /api/events streaming surface.
+//     Trace projections and internal workflow verification.
 //   - The store interface is minimal: CreateRun, GetRun, UpdateRun,
 //     ListRuns, AppendEvent, ListEvents. Later features extend it.
 package store
@@ -146,6 +146,28 @@ CREATE TABLE IF NOT EXISTS research_findings (
 	PRIMARY KEY (owner_id, finding_id)
 );
 
+CREATE TABLE IF NOT EXISTS worker_updates (
+	owner_id          TEXT NOT NULL DEFAULT '',
+	update_id         TEXT NOT NULL DEFAULT '',
+	agent_id          TEXT NOT NULL DEFAULT '',
+	target_agent_id   TEXT NOT NULL DEFAULT '',
+	channel_id        TEXT NOT NULL DEFAULT '',
+	message_seq       INTEGER NOT NULL DEFAULT 0,
+	trajectory_id     TEXT NOT NULL DEFAULT '',
+	role              TEXT NOT NULL DEFAULT '',
+	findings_json     TEXT NOT NULL DEFAULT '[]',
+	evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+	artifacts_json    TEXT NOT NULL DEFAULT '[]',
+	refs_json         TEXT NOT NULL DEFAULT '[]',
+	tests_json        TEXT NOT NULL DEFAULT '[]',
+	questions_json    TEXT NOT NULL DEFAULT '[]',
+	proposals_json    TEXT NOT NULL DEFAULT '[]',
+	notes_json        TEXT NOT NULL DEFAULT '[]',
+	content           TEXT NOT NULL DEFAULT '',
+	created_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, update_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_agents_owner_id ON agents(owner_id);
 CREATE INDEX IF NOT EXISTS idx_agents_channel_id ON agents(channel_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_id ON runs(owner_id);
@@ -167,6 +189,9 @@ CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_owner_target ON inbox_deliveries
 CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_research_findings_channel_id ON research_findings(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_findings(target_agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
 
 CREATE TABLE IF NOT EXISTS desktop_state (
 	owner_id       TEXT PRIMARY KEY,
@@ -1122,6 +1147,53 @@ func (s *Store) ListResearchFindingsByTrajectory(ctx context.Context, ownerID, t
 	return findings, nil
 }
 
+// GetWorkerUpdate returns a previously dispatched structured worker update.
+func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.WorkerUpdateRecord, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		   FROM worker_updates
+		  WHERE owner_id = ? AND update_id = ?`,
+		ownerID, updateID,
+	)
+	return scanWorkerUpdate(row)
+}
+
+// ListWorkerUpdatesByTrajectory returns structured worker updates for one
+// trajectory ordered by creation time ascending.
+func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.WorkerUpdateRecord, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		   FROM worker_updates
+		  WHERE owner_id = ?
+		    AND trajectory_id = ?
+		  ORDER BY created_at ASC
+		  LIMIT ?`,
+		ownerID,
+		trajectoryID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query worker updates by trajectory: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var updates []types.WorkerUpdateRecord
+	for rows.Next() {
+		rec, err := scanWorkerUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate worker updates by trajectory: %w", err)
+	}
+	return updates, nil
+}
+
 // DispatchResearchFinding atomically persists the addressed channel message,
 // inbox delivery, and finding dispatch record inside the runtime SQLite store.
 // Evidence durability remains in the vtext workspace and should be handled
@@ -1246,6 +1318,153 @@ func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.Resea
 		return types.ResearchFindingRecord{}, false, fmt.Errorf("commit research finding transaction: %w", err)
 	}
 	return finding, true, nil
+}
+
+// DispatchWorkerUpdate atomically persists a structured worker update with its
+// addressed channel message and inbox delivery. The update_id is idempotent per
+// owner, so retries can return the existing update without duplicating the
+// channel delivery.
+func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpdateRecord, message *types.ChannelMessage, delivery types.InboxDelivery) (types.WorkerUpdateRecord, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("begin worker update transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	existing, err := scanWorkerUpdate(tx.QueryRowContext(ctx,
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		   FROM worker_updates
+		  WHERE owner_id = ? AND update_id = ?`,
+		update.OwnerID, update.UpdateID,
+	))
+	if err == nil {
+		return existing, false, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return types.WorkerUpdateRecord{}, false, err
+	}
+
+	row := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(seq), 0) + 1 FROM channel_messages WHERE channel_id = ?`,
+		message.ChannelID,
+	)
+	if err := row.Scan(&message.Seq); err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("query next worker update message sequence: %w", err)
+	}
+	if message.Timestamp.IsZero() {
+		message.Timestamp = time.Now().UTC()
+	}
+	if delivery.CreatedAt.IsZero() {
+		delivery.CreatedAt = message.Timestamp
+	}
+	update.MessageSeq = message.Seq
+	if update.CreatedAt.IsZero() {
+		update.CreatedAt = message.Timestamp
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		message.ChannelID,
+		message.Seq,
+		update.OwnerID,
+		message.FromAgentID,
+		message.FromRunID,
+		message.ToAgentID,
+		message.ToRunID,
+		message.TrajectoryID,
+		message.From,
+		message.Role,
+		message.Content,
+		message.Timestamp.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update channel message: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO inbox_deliveries (delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		delivery.DeliveryID,
+		delivery.OwnerID,
+		delivery.ToAgentID,
+		delivery.ToRunID,
+		delivery.FromAgentID,
+		delivery.FromRunID,
+		delivery.ChannelID,
+		delivery.Role,
+		delivery.Content,
+		delivery.TrajectoryID,
+		delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
+		delivery.DeliveredToLoopID,
+		formatTimePtr(delivery.DeliveredAt),
+	)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update inbox delivery: %w", err)
+	}
+
+	findingsJSON, err := marshalStringSliceJSON(update.Findings)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update findings: %w", err)
+	}
+	evidenceIDsJSON, err := marshalStringSliceJSON(update.EvidenceIDs)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update evidence ids: %w", err)
+	}
+	artifactsJSON, err := marshalStringSliceJSON(update.Artifacts)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update artifacts: %w", err)
+	}
+	refsJSON, err := marshalStringSliceJSON(update.Refs)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update refs: %w", err)
+	}
+	testsJSON, err := marshalStringSliceJSON(update.Tests)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update tests: %w", err)
+	}
+	questionsJSON, err := marshalStringSliceJSON(update.Questions)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update questions: %w", err)
+	}
+	proposalsJSON, err := marshalStringSliceJSON(update.Proposals)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update proposals: %w", err)
+	}
+	notesJSON, err := marshalStringSliceJSON(update.Notes)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update notes: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		update.OwnerID,
+		update.UpdateID,
+		update.AgentID,
+		update.TargetAgentID,
+		update.ChannelID,
+		update.MessageSeq,
+		update.TrajectoryID,
+		update.Role,
+		string(findingsJSON),
+		string(evidenceIDsJSON),
+		string(artifactsJSON),
+		string(refsJSON),
+		string(testsJSON),
+		string(questionsJSON),
+		string(proposalsJSON),
+		string(notesJSON),
+		update.Content,
+		update.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update record: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("commit worker update transaction: %w", err)
+	}
+	return update, true, nil
 }
 
 // scanRun scans a run record from a single row.
@@ -1485,6 +1704,70 @@ func scanResearchFinding(row interface{ Scan(...any) error }) (types.ResearchFin
 	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
 		return types.ResearchFindingRecord{}, fmt.Errorf("parse research finding created_at: %w", err)
+	}
+	return rec, nil
+}
+
+func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRecord, error) {
+	var (
+		rec             types.WorkerUpdateRecord
+		findingsJSON    string
+		evidenceIDsJSON string
+		artifactsJSON   string
+		refsJSON        string
+		testsJSON       string
+		questionsJSON   string
+		proposalsJSON   string
+		notesJSON       string
+		createdAt       string
+	)
+	err := row.Scan(
+		&rec.OwnerID,
+		&rec.UpdateID,
+		&rec.AgentID,
+		&rec.TargetAgentID,
+		&rec.ChannelID,
+		&rec.MessageSeq,
+		&rec.TrajectoryID,
+		&rec.Role,
+		&findingsJSON,
+		&evidenceIDsJSON,
+		&artifactsJSON,
+		&refsJSON,
+		&testsJSON,
+		&questionsJSON,
+		&proposalsJSON,
+		&notesJSON,
+		&rec.Content,
+		&createdAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.WorkerUpdateRecord{}, ErrNotFound
+		}
+		return types.WorkerUpdateRecord{}, fmt.Errorf("scan worker update: %w", err)
+	}
+	for _, item := range []struct {
+		name string
+		raw  string
+		dst  *[]string
+	}{
+		{"findings", findingsJSON, &rec.Findings},
+		{"evidence_ids", evidenceIDsJSON, &rec.EvidenceIDs},
+		{"artifacts", artifactsJSON, &rec.Artifacts},
+		{"refs", refsJSON, &rec.Refs},
+		{"tests", testsJSON, &rec.Tests},
+		{"questions", questionsJSON, &rec.Questions},
+		{"proposals", proposalsJSON, &rec.Proposals},
+		{"notes", notesJSON, &rec.Notes},
+	} {
+		if err := json.Unmarshal([]byte(item.raw), item.dst); err != nil {
+			return types.WorkerUpdateRecord{}, fmt.Errorf("decode worker update %s: %w", item.name, err)
+		}
+	}
+	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, fmt.Errorf("parse worker update created_at: %w", err)
 	}
 	return rec, nil
 }

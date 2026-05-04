@@ -275,10 +275,16 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 		go func(idx int, c types.ToolCall) {
 			defer wg.Done()
 
-			// Emit tool.invoked event before execution.
-			invokedPayload, _ := json.Marshal(map[string]string{
-				"tool":   c.Name,
-				"call_id": c.ID,
+			// Emit full tool inputs: Trace is owner-scoped and is the proof surface
+			// for workflow tests, so summaries are not enough.
+			args := json.RawMessage(strings.TrimSpace(string(c.Arguments)))
+			if len(args) == 0 {
+				args = json.RawMessage(`{}`)
+			}
+			invokedPayload, _ := json.Marshal(map[string]any{
+				"tool":      c.Name,
+				"call_id":   c.ID,
+				"arguments": args,
 			})
 			emit(types.EventToolInvoked, "tool_call", invokedPayload)
 
@@ -299,10 +305,11 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 
 			// Emit tool.result event after execution.
 			resultPayload, _ := json.Marshal(map[string]any{
-				"tool":    c.Name,
-				"call_id": c.ID,
-				"is_error": isError,
+				"tool":       c.Name,
+				"call_id":    c.ID,
+				"is_error":   isError,
 				"output_len": len(output),
+				"output":     output,
 			})
 			emit(types.EventToolResult, "tool_call", resultPayload)
 

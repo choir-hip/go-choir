@@ -227,20 +227,18 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
       testResults.steps[5].observed = 'Task runner UI not visible, trying direct API';
 
       const taskRes = await page.evaluate(async (baseURL) => {
-        const res = await fetch(`${baseURL}/api/agent/loop`, {
+        const res = await fetch(`${baseURL}/api/prompt-bar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: 'What is 2+2? Answer with just the number.' }]
-          })
+          body: JSON.stringify({ text: 'What is 2+2? Answer with just the number.' })
         });
         return { status: res.status, body: await res.json().catch(() => null) };
       }, BASE_URL);
 
       testResults.steps[5].observed = `Direct API response: ${taskRes.status}, body: ${JSON.stringify(taskRes.body)?.substring(0, 200)}`;
 
-      if (taskRes.status === 200 && taskRes.body?.task_id) {
+      if (taskRes.status === 202 && taskRes.body?.submission_id) {
         testResults.steps.push({
           action: 'Poll for task completion',
           expected: 'Task completes with real provider response',
@@ -253,16 +251,16 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
         let finalStatus = null;
 
         while (!taskComplete && pollAttempts < 30) {
-          const statusRes = await page.evaluate(async (baseURL, taskId) => {
-            const res = await fetch(`${baseURL}/api/agent/status?task_id=${taskId}`, {
+          const statusRes = await page.evaluate(async (baseURL, submissionId) => {
+            const res = await fetch(`${baseURL}/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`, {
               credentials: 'include'
             });
             return res.json();
-          }, BASE_URL, taskRes.body.task_id);
+          }, BASE_URL, taskRes.body.submission_id);
 
           finalStatus = statusRes;
 
-          if (statusRes.state === 'completed' || statusRes.state === 'failed') {
+          if (statusRes.decision || statusRes.state === 'failed' || statusRes.state === 'blocked' || statusRes.state === 'cancelled') {
             taskComplete = true;
           } else {
             await page.waitForTimeout(1000);
@@ -272,9 +270,9 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
 
         testResults.steps[6].observed = `Final status after ${pollAttempts}s: ${JSON.stringify(finalStatus)?.substring(0, 300)}`;
 
-        if (finalStatus?.state === 'completed') {
+        if (finalStatus?.state === 'completed' && finalStatus?.decision) {
           testResults.status = 'pass';
-          if (finalStatus.result?.content?.includes('Echo') || finalStatus.result?.content?.includes('stub')) {
+          if (JSON.stringify(finalStatus.decision).includes('Echo') || JSON.stringify(finalStatus.decision).includes('stub')) {
             testResults.issues = 'Response appears to be from stub provider, not a real gateway provider';
           }
         } else {

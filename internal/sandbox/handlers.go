@@ -3,6 +3,8 @@ package sandbox
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -38,7 +40,7 @@ type WSMessage struct {
 
 // Handler provides the placeholder sandbox HTTP and WebSocket handlers.
 type Handler struct {
-	cfg    Config
+	cfg      Config
 	upgrader websocket.Upgrader
 }
 
@@ -139,6 +141,17 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 // RegisterRoutes registers all sandbox routes on the given server.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)
-	s.HandleFunc("/api/shell/error", h.HandleError)
+	if sandboxTestRoutesEnabled() {
+		s.HandleFunc("/api/shell/error", h.HandleError)
+	}
 	s.HandleFunc("/api/ws", h.HandleWS)
+}
+
+func sandboxTestRoutesEnabled() bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv("RUNTIME_ENABLE_TEST_APIS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

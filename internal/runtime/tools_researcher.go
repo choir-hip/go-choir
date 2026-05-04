@@ -86,7 +86,6 @@ func newSubmitResearchFindingsTool(rt *Runtime) Tool {
 			agentID := stringFromToolContext(ctx, toolCtxAgentID)
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			role := stringFromToolContext(ctx, toolCtxRole)
-			channelID := strings.TrimSpace(in.ChannelID)
 			if ownerID == "" || agentID == "" || runID == "" {
 				return "", fmt.Errorf("submit_research_findings missing researcher context")
 			}
@@ -102,12 +101,7 @@ func newSubmitResearchFindingsTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			if channelID == "" {
-				channelID = targetChannelID
-			}
-			if channelID == "" {
-				channelID = stringFromToolContext(ctx, toolCtxChannelID)
-			}
+			channelID := authoritativeDeliveryChannelID(targetChannelID, in.ChannelID, stringFromToolContext(ctx, toolCtxChannelID))
 			if channelID == "" {
 				return "", fmt.Errorf("submit_research_findings could not resolve channel_id")
 			}
@@ -193,22 +187,46 @@ func newSubmitResearchFindingsTool(rt *Runtime) Tool {
 }
 
 func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
+	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
+	if runRec != nil && strings.TrimSpace(runRec.ParentRunID) != "" {
+		parent, err := rt.store.GetRun(ctx, strings.TrimSpace(runRec.ParentRunID))
+		if err != nil {
+			return "", "", fmt.Errorf("resolve delivery target parent lookup: %w", err)
+		}
+		return agentIDForRun(&parent), channelIDForRun(&parent), nil
+	}
+
+	if runRec != nil && metadataStringValue(runRec.Metadata, "requested_by_profile") == AgentProfileVText {
+		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
+		if requesterAgentID != "" {
+			target, err := rt.store.GetAgent(ctx, requesterAgentID)
+			if err != nil {
+				return "", "", fmt.Errorf("resolve delivery target requester lookup: %w", err)
+			}
+			return requesterAgentID, strings.TrimSpace(target.ChannelID), nil
+		}
+	}
+
 	if explicitAgentID != "" {
 		target, err := rt.store.GetAgent(ctx, explicitAgentID)
 		if err != nil {
-			return "", "", fmt.Errorf("submit_research_findings target lookup: %w", err)
+			return "", "", fmt.Errorf("resolve delivery target lookup: %w", err)
 		}
 		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
 	}
-	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-	if runRec == nil || strings.TrimSpace(runRec.ParentRunID) == "" {
-		return "", "", fmt.Errorf("submit_research_findings requires agent_id or a parent run")
+	return "", "", fmt.Errorf("structured delivery requires agent_id, a parent run, or a vtext requester")
+}
+
+func authoritativeDeliveryChannelID(targetChannelID, explicitChannelID, contextChannelID string) string {
+	targetChannelID = strings.TrimSpace(targetChannelID)
+	if targetChannelID != "" {
+		return targetChannelID
 	}
-	parent, err := rt.store.GetRun(ctx, strings.TrimSpace(runRec.ParentRunID))
-	if err != nil {
-		return "", "", fmt.Errorf("submit_research_findings parent lookup: %w", err)
+	explicitChannelID = strings.TrimSpace(explicitChannelID)
+	if explicitChannelID != "" {
+		return explicitChannelID
 	}
-	return agentIDForRun(&parent), channelIDForRun(&parent), nil
+	return strings.TrimSpace(contextChannelID)
 }
 
 func ensureFindingEvidence(ctx context.Context, s *store.Store, ownerID, agentID, findingID string, index int, item researchFindingEvidenceInput) (types.EvidenceRecord, error) {

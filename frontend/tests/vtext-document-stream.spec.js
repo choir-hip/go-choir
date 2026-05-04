@@ -120,6 +120,22 @@ async function submitTestResearchFindings(page, payload) {
   }, payload);
 }
 
+async function submitTestWorkerUpdate(page, payload) {
+  return page.evaluate(async (body) => {
+    const res = await fetch('/api/test/vtext/worker-update', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`failed to submit worker update: ${res.status} ${err}`);
+    }
+    return res.json();
+  }, payload);
+}
+
 test('vtext auto-follows latest head when the editor is clean', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const fileName = `auto-follow-${Date.now()}.txt`;
@@ -214,7 +230,11 @@ test('vtext file-backed window restores on reload with the latest canonical head
   await expect(restoredEditor).toHaveValue(externalContent, { timeout: 10000 });
 });
 
-test('submit_research_findings batches rapid worker updates into one auto-advanced next version', async ({ page, authenticator }) => {
+test('dry-run test endpoint: submit_research_findings batches rapid worker updates into one auto-advanced next version', async ({ page, authenticator }) => {
+  test.skip(
+    process.env.GO_CHOIR_RUN_VTEXT_DRY_RUN_TESTS !== '1',
+    'uses /api/test/vtext/research-findings and is only a dry-run plumbing check'
+  );
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const initialContent = 'Base draft that should get a findings-driven follow-up.';
 
@@ -225,7 +245,7 @@ test('submit_research_findings batches rapid worker updates into one auto-advanc
 
   const revisionRequest = page.waitForResponse((response) => {
     return response.request().method() === 'POST' &&
-      /\/api\/vtext\/documents\/[^/]+\/agent-revision$/.test(new URL(response.url()).pathname);
+      /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname);
   });
   await page.locator('[data-vtext-prompt]').last().click();
   const revisionResponse = await revisionRequest;
@@ -251,10 +271,83 @@ test('submit_research_findings batches rapid worker updates into one auto-advanc
 
   const afterWake = await waitForRevisionTotal(page, revisionJSON.doc_id, baselineCount + 1, 12000);
   expect(afterWake.revisions.length).toBe(baselineCount + 1);
+  const currentDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`failed to load document: ${res.status}`);
+    }
+    return res.json();
+  }, revisionJSON.doc_id);
+  const latestRevision = afterWake.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
+  expect(latestRevision?.content || '').toContain('Finding A');
+  expect(latestRevision?.content || '').toContain('Finding B');
+  expect(latestRevision?.content || '').not.toMatch(/Research findings ready\.|Task completed successfully|stub provider/i);
   await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
   await expect(page.locator('[data-vtext-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
 
   await page.waitForTimeout(4000);
   const stableRevisions = await listRevisions(page, revisionJSON.doc_id);
   expect(stableRevisions.revisions.length).toBe(baselineCount + 1);
+});
+
+test('dry-run test endpoint: submit_worker_update records artifacts and tests before auto-advancing vtext', async ({ page, authenticator }) => {
+  test.skip(
+    process.env.GO_CHOIR_RUN_VTEXT_DRY_RUN_TESTS !== '1',
+    'uses /api/test/vtext/worker-update and is only a dry-run plumbing check'
+  );
+  await registerAndLoadDesktop(page, authenticator, uniqueEmail());
+
+  await openVText(page);
+  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  await editor.fill('Base draft that needs a verified simulation artifact.');
+
+  const revisionRequest = page.waitForResponse((response) => {
+    return response.request().method() === 'POST' &&
+      /\/api\/vtext\/documents\/[^/]+\/revise$/.test(new URL(response.url()).pathname);
+  });
+  await page.locator('[data-vtext-prompt]').last().click();
+  const revisionJSON = await (await revisionRequest).json();
+  await expect(page.locator('[data-vtext-save-status]').last()).toContainText(/First draft ready|Agent created next version/, { timeout: 10000 });
+
+  const baselineRevisions = await listRevisions(page, revisionJSON.doc_id);
+  const baselineCount = baselineRevisions.revisions.length;
+  const updateId = `super-artifact-${Date.now()}`;
+
+  const workerResp = await submitTestWorkerUpdate(page, {
+    doc_id: revisionJSON.doc_id,
+    update_id: updateId,
+    role: 'super',
+    artifacts: ['artifacts/evolution-ca.html'],
+    tests: ['node artifacts/evolution-ca.verify.js passed'],
+    proposals: ['Mention the verified cellular automata visualization in the next version.'],
+  });
+  expect(workerResp.status).toBe('submitted');
+  expect(workerResp.loop_id).toBeTruthy();
+
+  const afterWake = await waitForRevisionTotal(page, revisionJSON.doc_id, baselineCount + 1, 12000);
+  const currentDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`failed to load document: ${res.status}`);
+    }
+    return res.json();
+  }, revisionJSON.doc_id);
+  const latestRevision = afterWake.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
+  expect(latestRevision).toBeTruthy();
+  expect(latestRevision.content || '').toContain('artifacts/evolution-ca.html');
+  expect(latestRevision.content || '').toContain('node artifacts/evolution-ca.verify.js passed');
+  expect(latestRevision.content || '').not.toMatch(/Worker update ready\.|Task completed successfully|stub provider/i);
+  const consumed = latestRevision.metadata.worker_updates_consumed || [];
+  expect(consumed.some((item) =>
+    item.seq === workerResp.cursor &&
+    item.role === 'super' &&
+    item.content_preview.includes('artifacts/evolution-ca.html') &&
+    item.content_preview.includes('evolution-ca.verify.js passed')
+  )).toBe(true);
+
+  await expect(page.locator('[data-vtext-version]').last()).toHaveText(`v${afterWake.revisions.length - 1}`);
 });

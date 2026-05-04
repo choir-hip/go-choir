@@ -206,7 +206,7 @@ const (
 
 // EventRecord represents a single runtime event emitted during run execution
 // or runtime lifecycle changes. Events are ordered by sequence number within
-// a run, persisted for restart recovery, and streamed through /api/events
+// a run, persisted for restart recovery, and projected through Trace
 // (VAL-RUNTIME-005).
 type EventRecord struct {
 	// EventID is the unique identifier for this event.

@@ -80,9 +80,61 @@
   }
 
   function sortRevisionsChronologically(items) {
-    return [...items].sort((left, right) => {
-      return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
-    });
+    const byId = new Map();
+    for (const item of items || []) {
+      if (item?.revision_id) {
+        byId.set(item.revision_id, item);
+      }
+    }
+
+    const fallbackCompare = (left, right) => {
+      const leftTime = new Date(left?.created_at || 0).getTime();
+      const rightTime = new Date(right?.created_at || 0).getTime();
+      if (leftTime !== rightTime) return leftTime - rightTime;
+      return String(left?.revision_id || '').localeCompare(String(right?.revision_id || ''));
+    };
+
+    const childrenByParent = new Map();
+    const roots = [];
+    for (const item of byId.values()) {
+      const parentId = item.parent_revision_id || '';
+      if (parentId && byId.has(parentId)) {
+        const children = childrenByParent.get(parentId) || [];
+        children.push(item);
+        childrenByParent.set(parentId, children);
+      } else {
+        roots.push(item);
+      }
+    }
+
+    for (const children of childrenByParent.values()) {
+      children.sort(fallbackCompare);
+    }
+    roots.sort(fallbackCompare);
+
+    const ordered = [];
+    const visited = new Set();
+    function visit(item) {
+      if (!item?.revision_id || visited.has(item.revision_id)) return;
+      visited.add(item.revision_id);
+      ordered.push(item);
+      for (const child of childrenByParent.get(item.revision_id) || []) {
+        visit(child);
+      }
+    }
+
+    for (const root of roots) {
+      visit(root);
+    }
+
+    const leftovers = [...byId.values()]
+      .filter((item) => !visited.has(item.revision_id))
+      .sort(fallbackCompare);
+    for (const item of leftovers) {
+      visit(item);
+    }
+
+    return ordered;
   }
 
   function buildRevisionMetadata() {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -15,7 +14,7 @@ import (
 type pendingVTextWake struct {
 	ownerID string
 	docID   string
-	timer   *time.Timer
+	timer   vtextWakeTimer
 }
 
 func vtextWakeKey(ownerID, docID string) string {
@@ -34,7 +33,7 @@ func (rt *Runtime) scheduleVTextWorkerWake(ownerID, docID, _ string) {
 	if pending, ok := rt.vtextWakePending[key]; ok && pending.timer != nil {
 		pending.timer.Stop()
 	}
-	timer := time.AfterFunc(debounce, func() {
+	timer := rt.vtextWakeAfter(debounce, func() {
 		rt.flushVTextWorkerWake(key)
 	})
 	rt.vtextWakePending[key] = pendingVTextWake{

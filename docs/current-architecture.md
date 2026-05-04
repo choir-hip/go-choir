@@ -41,7 +41,7 @@ before the vtext loop is reliable.
 The core loop is:
 
 ```text
-prompt -> conductor -> vtext -> researcher/super/cosuper -> vtext versions
+prompt -> conductor -> vtext -> researcher/persistent super -> cosuper -> vtext versions
 ```
 
 Then:
@@ -71,14 +71,14 @@ surface.
 A `vtext` version is a canonical document state:
 
 - `v0` is the initial user input.
-- `v1` is the conductor's short framing note included in the spawn/delegation
-  call that creates the `vtext`.
+- `v1` is the initial document seed included in the route that creates the
+  `vtext`.
 - `v2+` are user edits and `vtext`-authored revisions.
 
 The `vtext` agent should not spend one extra LLM call producing an initial
-answer from priors before the document opens. The conductor already has enough
-context to create the initial framing note. Opening the window should show `v0`
-as the user prompt and `v1` as the current conductor-framed state.
+answer from priors before the document opens. The route already has enough
+context to create the initial seed. Opening the window should show `v0` as the
+user prompt and `v1` as the current seeded state.
 
 Workers do not send patches to `vtext`. That mixes concerns. Workers emit
 updates: findings, evidence, source references, artifact refs, branch/commit
@@ -102,8 +102,8 @@ testable without real providers, browsers, or timing luck.
 
 Required deterministic tests:
 
-- Prompt creation produces one document with `v0` user input and `v1` conductor
-  framing.
+- Prompt creation produces one document with `v0` user input and `v1` initial
+  document seed.
 - No vtext answer-from-priors call is needed to create `v1`.
 - User edits always create user-authored versions.
 - Worker updates are durably attached to the document trajectory.
@@ -143,7 +143,7 @@ mutable execution. The useful distinction is authority: `super` can request
 `vmctl` resources such as background VM forks and promotions.
 
 `cosuper` is a durable execution co-agent, usually running inside a background
-VM. Cosupers can spawn other cosupers. They should not be treated as one-shot
+VM. Only `super` can spawn cosupers. They should not be treated as one-shot
 subagents that disappear without live coordination.
 
 `worker` is the general category for delegated agents such as researcher, super,

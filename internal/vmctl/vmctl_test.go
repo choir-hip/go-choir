@@ -976,9 +976,13 @@ func TestClient_ResolveDesktopAndLookupDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDesktop primary: %v", err)
 	}
-	branch, err := client.ResolveDesktop("user-desktop", "branch-a")
+	branch, err := client.ForkDesktop("user-desktop", PrimaryDesktopID, "branch-a")
 	if err != nil {
-		t.Fatalf("ResolveDesktop branch: %v", err)
+		t.Fatalf("ForkDesktop branch: %v", err)
+	}
+	branch, err = client.PublishDesktop("user-desktop", "branch-a")
+	if err != nil {
+		t.Fatalf("PublishDesktop branch: %v", err)
 	}
 	if primary.VMID == branch.VMID {
 		t.Fatalf("expected different VM IDs per desktop, got %s", primary.VMID)

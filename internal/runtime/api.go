@@ -24,6 +24,31 @@ type runSubmitRequest struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
+// promptBarSubmitRequest is the public product payload for POST
+// /api/prompt-bar. Browser callers submit user intent only; runtime role,
+// model, channel, trajectory, and orchestration metadata are assigned
+// server-side.
+type promptBarSubmitRequest struct {
+	Text string `json:"text"`
+}
+
+type promptBarSubmitResponse struct {
+	SubmissionID string         `json:"submission_id"`
+	State        types.RunState `json:"state"`
+	CreatedAt    string         `json:"created_at"`
+	StatusURL    string         `json:"status_url"`
+}
+
+type promptBarSubmissionStatusResponse struct {
+	SubmissionID string             `json:"submission_id"`
+	State        types.RunState     `json:"state"`
+	CreatedAt    string             `json:"created_at"`
+	UpdatedAt    string             `json:"updated_at"`
+	FinishedAt   *string            `json:"finished_at,omitempty"`
+	Decision     *conductorDecision `json:"decision,omitempty"`
+	Error        string             `json:"error,omitempty"`
+}
+
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
 // It creates a child run linked to a parent, with an objective and optional
 // constraints (VAL-CHOIR-001).
@@ -168,6 +193,127 @@ func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("runtime api: json encode error: %v", err)
 	}
+}
+
+// HandlePromptBar handles POST /api/prompt-bar. This is the browser-public
+// product entrypoint for user intent. It creates the conductor run internally
+// with server-owned role metadata.
+func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+
+	var req promptBarSubmitRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid prompt-bar request"})
+		return
+	}
+
+	text := strings.TrimSpace(req.Text)
+	if text == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "text is required"})
+		return
+	}
+
+	metadata := map[string]any{
+		runMetadataAgentProfile:  AgentProfileConductor,
+		runMetadataAgentRole:     AgentProfileConductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          AgentProfileVText,
+		"seed_prompt":            text,
+		"initial_document_title": buildInitialVTextTitle(text, ""),
+		"submission_surface":     "prompt_bar",
+	}
+
+	if _, err := h.rt.EnsurePersistentSuperAgent(r.Context(), ownerID); err != nil {
+		log.Printf("runtime api: ensure persistent super: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
+		return
+	}
+
+	rec, err := h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
+	if err != nil {
+		log.Printf("runtime api: submit prompt-bar intent: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
+		return
+	}
+
+	writeAPIJSON(w, http.StatusAccepted, promptBarSubmitResponse{
+		SubmissionID: rec.RunID,
+		State:        rec.State,
+		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		StatusURL:    "/api/prompt-bar/submissions/" + rec.RunID,
+	})
+}
+
+// HandlePromptBarSubmission handles GET /api/prompt-bar/submissions/{id}.
+// It returns product-level submission state without exposing raw run metadata,
+// agent identity controls, or runtime mailboxes.
+func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+
+	const prefix = "/api/prompt-bar/submissions/"
+	if !strings.HasPrefix(r.URL.Path, prefix) {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
+		return
+	}
+	submissionID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, prefix))
+	if submissionID == "" || strings.Contains(submissionID, "/") {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
+		return
+	}
+
+	rec, err := h.rt.GetRun(r.Context(), submissionID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
+		return
+	}
+	if agentProfileForRun(rec) != AgentProfileConductor || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
+		return
+	}
+
+	var finishedAt *string
+	if rec.FinishedAt != nil {
+		s := rec.FinishedAt.Format("2006-01-02T15:04:05.000Z")
+		finishedAt = &s
+	}
+
+	resp := promptBarSubmissionStatusResponse{
+		SubmissionID: rec.RunID,
+		State:        rec.State,
+		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		FinishedAt:   finishedAt,
+		Error:        rec.Error,
+	}
+	if raw := strings.TrimSpace(rec.Result); raw != "" {
+		var decision conductorDecision
+		if err := json.Unmarshal([]byte(raw), &decision); err == nil && strings.TrimSpace(decision.Action) != "" {
+			decision = fillConductorDecisionFromRun(rec, decision)
+			resp.Decision = &decision
+		}
+	}
+
+	writeAPIJSON(w, http.StatusOK, resp)
 }
 
 // HandleRunSubmission handles POST /api/agent/loop.
@@ -446,7 +592,8 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 // HandleEventList handles GET /api/agent/events.
 // When loop_id is present, it returns historical events for that specific
 // loop after verifying owner access. Otherwise it returns recent owner-scoped
-// events across loops. This complements the live /api/events SSE feed.
+// events across loops. This legacy handler is not browser-public; Trace uses
+// /api/trace/* projections.
 func (h *APIHandler) HandleEventList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -637,11 +784,9 @@ func (h *APIHandler) HandleTopology(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleEvents handles GET /api/events.
-// It provides a long-lived incremental event stream through the authenticated
-// same-origin proxy path, emitting ordered lifecycle updates correlated to
-// accepted runtime work before final completion (VAL-RUNTIME-005).
-// Status and events are auth-gated and caller-scoped (VAL-RUNTIME-006).
+// HandleEvents is the legacy raw owner event stream handler. It is intentionally
+// not registered on the browser-public route table; Trace uses trajectory-scoped
+// /api/trace/* projections instead.
 func (h *APIHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -771,22 +916,17 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // report runtime readiness.
 func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.SetHealthHandler(h.HandleHealth)
-	s.HandleFunc("/api/agent/loop", h.HandleRunSubmission)
-	s.HandleFunc("/api/agent/loops", h.HandleRunList)
-	s.HandleFunc("/api/agent/events", h.HandleEventList)
-	s.HandleFunc("/api/agent/channel-messages", h.HandleChannelMessageList)
-	s.HandleFunc("/api/agent/topology", h.HandleTopology)
-	s.HandleFunc("/api/agent/spawn", h.HandleSpawn)
-	s.HandleFunc("/api/agent/cancel", h.HandleCancel)
-	s.HandleFunc("/api/agent/status", h.HandleRunStatus)
-	s.HandleFunc("/api/agent/", h.HandleRunStatusByID) // matches /api/agent/{id}/status
-	s.HandleFunc("/api/events", h.HandleEvents)
+	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
+	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
-	s.HandleFunc("/api/prompts", h.HandlePromptList)
-	s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-	s.HandleFunc("/api/test/vtext/research-findings", h.HandleTestVTextResearchFindings)
+	if h.rt.cfg.EnableTestAPIs {
+		s.HandleFunc("/api/prompts", h.HandlePromptList)
+		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
+		s.HandleFunc("/api/test/vtext/research-findings", h.HandleTestVTextResearchFindings)
+		s.HandleFunc("/api/test/vtext/worker-update", h.HandleTestVTextWorkerUpdate)
+	}
 
 	// VText document/revision/history/diff/blame APIs.
 	// All routes are dispatched from a single prefix handler that inspects
@@ -820,7 +960,7 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 //	POST   /api/vtext/documents/{id}/revisions → create revision
 //	GET    /api/vtext/documents/{id}/revisions → list revisions
 //	GET    /api/vtext/documents/{id}/stream    → document-scoped stream
-//	POST   /api/vtext/documents/{id}/agent-revision → submit agent revision
+//	POST   /api/vtext/documents/{id}/revise   → submit a document revise request
 //	GET    /api/vtext/documents/{id}/history   → revision history
 //	GET    /api/vtext/revisions/{id}          → get revision (snapshot)
 //	GET    /api/vtext/revisions/{id}/blame     → blame revision
@@ -870,9 +1010,13 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleVTextDocumentStream(w, r)
 			return
 		}
-		if strings.HasSuffix(rest, "/agent-revision") {
-			// /api/vtext/documents/{id}/agent-revision
+		if strings.HasSuffix(rest, "/revise") {
+			// /api/vtext/documents/{id}/revise
 			h.HandleVTextAgentRevision(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/agent-revision") {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "vtext endpoint not found"})
 			return
 		}
 		if strings.HasSuffix(rest, "/history") {

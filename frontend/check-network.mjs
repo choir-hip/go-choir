@@ -24,30 +24,30 @@ import { chromium } from '@playwright/test';
     });
   });
 
-  // Navigate and submit a new task
+  // Navigate and submit prompt-bar intent
   await page.goto('https://draft.choir-ip.com/');
   await page.waitForTimeout(3000);
 
-  console.log('Submitting new task for network analysis...');
-  const taskResponse = await page.evaluate(async () => {
+  console.log('Submitting prompt-bar intent for network analysis...');
+  const submissionResponse = await page.evaluate(async () => {
     try {
-      const res = await fetch('https://draft.choir-ip.com/api/agent/loop', {
+      const res = await fetch('https://draft.choir-ip.com/api/prompt-bar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'What is 2+2?' })
+        body: JSON.stringify({ text: 'What is 2+2?' })
       });
       return { status: res.status, text: await res.text() };
     } catch (e) {
       return { error: e.message };
     }
   });
-  console.log('Task submission:', JSON.stringify(taskResponse));
+  console.log('Prompt submission:', JSON.stringify(submissionResponse));
 
   // Wait for completion
   await page.waitForTimeout(5000);
 
   // Check status
-  const taskId = JSON.parse(taskResponse.text).task_id;
+  const submissionId = JSON.parse(submissionResponse.text).submission_id;
   const statusResponse = await page.evaluate(async (url) => {
     try {
       const res = await fetch(url);
@@ -55,8 +55,8 @@ import { chromium } from '@playwright/test';
     } catch (e) {
       return { error: e.message };
     }
-  }, `https://draft.choir-ip.com/api/agent/status?task_id=${taskId}`);
-  console.log('Task status:', JSON.stringify(statusResponse));
+  }, `https://draft.choir-ip.com/api/prompt-bar/submissions/${submissionId}`);
+  console.log('Prompt submission status:', JSON.stringify(statusResponse));
 
   // Analyze network traffic
   console.log('\n\n=== NETWORK TRAFFIC ANALYSIS ===');

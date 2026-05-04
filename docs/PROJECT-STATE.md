@@ -201,7 +201,7 @@ sqlite3 .cogent/cogent-private.db "SELECT title, content FROM private_notes WHER
 
 ## Current Prompt Flow
 
-This is the live prompt path today, not the intended path:
+This is the live prompt path today:
 
 1. **Bottom prompt bar**
    - `frontend/src/lib/BottomBar.svelte` emits `promptsubmit`
@@ -210,22 +210,22 @@ This is the live prompt path today, not the intended path:
    - non-trivial prompts call `submitConductorPrompt(...)` in `frontend/src/lib/conductor.js`
 
 2. **Conductor submission**
-   - `submitConductorPrompt(...)` posts to `/api/agent/task`
-   - metadata includes:
+   - `submitConductorPrompt(...)` posts `{ text }` to `/api/prompt-bar`
+   - the browser cannot set runtime metadata; the backend creates a server-owned conductor run with:
      - `agent_profile=conductor`
      - `agent_role=conductor`
      - `requested_app=vtext`
      - `seed_prompt=<prompt>`
-   - this creates a real conductor task in the runtime
+      - `input_source=prompt_bar`
+   - the frontend polls `/api/prompt-bar/submissions/{id}` for the product-level result
 
-3. **But the UI still bypasses conductor results**
-   - after submission, `Desktop.svelte` immediately opens a new `vtext` window locally
-   - that window is seeded directly with the prompt text as `v0`
-   - conductor is therefore not yet the actual owner of app routing in practice
+3. **Conductor-owned routing**
+   - conductor completion creates the VText document, v0 user revision, v1 initial seed revision, and initial VText run server-side
+   - `Desktop.svelte` opens the document returned by the conductor decision
 
 4. **`vtext` prompt/apply**
    - `frontend/src/lib/VTextEditor.svelte` saves a user revision
-   - then it calls `/api/vtext/documents/{id}/agent-revision`
+   - then it calls `/api/vtext/documents/{id}/revise`
    - the backend builds the real provider prompt in `internal/runtime/vtext.go`
 
 5. **Runtime execution**
@@ -237,11 +237,9 @@ This is the live prompt path today, not the intended path:
      - `super`: coding + research + file + coagent tools
    - the tool loop system prompt comes from `systemPromptForTask(...)`
 
-6. **Why the behavior still feels fake**
-   - conductor is not yet actually driving the desktop/app routing result
+6. **Remaining product risks**
    - `vtext` is still mostly instructed by prompt text alone, not by a strong structured orchestration contract
-   - the trace surface exists, but it is still too raw to make delegation legible at a glance
-   - as a result, the system can spawn agents in principle, but the user experience does not yet make that orchestration visible or reliable
+   - Trace is read-only and product-scoped, but still needs polish to make delegation legible at a glance
 
 ## Prompt Surfaces To Edit
 
@@ -249,11 +247,11 @@ These are the important prompt/system-prompt surfaces right now:
 
 1. **Conductor user prompt payload**
    - `frontend/src/lib/conductor.js`
-   - controls what metadata gets attached when the prompt bar submits a conductor task
+   - submits prompt-bar intent text; backend policy owns runtime metadata
 
 2. **Desktop routing behavior**
    - `frontend/src/lib/Desktop.svelte`
-   - not a prompt, but it currently determines that prompt-bar input opens `vtext` directly instead of waiting for conductor output
+   - not a prompt, but it maps conductor decisions to open product windows
 
 3. **`vtext` frontend agent prompt**
    - `frontend/src/lib/VTextEditor.svelte`

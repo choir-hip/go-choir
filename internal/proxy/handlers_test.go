@@ -686,17 +686,24 @@ func TestHandleAPIReturnsNotFoundForUnknownRoutes(t *testing.T) {
 	}
 }
 
-// TestHandleAPIForwardsPromptRoutes verifies that /api/prompts and
-// /api/prompts/{role} are forwarded to the sandbox through the proxy
+// TestHandleAPIForwardsPromptBarRoutes verifies that prompt-bar product
+// routes are forwarded to the sandbox through the proxy
 // rather than hitting the generic 404 fallback.
-func TestHandleAPIForwardsPromptRoutes(t *testing.T) {
+func TestHandleAPIForwardsPromptBarRoutes(t *testing.T) {
 	h, priv, _ := testProxyEnv(t)
 	accessToken := issueTestAccessJWT(priv, "user-123")
 
-	paths := []string{"/api/prompts", "/api/prompts/conductor"}
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+	routes := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/api/prompt-bar", `{"text":"draft"}`},
+		{http.MethodGet, "/api/prompt-bar/submissions/run-123", ""},
+	}
+	for _, route := range routes {
+		t.Run(route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, strings.NewReader(route.body))
 			req.AddCookie(&http.Cookie{
 				Name:  "choir_access",
 				Value: accessToken,
@@ -704,13 +711,13 @@ func TestHandleAPIForwardsPromptRoutes(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.HandleAPI(w, req)
 
-			// The sandbox mock doesn't handle /api/prompts, so we'll get
+			// The sandbox mock doesn't handle these routes, so we'll get
 			// a 404 or 502 from the sandbox rather than the proxy's own
 			// auth-gated 404. The key assertion is that we do NOT get the
 			// proxy's 404 JSON body, meaning the request was forwarded.
 			body := w.Body.String()
 			if w.Code == http.StatusNotFound && strings.Contains(body, `"error":"not found"`) {
-				t.Errorf("%s was NOT forwarded to sandbox; proxy returned its own 404", path)
+				t.Errorf("%s was NOT forwarded to sandbox; proxy returned its own 404", route.path)
 			}
 		})
 	}
@@ -1677,9 +1684,9 @@ func TestAllAPIRoutesDenySignedOutCallers(t *testing.T) {
 	}{
 		{"/api/shell/bootstrap", http.MethodGet, http.StatusUnauthorized},
 		{"/api/ws", http.MethodGet, http.StatusUnauthorized},
-		{"/api/agent/loop", http.MethodPost, http.StatusUnauthorized},
-		{"/api/agent/status", http.MethodGet, http.StatusUnauthorized},
-		{"/api/events", http.MethodGet, http.StatusUnauthorized},
+		{"/api/prompt-bar", http.MethodPost, http.StatusUnauthorized},
+		{"/api/prompt-bar/submissions/run-1", http.MethodGet, http.StatusUnauthorized},
+		{"/api/trace/trajectories", http.MethodGet, http.StatusUnauthorized},
 		{"/api/unknown", http.MethodGet, http.StatusUnauthorized},
 		{"/api/shell/some-future-route", http.MethodGet, http.StatusUnauthorized},
 	}
@@ -1940,7 +1947,7 @@ func TestSignedOutCallersNeverSeeSandboxData(t *testing.T) {
 	paths := []string{
 		"/api/shell/bootstrap",
 		"/api/ws",
-		"/api/agent/loop",
+		"/api/prompt-bar",
 		"/api/anything",
 	}
 
@@ -2292,13 +2299,13 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 			"path":       r.URL.Path,
 		})
 	})
-	sandboxMux.HandleFunc("/api/agent/loop", func(w http.ResponseWriter, r *http.Request) {
+	sandboxMux.HandleFunc("/api/prompt-bar", func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("X-Authenticated-User")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"loop_id":  "task-123",
-			"owner_id": user,
-			"state":    "accepted",
+			"submission_id": "task-123",
+			"owner_id":      user,
+			"state":         "accepted",
 		})
 	})
 	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -2416,6 +2423,16 @@ func TestVMctlRouting_SameUserDifferentDesktopsGetDifferentVMs(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 
 	accessToken := issueTestAccessJWT(priv, "alice")
+	client := vmctl.NewClient(vmctlSrv.URL)
+	if _, err := client.ResolveDesktop("alice", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveDesktop primary: %v", err)
+	}
+	if _, err := client.ForkDesktop("alice", vmctl.PrimaryDesktopID, "branch-a"); err != nil {
+		t.Fatalf("ForkDesktop branch-a: %v", err)
+	}
+	if _, err := client.PublishDesktop("alice", "branch-a"); err != nil {
+		t.Fatalf("PublishDesktop branch-a: %v", err)
+	}
 
 	reqA := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?desktop_id=primary", nil)
 	reqA.Header.Set("Cookie", "choir_access="+accessToken)
@@ -2431,7 +2448,6 @@ func TestVMctlRouting_SameUserDifferentDesktopsGetDifferentVMs(t *testing.T) {
 		t.Fatalf("expected both 200, got %d and %d", wA.Code, wB.Code)
 	}
 
-	client := vmctl.NewClient(vmctlSrv.URL)
 	primary, err := client.LookupDesktop("alice", vmctl.PrimaryDesktopID)
 	if err != nil {
 		t.Fatalf("LookupDesktop primary: %v", err)
@@ -2445,6 +2461,33 @@ func TestVMctlRouting_SameUserDifferentDesktopsGetDifferentVMs(t *testing.T) {
 	}
 	if primary.VMID == branch.VMID {
 		t.Fatalf("expected different VM IDs per desktop, got %s", primary.VMID)
+	}
+}
+
+func TestVMctlRouting_UnknownDesktopSelectorDoesNotMintVM(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+
+	client := vmctl.NewClient(vmctlSrv.URL)
+	if _, err := client.ResolveDesktop("alice", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveDesktop primary: %v", err)
+	}
+
+	accessToken := issueTestAccessJWT(priv, "alice")
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?desktop_id=branch-a", nil)
+	req.Header.Set("Cookie", "choir_access="+accessToken)
+	w := httptest.NewRecorder()
+	handler.HandleBootstrap(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 for unknown desktop, got %d", w.Code)
+	}
+
+	branch, err := client.LookupDesktop("alice", "branch-a")
+	if err != nil {
+		t.Fatalf("LookupDesktop branch-a: %v", err)
+	}
+	if branch != nil {
+		t.Fatalf("browser-selected unknown desktop minted VM ownership: %+v", branch)
 	}
 }
 
@@ -2547,7 +2590,7 @@ func TestVMctlRouting_ProtectedAPIThroughVM(t *testing.T) {
 
 	accessToken := issueTestAccessJWT(priv, "user-runtime")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/agent/loop", strings.NewReader(`{"prompt":"test"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/prompt-bar", strings.NewReader(`{"text":"test"}`))
 	req.Header.Set("Cookie", "choir_access="+accessToken)
 	w := httptest.NewRecorder()
 	handler.HandleProtectedAPI(w, req)

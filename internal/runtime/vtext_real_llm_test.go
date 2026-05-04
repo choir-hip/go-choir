@@ -359,7 +359,7 @@ func TestVTextAgentRevisionRealLLM(t *testing.T) {
 	// Step 3: Submit agent revision prompt.
 	revisionPrompt := "Rewrite this in a formal, professional tone. Keep the same meaning but use professional language."
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": revisionPrompt})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -508,7 +508,7 @@ func TestVTextAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 
 	// Submit agent revision requesting code.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Write a complete Python function that calculates fibonacci numbers. Include a docstring and handle edge cases."})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -584,7 +584,7 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Make it shorter"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -603,9 +603,9 @@ func TestVTextAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	}
 
 	expectedKinds := map[types.EventKind]bool{
-		types.EventRunSubmitted:               false,
-		types.EventRunStarted:                 false,
-		types.EventRunCompleted:               false,
+		types.EventRunSubmitted:                false,
+		types.EventRunStarted:                  false,
+		types.EventRunCompleted:                false,
 		types.EventVTextAgentRevisionStarted:   false,
 		types.EventVTextAgentRevisionCompleted: false,
 	}
@@ -678,7 +678,7 @@ func TestVTextAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Improve this document"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -687,7 +687,7 @@ func TestVTextAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 
 	// Retry — should return same task ID.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Improve this document"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -757,7 +757,7 @@ func TestVTextAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Expand this to a paragraph"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -823,7 +823,7 @@ func TestVTextAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 
 	// Submit agent revision.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Rewrite this concisely"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -889,7 +889,7 @@ func TestVTextAgentRevisionRealLLMFullHistory(t *testing.T) {
 
 	// Agent revision 1.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Make it more detailed"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)
@@ -914,7 +914,7 @@ func TestVTextAgentRevisionRealLLMFullHistory(t *testing.T) {
 
 	// Agent revision 2.
 	req = vtextRealLLMRequest(t, http.MethodPost,
-		"/api/vtext/documents/"+docResp.DocID+"/agent-revision",
+		"/api/vtext/documents/"+docResp.DocID+"/revise",
 		map[string]string{"prompt": "Summarize the content"})
 	w = httptest.NewRecorder()
 	h.HandleVTextAgentRevision(w, req)

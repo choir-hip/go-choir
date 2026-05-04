@@ -8,6 +8,21 @@ if [ ! -f "${CHOIR_AUTH_SIGNING_KEY_PATH}.pub" ]; then
   ssh-keygen -y -f "$CHOIR_AUTH_SIGNING_KEY_PATH" > "${CHOIR_AUTH_SIGNING_KEY_PATH}.pub"
 fi
 
+wait_for_url() {
+  local url="$1"
+  local label="$2"
+  local attempts="${3:-60}"
+  local delay="${4:-1}"
+  for _ in $(seq 1 "$attempts"); do
+    if curl -sf "$url" >/dev/null; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+  echo "$label failed"
+  return 1
+}
+
 export AUTH_JWT_PRIVATE_KEY_PATH="$CHOIR_AUTH_SIGNING_KEY_PATH"
 export PROXY_AUTH_PUBLIC_KEY_PATH="${CHOIR_AUTH_SIGNING_KEY_PATH}.pub"
 export AUTH_PORT=8081 AUTH_RP_ID="localhost" AUTH_RP_ORIGINS="http://localhost:4173" AUTH_ACCESS_TOKEN_TTL="5m" AUTH_REFRESH_TOKEN_TTL="720h" AUTH_COOKIE_SECURE="false"
@@ -18,8 +33,7 @@ export GATEWAY_CHATGPT_MODELS="${GATEWAY_CHATGPT_MODELS:-gpt-5.5,gpt-5.4,gpt-5.4
 export GATEWAY_CHATGPT_REASONING_EFFORT="${GATEWAY_CHATGPT_REASONING_EFFORT:-low}"
 export GATEWAY_PORT=8084
 go run ./cmd/gateway > gateway.log 2>&1 &
-sleep 5
-curl -sf http://127.0.0.1:8084/health || { echo "gateway failed"; exit 1; }
+wait_for_url http://127.0.0.1:8084/health gateway || exit 1
 
 RUNTIME_GATEWAY_TOKEN="$(curl -sf -X POST \
   http://127.0.0.1:8084/provider/v1/credentials/issue \
@@ -31,18 +45,15 @@ export RUNTIME_GATEWAY_URL="http://127.0.0.1:8084"
 export RUNTIME_LLM_PROVIDER="${RUNTIME_LLM_PROVIDER:-chatgpt}"
 export RUNTIME_LLM_MODEL="${RUNTIME_LLM_MODEL:-gpt-5.5}"
 export RUNTIME_LLM_REASONING_EFFORT="${RUNTIME_LLM_REASONING_EFFORT:-low}"
-export SANDBOX_PORT=8085 SANDBOX_ID="sandbox-dev" RUNTIME_ENABLE_TEST_APIS="1"
+export SANDBOX_PORT="${SANDBOX_PORT:-8085}" SANDBOX_ID="${SANDBOX_ID:-sandbox-dev}" RUNTIME_ENABLE_TEST_APIS="${RUNTIME_ENABLE_TEST_APIS:-0}"
 go run ./cmd/sandbox > sandbox.log 2>&1 &
-sleep 5
-curl -sf http://127.0.0.1:8081/health || { echo "auth failed"; exit 1; }
-curl -sf http://127.0.0.1:8085/health || { echo "sandbox failed"; exit 1; }
+wait_for_url http://127.0.0.1:8081/health auth || exit 1
+wait_for_url http://127.0.0.1:8085/health sandbox || exit 1
 
 export PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085"
 go run ./cmd/proxy > proxy.log 2>&1 &
-sleep 5
-curl -sf http://127.0.0.1:8082/health || { echo "proxy failed"; exit 1; }
+wait_for_url http://127.0.0.1:8082/health proxy || exit 1
 
 cd frontend && pnpm dev --host localhost --port 4173 > frontend.log 2>&1 &
-sleep 10
-curl -sf http://localhost:4173 || { echo "frontend failed"; exit 1; }
+wait_for_url http://localhost:4173 frontend || exit 1
 echo "Services started successfully"

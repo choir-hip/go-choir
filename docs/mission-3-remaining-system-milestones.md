@@ -37,9 +37,12 @@ Continue after Mission 2 completes the original Milestone 1 foundation. Mission 
 
 **Sandbox HTTP API:**
 - `/health`
-- `/api/agent/task`
-- `/api/agent/status`
-- `/api/events`
+- `/api/prompt-bar`
+- `/api/prompt-bar/submissions/{id}`
+- `/api/trace/trajectories/{id}`
+- `/api/trace/trajectories/{id}/events`
+
+`/api/agent/*` is runtime-internal, not browser-public product API.
 
 **Verification:**
 - prompt from the Svelte UI reaches proxy → sandbox → LLM client and the response returns to the UI on `draft.choir-ip.com`

@@ -10,7 +10,7 @@
 //	GET    /api/vtext/documents/{id}     — get a document by ID
 //	PUT    /api/vtext/documents/{id}     — update a document (e.g., title)
 //	DELETE /api/vtext/documents/{id}     — delete a document and its revisions
-//	POST   /api/vtext/documents/{id}/revisions — create a new revision (user edit or appagent edit)
+//	POST   /api/vtext/documents/{id}/revisions — create a user-authored revision
 //	GET    /api/vtext/documents/{id}/revisions — list revisions for a document
 //	GET    /api/vtext/documents/{id}/stream — stream document lifecycle changes
 //	GET    /api/vtext/revisions/{id}    — get a specific revision (snapshot)
@@ -113,8 +113,10 @@ type vtextListDocsResponse struct {
 	Documents []vtextDocumentResponse `json:"documents"`
 }
 
-// vtextCreateRevisionRequest is the JSON payload for
-// POST /api/vtext/documents/{id}/revisions.
+// vtextCreateRevisionRequest is the public JSON payload for
+// POST /api/vtext/documents/{id}/revisions. The public route always creates
+// user-authored revisions; author_kind/author_label are accepted only for
+// older clients and are not authority-bearing.
 type vtextCreateRevisionRequest struct {
 	Content          string           `json:"content"`
 	AuthorKind       types.AuthorKind `json:"author_kind"`
@@ -671,12 +673,6 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Validate author kind — only user and appagent are canonical editors.
-	if !req.AuthorKind.Valid() {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid author_kind; must be 'user' or 'appagent'"})
-		return
-	}
-
 	// Verify the document exists and belongs to this owner.
 	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
 	if err != nil {
@@ -705,8 +701,8 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		RevisionID:       uuid.New().String(),
 		DocID:            docID,
 		OwnerID:          ownerID,
-		AuthorKind:       req.AuthorKind,
-		AuthorLabel:      req.AuthorLabel,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      ownerID,
 		Content:          req.Content,
 		Citations:        citations,
 		Metadata:         metadata,
@@ -1066,10 +1062,10 @@ func (h *APIHandler) HandleVTextBlame(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, vtextBlameResponse{BlameResult: blame})
 }
 
-// ----- Agent revision -----
+// ----- VText revise -----
 
 // vtextAgentRevisionRequest is the JSON payload for
-// POST /api/vtext/documents/{id}/agent-revision.
+// POST /api/vtext/documents/{id}/revise.
 // Submitting a natural-language revision request from within an open document
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
@@ -1098,8 +1094,22 @@ type testVTextResearchFindingsRequest struct {
 	Questions []string                       `json:"questions,omitempty"`
 }
 
+type testVTextWorkerUpdateRequest struct {
+	DocID       string   `json:"doc_id"`
+	UpdateID    string   `json:"update_id"`
+	Role        string   `json:"role,omitempty"`
+	Findings    []string `json:"findings,omitempty"`
+	EvidenceIDs []string `json:"evidence_ids,omitempty"`
+	Artifacts   []string `json:"artifacts,omitempty"`
+	Refs        []string `json:"refs,omitempty"`
+	Tests       []string `json:"tests,omitempty"`
+	Questions   []string `json:"questions,omitempty"`
+	Proposals   []string `json:"proposals,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
+}
+
 // HandleVTextAgentRevision handles POST
-// /api/vtext/documents/{id}/agent-revision.
+// /api/vtext/documents/{id}/revise.
 //
 // It creates a runtime task that, when completed, will create a canonical
 // appagent-authored revision. The task ID is returned so the client can
@@ -1175,9 +1185,10 @@ func (h *APIHandler) HandleVTextAgentRevision(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// HandleTestVTextResearchFindings is a local-only browser test seam that routes
-// through the real researcher tool path instead of inventing a fake direct
-// revision shortcut. It must stay disabled outside local/test environments.
+// HandleTestVTextResearchFindings is a local-only dry-run browser test seam that
+// routes through the real researcher tool path instead of inventing a fake
+// direct revision shortcut. It is not product proof and must stay disabled
+// outside local/test environments.
 func (h *APIHandler) HandleTestVTextResearchFindings(w http.ResponseWriter, r *http.Request) {
 	if !h.rt.cfg.EnableTestAPIs {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "test endpoint not found"})
@@ -1284,6 +1295,130 @@ func (h *APIHandler) HandleTestVTextResearchFindings(w http.ResponseWriter, r *h
 	writeAPIJSON(w, http.StatusAccepted, resp)
 }
 
+// HandleTestVTextWorkerUpdate is a local-only dry-run browser test seam that
+// routes through the real structured worker-update tool. It is not product
+// proof and stays disabled unless RUNTIME_ENABLE_TEST_APIS is set.
+func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.Request) {
+	if !h.rt.cfg.EnableTestAPIs {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "test endpoint not found"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+
+	var req testVTextWorkerUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	req.DocID = strings.TrimSpace(req.DocID)
+	req.UpdateID = strings.TrimSpace(req.UpdateID)
+	if req.DocID == "" || req.UpdateID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id and update_id are required"})
+		return
+	}
+
+	if _, err := h.rt.Store().GetDocument(r.Context(), req.DocID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	targetAgentID := "vtext:" + req.DocID
+	if _, err := h.rt.Store().GetAgent(r.Context(), targetAgentID); err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "vtext agent is not initialized for this document"})
+		return
+	}
+
+	runs, err := h.rt.Store().ListRunsByChannel(r.Context(), ownerID, req.DocID, 50)
+	if err != nil {
+		log.Printf("vtext test api: list channel runs for worker update: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve vtext agent"})
+		return
+	}
+
+	var parent *types.RunRecord
+	for i := len(runs) - 1; i >= 0; i-- {
+		if agentProfileForRun(&runs[i]) == AgentProfileVText {
+			parent = &runs[i]
+			break
+		}
+	}
+	if parent == nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "vtext agent has no run context for this document"})
+		return
+	}
+
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		role = AgentProfileSuper
+	}
+	switch role {
+	case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+	default:
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, or co-super"})
+		return
+	}
+
+	workerRun, err := h.rt.StartChildRun(r.Context(), parent.RunID, "Browser test: submit structured worker update", ownerID, map[string]any{
+		runMetadataAgentProfile: role,
+		runMetadataAgentRole:    role,
+		runMetadataAgentID:      role + ":test:" + req.DocID,
+		runMetadataChannelID:    req.DocID,
+		"doc_id":                req.DocID,
+	})
+	if err != nil {
+		log.Printf("vtext test api: start worker update run: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create worker context"})
+		return
+	}
+
+	registry := h.rt.ToolRegistryForProfile(role)
+	if registry == nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "worker tools are unavailable"})
+		return
+	}
+
+	rawArgs, err := json.Marshal(map[string]any{
+		"update_id":    req.UpdateID,
+		"agent_id":     targetAgentID,
+		"channel_id":   req.DocID,
+		"findings":     req.Findings,
+		"evidence_ids": req.EvidenceIDs,
+		"artifacts":    req.Artifacts,
+		"refs":         req.Refs,
+		"tests":        req.Tests,
+		"questions":    req.Questions,
+		"proposals":    req.Proposals,
+		"notes":        req.Notes,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+
+	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "submit_worker_update", rawArgs)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		log.Printf("vtext test api: decode worker update response: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to encode worker update response"})
+		return
+	}
+	resp["loop_id"] = workerRun.RunID
+	writeAPIJSON(w, http.StatusAccepted, resp)
+}
+
 func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req vtextAgentRevisionRequest, parentRunID string, scheduledMessageSeq int64) (*types.RunRecord, error) {
 	// Build the backend-owned vtext revision request from current document state.
 	var currentRevision types.Revision
@@ -1348,6 +1483,13 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 	for _, key := range durableMetadataKeys {
 		if val := metadataString(metadata, key); val != "" {
 			runMetadata[key] = val
+		}
+	}
+	if strings.TrimSpace(parentRunID) == "" {
+		if conductorLoopID := metadataString(metadata, "conductor_loop_id"); conductorLoopID != "" {
+			if conductorRun, err := rt.store.GetRun(ctx, conductorLoopID); err == nil && conductorRun.OwnerID == ownerID {
+				parentRunID = conductorRun.RunID
+			}
 		}
 	}
 
@@ -1483,18 +1625,34 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	if hasGroundedHistory {
 		b.WriteString("\nThis document already has grounded workflow history on the coordination channel.")
 		b.WriteString("\nReuse the informed context already present in the current document and prior worker messages.")
-		b.WriteString("\nOpen new researcher or super work when this follow-up needs facts, evidence, or validation beyond what the workflow has already grounded.")
+		b.WriteString("\nOpen new researcher work when this follow-up needs facts or evidence beyond what the workflow has already grounded.")
+		b.WriteString("\nUse request_super_execution when the follow-up needs generated artifacts, execution, or verification.")
 	} else {
 		b.WriteString("\nThis document does not yet have grounded workflow history.")
-		b.WriteString("\nIf you can already produce a useful next version from the current material and your priors, do it promptly.")
-		b.WriteString("\nStart researcher or super work early when the request needs outside facts, validation, or deeper investigation so later versions can integrate grounded findings.")
+		b.WriteString("\nCall edit_vtext promptly with a useful abstract, outline, or working specification built from the current material and your priors.")
+		b.WriteString("\nIf the request needs live facts or citations, start the needed researcher work on this document channel before ending the run.")
+		b.WriteString("\nIf the request needs generated artifacts, execution, or verification, call request_super_execution before ending the run.")
 	}
 	b.WriteString("\nTreat this run as one step in an ongoing document loop.")
 	b.WriteString("\nWorker messages can wake later vtext runs and trigger the next revision.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nDo not claim to be researching unless you actually open worker runs and incorporate their messages.")
-	b.WriteString("\nProduce the next canonical document version.")
+	b.WriteString("\nTo create the next canonical document version, call edit_vtext. Provider final text is not a document write path.")
+	b.WriteString("\nFor a precise edit against the current head, call edit_vtext with:")
+	b.WriteString("\n{\"doc_id\":\"")
+	b.WriteString(current.DocID)
+	b.WriteString("\",\"base_revision_id\":\"")
+	b.WriteString(current.RevisionID)
+	b.WriteString("\",\"operation\":\"apply_edits\",\"edits\":[{\"op\":\"replace\",\"find\":\"exact previous text\",\"replace\":\"new text\"}]}")
+	b.WriteString("\nA replace edit must match exactly once. If the same find text appears multiple times and every occurrence should change, set \"replace_all\":true on that edit.")
+	b.WriteString("\nUse {\"op\":\"append\",\"text\":\"section text\"} to append new material when appropriate.")
+	b.WriteString("\nIf a full replacement is clearer, call edit_vtext with {\"doc_id\":\"")
+	b.WriteString(current.DocID)
+	b.WriteString("\",\"base_revision_id\":\"")
+	b.WriteString(current.RevisionID)
+	b.WriteString("\",\"operation\":\"replace_all\",\"content\":\"complete current-state document\"}.")
+	b.WriteString("\nIf you end the run without edit_vtext, no canonical document revision will be created.")
 	return b.String()
 }
 
@@ -1670,6 +1828,43 @@ func (rt *Runtime) emitVTextDocumentRevisionEvent(ctx context.Context, ownerID s
 		Timestamp: time.Now().UTC(),
 		Kind:      types.EventVTextDocumentRevisionCreated,
 		Payload:   payload,
+	}
+	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist vtext document revision event: %v", err)
+		return
+	}
+	rt.bus.Publish(events.RuntimeEvent{
+		Record: *evRec,
+		Actor:  events.ActorRuntime,
+		Cause:  events.CauseTaskLifecycle,
+	})
+}
+
+func (rt *Runtime) emitVTextDocumentRevisionEventForRun(ctx context.Context, rec *types.RunRecord, rev types.Revision) {
+	if rec == nil {
+		rt.emitVTextDocumentRevisionEvent(ctx, rev.OwnerID, rev)
+		return
+	}
+	payload, err := json.Marshal(map[string]string{
+		"doc_id":              rev.DocID,
+		"revision_id":         rev.RevisionID,
+		"current_revision_id": rev.RevisionID,
+		"loop_id":             rec.RunID,
+	})
+	if err != nil {
+		log.Printf("runtime: marshal vtext document revision event: %v", err)
+		return
+	}
+	evRec := &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rev.DocID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Timestamp:    time.Now().UTC(),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      payload,
 	}
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
 		log.Printf("runtime: persist vtext document revision event: %v", err)

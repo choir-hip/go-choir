@@ -49,6 +49,9 @@
   function normalizeUrl(raw) {
     let url = raw.trim();
     if (!url) return '';
+    if (url.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:/)) {
+      return url;
+    }
     // Add https:// if no protocol specified
     if (!url.match(/^[a-zA-Z]+:\/\//)) {
       // Check if it looks like a domain (contains a dot)

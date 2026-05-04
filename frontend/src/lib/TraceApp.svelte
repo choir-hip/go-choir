@@ -113,10 +113,10 @@
       const current = queue.shift();
       const currentDepth = depth.get(current) || 0;
       for (const next of outgoing.get(current) || []) {
-        if (!depth.has(next) || (depth.get(next) || 0) < currentDepth + 1) {
+        if (!depth.has(next)) {
           depth.set(next, currentDepth + 1);
+          queue.push(next);
         }
-        queue.push(next);
       }
     }
 
