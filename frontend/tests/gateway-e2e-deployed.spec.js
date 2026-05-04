@@ -251,12 +251,12 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
         let finalStatus = null;
 
         while (!taskComplete && pollAttempts < 30) {
-          const statusRes = await page.evaluate(async (baseURL, submissionId) => {
+          const statusRes = await page.evaluate(async ({ baseURL, submissionId }) => {
             const res = await fetch(`${baseURL}/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`, {
               credentials: 'include'
             });
             return res.json();
-          }, BASE_URL, taskRes.body.submission_id);
+          }, { baseURL: BASE_URL, submissionId: taskRes.body.submission_id });
 
           finalStatus = statusRes;
 
