@@ -112,6 +112,57 @@ func TestSearchClient_Rotation(t *testing.T) {
 	}
 }
 
+func TestSearchClient_DiversifiesAcrossProviders(t *testing.T) {
+	mock1 := &mockSearchProvider{
+		name:      "mock1",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{{Title: "Result1", URL: "http://example.com/1", Snippet: "result1"}}, nil
+		},
+	}
+	mock2 := &mockSearchProvider{
+		name:      "mock2",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{{Title: "Result2", URL: "http://example.com/2", Snippet: "result2"}}, nil
+		},
+	}
+	mock3 := &mockSearchProvider{
+		name:      "mock3",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{{Title: "Result3", URL: "http://example.com/3", Snippet: "result3"}}, nil
+		},
+	}
+
+	client := &SearchClient{providers: []SearchProvider{mock1, mock2, mock3}, providersPerQuery: 2}
+
+	resp1, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 10})
+	if err != nil {
+		t.Fatalf("first search: %v", err)
+	}
+	if got, want := strings.Join(resp1.Providers, ","), "mock1,mock2"; got != want {
+		t.Fatalf("first providers = %q, want %q", got, want)
+	}
+	if len(resp1.Results) != 2 {
+		t.Fatalf("first results = %d, want 2", len(resp1.Results))
+	}
+	if len(resp1.Attempts) != 2 {
+		t.Fatalf("first attempts = %d, want 2", len(resp1.Attempts))
+	}
+	if resp1.Results[0].Provider != "mock1" || resp1.Results[1].Provider != "mock2" {
+		t.Fatalf("result providers = %#v, want mock1/mock2", resp1.Results)
+	}
+
+	resp2, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 10})
+	if err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	if got, want := strings.Join(resp2.Providers, ","), "mock2,mock3"; got != want {
+		t.Fatalf("second providers = %q, want %q", got, want)
+	}
+}
+
 func TestSearchClient_Fallback(t *testing.T) {
 	failProvider := &mockSearchProvider{
 		name:      "fail",
@@ -136,6 +187,15 @@ func TestSearchClient_Fallback(t *testing.T) {
 	}
 	if resp.Provider != "success" {
 		t.Errorf("expected provider 'success' after fallback, got %s", resp.Provider)
+	}
+	if len(resp.Attempts) != 2 {
+		t.Fatalf("attempts = %d, want failed provider plus success provider", len(resp.Attempts))
+	}
+	if resp.Attempts[0].Provider != "fail" || resp.Attempts[0].Status != "error" {
+		t.Fatalf("first attempt = %+v, want fail/error", resp.Attempts[0])
+	}
+	if resp.Attempts[1].Provider != "success" || resp.Attempts[1].Status != "success" {
+		t.Fatalf("second attempt = %+v, want success/success", resp.Attempts[1])
 	}
 	if len(resp.Results) != 1 {
 		t.Errorf("expected 1 result, got %d", len(resp.Results))

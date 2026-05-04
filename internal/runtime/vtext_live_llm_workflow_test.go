@@ -131,7 +131,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 	}
 
 	researchRun, err := rt.StartChildRun(context.Background(), initialVTextID,
-		"Live verification: call web_search once for cellular automata biological evolution toy model, then call submit_research_findings with finding_id live-research-ca and one concise evidence-backed finding for the parent vtext agent. Stop after the findings tool returns.",
+		"Live verification: call web_search for cellular automata biological evolution toy model, then call submit_research_findings with finding_id live-research-ca and one concise evidence-backed checkpoint for the parent vtext agent.",
 		liveLLMOwnerID,
 		map[string]any{
 			"agent_profile": "researcher",

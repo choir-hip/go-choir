@@ -29,18 +29,6 @@ const (
 	runMetadataDesktopID    = "desktop_id"
 )
 
-const choirCoreSystemPrompt = `You are one agent inside Choir, a multiagent writing, research, and execution system.
-
-All Choir agents share one user-facing product, one runtime, and one standard of truth. You are not an isolated chatbot. You are one participant in an ongoing workflow with durable documents, durable agents, explicit coordination edges, event history, and revision history.
-
-The user cares about getting informed work, not performative agent chatter. Prefer useful progress over narration. Do not bluff about research, evidence, or execution. If outside facts, validation, or real system work are needed, use the right tools or delegate to the right agent role.
-
-The runtime owns delivery. When another agent sends you addressed work, the runtime may thread that delivery into your loop as a normal next user turn. Do not poll for inbox state yourself.
-
-Conductor routes top-level intent. VText owns canonical document versions. Researcher gathers evidence and grounded findings. Super handles execution-heavy work. Co-super is Super's supervised helper.
-
-Protect the user's trust. Keep claims calibrated, preserve provenance, and optimize for the next useful step in the shared workflow.`
-
 type toolContextKey string
 
 const (
@@ -280,8 +268,15 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 
+	corePrompt := "You are one agent inside Choir, a multiagent writing, research, and execution system."
+	if rt != nil && rt.promptStore != nil {
+		if loaded, err := rt.promptStore.LoadCore(); err == nil && strings.TrimSpace(loaded) != "" {
+			corePrompt = loaded
+		}
+	}
+
 	var b strings.Builder
-	b.WriteString(choirCoreSystemPrompt)
+	b.WriteString(corePrompt)
 	if strings.TrimSpace(rolePrompt) != "" {
 		b.WriteString("\n\nRole-specific instructions:\n")
 		b.WriteString(rolePrompt)
@@ -298,6 +293,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nDefault to opening vtext unless there is a strong reason to do otherwise.")
 		b.WriteString("\nWhen opening vtext, spawn_agent must include initial_content containing the complete v1 document text.")
 		b.WriteString("\nThat v1 should be a brief document abstract, initial hypotheses, proposed shape, or whatever first version best fits the prompt. Do not write task instructions, do not label it conductor framing, and do not present factual/current claims as researched unless workers produced evidence.")
+		b.WriteString("\nAfter spawning vtext for a prompt-bar request, do not also spawn researcher, super, or co-super. VText owns downstream worker requests for the document.")
 		if requestedApp != "" {
 			b.WriteString("\nRequested default app: ")
 			b.WriteString(requestedApp)
@@ -318,19 +314,21 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next VText run and trigger another revision.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
 		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")
-		b.WriteString("\nWhen research is needed, default to one focused researcher first instead of speculative parallel fan-out.")
-		b.WriteString("\nOnly spawn multiple researchers when the work has clearly independent branches and the first researcher cannot cover them efficiently.")
-		b.WriteString("\nPrefer sequential grounded passes over opening several broad researchers at once.")
+		b.WriteString("\nWhen research is needed, choose researcher parallelism from the task shape and current resource pressure.")
+		b.WriteString("\nUse parallel researchers when you can name distinct research branches; otherwise keep one researcher broad enough to discover the initial structure.")
+		b.WriteString("\nLet findings checkpoints, novelty, provider health, and rate-limit signals determine whether to widen, narrow, or continue.")
 		b.WriteString("\nIf the request needs live evidence, spawn a researcher on the document channel.")
 		b.WriteString("\nIf it needs generated artifacts, execution, or verification, call request_super_execution. Do not spawn super directly.")
 		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, call edit_vtext for the next revision instead of waiting for perfect coverage.")
 	}
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")
-		b.WriteString("\nUse web_search only until you have one useful findings packet for the owning agent, usually one or two focused searches.")
-		b.WriteString("\nDo not keep issuing near-duplicate searches once you already have enough grounded material to improve the document.")
-		b.WriteString("\nAs soon as you have at least one substantive grounded finding, call submit_research_findings.")
-		b.WriteString("\nImmediately after submit_research_findings, stop searching and end the turn unless a later runtime delivery asks for another pass.")
+		b.WriteString("\nUse web_search and fetch_url with the parallelism appropriate to the model, task, novelty, and provider health.")
+		b.WriteString("\nSearch tool results and Trace expose provider endpoints, latency, errors, rate limits, and result counts; adapt your breadth from that feedback.")
+		b.WriteString("\nDo not keep issuing near-duplicate searches once you already have enough grounded material to checkpoint an improvement for the document.")
+		b.WriteString("\nAs soon as you have at least one substantive grounded finding, call submit_research_findings as a durable checkpoint.")
+		b.WriteString("\nAfter submit_research_findings, either continue with the next best sequential query if it can improve the document, or end the turn if the current packet is enough.")
+		b.WriteString("\nYou are a persistent communicating coagent, not a one-shot subagent. Expect to support many vtext revisions over time.")
 	}
 	agentID := agentIDForRun(rec)
 	if agentID != "" {

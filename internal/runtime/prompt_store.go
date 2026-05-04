@@ -38,6 +38,21 @@ func promptRoles() []string {
 	}
 }
 
+func promptDefaultFiles() []string {
+	return append([]string{"core"}, promptRoles()...)
+}
+
+func (ps *PromptStore) LoadCore() (string, error) {
+	if err := ps.ensureDefaults(); err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(ps.defaultPromptPath("core"))
+	if err != nil {
+		return "", fmt.Errorf("read core prompt: %w", err)
+	}
+	return strings.TrimSpace(string(content)), nil
+}
+
 func (ps *PromptStore) List(ownerID string) ([]PromptDescriptor, error) {
 	if err := ps.ensureDefaults(); err != nil {
 		return nil, err
@@ -152,19 +167,19 @@ func (ps *PromptStore) ensureDefaults() error {
 	if err := os.MkdirAll(filepath.Join(ps.root, "defaults"), 0o755); err != nil {
 		return fmt.Errorf("create prompt defaults directory: %w", err)
 	}
-	for _, role := range promptRoles() {
-		path := ps.defaultPromptPath(role)
-		content, err := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", role+".md")))
+	for _, name := range promptDefaultFiles() {
+		path := ps.defaultPromptPath(name)
+		content, err := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", name+".md")))
 		if err != nil {
-			return fmt.Errorf("load embedded prompt default %s: %w", role, err)
+			return fmt.Errorf("load embedded prompt default %s: %w", name, err)
 		}
 		if current, err := os.ReadFile(path); err == nil && string(current) == string(content) {
 			continue
 		} else if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("read prompt default %s: %w", role, err)
+			return fmt.Errorf("read prompt default %s: %w", name, err)
 		}
 		if err := os.WriteFile(path, content, 0o644); err != nil {
-			return fmt.Errorf("seed prompt default %s: %w", role, err)
+			return fmt.Errorf("seed prompt default %s: %w", name, err)
 		}
 	}
 	return nil

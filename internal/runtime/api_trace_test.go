@@ -185,6 +185,45 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 }
 
+func TestBuildTraceSearchSummaryAggregatesProviderAttempts(t *testing.T) {
+	events := []types.EventRecord{
+		{
+			Kind: types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"web_search",
+				"is_error":false,
+				"output":"{\"provider\":\"tavily\",\"providers\":[\"tavily\"],\"attempts\":[{\"provider\":\"tavily\",\"endpoint\":\"https://api.tavily.com/search\",\"status\":\"success\",\"latency_ms\":120,\"results\":3},{\"provider\":\"brave\",\"endpoint\":\"https://api.search.brave.com/res/v1/web/search\",\"status\":\"rate_limited\",\"latency_ms\":40,\"results\":0,\"error\":\"429 too many requests\"}],\"results\":[{\"title\":\"AI news\",\"url\":\"https://example.com\",\"provider\":\"tavily\"}]}"
+			}`),
+		},
+		{
+			Kind: types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"web_search",
+				"is_error":false,
+				"output":"{\"provider\":\"exa\",\"providers\":[\"exa\"],\"attempts\":[{\"provider\":\"exa\",\"endpoint\":\"https://api.exa.ai/search\",\"status\":\"success\",\"latency_ms\":80,\"results\":2}],\"results\":[{\"title\":\"AI research\",\"url\":\"https://example.org\",\"provider\":\"exa\"}]}"
+			}`),
+		},
+	}
+
+	summary := buildTraceSearchSummary(events)
+	if summary.Queries != 2 || summary.Attempts != 3 || summary.Successes != 2 || summary.RateLimits != 1 {
+		t.Fatalf("summary = %+v, want queries=2 attempts=3 successes=2 rate_limits=1", summary)
+	}
+	byProvider := make(map[string]traceSearchProviderStats)
+	for _, provider := range summary.Providers {
+		byProvider[provider.Provider] = provider
+	}
+	if byProvider["tavily"].ResultCount != 3 || byProvider["tavily"].AvgLatencyMs != 120 {
+		t.Fatalf("tavily stats = %+v", byProvider["tavily"])
+	}
+	if byProvider["brave"].RateLimits != 1 || !strings.Contains(byProvider["brave"].LastError, "429") {
+		t.Fatalf("brave stats = %+v", byProvider["brave"])
+	}
+	if byProvider["exa"].ResultCount != 2 {
+		t.Fatalf("exa stats = %+v", byProvider["exa"])
+	}
+}
+
 func TestHandleTraceMomentDetailReturnsMessageAndFindings(t *testing.T) {
 	rt, handler := testAPISetup(t)
 

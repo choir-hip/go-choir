@@ -1,8 +1,9 @@
 // Package gateway implements web search functionality with multi-provider
 // rotation and fallback. Supports Tavily, Brave, Exa, and Serper search APIs.
 //
-// The SearchClient uses round-robin rotation across available providers,
-// automatically falling back to the next provider if one fails.
+// The SearchClient uses round-robin rotation across available providers and
+// queries more than one provider per request by default for result diversity.
+// It automatically falls back to the next provider if one fails.
 package gateway
 
 import (
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -34,6 +36,9 @@ type SearchResult struct {
 
 	// Score is the optional relevance score.
 	Score float64 `json:"score,omitempty"`
+
+	// Provider identifies the search backend that returned this result.
+	Provider string `json:"provider,omitempty"`
 }
 
 // SearchResponse is the unified response from the search endpoint.
@@ -41,11 +46,30 @@ type SearchResponse struct {
 	// Results is the list of search results.
 	Results []SearchResult `json:"results"`
 
-	// Provider identifies which search provider served this request.
+	// Provider identifies the first successful search provider for backward
+	// compatibility with older clients.
 	Provider string `json:"provider"`
+
+	// Providers identifies every successful search provider contributing
+	// results to this response.
+	Providers []string `json:"providers,omitempty"`
+
+	// Attempts records every provider attempted for this request, including
+	// failures. It is safe for owner-scoped Trace and does not include secrets.
+	Attempts []SearchProviderAttempt `json:"attempts,omitempty"`
 
 	// Query is the original search query.
 	Query string `json:"query"`
+}
+
+// SearchProviderAttempt records one provider call within a logical search.
+type SearchProviderAttempt struct {
+	Provider  string `json:"provider"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Status    string `json:"status"`
+	LatencyMs int64  `json:"latency_ms"`
+	Results   int    `json:"results"`
+	Error     string `json:"error,omitempty"`
 }
 
 // SearchRequest is the incoming search request payload.
@@ -73,8 +97,9 @@ type SearchProvider interface {
 // SearchClient provides round-robin rotation across multiple search providers
 // with automatic fallback on failure.
 type SearchClient struct {
-	providers []SearchProvider
-	counter   atomic.Int64
+	providers         []SearchProvider
+	counter           atomic.Int64
+	providersPerQuery int
 }
 
 // NewSearchClient creates a SearchClient with all available providers.
@@ -103,7 +128,8 @@ func NewSearchClient() *SearchClient {
 }
 
 // Search executes a search query using round-robin rotation across providers.
-// It tries each available provider in sequence until one succeeds.
+// It gathers results from a small provider fanout for diversity, falling back
+// across the configured provider list until at least one provider succeeds.
 // Returns an error if all providers fail.
 func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
 	if req.Query == "" {
@@ -124,26 +150,68 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 
 	// Round-robin: get next starting position atomically.
 	start := int(c.counter.Add(1)-1) % len(c.providers)
+	targetProviders := c.providerFanout()
 
 	var lastErr error
+	var providers []string
+	attempts := make([]SearchProviderAttempt, 0, len(c.providers))
+	results := make([]SearchResult, 0, maxResults)
+	seenURLs := make(map[string]struct{})
 	for i := range c.providers {
 		idx := (start + i) % len(c.providers)
 		provider := c.providers[idx]
 
-		results, err := provider.Search(ctx, req.Query, maxResults)
+		started := time.Now()
+		providerResults, err := provider.Search(ctx, req.Query, maxResults)
+		attempt := SearchProviderAttempt{
+			Provider:  provider.Name(),
+			Endpoint:  searchProviderEndpoint(provider.Name()),
+			Status:    "success",
+			LatencyMs: time.Since(started).Milliseconds(),
+		}
 		if err == nil {
-			return &SearchResponse{
-				Results:  results,
-				Provider: provider.Name(),
-				Query:    req.Query,
-			}, nil
+			providerName := provider.Name()
+			providers = append(providers, providerName)
+			for _, result := range providerResults {
+				key := normalizeSearchResultURL(result.URL)
+				if key == "" {
+					continue
+				}
+				if _, exists := seenURLs[key]; exists {
+					continue
+				}
+				seenURLs[key] = struct{}{}
+				result.Provider = providerName
+				results = append(results, result)
+				if len(results) >= maxResults {
+					break
+				}
+			}
+			attempt.Results = len(providerResults)
+			attempts = append(attempts, attempt)
+			if len(providers) >= targetProviders || len(results) >= maxResults {
+				break
+			}
+			continue
 		}
 
+		attempt.Status = searchAttemptStatus(err)
+		attempt.Error = truncateSearchAttemptError(err)
+		attempts = append(attempts, attempt)
 		lastErr = fmt.Errorf("%s: %w", provider.Name(), err)
 		// Continue to next provider (fallback).
 	}
 
-	return nil, fmt.Errorf("all search providers failed: %w", lastErr)
+	if len(providers) == 0 {
+		return nil, fmt.Errorf("all search providers failed: %w", lastErr)
+	}
+	return &SearchResponse{
+		Results:   results,
+		Provider:  providers[0],
+		Providers: providers,
+		Attempts:  attempts,
+		Query:     req.Query,
+	}, nil
 }
 
 // AvailableProviders returns the names of configured search providers.
@@ -153,6 +221,76 @@ func (c *SearchClient) AvailableProviders() []string {
 		names[i] = p.Name()
 	}
 	return names
+}
+
+func (c *SearchClient) providerFanout() int {
+	value := c.providersPerQuery
+	if value <= 0 {
+		value = intFromEnv("CHOIR_SEARCH_PROVIDERS_PER_QUERY", 2)
+	}
+	if value < 1 {
+		value = 1
+	}
+	if value > len(c.providers) {
+		value = len(c.providers)
+	}
+	return value
+}
+
+func intFromEnv(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func normalizeSearchResultURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/")
+}
+
+func searchProviderEndpoint(provider string) string {
+	switch strings.TrimSpace(provider) {
+	case "tavily":
+		return "https://api.tavily.com/search"
+	case "brave":
+		return "https://api.search.brave.com/res/v1/web/search"
+	case "exa":
+		return "https://api.exa.ai/search"
+	case "serper":
+		return "https://google.serper.dev/search"
+	default:
+		return ""
+	}
+}
+
+func searchAttemptStatus(err error) string {
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "too many requests") {
+		return "rate_limited"
+	}
+	return "error"
+}
+
+func truncateSearchAttemptError(err error) string {
+	msg := strings.TrimSpace(err.Error())
+	if len(msg) > 240 {
+		return msg[:240] + "..."
+	}
+	return msg
 }
 
 // --- Tavily Provider ---
@@ -182,10 +320,10 @@ func (p *TavilyProvider) Search(ctx context.Context, query string, maxResults in
 	}
 
 	body := map[string]any{
-		"query":       query,
-		"max_results": maxResults,
-		"search_depth": "basic",
-		"include_answer": false,
+		"query":               query,
+		"max_results":         maxResults,
+		"search_depth":        "basic",
+		"include_answer":      false,
 		"include_raw_content": false,
 	}
 
@@ -405,11 +543,11 @@ func (p *ExaProvider) Search(ctx context.Context, query string, maxResults int) 
 func parseExaResults(data []byte) ([]SearchResult, error) {
 	var result struct {
 		Results []struct {
-			Title         string  `json:"title"`
-			URL           string  `json:"url"`
-			Text          string  `json:"text"`
-			PublishedDate string  `json:"publishedDate"`
-			Score         float64 `json:"score"`
+			Title         string   `json:"title"`
+			URL           string   `json:"url"`
+			Text          string   `json:"text"`
+			PublishedDate string   `json:"publishedDate"`
+			Score         float64  `json:"score"`
 			Highlights    []string `json:"highlights"`
 		} `json:"results"`
 	}
@@ -423,7 +561,7 @@ func parseExaResults(data []byte) ([]SearchResult, error) {
 		if r.URL == "" {
 			continue
 		}
-		
+
 		// Use highlights if available, otherwise text.
 		snippet := r.Text
 		if len(r.Highlights) > 0 {

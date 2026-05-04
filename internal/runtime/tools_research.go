@@ -15,9 +15,11 @@ type webSearchClient interface {
 }
 
 type webSearchResponse struct {
-	Query    string           `json:"query"`
-	Provider string           `json:"provider"`
-	Results  []map[string]any `json:"results"`
+	Query     string           `json:"query"`
+	Provider  string           `json:"provider"`
+	Providers []string         `json:"providers,omitempty"`
+	Attempts  []map[string]any `json:"attempts,omitempty"`
+	Results   []map[string]any `json:"results"`
 }
 
 func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client) error {
@@ -60,9 +62,11 @@ func newWebSearchTool(searchClient webSearchClient) Tool {
 				return "", err
 			}
 			return toolResultJSON(map[string]any{
-				"query":    resp.Query,
-				"provider": resp.Provider,
-				"results":  resp.Results,
+				"query":     resp.Query,
+				"provider":  resp.Provider,
+				"providers": resp.Providers,
+				"attempts":  resp.Attempts,
+				"results":   resp.Results,
 			})
 		},
 	}

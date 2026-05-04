@@ -267,6 +267,7 @@ func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) strin
 // and no tool activation (all tools are always available).
 func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
+	skipped := plannedToolSkips(ctx, calls)
 
 	// Execute tool calls in parallel — results collected in order.
 	var wg sync.WaitGroup
@@ -288,11 +289,17 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 			})
 			emit(types.EventToolInvoked, "tool_call", invokedPayload)
 
-			output, err := registry.Execute(ctx, c.Name, c.Arguments)
 			isError := false
-			if err != nil {
-				output = fmt.Sprintf("tool_error: %v", err)
+			output, skip := skipped[idx]
+			if skip {
 				isError = true
+			} else {
+				var err error
+				output, err = registry.Execute(ctx, c.Name, c.Arguments)
+				if err != nil {
+					output = fmt.Sprintf("tool_error: %v", err)
+					isError = true
+				}
 			}
 
 			// Cap tool output to prevent context overflow.
@@ -323,4 +330,57 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	wg.Wait()
 
 	return results
+}
+
+func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
+	profile := canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile))
+	if profile == "" || len(calls) == 0 {
+		return nil
+	}
+	skipped := make(map[int]string)
+
+	switch profile {
+	case AgentProfileConductor:
+		firstVText := -1
+		for i, call := range calls {
+			if call.Name != "spawn_agent" {
+				continue
+			}
+			if toolCallSpawnProfile(call) == AgentProfileVText {
+				if firstVText == -1 {
+					firstVText = i
+				} else {
+					skipped[i] = "tool_error: conductor already routed this prompt to vtext; do not create duplicate vtext routes"
+				}
+			}
+		}
+		if firstVText != -1 {
+			for i, call := range calls {
+				if i == firstVText || call.Name != "spawn_agent" {
+					continue
+				}
+				skipped[i] = "tool_error: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests"
+			}
+		}
+	}
+
+	if len(skipped) == 0 {
+		return nil
+	}
+	return skipped
+}
+
+func toolCallSpawnProfile(call types.ToolCall) string {
+	var in struct {
+		Role    string `json:"role"`
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return ""
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	return profile
 }

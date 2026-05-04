@@ -81,6 +81,7 @@
       { label: 'moments', value: trajectory?.moment_count || 0 },
       { label: 'messages', value: trajectory?.message_count || 0 },
       { label: 'findings', value: trajectory?.finding_count || 0 },
+      { label: 'searches', value: trajectory?.search_attempt_count || 0 },
     ];
   }
 
@@ -299,6 +300,7 @@
   $: graphAgents = snapshot?.agents || [];
   $: graphEdges = snapshot?.edges || [];
   $: moments = snapshot?.moments || [];
+  $: searchSummary = snapshot?.search || { providers: [] };
   $: graphLayout = buildGraphLayout(graphAgents, graphEdges);
   $: activeMoment = moments.find((moment) => moment.moment_id === selectedMomentId) || moments[moments.length - 1] || null;
   $: activeDetail = selectedMomentId ? momentDetails[selectedMomentId] : null;
@@ -379,6 +381,42 @@
           </div>
         {/each}
       </div>
+
+      {#if searchSummary.attempts > 0}
+        <section class="panel search-panel" data-trace-search-stats>
+          <div class="panel-header">
+            <div>
+              <h4>Search endpoints</h4>
+              <p>Provider attempts, health, rate limits, and result volume for this trajectory.</p>
+            </div>
+            <span class="status-pill neutral">
+              {searchSummary.successes || 0}/{searchSummary.attempts || 0} succeeded
+            </span>
+          </div>
+          <div class="search-grid">
+            {#each searchSummary.providers || [] as provider (provider.provider)}
+              <div class={`search-card ${provider.rate_limits > 0 ? 'error' : provider.successes > 0 ? 'success' : 'neutral'}`}>
+                <div class="search-card-top">
+                  <strong>{provider.provider}</strong>
+                  <span>{provider.successes}/{provider.attempts}</span>
+                </div>
+                <div class="detail-meta">{provider.endpoint || 'endpoint unavailable'}</div>
+                <div class="search-card-metrics">
+                  <span>{provider.result_count || 0} results</span>
+                  <span>{provider.rate_limits || 0} rate limits</span>
+                  <span>{provider.errors || 0} errors</span>
+                  {#if provider.avg_latency_ms}
+                    <span>{provider.avg_latency_ms}ms avg</span>
+                  {/if}
+                </div>
+                {#if provider.last_error}
+                  <pre class="payload-block compact">{provider.last_error}</pre>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
 
       <div class="main-grid">
         <div class="main-left">
@@ -752,7 +790,7 @@
 
   .metric-row {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.75rem;
   }
 
@@ -789,6 +827,48 @@
 
   .panel {
     padding: 0.95rem;
+  }
+
+  .search-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.85rem;
+  }
+
+  .search-card {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    padding: 0.75rem;
+    background: rgba(2, 6, 23, 0.34);
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .search-card.success {
+    border-color: rgba(134, 239, 172, 0.24);
+  }
+
+  .search-card.error {
+    border-color: rgba(252, 165, 165, 0.34);
+  }
+
+  .search-card-top,
+  .search-card-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  .search-card-top strong {
+    color: #e2e8f0;
+  }
+
+  .search-card-top span,
+  .search-card-metrics span {
+    color: #94a3b8;
+    font-size: 0.75rem;
   }
 
   .graph-stage {

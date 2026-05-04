@@ -13,7 +13,7 @@
 
 ## System Overview
 
-go-choir is a local-first multiagent writing environment. Users submit prompts through a desktop shell; a **conductor** agent decides what to open; for writing work, **vtext** owns the canonical document and may delegate to **researcher** or **super** workers over durable coordination channels.
+go-choir is a local-first multiagent writing environment. Users submit prompts through a desktop shell; a **conductor** agent decides what app should own the work; for writing work, **vtext** owns the canonical document and is the only document-level agent that may orchestrate **researcher** or **super** workers over durable coordination channels.
 
 All execution happens inside a **sandbox** process. A **proxy** sits between the frontend and the sandbox, forwarding authenticated requests. Agent coordination is message-passing over durable channels plus runtime-owned inbox delivery; there is no shared mutable state between loops.
 
@@ -27,11 +27,11 @@ User (desktop shell)
        v
   [conductor]  decides: open vtext / show toast
        |
-       | materializeConductorDecision()
-       | creates: document, v0, initial vtext run
+       | spawn_agent("vtext") with initial_content
+       | creates: document, v0, v1 abstract, initial vtext run
        v
   [vtext] --spawn_agent("researcher")--> [researcher]  (leaf: search + evidence)
-  (owns    --spawn_agent("super")------> [super]
+  (owns    --request_super_execution---> [super]
    doc)                                    |
                                   spawn_agent("co-super")
                                            v
@@ -42,8 +42,8 @@ User (desktop shell)
 
 | Caller     | Can spawn            | Notes                                       |
 |------------|----------------------|---------------------------------------------|
-| conductor  | vtext, researcher    | Routing-only; no file/code tools            |
-| vtext      | researcher, super    | Owns document; workers cast findings back to the vtext agent |
+| conductor  | vtext                | App-routing only; never orchestrates document workers |
+| vtext      | researcher; request super | Owns document; workers cast findings back to the vtext agent |
 | super      | researcher, co-super | Privileged execution root                   |
 | co-super   | researcher           | Supervised execution helper                 |
 | researcher | (none)               | Leaf node; read-only files + search         |

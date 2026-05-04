@@ -1,11 +1,20 @@
 package runtime
 
 import (
+	"strings"
 	"testing"
 )
 
 func TestPromptStoreSeedsDefaults(t *testing.T) {
 	store := NewPromptStore(t.TempDir())
+
+	core, err := store.LoadCore()
+	if err != nil {
+		t.Fatalf("load core prompt: %v", err)
+	}
+	if !strings.Contains(core, "multiagent writing, research, and execution system") {
+		t.Fatalf("unexpected core prompt: %q", core)
+	}
 
 	prompts, err := store.List("user-alice")
 	if err != nil {

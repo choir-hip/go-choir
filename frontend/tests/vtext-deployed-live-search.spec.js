@@ -116,7 +116,7 @@ async function waitForSuccessfulWebSearch(page, trajectoryId, timeout = 240_000)
         const results = Array.isArray(output.results) ? output.results : [];
         const serializedResults = JSON.stringify(results);
         if (output.provider && results.length > 0 && /2026/.test(serializedResults)) {
-          return { snapshot, provider: output.provider, results };
+          return { snapshot, provider: output.provider, providers: output.providers || [], results };
         }
       }
     }
@@ -195,7 +195,10 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
     await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(escapeRegExp(marker)), { timeout: 30_000 });
 
     const search = await waitForSuccessfulWebSearch(page, body.submission_id);
-    expect(['tavily', 'brave', 'exa', 'serper']).toContain(search.provider);
+    const searchProviders = Array.isArray(search.providers) && search.providers.length > 0
+      ? search.providers
+      : [search.provider];
+    expect(searchProviders.some((provider) => ['tavily', 'brave', 'exa', 'serper'].includes(provider))).toBeTruthy();
     expect(search.results.length).toBeGreaterThan(0);
 
     const finalState = await waitForGroundedVTextRevision(page, decision.doc_id, marker);

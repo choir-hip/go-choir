@@ -375,8 +375,8 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 	if !strings.Contains(prompt, "Open researcher work first") {
 		t.Fatalf("vtext system prompt should bias toward spawning researchers first, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "one focused researcher first") {
-		t.Fatalf("vtext system prompt should bias toward one focused researcher before parallel fan-out, got %q", prompt)
+	if !strings.Contains(prompt, "Use parallel researchers when you can name distinct research branches") {
+		t.Fatalf("vtext system prompt should make researcher parallelism contextual, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("vtext system prompt should include coordination channel, got %q", prompt)
@@ -399,14 +399,17 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
-	if !strings.Contains(prompt, "usually one or two focused searches") {
-		t.Fatalf("researcher system prompt should cap early search breadth, got %q", prompt)
+	if !strings.Contains(prompt, "Use web_search and fetch_url with the parallelism appropriate") {
+		t.Fatalf("researcher system prompt should make tool parallelism contextual, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "As soon as you have at least one substantive grounded finding, call submit_research_findings.") {
+	if !strings.Contains(prompt, "call submit_research_findings as a durable checkpoint") {
 		t.Fatalf("researcher system prompt should require early findings handoff, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Immediately after submit_research_findings, stop searching and end the turn") {
-		t.Fatalf("researcher system prompt should require stopping after handoff, got %q", prompt)
+	if !strings.Contains(prompt, "persistent communicating coagent") {
+		t.Fatalf("researcher system prompt should describe persistent coagent research, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "provider endpoints, latency, errors, rate limits, and result counts") {
+		t.Fatalf("researcher system prompt should allow sequential follow-up after findings checkpoints, got %q", prompt)
 	}
 }
 

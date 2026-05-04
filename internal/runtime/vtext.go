@@ -1637,7 +1637,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, start the needed worker request before ending the run.")
 		} else {
 			b.WriteString("\nDo not call edit_vtext from model priors. The current conductor abstract is already the visible document seed.")
-			b.WriteString("\nFor factual/current claims, call spawn_agent with role=\"researcher\" on this document channel.")
+			b.WriteString("\nFor factual/current claims, call spawn_agent with role=\"researcher\" on this document channel. Use parallel researchers when you can give each one a distinct branch; otherwise start with one broad researcher.")
 			b.WriteString("\nFor coding, generated artifacts, execution, or verification, call request_super_execution.")
 			b.WriteString("\nAfter starting the necessary worker request(s), end the run without edit_vtext. Worker deliveries will wake the next VText run to create the next revision.")
 		}

@@ -747,8 +747,8 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("gateway: search succeeded for sandbox %s (provider=%s results=%d)",
-		sandboxID, resp.Provider, len(resp.Results))
+	log.Printf("gateway: search succeeded for sandbox %s (provider=%s providers=%s results=%d)",
+		sandboxID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
 
 	writeGatewayJSON(w, http.StatusOK, resp)
 }

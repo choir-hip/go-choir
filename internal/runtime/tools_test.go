@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -315,18 +316,18 @@ func TestToolValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid tool",
-			tool: Tool{Name: "valid", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
+			name:    "valid tool",
+			tool:    Tool{Name: "valid", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
 			wantErr: false,
 		},
 		{
-			name: "empty name",
-			tool: Tool{Name: "", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
+			name:    "empty name",
+			tool:    Tool{Name: "", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
 			wantErr: true,
 		},
 		{
-			name: "nil func",
-			tool: Tool{Name: "nil_func"},
+			name:    "nil func",
+			tool:    Tool{Name: "nil_func"},
 			wantErr: true,
 		},
 	}
@@ -516,6 +517,92 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 	// Output should be truncated to ~100KB + truncation notice.
 	if len(results[0].Output) > 110*1024 {
 		t.Errorf("output should be truncated, got %d bytes", len(results[0].Output))
+	}
+}
+
+func TestExecuteToolsConductorVTextRouteSkipsOtherSpawn(t *testing.T) {
+	registry := NewToolRegistry()
+	executed := []string{}
+	if err := registry.Register(Tool{
+		Name: "spawn_agent",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			var in struct {
+				Role string `json:"role"`
+			}
+			if err := json.Unmarshal(args, &in); err != nil {
+				return "", err
+			}
+			executed = append(executed, in.Role)
+			return in.Role, nil
+		},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "conductor-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileConductor,
+	})
+	calls := []types.ToolCall{
+		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","objective":"research"}`)},
+		{ID: "vtext", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"vtext","objective":"open document","initial_content":"# Draft"}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if len(executed) != 1 || executed[0] != AgentProfileVText {
+		t.Fatalf("executed = %#v, want only vtext", executed)
+	}
+	if !results[0].IsError || !strings.Contains(results[0].Output, "vtext owns downstream") {
+		t.Fatalf("research spawn result = %#v, want skipped downstream worker", results[0])
+	}
+	if results[1].IsError || results[1].Output != AgentProfileVText {
+		t.Fatalf("vtext spawn result = %#v, want success", results[1])
+	}
+}
+
+func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
+	registry := NewToolRegistry()
+	searches := 0
+	if err := registry.Register(Tool{
+		Name: "web_search",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			searches++
+			return "search result", nil
+		},
+	}); err != nil {
+		t.Fatalf("register web_search: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name: "fetch_url",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return "fetch result", nil
+		},
+	}); err != nil {
+		t.Fatalf("register fetch_url: %v", err)
+	}
+
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "researcher-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileResearcher,
+	})
+	calls := []types.ToolCall{
+		{ID: "search-1", Name: "web_search", Arguments: json.RawMessage(`{"query":"ai news may 2026"}`)},
+		{ID: "search-2", Name: "web_search", Arguments: json.RawMessage(`{"query":"openai may 2026"}`)},
+		{ID: "search-3", Name: "web_search", Arguments: json.RawMessage(`{"query":"google ai may 2026"}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if searches != 3 {
+		t.Fatalf("searches = %d, want 3", searches)
+	}
+	for idx, result := range results {
+		if result.IsError {
+			t.Fatalf("result[%d] = %#v, want success", idx, result)
+		}
 	}
 }
 

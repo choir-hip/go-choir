@@ -24,6 +24,7 @@ type traceTrajectorySnapshotResponse struct {
 	Agents     []traceAgentNode       `json:"agents"`
 	Edges      []traceAgentEdge       `json:"edges"`
 	Moments    []traceMomentSummary   `json:"moments"`
+	Search     traceSearchSummary     `json:"search"`
 }
 
 type traceMomentDetailResponse struct {
@@ -36,20 +37,44 @@ type traceMomentDetailResponse struct {
 }
 
 type traceTrajectorySummary struct {
-	TrajectoryID     string         `json:"trajectory_id"`
-	Title            string         `json:"title"`
-	Subtitle         string         `json:"subtitle,omitempty"`
-	State            types.RunState `json:"state,omitempty"`
-	Live             bool           `json:"live"`
-	LatestActivityAt string         `json:"latest_activity_at,omitempty"`
-	LeadAgents       []string       `json:"lead_agents,omitempty"`
-	AgentCount       int            `json:"agent_count"`
-	DelegationCount  int            `json:"delegation_count"`
-	MomentCount      int            `json:"moment_count"`
-	MessageCount     int            `json:"message_count"`
-	FindingCount     int            `json:"finding_count"`
-	DocID            string         `json:"doc_id,omitempty"`
-	LatestStreamSeq  int64          `json:"latest_stream_seq,omitempty"`
+	TrajectoryID         string         `json:"trajectory_id"`
+	Title                string         `json:"title"`
+	Subtitle             string         `json:"subtitle,omitempty"`
+	State                types.RunState `json:"state,omitempty"`
+	Live                 bool           `json:"live"`
+	LatestActivityAt     string         `json:"latest_activity_at,omitempty"`
+	LeadAgents           []string       `json:"lead_agents,omitempty"`
+	AgentCount           int            `json:"agent_count"`
+	DelegationCount      int            `json:"delegation_count"`
+	MomentCount          int            `json:"moment_count"`
+	MessageCount         int            `json:"message_count"`
+	FindingCount         int            `json:"finding_count"`
+	DocID                string         `json:"doc_id,omitempty"`
+	LatestStreamSeq      int64          `json:"latest_stream_seq,omitempty"`
+	SearchAttemptCount   int            `json:"search_attempt_count,omitempty"`
+	SearchSuccessCount   int            `json:"search_success_count,omitempty"`
+	SearchRateLimitCount int            `json:"search_rate_limit_count,omitempty"`
+}
+
+type traceSearchSummary struct {
+	Queries    int                        `json:"queries"`
+	Attempts   int                        `json:"attempts"`
+	Successes  int                        `json:"successes"`
+	RateLimits int                        `json:"rate_limits"`
+	Providers  []traceSearchProviderStats `json:"providers"`
+}
+
+type traceSearchProviderStats struct {
+	Provider     string `json:"provider"`
+	Endpoint     string `json:"endpoint,omitempty"`
+	Attempts     int    `json:"attempts"`
+	Successes    int    `json:"successes"`
+	RateLimits   int    `json:"rate_limits"`
+	Errors       int    `json:"errors"`
+	ResultCount  int    `json:"result_count"`
+	AvgLatencyMs int64  `json:"avg_latency_ms,omitempty"`
+	LastStatus   string `json:"last_status,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
 }
 
 type traceAgentNode struct {
@@ -106,6 +131,7 @@ type traceTrajectoryBundle struct {
 	Agents     []traceAgentNode
 	Edges      []traceAgentEdge
 	Moments    []traceMomentSummary
+	Search     traceSearchSummary
 	events     []types.EventRecord
 	messages   []types.ChannelMessage
 	findings   []types.ResearchFindingRecord
@@ -191,6 +217,7 @@ func (h *APIHandler) handleTraceTrajectorySnapshot(w http.ResponseWriter, r *htt
 		Agents:     bundle.Agents,
 		Edges:      bundle.Edges,
 		Moments:    bundle.Moments,
+		Search:     bundle.Search,
 	})
 }
 
@@ -366,13 +393,15 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 	agents, agentIndex := buildTraceAgentNodes(filteredRuns)
 	edges := buildTraceAgentEdges(filteredRuns)
 	moments := buildTraceMomentSummaries(events, agentIndex)
-	trajectory := buildTraceTrajectorySummary(trajectoryID, filteredRuns, agents, edges, moments, messages, findings)
+	search := buildTraceSearchSummary(events)
+	trajectory := buildTraceTrajectorySummary(trajectoryID, filteredRuns, agents, edges, moments, messages, findings, search)
 
 	return traceTrajectoryBundle{
 		Trajectory: trajectory,
 		Agents:     agents,
 		Edges:      edges,
 		Moments:    moments,
+		Search:     search,
 		events:     events,
 		messages:   messages,
 		findings:   findings,
@@ -403,7 +432,8 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 		agents, _ := buildTraceAgentNodes(runGroup)
 		edges := buildTraceAgentEdges(runGroup)
 		moments := buildTraceMomentSummaries(groupedEvents[trajectoryID], nil)
-		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, runGroup, agents, edges, moments, nil, nil))
+		search := buildTraceSearchSummary(groupedEvents[trajectoryID])
+		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, runGroup, agents, edges, moments, nil, nil, search))
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].LatestActivityAt > summaries[j].LatestActivityAt
@@ -411,7 +441,7 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 	return summaries
 }
 
-func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, agents []traceAgentNode, edges []traceAgentEdge, moments []traceMomentSummary, messages []types.ChannelMessage, findings []types.ResearchFindingRecord) traceTrajectorySummary {
+func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, agents []traceAgentNode, edges []traceAgentEdge, moments []traceMomentSummary, messages []types.ChannelMessage, findings []types.ResearchFindingRecord, search traceSearchSummary) traceTrajectorySummary {
 	latestAt := time.Time{}
 	var latestRun types.RunRecord
 	for _, run := range runs {
@@ -471,20 +501,23 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 	}
 
 	return traceTrajectorySummary{
-		TrajectoryID:     trajectoryID,
-		Title:            title,
-		Subtitle:         subtitle,
-		State:            latestRun.State,
-		Live:             latestRun.State == types.RunPending || latestRun.State == types.RunRunning || latestRun.State == types.RunBlocked,
-		LatestActivityAt: formatTraceTime(latestAt),
-		LeadAgents:       leadAgents,
-		AgentCount:       len(agents),
-		DelegationCount:  len(edges),
-		MomentCount:      len(moments),
-		MessageCount:     len(messages),
-		FindingCount:     len(findings),
-		DocID:            docID,
-		LatestStreamSeq:  latestStreamSeq,
+		TrajectoryID:         trajectoryID,
+		Title:                title,
+		Subtitle:             subtitle,
+		State:                latestRun.State,
+		Live:                 latestRun.State == types.RunPending || latestRun.State == types.RunRunning || latestRun.State == types.RunBlocked,
+		LatestActivityAt:     formatTraceTime(latestAt),
+		LeadAgents:           leadAgents,
+		AgentCount:           len(agents),
+		DelegationCount:      len(edges),
+		MomentCount:          len(moments),
+		MessageCount:         len(messages),
+		FindingCount:         len(findings),
+		DocID:                docID,
+		LatestStreamSeq:      latestStreamSeq,
+		SearchAttemptCount:   search.Attempts,
+		SearchSuccessCount:   search.Successes,
+		SearchRateLimitCount: search.RateLimits,
 	}
 }
 
@@ -622,6 +655,110 @@ func buildTraceMomentSummaries(events []types.EventRecord, agentIndex map[string
 	return moments
 }
 
+func buildTraceSearchSummary(events []types.EventRecord) traceSearchSummary {
+	type agg struct {
+		traceSearchProviderStats
+		latencyTotal int64
+	}
+	byProvider := make(map[string]*agg)
+	summary := traceSearchSummary{}
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "tool") != "web_search" {
+			continue
+		}
+		summary.Queries++
+		if isError, _ := payload["is_error"].(bool); isError {
+			provider := "unknown"
+			entry := byProvider[provider]
+			if entry == nil {
+				entry = &agg{traceSearchProviderStats: traceSearchProviderStats{Provider: provider}}
+				byProvider[provider] = entry
+			}
+			entry.Attempts++
+			entry.Errors++
+			entry.LastStatus = "error"
+			entry.LastError = traceExcerpt(payloadString(payload, "output"), 240)
+			continue
+		}
+		output := parseTraceToolOutput(payload)
+		attempts, ok := output["attempts"].([]any)
+		if !ok || len(attempts) == 0 {
+			provider := payloadString(output, "provider")
+			if provider == "" {
+				provider = "unknown"
+			}
+			results := payloadAnySliceLen(output, "results")
+			entry := byProvider[provider]
+			if entry == nil {
+				entry = &agg{traceSearchProviderStats: traceSearchProviderStats{Provider: provider}}
+				byProvider[provider] = entry
+			}
+			entry.Attempts++
+			entry.Successes++
+			entry.ResultCount += results
+			entry.LastStatus = "success"
+			continue
+		}
+		for _, rawAttempt := range attempts {
+			attempt, _ := rawAttempt.(map[string]any)
+			if attempt == nil {
+				continue
+			}
+			provider := payloadString(attempt, "provider")
+			if provider == "" {
+				provider = "unknown"
+			}
+			entry := byProvider[provider]
+			if entry == nil {
+				entry = &agg{traceSearchProviderStats: traceSearchProviderStats{Provider: provider}}
+				byProvider[provider] = entry
+			}
+			if endpoint := payloadString(attempt, "endpoint"); endpoint != "" {
+				entry.Endpoint = endpoint
+			}
+			status := payloadString(attempt, "status")
+			if status == "" {
+				status = "unknown"
+			}
+			entry.Attempts++
+			entry.LastStatus = status
+			latency := payloadInt64(attempt, "latency_ms")
+			entry.latencyTotal += latency
+			switch status {
+			case "success":
+				entry.Successes++
+				entry.ResultCount += int(payloadInt64(attempt, "results"))
+			case "rate_limited":
+				entry.RateLimits++
+				entry.LastError = payloadString(attempt, "error")
+			default:
+				entry.Errors++
+				entry.LastError = payloadString(attempt, "error")
+			}
+		}
+	}
+
+	providers := make([]traceSearchProviderStats, 0, len(byProvider))
+	for _, entry := range byProvider {
+		if entry.Attempts > 0 && entry.latencyTotal > 0 {
+			entry.AvgLatencyMs = entry.latencyTotal / int64(entry.Attempts)
+		}
+		summary.Attempts += entry.Attempts
+		summary.Successes += entry.Successes
+		summary.RateLimits += entry.RateLimits
+		providers = append(providers, entry.traceSearchProviderStats)
+	}
+	sort.Slice(providers, func(i, j int) bool {
+		return providers[i].Provider < providers[j].Provider
+	})
+	summary.Providers = providers
+	return summary
+}
+
 func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAgentNode) traceMomentSummary {
 	payload := parseTracePayload(ev.Payload)
 	agent := traceAgentNode{}
@@ -718,6 +855,28 @@ func payloadStringSlice(payload map[string]any, key string) []string {
 		}
 	}
 	return out
+}
+
+func payloadAnySliceLen(payload map[string]any, key string) int {
+	raw, ok := payload[key].([]any)
+	if !ok {
+		return 0
+	}
+	return len(raw)
+}
+
+func parseTraceToolOutput(payload map[string]any) map[string]any {
+	raw := payload["output"]
+	switch value := raw.(type) {
+	case map[string]any:
+		return value
+	case string:
+		var out map[string]any
+		if err := json.Unmarshal([]byte(value), &out); err == nil && out != nil {
+			return out
+		}
+	}
+	return map[string]any{}
 }
 
 func payloadInt64(payload map[string]any, key string) int64 {
