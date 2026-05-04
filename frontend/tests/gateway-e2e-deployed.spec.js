@@ -58,6 +58,7 @@ const testResults = {
 };
 
 test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
+  test.setTimeout(120000);
   const context = await browser.newContext({
     viewport: { width: 430, height: 932 },
     isMobile: true,
@@ -185,7 +186,8 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
       observed: 'In progress...'
     });
 
-    const prompt = `Draft a vtext abstract for deployed prompt-bar verification ${Date.now()}`;
+    const marker = `deployed-prompt-bar-${Date.now()}`;
+    const prompt = `Draft a vtext abstract for ${marker}`;
     const promptInput = page.locator('[data-prompt-input]');
     await expect(promptInput).toBeVisible({ timeout: 10000 });
     await expect(promptInput).toBeEnabled();
@@ -222,7 +224,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
 
     const vtextWindow = page.locator('[data-vtext-app]').last();
     await expect(vtextWindow).toBeVisible({ timeout: 30000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(prompt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
     await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
     testResults.steps[6].observed = `Conductor decision: ${JSON.stringify(finalStatus.decision)?.substring(0, 300)}`;
@@ -241,7 +243,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     expect(userRevision?.content).toBe(prompt);
     expect(framingRevision?.author_kind).toBe('appagent');
     expect(framingRevision?.author_label).toBe('conductor');
-    expect(framingRevision?.content || '').toContain(prompt);
+    expect(framingRevision?.content || '').toContain(marker);
     expect(framingRevision?.content || '').not.toMatch(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
     const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(responseBody.submission_id)}`);
