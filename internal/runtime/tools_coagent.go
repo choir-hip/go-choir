@@ -36,8 +36,8 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 		Description: "Spawn a child agent run with a specific role/profile and optional coordination channel.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"objective":  map[string]any{"type": "string"},
-			"role":       map[string]any{"type": "string"},
-			"profile":    map[string]any{"type": "string"},
+			"role":       map[string]any{"type": "string", "description": "Canonical role/profile name. Use one of: vtext, researcher, super, co-super."},
+			"profile":    map[string]any{"type": "string", "description": "Optional canonical profile override. Usually omit; when set, use one of: vtext, researcher, super, co-super."},
 			"channel_id": map[string]any{"type": "string"},
 			"model":      map[string]any{"type": "string"},
 			"initial_content": map[string]any{
@@ -55,12 +55,12 @@ func newSpawnAgentTool(rt *Runtime) Tool {
 			if parentID == "" || ownerID == "" {
 				return "", fmt.Errorf("spawn_agent missing run context")
 			}
-			role := strings.TrimSpace(in.Role)
+			role := canonicalAgentProfile(strings.TrimSpace(in.Role))
 			if role == "" {
 				return "", fmt.Errorf("role must not be empty")
 			}
 			callerProfile := stringFromToolContext(ctx, toolCtxProfile)
-			profile := strings.TrimSpace(in.Profile)
+			profile := canonicalAgentProfile(strings.TrimSpace(in.Profile))
 			if profile == "" {
 				profile = role
 			}

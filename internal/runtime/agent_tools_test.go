@@ -688,6 +688,25 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if researchSpawn.ChannelID != vtextSpawn.ChannelID {
 		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, vtextSpawn.ChannelID)
 	}
+
+	researchAliasSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+		"objective":"research current facts for the document",
+		"role":"research",
+		"channel_id":"`+vtextSpawn.ChannelID+`"
+	}`))
+	if err != nil {
+		t.Fatalf("vtext spawn research alias: %v", err)
+	}
+	var researchAliasSpawn struct {
+		Role    string `json:"role"`
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal([]byte(researchAliasSpawnRaw), &researchAliasSpawn); err != nil {
+		t.Fatalf("decode researcher alias spawn: %v", err)
+	}
+	if researchAliasSpawn.Role != AgentProfileResearcher || researchAliasSpawn.Profile != AgentProfileResearcher {
+		t.Fatalf("research alias spawn = role %q profile %q, want researcher/researcher", researchAliasSpawn.Role, researchAliasSpawn.Profile)
+	}
 }
 
 func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {

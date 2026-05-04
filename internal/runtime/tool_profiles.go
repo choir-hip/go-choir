@@ -184,7 +184,7 @@ type AgentRoleSpec struct {
 }
 
 func roleSpec(profile string) AgentRoleSpec {
-	switch strings.TrimSpace(profile) {
+	switch canonicalAgentProfile(profile) {
 	case AgentProfileConductor:
 		return AgentRoleSpec{
 			Profile:                AgentProfileConductor,
@@ -232,9 +232,28 @@ func roleSpec(profile string) AgentRoleSpec {
 	}
 }
 
+func canonicalAgentProfile(profile string) string {
+	profile = strings.TrimSpace(profile)
+	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
+	switch normalized {
+	case "researcher", "research", "research-agent", "web-research", "web-researcher":
+		return AgentProfileResearcher
+	case "cosuper", "co-super", "coagent", "co-agent":
+		return AgentProfileCoSuper
+	case "vtext", "vtext-agent", "document-agent":
+		return AgentProfileVText
+	case "super":
+		return AgentProfileSuper
+	case "conductor":
+		return AgentProfileConductor
+	default:
+		return normalized
+	}
+}
+
 func canDelegateTo(callerProfile, targetProfile string) bool {
 	spec := roleSpec(callerProfile)
-	targetProfile = strings.TrimSpace(targetProfile)
+	targetProfile = canonicalAgentProfile(targetProfile)
 	for _, allowed := range spec.AllowedDelegateTargets {
 		if targetProfile == allowed {
 			return true
