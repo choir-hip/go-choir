@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Deploy provider credentials to Node B for the go-choir-gateway service.
 #
-# This script reads optional API-key provider settings from
-# ${CHOIR_PROVIDER_SETTINGS:-$HOME/.config/go-choir/provider-settings.json}
-# and writes them to /var/lib/go-choir/gateway-provider.env on Node B via SSH.
-# The gateway systemd service loads this file via EnvironmentFile.
+# This script reads provider credentials from
+# ${CHOIR_PROVIDER_ENV_FILE:-./.env}, plus optional custom model settings from
+# ${CHOIR_PROVIDER_SETTINGS:-$HOME/.config/go-choir/provider-settings.json}, and
+# writes them to /var/lib/go-choir/gateway-provider.env on Node B via SSH. The
+# gateway systemd service loads this file via EnvironmentFile.
 #
 # IMPORTANT: This script never commits credentials to the repo or Nix store.
 # The EnvironmentFile is a writable runtime location on Node B only.
@@ -17,14 +18,36 @@
 set -euo pipefail
 
 HOST="${1:-node-b}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CHOIR_PROVIDER_ENV_FILE:-${REPO_ROOT}/.env}"
 SETTINGS="${CHOIR_PROVIDER_SETTINGS:-${HOME}/.config/go-choir/provider-settings.json}"
 CODEX_AUTH="${CODEX_AUTH_PATH:-${HOME}/.codex/auth.json}"
 REMOTE_ENV_FILE="/var/lib/go-choir/gateway-provider.env"
 REMOTE_CODEX_AUTH="/var/lib/go-choir/codex-auth.json"
 
+# Load local deployment credentials when present. This keeps the common
+# operator path safe: running this script from the repo should deploy the
+# private .env values without requiring every key to be exported first.
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+else
+  echo "warning: $ENV_FILE not found; relying on exported environment variables" >&2
+fi
+
 # Build the env file content from customModels entries.
 # We detect the provider type by apiKey prefix and baseUrl.
 ENVS=()
+
+add_env_once() {
+  local key="$1"
+  local value="${!key:-}"
+  if [ -n "$value" ] && ! printf '%s\n' "${ENVS[@]}" | grep -q "^${key}="; then
+    ENVS+=("${key}=${value}")
+  fi
+}
 
 if [ -f "$SETTINGS" ]; then
   # Extract all customModels entries with their provider info
@@ -77,6 +100,10 @@ if [ ${#ENVS[@]} -eq 0 ]; then
   echo "warning: no API-key provider credentials found in $SETTINGS" >&2
 fi
 
+for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL FIREWORKS_API_KEY FIREWORKS_BASE_URL; do
+  add_env_once "$key"
+done
+
 if [ -f "$CODEX_AUTH" ]; then
   ENVS+=("CHATGPT_AUTH_PATH=${REMOTE_CODEX_AUTH}")
   ENVS+=("GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini")
@@ -86,10 +113,7 @@ else
 fi
 
 for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY; do
-  value="${!key:-}"
-  if [ -n "$value" ]; then
-    ENVS+=("${key}=${value}")
-  fi
+  add_env_once "$key"
 done
 
 if [ ${#ENVS[@]} -eq 0 ]; then
