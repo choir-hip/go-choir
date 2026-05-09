@@ -92,10 +92,7 @@ jobs:
             current_commit=$(git rev-parse HEAD)
             deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             install -d -m 0750 /var/lib/go-choir
-            cat > /var/lib/go-choir/deploy.env <<EOF
-CHOIR_DEPLOYED_AT=$deployed_at
-CHOIR_DEPLOYED_COMMIT=$current_commit
-EOF
+            printf "CHOIR_DEPLOYED_AT=%s\nCHOIR_DEPLOYED_COMMIT=%s\n" "$deployed_at" "$current_commit" > /var/lib/go-choir/deploy.env
             chmod 0644 /var/lib/go-choir/deploy.env
 
             systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
