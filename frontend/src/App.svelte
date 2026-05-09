@@ -187,6 +187,16 @@
     --choir-radius-lg: 18px;
     --choir-shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.28);
     --choir-motion-fast: 120ms ease;
+    --choir-bottom-bar-height: 56px;
+  }
+
+  :global(html),
+  :global(body),
+  :global(#app) {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
   }
 
   :global(body) {
@@ -194,13 +204,29 @@
       Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     background: var(--choir-bg);
     color: var(--choir-fg);
+    overscroll-behavior: none;
+  }
+
+  :global(input),
+  :global(textarea),
+  :global([contenteditable="true"]) {
+    font-size: max(16px, 1rem);
+  }
+
+  @supports (height: 100dvh) {
+    :global(html),
+    :global(body),
+    :global(#app) {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
   }
 
   .loading {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
+    min-height: 100dvh;
     color: #888;
   }
 </style>

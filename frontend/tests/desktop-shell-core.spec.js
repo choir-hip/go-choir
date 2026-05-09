@@ -183,16 +183,13 @@ test('VText recent landing can open a Markdown document without control overlap'
   const [toolbarBox, bodyBox] = await Promise.all([toolbar.boundingBox(), body.boundingBox()]);
   expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(bodyBox.y + 1);
 
-  await vtextWindow.locator('button', { hasText: 'Read' }).click();
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   await expect(rendered.locator('h1')).toContainText('Markdown UX Fixture');
   await expect(rendered.locator('strong')).toContainText('bold');
   await expect(rendered.locator('em')).toContainText('emphasis');
   await expect(rendered.locator('a')).toHaveAttribute('href', 'https://example.com');
   await expect(rendered.locator('li')).toHaveCount(2);
-
-  await vtextWindow.locator('button', { hasText: 'Edit' }).click();
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/# Markdown UX Fixture/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/Markdown UX Fixture/);
 });
 
 test('VText opens near full mobile workspace and clears the prompt bar', async ({ page, authenticator }) => {
@@ -337,10 +334,15 @@ test('bottom bar prompt input with placeholder', async ({ page, authenticator })
   const promptInput = page.locator('[data-prompt-input]');
   await expect(promptInput).toBeVisible();
   await expect(promptInput).toBeEnabled();
+  await expect(promptInput).toHaveJSProperty('tagName', 'TEXTAREA');
 
   // Check placeholder text
   const placeholder = await promptInput.getAttribute('placeholder');
   expect(placeholder).toBe('Ask anything...');
+
+  const initialBox = await promptInput.boundingBox();
+  await promptInput.fill('This prompt is intentionally long enough to wrap across more than one visual line on the desktop prompt bar. '.repeat(6));
+  await expect.poll(async () => (await promptInput.boundingBox())?.height || 0).toBeGreaterThan((initialBox?.height || 0) + 8);
 
   // Type text and submit with Enter
   await promptInput.fill('Hello world');
@@ -383,7 +385,7 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
     // The local stub provider can only prove the public prompt-bar route and
     // app launch path. Real/live conductor materialization includes the
     // durable doc/revision IDs asserted below.
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/Draft a project outline/);
     return;
   }
 
@@ -425,8 +427,8 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
   expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
 
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/Draft a project outline/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText(/^v[1-9][0-9]*$/);
   await expect(vtextWindow.locator('[data-vtext-prev]')).toBeEnabled();
   await expect(vtextWindow.locator('[data-vtext-next]')).toBeDisabled();
@@ -443,8 +445,8 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
   const editor = vtextWindow.locator('[data-vtext-editor-area]');
-  await expect(editor).toHaveValue(/Ahaha/);
-  await expect(editor).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(editor).toContainText(/Ahaha/);
+  await expect(editor).not.toContainText(/Conductor framing|Use this vtext|User request:/);
 
   const fileNameHandle = await page.waitForFunction(async () => {
     const res = await fetch('/api/files', { credentials: 'include' });
@@ -512,8 +514,8 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
 
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/hi/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/hi/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:/);
 });
 
 // ---------------------------------------------------------------

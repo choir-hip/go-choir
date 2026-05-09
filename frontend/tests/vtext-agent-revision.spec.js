@@ -7,7 +7,9 @@ async function openVText(page) {
   if (await recent.isVisible().catch(() => false)) {
     await page.locator('[data-vtext-new-document]').click();
   }
-  await page.locator('[data-vtext-editor-area]').waitFor({ state: 'visible', timeout: 10000 });
+  const editor = page.locator('[data-vtext-editor-area]');
+  await editor.waitFor({ state: 'visible', timeout: 10000 });
+  await expect(editor).toHaveAttribute('contenteditable', 'true', { timeout: 10000 });
 }
 
 test('prompt button submits a vtext agent revision request', async ({ desktopSession }) => {

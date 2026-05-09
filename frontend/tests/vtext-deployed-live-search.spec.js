@@ -189,7 +189,7 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
 
     const vtextWindow = page.locator('[data-vtext-app]').last();
     await expect(vtextWindow).toBeVisible({ timeout: 30_000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/live|search|evidence|source|2026/i, { timeout: 30_000 });
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/live|search|evidence|source|2026/i, { timeout: 30_000 });
 
     const search = await waitForSuccessfulWebSearch(page, body.submission_id);
     const searchProviders = Array.isArray(search.providers) && search.providers.length > 0

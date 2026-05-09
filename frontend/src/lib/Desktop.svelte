@@ -590,7 +590,8 @@
   .desktop {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
     background: var(--choir-bg, #0f0f0f);
     overflow: hidden;
   }
@@ -608,7 +609,8 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    height: calc(100vh - 56px); /* subtract bottom bar height */
+    height: calc(100dvh - var(--choir-bottom-bar-height, 56px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* Prevent flash of empty desktop while state loads (VAL-SHELL-022) */

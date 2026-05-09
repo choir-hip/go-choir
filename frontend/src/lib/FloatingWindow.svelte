@@ -292,7 +292,7 @@
     transition: box-shadow 0.15s, border-color 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 72px);
+    max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 16px);
   }
 
   .window-active {
@@ -401,7 +401,7 @@
   @media (max-width: 768px) {
     .window {
       max-width: calc(100vw - 16px);
-      max-height: calc(100vh - 64px);
+      max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 8px);
     }
 
     .titlebar {

@@ -3,6 +3,13 @@ import { test, expect } from './helpers/fixtures.js';
 async function openVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
   await page.locator('[data-vtext-editor]').waitFor({ state: 'visible', timeout: 10000 });
+  const recent = page.locator('[data-vtext-recent]');
+  if (await recent.isVisible().catch(() => false)) {
+    await page.locator('[data-vtext-new-document]').click();
+  }
+  const editor = page.locator('[data-vtext-editor-area]');
+  await editor.waitFor({ state: 'visible', timeout: 10000 });
+  await expect(editor).toHaveAttribute('contenteditable', 'true', { timeout: 10000 });
 }
 
 test('vtext uses the document surface as the window and exposes version navigation', async ({ desktopSession }) => {

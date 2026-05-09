@@ -31,7 +31,9 @@ async function openVText(page) {
   if (await recent.isVisible().catch(() => false)) {
     await page.locator('[data-vtext-app] [data-vtext-new-document]').last().click();
   }
-  await page.locator('[data-vtext-app] [data-vtext-editor-area]').last().waitFor({ state: 'visible', timeout: 10000 });
+  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  await editor.waitFor({ state: 'visible', timeout: 10000 });
+  await expect(editor).toHaveAttribute('contenteditable', 'true', { timeout: 10000 });
 }
 
 async function seedTextFile(page, fileName, content) {
@@ -151,11 +153,11 @@ test('vtext auto-follows latest head when the editor is clean', async ({ page, a
   const opened = await openFileInVText(page, fileName);
 
   const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
-  await expect(editor).toHaveValue(initialContent);
+  await expect(editor).toContainText(initialContent);
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
 
-  await expect(editor).toHaveValue(externalContent, { timeout: 10000 });
+  await expect(editor).toContainText(externalContent, { timeout: 10000 });
   await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
 });
 
@@ -176,10 +178,10 @@ test('vtext keeps dirty edits and offers latest-head jump instead of auto-clobbe
 
   const updateButton = page.locator('[data-vtext-new-version]');
   await expect(updateButton).toBeVisible({ timeout: 10000 });
-  await expect(editor).toHaveValue(dirtyContent);
+  await expect(editor).toContainText(dirtyContent);
 
   await updateButton.click();
-  await expect(editor).toHaveValue(externalContent, { timeout: 10000 });
+  await expect(editor).toContainText(externalContent, { timeout: 10000 });
   await expect(updateButton).toHaveCount(0);
 });
 
@@ -221,10 +223,10 @@ test('vtext file-backed window restores on reload with the latest canonical head
   const opened = await openFileInVText(page, fileName);
 
   const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
-  await expect(editor).toHaveValue(initialContent);
+  await expect(editor).toContainText(initialContent);
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
-  await expect(editor).toHaveValue(externalContent, { timeout: 10000 });
+  await expect(editor).toContainText(externalContent, { timeout: 10000 });
 
   await page.waitForTimeout(1000);
   await page.reload();
@@ -232,7 +234,7 @@ test('vtext file-backed window restores on reload with the latest canonical head
   await page.waitForTimeout(1500);
 
   const restoredEditor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
-  await expect(restoredEditor).toHaveValue(externalContent, { timeout: 10000 });
+  await expect(restoredEditor).toContainText(externalContent, { timeout: 10000 });
 });
 
 test('dry-run test endpoint: submit_research_findings batches rapid worker updates into one auto-advanced next version', async ({ page, authenticator }) => {
@@ -246,7 +248,7 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
   await openVText(page);
   const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
   await editor.fill(initialContent);
-  await expect(editor).toHaveValue(initialContent);
+  await expect(editor).toContainText(initialContent);
 
   const revisionRequest = page.waitForResponse((response) => {
     return response.request().method() === 'POST' &&

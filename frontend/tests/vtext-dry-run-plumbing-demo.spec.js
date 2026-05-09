@@ -193,12 +193,12 @@ test('dry-run vtext plumbing demo uses seeded worker updates and artifacts', asy
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 10000 });
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/cellular automata/);
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(/cellular automata/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
   const beforeManualRevision = await listRevisions(page, conductorDecision.doc_id);
   const editor = vtextWindow.locator('[data-vtext-editor-area]');
-  await editor.fill(`${await editor.inputValue()}
+  await editor.fill(`${await editor.textContent()}
 
 User edit: keep the model deterministic, cite the research assumptions, and require a generated artifact plus a verification script.`);
 

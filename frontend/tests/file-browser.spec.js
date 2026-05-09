@@ -286,7 +286,7 @@ test('clicking text file opens in VText', async ({ desktopSession }) => {
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
 
   const editorArea = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
-  await expect(editorArea).toHaveValue(fileContent);
+  await expect(editorArea).toContainText(fileContent);
 });
 
 // ---------------------------------------------------------------

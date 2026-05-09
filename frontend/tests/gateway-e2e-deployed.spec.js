@@ -224,8 +224,8 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
 
     const vtextWindow = page.locator('[data-vtext-app]').last();
     await expect(vtextWindow).toBeVisible({ timeout: 30000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
-    await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
 
     testResults.steps[6].observed = `Conductor decision: ${JSON.stringify(finalStatus.decision)?.substring(0, 300)}`;
 

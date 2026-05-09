@@ -45,7 +45,9 @@
   let showRecent = false;
   let recentLoading = false;
   let recentDocuments = [];
-  let editing = true;
+  let editorSurface = null;
+  let surfaceFocused = false;
+  let toolbarFaded = false;
 
   function escapeHTML(value) {
     return String(value || '')
@@ -114,6 +116,72 @@
     flushParagraph();
     flushList();
     return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
+  }
+
+  function serializeInlineMarkdown(node) {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent || '').replace(/\u00a0/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    const childText = Array.from(node.childNodes).map(serializeInlineMarkdown).join('');
+    if (!childText) return '';
+    if (tag === 'strong' || tag === 'b') return `**${childText}**`;
+    if (tag === 'em' || tag === 'i') return `*${childText}*`;
+    if (tag === 'code') return `\`${childText}\``;
+    if (tag === 'a') {
+      const href = node.getAttribute('href') || '';
+      return href ? `[${childText}](${href})` : childText;
+    }
+    return childText;
+  }
+
+  function serializeBlockMarkdown(node) {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent || '').replace(/\u00a0/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName.toLowerCase();
+    if (/^h[1-4]$/.test(tag)) {
+      return `${'#'.repeat(Number(tag.slice(1)))} ${serializeInlineMarkdown(node).trim()}`;
+    }
+    if (tag === 'ul') {
+      return Array.from(node.children)
+        .filter((child) => child.tagName?.toLowerCase() === 'li')
+        .map((child) => `- ${serializeInlineMarkdown(child).trim()}`)
+        .join('\n');
+    }
+    if (tag === 'ol') {
+      return Array.from(node.children)
+        .filter((child) => child.tagName?.toLowerCase() === 'li')
+        .map((child, index) => `${index + 1}. ${serializeInlineMarkdown(child).trim()}`)
+        .join('\n');
+    }
+    return serializeInlineMarkdown(node).trimEnd();
+  }
+
+  function serializeEditorMarkdown(root) {
+    if (!root) return '';
+    const blocks = Array.from(root.childNodes)
+      .map(serializeBlockMarkdown)
+      .map((block) => block.trimEnd())
+      .filter((block) => block.trim() !== '');
+    if (blocks.length > 0) {
+      return blocks.join('\n\n');
+    }
+    return (root.innerText || '').replace(/\u00a0/g, ' ').trimEnd();
+  }
+
+  function syncEditorSurface(html) {
+    if (!editorSurface || surfaceFocused) return;
+    if (editorSurface.innerHTML !== html) {
+      editorSurface.innerHTML = html;
+    }
   }
 
   function normalizeTitle(ctx) {
@@ -437,14 +505,14 @@
     editorValue = '';
     latestHeadRevisionId = '';
     showRecent = false;
-    editing = true;
+    surfaceFocused = false;
+    toolbarFaded = false;
     clearNewVersionIndicator();
     closeDocumentStream();
 
     try {
       if (shouldShowRecentLanding(appContext)) {
         showRecent = true;
-        editing = false;
         saveStatus = 'Recent VTexts';
         await loadRecentDocuments();
         return;
@@ -528,7 +596,8 @@
   async function handleNewDocument() {
     loading = true;
     showRecent = false;
-    editing = true;
+    surfaceFocused = false;
+    toolbarFaded = false;
     error = '';
     try {
       currentDoc = await createDocument('Untitled VText');
@@ -609,6 +678,23 @@
     saveStatus = 'Viewing latest version';
   }
 
+  function handleEditorFocus() {
+    surfaceFocused = true;
+  }
+
+  function handleEditorInput() {
+    editorValue = serializeEditorMarkdown(editorSurface);
+  }
+
+  function handleEditorBlur() {
+    surfaceFocused = false;
+    syncEditorSurface(renderMarkdown(editorValue));
+  }
+
+  function handleDocumentScroll(event) {
+    toolbarFaded = event.currentTarget.scrollTop > 32;
+  }
+
   $: contextKey = getContextKey(appContext);
   $: if (contextKey && contextKey !== initializedKey) {
     initializedKey = contextKey;
@@ -621,6 +707,7 @@
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
   $: renderedMarkdown = renderMarkdown(editorValue);
+  $: syncEditorSurface(renderedMarkdown);
 
   onMount(() => {
     if (!initializedKey) {
@@ -674,7 +761,7 @@
       </div>
     </section>
   {:else}
-    <div class="doc-toolbar" data-vtext-toolbar>
+    <div class="doc-toolbar" class:toolbar-faded={toolbarFaded} data-vtext-toolbar>
       <div class="version-controls">
         <span class="nav-version" data-vtext-version>{versionLabel}</span>
         <button
@@ -712,12 +799,6 @@
       </div>
 
       <div class="doc-actions">
-        <button class="mode-btn" class:active={!editing} on:click={() => (editing = false)} disabled={loading}>
-          Read
-        </button>
-        <button class="mode-btn" class:active={editing} on:click={() => (editing = true)} disabled={loading || isViewingHistorical}>
-          Edit
-        </button>
         <button
           class="prompt-btn"
           data-vtext-prompt
@@ -731,22 +812,22 @@
     </div>
 
     <div class="document-body" data-vtext-document-body>
-      {#if editing}
-        <textarea
-          class="editor"
-          data-vtext-editor-area
-          bind:value={editorValue}
-          placeholder="Start typing the document..."
-          disabled={loading}
-          readonly={isViewingHistorical}
-          spellcheck="true"
-        ></textarea>
-      {:else}
-        <article class="rendered-doc" data-vtext-rendered>
-          {@html renderedMarkdown}
-        </article>
-        <textarea class="source-shadow" data-vtext-editor-area bind:value={editorValue} readonly tabindex="-1" aria-hidden="true"></textarea>
-      {/if}
+      <div
+        class="rendered-doc editable-doc"
+        class:readonly={isViewingHistorical || loading}
+        data-vtext-editor-area
+        data-vtext-rendered
+        bind:this={editorSurface}
+        contenteditable={!loading && !isViewingHistorical}
+        role="textbox"
+        aria-multiline="true"
+        aria-label="VText document"
+        spellcheck="true"
+        on:focus={handleEditorFocus}
+        on:input={handleEditorInput}
+        on:blur={handleEditorBlur}
+        on:scroll={handleDocumentScroll}
+      ></div>
     </div>
   {/if}
 
@@ -785,12 +866,25 @@
   .doc-toolbar {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: auto minmax(5rem, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.7rem 0.85rem;
+    gap: 0.55rem;
+    padding: 0.58rem 0.72rem;
     border-bottom: 1px solid rgba(148, 163, 184, 0.12);
     background: rgba(17, 24, 39, 0.58);
+    transition: opacity 180ms ease, transform 180ms ease;
+    will-change: opacity, transform;
+  }
+
+  .doc-toolbar.toolbar-faded {
+    opacity: 0.16;
+    transform: translateY(-0.4rem);
+  }
+
+  .doc-toolbar.toolbar-faded:hover,
+  .doc-toolbar.toolbar-faded:focus-within {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   .version-controls,
@@ -822,31 +916,6 @@
     overflow: hidden;
   }
 
-  .editor {
-    width: 100%;
-    height: 100%;
-    resize: none;
-    border: none;
-    background: transparent;
-    color: #f8fafc;
-    padding: clamp(1rem, 2vw, 1.75rem);
-    font: inherit;
-    line-height: 1.65;
-    outline: none;
-  }
-
-  .editor::placeholder {
-    color: rgba(203, 213, 225, 0.45);
-  }
-
-  .editor:focus {
-    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22);
-  }
-
-  .editor[readonly] {
-    color: rgba(226, 232, 240, 0.82);
-  }
-
   .nav-version {
     display: inline-flex;
     align-items: center;
@@ -866,7 +935,6 @@
   .nav-btn,
   .prompt-btn,
   .update-pill,
-  .mode-btn,
   .primary-action,
   .ghost-action {
     border: 1px solid rgba(96, 165, 250, 0.28);
@@ -892,25 +960,30 @@
     font-weight: 700;
   }
 
-  .mode-btn {
-    border-radius: 999px;
-    padding: 0.48rem 0.72rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .mode-btn.active {
-    background: rgba(37, 99, 235, 0.42);
-    border-color: rgba(147, 197, 253, 0.58);
-    color: #eff6ff;
-  }
-
   .rendered-doc {
     height: 100%;
     overflow: auto;
     padding: clamp(1.1rem, 2.2vw, 2rem);
     line-height: 1.72;
     color: #f8fafc;
+  }
+
+  .editable-doc {
+    outline: none;
+    caret-color: #bfdbfe;
+  }
+
+  .editable-doc:empty::before {
+    content: "Start typing the document...";
+    color: rgba(203, 213, 225, 0.45);
+  }
+
+  .editable-doc:focus {
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22);
+  }
+
+  .editable-doc.readonly {
+    color: rgba(226, 232, 240, 0.82);
   }
 
   .rendered-doc :global(h1),
@@ -940,14 +1013,6 @@
     border-radius: 0.35rem;
     background: rgba(148, 163, 184, 0.14);
     padding: 0.08rem 0.3rem;
-  }
-
-  .source-shadow {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
   }
 
   .recent-panel {
@@ -1079,7 +1144,6 @@
   .nav-btn:hover:enabled,
   .prompt-btn:hover:enabled,
   .update-pill:hover:enabled,
-  .mode-btn:hover:enabled,
   .primary-action:hover:enabled,
   .ghost-action:hover:enabled {
     transform: translateY(-1px);
@@ -1090,7 +1154,6 @@
   .nav-btn:disabled,
   .prompt-btn:disabled,
   .update-pill:disabled,
-  .mode-btn:disabled,
   .primary-action:disabled,
   .ghost-action:disabled {
     opacity: 0.46;
@@ -1111,23 +1174,41 @@
 
   @media (max-width: 768px) {
     .doc-toolbar {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-      gap: 0.55rem;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 0.42rem;
+      padding: 0.46rem 0.55rem;
     }
 
     .version-controls,
     .doc-actions {
-      justify-content: space-between;
+      gap: 0.32rem;
     }
 
     .doc-state {
-      text-align: left;
+      text-align: center;
+      font-size: 0.68rem;
     }
 
-    .editor,
     .rendered-doc {
       padding: 1rem;
+    }
+
+    .nav-version {
+      min-width: 2.05rem;
+      height: 1.78rem;
+      padding: 0 0.48rem;
+      font-size: 0.7rem;
+    }
+
+    .nav-btn {
+      width: 1.78rem;
+      height: 1.78rem;
+      font-size: 0.82rem;
+    }
+
+    .prompt-btn {
+      padding: 0.5rem 0.7rem;
+      font-size: 0.75rem;
     }
 
     .update-pill {

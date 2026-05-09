@@ -16,7 +16,7 @@
     data-connection-status  — connection status indicator
 -->
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import {
     minimizedWindows,
     restoreWindow,
@@ -33,6 +33,9 @@
   const dispatch = createEventDispatcher();
 
   let promptValue = '';
+  let promptInputEl = null;
+  let bottomBarEl = null;
+  let bottomBarResizeObserver = null;
   let menuOpen = false;
 
   function handleRestore(windowId) {
@@ -48,13 +51,29 @@
     if (promptDisabled) {
       return;
     }
-    if (event.key === 'Enter' && promptValue.trim()) {
-      // Submit prompt (for now just clear — no Chat app yet)
+
+    if (event.key === 'Enter' && !event.shiftKey && promptValue.trim()) {
+      event.preventDefault();
       dispatch('promptsubmit', { text: promptValue.trim() });
       promptValue = '';
+      tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
       event.target.blur();
     }
+  }
+
+  function resizePromptInput() {
+    if (!promptInputEl) return;
+    promptInputEl.style.height = 'auto';
+    const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
+    promptInputEl.style.height = `${Math.min(promptInputEl.scrollHeight, maxHeight)}px`;
+    promptInputEl.style.overflowY = promptInputEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    tick().then(publishBottomBarHeight);
+  }
+
+  function publishBottomBarHeight() {
+    if (!bottomBarEl || typeof document === 'undefined') return;
+    document.documentElement.style.setProperty('--choir-bottom-bar-height', `${bottomBarEl.offsetHeight}px`);
   }
 
   function handleLogout() {
@@ -75,9 +94,24 @@
     if (liveStatus === 'error') return 'Error';
     return 'Disconnected';
   }
+
+  onMount(() => {
+    publishBottomBarHeight();
+    resizePromptInput();
+    if (typeof ResizeObserver !== 'undefined' && bottomBarEl) {
+      bottomBarResizeObserver = new ResizeObserver(publishBottomBarHeight);
+      bottomBarResizeObserver.observe(bottomBarEl);
+    }
+    window.addEventListener('resize', resizePromptInput);
+  });
+
+  onDestroy(() => {
+    bottomBarResizeObserver?.disconnect();
+    window.removeEventListener('resize', resizePromptInput);
+  });
 </script>
 
-<div class="bottom-bar" data-bottom-bar>
+<div class="bottom-bar" data-bottom-bar bind:this={bottomBarEl}>
   <!-- Left section: show desktop + minimized windows -->
   <div class="bar-left">
     <!-- Show Desktop button -->
@@ -130,16 +164,18 @@
   <!-- Center section: prompt bar -->
   <div class="bar-center">
     <div class="prompt-bar">
-      <input
-        type="text"
+      <textarea
         class="prompt-input"
         data-prompt-input
+        rows="1"
+        bind:this={promptInputEl}
         bind:value={promptValue}
         on:keydown={handlePromptKeydown}
+        on:input={resizePromptInput}
         placeholder={promptPlaceholder}
         aria-label="Prompt input"
         disabled={promptDisabled}
-      />
+      ></textarea>
     </div>
   </div>
 
@@ -169,12 +205,12 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    min-height: var(--choir-bottom-bar-height, 56px);
     background: var(--choir-panel-strong, #11111b);
     border-top: 1px solid var(--choir-border, #2a2a3a);
     display: flex;
-    align-items: center;
-    padding: 0 12px;
+    align-items: flex-end;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
     z-index: 100;
     gap: 12px;
   }
@@ -186,6 +222,7 @@
     gap: 4px;
     flex-shrink: 0;
     min-width: 0;
+    min-height: 40px;
   }
 
   .show-desktop-btn {
@@ -316,6 +353,7 @@
     min-width: 0;
     display: flex;
     justify-content: center;
+    align-items: flex-end;
   }
 
   .prompt-bar {
@@ -325,14 +363,19 @@
 
   .prompt-input {
     width: 100%;
-    height: 36px;
-    padding: 0 12px;
+    min-height: 40px;
+    max-height: min(8rem, 22dvh);
+    padding: 9px 12px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid #333;
-    border-radius: 18px;
+    border-radius: 20px;
     color: #e0e0e0;
-    font-size: 0.85rem;
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.35;
     outline: none;
+    resize: none;
+    overflow-y: hidden;
     transition: border-color 0.15s;
   }
 
@@ -350,6 +393,7 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+    min-height: 40px;
   }
 
   .connection-status {
@@ -397,7 +441,7 @@
   /* Responsive: Mobile */
   @media (max-width: 768px) {
     .bottom-bar {
-      padding: 0 8px;
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
       gap: 8px;
     }
 
@@ -407,10 +451,6 @@
 
     .prompt-bar {
       max-width: none;
-    }
-
-    .prompt-input {
-      min-height: 44px;
     }
 
     .bar-right {

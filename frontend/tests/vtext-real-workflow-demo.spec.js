@@ -173,8 +173,8 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
 
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 15000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(new RegExp(marker));
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:/);
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText(new RegExp(marker));
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:/);
 
   const traceWithWorkers = await waitForTraceRoles(page, conductorSubmitted.submission_id, ['conductor', 'vtext', 'researcher', 'super'], 180_000);
   expect(browserSpawnRequests).toHaveLength(0);
