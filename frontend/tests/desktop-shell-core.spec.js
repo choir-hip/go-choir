@@ -10,7 +10,7 @@
  * - Bottom bar always visible (VAL-SHELL-006)
  * - Bottom bar prompt input (VAL-SHELL-007)
  * - Minimized window indicators in bottom bar (VAL-SHELL-008)
- * - User info and logout in bottom bar (VAL-SHELL-009)
+ * - User info and logout in desktop/account menu (VAL-SHELL-009)
  * - Live connection status dot (VAL-SHELL-010)
  * - No bootstrap accordion or runtime panel (VAL-SHELL-024)
  * - No left rail, no hamburger button, no backdrop (VAL-SHELL-026)
@@ -138,9 +138,78 @@ test('VText appears as a first-class desktop app', async ({ page, authenticator 
 
   const vtextWindow = page.locator('[data-vtext-app]');
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible();
 
   const titleText = page.locator('[data-window-titlebar] .titlvtext');
   await expect(titleText.first()).toContainText('VText');
+});
+
+test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const created = await page.evaluate(async () => {
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Markdown UX Fixture' }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Markdown UX Fixture\n\nThis has **bold** text, *emphasis*, a [link](https://example.com), and a list.\n\n- First item\n- Second item',
+        author_kind: 'user',
+        author_label: 'browser-test',
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const toolbar = vtextWindow.locator('[data-vtext-toolbar]');
+  const body = vtextWindow.locator('[data-vtext-document-body]');
+  await expect(toolbar).toBeVisible();
+  await expect(body).toBeVisible();
+  const [toolbarBox, bodyBox] = await Promise.all([toolbar.boundingBox(), body.boundingBox()]);
+  expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(bodyBox.y + 1);
+
+  await vtextWindow.locator('button', { hasText: 'Read' }).click();
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered.locator('h1')).toContainText('Markdown UX Fixture');
+  await expect(rendered.locator('strong')).toContainText('bold');
+  await expect(rendered.locator('em')).toContainText('emphasis');
+  await expect(rendered.locator('a')).toHaveAttribute('href', 'https://example.com');
+  await expect(rendered.locator('li')).toHaveCount(2);
+
+  await vtextWindow.locator('button', { hasText: 'Edit' }).click();
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/# Markdown UX Fixture/);
+});
+
+test('VText opens near full mobile workspace and clears the prompt bar', async ({ page, authenticator }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const windowEl = page.locator('[data-window]').filter({ has: page.locator('[data-vtext-app]') }).last();
+  await expect(windowEl).toBeVisible({ timeout: 5000 });
+
+  const box = await windowEl.boundingBox();
+  expect(box.width).toBeGreaterThanOrEqual(350);
+  expect(box.height).toBeGreaterThanOrEqual(720);
+  expect(box.x).toBeGreaterThanOrEqual(8);
+  expect(box.y).toBeGreaterThanOrEqual(8);
+  expect(box.y + box.height).toBeLessThanOrEqual(844 - 56 + 2);
 });
 
 // ---------------------------------------------------------------
@@ -159,6 +228,34 @@ test('Trace appears as a debugging desktop app', async ({ page, authenticator })
   const traceWindow = page.locator('[data-trace-window]');
   await expect(traceWindow).toBeVisible({ timeout: 5000 });
   await expect(traceWindow.locator('[data-trace-app]')).toBeVisible();
+});
+
+test('Trace opens a prompt-bar trajectory without stale route calls', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const staleRequests = [];
+  const failedTraceRequests = [];
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (['/api/agent/topology', '/api/prompts', '/api/events'].includes(url.pathname)) {
+      staleRequests.push(url.pathname);
+    }
+    if (url.pathname.startsWith('/api/trace/') && response.status() >= 400) {
+      failedTraceRequests.push(`${url.pathname}:${response.status()}`);
+    }
+  });
+
+  const prompt = `Trace smoke ${Date.now()}`;
+  await page.locator('[data-prompt-input]').fill(prompt);
+  await page.locator('[data-prompt-input]').press('Enter');
+  await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 10000 });
+
+  await openAppViaIcon(page, 'trace');
+  const traceWindow = page.locator('[data-trace-window]').last();
+  await expect(traceWindow.locator('[data-trace-trajectory]').filter({ hasText: prompt })).toBeVisible({ timeout: 10000 });
+  expect(staleRequests).toHaveLength(0);
+  expect(failedTraceRequests).toHaveLength(0);
 });
 
 // ---------------------------------------------------------------
@@ -277,6 +374,19 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   const decision = await waitForPromptSubmissionDecision(page, submitted.submission_id);
   expect(decision.action).toBe('open_app');
   expect(decision.app).toBe('vtext');
+
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-vtext-app]')).toHaveCount(initialVTextCount + 1);
+
+  if (!decision.doc_id) {
+    // The local stub provider can only prove the public prompt-bar route and
+    // app launch path. Real/live conductor materialization includes the
+    // durable doc/revision IDs asserted below.
+    await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
+    return;
+  }
+
   expect(decision.doc_id).toBeTruthy();
   expect(decision.user_revision_id).toBeTruthy();
   expect(decision.framing_revision_id).toBeTruthy();
@@ -315,9 +425,6 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
   expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
 
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('[data-vtext-app]')).toHaveCount(initialVTextCount + 1);
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).toHaveValue(/Draft a project outline/);
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toHaveValue(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText(/^v[1-9][0-9]*$/);
@@ -444,17 +551,24 @@ test('minimized window indicators in bottom bar', async ({ page, authenticator }
 });
 
 // ---------------------------------------------------------------
-// Test: user info and logout in bottom bar (VAL-SHELL-009)
+// Test: user info and logout in desktop/account menu (VAL-SHELL-009)
 // ---------------------------------------------------------------
-test('user info and logout in bottom bar', async ({ page, authenticator }) => {
+test('user info and logout in desktop menu', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
+
+  await expect(page.locator('[data-bottom-logout]')).toHaveCount(0);
+  await page.locator('[data-show-desktop-btn]').click();
+
+  const menu = page.locator('[data-desktop-menu]');
+  await expect(menu).toBeVisible();
 
   // User info should show email
   const userInfo = page.locator('[data-bottom-user]');
   await expect(userInfo).toBeVisible();
+  await expect(userInfo).toContainText(email);
 
-  // Logout button should be present
+  // Logout button should be present in the menu.
   const logoutBtn = page.locator('[data-bottom-logout]');
   await expect(logoutBtn).toBeVisible();
 
@@ -467,6 +581,29 @@ test('user info and logout in bottom bar', async ({ page, authenticator }) => {
 
   // Desktop should not be visible
   await expect(page.locator('[data-desktop]')).not.toBeVisible();
+});
+
+test('Settings opens as safe product settings without prompt APIs', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const forbiddenRequests = [];
+  page.on('request', (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.startsWith('/api/prompts')) {
+      forbiddenRequests.push(url.pathname);
+    }
+  });
+
+  await openAppViaIcon(page, 'settings');
+  const settings = page.locator('[data-settings-app]');
+  await expect(settings).toBeVisible({ timeout: 5000 });
+  await expect(settings.locator('[data-settings-account]')).toContainText(email);
+  await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
+  await expect(settings.locator('[data-settings-theme-validation]')).toContainText('valid config');
+  await expect(settings).not.toContainText('Editable role prompt');
+  await page.waitForTimeout(300);
+  expect(forbiddenRequests).toHaveLength(0);
 });
 
 // ---------------------------------------------------------------

@@ -150,11 +150,14 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
   const page = await context.newPage();
   const { client, authenticatorId } = await setupVirtualAuthenticator(page);
 
-  const browserSpawnRequests = [];
+  const forbiddenRuntimeRequests = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (request.method() === 'POST' && url.pathname === '/api/agent/spawn') {
-      browserSpawnRequests.push(url.pathname);
+      forbiddenRuntimeRequests.push(url.pathname);
+    }
+    if (['/api/agent/topology', '/api/prompts', '/api/events'].includes(url.pathname)) {
+      forbiddenRuntimeRequests.push(url.pathname);
     }
   });
 
@@ -199,7 +202,7 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
     expect(finalState.head.metadata.source).toBe('edit_vtext');
     expect(finalState.head.content).toMatch(/2026/);
     expect(finalState.head.content).not.toMatch(/search (?:was )?unavailable|model knowledge through|mid-2024|stub provider/i);
-    expect(browserSpawnRequests).toHaveLength(0);
+    expect(forbiddenRuntimeRequests).toHaveLength(0);
 
     await page.locator('[data-desktop-icon-id="trace"]').dblclick();
     const traceApp = page.locator('[data-trace-app]').last();

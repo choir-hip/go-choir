@@ -3,6 +3,11 @@ import { test, expect } from './helpers/fixtures.js';
 async function openVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
   await page.locator('[data-vtext-editor]').waitFor({ state: 'visible', timeout: 10000 });
+  const recent = page.locator('[data-vtext-recent]');
+  if (await recent.isVisible().catch(() => false)) {
+    await page.locator('[data-vtext-new-document]').click();
+  }
+  await page.locator('[data-vtext-editor-area]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
 test('prompt button submits a vtext agent revision request', async ({ desktopSession }) => {

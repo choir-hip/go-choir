@@ -21,12 +21,22 @@ import { writable, derived } from 'svelte/store';
 // ---- App registry ----
 
 export const APP_REGISTRY = [
-  { id: 'files', name: 'Files', icon: '📁', description: 'File Browser' },
-  { id: 'browser', name: 'Browser', icon: '🌐', description: 'Web Browser' },
-  { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal' },
-  { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings' },
-  { id: 'vtext', name: 'VText', icon: '📝', description: 'Versioned document editor' },
-  { id: 'trace', name: 'Trace', icon: '🔎', description: 'Multiagent trace viewer' },
+  { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
+  { id: 'browser', name: 'Browser', icon: '🌐', description: 'Web Browser', singleton: true },
+  { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
+  { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
+  {
+    id: 'vtext',
+    name: 'VText',
+    icon: '📝',
+    description: 'Versioned document editor',
+    singleton: false,
+    window: {
+      desktop: { width: 960, height: 720, minWidth: 680, minHeight: 520 },
+      compact: { fullBleed: true, minWidth: 280, minHeight: 420 },
+    },
+  },
+  { id: 'trace', name: 'Trace', icon: '🔎', description: 'Multiagent trace viewer', singleton: true, window: { desktop: { width: 1040, height: 680 } } },
 ];
 
 /** The main apps shown as floating desktop icons */
@@ -44,9 +54,13 @@ const BOTTOM_BAR_HEIGHT = 56;
 const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
-const APP_WINDOW_PREFERENCES = {
-  trace: { width: 1040, height: 680 },
-};
+function appDefinition(appId) {
+  return APP_REGISTRY.find((app) => app.id === appId) || null;
+}
+
+function appWindowPreference(appId) {
+  return appDefinition(appId)?.window || {};
+}
 
 function generateWindowId() {
   windowCounter++;
@@ -93,10 +107,26 @@ function getViewportMetrics() {
   };
 }
 
-function constrainWindowGeometry({ x, y, width, height }) {
+function appMinimums(appId, metrics) {
+  const pref = appWindowPreference(appId);
+  if (metrics.compact && pref.compact?.fullBleed) {
+    return {
+      width: Math.min(metrics.maxWidth, Math.max(pref.compact.minWidth || MIN_WINDOW_WIDTH, metrics.viewportWidth - metrics.margin * 2)),
+      height: Math.min(metrics.maxHeight, Math.max(pref.compact.minHeight || MIN_WINDOW_HEIGHT, metrics.maxHeight)),
+    };
+  }
+  const desktop = pref.desktop || {};
+  return {
+    width: desktop.minWidth || MIN_WINDOW_WIDTH,
+    height: desktop.minHeight || MIN_WINDOW_HEIGHT,
+  };
+}
+
+function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
   const metrics = getViewportMetrics();
-  const clampedWidth = clamp(width, MIN_WINDOW_WIDTH, metrics.maxWidth);
-  const clampedHeight = clamp(height, MIN_WINDOW_HEIGHT, metrics.maxHeight);
+  const minimums = appMinimums(appId, metrics);
+  const clampedWidth = clamp(width, Math.min(minimums.width, metrics.maxWidth), metrics.maxWidth);
+  const clampedHeight = clamp(height, Math.min(minimums.height, metrics.maxHeight), metrics.maxHeight);
   const maxX = Math.max(metrics.margin, metrics.viewportWidth - clampedWidth - metrics.margin);
   const maxY = Math.max(
     metrics.margin,
@@ -115,20 +145,32 @@ function getNewWindowGeometry(openCount, appId = '') {
   const metrics = getViewportMetrics();
   const offsetStep = metrics.compact ? 18 : 30;
   const offset = (openCount % 6) * offsetStep;
-  const preference = APP_WINDOW_PREFERENCES[appId] || {};
+  const preference = appWindowPreference(appId);
+  const desktopPref = preference.desktop || {};
+
+  if (metrics.compact && preference.compact?.fullBleed) {
+    return constrainWindowGeometry({
+      x: metrics.margin,
+      y: metrics.margin,
+      width: metrics.maxWidth,
+      height: metrics.maxHeight,
+      appId,
+    });
+  }
 
   return constrainWindowGeometry({
     x: metrics.workspaceStartX + offset,
     y: metrics.margin + offset,
-    width: Math.min(preference.width || metrics.baseWidth, metrics.workspaceWidth),
-    height: preference.height || metrics.baseHeight,
+    width: Math.min(desktopPref.width || metrics.baseWidth, metrics.workspaceWidth),
+    height: desktopPref.height || metrics.baseHeight,
+    appId,
   });
 }
 
 function normalizeWindowGeometry(windowState) {
-  const geometry = constrainWindowGeometry(windowState);
+  const geometry = constrainWindowGeometry({ ...windowState, appId: windowState.appId });
   const restoredGeometry = windowState.restoredGeometry
-    ? constrainWindowGeometry(windowState.restoredGeometry)
+    ? constrainWindowGeometry({ ...windowState.restoredGeometry, appId: windowState.appId })
     : null;
 
   return {
@@ -197,7 +239,8 @@ export const visibleWindows = derived(windows, ($windows) =>
  */
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
-    const allowMultiple = appContext.allowMultiple === true || appId === 'vtext';
+    const definition = appDefinition(appId);
+    const allowMultiple = appContext.allowMultiple === true || definition?.singleton === false;
     const existing = !allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null;
     if (existing) {
       // Focus existing window
@@ -209,7 +252,7 @@ export function openApp(appId, appName, icon, appContext = {}) {
       );
       // If it was minimized, restore its geometry
       if (existing.mode === 'minimized' && existing.restoredGeometry) {
-        const geo = constrainWindowGeometry(existing.restoredGeometry);
+        const geo = constrainWindowGeometry({ ...existing.restoredGeometry, appId });
         updated = updated.map((w) =>
           w.windowId === existing.windowId
             ? { ...w, x: geo.x, y: geo.y, width: geo.width, height: geo.height, restoredGeometry: null }
@@ -315,7 +358,7 @@ export function restoreWindow(windowId) {
     $windows.map((w) => {
       if (w.windowId === windowId) {
         if (w.mode === 'minimized' && w.restoredGeometry) {
-          const geo = constrainWindowGeometry(w.restoredGeometry);
+          const geo = constrainWindowGeometry({ ...w.restoredGeometry, appId: w.appId });
           return {
             ...w,
             mode: 'normal',
@@ -327,7 +370,7 @@ export function restoreWindow(windowId) {
           };
         }
         if (w.mode === 'maximized' && w.restoredGeometry) {
-          const geo = constrainWindowGeometry(w.restoredGeometry);
+          const geo = constrainWindowGeometry({ ...w.restoredGeometry, appId: w.appId });
           return {
             ...w,
             mode: 'normal',
@@ -351,7 +394,7 @@ export function moveWindow(windowId, x, y) {
   windows.update(($windows) =>
     $windows.map((w) => {
       if (w.windowId !== windowId) return w;
-      const geometry = constrainWindowGeometry({ x, y, width: w.width, height: w.height });
+      const geometry = constrainWindowGeometry({ x, y, width: w.width, height: w.height, appId: w.appId });
       return { ...w, ...geometry };
     })
   );
@@ -362,7 +405,7 @@ export function resizeWindow(windowId, x, y, width, height) {
   windows.update(($windows) =>
     $windows.map((w) => {
       if (w.windowId !== windowId) return w;
-      const geometry = constrainWindowGeometry({ x, y, width, height });
+      const geometry = constrainWindowGeometry({ x, y, width, height, appId: w.appId });
       return { ...w, ...geometry };
     })
   );

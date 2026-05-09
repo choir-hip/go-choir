@@ -46,6 +46,12 @@ async function openAppViaIcon(page, appId) {
   await icon.dblclick();
 }
 
+async function clickDesktopLogout(page) {
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-desktop-logout]').click();
+}
+
 // ---------------------------------------------------------------
 // Test: authenticated users reach a real desktop shell
 // (VAL-DESKTOP-001)
@@ -73,9 +79,11 @@ test('authenticated users reach a real desktop shell', async ({
   const bottomBar = page.locator('[data-bottom-bar]');
   await expect(bottomBar).toBeVisible();
 
-  // The logout button should be visible in the bottom bar.
-  const logoutBtn = page.locator('[data-desktop-logout]');
-  await expect(logoutBtn).toBeVisible();
+  // The logout button should be available from the desktop/account menu.
+  await page.locator('[data-show-desktop-btn]').click();
+  await expect(page.locator('[data-desktop-menu]')).toBeVisible();
+  await expect(page.locator('[data-desktop-logout]')).toBeVisible();
+  await page.locator('[data-show-desktop-btn]').click();
 });
 
 // ---------------------------------------------------------------
@@ -321,9 +329,8 @@ test('clicking logout returns to guest auth UI from desktop', async ({
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Click logout (now in bottom bar).
-  const logoutBtn = page.locator('[data-desktop-logout]');
-  await logoutBtn.click();
+  // Click logout from the desktop/account menu.
+  await clickDesktopLogout(page);
 
   // Should return to the guest auth UI.
   const authEntry = page.locator('[data-auth-entry]');

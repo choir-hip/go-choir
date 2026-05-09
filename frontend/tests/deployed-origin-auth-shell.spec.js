@@ -71,6 +71,48 @@ test('deployed root serves the real SPA with built-asset references', async ({
   expect(jsModules).toBeGreaterThanOrEqual(1);
 });
 
+test('deployed SPA cache policy keeps shell fresh and assets immutable', async ({
+  request,
+}) => {
+  const root = await request.get(DEPLOYED_ORIGIN);
+  expect(root.ok()).toBeTruthy();
+  expect(root.headers()['cache-control'] || '').toContain('no-store');
+
+  const html = await root.text();
+  const match = html.match(/src="([^"]*\/assets\/[^"]+\.js)"/);
+  expect(match?.[1]).toBeTruthy();
+
+  const assetURL = new URL(match[1], DEPLOYED_ORIGIN).toString();
+  const asset = await request.get(assetURL);
+  expect(asset.ok()).toBeTruthy();
+  const assetCache = asset.headers()['cache-control'] || '';
+  expect(assetCache).toContain('max-age=31536000');
+  expect(assetCache).toContain('immutable');
+});
+
+test('deployed frontend build identity matches proxy health identity', async ({
+  page,
+}) => {
+  await page.goto(DEPLOYED_ORIGIN);
+
+  const identity = await page.evaluate(async () => {
+    const healthRes = await fetch('/health', { credentials: 'include' });
+    const health = await healthRes.json();
+    return {
+      frontend: window.__CHOIR_BUILD__,
+      health,
+      staleScripts: Array.from(document.scripts)
+        .map((script) => script.getAttribute('src') || '')
+        .filter((src) => src.includes('/src/')),
+    };
+  });
+
+  expect(identity.frontend?.commit).toBeTruthy();
+  expect(identity.health?.build?.commit).toBeTruthy();
+  expect(identity.frontend.commit).toBe(identity.health.build.commit);
+  expect(identity.staleScripts).toHaveLength(0);
+});
+
 test('signed-out visitor on deployed origin does not see authenticated shell', async ({
   page,
 }) => {
@@ -101,7 +143,10 @@ test('signed-out render on deployed origin does not fire protected requests', as
       url.pathname === '/api/shell/bootstrap' ||
 	      url.pathname === '/api/ws' ||
 	      url.pathname.startsWith('/api/prompt-bar') ||
-	      url.pathname.startsWith('/api/trace/')
+	      url.pathname.startsWith('/api/trace/') ||
+	      url.pathname === '/api/agent/topology' ||
+	      url.pathname === '/api/prompts' ||
+	      url.pathname === '/api/events'
 	    ) {
       protectedRequests.push({
         url: req.url(),

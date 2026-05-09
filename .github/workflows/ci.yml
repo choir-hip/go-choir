@@ -89,6 +89,14 @@ jobs:
             git fetch origin
             git reset --hard origin/main
             git clean -ffdX
+            current_commit=$(git rev-parse HEAD)
+            deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            install -d -m 0750 /var/lib/go-choir
+            cat > /var/lib/go-choir/deploy.env <<EOF
+CHOIR_DEPLOYED_AT=$deployed_at
+CHOIR_DEPLOYED_COMMIT=$current_commit
+EOF
+            chmod 0644 /var/lib/go-choir/deploy.env
 
             systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
 

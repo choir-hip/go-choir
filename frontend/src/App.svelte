@@ -174,11 +174,26 @@
     box-sizing: border-box;
   }
 
+  :global(:root) {
+    --choir-bg: #0b0d10;
+    --choir-panel: #171827;
+    --choir-panel-strong: #11111b;
+    --choir-fg: #f8fafc;
+    --choir-muted: #a8b3c7;
+    --choir-accent: #60a5fa;
+    --choir-danger: #f87171;
+    --choir-border: rgba(148, 163, 184, 0.18);
+    --choir-radius-md: 12px;
+    --choir-radius-lg: 18px;
+    --choir-shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.28);
+    --choir-motion-fast: 120ms ease;
+  }
+
   :global(body) {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
       Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-    background: #0f0f0f;
-    color: #e0e0e0;
+    background: var(--choir-bg);
+    color: var(--choir-fg);
   }
 
   .loading {

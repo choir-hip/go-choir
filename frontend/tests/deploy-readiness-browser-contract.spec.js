@@ -84,6 +84,12 @@ async function setupAuthenticatedShell(page) {
   return email;
 }
 
+async function clickShellLogout(page) {
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-shell-logout]').click();
+}
+
 // ---------------------------------------------------------------------------
 // VAL-DEPLOY-002: Signed-out visitors see guest auth on the public origin
 // ---------------------------------------------------------------------------
@@ -512,8 +518,8 @@ test('VAL-CROSS-106: logout tears down the live channel', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  await page.locator('[data-shell-logout]').click();
+  // Click logout from the desktop/account menu.
+  await clickShellLogout(page);
 
   // Should return to guest auth UI.
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
@@ -531,8 +537,8 @@ test('VAL-CROSS-106: after logout, WebSocket cannot reconnect', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  await page.locator('[data-shell-logout]').click();
+  // Click logout from the desktop/account menu.
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Attempt to open a WebSocket after logout — should fail.
@@ -574,8 +580,8 @@ test('VAL-CROSS-106: refresh after logout does not resurrect the shell', async (
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  await page.locator('[data-shell-logout]').click();
+  // Click logout from the desktop/account menu.
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Refresh the page — should remain in guest auth state.
@@ -619,7 +625,7 @@ test('VAL-CROSS-107: user A logout then user B login shows only user B state', a
   const userAId = sessionA.user.id;
 
   // Logout as user A.
-  await page.locator('[data-shell-logout]').click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Register user B.

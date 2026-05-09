@@ -33,6 +33,11 @@ async function registerAndReloadShell(page, authenticator, email) {
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
+async function openDesktopMenu(page) {
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+}
+
 // ---------------------------------------------------------------
 // Test: authenticated shell is visible and distinct from auth entry
 // ---------------------------------------------------------------
@@ -62,7 +67,9 @@ test('authenticated shell includes a visible logout control', async ({
   const email = uniqueEmail();
   await registerAndReloadShell(page, authenticator, email);
 
-  // The logout button should be visible and enabled.
+  await openDesktopMenu(page);
+
+  // The logout button should be visible and enabled in the desktop menu.
   const logoutBtn = page.locator('[data-shell-logout]');
   await expect(logoutBtn).toBeVisible();
   await expect(logoutBtn).toBeEnabled();
@@ -78,7 +85,9 @@ test('authenticated shell exposes session-aware current user display', async ({
   const email = uniqueEmail();
   await registerAndReloadShell(page, authenticator, email);
 
-  // The user area should show the current email.
+  await openDesktopMenu(page);
+
+  // The user area should show the current email in the desktop menu.
   const userArea = page.locator('[data-shell-user]');
   await expect(userArea).toBeVisible();
   await expect(userArea).toContainText(email);
@@ -155,7 +164,8 @@ test('clicking logout returns to guest auth UI', async ({
   const email = uniqueEmail();
   await registerAndReloadShell(page, authenticator, email);
 
-  // Click logout.
+  // Click logout from the desktop menu.
+  await openDesktopMenu(page);
   const logoutBtn = page.locator('[data-shell-logout]');
   await logoutBtn.click();
 

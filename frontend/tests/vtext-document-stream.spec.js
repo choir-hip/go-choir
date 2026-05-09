@@ -27,6 +27,11 @@ async function openFilesApp(page) {
 async function openVText(page) {
   await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
   await page.locator('[data-vtext-editor]').last().waitFor({ state: 'visible', timeout: 10000 });
+  const recent = page.locator('[data-vtext-app] [data-vtext-recent]').last();
+  if (await recent.isVisible().catch(() => false)) {
+    await page.locator('[data-vtext-app] [data-vtext-new-document]').last().click();
+  }
+  await page.locator('[data-vtext-app] [data-vtext-editor-area]').last().waitFor({ state: 'visible', timeout: 10000 });
 }
 
 async function seedTextFile(page, fileName, content) {

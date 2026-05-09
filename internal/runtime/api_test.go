@@ -1204,6 +1204,12 @@ func TestHandleHealthReady(t *testing.T) {
 	if resp.ActiveProvider != "stub" {
 		t.Errorf("active_provider: got %q, want stub (default test provider)", resp.ActiveProvider)
 	}
+	if resp.Build.Service != "sandbox" {
+		t.Errorf("build.service: got %q, want sandbox", resp.Build.Service)
+	}
+	if resp.Build.Commit == "" {
+		t.Error("build.commit should not be empty")
+	}
 }
 
 func TestHandleHealthDegraded(t *testing.T) {

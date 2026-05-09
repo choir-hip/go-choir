@@ -108,8 +108,17 @@ in
         handle /provider/* {
           respond "provider routes are not available from the public edge" 403
         }
+        handle /assets/* {
+          root * ${goChoirPackages.frontend}
+          header Cache-Control "public, max-age=31536000, immutable"
+          file_server
+        }
         handle {
           root * ${goChoirPackages.frontend}
+          # The SPA shell must not be browser-cached. Vite content-hashes built
+          # assets, but index.html is the pointer to the current asset graph.
+          header Cache-Control "no-store"
+          try_files {path} /index.html
           file_server
         }
       '';
@@ -178,6 +187,7 @@ in
       ExecStart = "${goChoirPackages.proxy}/bin/proxy";
       Restart = "on-failure";
       RestartSec = 3;
+      EnvironmentFile = "-/var/lib/go-choir/deploy.env";
       # Proxy needs to read the auth signing public key.
       ReadWritePaths = [ "/var/lib/go-choir/auth-signing" ];
       Environment = [
@@ -349,7 +359,10 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       # Read the gateway token obtained by ExecStartPre.
-      EnvironmentFile = "-/var/lib/go-choir/sandbox-gateway-token.env";
+      EnvironmentFile = [
+        "-/var/lib/go-choir/sandbox-gateway-token.env"
+        "-/var/lib/go-choir/deploy.env"
+      ];
       ReadWritePaths = [ "/var/lib/go-choir" ];
       Environment = [
         "SANDBOX_PORT=8085"

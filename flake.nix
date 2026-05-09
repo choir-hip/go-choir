@@ -22,6 +22,8 @@
 
       # Go module version from go.mod
       goModuleVersion = "0.1.0";
+      buildCommit = self.rev or self.dirtyRev or "local";
+      buildDate = self.lastModifiedDate or "unknown";
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
@@ -37,6 +39,11 @@
         vendorHash = "sha256-7sTVRCu7SWElqse4g82ERcaJAeWd9EAKmgAdmRa7Ezw=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
+        ldflags = [
+          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
+          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
+          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${buildDate}"
+        ];
         doCheck = false; # Tests run separately in CI
       };
 
@@ -70,6 +77,9 @@
         };
         npmDepsHash = "sha256-ZZNGgjuxa7b6sVuREh9v8znFYLu0AChAaf95dfxtNHg=";
         npmBuildScript = "build";
+        VITE_CHOIR_BUILD_VERSION = goModuleVersion;
+        VITE_CHOIR_BUILD_SHA = buildCommit;
+        VITE_CHOIR_BUILD_TIME = buildDate;
         # Playwright downloads browsers during postinstall, which fails in the
         # Nix sandbox.  We only need it for e2e tests (not the build), so skip.
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";

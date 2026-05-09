@@ -1,8 +1,19 @@
-import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+
+const buildInfo = {
+  version: process.env.VITE_CHOIR_BUILD_VERSION || process.env.CHOIR_BUILD_VERSION || 'dev',
+  commit: process.env.VITE_CHOIR_BUILD_SHA || process.env.CHOIR_BUILD_SHA || 'local',
+  builtAt: process.env.VITE_CHOIR_BUILD_TIME || process.env.CHOIR_BUILD_TIME || 'unknown',
+};
 
 export default defineConfig({
   plugins: [svelte()],
+  define: {
+    __CHOIR_BUILD_VERSION__: JSON.stringify(buildInfo.version),
+    __CHOIR_BUILD_COMMIT__: JSON.stringify(buildInfo.commit),
+    __CHOIR_BUILD_TIME__: JSON.stringify(buildInfo.builtAt),
+  },
   build: {
     outDir: 'dist',
   },

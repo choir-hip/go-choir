@@ -85,6 +85,12 @@ async function setupAuthenticatedShell(page) {
   return email;
 }
 
+async function clickShellLogout(page) {
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-shell-logout]').click();
+}
+
 // ---------------------------------------------------------------------------
 // VAL-CROSS-006: Logout revokes shell, session, HTTP, and WebSocket
 // access across refresh and back navigation
@@ -100,9 +106,8 @@ test('logout tears down the open live channel', async ({
   const liveStatusBefore = page.locator('[data-shell-live-status]');
   await expect(liveStatusBefore).toBeVisible();
 
-  // Click logout.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  // Click logout from the desktop menu.
+  await clickShellLogout(page);
 
   // Should return to the guest auth UI.
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
@@ -119,9 +124,8 @@ test('after logout, GET /api/shell/bootstrap fails', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  // Click logout from the desktop menu.
+  await clickShellLogout(page);
 
   // Wait for guest auth UI.
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
@@ -146,9 +150,8 @@ test('after logout, GET /api/ws cannot reconnect', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  // Click logout from the desktop menu.
+  await clickShellLogout(page);
 
   // Wait for guest auth UI.
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
@@ -202,8 +205,7 @@ test('back navigation after logout does not resurrect the authenticated shell', 
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   // Now logout.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Navigate away again.
@@ -228,9 +230,8 @@ test('refresh after logout does not resurrect the authenticated shell', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  // Click logout from the desktop menu.
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Refresh the page — should remain in guest auth state.
@@ -287,8 +288,7 @@ test('user A -> logout -> user B produces only user-B shell state', async ({
   const userAId = sessionA.user.id;
 
   // Logout as user A.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Session should report signed out.
@@ -360,8 +360,7 @@ test('user A live channel does not leak into user B session', async ({
   expect(sessionA.user.email).toBe(userA);
 
   // Logout as user A.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Register user B.
@@ -408,8 +407,7 @@ test('user A -> logout -> user B in separate browser contexts has no stale state
   expect(sessionA.user.email).toBe(userA);
 
   // Logout as user A.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Create a completely separate browser context for user B.
@@ -456,8 +454,7 @@ test('repeated logout does not cause errors and keeps the user in guest state', 
   const email = await setupAuthenticatedShell(page);
 
   // Logout once.
-  const logoutBtn = page.locator('[data-shell-logout]');
-  await logoutBtn.click();
+  await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
   // Call logout again via the API — should be safe.

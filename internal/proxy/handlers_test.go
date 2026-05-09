@@ -2008,6 +2008,12 @@ func TestProxyHealthReportsOkWhenUpstreamIsHealthy(t *testing.T) {
 	if resp.Upstream != "ok" {
 		t.Errorf("upstream: got %q, want %q", resp.Upstream, "ok")
 	}
+	if resp.Build.Service != "proxy" {
+		t.Errorf("build.service: got %q, want proxy", resp.Build.Service)
+	}
+	if resp.Build.Commit == "" {
+		t.Error("build.commit should not be empty")
+	}
 }
 
 // TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable verifies that

@@ -88,6 +88,9 @@ type vtextDocumentResponse struct {
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at"`
+	RevisionCount     int    `json:"revision_count"`
+	LastEditor        string `json:"last_editor,omitempty"`
+	LastAuthorKind    string `json:"last_author_kind,omitempty"`
 }
 
 // vtextDocumentStreamEvent is the hidden transport envelope sent over the
@@ -532,14 +535,34 @@ func (h *APIHandler) HandleVTextListDocuments(w http.ResponseWriter, r *http.Req
 
 	resp := vtextListDocsResponse{Documents: make([]vtextDocumentResponse, 0, len(docs))}
 	for _, doc := range docs {
-		resp.Documents = append(resp.Documents, vtextDocumentResponse{
+		docResp := vtextDocumentResponse{
 			DocID:             doc.DocID,
 			OwnerID:           doc.OwnerID,
 			Title:             doc.Title,
 			CurrentRevisionID: doc.CurrentRevisionID,
 			CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 			UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		})
+		}
+		revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), doc.DocID, ownerID, 200)
+		if err != nil {
+			log.Printf("vtext api: list document revisions for recent metadata: %v", err)
+		} else {
+			docResp.RevisionCount = len(revs)
+			if len(revs) > 0 {
+				latest := revs[0]
+				if doc.CurrentRevisionID != "" {
+					for _, rev := range revs {
+						if rev.RevisionID == doc.CurrentRevisionID {
+							latest = rev
+							break
+						}
+					}
+				}
+				docResp.LastEditor = latest.AuthorLabel
+				docResp.LastAuthorKind = string(latest.AuthorKind)
+			}
+		}
+		resp.Documents = append(resp.Documents, docResp)
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)

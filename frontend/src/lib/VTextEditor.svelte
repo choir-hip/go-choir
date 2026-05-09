@@ -15,6 +15,7 @@
     ensureDocumentManifest,
     getDocument,
     getRevision,
+    listDocuments,
     listRevisions,
     openDocumentStream,
     submitAgentRevision,
@@ -41,6 +42,79 @@
   let newVersionAvailable = false;
   let streamSource = null;
   let streamDocId = '';
+  let showRecent = false;
+  let recentLoading = false;
+  let recentDocuments = [];
+  let editing = true;
+
+  function escapeHTML(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderInlineMarkdown(value) {
+    let html = escapeHTML(value);
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    return html;
+  }
+
+  function renderMarkdown(value) {
+    const lines = String(value || '').split(/\r?\n/);
+    const blocks = [];
+    let paragraph = [];
+    let list = [];
+
+    function flushParagraph() {
+      if (paragraph.length === 0) return;
+      blocks.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+      paragraph = [];
+    }
+
+    function flushList() {
+      if (list.length === 0) return;
+      blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`);
+      list = [];
+    }
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      const trimmed = line.trim();
+      if (!trimmed) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+
+      const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+      if (heading) {
+        flushParagraph();
+        flushList();
+        const level = heading[1].length;
+        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+        continue;
+      }
+
+      const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+      if (bullet) {
+        flushParagraph();
+        list.push(bullet[1]);
+        continue;
+      }
+
+      flushList();
+      paragraph.push(trimmed);
+    }
+
+    flushParagraph();
+    flushList();
+    return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
+  }
 
   function normalizeTitle(ctx) {
     if (ctx?.windowTitle) return ctx.windowTitle;
@@ -68,6 +142,28 @@
       createInitialVersion: !!ctx?.createInitialVersion,
     };
     return JSON.stringify(key);
+  }
+
+  function shouldShowRecentLanding(ctx) {
+    return !ctx?.docId &&
+      !ctx?.sourcePath &&
+      !ctx?.initialContent &&
+      !ctx?.seedPrompt &&
+      !ctx?.createInitialVersion;
+  }
+
+  function formatDocTime(value) {
+    if (!value) return 'unknown';
+    try {
+      return new Date(value).toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return 'unknown';
+    }
   }
 
   function buildFilePath(sourcePath) {
@@ -340,10 +436,20 @@
     activeRevisionIndex = -1;
     editorValue = '';
     latestHeadRevisionId = '';
+    showRecent = false;
+    editing = true;
     clearNewVersionIndicator();
     closeDocumentStream();
 
     try {
+      if (shouldShowRecentLanding(appContext)) {
+        showRecent = true;
+        editing = false;
+        saveStatus = 'Recent VTexts';
+        await loadRecentDocuments();
+        return;
+      }
+
       const initialValue = appContext.initialContent ?? appContext.seedPrompt ?? '';
 
       if (appContext.docId) {
@@ -387,6 +493,60 @@
         return;
       }
       error = err.message || 'Failed to initialize VText';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadRecentDocuments() {
+    recentLoading = true;
+    error = '';
+    try {
+      const response = await listDocuments();
+      recentDocuments = response.documents || [];
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to load recent VTexts';
+    } finally {
+      recentLoading = false;
+    }
+  }
+
+  function handleOpenRecent(doc) {
+    if (!doc?.doc_id) return;
+    appContext = {
+      ...appContext,
+      docId: doc.doc_id,
+      windowTitle: doc.title || 'VText',
+      createInitialVersion: false,
+    };
+  }
+
+  async function handleNewDocument() {
+    loading = true;
+    showRecent = false;
+    editing = true;
+    error = '';
+    try {
+      currentDoc = await createDocument('Untitled VText');
+      latestHeadRevisionId = currentDoc.current_revision_id || '';
+      revisions = [];
+      activeRevisionIndex = -1;
+      currentRevision = null;
+      editorValue = '';
+      saveStatus = 'Blank document ready';
+      await ensureFileManifest();
+      connectDocumentStream(currentDoc.doc_id);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to create VText';
+      showRecent = true;
     } finally {
       loading = false;
     }
@@ -460,6 +620,7 @@
   $: versionLabel = activeRevisionIndex >= 0 ? `v${activeRevisionIndex}` : 'v0';
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
+  $: renderedMarkdown = renderMarkdown(editorValue);
 
   onMount(() => {
     if (!initializedKey) {
@@ -474,49 +635,120 @@
 </script>
 
 <div class="vtext-editor" data-vtext-editor>
-  <textarea
-    class="editor"
-    data-vtext-editor-area
-    bind:value={editorValue}
-    placeholder="Start typing the document..."
-    disabled={loading}
-    readonly={isViewingHistorical}
-    spellcheck="true"
-  ></textarea>
+  {#if showRecent}
+    <section class="recent-panel" data-vtext-recent>
+      <div class="recent-hero">
+        <p class="eyebrow">VText</p>
+        <h2>Recent living documents</h2>
+        <p>Open an existing document, or start a clean one. Prompt-bar requests still create agentic VTexts directly.</p>
+      </div>
 
-  <div class="nav-float">
-    <span class="nav-version" data-vtext-version>{versionLabel}</span>
-    <button
-      class="nav-btn"
-      data-vtext-prev
-      aria-label={activeRevisionIndex > 0 ? `Older version (v${activeRevisionIndex - 1})` : 'At oldest version'}
-      title={activeRevisionIndex > 0 ? `Go to v${activeRevisionIndex - 1}` : 'At oldest version'}
-      on:click={handlePrevVersion}
-      disabled={navDisabled || activeRevisionIndex <= 0}
-    >
-      &lt;
-    </button>
-    <button
-      class="nav-btn"
-      data-vtext-next
-      aria-label={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Newer version (v${activeRevisionIndex + 1})` : 'At latest version'}
-      title={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Go to v${activeRevisionIndex + 1}` : 'At latest version'}
-      on:click={handleNextVersion}
-      disabled={navDisabled || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
-    >
-      &gt;
-    </button>
-  </div>
+      <div class="recent-actions">
+        <button class="primary-action" data-vtext-new-document on:click={handleNewDocument} disabled={loading || recentLoading}>
+          New document
+        </button>
+        <button class="ghost-action" on:click={loadRecentDocuments} disabled={recentLoading}>
+          {recentLoading ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
-  <button
-    class="prompt-btn"
-    data-vtext-prompt
-    data-vtext-save
-    on:click={handlePrompt}
-    disabled={loading || submitting || agentPending || isViewingHistorical}
-  >
-    {promptLabel}
-  </button>
+      <div class="recent-list" data-vtext-recent-list>
+        {#if recentLoading}
+          <div class="recent-empty">Loading recent VTexts…</div>
+        {:else if recentDocuments.length === 0}
+          <div class="recent-empty">No VTexts yet.</div>
+        {:else}
+          {#each recentDocuments as doc (doc.doc_id)}
+            <button class="recent-card" data-vtext-recent-document on:click={() => handleOpenRecent(doc)}>
+              <span class="recent-title">{doc.title || 'Untitled VText'}</span>
+              <span class="recent-meta">
+                v{Math.max(0, (doc.revision_count || 1) - 1)}
+                {#if doc.last_editor}
+                  · {doc.last_editor}
+                {/if}
+                · {formatDocTime(doc.updated_at || doc.created_at)}
+              </span>
+            </button>
+          {/each}
+        {/if}
+      </div>
+    </section>
+  {:else}
+    <div class="doc-toolbar" data-vtext-toolbar>
+      <div class="version-controls">
+        <span class="nav-version" data-vtext-version>{versionLabel}</span>
+        <button
+          class="nav-btn"
+          data-vtext-prev
+          aria-label={activeRevisionIndex > 0 ? `Older version (v${activeRevisionIndex - 1})` : 'At oldest version'}
+          title={activeRevisionIndex > 0 ? `Go to v${activeRevisionIndex - 1}` : 'At oldest version'}
+          on:click={handlePrevVersion}
+          disabled={navDisabled || activeRevisionIndex <= 0}
+        >
+          &lt;
+        </button>
+        <button
+          class="nav-btn"
+          data-vtext-next
+          aria-label={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Newer version (v${activeRevisionIndex + 1})` : 'At latest version'}
+          title={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Go to v${activeRevisionIndex + 1}` : 'At latest version'}
+          on:click={handleNextVersion}
+          disabled={navDisabled || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
+        >
+          &gt;
+        </button>
+      </div>
+
+      <div class="doc-state" data-vtext-state>
+        {#if isViewingHistorical}
+          Historical version
+        {:else if isDirty}
+          Unsaved edit
+        {:else if agentPending}
+          {synthStatusLabel()}
+        {:else}
+          Latest
+        {/if}
+      </div>
+
+      <div class="doc-actions">
+        <button class="mode-btn" class:active={!editing} on:click={() => (editing = false)} disabled={loading}>
+          Read
+        </button>
+        <button class="mode-btn" class:active={editing} on:click={() => (editing = true)} disabled={loading || isViewingHistorical}>
+          Edit
+        </button>
+        <button
+          class="prompt-btn"
+          data-vtext-prompt
+          data-vtext-save
+          on:click={handlePrompt}
+          disabled={loading || submitting || agentPending || isViewingHistorical}
+        >
+          {promptLabel}
+        </button>
+      </div>
+    </div>
+
+    <div class="document-body" data-vtext-document-body>
+      {#if editing}
+        <textarea
+          class="editor"
+          data-vtext-editor-area
+          bind:value={editorValue}
+          placeholder="Start typing the document..."
+          disabled={loading}
+          readonly={isViewingHistorical}
+          spellcheck="true"
+        ></textarea>
+      {:else}
+        <article class="rendered-doc" data-vtext-rendered>
+          {@html renderedMarkdown}
+        </article>
+        <textarea class="source-shadow" data-vtext-editor-area bind:value={editorValue} readonly tabindex="-1" aria-hidden="true"></textarea>
+      {/if}
+    </div>
+  {/if}
 
   {#if newVersionAvailable}
     <button
@@ -542,10 +774,52 @@
     position: relative;
     height: 100%;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     color: #eef2ff;
     background:
       radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 30%),
       rgba(9, 10, 16, 0.98);
+  }
+
+  .doc-toolbar {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto minmax(5rem, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(17, 24, 39, 0.58);
+  }
+
+  .version-controls,
+  .doc-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .doc-actions {
+    justify-content: flex-end;
+  }
+
+  .doc-state {
+    min-width: 0;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(203, 213, 225, 0.72);
+    font-size: 0.74rem;
+  }
+
+  .document-body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .editor {
@@ -555,7 +829,7 @@
     border: none;
     background: transparent;
     color: #f8fafc;
-    padding: 1rem 1rem 1.4rem;
+    padding: clamp(1rem, 2vw, 1.75rem);
     font: inherit;
     line-height: 1.65;
     outline: none;
@@ -571,16 +845,6 @@
 
   .editor[readonly] {
     color: rgba(226, 232, 240, 0.82);
-  }
-
-  .nav-float {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    z-index: 2;
   }
 
   .nav-version {
@@ -601,7 +865,10 @@
 
   .nav-btn,
   .prompt-btn,
-  .update-pill {
+  .update-pill,
+  .mode-btn,
+  .primary-action,
+  .ghost-action {
     border: 1px solid rgba(96, 165, 250, 0.28);
     background: rgba(15, 23, 42, 0.82);
     color: #e0ecff;
@@ -619,14 +886,166 @@
   }
 
   .prompt-btn {
-    position: absolute;
-    right: 0.85rem;
-    bottom: 0.85rem;
-    z-index: 2;
     border-radius: 999px;
     padding: 0.62rem 0.95rem;
     font-size: 0.82rem;
     font-weight: 700;
+  }
+
+  .mode-btn {
+    border-radius: 999px;
+    padding: 0.48rem 0.72rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .mode-btn.active {
+    background: rgba(37, 99, 235, 0.42);
+    border-color: rgba(147, 197, 253, 0.58);
+    color: #eff6ff;
+  }
+
+  .rendered-doc {
+    height: 100%;
+    overflow: auto;
+    padding: clamp(1.1rem, 2.2vw, 2rem);
+    line-height: 1.72;
+    color: #f8fafc;
+  }
+
+  .rendered-doc :global(h1),
+  .rendered-doc :global(h2),
+  .rendered-doc :global(h3),
+  .rendered-doc :global(h4) {
+    margin: 0 0 1rem;
+    line-height: 1.18;
+    letter-spacing: -0.03em;
+  }
+
+  .rendered-doc :global(p),
+  .rendered-doc :global(ul) {
+    margin: 0 0 1rem;
+  }
+
+  .rendered-doc :global(ul) {
+    padding-left: 1.25rem;
+  }
+
+  .rendered-doc :global(a) {
+    color: #93c5fd;
+    text-underline-offset: 0.18em;
+  }
+
+  .rendered-doc :global(code) {
+    border-radius: 0.35rem;
+    background: rgba(148, 163, 184, 0.14);
+    padding: 0.08rem 0.3rem;
+  }
+
+  .source-shadow {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .recent-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 1rem;
+    padding: clamp(1rem, 2.5vw, 2rem);
+    overflow: auto;
+  }
+
+  .recent-hero {
+    max-width: 40rem;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.35rem;
+    color: #93c5fd;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .recent-hero h2 {
+    margin: 0 0 0.45rem;
+    color: #f8fafc;
+    font-size: clamp(1.5rem, 4vw, 2.4rem);
+    letter-spacing: -0.05em;
+  }
+
+  .recent-hero p {
+    margin: 0;
+    color: #a8b3c7;
+    line-height: 1.5;
+  }
+
+  .recent-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .primary-action,
+  .ghost-action {
+    border-radius: 999px;
+    padding: 0.62rem 0.9rem;
+    font-weight: 750;
+  }
+
+  .primary-action {
+    background: rgba(37, 99, 235, 0.74);
+    border-color: rgba(147, 197, 253, 0.48);
+  }
+
+  .recent-list {
+    display: grid;
+    align-content: start;
+    gap: 0.65rem;
+    min-height: 0;
+  }
+
+  .recent-card,
+  .recent-empty {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.48);
+  }
+
+  .recent-card {
+    display: grid;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.85rem 0.95rem;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .recent-card:hover {
+    border-color: rgba(96, 165, 250, 0.36);
+    background: rgba(30, 41, 59, 0.66);
+  }
+
+  .recent-title {
+    color: #f8fafc;
+    font-weight: 780;
+  }
+
+  .recent-meta,
+  .recent-empty {
+    color: #94a3b8;
+    font-size: 0.8rem;
+  }
+
+  .recent-empty {
+    padding: 1rem;
   }
 
   .update-pill {
@@ -659,7 +1078,10 @@
 
   .nav-btn:hover:enabled,
   .prompt-btn:hover:enabled,
-  .update-pill:hover:enabled {
+  .update-pill:hover:enabled,
+  .mode-btn:hover:enabled,
+  .primary-action:hover:enabled,
+  .ghost-action:hover:enabled {
     transform: translateY(-1px);
     background: rgba(30, 41, 59, 0.92);
     border-color: rgba(96, 165, 250, 0.42);
@@ -667,7 +1089,10 @@
 
   .nav-btn:disabled,
   .prompt-btn:disabled,
-  .update-pill:disabled {
+  .update-pill:disabled,
+  .mode-btn:disabled,
+  .primary-action:disabled,
+  .ghost-action:disabled {
     opacity: 0.46;
     cursor: not-allowed;
   }
@@ -685,14 +1110,24 @@
   }
 
   @media (max-width: 768px) {
-    .editor {
-      padding: 0.85rem 0.85rem 1.25rem;
+    .doc-toolbar {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+      gap: 0.55rem;
     }
 
-    .prompt-btn {
-      right: 0.7rem;
-      bottom: 0.7rem;
-      padding: 0.58rem 0.82rem;
+    .version-controls,
+    .doc-actions {
+      justify-content: space-between;
+    }
+
+    .doc-state {
+      text-align: left;
+    }
+
+    .editor,
+    .rendered-doc {
+      padding: 1rem;
     }
 
     .update-pill {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -42,11 +43,13 @@ type errorResponse struct {
 // reachability status, and vmctl routing status, making the
 // protected-request backend health observable for VAL-DEPLOY-008.
 type proxyHealthResponse struct {
-	Status       string `json:"status"`
-	Service      string `json:"service"`
-	Upstream     string `json:"upstream"`
-	VMctlRouting string `json:"vmctl_routing,omitempty"`
-	VMctlURL     string `json:"vmctl_url,omitempty"`
+	Status        string          `json:"status"`
+	Service       string          `json:"service"`
+	Upstream      string          `json:"upstream"`
+	VMctlRouting  string          `json:"vmctl_routing,omitempty"`
+	VMctlURL      string          `json:"vmctl_url,omitempty"`
+	Build         buildinfo.Info  `json:"build"`
+	UpstreamBuild *buildinfo.Info `json:"upstream_build,omitempty"`
 }
 
 // AuthResult holds the result of access JWT validation.
@@ -620,7 +623,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	// Check upstream sandbox health.
 	upstreamStatus := "ok"
-	upstreamHealthy := h.checkUpstreamHealth()
+	upstreamHealthy, upstreamBuild := h.probeUpstreamHealth()
 	if !upstreamHealthy {
 		upstreamStatus = "unreachable"
 	}
@@ -631,9 +634,11 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := proxyHealthResponse{
-		Status:   status,
-		Service:  "proxy",
-		Upstream: upstreamStatus,
+		Status:        status,
+		Service:       "proxy",
+		Upstream:      upstreamStatus,
+		Build:         buildinfo.Snapshot("proxy"),
+		UpstreamBuild: upstreamBuild,
 	}
 
 	// Report vmctl routing status (VAL-VM-002).
@@ -646,18 +651,29 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// checkUpstreamHealth probes the upstream sandbox's /health endpoint
-// with a short timeout. Returns true if the upstream responds with a
-// 2xx status within 2 seconds, false otherwise.
-func (h *Handler) checkUpstreamHealth() bool {
+// probeUpstreamHealth probes the upstream sandbox's /health endpoint with a
+// short timeout. When available, it also surfaces the sandbox build identity so
+// deployed browsers can prove they are talking to the expected backend build.
+func (h *Handler) probeUpstreamHealth() (bool, *buildinfo.Info) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	url := h.sandboxURL.String() + "/health"
 	resp, err := client.Get(url)
 	if err != nil {
-		return false
+		return false, nil
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
+	healthy := resp.StatusCode >= 200 && resp.StatusCode < 300
+
+	var body struct {
+		Build buildinfo.Info `json:"build"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return healthy, nil
+	}
+	if body.Build.Commit == "" {
+		return healthy, nil
+	}
+	return healthy, &body.Build
 }
 
 // HandleProviderDeny denies all browser requests to /provider/* routes.

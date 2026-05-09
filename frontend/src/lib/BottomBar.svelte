@@ -2,9 +2,9 @@
   BottomBar — fixed bottom bar for the ChoirOS desktop.
 
   Contains:
-    - Left: Show Desktop button + minimized window indicators (click to restore)
+    - Left: Show Desktop button + desktop/account menu + minimized window indicators
     - Center: prompt bar input with "Ask anything..." placeholder
-    - Right: connection status dot, user email + logout button
+    - Right: quiet connection status
 
   Data attributes for test targeting:
     data-bottom-bar         — root bar container
@@ -33,6 +33,7 @@
   const dispatch = createEventDispatcher();
 
   let promptValue = '';
+  let menuOpen = false;
 
   function handleRestore(windowId) {
     restoreWindow(windowId);
@@ -40,6 +41,7 @@
 
   function handleShowDesktop() {
     toggleShowDesktop();
+    menuOpen = !menuOpen;
   }
 
   function handlePromptKeydown(event) {
@@ -56,6 +58,7 @@
   }
 
   function handleLogout() {
+    menuOpen = false;
     dispatch('logout');
   }
 
@@ -87,6 +90,25 @@
     >
       <span class="show-desktop-icon">⊞</span>
     </button>
+
+    {#if menuOpen}
+      <div class="desktop-menu" data-desktop-menu>
+        <div class="menu-section" data-bottom-user data-desktop-user data-shell-user>
+          <span class="menu-label">Signed in</span>
+          <span class="menu-email">{currentUser?.email || 'unknown'}</span>
+        </div>
+        <button
+          class="menu-logout-btn"
+          data-bottom-logout
+          data-desktop-logout
+          data-shell-logout
+          on:click={handleLogout}
+          aria-label="Sign out"
+        >
+          Sign out
+        </button>
+      </div>
+    {/if}
 
     <!-- Minimized window indicators -->
     <div class="minimized-indicators">
@@ -121,7 +143,7 @@
     </div>
   </div>
 
-  <!-- Right section: user info, connection, logout -->
+  <!-- Right section: quiet connection status -->
   <div class="bar-right">
     <!-- Connection status dot -->
     <div
@@ -138,23 +160,6 @@
       ></span>
       <span class="status-text">{getStatusText()}</span>
     </div>
-
-    <!-- User info -->
-    <div class="user-info" data-bottom-user data-desktop-user data-shell-user>
-      <span class="user-email">{currentUser?.email || 'unknown'}</span>
-    </div>
-
-    <!-- Logout button -->
-    <button
-      class="logout-btn"
-      data-bottom-logout
-      data-desktop-logout
-      data-shell-logout
-      on:click={handleLogout}
-      aria-label="Sign out"
-    >
-      Sign Out
-    </button>
   </div>
 </div>
 
@@ -165,8 +170,8 @@
     left: 0;
     right: 0;
     height: 56px;
-    background: #11111b;
-    border-top: 1px solid #2a2a3a;
+    background: var(--choir-panel-strong, #11111b);
+    border-top: 1px solid var(--choir-border, #2a2a3a);
     display: flex;
     align-items: center;
     padding: 0 12px;
@@ -175,6 +180,7 @@
   }
 
   .bar-left {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -192,10 +198,10 @@
     border: 1px solid #333;
     border-radius: 6px;
     cursor: pointer;
-    color: #c0c0d0;
+    color: var(--choir-muted, #c0c0d0);
     font-size: 1.1rem;
     flex-shrink: 0;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--choir-motion-fast, 0.15s), border-color var(--choir-motion-fast, 0.15s);
   }
 
   .show-desktop-btn:hover {
@@ -204,8 +210,61 @@
   }
 
   .show-desktop-btn:focus-visible {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid var(--choir-accent, #3b82f6);
     outline-offset: 2px;
+  }
+
+  .desktop-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 10px);
+    min-width: min(21rem, calc(100vw - 24px));
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: var(--choir-radius-lg, 18px);
+    background:
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 34%),
+      rgba(15, 23, 42, 0.96);
+    box-shadow: var(--choir-shadow-soft, 0 18px 48px rgba(0, 0, 0, 0.4));
+    padding: 0.8rem;
+    z-index: 300;
+    backdrop-filter: blur(18px);
+  }
+
+  .menu-section {
+    display: grid;
+    gap: 0.2rem;
+    margin-bottom: 0.65rem;
+    min-width: 0;
+  }
+
+  .menu-label {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .menu-email {
+    color: #e2e8f0;
+    font-size: 0.86rem;
+    overflow-wrap: anywhere;
+  }
+
+  .menu-logout-btn {
+    width: 100%;
+    border: 1px solid rgba(248, 113, 113, 0.26);
+    border-radius: 12px;
+    background: rgba(127, 29, 29, 0.22);
+    color: #fecaca;
+    cursor: pointer;
+    padding: 0.62rem 0.75rem;
+    text-align: left;
+    font-weight: 760;
+  }
+
+  .menu-logout-btn:hover {
+    background: rgba(127, 29, 29, 0.34);
   }
 
   .minimized-indicators {
@@ -323,43 +382,6 @@
     box-shadow: 0 0 4px rgba(74, 222, 128, 0.5);
   }
 
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: #999;
-  }
-
-  .user-email {
-    font-size: 0.75rem;
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .logout-btn {
-    padding: 4px 10px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #f87171;
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid rgba(248, 113, 113, 0.25);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-
-  .logout-btn:hover {
-    background: rgba(248, 113, 113, 0.2);
-  }
-
-  .logout-btn:focus-visible {
-    outline: 2px solid #f87171;
-    outline-offset: 2px;
-  }
-
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
@@ -367,8 +389,8 @@
 
   /* Responsive: Tablet */
   @media (max-width: 1024px) {
-    .user-email {
-      max-width: 100px;
+    .desktop-menu {
+      min-width: min(18rem, calc(100vw - 16px));
     }
   }
 
@@ -391,8 +413,8 @@
       min-height: 44px;
     }
 
-    .user-email {
-      display: none;
+    .bar-right {
+      gap: 4px;
     }
   }
 </style>

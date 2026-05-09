@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -149,6 +150,7 @@ type runtimeHealthResponse struct {
 	RunningRuns     int                      `json:"running_runs"`
 	ResearcherCount int                      `json:"researcher_count"`
 	ActiveProvider  string                   `json:"active_provider"`
+	Build           buildinfo.Info           `json:"build"`
 }
 
 // runtimeTopologyResponse is the JSON structure returned by GET /api/agent/topology.
@@ -908,6 +910,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		RunningRuns:     h.rt.RunningCount(),
 		ResearcherCount: h.rt.cfg.ResearcherCount,
 		ActiveProvider:  h.rt.provider.ProviderName(),
+		Build:           buildinfo.Snapshot("sandbox"),
 	})
 }
 

@@ -30,6 +30,7 @@
   import FloatingWindow from './FloatingWindow.svelte';
   import TraceApp from './TraceApp.svelte';
   import VTextEditor from './VTextEditor.svelte';
+  import SettingsApp from './SettingsApp.svelte';
   import { openFileDocument } from './vtext.js';
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
@@ -51,6 +52,7 @@
     resizeWindow,
     setWindows,
     setIconPositions,
+    getDefaultIconPositions,
   } from './stores/desktop.js';
 
   export let currentUser = null;
@@ -432,6 +434,13 @@
     scheduleSave();
   }
 
+  function handleResetDesktop() {
+    setWindows([], '');
+    setIconPositions(getDefaultIconPositions());
+    scheduleSave();
+    showToast('Desktop layout reset');
+  }
+
   function showToast(message, options = {}) {
     const id = ++toastCounter;
     const kind = options.kind || 'info';
@@ -531,9 +540,11 @@
               </div>
             {:else if win.appId === 'settings'}
               <div class="app-content settings-content" data-settings-window>
-                <div class="app-header">
-                  <span class="app-label">Settings</span>
-                </div>
+                <SettingsApp
+                  {currentUser}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:resetdesktop={handleResetDesktop}
+                />
               </div>
             {:else if win.appId === 'vtext'}
               <div class="app-content vtext-content" data-vtext-app>
@@ -580,7 +591,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: #0f0f0f;
+    background: var(--choir-bg, #0f0f0f);
     overflow: hidden;
   }
 
@@ -630,6 +641,11 @@
   .trace-content {
     padding: 0;
     background: #0a0d14;
+  }
+
+  .settings-content {
+    padding: 0;
+    background: #171827;
   }
 
   .toast-stack {
