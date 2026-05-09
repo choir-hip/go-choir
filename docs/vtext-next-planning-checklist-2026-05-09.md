@@ -40,6 +40,7 @@ getting hard to reason about.
 - [ ] Mobile/editor UX polish.
 - [ ] Staging/deploy verification.
 - [ ] VM/background-work architecture.
+- [ ] Server-side Browser app / Obscura integration.
 - [ ] Coding benchmark/eval suite.
 - [ ] Extraction pipeline.
 - [ ] Citations/publication.
@@ -49,16 +50,64 @@ getting hard to reason about.
 
 1. Ship and verify the current UX patch on staging.
 2. Fix any deployed regressions found by Playwright or mobile manual QA.
-3. Return to `vmctl` motion before serious coding-agent benchmarks:
+3. Prototype the server-side Browser app with Obscura if it can be kept
+   narrowly scoped:
+   backend-controlled browsing, extraction, and future background-VM preview
+   surfaces; not a broad rewrite of QA or desktop.
+4. Return to `vmctl` motion before serious coding-agent benchmarks:
    background VM fork, worker execution, merge/promotion/rollback.
-4. Add VText coding benchmark tasks only after mutable work can happen outside
+5. Add VText coding benchmark tasks only after mutable work can happen outside
    the live desktop VM.
-5. Port extraction work after the VText product loop is stable enough to show
+6. Port extraction work after the VText product loop is stable enough to show
    retrieved content as first-class document evidence.
-6. Add citation/publication flows after extraction produces durable source
+7. Add citation/publication flows after extraction produces durable source
    objects worth citing.
-7. Replace the stopgap contenteditable Markdown surface with a Pretext-backed
+8. Replace the stopgap contenteditable Markdown surface with a Pretext-backed
    editor when document layout/transclusion/citation demands require it.
+
+## Server-Side Browser / Obscura Track
+
+Motivation:
+
+- The current Browser app is iframe-like client-side browsing, which runs into
+  frame blockers and is the wrong substrate for agentic browsing.
+- Background VMs need visible previews. A background VM should be openable as a
+  Browser app page, then later promoted to the active desktop with an explicit
+  transition.
+- Browser-derived content should feed extraction and transclusion, not just
+  display pixels.
+
+Obscura is a candidate substrate because it is a Rust headless browser engine
+with V8, Chrome DevTools Protocol compatibility, Puppeteer/Playwright
+connection support, and built-in DOM-to-Markdown (`LP.getMarkdown`) according
+to its upstream README.
+
+Initial integration shape:
+
+- [ ] Add an internal browser service or sandbox-side browser controller that
+  starts Obscura as a managed process.
+- [ ] Expose product endpoints for browser sessions, navigation, screenshots or
+  DOM snapshots, and extracted text/Markdown.
+- [ ] Keep the browser app server-side. The frontend should render a controlled
+  view and send navigation/input intents; it should not iframe arbitrary sites.
+- [ ] Record browser navigation/extraction events into Trace when an agent uses
+  the browser.
+- [ ] Treat Obscura as extraction/browser substrate first, not as a replacement
+  for product Playwright QA.
+- [ ] Add capability checks for binary availability, version, CDP health, and
+  failure modes.
+- [ ] Preserve provider independence: Obscura should be one browser backend
+  behind an internal interface, not a global dependency that breaks the desktop
+  if unavailable.
+
+Open risks:
+
+- [ ] Obscura is young and may not implement enough CDP surface for all sites.
+- [ ] Anti-detection/stealth features need policy review before defaulting on.
+- [ ] Server-side browsing has SSRF and network-access risks; URL allow/deny,
+  per-user isolation, and resource limits are required.
+- [ ] Screenshots/video streaming can become expensive; start with static
+  snapshots and extraction before live remote-browser streaming.
 
 ## VText Coding Benchmark Shape
 
@@ -139,4 +188,3 @@ Use Pretext when we need:
 - [ ] richer document-native interactions without becoming a Google Docs clone
 
 Do not block current VText usability on Pretext.
-
