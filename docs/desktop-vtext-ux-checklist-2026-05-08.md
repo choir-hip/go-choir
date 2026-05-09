@@ -12,8 +12,8 @@ truth until the cache/deploy identity checks pass.
 - [x] Ensure the deployed SPA shell is never browser-cached.
 - [x] Serve `/assets/*` with long immutable caching because Vite fingerprints built JS/CSS assets.
 - [x] Serve `index.html` and SPA fallback responses with `Cache-Control: no-store`.
-- [ ] Verify `curl -I https://draft.choir-ip.com/` returns `Cache-Control: no-store` after deploy.
-- [ ] Verify `curl -I https://draft.choir-ip.com/assets/<current-bundle>.js` returns `Cache-Control: public, max-age=31536000, immutable`.
+- [x] Verify `curl -I https://draft.choir-ip.com/` returns `Cache-Control: no-store` after deploy.
+- [x] Verify `curl -I https://draft.choir-ip.com/assets/<current-bundle>.js` returns `Cache-Control: public, max-age=31536000, immutable`.
 - [x] Add a visible or hidden build identity surface: frontend git SHA, sandbox git SHA, proxy git SHA, and deploy timestamp.
 - [x] Add a deployed Playwright assertion that the loaded JS bundle commit matches the server-reported commit.
 - [x] Add a deployed Playwright assertion that the browser does not call removed/stale routes such as `/api/agent/topology`, `/api/prompts`, or `/api/events`.
@@ -109,7 +109,21 @@ https://pretextjs.dev/pretext-library.
 - [x] Run `git diff --check`.
 - [x] Run frontend build after UI changes.
 - [x] Run local Playwright for VText layout, recent-documents, Trace, Settings, and bottom-bar account menu.
-- [ ] Run deployed Playwright against `https://draft.choir-ip.com` after push/deploy.
-- [ ] Capture screenshots for mobile, tablet, and desktop sizes.
-- [ ] Verify the deployed response headers after deploy with `curl -I`.
-- [ ] Verify stale browser sessions update without manual cache clearing.
+- [x] Run deployed Playwright against `https://draft.choir-ip.com` after push/deploy.
+- [x] Capture screenshots for mobile, tablet, and desktop sizes.
+- [x] Verify the deployed response headers after deploy with `curl -I`.
+- [x] Verify stale browser sessions update without manual cache clearing.
+
+Deployment evidence, 2026-05-09:
+
+- GitHub Actions run `25606669466` succeeded for commit `6d16df1204e46524b524fcfcdaeada63d553e6fd`; deploy job `Deploy to Staging (Node B)` completed successfully.
+- `curl -I https://draft.choir-ip.com/` returned `Cache-Control: no-store`.
+- The deployed JS bundle `/assets/index-BVn6_J4O.js` returned `Cache-Control: public, max-age=31536000, immutable`.
+- `/health` reported proxy and sandbox build commit `6d16df1204e46524b524fcfcdaeada63d553e6fd` and deployed timestamp `2026-05-09T17:02:39Z`.
+- `npx playwright test tests/deployed-origin-auth-shell.spec.js --project=chromium` passed: 12/12.
+- `GO_CHOIR_RUN_DEPLOYED_LIVE_SEARCH=1 CHOIR_DEPLOYED_BASE_URL=https://draft.choir-ip.com npx playwright test tests/vtext-deployed-live-search.spec.js --project=chromium` passed: 1/1.
+- Responsive screenshots captured:
+  - `frontend/test-results/deployed-responsive-screenshots/mobile-vtext.png`
+  - `frontend/test-results/deployed-responsive-screenshots/tablet-vtext.png`
+  - `frontend/test-results/deployed-responsive-screenshots/desktop-vtext.png`
+- Stale-browser update verification is covered by the deployed no-store shell header, immutable fingerprinted assets, frontend/server build identity match, absence of `/src/` scripts, and the successful post-deploy reload in the deployed Playwright suite. No service worker cache path is present.
