@@ -1,17 +1,32 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { registerPasskey } from './auth.js';
+import { getSession, registerPasskey } from './auth.js';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './webauthn.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FRONTEND_ROOT = path.resolve(__dirname, '../..');
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || 'http://localhost:4173';
-const TEST_RESULTS_DIR = path.resolve(__dirname, '../../test-results');
-const AUTH_STATE_PATH = path.join(TEST_RESULTS_DIR, 'playwright-auth-state.json');
-const AUTH_META_PATH = path.join(TEST_RESULTS_DIR, 'playwright-auth-meta.json');
-const AUTH_LOCK_PATH = path.join(TEST_RESULTS_DIR, 'playwright-auth-state.lock');
+
+function defaultStatePath(baseURL) {
+  const host = new URL(baseURL).hostname.replaceAll('.', '-');
+  return path.join(FRONTEND_ROOT, 'playwright', '.auth', `${host}.storage.json`);
+}
+
+function statePaths(baseURL) {
+  const storageStatePath = path.resolve(process.env.CHOIR_AUTH_STATE || defaultStatePath(baseURL));
+  const metaPath = path.resolve(
+    process.env.CHOIR_AUTH_META ||
+      storageStatePath.replace(/\.json$/i, '.meta.json'),
+  );
+  return {
+    storageStatePath,
+    metaPath,
+    lockPath: `${storageStatePath}.lock`,
+  };
+}
 
 function uniqueEmail() {
   return `playwright-state-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -21,21 +36,53 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function readStoredState() {
-  const meta = JSON.parse(fs.readFileSync(AUTH_META_PATH, 'utf8'));
+function readStoredState(baseURL) {
+  const { storageStatePath, metaPath } = statePaths(baseURL);
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
   return {
     email: meta.email,
     baseURL: meta.baseURL,
-    storageStatePath: AUTH_STATE_PATH,
-    metaPath: AUTH_META_PATH,
+    storageStatePath,
+    metaPath,
   };
 }
 
-async function waitForStoredState(timeoutMs = 30000) {
+async function validateStoredState(browser, baseURL) {
+  const { storageStatePath, metaPath } = statePaths(baseURL);
+  if (!fs.existsSync(storageStatePath)) return null;
+
+  const context = await browser.newContext({ storageState: storageStatePath });
+  const page = await context.newPage();
+  try {
+    await page.goto(baseURL);
+    const session = await getSession(page, baseURL);
+    if (!session.authenticated) return null;
+
+    await context.storageState({ path: storageStatePath });
+    fs.writeFileSync(
+      metaPath,
+      JSON.stringify({
+        email: session.user?.email || null,
+        baseURL,
+        user: session.user || null,
+      }, null, 2),
+      'utf8',
+    );
+    return readStoredState(baseURL);
+  } catch {
+    return null;
+  } finally {
+    await context.close();
+  }
+}
+
+async function waitForStoredState(browser, baseURL, timeoutMs = 30000) {
+  const { storageStatePath } = statePaths(baseURL);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (fs.existsSync(AUTH_STATE_PATH) && fs.existsSync(AUTH_META_PATH)) {
-      return readStoredState();
+    if (fs.existsSync(storageStatePath)) {
+      const state = await validateStoredState(browser, baseURL);
+      if (state) return state;
     }
     await sleep(250);
   }
@@ -43,25 +90,28 @@ async function waitForStoredState(timeoutMs = 30000) {
 }
 
 export async function createAuthenticatedState(browser, baseURL = DEFAULT_BASE_URL) {
-  fs.mkdirSync(TEST_RESULTS_DIR, { recursive: true });
-  if (fs.existsSync(AUTH_STATE_PATH) && fs.existsSync(AUTH_META_PATH)) {
-    return readStoredState();
-  }
+  const { storageStatePath, metaPath, lockPath } = statePaths(baseURL);
+  fs.mkdirSync(path.dirname(storageStatePath), { recursive: true });
+  fs.mkdirSync(path.dirname(metaPath), { recursive: true });
+
+  const existing = await validateStoredState(browser, baseURL);
+  if (existing) return existing;
 
   let lockFd = null;
   try {
-    lockFd = fs.openSync(AUTH_LOCK_PATH, 'wx');
+    lockFd = fs.openSync(lockPath, 'wx');
   } catch (err) {
     if (err && err.code === 'EEXIST') {
-      return waitForStoredState();
+      return waitForStoredState(browser, baseURL);
     }
     throw err;
   }
 
-  if (fs.existsSync(AUTH_STATE_PATH) && fs.existsSync(AUTH_META_PATH)) {
+  const stateAfterLock = await validateStoredState(browser, baseURL);
+  if (stateAfterLock) {
     fs.closeSync(lockFd);
-    fs.rmSync(AUTH_LOCK_PATH, { force: true });
-    return readStoredState();
+    fs.rmSync(lockPath, { force: true });
+    return stateAfterLock;
   }
 
   const context = await browser.newContext();
@@ -75,9 +125,9 @@ export async function createAuthenticatedState(browser, baseURL = DEFAULT_BASE_U
     await page.reload();
     await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
 
-    await context.storageState({ path: AUTH_STATE_PATH });
+    await context.storageState({ path: storageStatePath });
     fs.writeFileSync(
-      AUTH_META_PATH,
+      metaPath,
       JSON.stringify({ email, baseURL }, null, 2),
       'utf8',
     );
@@ -85,15 +135,15 @@ export async function createAuthenticatedState(browser, baseURL = DEFAULT_BASE_U
     return {
       email,
       baseURL,
-      storageStatePath: AUTH_STATE_PATH,
-      metaPath: AUTH_META_PATH,
+      storageStatePath,
+      metaPath,
     };
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);
     await context.close();
     if (lockFd !== null) {
       fs.closeSync(lockFd);
-      fs.rmSync(AUTH_LOCK_PATH, { force: true });
+      fs.rmSync(lockPath, { force: true });
     }
   }
 }

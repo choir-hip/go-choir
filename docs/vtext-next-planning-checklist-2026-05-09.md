@@ -82,6 +82,12 @@ with V8, Chrome DevTools Protocol compatibility, Puppeteer/Playwright
 connection support, and built-in DOM-to-Markdown (`LP.getMarkdown`) according
 to its upstream README.
 
+2026-05-10 audit result: Obscura-specific audit material has moved to the
+Obscura fork branch `choir/playwright-parity-audit-2026-05-10`, under
+`docs/choir/` and `scripts/choir/`. The patched local Obscura build passed the
+Choir audit, but the evidence is not clean-upstream parity and should be used
+for PR decomposition rather than treated as a product dependency.
+
 Initial integration shape:
 
 - [ ] Add an internal browser service or sandbox-side browser controller that
