@@ -542,11 +542,11 @@ Section 1 decision point:
 - [ ] Export a background VM branch as a bundle or patchset plus manifest.
 - [x] Import the bundle/patchset into a clean checkout.
 - [x] Rerun required checks in the shipper context.
-- [ ] Push an `agent/<run-id>/<slug>` branch through the approved GitHub
+- [x] Push an `agent/<run-id>/<slug>` branch through the approved GitHub
       credential boundary.
-- [ ] Create or update PR metadata with run id, trace id, VM id, base/head SHA,
+- [x] Create or update PR metadata with run id, trace id, VM id, base/head SHA,
       verification manifest, and residual risks.
-- [ ] Confirm GitHub Actions runs on the pushed branch.
+- [x] Confirm GitHub Actions runs on the pushed branch.
 
 Section 2 local progress, 2026-05-12 UTC:
 
@@ -605,17 +605,41 @@ Section 2 local progress, 2026-05-12 UTC:
   returned `mission restart proof 2026-05-12T03:59:00Z`. Node B journal showed
   vmctl stopping only its health checker, loading one persisted ownership, and
   reattaching the same VM after the deploy.
+- Low-resolution GitHub boundary proof passed without granting worker GitHub
+  authority. A worker checkout with no GitHub remote committed proof head
+  `bd96e1109649045fe9b86cf4c313e27462a08091`, exported
+  `/tmp/go-choir-shipper-proof.yIV4qk/export/manifest.json` and
+  `changes.patch` with `cmd/shipper export`, and passed
+  `test -f internal/shipper/testdata/github-boundary-proof.txt`.
+- A separate platform checkout imported that patchset with `cmd/shipper import
+  --push` to branch `agent/run-shipper-proof-20260512/github-boundary`, creating
+  platform head `c72a763413a75398897c535f4e7e9c6f03df8bfe` and rerunning the
+  same check. The import report was written to
+  `/tmp/go-choir-shipper-proof.yIV4qk/import-report.json`.
+- Draft PR #2, `[agent] Shipper GitHub boundary proof`, carried the run id
+  `run-shipper-proof-20260512`, trace id `trace-shipper-proof-20260512`, VM id
+  `vm-shipper-proof`, snapshot id `snapshot-shipper-proof`, base SHA
+  `261896f58e69239cb54968e505aad2421f5821ab`, worker head SHA
+  `bd96e1109649045fe9b86cf4c313e27462a08091`, platform head SHA
+  `c72a763413a75398897c535f4e7e9c6f03df8bfe`, verification commands, and
+  residual risks. It was closed after proof rather than merged because the file
+  was only a boundary artifact.
+- Pull request CI workflow `25713919314` passed on the imported branch:
+  frontend build job `75499698777`, Go vet/test/build job `75499698779`, and
+  skipped deploy job `75499896511` as expected for `pull_request`.
 
 Unresolved Section 2 gaps:
 
 - No deployed product path exports a background VM branch/patchset plus manifest
   yet. The worker export and shipper import mechanics exist locally, but they
   are not wired into super/cosuper tools or a deployed background VM workflow.
-- The optional `--push` path is implemented but not yet verified against
-  GitHub, and no PR metadata/CI proof has been produced from a generated branch.
-- This boundary keeps GitHub credentials out of worker VMs by design, but that
-  is not yet enforced end to end because workers do not yet produce/import
-  patchsets through this boundary from the deployed workflow.
+- The optional `--push` path is verified against GitHub through a platform
+  checkout, and PR CI is verified. This is still a low-resolution proof, not a
+  deployed Choir-in-Choir product-path export.
+- This boundary keeps GitHub credentials out of worker contexts by design, but
+  that is not yet enforced end to end for real background VMs because
+  super/cosuper workers do not yet produce/import patchsets through this
+  boundary from the deployed workflow.
 
 ### 3. Product Orchestration Proof
 
