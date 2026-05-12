@@ -737,20 +737,72 @@ Residual Section 2 gaps:
 
 ### 3. Product Orchestration Proof
 
-- [ ] Submit a real request from the deployed prompt bar.
-- [ ] Verify the browser did not call internal orchestration APIs.
-- [ ] Verify conductor created a VText with an initial document abstract, not
+- [x] Submit a real request from the deployed prompt bar.
+- [x] Verify the browser did not call internal orchestration APIs.
+- [x] Verify conductor created a VText with an initial document abstract, not
       template control text.
-- [ ] Verify VText requested research for current/factual claims instead of
+- [x] Verify VText requested research for current/factual claims instead of
       writing from model priors.
-- [ ] Verify researchers performed sequential and/or parallel real searches when
+- [x] Verify researchers performed sequential and/or parallel real searches when
       the task required current information.
-- [ ] Verify search provider/endpoint success, rate limit, error, and latency
+- [x] Verify search provider/endpoint success, rate limit, error, and latency
       stats appear in Trace.
-- [ ] Verify VText consumed worker updates and produced full current-state
+- [x] Verify VText consumed worker updates and produced full current-state
       document revisions.
 - [ ] Verify super/cosuper work happens in background VM context for mutable code
       or filesystem changes.
+
+Section 3 deployed proof, 2026-05-12 UTC:
+
+- Commit `f65a0a4487713ee34144424ac303cd415cfe80fd` passed GitHub Actions
+  workflow `25716964367`: frontend build, Go vet/test/build, and staging deploy.
+  Staging health reported proxy and sandbox deployed commit
+  `f65a0a4487713ee34144424ac303cd415cfe80fd`, deployed at
+  `2026-05-12T06:15:30Z`.
+- Deployed product-path proof passed:
+  `cd frontend && GO_CHOIR_RUN_REAL_VTEXT_DEMO=1 GO_CHOIR_REAL_DEMO_BASE_URL=https://draft.choir-ip.com npx playwright test tests/vtext-real-workflow-demo.spec.js --project=chromium --reporter=line`
+  passed 1/1 in 3.7 minutes.
+- Evidence artifacts:
+  `frontend/test-results/vtext-real-workflow-demo-r-23628-d-artifact-and-verification-chromium/video.webm`,
+  `frontend/test-results/vtext-real-workflow-demo-r-23628-d-artifact-and-verification-chromium/trace.zip`,
+  and
+  `frontend/test-results/vtext-real-workflow-demo-r-23628-d-artifact-and-verification-chromium/test-finished-1.png`.
+- The proof registered a fresh staging browser user, submitted through
+  `/api/prompt-bar`, and used submission/trajectory
+  `8778d93a-e21c-4f32-ba72-6227e53bfaea`. The browser request monitor observed
+  no forbidden product-proof calls to `/internal/*`, `/api/agent/*`,
+  `/api/prompts*`, `/api/test/*`, or `/api/events`.
+- The proof marker was `REAL_VTEXT_DEMO_1778566828334`. The conductor-created
+  first VText revision contained the marker and did not contain template/control
+  strings such as `Conductor framing`, `Use this vtext`, `User request:`,
+  `Current requirements:`, or `Grounding status:`.
+- Trace roles for the same trajectory included `conductor`, `vtext`,
+  `researcher`, and `super`. The final canonical VText revision had
+  `metadata.source=edit_vtext` and `metadata.vtext_edit_kind=vtext_edit`, and
+  consumed both researcher and super worker updates.
+- Trace search stats for the same trajectory recorded 32 queries, 98 attempts,
+  64 successes, and 11 rate limits. Provider-level endpoint stats were visible:
+  Brave at `https://api.search.brave.com/res/v1/web/search` had 16 attempts,
+  5 successes, and 11 rate limits; Exa at `https://api.exa.ai/search` had
+  23 attempts and 23 credit-limit errors; Serper at
+  `https://google.serper.dev/search` had 31 attempts and 31 successes; Tavily at
+  `https://api.tavily.com/search` had 28 attempts and 28 successes.
+- The product path generated real Files app artifacts:
+  `artifacts/real_vtext_demo_1778566828334-evolution-ca.html` and
+  `artifacts/real_vtext_demo_1778566828334-evolution-ca.verify.js`. Trace showed
+  a successful `bash` tool result running Node against the verification script.
+  The verification output included `PASS html contains marker`, canvas/control
+  checks, `PASS implements automaton step logic`, and
+  `Verification passed for REAL_VTEXT_DEMO_1778566828334`.
+
+Residual Section 3 gap:
+
+- This proves deployed prompt bar -> conductor -> VText -> researcher -> super
+  -> VText document revision with real search, generated files, Trace evidence,
+  and Node verification. It does not yet prove the stronger invariant that
+  mutable code/filesystem work is performed in a background VM and exported
+  through the shipper path. The generated artifact was product-visible in the
+  user's Files app, but the proof did not show background-VM mutable execution.
 
 ### 4. Desktop and VText UX
 
