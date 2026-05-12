@@ -49,7 +49,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
@@ -67,6 +67,9 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := coSuper.Lookup("request_worker_vm"); ok {
 		t.Fatalf("co-super should not have request_worker_vm")
+	}
+	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
 	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent"} {
 		if _, ok := conductor.Lookup(name); !ok {
@@ -94,6 +97,9 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := researcher.Lookup("export_patchset"); ok {
 		t.Fatalf("researcher should not have export_patchset")
+	}
+	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
 	for _, name := range []string{"read_file", "web_search", "cast_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
@@ -123,11 +129,17 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("export_patchset"); ok {
 		t.Fatalf("vtext should not have export_patchset")
 	}
+	if _, ok := vtext.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("vtext should not have delegate_worker_vm")
+	}
 	if _, ok := conductor.Lookup("edit_vtext"); ok {
 		t.Fatalf("conductor should not have edit_vtext")
 	}
 	if _, ok := conductor.Lookup("export_patchset"); ok {
 		t.Fatalf("conductor should not have export_patchset")
+	}
+	if _, ok := conductor.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("conductor should not have delegate_worker_vm")
 	}
 	if _, ok := super.Lookup("edit_vtext"); ok {
 		t.Fatalf("super should not have edit_vtext")
@@ -1662,6 +1674,127 @@ func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
 	}
 	if manifest.RunID != superRun.RunID || manifest.TraceID != "trace-export-tool" || manifest.VMID != "vm-tool-export" || manifest.SnapshotID != "snapshot-tool" || manifest.BaseSHA != base || manifest.ExpectedHeadSHA == "" {
 		t.Fatalf("manifest provenance mismatch: %+v", manifest)
+	}
+}
+
+func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	workerDir := t.TempDir()
+	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerCWD := filepath.Join(workerDir, "files")
+	if err := os.MkdirAll(workerCWD, 0o755); err != nil {
+		t.Fatalf("create worker cwd: %v", err)
+	}
+
+	repo := filepath.Join(workerCWD, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("create worker repo: %v", err)
+	}
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Choir Worker")
+	runGit(t, repo, "config", "user.email", "worker@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write worker base: %v", err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "base")
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\nbackground worker change\n"), 0o644); err != nil {
+		t.Fatalf("write worker change: %v", err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "worker change")
+
+	exportArgs := fmt.Sprintf(`{
+		"repo_path": "repo",
+		"output_dir": "exports/background-proof",
+		"base_sha": %q,
+		"snapshot_id": "snapshot-worker-proof",
+		"summary": "background worker export proof",
+		"checks": ["grep -q background README.md"]
+	}`, base)
+	workerProvider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-export",
+				Name:      "export_patchset",
+				Arguments: json.RawMessage(exportArgs),
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "Exported background worker patchset.",
+		},
+	)
+	workerRT := New(Config{
+		SandboxID:           "vm-worker-proof",
+		StorePath:           filepath.Join(workerDir, "worker.db"),
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerDB, events.NewEventBus(), workerProvider)
+	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
+		t.Fatalf("install worker tools: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	workerRT.Start(ctx)
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerDB.Close()
+	})
+
+	workerHandler := NewAPIHandler(workerRT)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
+	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to background worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-worker-delegation",
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-proof",
+		"vm_id": "vm-worker-proof",
+		"objective": "Export the committed worker patchset.",
+		"profile": "co-super",
+		"timeout_seconds": 10
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		State           types.RunState   `json:"state"`
+		WorkerVMID      string           `json:"worker_vm_id"`
+		ExportPatchsets []map[string]any `json:"export_patchsets"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.State != types.RunCompleted || result.WorkerVMID != "vm-worker-proof" || len(result.ExportPatchsets) != 1 {
+		t.Fatalf("unexpected delegate result: %+v\nraw=%s", result, raw)
+	}
+	if pushed, _ := result.ExportPatchsets[0]["github_push"].(bool); pushed {
+		t.Fatalf("worker export reported github push: %+v", result.ExportPatchsets[0])
+	}
+	if got, _ := result.ExportPatchsets[0]["worker_head"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("worker export missing worker_head: %+v", result.ExportPatchsets[0])
 	}
 }
 

@@ -654,12 +654,28 @@ Section 2 local progress, 2026-05-12 UTC:
   `runtime persistence proof 2026-05-12T04:13:02Z`. Node B journal showed
   vmctl stopping only its health checker, loading one persisted ownership, and
   reattaching the same VM after the deploy.
+- Added the next bridge toward real background VM execution: internal-only
+  `/internal/runtime/runs` service-to-service endpoints for starting,
+  polling, and inspecting constrained worker-runtime runs. These routes are not
+  under `/api/*`, require `X-Internal-Caller: true`, and only allow worker
+  profiles (`co-super` or `researcher`).
+- Added super-only `delegate_worker_vm`, which takes a typed worker sandbox URL,
+  starts a co-super/researcher run inside that worker VM runtime, polls it to
+  completion, reads its event log, and returns any successful `export_patchset`
+  tool results. This is intentionally unavailable to conductor, VText,
+  researcher, and co-super.
+- `TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport` proves an active
+  super can delegate to a separate worker-runtime HTTP server, where a co-super
+  exports a committed repo patchset with no GitHub push capability.
+- Full local verification after adding the worker runtime bridge passed with
+  local ICU flags: `go test ./...`.
 
 Unresolved Section 2 gaps:
 
 - No deployed product path exports a background VM branch/patchset plus manifest
-  yet. The worker export tool and platform shipper import mechanics exist and
-  are deployed, but they are not wired through a deployed background VM workflow.
+  yet. The worker export tool, platform shipper import mechanics, and
+  service-to-service worker runtime bridge exist locally, but the bridge has
+  not yet been deployed and proven against real Firecracker worker VMs.
 - The optional `--push` path is verified against GitHub through a platform
   checkout, and PR CI is verified. This is still a low-resolution proof, not a
   deployed Choir-in-Choir product-path export.

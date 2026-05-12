@@ -25,6 +25,15 @@ type runSubmitRequest struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
+// internalRunSubmitRequest is the service-to-service payload for starting a
+// run inside another sandbox runtime, such as a background worker VM. It is not
+// registered under /api/* and must never become browser-public.
+type internalRunSubmitRequest struct {
+	OwnerID  string         `json:"owner_id"`
+	Prompt   string         `json:"prompt"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
 // promptBarSubmitRequest is the public product payload for POST
 // /api/prompt-bar. Browser callers submit user intent only; runtime role,
 // model, channel, trajectory, and orchestration metadata are assigned
@@ -188,12 +197,48 @@ func authenticateUser(r *http.Request) (string, error) {
 	return user, nil
 }
 
+func requireInternalRuntimeCaller(r *http.Request) error {
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		return fmt.Errorf("missing internal caller marker")
+	}
+	return nil
+}
+
 // writeJSON writes a JSON response with the given status code.
 func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("runtime api: json encode error: %v", err)
+	}
+}
+
+func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
+	if rec == nil {
+		return runStatusResponse{}
+	}
+	var finishedAt *string
+	if rec.FinishedAt != nil {
+		s := rec.FinishedAt.Format("2006-01-02T15:04:05.000Z")
+		finishedAt = &s
+	}
+	return runStatusResponse{
+		AgentID:      rec.AgentID,
+		RunID:        rec.RunID,
+		ChannelID:    rec.ChannelID,
+		ParentRunID:  rec.ParentRunID,
+		AgentProfile: rec.AgentProfile,
+		AgentRole:    rec.AgentRole,
+		OwnerID:      rec.OwnerID,
+		SandboxID:    rec.SandboxID,
+		State:        rec.State,
+		Prompt:       rec.Prompt,
+		Result:       rec.Result,
+		Error:        rec.Error,
+		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		FinishedAt:   finishedAt,
+		Metadata:     rec.Metadata,
 	}
 }
 
@@ -418,6 +463,146 @@ func (h *APIHandler) HandleSpawn(w http.ResponseWriter, r *http.Request) {
 		OwnerID:   rec.OwnerID,
 		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 	})
+}
+
+// HandleInternalRunSubmission handles POST /internal/runtime/runs.
+// This is a service-to-service worker VM bridge: platform/runtime components
+// can start a constrained run inside a sandbox without exposing raw run control
+// to the browser route table.
+func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+
+	var req internalRunSubmitRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	ownerID := strings.TrimSpace(req.OwnerID)
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt is required"})
+		return
+	}
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]any)
+	}
+	profile := canonicalAgentProfile(metadataStringValue(req.Metadata, runMetadataAgentProfile))
+	if profile == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required"})
+		return
+	}
+	switch profile {
+	case AgentProfileCoSuper, AgentProfileResearcher:
+	default:
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super or researcher profiles"})
+		return
+	}
+	req.Metadata[runMetadataAgentProfile] = profile
+	if metadataStringValue(req.Metadata, runMetadataAgentRole) == "" {
+		req.Metadata[runMetadataAgentRole] = profile
+	}
+	if metadataStringValue(req.Metadata, "request_source") == "" {
+		req.Metadata["request_source"] = "internal_worker_vm"
+	}
+
+	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
+	if err != nil {
+		log.Printf("runtime api: submit internal run: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit internal run"})
+		return
+	}
+	writeAPIJSON(w, http.StatusAccepted, runStatusFromRecord(rec))
+}
+
+// HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
+func (h *APIHandler) HandleInternalRunStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
+		return
+	}
+	runID := internalRuntimeRunIDFromPath(r.URL.Path)
+	if runID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	rec, err := h.rt.GetRun(r.Context(), runID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, runStatusFromRecord(rec))
+}
+
+// HandleInternalRunEvents handles GET /internal/runtime/runs/{id}/events.
+func (h *APIHandler) HandleInternalRunEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
+		return
+	}
+	runID := internalRuntimeRunIDFromPath(strings.TrimSuffix(r.URL.Path, "/events"))
+	if runID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	if _, err := h.rt.GetRun(r.Context(), runID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	events, err := h.rt.Store().ListEvents(r.Context(), runID, limit)
+	if err != nil {
+		log.Printf("runtime api: list internal run events: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list run events"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, eventListResponse{Events: events})
+}
+
+func internalRuntimeRunIDFromPath(path string) string {
+	const prefix = "/internal/runtime/runs/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	runID := strings.TrimSpace(strings.TrimPrefix(path, prefix))
+	if runID == "" || strings.Contains(runID, "/") {
+		return ""
+	}
+	return runID
 }
 
 // HandleCancel handles POST /api/agent/cancel.
@@ -924,6 +1109,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
+	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
+	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	if h.rt.cfg.EnableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
@@ -936,6 +1123,16 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	// the URL path and method to route to the correct handler. This avoids
 	// ambiguity with Go's ServeMux prefix matching.
 	RegisterVTextRoutes(s, h)
+}
+
+// HandleInternalRuntimeRunRouter dispatches internal service-to-service run
+// status and event requests. It is intentionally separate from /api/*.
+func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/events") {
+		h.HandleInternalRunEvents(w, r)
+		return
+	}
+	h.HandleInternalRunStatus(w, r)
 }
 
 // RegisterVTextRoutes registers the vtext API routes on the given server.

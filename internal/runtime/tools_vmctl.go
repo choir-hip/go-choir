@@ -1,9 +1,13 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -18,6 +22,7 @@ func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime) error {
 		newForkDesktopTool(rt),
 		newPublishDesktopTool(rt),
 		newRequestWorkerVMTool(rt),
+		newDelegateWorkerVMTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -145,7 +150,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. Use delegate_worker_vm to run work inside it.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":       map[string]any{"type": "string"},
 			"machine_class": map[string]any{"type": "string"},
@@ -201,6 +206,281 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func newDelegateWorkerVMTool(rt *Runtime) Tool {
+	type args struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerID         string `json:"worker_id,omitempty"`
+		VMID             string `json:"vm_id,omitempty"`
+		Objective        string `json:"objective"`
+		Profile          string `json:"profile,omitempty"`
+		TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
+	}
+	return Tool{
+		Name:        "delegate_worker_vm",
+		Description: "Start and monitor a co-super or researcher run inside a requested worker VM through internal runtime endpoints.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_id":          map[string]any{"type": "string"},
+			"vm_id":              map[string]any{"type": "string"},
+			"objective":          map[string]any{"type": "string"},
+			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileCoSuper, AgentProfileResearcher}},
+			"timeout_seconds":    map[string]any{"type": "integer"},
+		}, []string{"worker_sandbox_url", "objective"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+				return "", fmt.Errorf("delegate_worker_vm is only available to super agents")
+			}
+			if rt == nil {
+				return "", fmt.Errorf("delegate_worker_vm missing runtime")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode delegate_worker_vm args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("delegate_worker_vm missing owner context")
+			}
+			objective := strings.TrimSpace(in.Objective)
+			if objective == "" {
+				return "", fmt.Errorf("objective must not be empty")
+			}
+			profile := canonicalAgentProfile(in.Profile)
+			if profile == "" {
+				profile = AgentProfileCoSuper
+			}
+			if profile != AgentProfileCoSuper && profile != AgentProfileResearcher {
+				return "", fmt.Errorf("profile must be %s or %s", AgentProfileCoSuper, AgentProfileResearcher)
+			}
+			timeout := time.Duration(in.TimeoutSeconds) * time.Second
+			if timeout <= 0 {
+				timeout = 2 * time.Minute
+			}
+			if timeout > 15*time.Minute {
+				timeout = 15 * time.Minute
+			}
+			client := &http.Client{Timeout: 30 * time.Second}
+
+			runID := stringFromToolContext(ctx, toolCtxRunID)
+			agentID := stringFromToolContext(ctx, toolCtxAgentID)
+			trajectoryID := ""
+			if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+				trajectoryID = metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
+			}
+			metadata := map[string]any{
+				runMetadataAgentProfile: profile,
+				runMetadataAgentRole:    profile,
+				"request_source":        "worker_vm_delegation",
+				"delegated_by_run_id":   runID,
+				"delegated_by_agent_id": agentID,
+				"delegated_by_profile":  AgentProfileSuper,
+				"worker_id":             strings.TrimSpace(in.WorkerID),
+				"worker_vm_id":          strings.TrimSpace(in.VMID),
+				"parent_sandbox_id":     stringFromToolContext(ctx, toolCtxSandboxID),
+			}
+			if channelID := stringFromToolContext(ctx, toolCtxChannelID); channelID != "" {
+				metadata[runMetadataChannelID] = channelID
+			}
+			if desktopID := stringFromToolContext(ctx, toolCtxDesktopID); desktopID != "" {
+				metadata[runMetadataDesktopID] = desktopID
+			}
+			if trajectoryID != "" {
+				metadata[runMetadataTrajectoryID] = trajectoryID
+			}
+
+			startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
+				OwnerID:  ownerID,
+				Prompt:   objective,
+				Metadata: metadata,
+			})
+			if err != nil {
+				return "", err
+			}
+			finalResp, err := pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
+			if err != nil {
+				return "", err
+			}
+			if finalResp.State != types.RunCompleted {
+				return "", fmt.Errorf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error))
+			}
+			eventsResp, err := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID)
+			if err != nil {
+				return "", err
+			}
+			exports := collectExportPatchsetResults(eventsResp.Events)
+
+			return toolResultJSON(map[string]any{
+				"status":             "worker_run_completed",
+				"worker_id":          strings.TrimSpace(in.WorkerID),
+				"worker_vm_id":       strings.TrimSpace(in.VMID),
+				"worker_sandbox_url": strings.TrimSpace(in.WorkerSandboxURL),
+				"loop_id":            finalResp.RunID,
+				"agent_id":           finalResp.AgentID,
+				"profile":            finalResp.AgentProfile,
+				"state":              finalResp.State,
+				"result":             finalResp.Result,
+				"error":              finalResp.Error,
+				"export_patchsets":   exports,
+				"event_count":        len(eventsResp.Events),
+			})
+		},
+	}
+}
+
+func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL string, body internalRunSubmitRequest) (*runStatusResponse, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs", nil)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("delegate_worker_vm submit: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		return nil, fmt.Errorf("delegate_worker_vm submit failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+	var out runStatusResponse
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return nil, fmt.Errorf("decode worker run submit response: %w", err)
+	}
+	if out.RunID == "" {
+		return nil, fmt.Errorf("worker run submit response missing loop_id")
+	}
+	return &out, nil
+}
+
+func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ownerID, runID string, timeout time.Duration) (*runStatusResponse, error) {
+	deadline := time.Now().Add(timeout)
+	var last runStatusResponse
+	for {
+		values := url.Values{"owner_id": []string{ownerID}}
+		endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs/"+url.PathEscape(runID), values)
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Internal-Caller", "true")
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("delegate_worker_vm status: %w", err)
+		}
+		payload, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("delegate_worker_vm status failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+		}
+		if err := json.Unmarshal(payload, &last); err != nil {
+			return nil, fmt.Errorf("decode worker run status response: %w", err)
+		}
+		if last.State.Terminal() || last.State == types.RunBlocked {
+			return &last, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("worker run %s did not finish within %s; last state=%s", runID, timeout, last.State)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+func fetchInternalWorkerRunEvents(ctx context.Context, client *http.Client, baseURL, ownerID, runID string) (*eventListResponse, error) {
+	values := url.Values{"owner_id": []string{ownerID}, "limit": []string{"500"}}
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs/"+url.PathEscape(runID)+"/events", values)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("delegate_worker_vm events: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("delegate_worker_vm events failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+	var out eventListResponse
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return nil, fmt.Errorf("decode worker run events response: %w", err)
+	}
+	return &out, nil
+}
+
+func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", fmt.Errorf("worker_sandbox_url is required")
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("parse worker_sandbox_url: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("worker_sandbox_url must be http or https")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("worker_sandbox_url missing host")
+	}
+	parsed.Path = path
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
+func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
+	var exports []map[string]any
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload struct {
+			Tool    string `json:"tool"`
+			IsError bool   `json:"is_error"`
+			Output  string `json:"output"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "export_patchset" {
+			continue
+		}
+		var output map[string]any
+		if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
+			output = map[string]any{"raw_output": payload.Output}
+		}
+		output["loop_id"] = ev.RunID
+		exports = append(exports, output)
+	}
+	return exports
 }
 
 func normalizeForkDesktopID(raw string) string {

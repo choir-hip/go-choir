@@ -195,6 +195,49 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 	}
 }
 
+func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	body := `{"owner_id":"user-alice","prompt":"do worker work","metadata":{"agent_profile":"co-super"}}`
+	publicReq := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(body))
+	publicW := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(publicW, publicReq)
+	if publicW.Code != http.StatusForbidden {
+		t.Fatalf("public internal runtime status = %d, want 403", publicW.Code)
+	}
+
+	badReq := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(`{"owner_id":"user-alice","prompt":"bad","metadata":{"agent_profile":"super"}}`))
+	badReq.Header.Set("X-Internal-Caller", "true")
+	badW := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(badW, badReq)
+	if badW.Code != http.StatusBadRequest {
+		t.Fatalf("super internal runtime status = %d, want 400; body=%s", badW.Code, badW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/runs", strings.NewReader(body))
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalRunSubmission(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("internal runtime status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	var resp runStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode internal run response: %v", err)
+	}
+	if resp.RunID == "" || resp.AgentProfile != AgentProfileCoSuper || resp.OwnerID != "user-alice" {
+		t.Fatalf("unexpected internal run response: %+v", resp)
+	}
+
+	rec, err := rt.Store().GetRun(context.Background(), resp.RunID)
+	if err != nil {
+		t.Fatalf("get internal run: %v", err)
+	}
+	if metadataStringValue(rec.Metadata, "request_source") != "internal_worker_vm" {
+		t.Fatalf("request_source = %q, want internal_worker_vm", metadataStringValue(rec.Metadata, "request_source"))
+	}
+}
+
 func TestHandleRunSubmissionReturnsStableHandle(t *testing.T) {
 	// VAL-RUNTIME-003: accepted run submission returns a stable handle.
 	_, handler := testAPISetup(t)
