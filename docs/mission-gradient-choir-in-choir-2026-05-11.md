@@ -396,7 +396,7 @@ Baseline evidence, 2026-05-12 UTC:
 - [x] Make vmctl ownership durable or reattachable across service restart.
 - [ ] Ensure active desktop VM file root and runtime state live on persistent
       disk, not `/tmp`.
-- [ ] Ensure deploy/restart does not kill or replace active VMs unless explicitly
+- [x] Ensure deploy/restart does not kill or replace active VMs unless explicitly
       requested.
 - [ ] Make background VM fork/snapshot state explicit and inspectable.
 - [ ] Prove a file created in the active desktop persists across browser reload
@@ -474,10 +474,15 @@ Unresolved Section 1 gaps:
   `data.img`, persisted `ownerships.json`, `firecracker.pid`, `KillMode=process`,
   `VMCTL_STOP_MANAGED_ON_EXIT=false`, and journal line
   `vmmanager: reattached VM vm-bb1b05195c9186fa06f22455522e81ff`.
-- Deploy-with-active-VM survival still needs a separate proof. The first deploy
-  of this patch had no ownerships afterward because the old service semantics
-  still owned that transition; a subsequent deploy with the new service config
-  and an already-active VM should be used to close this gap.
+- Deploy-with-active-VM survival passed on Node B after rerunning GitHub Actions
+  workflow `25712214504`, deploy job `75495916606`. Staging deployed commit
+  `3ec211fc4e2f7cfe58cb848b5ed242c2e2d5f720`; the same proof user still mapped
+  to VM `vm-bb1b05195c9186fa06f22455522e81ff`, state `active`, epoch `1`, and
+  sandbox URL `http://172.1.0.2:8085`; the proof file still returned
+  `mission restart proof 2026-05-12T03:59:00Z`. Node B `vmctl` health reported
+  `active_vms=1` and `total_ownerships=1`. Journal evidence showed vmctl
+  stopping only its health checker, loading one persisted ownership, and
+  reattaching the same Firecracker PID-backed VM after deployment.
 - Existing deployed VMs with 64 MiB `data.img` should expand on next boot after
   this patch deploys, but this has not been verified on Node B.
 - Invariant-level gap narrowed but not closed: VM-backed `fork_desktop` now
@@ -489,12 +494,10 @@ Unresolved Section 1 gaps:
 
 Section 1 decision point:
 
-- Keeping active VMs live through vmctl deploy/restart now has a local design:
-  systemd process-only kill mode, no managed-VM stop on vmctl exit, PID files,
-  and health-gated reattach. The remaining proof must happen on Node B after
-  deploy: create a file in an active VM, restart/deploy vmctl, confirm the same
-  VM id remains active without guest reboot, and confirm the file is still
-  present.
+- Keeping active VMs live through vmctl deploy/restart is now proven on Node B
+  for one active VM: systemd process-only kill mode, no managed-VM stop on vmctl
+  exit, PID files, and health-gated reattach preserved the same VM id and file
+  content across both direct vmctl restart and a GitHub Actions staging deploy.
 - Forking a currently active VM disk requires a quiesced snapshot strategy. The
   current truthful implementation refuses live disk copies. Candidate paths:
   stop/clone/resume with visible user disruption, guest-assisted sync/freeze
