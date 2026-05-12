@@ -537,16 +537,48 @@ Section 1 decision point:
 
 ### 2. GitHub Shipper Boundary
 
-- [ ] Design or implement the narrow shipper boundary for background VM commits.
+- [x] Design or implement the narrow shipper boundary for background VM commits.
 - [ ] Ensure worker/background VMs do not need broad GitHub credentials.
 - [ ] Export a background VM branch as a bundle or patchset plus manifest.
-- [ ] Import the bundle/patchset into a clean checkout.
-- [ ] Rerun required checks in the shipper context.
+- [x] Import the bundle/patchset into a clean checkout.
+- [x] Rerun required checks in the shipper context.
 - [ ] Push an `agent/<run-id>/<slug>` branch through the approved GitHub
       credential boundary.
 - [ ] Create or update PR metadata with run id, trace id, VM id, base/head SHA,
       verification manifest, and residual risks.
 - [ ] Confirm GitHub Actions runs on the pushed branch.
+
+Section 2 local progress, 2026-05-12 UTC:
+
+- Added a platform-side shipper boundary in `internal/shipper` and
+  `cmd/shipper`. It imports a worker-produced patch file or sorted
+  `.patch`/`.diff` directory plus a verification manifest into a clean checkout
+  at an expected `base_sha`, creates a safe `agent/<run-id>/<slug>` branch,
+  applies the patchset with `git apply --index`, commits with Choir provenance,
+  runs configured checks, writes a JSON import report, and optionally pushes
+  through the platform checkout's configured remote.
+- The manifest requires `run_id`, `trace_id`, `vm_id`, and `base_sha`; optional
+  fields include `snapshot_id`, `expected_head_sha`, verification results,
+  residual risks, summary, and generation metadata. Commit messages include
+  `Choir-Run-ID`, `Choir-Trace-ID`, `Choir-VM-ID`, and `Choir-Base-SHA`.
+- Focused tests passed:
+  `go test ./internal/shipper ./cmd/shipper`. Coverage includes clean-checkout
+  import, branch safety, provenance commit body, report writing, configured
+  checks, and dirty-repo rejection.
+- CLI proof passed against a temporary clean git repository:
+  `go run ./cmd/shipper import --repo <tmp-repo> --manifest <manifest.json> --patchset <change.patch> --branch agent/run-proof/shipper-proof --check "grep -q 'shipper proof' README.md" --report <report.json>`.
+  The resulting report had status `imported`, branch
+  `agent/run-proof/shipper-proof`, a new head SHA, and a passing check.
+
+Unresolved Section 2 gaps:
+
+- No deployed product path exports a background VM branch/patchset plus manifest
+  yet. The shipper import side exists; the worker export side is still missing.
+- The optional `--push` path is implemented but not yet verified against
+  GitHub, and no PR metadata/CI proof has been produced from a generated branch.
+- This boundary keeps GitHub credentials out of worker VMs by design, but that
+  is not yet enforced end to end because workers do not yet produce/import
+  patchsets through this boundary from the deployed workflow.
 
 ### 3. Product Orchestration Proof
 
