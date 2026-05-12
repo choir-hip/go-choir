@@ -59,7 +59,8 @@ function provenanceRungs(item) {
   return (item.provenance?.rungs || []).map((rung) => rung.name);
 }
 
-test('prompt bar routes bare content references and product APIs record extraction provenance', async ({ page }) => {
+test('prompt bar routes bare content references and product APIs record extraction provenance', async ({ page, authenticator }) => {
+  expect(authenticator.authenticatorId).toBeTruthy();
   const forbiddenRequests = [];
   page.on('request', (request) => {
     const url = new URL(request.url());

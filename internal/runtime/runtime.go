@@ -345,6 +345,58 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 	return rec, nil
 }
 
+// completePromptBarDecisionRun records a server-owned conductor decision that
+// does not require model inference. This is used for deterministic product
+// routes such as bare content references, where routing through a provider
+// would add latency and make display-app opening depend on LLM availability.
+func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, ownerID string, metadata map[string]any, decision conductorDecision) (*types.RunRecord, error) {
+	now := time.Now().UTC()
+	runID := uuid.New().String()
+	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
+	metadata = ensureTrajectoryID(metadata, nil, runID)
+	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
+	if strings.TrimSpace(agentRec.ChannelID) == "" {
+		agentRec.ChannelID = runID
+	}
+	agentRec.CreatedAt = now
+	agentRec.UpdatedAt = now
+	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
+		return nil, fmt.Errorf("persist agent: %w", err)
+	}
+
+	decision = fillConductorDecisionFromRun(&types.RunRecord{RunID: runID, Metadata: metadata}, decision)
+	result, err := json.Marshal(decision)
+	if err != nil {
+		return nil, fmt.Errorf("marshal conductor decision: %w", err)
+	}
+	rec := &types.RunRecord{
+		RunID:        runID,
+		AgentID:      agentRec.AgentID,
+		ChannelID:    agentRec.ChannelID,
+		AgentProfile: agentRec.Profile,
+		AgentRole:    agentRec.Role,
+		OwnerID:      ownerID,
+		SandboxID:    rt.cfg.SandboxID,
+		State:        types.RunCompleted,
+		Prompt:       prompt,
+		Result:       string(result),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata:     metadata,
+	}
+	if err := rt.store.CreateRun(ctx, *rec); err != nil {
+		return nil, fmt.Errorf("persist run: %w", err)
+	}
+
+	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": len(prompt)})
+	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, promptLenPayload)
+	rt.emitEvent(ctx, rec, types.EventRunStarted, events.CauseTaskLifecycle, json.RawMessage(`{"route":"server_content_reference"}`))
+	completedPayload, _ := json.Marshal(map[string]any{"route": "server_content_reference", "decision": decision})
+	rt.emitEvent(ctx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, completedPayload)
+	return rec, nil
+}
+
 // GetRun returns a run by ID, scoped to the given owner. If the run does
 // not exist or does not belong to the owner, it returns ErrNotFound
 // (VAL-RUNTIME-006: caller-scoped).

@@ -295,13 +295,25 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		metadata["content_app_hint"] = contentAppHint
 	}
 
-	if _, err := h.rt.EnsurePersistentSuperAgent(r.Context(), ownerID); err != nil {
-		log.Printf("runtime api: ensure persistent super: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
-		return
+	var rec *types.RunRecord
+	if contentSourceURL != "" {
+		decision := conductorDecision{
+			Action:    "open_app",
+			App:       contentAppHint,
+			Title:     buildInitialVTextTitle(text, ""),
+			SourceURL: contentSourceURL,
+			MediaType: contentMediaType,
+			AppHint:   contentAppHint,
+		}
+		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
+	} else {
+		if _, err := h.rt.EnsurePersistentSuperAgent(r.Context(), ownerID); err != nil {
+			log.Printf("runtime api: ensure persistent super: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
+			return
+		}
+		rec, err = h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
 	}
-
-	rec, err := h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
 	if err != nil {
 		log.Printf("runtime api: submit prompt-bar intent: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
