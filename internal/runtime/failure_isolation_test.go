@@ -603,27 +603,66 @@ func TestFailureIsolation_ConcurrentFailuresAndSuccesses(t *testing.T) {
 		}
 	}
 
-	// Verify parent channel has both results and errors.
-	msgs, _, err := rt.ChannelRead(parentID, 0)
-	if err != nil {
-		t.Fatalf("parent channel read: %v", err)
-	}
-
-	resultCount := 0
-	errorCount := 0
-	for _, msg := range msgs {
-		if msg.Role == "result" {
-			resultCount++
-		} else if msg.Role == "error" {
-			errorCount++
+	expectedRoleByChild := make(map[string]string, len(ids))
+	for i, id := range ids {
+		if strings.Contains(objectives[i], "fail") {
+			expectedRoleByChild[id] = "error"
+		} else {
+			expectedRoleByChild[id] = "result"
 		}
 	}
 
-	if resultCount != 3 {
-		t.Errorf("result messages: got %d, want 3", resultCount)
+	// Verify parent channel has exactly one terminal notification per child.
+	// Run state is committed before parent notification is posted, so poll for
+	// the channel/event-log condition rather than assuming terminal state means
+	// delivery is already visible.
+	var resultCountByChild map[string]int
+	var errorCountByChild map[string]int
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs, _, err := rt.ChannelRead(parentID, 0)
+		if err != nil {
+			t.Fatalf("parent channel read: %v", err)
+		}
+		resultCountByChild = make(map[string]int)
+		errorCountByChild = make(map[string]int)
+		for _, msg := range msgs {
+			if _, ok := expectedRoleByChild[msg.From]; !ok {
+				continue
+			}
+			switch msg.Role {
+			case "result":
+				resultCountByChild[msg.From]++
+			case "error":
+				errorCountByChild[msg.From]++
+			}
+		}
+		ready := true
+		for _, id := range ids {
+			switch expectedRoleByChild[id] {
+			case "result":
+				ready = ready && resultCountByChild[id] == 1 && errorCountByChild[id] == 0
+			case "error":
+				ready = ready && errorCountByChild[id] == 1 && resultCountByChild[id] == 0
+			}
+		}
+		if ready || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if errorCount != 2 {
-		t.Errorf("error messages: got %d, want 2", errorCount)
+
+	for _, id := range ids {
+		switch expectedRoleByChild[id] {
+		case "result":
+			if resultCountByChild[id] != 1 || errorCountByChild[id] != 0 {
+				t.Errorf("child %s result/error messages: got %d/%d, want 1/0", id, resultCountByChild[id], errorCountByChild[id])
+			}
+		case "error":
+			if errorCountByChild[id] != 1 || resultCountByChild[id] != 0 {
+				t.Errorf("child %s error/result messages: got %d/%d, want 1/0", id, errorCountByChild[id], resultCountByChild[id])
+			}
+		}
 	}
 }
 

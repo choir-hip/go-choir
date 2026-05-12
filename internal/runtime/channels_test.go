@@ -63,6 +63,37 @@ func TestAgentChannelPostSetsTimestamp(t *testing.T) {
 	}
 }
 
+func TestAgentChannelLoadSkipsAlreadyMirroredDurableSequence(t *testing.T) {
+	ch := NewAgentChannel()
+
+	if _, err := ch.Post(ChannelMessage{
+		Seq:     7,
+		From:    "child-1",
+		Role:    "result",
+		Content: "done",
+	}); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	ch.Load([]ChannelMessage{{
+		Seq:     7,
+		From:    "child-1",
+		Role:    "result",
+		Content: "done",
+	}})
+
+	msgs, cursor, err := ch.ReadSince(0)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("messages: got %d, want 1", len(msgs))
+	}
+	if cursor != 1 {
+		t.Fatalf("cursor: got %d, want 1", cursor)
+	}
+}
+
 func TestAgentChannelPostClosed(t *testing.T) {
 	ch := NewAgentChannel()
 	ch.Close()

@@ -38,6 +38,8 @@ type AgentChannel struct {
 	messages []ChannelMessage
 	closed   bool
 	waiters  []chan struct{}
+	seenSeq  map[int64]struct{}
+	seqHead  int64
 }
 
 // Load appends already-persisted messages into the in-memory mirror without waking waiters.
@@ -46,7 +48,17 @@ func (c *AgentChannel) Load(messages []ChannelMessage) {
 		return
 	}
 	c.mu.Lock()
-	c.messages = append(c.messages, cloneChannelMessages(messages)...)
+	c.ensureSeqIndexLocked()
+	for _, message := range messages {
+		if message.Seq > 0 {
+			if _, ok := c.seenSeq[message.Seq]; ok {
+				continue
+			}
+			c.seenSeq[message.Seq] = struct{}{}
+			c.advanceSeqHeadLocked()
+		}
+		c.messages = append(c.messages, message)
+	}
 	c.mu.Unlock()
 }
 
@@ -78,6 +90,16 @@ func (c *AgentChannel) Post(message ChannelMessage) (uint64, error) {
 	if c.closed {
 		c.mu.Unlock()
 		return 0, ErrChannelClosed
+	}
+	c.ensureSeqIndexLocked()
+	if message.Seq > 0 {
+		if _, ok := c.seenSeq[message.Seq]; ok {
+			cursor := uint64(len(c.messages))
+			c.mu.Unlock()
+			return cursor, nil
+		}
+		c.seenSeq[message.Seq] = struct{}{}
+		c.advanceSeqHeadLocked()
 	}
 	c.messages = append(c.messages, message)
 	cursor := uint64(len(c.messages))
@@ -138,6 +160,37 @@ func (c *AgentChannel) Wait(ctx context.Context, cursor uint64) ([]ChannelMessag
 		case <-waitCh:
 			// New message posted — loop back to check.
 		}
+	}
+}
+
+// DurableCursor returns the highest contiguous durable sequence mirrored in this channel.
+func (c *AgentChannel) DurableCursor() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.seqHead
+}
+
+func (c *AgentChannel) ensureSeqIndexLocked() {
+	if c.seenSeq != nil {
+		return
+	}
+	c.seenSeq = make(map[int64]struct{}, len(c.messages))
+	for _, message := range c.messages {
+		if message.Seq == 0 {
+			continue
+		}
+		c.seenSeq[message.Seq] = struct{}{}
+		c.advanceSeqHeadLocked()
+	}
+}
+
+func (c *AgentChannel) advanceSeqHeadLocked() {
+	for {
+		next := c.seqHead + 1
+		if _, ok := c.seenSeq[next]; !ok {
+			return
+		}
+		c.seqHead = next
 	}
 }
 
@@ -278,7 +331,7 @@ func cloneChannelMessages(messages []ChannelMessage) []ChannelMessage {
 // --- Channel-aware Runtime integration ---
 
 func (rt *Runtime) hydrateChannel(ctx context.Context, channelID string, ch *AgentChannel) error {
-	messages, err := rt.store.ListChannelMessages(ctx, stringFromToolContext(ctx, toolCtxOwnerID), channelID, int64(ch.Cursor()), 500)
+	messages, err := rt.store.ListChannelMessages(ctx, stringFromToolContext(ctx, toolCtxOwnerID), channelID, ch.DurableCursor(), 500)
 	if err != nil {
 		return err
 	}
