@@ -539,7 +539,7 @@ Section 1 decision point:
 
 - [x] Design or implement the narrow shipper boundary for background VM commits.
 - [x] Ensure worker/background VMs do not need broad GitHub credentials.
-- [ ] Export a background VM branch as a bundle or patchset plus manifest.
+- [x] Export a background VM branch as a bundle or patchset plus manifest.
 - [x] Import the bundle/patchset into a clean checkout.
 - [x] Rerun required checks in the shipper context.
 - [x] Push an `agent/<run-id>/<slug>` branch through the approved GitHub
@@ -669,21 +669,71 @@ Section 2 local progress, 2026-05-12 UTC:
   exports a committed repo patchset with no GitHub push capability.
 - Full local verification after adding the worker runtime bridge passed with
   local ICU flags: `go test ./...`.
+- Worker runtime bridge commit `22043676fbd4fb9df68cef567e1762f63fbbadf4`
+  passed GitHub Actions workflow `25715221014`: frontend build, Go
+  vet/test/build, and staging deploy. Staging health reported deployed commit
+  `22043676fbd4fb9df68cef567e1762f63fbbadf4`, deployed at
+  `2026-05-12T05:28:17Z`.
+- The first deployed real-worker export attempt exposed a real environment gap:
+  a fresh worker VM `vm-6298a8a17f22063a0ca1e7ec4895ef34` could run
+  `git --version` through the `bash` tool, but `export_patchset` failed because
+  direct Go `exec.Command("git", ...)` did not inherit a service `PATH`
+  containing `git`. That proved adding packages to the guest image was
+  necessary but not sufficient for direct tool execs.
+- Guest image commit `d6206f1c5574e0756c1528266baed1e79761c32a` added `git`
+  and `gnugrep` to the sandbox VM package set and passed GitHub Actions
+  workflow `25715750400`, but the deployed proof still failed because the
+  sandbox service environment was missing the direct exec `PATH`.
+- Service PATH commit `08ad40a098670ea746debd848d79810d590418d7` set an
+  explicit `go-choir-sandbox` guest service `PATH` including `git`, `grep`,
+  `sed`, shell, coreutils, and related utilities. Nix evaluation proved the
+  service environment included `git-2.53.0`; `git diff --check` passed.
+- Commit `08ad40a098670ea746debd848d79810d590418d7` passed GitHub Actions
+  workflow `25716186696`: frontend build job `75506564185`, Go vet/test/build
+  job `75506564186`, and staging deploy job `75506766414`. Staging health
+  reported proxy and sandbox deployed commit
+  `08ad40a098670ea746debd848d79810d590418d7`, deployed at
+  `2026-05-12T05:54:11Z`.
+- The same deploy revalidated Section 1 VM reattach. Proof user
+  `mission-restart-1778558340` still mapped to active VM
+  `vm-bb1b05195c9186fa06f22455522e81ff`, sandbox URL
+  `http://172.3.0.2:8085`, epoch `1`, and the proof file still returned
+  `mission restart proof 2026-05-12T03:59:00Z`.
+- Deployed real-worker export proof passed after the service `PATH` fix. vmctl
+  created worker VM `vm-998ed4064f822af12e2f1a6faf01a89d`, worker id
+  `worker-5bbc3f0d35502e8a`, sandbox URL `http://172.6.0.2:8085`, trajectory
+  `trace-worker-export-path-20260512060024`.
+- The worker internal co-super run
+  `13c4d1fc-5a02-4265-87bc-f8cbe7b93aab` created a repo under the worker files
+  root, committed base SHA `00fb020ddc3b70ff605f6fa310ed117a1dd8a840`,
+  committed worker head `470966f07acad294bb07a1580fc606fb003a7f6d`, verified
+  `grep -q mission-worker-export-service-path-proof-20260512 README.md`, and
+  called `export_patchset`.
+- The event log contains successful `export_patchset` tool results with
+  `status="exported"` and `github_push=false`. The manifest is available inside
+  the worker VM at `/mnt/persistent/files/exports/service-path-proof/manifest.json`
+  and the patchset at `/mnt/persistent/files/exports/service-path-proof/changes.patch`.
+  The manifest records run id
+  `13c4d1fc-5a02-4265-87bc-f8cbe7b93aab`, trace id
+  `trace-worker-export-path-20260512060024`, VM id
+  `vm-998ed4064f822af12e2f1a6faf01a89d`, snapshot id
+  `snapshot-service-path-proof-20260512`, base SHA
+  `00fb020ddc3b70ff605f6fa310ed117a1dd8a840`, expected head SHA
+  `470966f07acad294bb07a1580fc606fb003a7f6d`, and passed verification source
+  `shipper export`.
+- The exported patch contains exactly the proof delta:
+  `+mission-worker-export-service-path-proof-20260512` in `README.md`.
 
-Unresolved Section 2 gaps:
+Residual Section 2 gaps:
 
-- No deployed product path exports a background VM branch/patchset plus manifest
-  yet. The worker export tool, platform shipper import mechanics, and
-  service-to-service worker runtime bridge exist locally, but the bridge has
-  not yet been deployed and proven against real Firecracker worker VMs.
 - The optional `--push` path is verified against GitHub through a platform
-  checkout, and PR CI is verified. This is still a low-resolution proof, not a
-  deployed Choir-in-Choir product-path export.
+  checkout, PR CI is verified, and the worker VM export is now verified on a
+  real deployed Firecracker worker. This still needs composition into a single
+  product-path Choir-in-Choir workflow once Section 3 orchestration is stable.
 - The worker-side export tool keeps GitHub credentials out of worker contexts
-  by design. The remaining gap is product orchestration: real background VMs
-  still need to clone or receive a repo, produce a committed branch, call
-  `export_patchset`, and hand the export artifact to the platform shipper from
-  the deployed workflow.
+  by design. The remaining gap is product orchestration: VText/super should
+  request the worker, delegate the coding task, collect the export, and hand it
+  to the platform shipper without manual internal API calls.
 
 ### 3. Product Orchestration Proof
 
