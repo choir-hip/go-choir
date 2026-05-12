@@ -749,7 +749,7 @@ Residual Section 2 gaps:
       stats appear in Trace.
 - [x] Verify VText consumed worker updates and produced full current-state
       document revisions.
-- [ ] Verify super/cosuper work happens in background VM context for mutable code
+- [x] Verify super/cosuper work happens in background VM context for mutable code
       or filesystem changes.
 
 Section 3 deployed proof, 2026-05-12 UTC:
@@ -795,14 +795,54 @@ Section 3 deployed proof, 2026-05-12 UTC:
   checks, `PASS implements automaton step logic`, and
   `Verification passed for REAL_VTEXT_DEMO_1778566828334`.
 
-Residual Section 3 gap:
+Section 3 background worker proof, 2026-05-12 UTC:
 
-- This proves deployed prompt bar -> conductor -> VText -> researcher -> super
-  -> VText document revision with real search, generated files, Trace evidence,
-  and Node verification. It does not yet prove the stronger invariant that
-  mutable code/filesystem work is performed in a background VM and exported
-  through the shipper path. The generated artifact was product-visible in the
-  user's Files app, but the proof did not show background-VM mutable execution.
+- Commit `a9c6e7ce886612e1d1b498c288a43396a0090b45` passed GitHub Actions
+  workflow `25718378258`: frontend build, Go vet/test/build, and staging
+  deploy. Staging health reported proxy and sandbox deployed commit
+  `a9c6e7ce886612e1d1b498c288a43396a0090b45`, deployed at
+  `2026-05-12T06:51:18Z`.
+- Deployed background-worker product proof passed:
+  `cd frontend && GO_CHOIR_RUN_BACKGROUND_WORKER_DEMO=1 GO_CHOIR_WORKER_DEMO_BASE_URL=https://draft.choir-ip.com npx playwright test tests/vtext-background-worker-demo.spec.js --project=chromium --reporter=line`
+  passed 1/1 in 2.4 minutes.
+- Evidence artifacts:
+  `frontend/test-results/vtext-background-worker-de-af644-background-worker-VM-export-chromium/video.webm`,
+  `frontend/test-results/vtext-background-worker-de-af644-background-worker-VM-export-chromium/trace.zip`,
+  and
+  `frontend/test-results/vtext-background-worker-de-af644-background-worker-VM-export-chromium/test-finished-1.png`.
+- The proof registered a fresh staging browser user, submitted through
+  `/api/prompt-bar`, and used submission/trajectory
+  `a02e982c-f956-4ce9-a317-c4e9bada3901`. The browser request monitor observed
+  no forbidden product-proof calls to `/internal/*`, `/api/agent/*`,
+  `/api/prompts*`, `/api/test/*`, or `/api/events`.
+- The proof marker was `BACKGROUND_WORKER_DEMO_1778568984055`. Trace showed
+  successful `request_worker_vm` results returning worker handles such as
+  `worker-730a4d5ec28307a9` with VM
+  `vm-0676fe81a8213d39aaa377576a383539`, machine class `worker-small`, and a
+  tap-subnet sandbox URL.
+- Trace showed successful `delegate_worker_vm` results with exported patchsets.
+  The selected final VText export reported worker
+  `worker-b40c5bea04d58af0`, VM
+  `vm-0bd9bf690b505d5a282609b8d2a6ac00`, manifest path
+  `/mnt/persistent/files/export_out/manifest.json`, patchset path
+  `/mnt/persistent/files/export_out/changes.patch`, base SHA
+  `ae4c6c5c73229b5a84cd250b0d79ec177a23ce71`, worker head SHA
+  `ed2b4ce82e36504bee6fe23bc4cb8dd85d926464`, and `github_push=false`.
+- The final canonical VText revision had `metadata.source=edit_vtext` and
+  reported that `README.md` was created in the background worker VM, committed
+  in git, verified with
+  `grep -n 'BACKGROUND_WORKER_DEMO_1778568984055' README.md`, and exported as a
+  patchset. The proof therefore covers deployed prompt bar -> conductor -> VText
+  -> super -> background worker VM -> patchset export -> VText current-state
+  document without manual browser orchestration.
+
+Residual Section 3 follow-up:
+
+- The background-worker proof exposed duplicate addressed deliveries: the
+  worker completed four exports before VText selected the final one. That does
+  not invalidate the background-VM boundary proof, but it is a real efficiency
+  and idempotency issue. Future worker delegation should dedupe addressed
+  deliveries or make repeated worker-update consumption idempotent.
 
 ### 4. Desktop and VText UX
 
