@@ -19,11 +19,18 @@
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
-    if (!contentId || item) return;
+    if (item) return;
+    if (!contentId && !(appHint === 'podcast' && sourceUrl)) return;
     loading = true;
     error = '';
     try {
-      const res = await fetchWithRenewal(`/api/content/items/${encodeURIComponent(contentId)}`);
+      const res = contentId
+        ? await fetchWithRenewal(`/api/content/items/${encodeURIComponent(contentId)}`)
+        : await fetchWithRenewal('/api/content/import-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: sourceUrl, query: title || sourceUrl }),
+          });
       if (!res.ok) {
         if (res.status === 401) {
           dispatch('authexpired');
@@ -68,6 +75,32 @@
   $: embedUrl = mediaType === 'video/youtube' || /youtube\\.com|youtu\\.be/.test(sourceUrl)
     ? youtubeEmbedURL(sourceUrl)
     : '';
+  $: podcastEpisodes = appHint === 'podcast' && item?.text_content
+    ? parsePodcastEpisodes(item.text_content)
+    : [];
+
+  function textFromFirst(parent, tagName) {
+    return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
+  }
+
+  function parsePodcastEpisodes(xmlText) {
+    try {
+      const parsed = new DOMParser().parseFromString(xmlText, 'application/xml');
+      if (parsed.querySelector('parsererror')) return [];
+      return Array.from(parsed.getElementsByTagName('item')).slice(0, 24).map((episode) => {
+        const enclosure = episode.getElementsByTagName('enclosure')[0];
+        const mediaContent = episode.getElementsByTagName('media:content')[0];
+        return {
+          title: textFromFirst(episode, 'title') || 'Untitled episode',
+          description: textFromFirst(episode, 'description'),
+          publishedAt: textFromFirst(episode, 'pubDate'),
+          audioUrl: enclosure?.getAttribute('url') || mediaContent?.getAttribute('url') || '',
+        };
+      }).filter((episode) => episode.title || episode.audioUrl);
+    } catch (err) {
+      return [];
+    }
+  }
 
   onMount(loadContentItem);
 </script>
@@ -89,7 +122,22 @@
     <p class="error" role="alert">{error}</p>
   {:else}
     <div class="preview-shell">
-      {#if appHint === 'image' && displayUrl}
+      {#if appHint === 'podcast' && podcastEpisodes.length > 0}
+        <div class="podcast-list" data-podcast-feed>
+          {#each podcastEpisodes as episode}
+            <article class="podcast-episode" data-podcast-episode>
+              <div>
+                <h3>{episode.title}</h3>
+                {#if episode.publishedAt}<p class="episode-date">{episode.publishedAt}</p>{/if}
+                {#if episode.description}<p>{episode.description.replace(/<[^>]+>/g, '').slice(0, 420)}</p>{/if}
+              </div>
+              {#if episode.audioUrl}
+                <audio src={episode.audioUrl} controls data-podcast-audio />
+              {/if}
+            </article>
+          {/each}
+        </div>
+      {:else if appHint === 'image' && displayUrl}
         <img src={displayUrl} alt={title} />
       {:else if appHint === 'audio' && displayUrl}
         <audio src={displayUrl} controls />
@@ -196,6 +244,40 @@
   audio {
     margin: 24px;
     width: calc(100% - 48px);
+  }
+
+  .podcast-list {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .podcast-episode {
+    display: grid;
+    gap: 12px;
+    border: 1px solid rgba(120, 135, 170, 0.26);
+    border-radius: 18px;
+    padding: 16px;
+    background: rgba(12, 17, 30, 0.86);
+  }
+
+  .podcast-episode h3 {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+  }
+
+  .podcast-episode p {
+    margin: 0;
+    color: var(--choir-muted, #a8adbd);
+  }
+
+  .episode-date {
+    font-size: 0.85rem;
+  }
+
+  .podcast-episode audio {
+    margin: 0;
+    width: 100%;
   }
 
   .metadata-card {
