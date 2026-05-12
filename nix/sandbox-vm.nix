@@ -173,6 +173,22 @@ EOF
     wants = [ "network-online.target" ];
     requires = [ "go-choir-extract-cmdline.service" ];
     environment = {
+      # Direct Go exec paths (for example, git-backed export tools) do not
+      # run through an interactive shell. Give the sandbox service an explicit
+      # guest PATH so tool implementations and shell tools see the same basic
+      # runtime utilities.
+      PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
+        bash
+        coreutils
+        findutils
+        curl
+        git
+        gnugrep
+        gnused
+        systemd
+        procps
+        iproute2
+      ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
       SERVER_HOST = "0.0.0.0";
@@ -218,6 +234,7 @@ EOF
     curl
     git
     gnugrep
+    gnused
     procps
     iproute2
     bash
