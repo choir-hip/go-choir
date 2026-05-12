@@ -846,17 +846,57 @@ Residual Section 3 follow-up:
 
 ### 4. Desktop and VText UX
 
-- [ ] Make VText chrome one row on mobile and prevent controls from covering
+- [x] Make VText chrome one row on mobile and prevent controls from covering
       document text.
-- [ ] Make VText top controls fade or compact while scrolling if needed.
-- [ ] Make Markdown rendered and editable in one surface, not a permanent
+- [x] Make VText top controls fade or compact while scrolling if needed.
+- [x] Make Markdown rendered and editable in one surface, not a permanent
       read/edit mode split.
-- [ ] Prevent mobile viewport zoom in/out during prompt and document editing.
-- [ ] Make the prompt bar grow vertically for multiline input.
-- [ ] Keep sign-out/account actions quiet and menu-based.
-- [ ] Ensure VText opens to recent documents when no document is selected.
-- [ ] Ensure window geometry persists and repairs itself across viewport changes.
-- [ ] Verify with mobile, tablet, and desktop screenshots on staging.
+- [x] Prevent mobile viewport zoom in/out during prompt and document editing.
+- [x] Make the prompt bar grow vertically for multiline input.
+- [x] Keep sign-out/account actions quiet and menu-based.
+- [x] Ensure VText opens to recent documents when no document is selected.
+- [x] Ensure window geometry persists and repairs itself across viewport changes.
+- [x] Verify with mobile, tablet, and desktop screenshots on staging.
+
+Section 4 deployed UX proof, 2026-05-12 UTC:
+
+- Added `frontend/tests/vtext-responsive-ux.spec.js` as a staging-capable proof
+  for the VText/mobile desktop UX contract.
+- Staging UX proof passed:
+  `cd frontend && GO_CHOIR_UX_BASE_URL=https://draft.choir-ip.com npx playwright test tests/vtext-responsive-ux.spec.js --project=chromium --reporter=line`
+  passed 2/2 in 28.0 seconds.
+- `npm run build` passed after the test addition, with the existing
+  `ghostty-web` large chunk warning.
+- Mobile proof verified the viewport meta contains `maximum-scale=1` and
+  `interactive-widget=resizes-content`, VText opens nearly full-screen at
+  390x844, the VText toolbar is one row and does not overlap document text,
+  the document surface is `contenteditable`, Markdown renders in the same
+  editable surface, no permanent `Read` or `Edit` mode buttons exist, toolbar
+  opacity fades while reading/scrolling, the prompt textarea grows for multiple
+  lines, and sign-out is absent until the desktop menu opens.
+- Mobile reload proof verified VText window geometry survives reload and a
+  no-document VText window returns to the recent-documents landing instead of a
+  blank editor.
+- Tablet and desktop proof verified VText default window geometry is large
+  enough for real reading/writing and keeps the editable document below the
+  controls.
+- Evidence artifacts:
+  `frontend/test-results/vtext-responsive-ux-mobile-69633-rkdown-and-quiet-account-UI-chromium/mobile-vtext.png`,
+  `frontend/test-results/vtext-responsive-ux-mobile-69633-rkdown-and-quiet-account-UI-chromium/video.webm`,
+  `frontend/test-results/vtext-responsive-ux-mobile-69633-rkdown-and-quiet-account-UI-chromium/trace.zip`,
+  `frontend/test-results/vtext-responsive-ux-VText--471fe-large-on-tablet-and-desktop-chromium/tablet-vtext.png`,
+  `frontend/test-results/vtext-responsive-ux-VText--471fe-large-on-tablet-and-desktop-chromium/desktop-vtext.png`,
+  `frontend/test-results/vtext-responsive-ux-VText--471fe-large-on-tablet-and-desktop-chromium/video.webm`,
+  and
+  `frontend/test-results/vtext-responsive-ux-VText--471fe-large-on-tablet-and-desktop-chromium/trace.zip`.
+
+Residual Section 4 follow-up:
+
+- A manually-created blank VText window reopens to the recent-documents landing
+  after reload because the parent desktop window context is not updated with the
+  new document id. This preserves window geometry and avoids a blank document,
+  but selected-document persistence for manual blank documents should be
+  tightened later.
 
 ### 5. Trace, Settings, and App Registry Health
 
