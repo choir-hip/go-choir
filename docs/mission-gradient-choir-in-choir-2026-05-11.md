@@ -1117,15 +1117,48 @@ Section 8 evidence:
 
 ### 9. Final Proof Package
 
-- [ ] Run relevant local tests only for bootstrap code that must land locally.
-- [ ] Run deployed Playwright for prompt bar -> VText -> research -> background
+- [x] Run relevant local tests only for bootstrap code that must land locally.
+- [x] Run deployed Playwright for prompt bar -> VText -> research -> background
       VM -> shipper/GitHub/CI where implemented.
-- [ ] Capture a staging video showing a real user-facing workflow.
-- [ ] Capture Trace evidence for the same workflow.
-- [ ] Capture GitHub branch/PR/CI evidence for generated work.
-- [ ] Push any local bootstrap commits through normal reviewed Git flow.
-- [ ] Write a final report naming completed items, skipped items, residual risks,
+- [x] Capture a staging video showing a real user-facing workflow.
+- [x] Capture Trace evidence for the same workflow.
+- [x] Capture GitHub branch/PR/CI evidence for generated work.
+- [x] Push any local bootstrap commits through normal reviewed Git flow.
+- [x] Write a final report naming completed items, skipped items, residual risks,
       and invariant-level blockers.
+
+Final proof package, 2026-05-12 UTC:
+
+- Final report:
+  `docs/mission-gradient-choir-in-choir-final-report-2026-05-12.md`.
+- Recent mission commits cited by this report:
+  `46186b91628e34dd6fea3ad2278ce6e84d63f2dc`,
+  `6ef8582c6e2470cc48b44364ed93ae4e18129227`,
+  `74b42a19f922bc3ba684d18053e535be4fef61a1`,
+  `64b639e`, and `271adaf`.
+- Latest code-bearing CI/deploy proof:
+  GitHub Actions run `25727230342` passed frontend build, Go vet/test/build,
+  and staging deploy for commit
+  `74b42a19f922bc3ba684d18053e535be4fef61a1`.
+- Docs-only commit `271adaf` pushed successfully to `origin/main`; GitHub did
+  not create a run for that commit.
+- Current staging prompt-bar/content-app proof artifact:
+  `frontend/test-results/content-apps-routing-bare--cd595-nt-apps-from-the-prompt-bar-chromium/video.webm`,
+  `trace.zip`, and `test-finished-1.png`.
+- Product-path VText and background-worker proof artifacts are recorded in
+  Section 3. They cover deployed prompt bar -> conductor -> VText -> researcher
+  and super -> background worker VM -> patchset export -> VText revision, with
+  Trace evidence and staging videos.
+- Shipper/GitHub boundary proof is recorded in Section 2. Pull request #2,
+  `[agent] Shipper GitHub boundary proof`, used branch
+  `agent/run-shipper-proof-20260512/github-boundary`, head
+  `c72a763413a75398897c535f4e7e9c6f03df8bfe`, and GitHub Actions run
+  `25713919314`, whose frontend and Go checks passed.
+- Important residual gap: product-invoked background-worker shipping currently
+  proves patchset export and VText reporting, while platform shipper -> PR/CI
+  is proven as a separate boundary. The product flow does not yet automatically
+  invoke the platform shipper and emit PR/CI provenance back into the user's
+  trajectory.
 
 ## Completion Standard
 
