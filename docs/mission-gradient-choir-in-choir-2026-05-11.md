@@ -398,11 +398,11 @@ Baseline evidence, 2026-05-12 UTC:
       disk, not `/tmp`.
 - [x] Ensure deploy/restart does not kill or replace active VMs unless explicitly
       requested.
-- [ ] Make background VM fork/snapshot state explicit and inspectable.
+- [x] Make background VM fork/snapshot state explicit and inspectable.
 - [x] Prove a file created in the active desktop persists across browser reload
       and service restart.
-- [ ] Prove a background VM can be created from a known active/base snapshot.
-- [ ] Prove background VM work can be discarded without corrupting active state.
+- [x] Prove a background VM can be created from a known active/base snapshot.
+- [x] Prove background VM work can be discarded without corrupting active state.
 
 Section 1 local progress, 2026-05-12 UTC:
 
@@ -494,6 +494,23 @@ Unresolved Section 1 gaps:
   `/api/files/mission-restart-proof.txt` returned
   `mission restart proof 2026-05-12T03:59:00Z` after browser-path baseline
   reload coverage, direct vmctl restart, and GitHub Actions deploy/restart.
+- Background fork/snapshot proof passed on Node B using a hibernated source
+  snapshot. The proof VM `vm-bb1b05195c9186fa06f22455522e81ff` was hibernated
+  at epoch `1`, then forked into target desktop
+  `mission-fork-20260512T041608Z` on
+  VM `vm-03af9886dbffe4635887b8fbc45d53bd` with
+  `parent_desktop_id=primary`, `parent_vm_id=vm-bb1b05195c9186fa06f22455522e81ff`,
+  `snapshot_kind=data_img_copy`, `published=false`, and sandbox URL
+  `http://172.2.0.2:8085`. The fork read the source proof file
+  `mission restart proof 2026-05-12T03:59:00Z`, proving data-image copy
+  inheritance from the source snapshot.
+- Background discard proof passed on Node B. A fork-only file
+  `/api/files/fork-only-proof.txt` was written inside the fork. The primary VM
+  was resumed as the same VM id and epoch at `http://172.3.0.2:8085`; its
+  source proof file remained present, and the fork-only file returned `404`.
+  Removing target desktop `mission-fork-20260512T041608Z` returned `removed`;
+  a lookup for the fork returned `404`; vmctl health then reported
+  `active_vms=1` and `total_ownerships=1` with only the primary ownership.
 - Existing deployed VMs with 64 MiB `data.img` should expand on next boot after
   this patch deploys, but this has not been verified on Node B.
 - Invariant-level gap narrowed but not closed: VM-backed `fork_desktop` now
@@ -510,12 +527,13 @@ Section 1 decision point:
   exit, PID files, and health-gated reattach preserved the same VM id and file
   content across both direct vmctl restart and a GitHub Actions staging deploy.
   The same path also preserved runtime VText state across restart.
-- Forking a currently active VM disk requires a quiesced snapshot strategy. The
-  current truthful implementation refuses live disk copies. Candidate paths:
-  stop/clone/resume with visible user disruption, guest-assisted sync/freeze
-  then clone, Firecracker snapshot/block-device snapshot support, or waiting for
-  a known stopped/base snapshot. Do not reintroduce metadata-only forks as proof
-  of background coding isolation.
+- Forking from a quiesced source snapshot is proven. Forking a currently active
+  VM disk still requires a no-disruption snapshot strategy. The current truthful
+  implementation refuses live disk copies. Candidate paths: stop/clone/resume
+  with visible user disruption, guest-assisted sync/freeze then clone,
+  Firecracker snapshot/block-device snapshot support, or waiting for a known
+  stopped/base snapshot. Do not reintroduce metadata-only forks as proof of
+  background coding isolation.
 
 ### 2. GitHub Shipper Boundary
 
