@@ -83,10 +83,48 @@
     return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
   }
 
+  function stripMarkup(value) {
+    return String(value || '')
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim();
+  }
+
+  function firstTagText(source, tagName) {
+    const match = new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}>`, 'i').exec(source);
+    return stripMarkup(match?.[1] || '');
+  }
+
+  function firstAttribute(source, tagName, attrName) {
+    const tag = new RegExp(`<${tagName}\\b[^>]*>`, 'i').exec(source)?.[0] || '';
+    const attr = new RegExp(`${attrName}=["']([^"']+)["']`, 'i').exec(tag);
+    return stripMarkup(attr?.[1] || '');
+  }
+
+  function parsePodcastEpisodesLoosely(xmlText) {
+    return Array.from(String(xmlText || '').matchAll(/<item\b[\s\S]*?<\/item>/gi))
+      .slice(0, 24)
+      .map((match) => {
+        const source = match[0];
+        return {
+          title: firstTagText(source, 'title') || 'Untitled episode',
+          description: firstTagText(source, 'description'),
+          publishedAt: firstTagText(source, 'pubDate'),
+          audioUrl: firstAttribute(source, 'enclosure', 'url') || firstAttribute(source, 'media:content', 'url'),
+        };
+      })
+      .filter((episode) => episode.title || episode.audioUrl);
+  }
+
   function parsePodcastEpisodes(xmlText) {
     try {
       const parsed = new DOMParser().parseFromString(xmlText, 'application/xml');
-      if (parsed.querySelector('parsererror')) return [];
+      if (parsed.querySelector('parsererror')) return parsePodcastEpisodesLoosely(xmlText);
       return Array.from(parsed.getElementsByTagName('item')).slice(0, 24).map((episode) => {
         const enclosure = episode.getElementsByTagName('enclosure')[0];
         const mediaContent = episode.getElementsByTagName('media:content')[0];
@@ -98,7 +136,7 @@
         };
       }).filter((episode) => episode.title || episode.audioUrl);
     } catch (err) {
-      return [];
+      return parsePodcastEpisodesLoosely(xmlText);
     }
   }
 
