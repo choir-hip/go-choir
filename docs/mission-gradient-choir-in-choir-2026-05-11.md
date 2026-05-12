@@ -393,7 +393,7 @@ Baseline evidence, 2026-05-12 UTC:
 
 ### 1. VM Persistence and Background VM Motion
 
-- [ ] Make vmctl ownership durable or reattachable across service restart.
+- [x] Make vmctl ownership durable or reattachable across service restart.
 - [ ] Ensure active desktop VM file root and runtime state live on persistent
       disk, not `/tmp`.
 - [ ] Ensure deploy/restart does not kill or replace active VMs unless explicitly
@@ -465,9 +465,19 @@ Section 1 local progress, 2026-05-12 UTC:
 
 Unresolved Section 1 gaps:
 
-- This patch now includes a live-process reattach path and Node B systemd config
-  intended to preserve Firecracker children across vmctl replacement. It has not
-  yet been proven on deployed Node B with a real active user VM.
+- Deployed service-restart proof passed on Node B after commit `3b9c356`.
+  Proof user `mission-restart-1778558340` resolved to
+  VM `vm-bb1b05195c9186fa06f22455522e81ff` at
+  `http://172.1.0.2:8085`; a file written through `/api/files` survived
+  `systemctl restart go-choir-vmctl` with the same VM id, same sandbox URL,
+  active state, and identical file content. Node B evidence: 2.0 GiB
+  `data.img`, persisted `ownerships.json`, `firecracker.pid`, `KillMode=process`,
+  `VMCTL_STOP_MANAGED_ON_EXIT=false`, and journal line
+  `vmmanager: reattached VM vm-bb1b05195c9186fa06f22455522e81ff`.
+- Deploy-with-active-VM survival still needs a separate proof. The first deploy
+  of this patch had no ownerships afterward because the old service semantics
+  still owned that transition; a subsequent deploy with the new service config
+  and an already-active VM should be used to close this gap.
 - Existing deployed VMs with 64 MiB `data.img` should expand on next boot after
   this patch deploys, but this has not been verified on Node B.
 - Invariant-level gap narrowed but not closed: VM-backed `fork_desktop` now
