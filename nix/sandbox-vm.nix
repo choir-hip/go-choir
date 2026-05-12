@@ -216,6 +216,8 @@ EOF
   environment.systemPackages = with pkgs; [
     coreutils
     curl
+    git
+    gnugrep
     procps
     iproute2
     bash
