@@ -394,12 +394,12 @@ Baseline evidence, 2026-05-12 UTC:
 ### 1. VM Persistence and Background VM Motion
 
 - [x] Make vmctl ownership durable or reattachable across service restart.
-- [ ] Ensure active desktop VM file root and runtime state live on persistent
+- [x] Ensure active desktop VM file root and runtime state live on persistent
       disk, not `/tmp`.
 - [x] Ensure deploy/restart does not kill or replace active VMs unless explicitly
       requested.
 - [ ] Make background VM fork/snapshot state explicit and inspectable.
-- [ ] Prove a file created in the active desktop persists across browser reload
+- [x] Prove a file created in the active desktop persists across browser reload
       and service restart.
 - [ ] Prove a background VM can be created from a known active/base snapshot.
 - [ ] Prove background VM work can be discarded without corrupting active state.
@@ -483,6 +483,17 @@ Unresolved Section 1 gaps:
   `active_vms=1` and `total_ownerships=1`. Journal evidence showed vmctl
   stopping only its health checker, loading one persisted ownership, and
   reattaching the same Firecracker PID-backed VM after deployment.
+- Active VM runtime state persistence passed on Node B using the same proof VM.
+  Created VText document `bb2b1cbe-9793-424d-adc8-3caaf47ff90a` and revision
+  `b70d6c59-2cec-4da4-b7fe-fdcb46d6a9da` with content
+  `runtime persistence proof 2026-05-12T04:13:02Z`, restarted
+  `go-choir-vmctl`, then read back the same document and revision from the same
+  VM `vm-bb1b05195c9186fa06f22455522e81ff`, same sandbox URL
+  `http://172.1.0.2:8085`, state `active`, epoch `1`.
+- Active VM file persistence passed on Node B using the same proof VM. The file
+  `/api/files/mission-restart-proof.txt` returned
+  `mission restart proof 2026-05-12T03:59:00Z` after browser-path baseline
+  reload coverage, direct vmctl restart, and GitHub Actions deploy/restart.
 - Existing deployed VMs with 64 MiB `data.img` should expand on next boot after
   this patch deploys, but this has not been verified on Node B.
 - Invariant-level gap narrowed but not closed: VM-backed `fork_desktop` now
@@ -498,6 +509,7 @@ Section 1 decision point:
   for one active VM: systemd process-only kill mode, no managed-VM stop on vmctl
   exit, PID files, and health-gated reattach preserved the same VM id and file
   content across both direct vmctl restart and a GitHub Actions staging deploy.
+  The same path also preserved runtime VText state across restart.
 - Forking a currently active VM disk requires a quiesced snapshot strategy. The
   current truthful implementation refuses live disk copies. Candidate paths:
   stop/clone/resume with visible user disruption, guest-assisted sync/freeze
