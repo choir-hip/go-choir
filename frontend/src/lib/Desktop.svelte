@@ -53,6 +53,7 @@
     setWindows,
     setIconPositions,
     getDefaultIconPositions,
+    getAppIcon,
   } from './stores/desktop.js';
 
   export let currentUser = null;
@@ -104,7 +105,7 @@
             windowId: w.window_id,
             appId: w.app_id,
             title: w.title,
-            icon: getIconForApp(w.app_id),
+            icon: getAppIcon(w.app_id),
             x: w.geometry?.x ?? 100,
             y: w.geometry?.y ?? 100,
             width: w.geometry?.width ?? 600,
@@ -126,18 +127,6 @@
       }
     }
     stateLoaded = true;
-  }
-
-  function getIconForApp(appId) {
-    const icons = {
-      files: '📁',
-      browser: '🌐',
-      terminal: '💻',
-      settings: '⚙️',
-      vtext: '📝',
-      trace: '🔎',
-    };
-    return icons[appId] || '📱';
   }
 
   function delay(ms) {

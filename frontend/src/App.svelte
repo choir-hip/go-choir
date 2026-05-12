@@ -24,6 +24,7 @@
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage } from './lib/auth.js';
+  import { DEFAULT_THEME, applyThemeToElement } from './lib/theme.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in'} */
   let authState = 'checking';
@@ -118,6 +119,7 @@
 
   import { onMount } from 'svelte';
   onMount(() => {
+    applyThemeToElement(document.documentElement, DEFAULT_THEME);
     checkSession();
 
     // Prevent bfcache from resurrecting an authenticated shell after
@@ -152,42 +154,28 @@
   });
 </script>
 
-{#if authState === 'checking'}
-  <div class="loading">
-    <p>Loading…</p>
-  </div>
-{:else if authState === 'signed_out'}
-  <AuthEntry
-    {passkeyError}
-    {ceremonyInProgress}
-    on:authbegin={handleAuthBegin}
-    on:clearpasskeyerror={handleClearPasskeyError}
-  />
-{:else if authState === 'signed_in'}
-  <Desktop {currentUser} on:logout={handleLogout} on:authexpired={handleAuthExpired} />
-{/if}
+<div class="app-root" data-theme-id={DEFAULT_THEME.id}>
+  {#if authState === 'checking'}
+    <div class="loading">
+      <p>Loading…</p>
+    </div>
+  {:else if authState === 'signed_out'}
+    <AuthEntry
+      {passkeyError}
+      {ceremonyInProgress}
+      on:authbegin={handleAuthBegin}
+      on:clearpasskeyerror={handleClearPasskeyError}
+    />
+  {:else if authState === 'signed_in'}
+    <Desktop {currentUser} on:logout={handleLogout} on:authexpired={handleAuthExpired} />
+  {/if}
+</div>
 
 <style>
   :global(*) {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-  }
-
-  :global(:root) {
-    --choir-bg: #0b0d10;
-    --choir-panel: #171827;
-    --choir-panel-strong: #11111b;
-    --choir-fg: #f8fafc;
-    --choir-muted: #a8b3c7;
-    --choir-accent: #60a5fa;
-    --choir-danger: #f87171;
-    --choir-border: rgba(148, 163, 184, 0.18);
-    --choir-radius-md: 12px;
-    --choir-radius-lg: 18px;
-    --choir-shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.28);
-    --choir-motion-fast: 120ms ease;
-    --choir-bottom-bar-height: 56px;
   }
 
   :global(html),
@@ -205,6 +193,14 @@
     background: var(--choir-bg);
     color: var(--choir-fg);
     overscroll-behavior: none;
+  }
+
+  .app-root {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    background: var(--choir-bg);
+    color: var(--choir-fg);
   }
 
   :global(input),

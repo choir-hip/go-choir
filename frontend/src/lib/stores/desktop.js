@@ -54,12 +54,16 @@ const BOTTOM_BAR_HEIGHT = 56;
 const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
-function appDefinition(appId) {
+export function getAppDefinition(appId) {
   return APP_REGISTRY.find((app) => app.id === appId) || null;
 }
 
-function appWindowPreference(appId) {
-  return appDefinition(appId)?.window || {};
+export function getAppIcon(appId) {
+  return getAppDefinition(appId)?.icon || '📱';
+}
+
+export function getAppWindowPreference(appId) {
+  return getAppDefinition(appId)?.window || {};
 }
 
 function generateWindowId() {
@@ -108,7 +112,7 @@ function getViewportMetrics() {
 }
 
 function appMinimums(appId, metrics) {
-  const pref = appWindowPreference(appId);
+  const pref = getAppWindowPreference(appId);
   if (metrics.compact && pref.compact?.fullBleed) {
     return {
       width: Math.min(metrics.maxWidth, Math.max(pref.compact.minWidth || MIN_WINDOW_WIDTH, metrics.viewportWidth - metrics.margin * 2)),
@@ -145,7 +149,7 @@ function getNewWindowGeometry(openCount, appId = '') {
   const metrics = getViewportMetrics();
   const offsetStep = metrics.compact ? 18 : 30;
   const offset = (openCount % 6) * offsetStep;
-  const preference = appWindowPreference(appId);
+  const preference = getAppWindowPreference(appId);
   const desktopPref = preference.desktop || {};
 
   if (metrics.compact && preference.compact?.fullBleed) {
@@ -239,7 +243,7 @@ export const visibleWindows = derived(windows, ($windows) =>
  */
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
-    const definition = appDefinition(appId);
+    const definition = getAppDefinition(appId);
     const allowMultiple = appContext.allowMultiple === true || definition?.singleton === false;
     const existing = !allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null;
     if (existing) {
@@ -269,7 +273,7 @@ export function openApp(appId, appName, icon, appContext = {}) {
       windowId,
       appId,
       title: appContext.windowTitle || appName || appId,
-      icon: icon || '📱',
+      icon: icon || getAppIcon(appId),
       x: geometry.x,
       y: geometry.y,
       width: geometry.width,

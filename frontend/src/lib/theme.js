@@ -12,6 +12,7 @@ export const DEFAULT_THEME = {
     muted: '#a8b3c7',
     accent: '#60a5fa',
     danger: '#f87171',
+    border: 'rgba(148, 163, 184, 0.18)',
   },
   radii: {
     md: '12px',
@@ -23,9 +24,12 @@ export const DEFAULT_THEME = {
   motion: {
     fast: '120ms ease',
   },
+  layout: {
+    bottomBarHeight: '56px',
+  },
 };
 
-const REQUIRED_COLOR_KEYS = ['bg', 'panel', 'panelStrong', 'fg', 'muted', 'accent', 'danger'];
+const REQUIRED_COLOR_KEYS = ['bg', 'panel', 'panelStrong', 'fg', 'muted', 'accent', 'danger', 'border'];
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -66,9 +70,26 @@ export function themeCSSVariables(theme = DEFAULT_THEME) {
     '--choir-muted': theme.colors.muted,
     '--choir-accent': theme.colors.accent,
     '--choir-danger': theme.colors.danger,
+    '--choir-border': theme.colors.border,
     '--choir-radius-md': theme.radii.md,
     '--choir-radius-lg': theme.radii.lg,
     '--choir-shadow-soft': theme.shadows.soft,
     '--choir-motion-fast': theme.motion.fast,
+    '--choir-bottom-bar-height': theme.layout?.bottomBarHeight || DEFAULT_THEME.layout.bottomBarHeight,
   };
+}
+
+export function themeStyleString(theme = DEFAULT_THEME) {
+  return Object.entries(themeCSSVariables(theme))
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ');
+}
+
+export function applyThemeToElement(element, theme = DEFAULT_THEME) {
+  const variables = themeCSSVariables(theme);
+  if (!element) return variables;
+  for (const [key, value] of Object.entries(variables)) {
+    element.style.setProperty(key, value);
+  }
+  return variables;
 }
