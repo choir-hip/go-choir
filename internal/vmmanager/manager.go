@@ -936,6 +936,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("vm_id=%s", cfg.VMID),
 			fmt.Sprintf("epoch=%d", cfg.Epoch),
 			fmt.Sprintf("choir.gateway_url=http://%s:8084", hostIP),
+			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		if cfg.GatewayToken != "" {
@@ -1473,10 +1474,15 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	_ = exec.Command(iptBin, "-A", "FORWARD",
 		"-o", tapName, "-j", "ACCEPT").Run()
 	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	// Allow guest sandboxes to reach the host-side gateway listener on the tap
-	// subnet without opening 8084 beyond VM tap interfaces. Insert ahead of
-	// nixos-fw so the packet is accepted before the host firewall's default
-	// refuse path.
+	// Allow guest sandboxes to reach the host-side vmctl and gateway listeners
+	// on the tap subnet without opening them beyond VM tap interfaces. Insert
+	// ahead of nixos-fw so the packet is accepted before the host firewall's
+	// default refuse path.
+	_ = exec.Command(iptBin, "-I", "INPUT", "1",
+		"-i", tapName,
+		"-p", "tcp", "--dport", "8083",
+		"-m", "comment", "--comment", comment,
+		"-j", "ACCEPT").Run()
 	_ = exec.Command(iptBin, "-I", "INPUT", "1",
 		"-i", tapName,
 		"-p", "tcp", "--dport", "8084",
@@ -1511,12 +1517,15 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 		"-j", "DNAT", "--to-destination", fmt.Sprintf("%s:%d", guestIP, guestPort),
 		"-m", "comment", "--comment", comment).Run()
 
-	// Set up DNAT: guest→host traffic for the gateway port.
-	// The guest sends packets to hostIP:8084 (the gateway port) but the
-	// gateway only listens on 127.0.0.1:8084. This PREROUTING rule
-	// rewrites the destination so the guest can reach the gateway.
-	// Without this, the guest cannot route LLM calls through the host-side
-	// gateway, and provider-backed responses would be impossible.
+	// Set up DNAT: guest→host traffic for internal host control ports.
+	// The guest sends packets to hostIP:8083/8084, while vmctl/gateway listen
+	// on 127.0.0.1. These PREROUTING rules rewrite the destination so the guest
+	// can reach only the intended host-local services through its tap subnet.
+	_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
+		"-p", "tcp", "--dport", "8083",
+		"-d", hostIP,
+		"-j", "DNAT", "--to-destination", "127.0.0.1:8083",
+		"-m", "comment", "--comment", comment).Run()
 	_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
 		"-p", "tcp", "--dport", "8084",
 		"-d", hostIP,

@@ -678,10 +678,9 @@ func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
 // --- Guest Isolation Tests (VAL-VM-007, VAL-VM-011) ---
 
 func TestBuildFirecrackerConfig_NoHostControlPlaneAccess(t *testing.T) {
-	// VAL-VM-007: Guest workloads cannot reach host control-plane surfaces.
-	// Verify that the Firecracker network configuration does not expose
-	// host control-plane ports (8081-8084 for auth, proxy, vmctl, gateway)
-	// or host-only sockets and paths.
+	// VAL-VM-007: Guest workloads cannot reach host control-plane surfaces by
+	// loopback or host filesystem paths. vmctl/gateway access is deliberately
+	// exposed through per-VM tap-subnet URLs, not host localhost URLs.
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
 	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
@@ -930,6 +929,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"vm_id=vm-microvm-test",
 		"epoch=1",
 		"choir.gateway_url=http://172.1.0.1:8084",
+		"choir.vmctl_url=http://172.1.0.1:8083",
 		"ip=172.1.0.2::172.1.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {
@@ -947,6 +947,7 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//   - SANDBOX_PORT (from guest_port kernel param)
 	//   - SANDBOX_ID (from vm_id kernel param)
 	//   - RUNTIME_GATEWAY_URL / RUNTIME_GATEWAY_TOKEN (sandbox auth only)
+	//   - RUNTIME_VMCTL_URL (tap-subnet control plane for super VM tools)
 	//   - RUNTIME_STORE_PATH (local persistent path)
 	//
 	// No provider credentials or host-side secret paths are set.
@@ -955,6 +956,7 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 		"SANDBOX_ID",
 		"RUNTIME_GATEWAY_URL",
 		"RUNTIME_GATEWAY_TOKEN",
+		"RUNTIME_VMCTL_URL",
 		"RUNTIME_STORE_PATH",
 	}
 
