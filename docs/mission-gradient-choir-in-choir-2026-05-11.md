@@ -593,6 +593,18 @@ Section 2 local progress, 2026-05-12 UTC:
   `http://172.3.0.2:8085`, state `active`, epoch `1`; the proof file still
   returned `mission restart proof 2026-05-12T03:59:00Z`; Node B journal showed
   vmctl loading one persisted ownership and reattaching that VM.
+- Shipper export commit `deb377b9c926cba32714b82f0839675f94e2835f` passed
+  GitHub Actions workflow `25713576280`: frontend build, Go vet/test/build, and
+  staging deploy job `75498879196`. Staging health reported proxy and sandbox
+  deployed commit `deb377b9c926cba32714b82f0839675f94e2835f`, deployed at
+  `2026-05-12T04:36:26Z`.
+- That deploy again revalidated Section 1 VM reattach. The same proof user
+  `mission-restart-1778558340` still mapped to
+  VM `vm-bb1b05195c9186fa06f22455522e81ff`, sandbox URL
+  `http://172.3.0.2:8085`, state `active`, epoch `1`; the proof file still
+  returned `mission restart proof 2026-05-12T03:59:00Z`. Node B journal showed
+  vmctl stopping only its health checker, loading one persisted ownership, and
+  reattaching the same VM after the deploy.
 
 Unresolved Section 2 gaps:
 
