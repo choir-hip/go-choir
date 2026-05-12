@@ -900,15 +900,62 @@ Residual Section 4 follow-up:
 
 ### 5. Trace, Settings, and App Registry Health
 
-- [ ] Ensure Trace uses only `/api/trace/*` or product-safe projections.
-- [ ] Ensure Trace shows trajectories, events, messages, tool calls, search
+- [x] Ensure Trace uses only `/api/trace/*` or product-safe projections.
+- [x] Ensure Trace shows trajectories, events, messages, tool calls, search
       stats, and shipper/VM events without 404s.
-- [ ] Ensure Settings has safe product settings only by default.
-- [ ] Ensure prompt/runtime mutation is absent from normal product Settings.
-- [ ] Centralize app metadata so adding an app touches the minimum number of
+- [x] Ensure Settings has safe product settings only by default.
+- [x] Ensure prompt/runtime mutation is absent from normal product Settings.
+- [x] Centralize app metadata so adding an app touches the minimum number of
       files.
-- [ ] Centralize theme tokens so a future prompt can redesign the desktop by
+- [x] Centralize theme tokens so a future prompt can redesign the desktop by
       changing a validated theme/layout config, not arbitrary source edits.
+
+Section 5 deployed proof, 2026-05-12 UTC:
+
+- Commit `8a43bf1e7ab101a3e671f1e3b5f43a164758f0c7` centralized app metadata
+  helpers in `frontend/src/lib/stores/desktop.js` and removed the duplicate
+  icon mapping from `frontend/src/lib/Desktop.svelte`.
+- The same commit moved root desktop theme variables behind
+  `frontend/src/lib/theme.js` helpers. `App.svelte` applies the validated
+  default theme to `documentElement`, and the app root carries
+  `data-theme-id=system-noir`; BottomBar can still update the dynamic
+  `--choir-bottom-bar-height` token at runtime.
+- `frontend/tests/trace-settings-registry.spec.js` was added as a staging proof
+  for the Trace/Settings/app-registry/theme surface. It rejects browser calls to
+  `/api/agent/*`, `/api/prompts`, `/api/test/*`, `/internal*`, and `/api/events`;
+  flags Trace 4xx responses; verifies the six registry-backed desktop apps and
+  icons; verifies Settings exposes account/theme/layout/runtime status only; and
+  verifies theme tokens are present through the product shell.
+- Local verification before push: `cd frontend && npm run build` passed with the
+  existing `ghostty-web` large chunk warning.
+- GitHub Actions run `25720338856` for
+  `8a43bf1e7ab101a3e671f1e3b5f43a164758f0c7` passed: frontend build, Go
+  vet/test/build, and staging deploy job `75520013099`.
+- Staging health after deploy reported proxy and sandbox commit
+  `8a43bf1e7ab101a3e671f1e3b5f43a164758f0c7`, deployed at
+  `2026-05-12T07:36:55Z`.
+- Section 5 staging proof passed:
+  `cd frontend && GO_CHOIR_SECTION5_BASE_URL=https://draft.choir-ip.com npx playwright test tests/trace-settings-registry.spec.js --project=chromium --reporter=line`
+  passed 1/1 in 9.8 seconds.
+- Evidence artifacts:
+  `frontend/test-results/trace-settings-registry-Tr-5ce78-ta-come-from-product-config-chromium/trace-settings-registry.png`,
+  `frontend/test-results/trace-settings-registry-Tr-5ce78-ta-come-from-product-config-chromium/video.webm`,
+  `frontend/test-results/trace-settings-registry-Tr-5ce78-ta-come-from-product-config-chromium/trace.zip`, and
+  `frontend/test-results/trace-settings-registry-Tr-5ce78-ta-come-from-product-config-chromium/test-finished-1.png`.
+- Populated Trace behavior is covered by earlier product-path proofs in this
+  document: Section 3's real VText demo showed trajectories, agent graph,
+  moments, messages, tool calls, and provider-level search stats through
+  `/api/trace/*`; Section 3's background-worker demo showed worker VM request
+  and delegation results, exported patchset paths, base/head SHAs, and
+  `github_push=false` through Trace moment details.
+
+Residual Section 5 follow-up:
+
+- GitHub PR/CI/deploy provenance is still represented by shipper reports,
+  GitHub Actions run IDs, and this mission document. It is not yet emitted as a
+  first-class product Trace event inside the user's trajectory. That should be
+  added when the platform shipper is invoked from the product workflow instead
+  of from operator/CLI proof commands.
 
 ### 6. Shared Content Substrate
 

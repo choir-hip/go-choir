@@ -75,13 +75,12 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
       bottomBarHeight: style.getPropertyValue('--choir-bottom-bar-height').trim(),
     };
   });
-  expect(rootTheme).toEqual({
-    id: 'system-noir',
-    bg: '#0b0d10',
-    panel: '#171827',
-    border: 'rgba(148, 163, 184, 0.18)',
-    bottomBarHeight: '56px',
-  });
+  expect(rootTheme.id).toBe('system-noir');
+  expect(rootTheme.bg).toBe('#0b0d10');
+  expect(rootTheme.panel).toBe('#171827');
+  expect(rootTheme.border).toBe('rgba(148, 163, 184, 0.18)');
+  expect(rootTheme.bottomBarHeight).toMatch(/^\d+px$/);
+  expect(Number.parseInt(rootTheme.bottomBarHeight, 10)).toBeGreaterThanOrEqual(56);
 
   const expectedApps = [
     ['files', 'Files', '📁'],
