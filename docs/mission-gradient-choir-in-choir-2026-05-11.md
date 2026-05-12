@@ -569,6 +569,17 @@ Section 2 local progress, 2026-05-12 UTC:
   `go run ./cmd/shipper import --repo <tmp-repo> --manifest <manifest.json> --patchset <change.patch> --branch agent/run-proof/shipper-proof --check "grep -q 'shipper proof' README.md" --report <report.json>`.
   The resulting report had status `imported`, branch
   `agent/run-proof/shipper-proof`, a new head SHA, and a passing check.
+- Shipper commit `6bc889d974f4068bc5075937c7ee68ef9f886be1` passed GitHub
+  Actions workflow `25713210719`: frontend build, Go vet/test/build, and
+  staging deploy job `75497805767`. Staging health reported proxy and sandbox
+  deployed commit `6bc889d974f4068bc5075937c7ee68ef9f886be1`, deployed at
+  `2026-05-12T04:25:18Z`.
+- The same deploy also revalidated Section 1 VM reattach after the fork/resume
+  proof: user `mission-restart-1778558340` still mapped to
+  VM `vm-bb1b05195c9186fa06f22455522e81ff`, sandbox URL
+  `http://172.3.0.2:8085`, state `active`, epoch `1`; the proof file still
+  returned `mission restart proof 2026-05-12T03:59:00Z`; Node B journal showed
+  vmctl loading one persisted ownership and reattaching that VM.
 
 Unresolved Section 2 gaps:
 
