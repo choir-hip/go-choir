@@ -959,18 +959,74 @@ Residual Section 5 follow-up:
 
 ### 6. Shared Content Substrate
 
-- [ ] Define the common content object model for uploaded files, URLs, extracted
+- [x] Define the common content object model for uploaded files, URLs, extracted
       text, media metadata, provenance, and app routing.
-- [ ] Support uploads or durable references for text/Markdown, PDF, EPUB, image,
+- [x] Support uploads or durable references for text/Markdown, PDF, EPUB, image,
       audio, video, YouTube URL, and podcast RSS feed.
-- [ ] Implement or connect extraction rungs for URL text extraction, SearXNG
+- [x] Implement or connect extraction rungs for URL text extraction, SearXNG
       discovery, Defuddle/readability, and optional Obscura acquisition.
-- [ ] Record content provenance, hashes, extraction rung, source URL, timestamp,
+- [x] Record content provenance, hashes, extraction rung, source URL, timestamp,
       and warnings.
-- [ ] Make conductor route raw links/uploads to the appropriate display app when
+- [x] Make conductor route raw links/uploads to the appropriate display app when
       the prompt contains no contextual VText ingestion instruction.
-- [ ] Make contextual prompts route content into VText ingestion/research instead
+- [x] Make contextual prompts route content into VText ingestion/research instead
       of directly opening the display app.
+
+Section 6 evidence:
+
+- Implemented a durable `ContentItem` model/table/store/API for owner-scoped
+  content references. The record carries `source_type`, `media_type`,
+  `app_hint`, source/canonical URL, optional file path, extracted text, SHA-256
+  hash, metadata JSON, and provenance JSON.
+- Added product-safe content APIs under `/api/content/*` and a researcher-only
+  `import_url_content` tool. The tool stores URL imports through the same
+  substrate instead of returning loose text blobs.
+- Implemented direct HTTP acquisition with browser-ish headers, bounded body
+  reads, text/HTML extraction, a `readability_lite` HTML distillation rung, and
+  SearXNG alternate discovery through `SEARXNG_URL` or `CHOIR_SEARXNG_URL`.
+  Obscura remains optional and was not needed for this substrate proof.
+- Added provenance for source URL, fetch timestamp, acquisition/extraction
+  rungs, warnings, alternate candidates, content hash algorithm, HTTP status,
+  and content type.
+- Added frontend content viewers for `pdf`, `epub`, `image`, `video`, `audio`,
+  and `podcast` app hints, sharing the centralized desktop app registry rather
+  than one-off window wiring.
+- Updated prompt-bar routing so a bare content URL is a server-owned conductor
+  decision that opens the relevant display app without requiring a provider
+  call. This fixed the staging failure where a bare PDF link attempted a
+  ChatGPT-backed conductor run and hit a gateway `401 Unauthorized`.
+- Kept contextual URL prompts on the VText path. Tests cover the distinction:
+  bare URL -> display app; contextual URL -> VText/research ingestion.
+- Local checks passed:
+  `go test ./internal/runtime -run 'TestContent|TestPromptBar.*URL' -count=1`,
+  full `go test ./...` with local ICU flags, `npm run build`, and
+  `git diff --check`.
+- GitHub Actions run `25724505919` for
+  `1d8d1dd5cf96d82aae0868ab6aaa436fa420bfd4` passed frontend build,
+  Go vet/test/build, and staging deploy.
+- GitHub Actions run `25725687711` for
+  `46186b91628e34dd6fea3ad2278ce6e84d63f2dc` passed frontend build,
+  Go vet/test/build, and staging deploy job `75538071590`.
+- Staging health after the second deploy reported proxy and sandbox commit
+  `46186b91628e34dd6fea3ad2278ce6e84d63f2dc`, deployed at
+  `2026-05-12T09:28:53Z`.
+- Deployed Section 6 proof passed:
+  `cd frontend && GO_CHOIR_RUN_CONTENT_SUBSTRATE=1 GO_CHOIR_CONTENT_BASE_URL=https://draft.choir-ip.com npx playwright test tests/content-substrate-routing.spec.js --project=chromium --reporter=line`
+  passed 1/1 in 10.9 seconds against Node B.
+
+Residual Section 6 follow-up:
+
+- The in-tree extractor is a conservative `readability_lite` baseline, not the
+  full Defuddle extractor from the separate extraction bakeoff. Port Defuddle
+  when extraction quality becomes the bottleneck.
+- Obscura is not yet used as an acquisition rung. Keep it as the lightweight
+  browser candidate for pages that need JavaScript rendering without Playwright
+  in every desktop VM.
+- URL import currently allows ordinary `http`/`https` public fetches but does
+  not yet include a full SSRF/private-network denylist. Add that before treating
+  `/api/content/import-url` as hardened.
+- These are substrate viewers, not polished reader/player apps. Dedicated PDF,
+  EPUB, media, YouTube, and podcast app UX remains Section 7.
 
 ### 7. Content Apps as Self-Development Payload
 
