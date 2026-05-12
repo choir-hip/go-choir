@@ -538,7 +538,7 @@ Section 1 decision point:
 ### 2. GitHub Shipper Boundary
 
 - [x] Design or implement the narrow shipper boundary for background VM commits.
-- [ ] Ensure worker/background VMs do not need broad GitHub credentials.
+- [x] Ensure worker/background VMs do not need broad GitHub credentials.
 - [ ] Export a background VM branch as a bundle or patchset plus manifest.
 - [x] Import the bundle/patchset into a clean checkout.
 - [x] Rerun required checks in the shipper context.
@@ -627,19 +627,31 @@ Section 2 local progress, 2026-05-12 UTC:
 - Pull request CI workflow `25713919314` passed on the imported branch:
   frontend build job `75499698777`, Go vet/test/build job `75499698779`, and
   skipped deploy job `75499896511` as expected for `pull_request`.
+- Added worker-side `export_patchset` as a super/co-super tool. It wraps
+  `internal/shipper.ExportPatchset`, writes only a manifest, patchset, and
+  export report under the sandbox tool root, returns `github_push=false`, and
+  has no remote push or PR creation capability. It is intentionally absent from
+  conductor, VText, and researcher registries.
+- `TestExportPatchsetToolExportsWithoutGitHubPush` proves a co-super can export
+  a committed repo under the sandbox files root with run id, trace id, VM id,
+  snapshot id, base SHA, worker head SHA, and verification checks, while keeping
+  GitHub push outside the worker context.
+- Full local verification after adding the worker export tool passed with local
+  ICU flags: `go test ./...`.
 
 Unresolved Section 2 gaps:
 
 - No deployed product path exports a background VM branch/patchset plus manifest
-  yet. The worker export and shipper import mechanics exist locally, but they
-  are not wired into super/cosuper tools or a deployed background VM workflow.
+  yet. The worker export tool and platform shipper import mechanics exist
+  locally, but they are not wired through a deployed background VM workflow.
 - The optional `--push` path is verified against GitHub through a platform
   checkout, and PR CI is verified. This is still a low-resolution proof, not a
   deployed Choir-in-Choir product-path export.
-- This boundary keeps GitHub credentials out of worker contexts by design, but
-  that is not yet enforced end to end for real background VMs because
-  super/cosuper workers do not yet produce/import patchsets through this
-  boundary from the deployed workflow.
+- The worker-side export tool keeps GitHub credentials out of worker contexts
+  by design. The remaining gap is product orchestration: real background VMs
+  still need to clone or receive a repo, produce a committed branch, call
+  `export_patchset`, and hand the export artifact to the platform shipper from
+  the deployed workflow.
 
 ### 3. Product Orchestration Proof
 

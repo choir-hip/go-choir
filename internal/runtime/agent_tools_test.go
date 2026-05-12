@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -48,12 +49,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "fork_desktop", "publish_desktop", "request_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -91,6 +92,9 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("edit_vtext"); ok {
 		t.Fatalf("researcher should not have edit_vtext")
 	}
+	if _, ok := researcher.Lookup("export_patchset"); ok {
+		t.Fatalf("researcher should not have export_patchset")
+	}
 	for _, name := range []string{"read_file", "web_search", "cast_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
@@ -116,8 +120,14 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("submit_worker_update"); ok {
 		t.Fatalf("vtext should not have submit_worker_update")
 	}
+	if _, ok := vtext.Lookup("export_patchset"); ok {
+		t.Fatalf("vtext should not have export_patchset")
+	}
 	if _, ok := conductor.Lookup("edit_vtext"); ok {
 		t.Fatalf("conductor should not have edit_vtext")
+	}
+	if _, ok := conductor.Lookup("export_patchset"); ok {
+		t.Fatalf("conductor should not have export_patchset")
 	}
 	if _, ok := super.Lookup("edit_vtext"); ok {
 		t.Fatalf("super should not have edit_vtext")
@@ -1567,6 +1577,94 @@ func TestResearcherWebSearchWithoutGatewayIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	rt.cfg.SandboxID = "vm-tool-export"
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	repo := filepath.Join(cwd, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("create repo: %v", err)
+	}
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Choir Test")
+	runGit(t, repo, "config", "user.email", "choir-test@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write base file: %v", err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "base")
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\nworker proof\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "worker change")
+
+	superRun, err := rt.StartRunWithMetadata(context.Background(), "export worker patchset", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileCoSuper,
+		runMetadataAgentRole:    AgentProfileCoSuper,
+		runMetadataTrajectoryID: "trace-export-tool",
+	})
+	if err != nil {
+		t.Fatalf("start co-super run: %v", err)
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "export_patchset", json.RawMessage(fmt.Sprintf(`{
+		"repo_path": "repo",
+		"output_dir": "exports/proof",
+		"base_sha": %q,
+		"snapshot_id": "snapshot-tool",
+		"summary": "worker export proof",
+		"checks": ["grep -q worker README.md"]
+	}`, base)))
+	if err != nil {
+		t.Fatalf("export_patchset: %v", err)
+	}
+
+	var result struct {
+		Status       string `json:"status"`
+		ManifestPath string `json:"manifest_path"`
+		PatchsetPath string `json:"patchset_path"`
+		GitHubPush   bool   `json:"github_push"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode export result: %v\n%s", err, raw)
+	}
+	if result.Status != "exported" || result.GitHubPush {
+		t.Fatalf("unexpected export result: %+v", result)
+	}
+	for _, path := range []string{result.ManifestPath, result.PatchsetPath} {
+		if !strings.HasPrefix(path, cwd+string(os.PathSeparator)) {
+			t.Fatalf("export path escaped cwd: %s", path)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected export artifact %s: %v", path, err)
+		}
+	}
+
+	data, err := os.ReadFile(result.ManifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest struct {
+		RunID           string `json:"run_id"`
+		TraceID         string `json:"trace_id"`
+		VMID            string `json:"vm_id"`
+		SnapshotID      string `json:"snapshot_id"`
+		BaseSHA         string `json:"base_sha"`
+		ExpectedHeadSHA string `json:"expected_head_sha"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if manifest.RunID != superRun.RunID || manifest.TraceID != "trace-export-tool" || manifest.VMID != "vm-tool-export" || manifest.SnapshotID != "snapshot-tool" || manifest.BaseSHA != base || manifest.ExpectedHeadSHA == "" {
+		t.Fatalf("manifest provenance mismatch: %+v", manifest)
+	}
+}
+
 func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 	t.Helper()
 
@@ -1600,4 +1698,15 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 	})
 
 	return rt, s, cwd
+}
+
+func runGit(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
 }

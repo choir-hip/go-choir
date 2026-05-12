@@ -445,11 +445,17 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWorkerUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
+	if err := RegisterShipperTools(superRegistry, cwd); err != nil {
+		return err
+	}
 	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterWorkerUpdateTools(coSuperRegistry, rt); err != nil {
+		return err
+	}
+	if err := RegisterShipperTools(coSuperRegistry, cwd); err != nil {
 		return err
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, httpClient)
