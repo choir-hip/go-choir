@@ -47,6 +47,18 @@ type Options struct {
 	Push          bool
 }
 
+type ExportOptions struct {
+	RepoPath   string
+	OutputDir  string
+	BaseSHA    string
+	RunID      string
+	TraceID    string
+	VMID       string
+	SnapshotID string
+	Summary    string
+	Checks     []string
+}
+
 type CheckReport struct {
 	Command  string `json:"command"`
 	ExitCode int    `json:"exit_code"`
@@ -66,7 +78,113 @@ type Report struct {
 	ImportedAt   string        `json:"imported_at"`
 }
 
+type ExportReport struct {
+	Status       string        `json:"status"`
+	BaseSHA      string        `json:"base_sha"`
+	HeadSHA      string        `json:"head_sha"`
+	ManifestPath string        `json:"manifest_path"`
+	PatchsetPath string        `json:"patchset_path"`
+	Checks       []CheckReport `json:"checks"`
+	ExportedAt   string        `json:"exported_at"`
+}
+
 var safeBranchRE = regexp.MustCompile(`^agent/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+func ExportPatchset(ctx context.Context, opts ExportOptions) (*ExportReport, error) {
+	opts.RepoPath = strings.TrimSpace(opts.RepoPath)
+	if opts.RepoPath == "" {
+		opts.RepoPath = "."
+	}
+	opts.OutputDir = strings.TrimSpace(opts.OutputDir)
+	if opts.OutputDir == "" {
+		return nil, errors.New("output dir is required")
+	}
+	manifest := Manifest{
+		RunID:           strings.TrimSpace(opts.RunID),
+		TraceID:         strings.TrimSpace(opts.TraceID),
+		VMID:            strings.TrimSpace(opts.VMID),
+		SnapshotID:      strings.TrimSpace(opts.SnapshotID),
+		BaseSHA:         strings.TrimSpace(opts.BaseSHA),
+		Summary:         strings.TrimSpace(opts.Summary),
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
+		ExpectedHeadSHA: "",
+	}
+	if err := validateManifest(manifest); err != nil {
+		return nil, err
+	}
+	if err := ensureCleanRepo(ctx, opts.RepoPath); err != nil {
+		return nil, err
+	}
+	head, err := gitOutput(ctx, opts.RepoPath, "rev-parse", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	head = strings.TrimSpace(head)
+	if head == manifest.BaseSHA {
+		return nil, errors.New("worker HEAD equals base_sha; no committed work to export")
+	}
+	if _, err := gitOutput(ctx, opts.RepoPath, "merge-base", "--is-ancestor", manifest.BaseSHA, head); err != nil {
+		return nil, fmt.Errorf("base_sha %s is not an ancestor of HEAD %s: %w", manifest.BaseSHA, head, err)
+	}
+
+	checkReports, err := runChecks(ctx, opts.RepoPath, opts.Checks)
+	if err != nil {
+		return nil, err
+	}
+	manifest.ExpectedHeadSHA = head
+	manifest.Verification = make([]TestResult, 0, len(checkReports))
+	for _, check := range checkReports {
+		status := "passed"
+		if check.ExitCode != 0 {
+			status = "failed"
+		}
+		manifest.Verification = append(manifest.Verification, TestResult{
+			Name:   check.Command,
+			Status: status,
+			Output: check.Output,
+		})
+	}
+	manifest.VerificationSource = "shipper export"
+
+	diff, err := gitOutput(ctx, opts.RepoPath, "diff", "--binary", manifest.BaseSHA+"..HEAD")
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(diff) == "" {
+		return nil, errors.New("git diff produced an empty patchset")
+	}
+
+	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
+		return nil, err
+	}
+	patchPath := filepath.Join(opts.OutputDir, "changes.patch")
+	manifestPath := filepath.Join(opts.OutputDir, "manifest.json")
+	reportPath := filepath.Join(opts.OutputDir, "export-report.json")
+	if err := os.WriteFile(patchPath, []byte(diff), 0o644); err != nil {
+		return nil, fmt.Errorf("write patchset: %w", err)
+	}
+	manifestData, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(manifestPath, append(manifestData, '\n'), 0o644); err != nil {
+		return nil, fmt.Errorf("write manifest: %w", err)
+	}
+
+	report := &ExportReport{
+		Status:       "exported",
+		BaseSHA:      manifest.BaseSHA,
+		HeadSHA:      head,
+		ManifestPath: manifestPath,
+		PatchsetPath: patchPath,
+		Checks:       checkReports,
+		ExportedAt:   manifest.GeneratedAt,
+	}
+	if err := writeExportReport(reportPath, report); err != nil {
+		return nil, err
+	}
+	return report, nil
+}
 
 func ImportPatchset(ctx context.Context, opts Options) (*Report, error) {
 	opts.RepoPath = strings.TrimSpace(opts.RepoPath)
@@ -132,9 +250,6 @@ func ImportPatchset(ctx context.Context, opts Options) (*Report, error) {
 		return nil, err
 	}
 	newHead = strings.TrimSpace(newHead)
-	if manifest.ExpectedHeadSHA != "" && manifest.ExpectedHeadSHA != newHead {
-		return nil, fmt.Errorf("new head %s does not match manifest expected_head_sha %s", newHead, manifest.ExpectedHeadSHA)
-	}
 
 	report := &Report{
 		Status:       "imported",
@@ -336,6 +451,9 @@ func provenanceBody(manifest Manifest) string {
 	if strings.TrimSpace(manifest.SnapshotID) != "" {
 		lines = append(lines, "Choir-Snapshot-ID: "+manifest.SnapshotID)
 	}
+	if strings.TrimSpace(manifest.ExpectedHeadSHA) != "" {
+		lines = append(lines, "Choir-Worker-Head-SHA: "+manifest.ExpectedHeadSHA)
+	}
 	if len(manifest.ResidualRisks) > 0 {
 		lines = append(lines, "", "Residual risks:")
 		for _, risk := range manifest.ResidualRisks {
@@ -348,6 +466,17 @@ func provenanceBody(manifest Manifest) string {
 }
 
 func writeReport(path string, report *Report) error {
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+func writeExportReport(path string, report *ExportReport) error {
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

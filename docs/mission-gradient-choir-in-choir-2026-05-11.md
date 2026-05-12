@@ -569,6 +569,19 @@ Section 2 local progress, 2026-05-12 UTC:
   `go run ./cmd/shipper import --repo <tmp-repo> --manifest <manifest.json> --patchset <change.patch> --branch agent/run-proof/shipper-proof --check "grep -q 'shipper proof' README.md" --report <report.json>`.
   The resulting report had status `imported`, branch
   `agent/run-proof/shipper-proof`, a new head SHA, and a passing check.
+- Added and verified the matching low-privilege export path:
+  `go run ./cmd/shipper export --repo <worker-repo> --out <export-dir> --base <base-sha> --run-id run-proof --trace-id trace-proof --vm-id vm-proof --snapshot-id snapshot-proof --summary "Export worker proof" --check "grep -q 'worker export proof' README.md"`.
+  It wrote `manifest.json`, `changes.patch`, and `export-report.json` with a
+  worker head SHA and passing check result, without any push capability.
+- Export-to-import CLI proof passed: a temporary worker repo exported
+  `changes.patch` and `manifest.json`; a separate clean checkout detached at the
+  same base imported them to branch `agent/run-proof/export-import`, reran
+  `grep -q 'worker export proof' README.md`, and wrote an import report. The
+  shipper commit intentionally differs from the worker commit because the
+  boundary imports a diff into a platform-owned commit while preserving the
+  worker head SHA in provenance.
+- Full local verification after adding export passed with local ICU flags:
+  `go test ./...`.
 - Shipper commit `6bc889d974f4068bc5075937c7ee68ef9f886be1` passed GitHub
   Actions workflow `25713210719`: frontend build, Go vet/test/build, and
   staging deploy job `75497805767`. Staging health reported proxy and sandbox
@@ -584,7 +597,8 @@ Section 2 local progress, 2026-05-12 UTC:
 Unresolved Section 2 gaps:
 
 - No deployed product path exports a background VM branch/patchset plus manifest
-  yet. The shipper import side exists; the worker export side is still missing.
+  yet. The worker export and shipper import mechanics exist locally, but they
+  are not wired into super/cosuper tools or a deployed background VM workflow.
 - The optional `--push` path is implemented but not yet verified against
   GitHub, and no PR metadata/CI proof has been produced from a generated branch.
 - This boundary keeps GitHub credentials out of worker VMs by design, but that
