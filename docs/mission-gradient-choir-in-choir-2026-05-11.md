@@ -638,12 +638,28 @@ Section 2 local progress, 2026-05-12 UTC:
   GitHub push outside the worker context.
 - Full local verification after adding the worker export tool passed with local
   ICU flags: `go test ./...`.
+- Worker export tool commit `724b3951b8387ff21ba95803cfb6fe31686dbb61`
+  passed GitHub Actions workflow `25714329588`: frontend build job
+  `75500868130`, Go vet/test/build job `75500868107`, and staging deploy job
+  `75501044792`.
+- Staging health after that deploy reported proxy and sandbox deployed commit
+  `724b3951b8387ff21ba95803cfb6fe31686dbb61`, deployed at
+  `2026-05-12T04:59:41Z`.
+- The same deploy again revalidated Section 1 VM reattach. The proof user
+  `mission-restart-1778558340` still mapped to
+  VM `vm-bb1b05195c9186fa06f22455522e81ff`, sandbox URL
+  `http://172.3.0.2:8085`, state `active`, epoch `1`; the proof file still
+  returned `mission restart proof 2026-05-12T03:59:00Z`, and the persisted
+  VText revision `b70d6c59-2cec-4da4-b7fe-fdcb46d6a9da` still returned
+  `runtime persistence proof 2026-05-12T04:13:02Z`. Node B journal showed
+  vmctl stopping only its health checker, loading one persisted ownership, and
+  reattaching the same VM after the deploy.
 
 Unresolved Section 2 gaps:
 
 - No deployed product path exports a background VM branch/patchset plus manifest
-  yet. The worker export tool and platform shipper import mechanics exist
-  locally, but they are not wired through a deployed background VM workflow.
+  yet. The worker export tool and platform shipper import mechanics exist and
+  are deployed, but they are not wired through a deployed background VM workflow.
 - The optional `--push` path is verified against GitHub through a platform
   checkout, and PR CI is verified. This is still a low-resolution proof, not a
   deployed Choir-in-Choir product-path export.
