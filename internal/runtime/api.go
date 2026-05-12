@@ -271,14 +271,28 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestedApp := AgentProfileVText
+	var contentSourceURL, contentMediaType, contentAppHint string
+	if appHint, sourceURL, mediaType, ok := classifyPromptBarContentIntent(text); ok {
+		requestedApp = appHint
+		contentSourceURL = sourceURL
+		contentMediaType = mediaType
+		contentAppHint = appHint
+	}
+
 	metadata := map[string]any{
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileVText,
+		"requested_app":          requestedApp,
 		"seed_prompt":            text,
 		"initial_document_title": buildInitialVTextTitle(text, ""),
 		"submission_surface":     "prompt_bar",
+	}
+	if contentSourceURL != "" {
+		metadata["content_source_url"] = contentSourceURL
+		metadata["content_media_type"] = contentMediaType
+		metadata["content_app_hint"] = contentAppHint
 	}
 
 	if _, err := h.rt.EnsurePersistentSuperAgent(r.Context(), ownerID); err != nil {
@@ -356,6 +370,12 @@ func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Re
 		var decision conductorDecision
 		if err := json.Unmarshal([]byte(raw), &decision); err == nil && strings.TrimSpace(decision.Action) != "" {
 			decision = fillConductorDecisionFromRun(rec, decision)
+			resp.Decision = &decision
+		}
+	}
+	if resp.Decision == nil && rec.State == types.RunCompleted {
+		var decision conductorDecision
+		if err := json.Unmarshal([]byte(normalizeConductorDecision(rec)), &decision); err == nil {
 			resp.Decision = &decision
 		}
 	}
@@ -1108,6 +1128,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
+	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
+	s.HandleFunc("/api/content/", h.HandleContentRouter)
 	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)

@@ -1,0 +1,890 @@
+package runtime
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+const maxImportedContentBytes = 2 * 1024 * 1024
+const maxStoredExtractedText = 300 * 1024
+
+type contentItemListResponse struct {
+	Items []types.ContentItem `json:"items"`
+}
+
+type contentCreateRequest struct {
+	SourceType   string          `json:"source_type"`
+	MediaType    string          `json:"media_type,omitempty"`
+	AppHint      string          `json:"app_hint,omitempty"`
+	Title        string          `json:"title,omitempty"`
+	SourceURL    string          `json:"source_url,omitempty"`
+	CanonicalURL string          `json:"canonical_url,omitempty"`
+	FilePath     string          `json:"file_path,omitempty"`
+	TextContent  string          `json:"text_content,omitempty"`
+	Metadata     json.RawMessage `json:"metadata,omitempty"`
+	Provenance   json.RawMessage `json:"provenance,omitempty"`
+}
+
+type contentImportURLRequest struct {
+	URL   string `json:"url"`
+	Query string `json:"query,omitempty"`
+}
+
+type extractionRung struct {
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Endpoint    string `json:"endpoint,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	LatencyMs   int64  `json:"latency_ms,omitempty"`
+	Bytes       int    `json:"bytes,omitempty"`
+	TextChars   int    `json:"text_chars,omitempty"`
+	Candidates  int    `json:"candidates,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type searxngCandidate struct {
+	Title   string `json:"title,omitempty"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet,omitempty"`
+	Engine  string `json:"engine,omitempty"`
+}
+
+type fetchedURLContent struct {
+	URL         string
+	StatusCode  int
+	ContentType string
+	MediaType   string
+	Title       string
+	Text        string
+	RawHash     string
+	RawBytes    int
+	Rungs       []extractionRung
+	Warnings    []string
+}
+
+func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.HandleContentList(w, r)
+	case http.MethodPost:
+		h.HandleContentCreate(w, r)
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+func (h *APIHandler) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/content/import-url" {
+		h.HandleContentImportURL(w, r)
+		return
+	}
+	const prefix = "/api/content/items/"
+	if strings.HasPrefix(r.URL.Path, prefix) {
+		h.HandleContentItem(w, r)
+		return
+	}
+	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content endpoint not found"})
+}
+
+func (h *APIHandler) HandleContentList(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	items, err := h.rt.Store().ListContentItems(r.Context(), ownerID, limit)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list content items"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, contentItemListResponse{Items: items})
+}
+
+func (h *APIHandler) HandleContentItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	contentID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/content/items/"))
+	if contentID == "" || strings.Contains(contentID, "/") {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content item not found"})
+		return
+	}
+	item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contentID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content item not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load content item"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, item)
+}
+
+func (h *APIHandler) HandleContentCreate(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req contentCreateRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid content item request"})
+		return
+	}
+	item, err := buildContentItem(ownerID, req)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.rt.Store().CreateContentItem(r.Context(), item); err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create content item"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, item)
+}
+
+func (h *APIHandler) HandleContentImportURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req contentImportURLRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid URL import request"})
+		return
+	}
+	item, err := h.rt.ImportURLContent(r.Context(), ownerID, strings.TrimSpace(req.URL), strings.TrimSpace(req.Query))
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, item)
+}
+
+func buildContentItem(ownerID string, req contentCreateRequest) (types.ContentItem, error) {
+	sourceType := normalizeContentSourceType(req.SourceType)
+	if sourceType == "" {
+		return types.ContentItem{}, fmt.Errorf("source_type is required")
+	}
+	sourceURL := strings.TrimSpace(req.SourceURL)
+	filePath := strings.TrimSpace(req.FilePath)
+	text := strings.TrimSpace(req.TextContent)
+	if sourceType == "url" || sourceType == "extracted_url" {
+		if _, err := normalizeHTTPURL(sourceURL); err != nil {
+			return types.ContentItem{}, err
+		}
+	}
+	if sourceType == "file" || sourceType == "upload" {
+		if filePath == "" {
+			return types.ContentItem{}, fmt.Errorf("file_path is required for file content")
+		}
+	}
+	if sourceURL == "" && filePath == "" && text == "" {
+		return types.ContentItem{}, fmt.Errorf("content item needs source_url, file_path, or text_content")
+	}
+	now := time.Now().UTC()
+	mediaType := normalizeMediaType(req.MediaType)
+	if mediaType == "" {
+		mediaType = detectMediaType(sourceURL, filePath, "")
+	}
+	hash := contentHash(text)
+	item := types.ContentItem{
+		ContentID:    uuid.NewString(),
+		OwnerID:      ownerID,
+		SourceType:   sourceType,
+		MediaType:    mediaType,
+		AppHint:      normalizeAppHint(nonEmpty(req.AppHint, appHintForMedia(mediaType, sourceURL, filePath))),
+		Title:        strings.TrimSpace(req.Title),
+		SourceURL:    sourceURL,
+		CanonicalURL: strings.TrimSpace(req.CanonicalURL),
+		FilePath:     filePath,
+		TextContent:  text,
+		ContentHash:  hash,
+		Metadata:     ensureJSONObject(req.Metadata),
+		Provenance:   ensureJSONObject(req.Provenance),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if item.Title == "" {
+		item.Title = fallbackContentTitle(item)
+	}
+	return item, nil
+}
+
+func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query string) (types.ContentItem, error) {
+	normalizedURL, err := normalizeHTTPURL(rawURL)
+	if err != nil {
+		return types.ContentItem{}, err
+	}
+	started := time.Now().UTC()
+	rungs := []extractionRung{}
+	warnings := []string{}
+	candidates := []searxngCandidate{}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	selected, primaryErr := fetchAndExtractURL(ctx, client, normalizedURL, "direct_http", "readability_lite", "plain_text")
+	rungs = append(rungs, selected.Rungs...)
+	warnings = append(warnings, selected.Warnings...)
+	if primaryErr != nil {
+		warnings = append(warnings, "direct fetch failed: "+primaryErr.Error())
+	}
+	if shouldRunSearXNGDiscovery(query, selected, primaryErr) {
+		discovered, discoveryRung := discoverSearXNGCandidates(ctx, client, searxngBaseURL(), query, normalizedURL)
+		rungs = append(rungs, discoveryRung)
+		candidates = discovered
+		for _, candidate := range discovered {
+			alternate, alternateErr := fetchAndExtractURL(ctx, client, candidate.URL, "searxng_alt_http", "searxng_alt_readability_lite", "searxng_alt_plain_text")
+			rungs = append(rungs, alternate.Rungs...)
+			warnings = append(warnings, alternate.Warnings...)
+			if alternateErr != nil {
+				warnings = append(warnings, "alternate fetch failed for "+candidate.URL+": "+alternateErr.Error())
+				continue
+			}
+			if betterFetchedContent(alternate, selected) {
+				selected = alternate
+				break
+			}
+		}
+	}
+	if primaryErr != nil && strings.TrimSpace(selected.Text) == "" {
+		return types.ContentItem{}, fmt.Errorf("URL import failed: %w", primaryErr)
+	}
+	if len(strings.TrimSpace(selected.Text)) < 400 {
+		warnings = append(warnings, "extracted text is low-content")
+	}
+
+	provenance, _ := json.Marshal(map[string]any{
+		"source_url":     normalizedURL,
+		"fetched_at":     started.Format(time.RFC3339Nano),
+		"rungs":          rungs,
+		"warnings":       warnings,
+		"candidates":     candidates,
+		"hash_algorithm": "sha256",
+	})
+	metadata, _ := json.Marshal(map[string]any{
+		"query":              query,
+		"http_status":        selected.StatusCode,
+		"http_content_type":  selected.ContentType,
+		"retrieval_strategy": retrievalStrategy(rungs),
+	})
+	itemReq := contentCreateRequest{
+		SourceType:   "extracted_url",
+		MediaType:    selected.MediaType,
+		AppHint:      appHintForMedia(selected.MediaType, selected.URL, ""),
+		Title:        selected.Title,
+		SourceURL:    normalizedURL,
+		CanonicalURL: selected.URL,
+		TextContent:  selected.Text,
+		Metadata:     metadata,
+		Provenance:   provenance,
+	}
+	item, err := buildContentItem(ownerID, itemReq)
+	if err != nil {
+		return types.ContentItem{}, err
+	}
+	if item.ContentHash == "" {
+		item.ContentHash = selected.RawHash
+	}
+	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
+		return types.ContentItem{}, err
+	}
+	return item, nil
+}
+
+func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fetchRungName, htmlRungName, textRungName string) (fetchedURLContent, error) {
+	result := fetchedURLContent{URL: targetURL}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return result, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir-ip.com)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5")
+
+	fetchStarted := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Rungs = append(result.Rungs, extractionRung{Name: fetchRungName, Status: "error", LatencyMs: time.Since(fetchStarted).Milliseconds(), Error: err.Error()})
+		return result, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes+1))
+	if readErr != nil {
+		return result, fmt.Errorf("read URL response: %w", readErr)
+	}
+	if len(raw) > maxImportedContentBytes {
+		raw = raw[:maxImportedContentBytes]
+		result.Warnings = append(result.Warnings, "response truncated at 2MiB")
+	}
+	contentType := normalizeMediaType(resp.Header.Get("Content-Type"))
+	result.StatusCode = resp.StatusCode
+	result.ContentType = contentType
+	result.RawHash = contentHashBytes(raw)
+	result.RawBytes = len(raw)
+	result.Rungs = append(result.Rungs, extractionRung{
+		Name:        fetchRungName,
+		Status:      statusForHTTP(resp.StatusCode),
+		StatusCode:  resp.StatusCode,
+		ContentType: contentType,
+		LatencyMs:   time.Since(fetchStarted).Milliseconds(),
+		Bytes:       len(raw),
+	})
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return result, fmt.Errorf("%s returned status %s", fetchRungName, resp.Status)
+	}
+
+	result.MediaType = detectMediaType(targetURL, "", contentType)
+	if isHTMLMedia(result.MediaType) {
+		result.Title, result.Text = extractReadableHTML(raw)
+		result.Rungs = append(result.Rungs, extractionRung{Name: htmlRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
+	} else if isTextMedia(result.MediaType) {
+		result.Text = strings.TrimSpace(string(raw))
+		result.Rungs = append(result.Rungs, extractionRung{Name: textRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
+	}
+	if len(result.Text) > maxStoredExtractedText {
+		result.Text = result.Text[:maxStoredExtractedText]
+		result.Warnings = append(result.Warnings, "extracted text truncated at 300KiB")
+	}
+	return result, nil
+}
+
+func shouldRunSearXNGDiscovery(query string, selected fetchedURLContent, primaryErr error) bool {
+	if strings.TrimSpace(query) == "" {
+		return false
+	}
+	if primaryErr != nil {
+		return true
+	}
+	return len(strings.TrimSpace(selected.Text)) < 400
+}
+
+func searxngBaseURL() string {
+	for _, key := range []string{"SEARXNG_URL", "CHOIR_SEARXNG_URL"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func discoverSearXNGCandidates(ctx context.Context, client *http.Client, baseURL, query, originalURL string) ([]searxngCandidate, extractionRung) {
+	rung := extractionRung{Name: "searxng_discovery", Status: "not_configured"}
+	if strings.TrimSpace(baseURL) == "" {
+		return nil, rung
+	}
+	searchURL, err := buildSearXNGSearchURL(baseURL, query, true)
+	if err != nil {
+		rung.Status = "error"
+		rung.Error = err.Error()
+		return nil, rung
+	}
+	rung.Endpoint = redactedURL(searchURL)
+	started := time.Now()
+	candidates, statusCode, err := fetchSearXNGJSON(ctx, client, searchURL, originalURL)
+	rung.LatencyMs = time.Since(started).Milliseconds()
+	rung.StatusCode = statusCode
+	if err == nil && len(candidates) > 0 {
+		rung.Status = "success"
+		rung.Candidates = len(candidates)
+		return candidates, rung
+	}
+
+	htmlURL, htmlErr := buildSearXNGSearchURL(baseURL, query, false)
+	if htmlErr != nil {
+		rung.Status = "error"
+		rung.Error = nonEmpty(errString(err), htmlErr.Error())
+		return nil, rung
+	}
+	started = time.Now()
+	htmlCandidates, htmlStatusCode, htmlFetchErr := fetchSearXNGHTML(ctx, client, htmlURL, originalURL)
+	rung.Endpoint = redactedURL(htmlURL)
+	rung.LatencyMs += time.Since(started).Milliseconds()
+	if htmlStatusCode != 0 {
+		rung.StatusCode = htmlStatusCode
+	}
+	if htmlFetchErr != nil {
+		rung.Status = "error"
+		rung.Error = nonEmpty(errString(err), htmlFetchErr.Error())
+		return nil, rung
+	}
+	if len(htmlCandidates) == 0 {
+		rung.Status = "low_content"
+		rung.Error = errString(err)
+		return nil, rung
+	}
+	rung.Status = "success"
+	rung.Candidates = len(htmlCandidates)
+	return htmlCandidates, rung
+}
+
+func buildSearXNGSearchURL(baseURL, query string, jsonFormat bool) (string, error) {
+	parsed, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("SEARXNG_URL must be an absolute URL")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/search"
+	values := parsed.Query()
+	values.Set("q", strings.TrimSpace(query))
+	if jsonFormat {
+		values.Set("format", "json")
+	}
+	parsed.RawQuery = values.Encode()
+	return parsed.String(), nil
+}
+
+func fetchSearXNGJSON(ctx context.Context, client *http.Client, searchURL, originalURL string) ([]searxngCandidate, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return nil, resp.StatusCode, fmt.Errorf("searxng json status %s", resp.Status)
+	}
+	var parsed struct {
+		Results []struct {
+			Title   string `json:"title"`
+			URL     string `json:"url"`
+			Content string `json:"content"`
+			Engine  string `json:"engine"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, resp.StatusCode, err
+	}
+	candidates := make([]searxngCandidate, 0, len(parsed.Results))
+	for _, result := range parsed.Results {
+		if candidateURL := usableCandidateURL(result.URL, originalURL); candidateURL != "" {
+			candidates = append(candidates, searxngCandidate{Title: strings.TrimSpace(result.Title), URL: candidateURL, Snippet: strings.TrimSpace(result.Content), Engine: strings.TrimSpace(result.Engine)})
+		}
+		if len(candidates) >= 5 {
+			break
+		}
+	}
+	return candidates, resp.StatusCode, nil
+}
+
+func fetchSearXNGHTML(ctx context.Context, client *http.Client, searchURL, originalURL string) ([]searxngCandidate, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "text/html")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return nil, resp.StatusCode, fmt.Errorf("searxng html status %s", resp.Status)
+	}
+	return extractSearXNGHTMLCandidates(string(data), originalURL), resp.StatusCode, nil
+}
+
+func extractSearXNGHTMLCandidates(source, originalURL string) []searxngCandidate {
+	matches := regexp.MustCompile(`(?is)\bhref=["']([^"']+)["']`).FindAllStringSubmatch(source, -1)
+	candidates := []searxngCandidate{}
+	seen := map[string]struct{}{}
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		candidateURL := htmlEntityDecode(strings.TrimSpace(match[1]))
+		if strings.HasPrefix(candidateURL, "/url?") {
+			if parsed, err := url.Parse(candidateURL); err == nil {
+				candidateURL = parsed.Query().Get("url")
+			}
+		}
+		candidateURL = usableCandidateURL(candidateURL, originalURL)
+		if candidateURL == "" {
+			continue
+		}
+		if _, ok := seen[candidateURL]; ok {
+			continue
+		}
+		seen[candidateURL] = struct{}{}
+		candidates = append(candidates, searxngCandidate{URL: candidateURL})
+		if len(candidates) >= 5 {
+			break
+		}
+	}
+	return candidates
+}
+
+func usableCandidateURL(candidateURL, originalURL string) string {
+	normalized, err := normalizeHTTPURL(candidateURL)
+	if err != nil {
+		return ""
+	}
+	if sameNormalizedURL(normalized, originalURL) {
+		return ""
+	}
+	return normalized
+}
+
+func sameNormalizedURL(a, b string) bool {
+	na, errA := normalizeHTTPURL(a)
+	nb, errB := normalizeHTTPURL(b)
+	if errA != nil || errB != nil {
+		return strings.TrimSpace(a) == strings.TrimSpace(b)
+	}
+	return na == nb
+}
+
+func betterFetchedContent(candidate, current fetchedURLContent) bool {
+	if strings.TrimSpace(candidate.Text) == "" {
+		return false
+	}
+	if strings.TrimSpace(current.Text) == "" {
+		return true
+	}
+	return len(candidate.Text) > len(current.Text)*2 && len(candidate.Text) >= 400
+}
+
+func retrievalStrategy(rungs []extractionRung) string {
+	for _, rung := range rungs {
+		if rung.Name == "searxng_discovery" && rung.Status == "success" {
+			return "direct_http_readability_with_searxng_discovery"
+		}
+	}
+	return "direct_http_then_readability_lite"
+}
+
+func redactedURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	values := parsed.Query()
+	if values.Has("q") {
+		values.Set("q", "<query>")
+	}
+	parsed.RawQuery = values.Encode()
+	return parsed.String()
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func normalizeHTTPURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("url must be an absolute http or https URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("url scheme must be http or https")
+	}
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func classifyPromptBarContentIntent(text string) (appHint, sourceURL, mediaType string, ok bool) {
+	fields := strings.Fields(strings.TrimSpace(text))
+	if len(fields) != 1 {
+		return "", "", "", false
+	}
+	normalizedURL, err := normalizeHTTPURL(fields[0])
+	if err != nil {
+		return "", "", "", false
+	}
+	mediaType = detectMediaType(normalizedURL, "", "")
+	appHint = appHintForMedia(mediaType, normalizedURL, "")
+	if appHint == "files" {
+		appHint = "browser"
+	}
+	return appHint, normalizedURL, mediaType, true
+}
+
+func normalizeContentSourceType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "upload", "file", "url", "extracted_url", "text":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeMediaType(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return ""
+	}
+	if parsed, _, err := mime.ParseMediaType(value); err == nil {
+		return strings.ToLower(parsed)
+	}
+	return value
+}
+
+func detectMediaType(sourceURL, filePath, contentType string) string {
+	if normalized := normalizeMediaType(contentType); normalized != "" && normalized != "application/octet-stream" {
+		if normalized == "application/xml" && strings.Contains(strings.ToLower(sourceURL), "rss") {
+			return "application/rss+xml"
+		}
+		return normalized
+	}
+	ext := strings.ToLower(path.Ext(nonEmpty(filePath, sourceURL)))
+	switch ext {
+	case ".md", ".markdown":
+		return "text/markdown"
+	case ".txt":
+		return "text/plain"
+	case ".html", ".htm":
+		return "text/html"
+	case ".pdf":
+		return "application/pdf"
+	case ".epub":
+		return "application/epub+zip"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".mp4":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".rss", ".xml":
+		return "application/rss+xml"
+	}
+	if isYouTubeURL(sourceURL) {
+		return "video/youtube"
+	}
+	return "application/octet-stream"
+}
+
+func appHintForMedia(mediaType, sourceURL, filePath string) string {
+	mediaType = normalizeMediaType(mediaType)
+	switch {
+	case isYouTubeURL(sourceURL), strings.HasPrefix(mediaType, "video/"):
+		return "video"
+	case strings.HasPrefix(mediaType, "image/"):
+		return "image"
+	case strings.HasPrefix(mediaType, "audio/"):
+		return "audio"
+	case mediaType == "application/pdf":
+		return "pdf"
+	case mediaType == "application/epub+zip":
+		return "epub"
+	case mediaType == "application/rss+xml" || strings.Contains(strings.ToLower(sourceURL+filePath), "podcast"):
+		return "podcast"
+	case mediaType == "text/markdown" || mediaType == "text/plain":
+		return "vtext"
+	case mediaType == "text/html" || mediaType == "application/xhtml+xml":
+		return "browser"
+	default:
+		return "files"
+	}
+}
+
+func normalizeAppHint(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "vtext", "browser", "files", "pdf", "epub", "image", "video", "audio", "podcast":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "files"
+	}
+}
+
+func isAllowedProductApp(value string) bool {
+	return normalizeAppHint(value) == strings.ToLower(strings.TrimSpace(value))
+}
+
+func isHTMLMedia(mediaType string) bool {
+	mediaType = normalizeMediaType(mediaType)
+	return mediaType == "text/html" || mediaType == "application/xhtml+xml"
+}
+
+func isTextMedia(mediaType string) bool {
+	mediaType = normalizeMediaType(mediaType)
+	return strings.HasPrefix(mediaType, "text/") || mediaType == "application/json" || mediaType == "application/xml" || mediaType == "application/rss+xml"
+}
+
+func isYouTubeURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "youtube.com" || host == "www.youtube.com" || host == "youtu.be" || host == "m.youtube.com"
+}
+
+func statusForHTTP(code int) string {
+	if code >= 200 && code < 400 {
+		return "success"
+	}
+	return "error"
+}
+
+func statusForText(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return "low_content"
+	}
+	return "success"
+}
+
+func extractReadableHTML(data []byte) (string, string) {
+	source := string(data)
+	title := ""
+	if matches := regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`).FindStringSubmatch(source); len(matches) > 1 {
+		title = htmlEntityDecode(stripHTMLTags(matches[1]))
+	}
+	cleaned := source
+	for _, tag := range []string{"script", "style", "noscript", "svg"} {
+		cleaned = regexp.MustCompile(`(?is)<`+tag+`[^>]*>.*?</`+tag+`>`).ReplaceAllString(cleaned, " ")
+	}
+	cleaned = regexp.MustCompile(`(?is)<br\s*/?>|</p>|</div>|</section>|</article>|</h[1-6]>|</li>`).ReplaceAllString(cleaned, "\n")
+	text := htmlEntityDecode(stripHTMLTags(cleaned))
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if normalized := collapseWhitespace(line); normalized != "" {
+			out = append(out, normalized)
+		}
+	}
+	return strings.TrimSpace(title), strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func collapseWhitespace(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return ' '
+		}
+		return r
+	}, s))
+}
+
+func stripHTMLTags(source string) string {
+	return regexp.MustCompile(`(?is)<[^>]+>`).ReplaceAllString(source, " ")
+}
+
+func htmlEntityDecode(source string) string {
+	replacer := strings.NewReplacer(
+		"&amp;", "&",
+		"&lt;", "<",
+		"&gt;", ">",
+		"&quot;", `"`,
+		"&#39;", "'",
+		"&nbsp;", " ",
+	)
+	return replacer.Replace(source)
+}
+
+func ensureJSONObject(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "" {
+		return json.RawMessage(`{}`)
+	}
+	if json.Valid(raw) {
+		return raw
+	}
+	return json.RawMessage(`{}`)
+}
+
+func contentHash(text string) string {
+	if text == "" {
+		return ""
+	}
+	return contentHashBytes([]byte(text))
+}
+
+func contentHashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func fallbackContentTitle(item types.ContentItem) string {
+	switch {
+	case item.FilePath != "":
+		return path.Base(item.FilePath)
+	case item.CanonicalURL != "":
+		return hostPathTitle(item.CanonicalURL)
+	case item.SourceURL != "":
+		return hostPathTitle(item.SourceURL)
+	default:
+		return "Untitled content"
+	}
+}
+
+func hostPathTitle(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	base := path.Base(parsed.Path)
+	if base == "." || base == "/" || base == "" {
+		return parsed.Hostname()
+	}
+	return base
+}

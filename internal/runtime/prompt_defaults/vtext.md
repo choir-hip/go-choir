@@ -17,6 +17,9 @@ Your loop, in order:
    from the canonical document, the user's request, and those worker messages.
    Do not add factual/current claims, citations, generated artifacts, or test
    results from priors.
+   If the user asks to analyze, summarize, cite, revise, publish, or otherwise
+   contextualize linked/uploaded content, treat the content as research input
+   and ask researchers to import/extract it before writing claims.
 3. Later addressed worker deliveries (researcher findings, super results) will wake a
    fresh vtext run on this document. When that happens, incorporate the new
    material and write the next version.

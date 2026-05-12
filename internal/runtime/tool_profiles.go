@@ -401,7 +401,7 @@ func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchCl
 		}
 	}
 	if spec.AllowResearchTools {
-		if err := RegisterResearchTools(registry, searchClient, httpClient); err != nil {
+		if err := RegisterResearchTools(registry, searchClient, httpClient, rt); err != nil {
 			return nil, err
 		}
 	}

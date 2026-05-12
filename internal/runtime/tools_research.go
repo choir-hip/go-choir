@@ -22,16 +22,61 @@ type webSearchResponse struct {
 	Results   []map[string]any `json:"results"`
 }
 
-func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client) error {
+func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newWebSearchTool(searchClient),
 		newFetchURLTool(httpClient),
+		newImportURLContentTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func newImportURLContentTool(rt *Runtime) Tool {
+	type args struct {
+		URL   string `json:"url"`
+		Query string `json:"query,omitempty"`
+	}
+	return Tool{
+		Name:        "import_url_content",
+		Description: "Fetch a URL into the shared content substrate, extracting readable text and provenance for later VText ingestion or display apps.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"url":   map[string]any{"type": "string"},
+			"query": map[string]any{"type": "string"},
+		}, []string{"url"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if rt == nil {
+				return "", fmt.Errorf("runtime not configured")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode import_url_content args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("import_url_content missing owner context")
+			}
+			item, err := rt.ImportURLContent(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
+			if err != nil {
+				return "", err
+			}
+			return toolResultJSON(map[string]any{
+				"content_id":    item.ContentID,
+				"source_type":   item.SourceType,
+				"media_type":    item.MediaType,
+				"app_hint":      item.AppHint,
+				"title":         item.Title,
+				"source_url":    item.SourceURL,
+				"canonical_url": item.CanonicalURL,
+				"content_hash":  item.ContentHash,
+				"text_chars":    len(item.TextContent),
+				"provenance":    item.Provenance,
+			})
+		},
+	}
 }
 
 func newWebSearchTool(searchClient webSearchClient) Tool {

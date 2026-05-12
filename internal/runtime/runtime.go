@@ -945,6 +945,10 @@ type conductorDecision struct {
 	InitialContent       string `json:"initial_content,omitempty"`
 	CreateInitialVersion *bool  `json:"create_initial_version,omitempty"`
 	Message              string `json:"message,omitempty"`
+	SourceURL            string `json:"source_url,omitempty"`
+	MediaType            string `json:"media_type,omitempty"`
+	AppHint              string `json:"app_hint,omitempty"`
+	ContentID            string `json:"content_id,omitempty"`
 	DocID                string `json:"doc_id,omitempty"`
 	UserRevisionID       string `json:"user_revision_id,omitempty"`
 	FramingRevisionID    string `json:"framing_revision_id,omitempty"`
@@ -1007,10 +1011,22 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 		if strings.TrimSpace(decision.SeedPrompt) == "" {
 			decision.SeedPrompt = seedPrompt
 		}
-		if decision.CreateInitialVersion == nil {
+		if decision.App == AgentProfileVText && decision.CreateInitialVersion == nil {
 			decision.CreateInitialVersion = ptrBool(true)
 		}
 		if rec != nil && rec.Metadata != nil {
+			if decision.SourceURL == "" {
+				decision.SourceURL = metadataStringValue(rec.Metadata, "content_source_url")
+			}
+			if decision.MediaType == "" {
+				decision.MediaType = metadataStringValue(rec.Metadata, "content_media_type")
+			}
+			if decision.AppHint == "" {
+				decision.AppHint = metadataStringValue(rec.Metadata, "content_app_hint")
+			}
+			if decision.ContentID == "" {
+				decision.ContentID = metadataStringValue(rec.Metadata, "content_id")
+			}
 			if decision.DocID == "" {
 				decision.DocID = metadataStringValue(rec.Metadata, "doc_id")
 			}
@@ -1084,7 +1100,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 				}
 			case "open_app":
 				parsed = fillConductorDecisionFromRun(rec, parsed)
-				if strings.TrimSpace(parsed.App) != AgentProfileVText {
+				if !isAllowedProductApp(strings.TrimSpace(parsed.App)) {
 					parsed.App = defaultDecision.App
 				}
 			default:

@@ -24,13 +24,15 @@
 <script>
   import { onMount } from 'svelte';
 
+  export let appContext = {};
+
   // Auto-focus action for inputs
   function autofocus(node) {
     node.focus();
   }
 
   // ---- State ----
-  let urlInput = 'https://en.wikipedia.org';
+  let urlInput = appContext?.initialUrl || appContext?.sourceUrl || 'https://en.wikipedia.org';
   let currentUrl = '';
   let loading = false;
   let error = '';

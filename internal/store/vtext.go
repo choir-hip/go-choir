@@ -115,6 +115,27 @@ CREATE TABLE IF NOT EXISTS agent_evidence (
 
 CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_agent ON agent_evidence(owner_id, agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_created ON agent_evidence(owner_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS content_items (
+	content_id     VARCHAR(255) PRIMARY KEY,
+	owner_id       VARCHAR(255) NOT NULL,
+	source_type    VARCHAR(64) NOT NULL,
+	media_type     VARCHAR(255) NOT NULL DEFAULT '',
+	app_hint       VARCHAR(64) NOT NULL DEFAULT '',
+	title          LONGTEXT NOT NULL DEFAULT '',
+	source_url     VARCHAR(2048) NOT NULL DEFAULT '',
+	canonical_url  VARCHAR(2048) NOT NULL DEFAULT '',
+	file_path      VARCHAR(2048) NOT NULL DEFAULT '',
+	text_content   LONGTEXT NOT NULL DEFAULT '',
+	content_hash   VARCHAR(128) NOT NULL DEFAULT '',
+	metadata_json  LONGTEXT NOT NULL DEFAULT '{}',
+	provenance_json LONGTEXT NOT NULL DEFAULT '{}',
+	created_at     DATETIME NOT NULL,
+	updated_at     DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_content_items_owner_updated ON content_items(owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_content_items_owner_app ON content_items(owner_id, app_hint, updated_at DESC);
 `
 
 // OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for
@@ -1436,6 +1457,142 @@ func (s *Store) ListEvidenceByAgent(ctx context.Context, ownerID, agentID string
 		return nil, fmt.Errorf("iterate agent evidence: %w", err)
 	}
 	return out, nil
+}
+
+// CreateContentItem inserts a shared content-substrate record.
+func (s *Store) CreateContentItem(ctx context.Context, rec types.ContentItem) error {
+	metadata := string(rec.Metadata)
+	if strings.TrimSpace(metadata) == "" {
+		metadata = "{}"
+	}
+	provenance := string(rec.Provenance)
+	if strings.TrimSpace(provenance) == "" {
+		provenance = "{}"
+	}
+	_, err := s.vtextHandle().ExecContext(ctx,
+		`INSERT INTO content_items (
+			content_id, owner_id, source_type, media_type, app_hint, title,
+			source_url, canonical_url, file_path, text_content, content_hash,
+			metadata_json, provenance_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.ContentID,
+		rec.OwnerID,
+		rec.SourceType,
+		rec.MediaType,
+		rec.AppHint,
+		rec.Title,
+		rec.SourceURL,
+		rec.CanonicalURL,
+		rec.FilePath,
+		rec.TextContent,
+		rec.ContentHash,
+		metadata,
+		provenance,
+		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("insert content item: %w", err)
+	}
+	return nil
+}
+
+// GetContentItem returns a content item scoped to the authenticated owner.
+func (s *Store) GetContentItem(ctx context.Context, ownerID, contentID string) (types.ContentItem, error) {
+	row := s.vtextHandle().QueryRowContext(ctx,
+		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
+		        source_url, canonical_url, file_path, text_content, content_hash,
+		        metadata_json, provenance_json, created_at, updated_at
+		   FROM content_items
+		  WHERE owner_id = ? AND content_id = ?`,
+		ownerID,
+		contentID,
+	)
+	return scanContentItem(row)
+}
+
+// ListContentItems lists recent content substrate records for an owner.
+func (s *Store) ListContentItems(ctx context.Context, ownerID string, limit int) ([]types.ContentItem, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.vtextHandle().QueryContext(ctx,
+		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
+		        source_url, canonical_url, file_path, text_content, content_hash,
+		        metadata_json, provenance_json, created_at, updated_at
+		   FROM content_items
+		  WHERE owner_id = ?
+		  ORDER BY updated_at DESC
+		  LIMIT ?`,
+		ownerID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query content items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []types.ContentItem
+	for rows.Next() {
+		rec, err := scanContentItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate content items: %w", err)
+	}
+	return out, nil
+}
+
+func scanContentItem(row interface{ Scan(...any) error }) (types.ContentItem, error) {
+	var (
+		rec            types.ContentItem
+		metadataJSON   string
+		provenanceJSON string
+		createdAt      string
+		updatedAt      string
+	)
+	if err := row.Scan(
+		&rec.ContentID,
+		&rec.OwnerID,
+		&rec.SourceType,
+		&rec.MediaType,
+		&rec.AppHint,
+		&rec.Title,
+		&rec.SourceURL,
+		&rec.CanonicalURL,
+		&rec.FilePath,
+		&rec.TextContent,
+		&rec.ContentHash,
+		&metadataJSON,
+		&provenanceJSON,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.ContentItem{}, ErrNotFound
+		}
+		return types.ContentItem{}, fmt.Errorf("scan content item: %w", err)
+	}
+	if strings.TrimSpace(metadataJSON) != "" {
+		rec.Metadata = json.RawMessage(metadataJSON)
+	}
+	if strings.TrimSpace(provenanceJSON) != "" {
+		rec.Provenance = json.RawMessage(provenanceJSON)
+	}
+	parsedCreatedAt, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return types.ContentItem{}, fmt.Errorf("parse content created_at: %w", err)
+	}
+	parsedUpdatedAt, err := time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return types.ContentItem{}, fmt.Errorf("parse content updated_at: %w", err)
+	}
+	rec.CreatedAt = parsedCreatedAt.UTC()
+	rec.UpdatedAt = parsedUpdatedAt.UTC()
+	return rec, nil
 }
 
 // scanAgentMutation scans an agent mutation record from a single row.

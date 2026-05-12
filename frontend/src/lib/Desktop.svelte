@@ -35,6 +35,7 @@
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
   import TerminalApp from './TerminalApp.svelte';
+  import ContentViewer from './ContentViewer.svelte';
   import {
     windows,
     activeWindowId,
@@ -360,17 +361,29 @@
         return;
       }
 
-      if (decision.action !== 'open_app' || decision.app !== 'vtext') {
+      if (decision.action !== 'open_app') {
         showToast('Conductor returned an unsupported route');
         return;
       }
 
-      openApp('vtext', 'VText', '📝', {
+      if (decision.app === 'vtext') {
+        openApp('vtext', 'VText', '📝', {
+          windowTitle: decision.title || fallbackWindowTitle,
+          docId: decision.doc_id || '',
+          seedPrompt: decision.seed_prompt || text,
+          initialContent: decision.initial_content || decision.seed_prompt || text,
+          createInitialVersion: decision.create_initial_version !== false,
+          conductorLoopId: conductorSubmissionId,
+        });
+        return;
+      }
+
+      openApp(decision.app || 'browser', decision.title || decision.app || fallbackWindowTitle, '', {
         windowTitle: decision.title || fallbackWindowTitle,
-        docId: decision.doc_id || '',
-        seedPrompt: decision.seed_prompt || text,
-        initialContent: decision.initial_content || decision.seed_prompt || text,
-        createInitialVersion: decision.create_initial_version !== false,
+        sourceUrl: decision.source_url || text,
+        mediaType: decision.media_type || '',
+        appHint: decision.app_hint || decision.app || '',
+        contentId: decision.content_id || '',
         conductorLoopId: conductorSubmissionId,
       });
     } catch (err) {
@@ -521,7 +534,7 @@
               </div>
             {:else if win.appId === 'browser'}
               <div class="app-content browser-content" data-browser-app-container>
-                <BrowserApp />
+                <BrowserApp appContext={win.appContext} />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>
@@ -542,6 +555,10 @@
             {:else if win.appId === 'trace'}
               <div class="app-content trace-content" data-trace-window>
                 <TraceApp on:authexpired={() => dispatch('authexpired')} />
+              </div>
+            {:else if ['pdf', 'epub', 'image', 'video', 'audio', 'podcast'].includes(win.appId)}
+              <div class="app-content content-viewer-content" data-content-window>
+                <ContentViewer appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else}
               <div class="app-content">

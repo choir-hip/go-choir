@@ -25,6 +25,12 @@ export const APP_REGISTRY = [
   { id: 'browser', name: 'Browser', icon: '🌐', description: 'Web Browser', singleton: true },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
+  { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'epub', name: 'EPUB', icon: '📚', description: 'EPUB reader', singleton: false, window: { desktop: { width: 900, height: 700 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'image', name: 'Image', icon: '🖼️', description: 'Image viewer', singleton: false, window: { desktop: { width: 900, height: 680 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'video', name: 'Video', icon: '🎬', description: 'Video and YouTube player', singleton: false, window: { desktop: { width: 980, height: 720 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'audio', name: 'Audio', icon: '🎧', description: 'Audio player', singleton: false, window: { desktop: { width: 760, height: 420 }, compact: { fullBleed: true, minWidth: 280, minHeight: 320 } } },
+  { id: 'podcast', name: 'Podcast', icon: '📡', description: 'Podcast feed player', singleton: false, window: { desktop: { width: 900, height: 660 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   {
     id: 'vtext',
     name: 'VText',
