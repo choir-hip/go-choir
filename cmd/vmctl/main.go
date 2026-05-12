@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -19,6 +20,18 @@ func main() {
 	sandboxURLBase := envOr("VMCTL_SANDBOX_URL_BASE", "http://127.0.0.1:8085")
 
 	registry := vmctl.NewOwnershipRegistry(sandboxURLBase)
+	if ownershipPath := os.Getenv("VMCTL_OWNERSHIP_PATH"); ownershipPath != "" {
+		if err := registry.SetPersistencePath(ownershipPath); err != nil {
+			log.Fatalf("vmctl: load ownership registry: %v", err)
+		}
+		log.Printf("vmctl: ownership persistence enabled (%s)", ownershipPath)
+	} else if stateDir := os.Getenv("VM_STATE_DIR"); stateDir != "" {
+		ownershipPath = filepath.Join(stateDir, "ownerships.json")
+		if err := registry.SetPersistencePath(ownershipPath); err != nil {
+			log.Fatalf("vmctl: load ownership registry: %v", err)
+		}
+		log.Printf("vmctl: ownership persistence enabled (%s)", ownershipPath)
+	}
 
 	// Configure the gateway URL for issuing sandbox credentials to VM guests.
 	// When Firecracker VMs are active, each guest sandbox needs a token to
@@ -51,7 +64,12 @@ func main() {
 		}
 		mgr := vmmanager.NewManager(mgrCfg)
 		mgr.Start()
-		defer mgr.Stop()
+		if envBool("VMCTL_STOP_MANAGED_ON_EXIT", true) {
+			defer mgr.Stop()
+		} else {
+			defer mgr.StopHealthChecks()
+			log.Printf("vmctl: managed VMs will be left running on process exit for reattach")
+		}
 
 		// Wire the manager to the registry via an adapter that
 		// translates between the vmctl and vmmanager interfaces.
@@ -90,6 +108,7 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		MachineCPUCount:   cfg.MachineCPUCount,
 		MachineMemSizeMib: cfg.MachineMemSizeMib,
 		PersistentDir:     cfg.PersistentDir,
+		SourceVMID:        cfg.SourceVMID,
 		GatewayToken:      cfg.GatewayToken,
 	})
 	if err != nil {
@@ -113,6 +132,19 @@ func (a *vmManagerAdapter) HibernateVM(vmID string) error {
 
 func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) {
 	inst, err := a.mgr.ResumeVM(vmID)
+	if err != nil {
+		return nil, err
+	}
+	return &vmctl.VMInstanceInfo{
+		HostURL: inst.HostURL,
+		Epoch:   inst.Config.Epoch,
+		Healthy: inst.Healthy,
+		State:   string(inst.State),
+	}, nil
+}
+
+func (a *vmManagerAdapter) ReattachVM(vmID, hostURL string, epoch int64) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.ReattachVM(vmID, hostURL, epoch)
 	if err != nil {
 		return nil, err
 	}
@@ -159,4 +191,19 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	switch v {
+	case "0", "false", "FALSE", "no", "NO":
+		return false
+	case "1", "true", "TRUE", "yes", "YES":
+		return true
+	default:
+		return fallback
+	}
 }

@@ -218,6 +218,10 @@ in
       # CAP_NET_ADMIN is required for: ip tuntap, ip addr, ip link,
       # iptables (DNAT, MASQUERADE, FORWARD rules), and ip route.
       CapabilityBoundingSet = [ "CAP_NET_ADMIN" "CAP_SYS_PTRACE" ];
+      # Let Firecracker child processes survive vmctl process replacement.
+      # The new vmctl process reattaches using durable ownership + pid files
+      # after proving the guest health endpoint still responds.
+      KillMode = "process";
       # IP forwarding must be enabled for guest↔host communication.
       # ProtectKernelTunables blocks /proc/sys writes, so we override it
       # and use ExecStartPre to set ip_forward before the service starts.
@@ -253,6 +257,7 @@ in
         "VM_MEM_MIB=512"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=3s"
+        "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Idle timeout: VMs idle for 30 minutes are hibernated (VAL-VM-008).
         "VMCTL_IDLE_TIMEOUT=30m"
         # Gateway URL for issuing sandbox credentials to VM guests.

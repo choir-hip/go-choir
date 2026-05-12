@@ -84,6 +84,8 @@ func newForkDesktopTool(rt *Runtime) Tool {
 				"status":              "forked_background",
 				"desktop_id":          resolved.DesktopID,
 				"parent_desktop_id":   sourceDesktopID,
+				"parent_vm_id":        resolved.ParentVMID,
+				"snapshot_kind":       resolved.SnapshotKind,
 				"published":           resolved.Published,
 				"availability":        "background_only",
 				"copied_window_count": len(clonedState.Windows),

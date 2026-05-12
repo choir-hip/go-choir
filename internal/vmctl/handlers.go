@@ -37,6 +37,8 @@ type resolveResponse struct {
 	DesktopID       string `json:"desktop_id"`
 	Kind            VMKind `json:"kind,omitempty"`
 	ParentDesktopID string `json:"parent_desktop_id,omitempty"`
+	ParentVMID      string `json:"parent_vm_id,omitempty"`
+	SnapshotKind    string `json:"snapshot_kind,omitempty"`
 	Published       bool   `json:"published"`
 	SandboxURL      string `json:"sandbox_url"`
 	State           string `json:"state"`
@@ -49,6 +51,8 @@ type ownershipResponse struct {
 	DesktopID       string `json:"desktop_id"`
 	Kind            VMKind `json:"kind,omitempty"`
 	ParentDesktopID string `json:"parent_desktop_id,omitempty"`
+	ParentVMID      string `json:"parent_vm_id,omitempty"`
+	SnapshotKind    string `json:"snapshot_kind,omitempty"`
 	WorkerID        string `json:"worker_id,omitempty"`
 	ParentAgentID   string `json:"parent_agent_id,omitempty"`
 	TrajectoryID    string `json:"trajectory_id,omitempty"`
@@ -164,6 +168,8 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		DesktopID:       own.DesktopID,
 		Kind:            own.Kind,
 		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
@@ -211,6 +217,8 @@ func (h *Handler) HandleForkDesktop(w http.ResponseWriter, r *http.Request) {
 		DesktopID:       own.DesktopID,
 		Kind:            own.Kind,
 		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
@@ -255,6 +263,8 @@ func (h *Handler) HandlePublishDesktop(w http.ResponseWriter, r *http.Request) {
 		DesktopID:       own.DesktopID,
 		Kind:            own.Kind,
 		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
@@ -329,6 +339,8 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		DesktopID:       own.DesktopID,
 		Kind:            own.Kind,
 		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
 		WorkerID:        own.WorkerID,
 		ParentAgentID:   own.ParentAgentID,
 		TrajectoryID:    own.TrajectoryID,
@@ -488,11 +500,16 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:       own.VMID,
-		UserID:     own.UserID,
-		DesktopID:  own.DesktopID,
-		SandboxURL: own.SandboxURL,
-		State:      string(own.State),
+		VMID:            own.VMID,
+		UserID:          own.UserID,
+		DesktopID:       own.DesktopID,
+		Kind:            own.Kind,
+		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
+		Published:       own.Published,
+		SandboxURL:      own.SandboxURL,
+		State:           string(own.State),
 	})
 }
 
@@ -531,11 +548,16 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:       own.VMID,
-		UserID:     own.UserID,
-		DesktopID:  own.DesktopID,
-		SandboxURL: own.SandboxURL,
-		State:      string(own.State),
+		VMID:            own.VMID,
+		UserID:          own.UserID,
+		DesktopID:       own.DesktopID,
+		Kind:            own.Kind,
+		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
+		Published:       own.Published,
+		SandboxURL:      own.SandboxURL,
+		State:           string(own.State),
 	})
 }
 
@@ -618,6 +640,8 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			DesktopID:       own.DesktopID,
 			Kind:            own.Kind,
 			ParentDesktopID: own.ParentDesktopID,
+			ParentVMID:      own.ParentVMID,
+			SnapshotKind:    own.SnapshotKind,
 			WorkerID:        own.WorkerID,
 			ParentAgentID:   own.ParentAgentID,
 			TrajectoryID:    own.TrajectoryID,

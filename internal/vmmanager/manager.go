@@ -26,14 +26,18 @@ package vmmanager
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -58,6 +62,8 @@ const (
 	// StateFailed means the VM has crashed or failed to start.
 	StateFailed VMState = "failed"
 )
+
+const dataImageSizeMB = 2048
 
 // VMConfig holds the configuration for launching a single Firecracker VM.
 type VMConfig struct {
@@ -100,6 +106,12 @@ type VMConfig struct {
 	// (user data, task state) is stored. This directory is mounted into
 	// the guest and survives stop/resume cycles (VAL-CROSS-116).
 	PersistentDir string
+
+	// SourceVMID, when set, creates this VM's mutable data image by copying
+	// the source VM's data image. The source must be a stopped/hibernated VM
+	// or an unmanaged base snapshot on disk; live disk copying is rejected so
+	// callers cannot pretend a best-effort copy is an isolated fork.
+	SourceVMID string
 
 	// GatewayToken is the sandbox credential token for authenticating to
 	// the host-side gateway. Written to a file in the persistent directory
@@ -256,6 +268,37 @@ func (m *Manager) guestAndHostIP(hostPort int) (guestIP, hostIP string) {
 	return fmt.Sprintf("172.%d.0.2", subnetIndex), fmt.Sprintf("172.%d.0.1", subnetIndex)
 }
 
+func (m *Manager) reserveHostURLLocked(hostURL string) {
+	hostPort, ok := m.hostPortFromHostURL(hostURL)
+	if !ok {
+		return
+	}
+	if m.nextPort <= hostPort {
+		m.nextPort = hostPort + 1
+	}
+}
+
+func (m *Manager) hostPortFromHostURL(hostURL string) (int, bool) {
+	u, err := url.Parse(hostURL)
+	if err != nil {
+		return 0, false
+	}
+	host := u.Hostname()
+	parts := strings.Split(host, ".")
+	if len(parts) == 4 && parts[0] == "172" && parts[2] == "0" && parts[3] == "2" {
+		subnetIndex, err := strconv.Atoi(parts[1])
+		if err != nil || subnetIndex <= 0 {
+			return 0, false
+		}
+		return m.cfg.HostBasePort + subnetIndex - 1, true
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil || port < m.cfg.HostBasePort {
+		return 0, false
+	}
+	return port, true
+}
+
 // Start begins the manager's background health checking loop.
 func (m *Manager) Start() {
 	m.mu.Lock()
@@ -269,6 +312,17 @@ func (m *Manager) Start() {
 
 // Stop shuts down all managed VMs and stops the health checker.
 func (m *Manager) Stop() {
+	m.stop(true)
+}
+
+// StopHealthChecks stops only the manager's background goroutines. It leaves
+// Firecracker child processes running so a replacement vmctl process can
+// reattach to them from durable ownership metadata.
+func (m *Manager) StopHealthChecks() {
+	m.stop(false)
+}
+
+func (m *Manager) stop(stopVMs bool) {
 	m.mu.Lock()
 	cancel := m.healthCancel
 	done := m.healthDone
@@ -280,6 +334,11 @@ func (m *Manager) Stop() {
 	}
 	if done != nil {
 		<-done
+	}
+
+	if !stopVMs {
+		log.Printf("vmmanager: stopped health checker; managed VMs left running for reattach")
+		return
 	}
 
 	// Stop all VMs.
@@ -403,10 +462,28 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 		}
 		dataImg := filepath.Join(vmDataDir, "data.img")
 		if _, err := os.Stat(dataImg); os.IsNotExist(err) {
-			// Create a 64MB sparse ext4 data image for mutable state.
-			if err := m.createDataImage(dataImg, 64); err != nil {
-				return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
+			if cfg.SourceVMID != "" {
+				if source, ok := m.vms[cfg.SourceVMID]; ok && source.State == StateRunning {
+					return nil, fmt.Errorf("source VM %s is running; refusing unsafe live data image copy", cfg.SourceVMID)
+				}
+				sourceDataImg := filepath.Join(m.cfg.StateDir, cfg.SourceVMID, "data.img")
+				if err := m.copySparseFile(sourceDataImg, dataImg); err != nil {
+					return nil, fmt.Errorf("clone data image for VM %s from %s: %w", cfg.VMID, cfg.SourceVMID, err)
+				}
+			} else {
+				// Create a sparse ext4 data image for mutable state. This must
+				// be large enough for desktop files, VText artifacts, and generated
+				// proof outputs; tiny images make "persistent" desktops unusable.
+				if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
+					return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
+				}
 			}
+		} else if err == nil && cfg.SourceVMID == "" {
+			if err := m.ensureDataImageMinSize(dataImg, dataImageSizeMB); err != nil {
+				return nil, fmt.Errorf("resize data image for VM %s: %w", cfg.VMID, err)
+			}
+		} else if err != nil {
+			return nil, fmt.Errorf("stat data image for VM %s: %w", cfg.VMID, err)
 		}
 	} else if cfg.RootfsPath != "" {
 		// Legacy approach: create a per-VM writable copy of the rootfs.
@@ -586,6 +663,65 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	inst.LastHealthCheck = time.Now()
 
 	log.Printf("vmmanager: resumed VM %s (host=%s epoch=%d)", vmID, hostURL, epoch)
+	return inst, nil
+}
+
+// ReattachVM attaches a new manager process to a Firecracker process that
+// survived vmctl restart. It trusts the durable routing metadata only after
+// both the saved PID exists and the guest health endpoint responds.
+func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, error) {
+	if strings.TrimSpace(vmID) == "" {
+		return nil, fmt.Errorf("vm_id is required")
+	}
+	if strings.TrimSpace(hostURL) == "" {
+		return nil, fmt.Errorf("host_url is required")
+	}
+	pid, err := m.loadPID(vmID)
+	if err != nil {
+		return nil, err
+	}
+	if !processExists(pid) {
+		return nil, fmt.Errorf("firecracker pid %d for VM %s is not running", pid, vmID)
+	}
+	if !m.probeGuestHealth(hostURL) {
+		return nil, fmt.Errorf("guest health check failed for reattach VM %s at %s", vmID, hostURL)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if inst, ok := m.vms[vmID]; ok {
+		if inst.State == StateRunning {
+			return inst, nil
+		}
+	}
+	if epoch <= 0 {
+		if loaded, err := m.loadEpoch(vmID); err == nil {
+			epoch = loaded
+		}
+	}
+	inst := &VMInstance{
+		Config: VMConfig{
+			VMID:              vmID,
+			KernelImagePath:   m.cfg.KernelImagePath,
+			InitrdPath:        m.cfg.InitrdPath,
+			RootfsPath:        m.cfg.RootfsPath,
+			StoreDiskPath:     m.cfg.StoreDiskPath,
+			GuestPort:         m.cfg.GuestPort,
+			MachineCPUCount:   m.cfg.MachineCPUCount,
+			MachineMemSizeMib: m.cfg.MachineMemSizeMib,
+			PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
+			Epoch:             epoch,
+		},
+		State:           StateRunning,
+		HostURL:         hostURL,
+		PID:             pid,
+		StartedAt:       time.Now(),
+		LastHealthCheck: time.Now(),
+		Healthy:         true,
+	}
+	m.vms[vmID] = inst
+	m.reserveHostURLLocked(hostURL)
+	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
 
@@ -919,6 +1055,9 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		inst.PID = cmd.Process.Pid
 		inst.cmd = cmd
 		inst.done = make(chan struct{})
+		if err := m.savePID(vmID, inst.PID); err != nil {
+			log.Printf("vmmanager: warning: could not save pid for VM %s: %v", vmID, err)
+		}
 
 		// Monitor the process in the background.
 		go func() {
@@ -947,9 +1086,16 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 				log.Printf("vmmanager: timeout waiting for VM process %d to exit", inst.PID)
 			}
 		}
+	} else if inst.PID > 0 {
+		if proc, err := os.FindProcess(inst.PID); err == nil {
+			_ = proc.Kill()
+		}
 	}
 	inst.PID = 0
 	inst.cmd = nil
+	if inst.Config.VMID != "" {
+		_ = os.Remove(m.pidPath(inst.Config.VMID))
+	}
 
 	// Clean up the tap device.
 	if inst.Config.VMID != "" && len(inst.Config.VMID) >= 8 {
@@ -963,6 +1109,44 @@ func (m *Manager) forceCleanup(vmID string) {
 	if inst, ok := m.vms[vmID]; ok {
 		m.killFirecrackerProcess(inst)
 	}
+}
+
+func (m *Manager) pidPath(vmID string) string {
+	return filepath.Join(m.cfg.StateDir, vmID, "firecracker.pid")
+}
+
+func (m *Manager) savePID(vmID string, pid int) error {
+	path := m.pidPath(vmID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(fmt.Sprintf("%d", pid)), 0o644)
+}
+
+func (m *Manager) loadPID(vmID string) (int, error) {
+	data, err := os.ReadFile(m.pidPath(vmID))
+	if err != nil {
+		return 0, fmt.Errorf("load firecracker pid for VM %s: %w", vmID, err)
+	}
+	var pid int
+	for _, b := range strings.TrimSpace(string(data)) {
+		if b < '0' || b > '9' {
+			return 0, fmt.Errorf("invalid firecracker pid for VM %s", vmID)
+		}
+		pid = pid*10 + int(b-'0')
+	}
+	if pid <= 0 {
+		return 0, fmt.Errorf("invalid firecracker pid for VM %s", vmID)
+	}
+	return pid, nil
+}
+
+func processExists(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 // probeGuestHealth attempts to reach the guest's /health endpoint.
@@ -1055,6 +1239,67 @@ func (m *Manager) copyFile(src, dst string) error {
 	return nil
 }
 
+// copySparseFile copies a disk image while preserving zero holes where
+// possible. It avoids materializing the full sparse data.img when the source
+// only contains a small amount of written state.
+func (m *Manager) copySparseFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
+	}
+
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open source data image %s: %w", src, err)
+	}
+	defer in.Close()
+
+	info, err := in.Stat()
+	if err != nil {
+		return fmt.Errorf("stat source data image %s: %w", src, err)
+	}
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("create destination data image %s: %w", dst, err)
+	}
+	defer out.Close()
+
+	buf := make([]byte, 1024*1024)
+	for {
+		n, readErr := in.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			if isAllZero(chunk) {
+				if _, err := out.Seek(int64(n), 1); err != nil {
+					return fmt.Errorf("seek sparse destination %s: %w", dst, err)
+				}
+			} else if _, err := out.Write(chunk); err != nil {
+				return fmt.Errorf("write destination data image %s: %w", dst, err)
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return fmt.Errorf("read source data image %s: %w", src, readErr)
+		}
+	}
+
+	if err := out.Truncate(info.Size()); err != nil {
+		return fmt.Errorf("truncate destination data image %s: %w", dst, err)
+	}
+	return nil
+}
+
+func isAllZero(buf []byte) bool {
+	for _, b := range buf {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // createDataImage creates a sparse ext4 filesystem image for per-VM
 // mutable state. The image size is specified in megabytes.
 // This is used by the microvm.nix approach where the rootfs is read-only
@@ -1086,6 +1331,26 @@ func (m *Manager) createDataImage(path string, sizeMB int) error {
 		return fmt.Errorf("mkfs.ext4 data image %s: %w (%s)", path, err, string(output))
 	}
 
+	return nil
+}
+
+func (m *Manager) ensureDataImageMinSize(path string, sizeMB int) error {
+	want := int64(sizeMB) * 1024 * 1024
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.Size() >= want {
+		return nil
+	}
+	if err := os.Truncate(path, want); err != nil {
+		return fmt.Errorf("truncate data image %s: %w", path, err)
+	}
+	resizeBin := findBinary("resize2fs", "/run/current-system/sw/bin/resize2fs")
+	cmd := exec.Command(resizeBin, path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("resize2fs data image %s: %w (%s)", path, err, string(output))
+	}
 	return nil
 }
 

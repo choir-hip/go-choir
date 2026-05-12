@@ -403,6 +403,8 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 		Status            string `json:"status"`
 		DesktopID         string `json:"desktop_id"`
 		ParentDesktopID   string `json:"parent_desktop_id"`
+		ParentVMID        string `json:"parent_vm_id"`
+		SnapshotKind      string `json:"snapshot_kind"`
 		Published         bool   `json:"published"`
 		Availability      string `json:"availability"`
 		CopiedWindowCount int    `json:"copied_window_count"`
@@ -418,6 +420,12 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 	}
 	if resp.ParentDesktopID != types.PrimaryDesktopID {
 		t.Fatalf("parent_desktop_id = %q, want %q", resp.ParentDesktopID, types.PrimaryDesktopID)
+	}
+	if resp.ParentVMID != sourceOwn.VMID {
+		t.Fatalf("parent_vm_id = %q, want %q", resp.ParentVMID, sourceOwn.VMID)
+	}
+	if resp.SnapshotKind != "metadata_only" {
+		t.Fatalf("snapshot_kind = %q, want metadata_only", resp.SnapshotKind)
 	}
 	if resp.Published {
 		t.Fatal("forked candidate desktop should not be published yet")

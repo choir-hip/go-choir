@@ -181,6 +181,10 @@ EOF
       SANDBOX_ID = "sandbox-guest";
       # Persistent state directory on the virtio-blk data volume.
       RUNTIME_STORE_PATH = "/mnt/persistent/state";
+      # Files app data must use the same persistent data volume. Without this
+      # the sandbox falls back to its process-local default, which can disappear
+      # across guest reboot/recovery even when runtime DB state survives.
+      SANDBOX_FILES_ROOT = "/mnt/persistent/files";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";

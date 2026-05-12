@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -457,6 +458,220 @@ func TestCreateDataImage_CreatesMissingFile(t *testing.T) {
 	}
 	if info.Size() != 8*1024*1024 {
 		t.Fatalf("expected data.img size %d, got %d", 8*1024*1024, info.Size())
+	}
+}
+
+func TestCopySparseFileClonesDataImageContent(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := NewManager(DefaultManagerConfig())
+
+	src := filepath.Join(tmpDir, "source", "data.img")
+	dst := filepath.Join(tmpDir, "target", "data.img")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatalf("MkdirAll source: %v", err)
+	}
+	if err := os.WriteFile(src, []byte("prefix"), 0o644); err != nil {
+		t.Fatalf("WriteFile source: %v", err)
+	}
+	f, err := os.OpenFile(src, os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile source: %v", err)
+	}
+	if _, err := f.Seek(1024*1024, 0); err != nil {
+		t.Fatalf("Seek source: %v", err)
+	}
+	if _, err := f.Write([]byte("suffix")); err != nil {
+		t.Fatalf("Write suffix: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close source: %v", err)
+	}
+
+	if err := mgr.copySparseFile(src, dst); err != nil {
+		t.Fatalf("copySparseFile: %v", err)
+	}
+	srcData, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("ReadFile source: %v", err)
+	}
+	dstData, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("ReadFile destination: %v", err)
+	}
+	if string(dstData) != string(srcData) {
+		t.Fatalf("destination content mismatch")
+	}
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		t.Fatalf("Stat source: %v", err)
+	}
+	dstInfo, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat destination: %v", err)
+	}
+	if dstInfo.Size() != srcInfo.Size() {
+		t.Fatalf("destination size = %d, want %d", dstInfo.Size(), srcInfo.Size())
+	}
+}
+
+func TestBootVMRejectsRunningSourceDataImageFork(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = tmpDir
+	cfg.StoreDiskPath = "/nonexistent/store.erofs"
+	mgr := NewManager(cfg)
+
+	mgr.mu.Lock()
+	mgr.vms["source-vm"] = &VMInstance{
+		Config: VMConfig{VMID: "source-vm"},
+		State:  StateRunning,
+	}
+	mgr.mu.Unlock()
+
+	_, err := mgr.BootVM(VMConfig{
+		VMID:       "target-vm",
+		SourceVMID: "source-vm",
+	})
+	if err == nil {
+		t.Fatal("expected running source data-image fork to fail")
+	}
+	if !strings.Contains(err.Error(), "refusing unsafe live data image copy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBootVMClonesSourceDataImageBeforeLaunch(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = tmpDir
+	cfg.StoreDiskPath = "/nonexistent/store.erofs"
+	cfg.KernelImagePath = "/nonexistent/kernel"
+	cfg.RootfsPath = "/nonexistent/rootfs"
+	mgr := NewManager(cfg)
+
+	sourceData := filepath.Join(tmpDir, "source-vm", "data.img")
+	if err := os.MkdirAll(filepath.Dir(sourceData), 0o755); err != nil {
+		t.Fatalf("MkdirAll source VM: %v", err)
+	}
+	want := []byte("source filesystem bytes")
+	if err := os.WriteFile(sourceData, want, 0o644); err != nil {
+		t.Fatalf("WriteFile source data image: %v", err)
+	}
+
+	_, err := mgr.BootVM(VMConfig{
+		VMID:       "target-vm",
+		SourceVMID: "source-vm",
+	})
+	if err == nil {
+		t.Fatal("expected launch to fail with nonexistent Firecracker inputs")
+	}
+
+	targetData := filepath.Join(tmpDir, "target-vm", "data.img")
+	got, readErr := os.ReadFile(targetData)
+	if readErr != nil {
+		t.Fatalf("ReadFile target data image: %v", readErr)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("target data image = %q, want %q", string(got), string(want))
+	}
+}
+
+func TestBootVMExpandsExistingSmallDataImageBeforeLaunch(t *testing.T) {
+	tmpDir := t.TempDir()
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	resizePath := filepath.Join(binDir, "resize2fs")
+	if err := os.WriteFile(resizePath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile resize2fs: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = tmpDir
+	cfg.StoreDiskPath = "/nonexistent/store.erofs"
+	cfg.KernelImagePath = "/nonexistent/kernel"
+	cfg.RootfsPath = "/nonexistent/rootfs"
+	mgr := NewManager(cfg)
+
+	dataImg := filepath.Join(tmpDir, "old-vm-123", "data.img")
+	if err := os.MkdirAll(filepath.Dir(dataImg), 0o755); err != nil {
+		t.Fatalf("MkdirAll VM dir: %v", err)
+	}
+	if err := os.WriteFile(dataImg, []byte("old small image"), 0o644); err != nil {
+		t.Fatalf("WriteFile data image: %v", err)
+	}
+
+	_, err := mgr.BootVM(VMConfig{VMID: "old-vm-123"})
+	if err == nil {
+		t.Fatal("expected launch to fail with nonexistent Firecracker inputs")
+	}
+	info, statErr := os.Stat(dataImg)
+	if statErr != nil {
+		t.Fatalf("Stat data image: %v", statErr)
+	}
+	want := int64(dataImageSizeMB) * 1024 * 1024
+	if info.Size() != want {
+		t.Fatalf("data image size = %d, want %d", info.Size(), want)
+	}
+}
+
+func TestReattachVMRequiresPIDAndHealthyGuest(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := NewManager(ManagerConfig{
+		StateDir:           tmpDir,
+		GuestPort:          8085,
+		HealthCheckTimeout: time.Second,
+	})
+
+	if _, err := mgr.ReattachVM("vm-missing-pid", "http://127.0.0.1:1", 4); err == nil {
+		t.Fatal("expected missing pid reattach to fail")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := mgr.savePID("vm-reattach", os.Getpid()); err != nil {
+		t.Fatalf("savePID: %v", err)
+	}
+	inst, err := mgr.ReattachVM("vm-reattach", srv.URL, 9)
+	if err != nil {
+		t.Fatalf("ReattachVM: %v", err)
+	}
+	if inst.State != StateRunning || !inst.Healthy {
+		t.Fatalf("reattached state=%s healthy=%v, want running healthy", inst.State, inst.Healthy)
+	}
+	if inst.PID != os.Getpid() {
+		t.Fatalf("reattached pid=%d, want %d", inst.PID, os.Getpid())
+	}
+	if inst.Config.Epoch != 9 {
+		t.Fatalf("reattached epoch=%d, want 9", inst.Config.Epoch)
+	}
+}
+
+func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
+	mgr := NewManager(ManagerConfig{HostBasePort: 9000})
+
+	mgr.reserveHostURLLocked("http://172.9.0.2:8085")
+	if mgr.nextPort != 9009 {
+		t.Fatalf("nextPort=%d, want 9009 after reserving 172.9.0.2", mgr.nextPort)
+	}
+
+	mgr.reserveHostURLLocked("http://172.2.0.2:8085")
+	if mgr.nextPort != 9009 {
+		t.Fatalf("nextPort=%d, lower reservation should not move nextPort backward", mgr.nextPort)
+	}
+
+	mgr.reserveHostURLLocked("http://127.0.0.1:9017")
+	if mgr.nextPort != 9018 {
+		t.Fatalf("nextPort=%d, want localhost host-port reservation to 9018", mgr.nextPort)
 	}
 }
 

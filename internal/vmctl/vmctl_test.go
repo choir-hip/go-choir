@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -175,6 +176,9 @@ func (m *blockingBootVMManager) StopVM(vmID string) error      { return nil }
 func (m *blockingBootVMManager) HibernateVM(vmID string) error { return nil }
 func (m *blockingBootVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 1, Healthy: true, State: "running"}, nil
+}
+func (m *blockingBootVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstanceInfo, error) {
+	return &VMInstanceInfo{HostURL: hostURL, Epoch: epoch, Healthy: true, State: "running"}, nil
 }
 func (m *blockingBootVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 2, Healthy: true, State: "running"}, nil
@@ -678,6 +682,63 @@ func TestHandler_ForkDesktop(t *testing.T) {
 	}
 	if result.Published {
 		t.Fatal("forked desktop should not be published yet")
+	}
+}
+
+func TestOwnershipRegistry_ForkDesktopWithVMManagerUsesSourceDataImage(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	mock := &mockVMManager{
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9090",
+			Epoch:   2,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg.SetVMManager(mock)
+
+	source, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
+	}
+	if err := reg.StopVMForDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("StopVMForDesktop primary: %v", err)
+	}
+
+	branch, err := reg.ForkDesktop("user-1", PrimaryDesktopID, "branch-a")
+	if err != nil {
+		t.Fatalf("ForkDesktop: %v", err)
+	}
+	if branch.ParentVMID != source.VMID {
+		t.Fatalf("ParentVMID = %q, want %q", branch.ParentVMID, source.VMID)
+	}
+	if branch.SnapshotKind != "data_img_copy" {
+		t.Fatalf("SnapshotKind = %q, want data_img_copy", branch.SnapshotKind)
+	}
+	if len(mock.boots) != 2 {
+		t.Fatalf("expected source boot plus fork boot, got %d", len(mock.boots))
+	}
+	forkBoot := mock.boots[1]
+	if forkBoot.SourceVMID != source.VMID {
+		t.Fatalf("fork SourceVMID = %q, want %q", forkBoot.SourceVMID, source.VMID)
+	}
+	if forkBoot.VMID != branch.VMID {
+		t.Fatalf("fork boot VMID = %q, want branch VMID %q", forkBoot.VMID, branch.VMID)
+	}
+}
+
+func TestOwnershipRegistry_ForkDesktopRejectsActiveSourceWithVMManager(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(&mockVMManager{})
+
+	source, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
+	}
+	if _, err := reg.ForkDesktop("user-1", PrimaryDesktopID, "branch-a"); err == nil {
+		t.Fatal("expected active source fork to fail with VM manager")
+	} else if !strings.Contains(err.Error(), source.VMID) || !strings.Contains(err.Error(), "unsafe live data image fork") {
+		t.Fatalf("unexpected fork error: %v", err)
 	}
 }
 
@@ -1788,14 +1849,17 @@ type mockVMManager struct {
 	stops      []string
 	hibernates []string
 	resumes    []string
+	reattaches []string
 	recovers   []string
 	// Configurable responses
-	bootResponse    *VMInstanceInfo
-	bootError       error
-	resumeResponse  *VMInstanceInfo
-	resumeError     error
-	recoverResponse *VMInstanceInfo
-	recoverError    error
+	bootResponse     *VMInstanceInfo
+	bootError        error
+	resumeResponse   *VMInstanceInfo
+	resumeError      error
+	reattachResponse *VMInstanceInfo
+	reattachError    error
+	recoverResponse  *VMInstanceInfo
+	recoverError     error
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
@@ -1828,6 +1892,17 @@ func (m *mockVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
 		return m.resumeResponse, nil
 	}
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9002", Epoch: 1, Healthy: true, State: "running"}, nil
+}
+
+func (m *mockVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstanceInfo, error) {
+	m.reattaches = append(m.reattaches, vmID)
+	if m.reattachError != nil {
+		return nil, m.reattachError
+	}
+	if m.reattachResponse != nil {
+		return m.reattachResponse, nil
+	}
+	return &VMInstanceInfo{HostURL: hostURL, Epoch: epoch, Healthy: true, State: "running"}, nil
 }
 
 func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
@@ -2087,6 +2162,125 @@ func TestOwnershipRegistry_ResumeOnResolveWithVMManager(t *testing.T) {
 	// Verify resume was called on the manager.
 	if len(mock.resumes) != 1 {
 		t.Fatalf("expected 1 ResumeVM call, got %d", len(mock.resumes))
+	}
+}
+
+func TestOwnershipRegistry_PersistsOwnershipAndRebootsSameVMIDAfterRestart(t *testing.T) {
+	path := t.TempDir() + "/ownerships.json"
+
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+
+	own, err := reg.ResolveOrAssign("user-persist")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected ownership persistence file: %v", err)
+	}
+
+	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("restart SetPersistencePath: %v", err)
+	}
+
+	loaded := restarted.GetOwnership("user-persist")
+	if loaded == nil {
+		t.Fatal("expected persisted ownership after restart")
+	}
+	if loaded.VMID != own.VMID {
+		t.Fatalf("loaded VMID = %s, want %s", loaded.VMID, own.VMID)
+	}
+	if loaded.State != VMStateStopped {
+		t.Fatalf("loaded state = %s, want %s", loaded.State, VMStateStopped)
+	}
+	if loaded.StoppedBy != "vmctl-restart" {
+		t.Fatalf("loaded StoppedBy = %q, want vmctl-restart", loaded.StoppedBy)
+	}
+
+	mock := &mockVMManager{
+		reattachError: fmt.Errorf("vm process not available after process restart"),
+		resumeError:   fmt.Errorf("vm not managed after process restart"),
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9099",
+			Epoch:   loaded.Epoch + 1,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	restarted.SetVMManager(mock)
+
+	resolved, err := restarted.ResolveOrAssign("user-persist")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign after restart: %v", err)
+	}
+	if resolved.VMID != own.VMID {
+		t.Fatalf("resolved VMID = %s, want persisted %s", resolved.VMID, own.VMID)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9099" {
+		t.Fatalf("resolved SandboxURL = %s, want manager boot URL", resolved.SandboxURL)
+	}
+	if resolved.State != VMStateActive {
+		t.Fatalf("resolved state = %s, want active", resolved.State)
+	}
+	if len(mock.resumes) != 1 {
+		t.Fatalf("expected resume attempt before boot fallback, got %d", len(mock.resumes))
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("expected one boot fallback, got %d", len(mock.boots))
+	}
+	if mock.boots[0].VMID != own.VMID {
+		t.Fatalf("boot VMID = %s, want persisted %s", mock.boots[0].VMID, own.VMID)
+	}
+}
+
+func TestOwnershipRegistry_ReattachesPersistedVMWhenManagerCanAdopt(t *testing.T) {
+	path := t.TempDir() + "/ownerships.json"
+
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	own, err := reg.ResolveOrAssign("user-reattach")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+
+	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("restart SetPersistencePath: %v", err)
+	}
+	loaded := restarted.GetOwnership("user-reattach")
+	if loaded == nil {
+		t.Fatal("expected persisted ownership after restart")
+	}
+	if loaded.State != VMStateStopped || loaded.StoppedBy != "vmctl-restart" {
+		t.Fatalf("loaded state = %s stopped_by=%q, want stopped/vmctl-restart", loaded.State, loaded.StoppedBy)
+	}
+
+	mock := &mockVMManager{}
+	restarted.SetVMManager(mock)
+
+	reattached := restarted.GetOwnership("user-reattach")
+	if reattached == nil {
+		t.Fatal("expected ownership after reattach")
+	}
+	if reattached.VMID != own.VMID {
+		t.Fatalf("reattached VMID = %s, want %s", reattached.VMID, own.VMID)
+	}
+	if reattached.State != VMStateActive {
+		t.Fatalf("reattached state = %s, want active", reattached.State)
+	}
+	if reattached.StoppedBy != "" {
+		t.Fatalf("reattached stopped_by = %q, want empty", reattached.StoppedBy)
+	}
+	if len(mock.reattaches) != 1 || mock.reattaches[0] != own.VMID {
+		t.Fatalf("reattaches = %+v, want [%s]", mock.reattaches, own.VMID)
+	}
+	if len(mock.boots) != 0 {
+		t.Fatalf("reattach should not boot, got %d boot calls", len(mock.boots))
 	}
 }
 
