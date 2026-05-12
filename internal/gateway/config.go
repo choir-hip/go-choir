@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -202,6 +203,14 @@ type CredentialResult struct {
 	ExpiresAt time.Time
 }
 
+// CredentialEnsureResult is returned when an existing VM bootstrap token has
+// been reconciled into the gateway's durable identity store.
+type CredentialEnsureResult struct {
+	SandboxID string    `json:"sandbox_id"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // IssueCredential creates a new credential for the given sandbox ID.
 // If an existing credential exists, it is revoked and replaced.
 // Returns the raw token (shown once) and an error if generation fails.
@@ -237,6 +246,60 @@ func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult,
 	return &CredentialResult{
 		SandboxID: sandboxID,
 		RawToken:  sandboxID + ":" + token,
+		ExpiresAt: identity.ExpiresAt,
+	}, nil
+}
+
+// EnsureCredential imports an already-issued raw sandbox credential into the
+// registry if the sandbox identity is currently unknown. This is intentionally
+// narrower than IssueCredential: it never returns the raw token, refuses to
+// overwrite a different known credential, and refuses to reactivate revoked or
+// expired credentials. It exists to repair VMs that were booted before gateway
+// identity persistence existed, where the host still has the VM bootstrap token
+// but the restarted gateway has lost the token hash.
+func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	sandboxID, token, ok := splitCredential(rawToken)
+	if !ok || strings.TrimSpace(sandboxID) == "" || strings.TrimSpace(token) == "" {
+		return nil, fmt.Errorf("invalid credential format")
+	}
+	hash := sha256.Sum256([]byte(token))
+	hashText := hex.EncodeToString(hash[:])
+	now := time.Now()
+
+	if existing, ok := r.identities[sandboxID]; ok {
+		if existing.TokenHash != hashText {
+			return nil, fmt.Errorf("credential conflict")
+		}
+		if !existing.Active {
+			return nil, fmt.Errorf("credential revoked")
+		}
+		if now.After(existing.ExpiresAt) {
+			return nil, fmt.Errorf("credential expired")
+		}
+		return &CredentialEnsureResult{
+			SandboxID: sandboxID,
+			Status:    "already_active",
+			ExpiresAt: existing.ExpiresAt,
+		}, nil
+	}
+
+	identity := &SandboxIdentity{
+		SandboxID: sandboxID,
+		TokenHash: hashText,
+		IssuedAt:  now,
+		ExpiresAt: now.Add(r.tokenTTL),
+		Active:    true,
+	}
+	r.identities[sandboxID] = identity
+	if err := r.persistLocked(); err != nil {
+		return nil, err
+	}
+	return &CredentialEnsureResult{
+		SandboxID: sandboxID,
+		Status:    "imported",
 		ExpiresAt: identity.ExpiresAt,
 	}, nil
 }

@@ -322,6 +322,18 @@ func (m *Manager) StopHealthChecks() {
 	m.stop(false)
 }
 
+// ReadGatewayToken returns the host-side bootstrap token written for a VM.
+// This is a sandbox identity credential, not a provider credential. Callers use
+// it only to reconcile the gateway's token hash store after gateway restart.
+func (m *Manager) ReadGatewayToken(vmID string) (string, error) {
+	tokenPath := filepath.Join(m.cfg.StateDir, vmID, "persist", "gateway-token")
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return "", fmt.Errorf("read gateway token for VM %s: %w", vmID, err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
 func (m *Manager) stop(stopVMs bool) {
 	m.mu.Lock()
 	cancel := m.healthCancel

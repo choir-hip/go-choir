@@ -535,6 +535,44 @@ func (h *Handler) HandleRotateCredential(w http.ResponseWriter, r *http.Request)
 	writeGatewayJSON(w, http.StatusOK, result)
 }
 
+// HandleEnsureCredential handles POST /provider/v1/credentials/ensure.
+// It lets host-side lifecycle control reconcile an existing VM bootstrap token
+// into the durable gateway identity store after a gateway restart or upgrade.
+// It is internal-only and never returns the raw token.
+func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied"})
+		return
+	}
+
+	var req struct {
+		RawToken string `json:"raw_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.RawToken) == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "raw_token is required"})
+		return
+	}
+
+	result, err := h.registry.EnsureCredential(req.RawToken)
+	if err != nil {
+		writeGatewayJSON(w, http.StatusConflict, ErrorResponse{Error: "credential could not be ensured"})
+		return
+	}
+	if result.Status == "imported" {
+		log.Printf("gateway: imported existing credential for sandbox %s (expires=%s)", result.SandboxID, result.ExpiresAt)
+	}
+	writeGatewayJSON(w, http.StatusOK, result)
+}
+
 // authenticateSandbox validates the Bearer token from the Authorization
 // header against the identity registry. Returns the sandbox ID if valid
 // (VAL-GATEWAY-003).
@@ -766,4 +804,5 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/revoke", h.HandleRevokeCredential)
 	s.HandleFunc("/provider/v1/credentials/rotate", h.HandleRotateCredential)
+	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
 }

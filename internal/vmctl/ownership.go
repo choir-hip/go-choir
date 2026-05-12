@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -214,6 +215,10 @@ type VMManager interface {
 	CheckHealth(vmID string) (bool, error)
 }
 
+type vmGatewayTokenReader interface {
+	ReadGatewayToken(vmID string) (string, error)
+}
+
 // VMManagerConfig holds the configuration for launching a single VM,
 // mirroring the vmmanager.VMConfig fields that the registry controls.
 type VMManagerConfig struct {
@@ -269,6 +274,12 @@ type OwnershipRegistry struct {
 	// collapses concurrent first requests (VAL-VM-004).
 	pendingWaiters map[string][]chan *VMOwnership
 
+	// gatewayCredentialNextCheck throttles host-side token reconciliation for
+	// already-running VMs. It avoids an internal gateway round trip on every
+	// proxied browser request while still retrying quickly after transient
+	// failures.
+	gatewayCredentialNextCheck map[string]time.Time
+
 	// sandboxURLBase is the base URL pattern for sandbox runtimes.
 	// The VM ID is appended as a path component: base + "/" + vmID
 	sandboxURLBase string
@@ -307,13 +318,14 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		sandboxURLBase = "http://127.0.0.1:8085"
 	}
 	return &OwnershipRegistry{
-		ownerships:     make(map[string]*VMOwnership),
-		workerVMs:      make(map[string]*VMOwnership),
-		vmByID:         make(map[string]*VMOwnership),
-		pendingWaiters: make(map[string][]chan *VMOwnership),
-		sandboxURLBase: sandboxURLBase,
-		idleTimeout:    0, // no idle timeout by default
-		epochCounter:   1,
+		ownerships:                 make(map[string]*VMOwnership),
+		workerVMs:                  make(map[string]*VMOwnership),
+		vmByID:                     make(map[string]*VMOwnership),
+		pendingWaiters:             make(map[string][]chan *VMOwnership),
+		gatewayCredentialNextCheck: make(map[string]time.Time),
+		sandboxURLBase:             sandboxURLBase,
+		idleTimeout:                0, // no idle timeout by default
+		epochCounter:               1,
 	}
 }
 
@@ -602,7 +614,10 @@ func (r *OwnershipRegistry) issueGatewayToken(sandboxID string) string {
 	r.mu.RLock()
 	gwURL := r.gatewayURL
 	r.mu.RUnlock()
+	return issueGatewayTokenAt(gwURL, sandboxID)
+}
 
+func issueGatewayTokenAt(gwURL, sandboxID string) string {
 	if gwURL == "" {
 		return ""
 	}
@@ -612,8 +627,9 @@ func (r *OwnershipRegistry) issueGatewayToken(sandboxID string) string {
 	body := fmt.Sprintf(`{"sandbox_id":"%s"}`, sandboxID)
 	url := strings.TrimRight(gwURL, "/") + "/provider/v1/credentials/issue"
 
-	req, err := http.NewRequestWithContext(context.Background(),
-		http.MethodPost, url, strings.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	if err != nil {
 		log.Printf("vmctl: gateway token request creation failed for %s: %v", sandboxID, err)
 		return ""
@@ -652,6 +668,79 @@ func (r *OwnershipRegistry) issueGatewayToken(sandboxID string) string {
 	return result.RawToken
 }
 
+const (
+	gatewayCredentialRequestTimeout        = 5 * time.Second
+	gatewayCredentialEnsureSuccessInterval = 10 * time.Minute
+	gatewayCredentialEnsureFailureInterval = 30 * time.Second
+)
+
+func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
+		return
+	}
+	r.mu.Lock()
+	now := time.Now()
+	gwURL := strings.TrimSpace(r.gatewayURL)
+	if gwURL == "" {
+		r.mu.Unlock()
+		return
+	}
+	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) {
+		r.mu.Unlock()
+		return
+	}
+	// Suppress request stampedes while still allowing quick retry if the
+	// gateway is temporarily unavailable or starting during deploy.
+	r.gatewayCredentialNextCheck[vmID] = now.Add(gatewayCredentialEnsureFailureInterval)
+	mgr := r.vmManager
+	r.mu.Unlock()
+
+	reader, ok := mgr.(vmGatewayTokenReader)
+	if !ok {
+		return
+	}
+	rawToken, err := reader.ReadGatewayToken(vmID)
+	if err != nil {
+		log.Printf("vmctl: gateway credential ensure skipped for VM %s: %v", vmID, err)
+		return
+	}
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		log.Printf("vmctl: gateway credential ensure skipped for VM %s: empty token", vmID)
+		return
+	}
+	bodyBytes, err := json.Marshal(map[string]string{"raw_token": rawToken})
+	if err != nil {
+		log.Printf("vmctl: gateway credential ensure marshal failed for VM %s: %v", vmID, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		strings.TrimRight(gwURL, "/")+"/provider/v1/credentials/ensure", strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		log.Printf("vmctl: gateway credential ensure request creation failed for VM %s: %v", vmID, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("vmctl: gateway credential ensure failed for VM %s: %v", vmID, err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		log.Printf("vmctl: gateway credential ensure returned %d for VM %s: %s", resp.StatusCode, vmID, strings.TrimSpace(string(detail)))
+		return
+	}
+	r.mu.Lock()
+	r.gatewayCredentialNextCheck[vmID] = time.Now().Add(gatewayCredentialEnsureSuccessInterval)
+	r.mu.Unlock()
+}
+
 // ResolveOrAssign resolves the VM ownership for the primary desktop of the
 // given user.
 func (r *OwnershipRegistry) ResolveOrAssign(userID string) (*VMOwnership, error) {
@@ -675,6 +764,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 			own.LastActiveAt = time.Now()
 			r.saveLocked()
 			r.mu.Unlock()
+			r.ensureExistingGatewayCredential(own.VMID)
 			return own, nil
 		}
 
@@ -703,6 +793,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 			own.StoppedBy = ""
 			r.saveLocked()
 			r.mu.Unlock()
+			r.ensureExistingGatewayCredential(own.VMID)
 			log.Printf("vmctl: resumed VM %s for user %s desktop %s on resolve (epoch=%d)", own.VMID, userID, desktopID, own.Epoch)
 			return own, nil
 		}
@@ -1243,6 +1334,12 @@ func (r *OwnershipRegistry) ResumeVM(userID string) (*VMOwnership, error) {
 }
 
 func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	var ensureVMID string
+	defer func() {
+		if ensureVMID != "" {
+			r.ensureExistingGatewayCredential(ensureVMID)
+		}
+	}()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1254,6 +1351,9 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	if own.State != VMStateStopped && own.State != VMStateHibernated {
 		if own.State == VMStateActive || own.State == VMStateBooting {
 			own.LastActiveAt = time.Now()
+			if own.IsReady() {
+				ensureVMID = own.VMID
+			}
 			return own, nil
 		}
 		return nil, fmt.Errorf("VM %s cannot be resumed (state=%s)", own.VMID, own.State)
@@ -1276,6 +1376,7 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	own.StoppedBy = ""
 	r.saveLocked()
 	log.Printf("vmctl: resumed VM %s for user %s desktop %s (epoch=%d, same-epoch=resume)", own.VMID, userID, own.DesktopID, own.Epoch)
+	ensureVMID = own.VMID
 	return own, nil
 }
 
@@ -1291,6 +1392,12 @@ func (r *OwnershipRegistry) RecoverVM(userID string) (*VMOwnership, error) {
 }
 
 func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	var ensureVMID string
+	defer func() {
+		if ensureVMID != "" {
+			r.ensureExistingGatewayCredential(ensureVMID)
+		}
+	}()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1322,6 +1429,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	own.StoppedBy = ""
 	r.saveLocked()
 	log.Printf("vmctl: recovered VM %s for user %s desktop %s (new_epoch=%d, fresh-boot)", own.VMID, userID, own.DesktopID, own.Epoch)
+	ensureVMID = own.VMID
 	return own, nil
 }
 

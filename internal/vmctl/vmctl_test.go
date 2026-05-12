@@ -1851,6 +1851,7 @@ type mockVMManager struct {
 	resumes    []string
 	reattaches []string
 	recovers   []string
+	tokens     map[string]string
 	// Configurable responses
 	bootResponse     *VMInstanceInfo
 	bootError        error
@@ -1922,6 +1923,80 @@ func (m *mockVMManager) GetVM(vmID string) *VMInstanceInfo {
 
 func (m *mockVMManager) CheckHealth(vmID string) (bool, error) {
 	return true, nil
+}
+
+func (m *mockVMManager) ReadGatewayToken(vmID string) (string, error) {
+	if m.tokens == nil {
+		return "", os.ErrNotExist
+	}
+	token, ok := m.tokens[vmID]
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	return token, nil
+}
+
+func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing.T) {
+	var ensuredRawToken string
+	gatewayMux := http.NewServeMux()
+	gatewayMux.HandleFunc("/provider/v1/credentials/ensure", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("ensure method = %s, want POST", r.Method)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Errorf("missing internal caller header")
+		}
+		var req struct {
+			RawToken string `json:"raw_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode ensure request: %v", err)
+		}
+		ensuredRawToken = req.RawToken
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sandbox_id":"vm-existing-old-account","status":"imported"}`))
+	})
+	gatewayServer := httptest.NewServer(gatewayMux)
+	t.Cleanup(gatewayServer.Close)
+
+	rawToken := "vm-existing-old-account:token-from-host-persistent-dir"
+
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetGatewayURL(gatewayServer.URL)
+	reg.SetVMManager(&mockVMManager{
+		tokens: map[string]string{
+			"vm-existing-old-account": rawToken,
+		},
+	})
+
+	now := time.Now()
+	own := &VMOwnership{
+		VMID:         "vm-existing-old-account",
+		UserID:       "user-old-account",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateActive,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Epoch:        3,
+		Published:    true,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	resolved, err := reg.ResolveOrAssignDesktop("user-old-account", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if resolved.VMID != own.VMID {
+		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
+	}
+	if ensuredRawToken != rawToken {
+		t.Fatalf("ensured raw token = %q, want %q", ensuredRawToken, rawToken)
+	}
 }
 
 func TestOwnershipRegistry_DelegatesBootToVMManager(t *testing.T) {

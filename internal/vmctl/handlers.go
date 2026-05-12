@@ -332,6 +332,9 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for user"})
 		return
 	}
+	if own.IsReady() {
+		h.registry.ensureExistingGatewayCredential(own.VMID)
+	}
 
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
 		VMID:            own.VMID,

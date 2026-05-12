@@ -1063,6 +1063,14 @@ func TestBootVM_WritesGatewayToken(t *testing.T) {
 	if string(data) != token {
 		t.Errorf("expected token %q, got %q", token, string(data))
 	}
+
+	readToken, err := mgr.ReadGatewayToken("test-vm-gw")
+	if err != nil {
+		t.Fatalf("ReadGatewayToken: %v", err)
+	}
+	if readToken != token {
+		t.Errorf("ReadGatewayToken = %q, want %q", readToken, token)
+	}
 }
 
 func TestBootVM_NoGatewayToken(t *testing.T) {

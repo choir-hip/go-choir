@@ -186,6 +186,10 @@ func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 	return a.mgr.CheckHealth(vmID)
 }
 
+func (a *vmManagerAdapter) ReadGatewayToken(vmID string) (string, error) {
+	return a.mgr.ReadGatewayToken(vmID)
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

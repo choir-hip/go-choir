@@ -209,6 +209,69 @@ func TestIdentityRegistryPersistsRevocation(t *testing.T) {
 	}
 }
 
+func TestEnsureCredentialImportsHostHeldTokenAfterRegistryRestart(t *testing.T) {
+	path := t.TempDir() + "/gateway-identities.json"
+	rawToken := "sandbox-pre-persistence:host-held-token"
+
+	reg := NewIdentityRegistry(1 * time.Hour)
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("set persistence path: %v", err)
+	}
+	if _, err := reg.ValidateCredential(rawToken); err == nil {
+		t.Fatal("pre-persistence token should be unknown before ensure")
+	}
+
+	result, err := reg.EnsureCredential(rawToken)
+	if err != nil {
+		t.Fatalf("ensure credential: %v", err)
+	}
+	if result.SandboxID != "sandbox-pre-persistence" {
+		t.Fatalf("SandboxID = %q, want sandbox-pre-persistence", result.SandboxID)
+	}
+	if result.Status != "imported" {
+		t.Fatalf("Status = %q, want imported", result.Status)
+	}
+	if _, err := reg.ValidateCredential(rawToken); err != nil {
+		t.Fatalf("validate ensured credential: %v", err)
+	}
+
+	restarted := NewIdentityRegistry(1 * time.Hour)
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("load persistence path: %v", err)
+	}
+	if _, err := restarted.ValidateCredential(rawToken); err != nil {
+		t.Fatalf("validate ensured credential after restart: %v", err)
+	}
+
+	second, err := restarted.EnsureCredential(rawToken)
+	if err != nil {
+		t.Fatalf("ensure already-active credential: %v", err)
+	}
+	if second.Status != "already_active" {
+		t.Fatalf("Status = %q, want already_active", second.Status)
+	}
+}
+
+func TestEnsureCredentialRefusesConflictAndRevokedIdentity(t *testing.T) {
+	reg := NewIdentityRegistry(1 * time.Hour)
+
+	result, err := reg.IssueCredential("sandbox-conflict")
+	if err != nil {
+		t.Fatalf("issue credential: %v", err)
+	}
+	if _, err := reg.EnsureCredential("sandbox-conflict:different-token"); err == nil {
+		t.Fatal("expected conflicting credential ensure to fail")
+	}
+	if _, err := reg.ValidateCredential(result.RawToken); err != nil {
+		t.Fatalf("original credential should remain valid after conflict: %v", err)
+	}
+
+	reg.RevokeCredential("sandbox-conflict")
+	if _, err := reg.EnsureCredential(result.RawToken); err == nil {
+		t.Fatal("expected revoked credential ensure to fail")
+	}
+}
+
 // --- Gateway Handler Tests ---
 
 // mockProvider is a test double for provider.Provider.
@@ -658,6 +721,54 @@ func TestHandleRotateCredential(t *testing.T) {
 	_, err = reg.ValidateCredential(result2.RawToken)
 	if err != nil {
 		t.Fatalf("new credential should be valid: %v", err)
+	}
+}
+
+func TestHandleEnsureCredentialImportsUnknownCredentialWithoutEchoingToken(t *testing.T) {
+	h, reg := setupHandlerNoProvider(t)
+	rawToken := "sandbox-existing-vm:host-held-token"
+
+	body := `{"raw_token":"` + rawToken + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/ensure", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	req.Host = "localhost:8084"
+	req.RemoteAddr = "127.0.0.1:12345"
+
+	w := httptest.NewRecorder()
+	h.HandleEnsureCredential(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), rawToken) || strings.Contains(w.Body.String(), "host-held-token") {
+		t.Fatalf("ensure response leaked raw token: %s", w.Body.String())
+	}
+	var result CredentialEnsureResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Status != "imported" {
+		t.Fatalf("Status = %q, want imported", result.Status)
+	}
+	if _, err := reg.ValidateCredential(rawToken); err != nil {
+		t.Fatalf("validate ensured token: %v", err)
+	}
+}
+
+func TestHandleEnsureCredentialDeniedWithoutInternalCaller(t *testing.T) {
+	h, _ := setupHandlerNoProvider(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/ensure", strings.NewReader(`{"raw_token":"sandbox-existing-vm:host-held-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = "localhost:8084"
+	req.RemoteAddr = "127.0.0.1:12345"
+
+	w := httptest.NewRecorder()
+	h.HandleEnsureCredential(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
 }
 
