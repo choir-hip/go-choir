@@ -1085,15 +1085,35 @@ Residual Section 7 follow-up:
 
 ### 8. Publishing Path Skeleton
 
-- [ ] Document the distinction between user desktop VText state and platform
+- [x] Document the distinction between user desktop VText state and platform
       publication state.
-- [ ] Sketch or implement the platform Dolt appliance boundary for published
+- [x] Sketch or implement the platform Dolt appliance boundary for published
       VTexts.
-- [ ] Define the first publish operation: selected VText revision from user
+- [x] Define the first publish operation: selected VText revision from user
       desktop -> platform publishing desktop.
-- [ ] Record open questions for version publishing, redaction, paywalls,
+- [x] Record open questions for version publishing, redaction, paywalls,
       collaboration, citations, and CHIPS economics without blocking tonight's
       self-development proof.
+
+Section 8 evidence:
+
+- Added `docs/publication-path-skeleton-2026-05-12.md`.
+- The skeleton defines private user desktop state as per-user embedded Dolt plus
+  snapshot filesystem, and platform publication state as explicit
+  platform-visible records in platform Dolt plus content-addressed public
+  artifacts.
+- The platform Dolt appliance boundary is ledger/index only: publication rows,
+  public artifact metadata, published revision refs, citation graph edges,
+  routing records, compute accounting, and later CHIPS state. It is explicitly
+  not the live editor, actor mailbox, or cross-VM message bus.
+- The first publish operation is one selected immutable VText revision copied
+  into platform-visible publication state with source doc/revision IDs, content
+  hashes, artifact refs, Trace/publication events, and a platform publishing
+  desktop reader surface.
+- Open questions are recorded for version publishing, redaction/projection,
+  paywalls and release timing, collaboration submissions, citations, and CHIPS
+  economics. These are preserved as forward-compatible design space, not
+  imported into the current execution goal.
 
 ### 9. Final Proof Package
 
