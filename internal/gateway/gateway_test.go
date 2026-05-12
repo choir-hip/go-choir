@@ -156,6 +156,59 @@ func TestIssueCredentialReplacesExisting(t *testing.T) {
 	}
 }
 
+func TestIdentityRegistryPersistsCredentialAcrossRestart(t *testing.T) {
+	path := t.TempDir() + "/gateway-identities.json"
+
+	reg := NewIdentityRegistry(1 * time.Hour)
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("set persistence path: %v", err)
+	}
+	result, err := reg.IssueCredential("sandbox-persist")
+	if err != nil {
+		t.Fatalf("issue credential: %v", err)
+	}
+
+	restarted := NewIdentityRegistry(1 * time.Hour)
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("load persistence path: %v", err)
+	}
+	got, err := restarted.ValidateCredential(result.RawToken)
+	if err != nil {
+		t.Fatalf("validate persisted credential: %v", err)
+	}
+	if got != "sandbox-persist" {
+		t.Fatalf("sandbox ID = %q, want sandbox-persist", got)
+	}
+	if restarted.ActiveCount() != 1 {
+		t.Fatalf("active count = %d, want 1", restarted.ActiveCount())
+	}
+}
+
+func TestIdentityRegistryPersistsRevocation(t *testing.T) {
+	path := t.TempDir() + "/gateway-identities.json"
+
+	reg := NewIdentityRegistry(1 * time.Hour)
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("set persistence path: %v", err)
+	}
+	result, err := reg.IssueCredential("sandbox-revoked")
+	if err != nil {
+		t.Fatalf("issue credential: %v", err)
+	}
+	reg.RevokeCredential("sandbox-revoked")
+
+	restarted := NewIdentityRegistry(1 * time.Hour)
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("load persistence path: %v", err)
+	}
+	if _, err := restarted.ValidateCredential(result.RawToken); err == nil {
+		t.Fatal("expected revoked persisted credential to fail")
+	}
+	if restarted.ActiveCount() != 0 {
+		t.Fatalf("active count = %d, want 0", restarted.ActiveCount())
+	}
+}
+
 // --- Gateway Handler Tests ---
 
 // mockProvider is a test double for provider.Provider.

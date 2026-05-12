@@ -173,18 +173,11 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		providerName = h.provider.Name()
 	}
 
-	activeCount := 0
-	for _, id := range h.registry.identities {
-		if id.Active {
-			activeCount++
-		}
-	}
-
 	resp := gatewayHealthResponse{
 		Status:           "ok",
 		Service:          "gateway",
 		Provider:         providerName,
-		ActiveIdentities: activeCount,
+		ActiveIdentities: h.registry.ActiveCount(),
 	}
 
 	if h.rateLimiter != nil {

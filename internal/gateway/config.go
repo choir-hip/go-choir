@@ -20,8 +20,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -32,6 +35,10 @@ type Config struct {
 
 	// SandboxTokenTTL is how long issued sandbox credentials remain valid.
 	SandboxTokenTTL time.Duration
+
+	// IdentityStorePath persists sandbox credential hashes so gateway restarts
+	// do not invalidate still-running desktop VMs.
+	IdentityStorePath string
 }
 
 const (
@@ -54,8 +61,9 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		Port:            port,
-		SandboxTokenTTL: ttl,
+		Port:              port,
+		SandboxTokenTTL:   ttl,
+		IdentityStorePath: os.Getenv("GATEWAY_IDENTITY_STORE_PATH"),
 	}
 }
 
@@ -113,8 +121,10 @@ type SandboxIdentity struct {
 // It supports issuance, validation, revocation, and invalidation of
 // stale credentials (VAL-GATEWAY-008).
 type IdentityRegistry struct {
-	identities map[string]*SandboxIdentity // sandbox_id → identity
-	tokenTTL   time.Duration
+	mu              sync.Mutex
+	identities      map[string]*SandboxIdentity // sandbox_id -> identity
+	tokenTTL        time.Duration
+	persistencePath string
 }
 
 // NewIdentityRegistry creates a new identity registry with the given
@@ -124,6 +134,63 @@ func NewIdentityRegistry(tokenTTL time.Duration) *IdentityRegistry {
 		identities: make(map[string]*SandboxIdentity),
 		tokenTTL:   tokenTTL,
 	}
+}
+
+// SetPersistencePath loads and enables file-backed identity persistence. The
+// file stores token hashes only, never raw gateway credentials.
+func (r *IdentityRegistry) SetPersistencePath(path string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.persistencePath = path
+	if r.persistencePath == "" {
+		return nil
+	}
+	return r.loadLocked()
+}
+
+func (r *IdentityRegistry) loadLocked() error {
+	data, err := os.ReadFile(r.persistencePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read identity store: %w", err)
+	}
+	if len(data) == 0 {
+		return nil
+	}
+
+	var identities map[string]*SandboxIdentity
+	if err := json.Unmarshal(data, &identities); err != nil {
+		return fmt.Errorf("decode identity store: %w", err)
+	}
+	if identities == nil {
+		identities = make(map[string]*SandboxIdentity)
+	}
+	r.identities = identities
+	return nil
+}
+
+func (r *IdentityRegistry) persistLocked() error {
+	if r.persistencePath == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(r.persistencePath), 0o700); err != nil {
+		return fmt.Errorf("create identity store dir: %w", err)
+	}
+	data, err := json.MarshalIndent(r.identities, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode identity store: %w", err)
+	}
+	tmp := r.persistencePath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write identity store temp: %w", err)
+	}
+	if err := os.Rename(tmp, r.persistencePath); err != nil {
+		return fmt.Errorf("replace identity store: %w", err)
+	}
+	return nil
 }
 
 // CredentialResult is returned when a new credential is issued.
@@ -139,6 +206,9 @@ type CredentialResult struct {
 // If an existing credential exists, it is revoked and replaced.
 // Returns the raw token (shown once) and an error if generation fails.
 func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	token, err := generateSecureToken(32)
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
@@ -160,6 +230,9 @@ func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult,
 		Active:    true,
 	}
 	r.identities[sandboxID] = identity
+	if err := r.persistLocked(); err != nil {
+		return nil, err
+	}
 
 	return &CredentialResult{
 		SandboxID: sandboxID,
@@ -171,6 +244,9 @@ func (r *IdentityRegistry) IssueCredential(sandboxID string) (*CredentialResult,
 // ValidateCredential checks whether a sandbox credential is valid.
 // Returns the sandbox ID if valid, or an error explaining why not.
 func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	sandboxID, token, ok := splitCredential(rawToken)
 	if !ok {
 		return "", fmt.Errorf("invalid credential format")
@@ -202,8 +278,12 @@ func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 // After revocation, the old credential no longer authorizes provider
 // requests (VAL-GATEWAY-008).
 func (r *IdentityRegistry) RevokeCredential(sandboxID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if identity, ok := r.identities[sandboxID]; ok {
 		identity.Active = false
+		_ = r.persistLocked()
 	}
 }
 
@@ -211,8 +291,22 @@ func (r *IdentityRegistry) RevokeCredential(sandboxID string) {
 // This is used when sandbox credentials are rotated for security or
 // after lifecycle changes.
 func (r *IdentityRegistry) RotateCredential(sandboxID string) (*CredentialResult, error) {
-	r.RevokeCredential(sandboxID)
 	return r.IssueCredential(sandboxID)
+}
+
+// ActiveCount reports currently active, unexpired identities.
+func (r *IdentityRegistry) ActiveCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	count := 0
+	for _, id := range r.identities {
+		if id.Active && now.Before(id.ExpiresAt) {
+			count++
+		}
+	}
+	return count
 }
 
 // generateSecureToken generates a cryptographically secure random token

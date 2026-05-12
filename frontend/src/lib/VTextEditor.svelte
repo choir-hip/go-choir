@@ -48,6 +48,13 @@
   let editorSurface = null;
   let surfaceFocused = false;
   let toolbarFaded = false;
+  let autosaveTimer = null;
+  let autosavePromise = null;
+  let autosaveInFlight = false;
+  let autosaveQueued = false;
+  let lastAutosavedContent = '';
+
+  const AUTOSAVE_DELAY_MS = 900;
 
   function escapeHTML(value) {
     return String(value || '')
@@ -375,6 +382,7 @@
     currentRevision = revision;
     activeRevisionIndex = index;
     editorValue = revision.content || '';
+    lastAutosavedContent = editorValue;
     const knownHeadId = latestHeadRevisionId || currentDoc?.current_revision_id || '';
     if (summary.revision_id === knownHeadId) {
       clearNewVersionIndicator();
@@ -426,6 +434,97 @@
 
     await reloadDocument(revision.revision_id);
     return revision;
+  }
+
+  function clearAutosaveTimer() {
+    if (!autosaveTimer) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+
+  function shouldAutosave() {
+    if (!currentDoc || loading || submitting || agentPending || isViewingHistorical) return false;
+    const savedContent = currentRevision?.content || '';
+    if (editorValue === savedContent || editorValue === lastAutosavedContent) return false;
+    if (!currentRevision && editorValue.trim() === '') return false;
+    return true;
+  }
+
+  async function recordSavedRevision(revision, contentAtSave) {
+    currentDoc = await getDocument(currentDoc.doc_id);
+    latestHeadRevisionId = revision.revision_id;
+
+    const nextRevision = {
+      ...revision,
+      created_at: revision.created_at || new Date().toISOString(),
+    };
+    const existing = revisions.filter((item) => item.revision_id !== revision.revision_id);
+    revisions = sortRevisionsChronologically([...existing, nextRevision]);
+    activeRevisionIndex = revisions.findIndex((item) => item.revision_id === revision.revision_id);
+    currentRevision = revision;
+    lastAutosavedContent = contentAtSave;
+    clearNewVersionIndicator();
+
+    if (editorValue === contentAtSave) {
+      editorValue = revision.content || '';
+    }
+  }
+
+  async function autosaveUserDraft() {
+    autosaveTimer = null;
+    if (!shouldAutosave()) return;
+    if (autosaveInFlight) {
+      autosaveQueued = true;
+      return;
+    }
+
+    autosaveInFlight = true;
+    const contentAtSave = editorValue;
+    saveStatus = 'Saving draft...';
+
+    try {
+      await writeThroughToFile(contentAtSave);
+      const revision = await createRevision(currentDoc.doc_id, {
+        content: contentAtSave,
+        authorKind: 'user',
+        authorLabel: getAuthorLabel(),
+        metadata: {
+          ...buildRevisionMetadata(),
+          autosaved: true,
+        },
+        parentRevisionId: currentRevision?.revision_id || '',
+      });
+      await recordSavedRevision(revision, contentAtSave);
+      saveStatus = 'Saved';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Autosave failed';
+      saveStatus = 'Autosave failed';
+    } finally {
+      autosaveInFlight = false;
+      if (autosaveQueued) {
+        autosaveQueued = false;
+        scheduleAutosave();
+      }
+    }
+  }
+
+  function scheduleAutosave() {
+    clearAutosaveTimer();
+    if (!shouldAutosave()) return;
+    saveStatus = 'Unsaved changes';
+    autosaveTimer = setTimeout(() => {
+      const promise = autosaveUserDraft();
+      autosavePromise = promise;
+      promise.finally(() => {
+        if (autosavePromise === promise) {
+          autosavePromise = null;
+        }
+      });
+    }, AUTOSAVE_DELAY_MS);
   }
 
   async function applyHeadChange(revisionId) {
@@ -503,10 +602,12 @@
     revisions = [];
     activeRevisionIndex = -1;
     editorValue = '';
+    lastAutosavedContent = '';
     latestHeadRevisionId = '';
     showRecent = false;
     surfaceFocused = false;
     toolbarFaded = false;
+    clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
 
@@ -595,6 +696,7 @@
 
   async function handleNewDocument() {
     loading = true;
+    clearAutosaveTimer();
     showRecent = false;
     surfaceFocused = false;
     toolbarFaded = false;
@@ -606,6 +708,7 @@
       activeRevisionIndex = -1;
       currentRevision = null;
       editorValue = '';
+      lastAutosavedContent = '';
       saveStatus = 'Blank document ready';
       await ensureFileManifest();
       connectDocumentStream(currentDoc.doc_id);
@@ -625,12 +728,19 @@
     if (!currentDoc || loading || submitting || agentPending) return;
 
     submitting = true;
+    clearAutosaveTimer();
     error = '';
     saveStatus = 'Saving user version…';
 
     try {
-      await writeThroughToFile(editorValue);
-      await saveUserVersion();
+      if (autosavePromise) {
+        saveStatus = 'Finishing draft save...';
+        await autosavePromise;
+      }
+      if (!currentRevision || editorValue !== (currentRevision.content || '')) {
+        await writeThroughToFile(editorValue);
+        await saveUserVersion();
+      }
       saveStatus = 'Submitting revise event…';
       await submitAgentRevision(currentDoc.doc_id, {
         intent: 'revise',
@@ -684,6 +794,7 @@
 
   function handleEditorInput() {
     editorValue = serializeEditorMarkdown(editorSurface);
+    scheduleAutosave();
   }
 
   function handleEditorBlur() {
@@ -702,7 +813,7 @@
   }
 
   $: isViewingHistorical = revisions.length > 0 && activeRevisionIndex !== revisions.length - 1;
-  $: isDirty = !!currentRevision && !isViewingHistorical && editorValue !== (currentRevision.content || '');
+  $: isDirty = !!currentDoc && !isViewingHistorical && editorValue !== (currentRevision?.content || '');
   $: versionLabel = activeRevisionIndex >= 0 ? `v${activeRevisionIndex}` : 'v0';
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
@@ -717,6 +828,7 @@
   });
 
   onDestroy(() => {
+    clearAutosaveTimer();
     closeDocumentStream();
   });
 </script>

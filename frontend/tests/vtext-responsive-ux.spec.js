@@ -100,6 +100,15 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
   await expect(editor.locator('h1')).toContainText('Rendered Markdown Proof');
   await expect(editor.locator('strong')).toContainText('bold');
   await expect(editor.locator('code')).toContainText('code');
+  await expect(page.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 7000 });
+
+  await page.reload();
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
+  await expect(page.locator('[data-vtext-recent]')).toBeVisible({ timeout: 15000 });
+  await page.locator('[data-vtext-recent-document]').first().click();
+  editor = page.locator('[data-vtext-editor-area]');
+  await editor.waitFor({ state: 'visible', timeout: 15000 });
+  await expect(editor).toContainText('Rendered Markdown Proof', { timeout: 15000 });
 
   await editor.fill([
     '# Scroll Proof',
@@ -113,9 +122,9 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
   });
   await page.mouse.move(180, 520);
   await expect(page.locator('[data-vtext-toolbar]')).toHaveCSS('opacity', /0\.1[0-9]|0\.2[0-5]/);
+  await expect(page.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 7000 });
 
   const beforeReload = await getVTextLayout(page);
-  await page.waitForTimeout(800);
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
   await expect(page.locator('[data-vtext-recent]')).toBeVisible({ timeout: 15000 });

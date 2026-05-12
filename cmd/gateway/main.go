@@ -17,6 +17,12 @@ func main() {
 
 	// Initialize the identity registry for sandbox credential management.
 	registry := gateway.NewIdentityRegistry(cfg.SandboxTokenTTL)
+	if cfg.IdentityStorePath != "" {
+		if err := registry.SetPersistencePath(cfg.IdentityStorePath); err != nil {
+			log.Fatalf("gateway: load identity store: %v", err)
+		}
+		log.Printf("gateway: identity persistence enabled (%s)", cfg.IdentityStorePath)
+	}
 
 	// Resolve all available real providers from environment credentials
 	// using the MultiProvider for multi-provider routing. The gateway
