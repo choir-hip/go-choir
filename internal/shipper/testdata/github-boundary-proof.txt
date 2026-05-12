@@ -1,0 +1,5 @@
+shipper github boundary proof
+
+This file is generated in a worker checkout with no GitHub remote. It should
+cross into the platform checkout only through cmd/shipper export/import, then
+be pushed as an agent/* proof branch for PR CI.
