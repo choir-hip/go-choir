@@ -185,6 +185,7 @@ EOF
         git
         gnugrep
         gnused
+        nodejs
         systemd
         procps
         iproute2
@@ -235,6 +236,7 @@ EOF
     git
     gnugrep
     gnused
+    nodejs
     procps
     iproute2
     bash

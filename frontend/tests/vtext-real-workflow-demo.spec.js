@@ -1,7 +1,9 @@
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey } from './helpers/auth.js';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL = process.env.GO_CHOIR_REAL_DEMO_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  'http://localhost:4173';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
 test.setTimeout(240_000);
@@ -15,9 +17,19 @@ function uniqueEmail() {
 }
 
 async function assertRealSearchConfigured() {
-  const gatewayURL = process.env.GO_CHOIR_REAL_DEMO_GATEWAY_URL ||
+  const configuredGatewayURL = process.env.GO_CHOIR_REAL_DEMO_GATEWAY_URL ||
     process.env.RUNTIME_GATEWAY_URL ||
-    'http://127.0.0.1:8084';
+    '';
+  const localTarget = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\b/.test(BASE_URL);
+  if (!configuredGatewayURL && !localTarget) {
+    // On deployed staging the gateway is host-internal; the test proves search
+    // through Trace provider stats instead of preflighting the private gateway.
+    return;
+  }
+  if (configuredGatewayURL === 'skip') {
+    return;
+  }
+  const gatewayURL = configuredGatewayURL || 'http://127.0.0.1:8084';
   let health;
   try {
     const res = await fetch(`${gatewayURL}/health`);
@@ -132,15 +144,49 @@ async function waitForFileText(page, path, timeout = 90_000) {
   throw new Error(`file ${path} was not generated`);
 }
 
+async function loadToolResults(page, trajectoryId, toolName) {
+  const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
+  const toolMoments = (snapshot.moments || []).filter((moment) =>
+    moment.kind === 'tool.result' && moment.summary === `${toolName} returned`
+  );
+  const results = [];
+  for (const moment of toolMoments) {
+    const detail = await fetchJSON(
+      page,
+      `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`
+    );
+    for (const event of detail.events || []) {
+      const payload = event.payload || {};
+      if (payload.tool !== toolName || payload.is_error) continue;
+      let output = payload.output;
+      if (typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch {
+          output = { raw_output: payload.output };
+        }
+      }
+      results.push({ moment, event, output });
+    }
+  }
+  return { snapshot, results };
+}
+
 test('real vtext workflow demo uses live LLM, search, generated artifact, and verification', async ({ page, authenticator }) => {
   await assertRealSearchConfigured();
   await registerAndLoadDesktop(page, uniqueEmail());
 
-  const browserSpawnRequests = [];
+  const forbiddenBrowserRequests = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (request.method() === 'POST' && url.pathname === '/api/agent/spawn') {
-      browserSpawnRequests.push(url.pathname);
+    const forbidden =
+      url.pathname.startsWith('/internal/') ||
+      url.pathname.startsWith('/api/agent/') ||
+      url.pathname.startsWith('/api/prompts') ||
+      url.pathname.startsWith('/api/test/') ||
+      url.pathname === '/api/events';
+    if (forbidden) {
+      forbiddenBrowserRequests.push(`${request.method()} ${url.pathname}`);
     }
   });
 
@@ -177,7 +223,7 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:/);
 
   const traceWithWorkers = await waitForTraceRoles(page, conductorSubmitted.submission_id, ['conductor', 'vtext', 'researcher', 'super'], 180_000);
-  expect(browserSpawnRequests).toHaveLength(0);
+  expect(forbiddenBrowserRequests).toHaveLength(0);
 
   const html = await waitForFileText(page, artifactPath);
   const verify = await waitForFileText(page, verifyPath);
@@ -204,10 +250,22 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: artifactPath.split('/').pop() })).toBeVisible({ timeout: 10000 });
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: verifyPath.split('/').pop() })).toBeVisible();
 
-  const traceSnapshot = traceWithWorkers.snapshot;
-  const roles = traceWithWorkers.roles;
+  const { snapshot: traceSnapshot, results: searchResults } = await loadToolResults(page, conductorSubmitted.submission_id, 'web_search');
+  const roles = (traceSnapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'vtext', 'researcher', 'super']));
-  expect(traceSnapshot.moments.some((moment) => /web_search|Research findings|Worker update|vtext revision/i.test(moment.summary))).toBe(true);
+  expect(searchResults.length).toBeGreaterThan(0);
+  expect(traceSnapshot.search?.attempts || 0).toBeGreaterThan(0);
+  expect(traceSnapshot.search?.successes || 0).toBeGreaterThan(0);
+  expect((traceSnapshot.search?.providers || []).some((provider) =>
+    provider.provider && provider.endpoint && provider.attempts > 0 && provider.successes > 0
+  )).toBe(true);
+
+  const { results: bashResults } = await loadToolResults(page, conductorSubmitted.submission_id, 'bash');
+  expect(bashResults.some((result) =>
+    result.output?.exit_code === 0 &&
+    /\bnode\b/.test(result.output?.command || '') &&
+    (result.output?.command || '').includes(verifyPath)
+  )).toBe(true);
 
   await page.locator('[data-desktop-icon-id="trace"]').dblclick();
   const traceApp = page.locator('[data-trace-app]').last();
