@@ -71,7 +71,8 @@ func newReadFileTool(cwd string) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode read_file args: %w", err)
 			}
-			resolved, err := resolveToolPath(cwd, in.Path)
+			baseCWD := effectiveToolCWD(ctx, cwd)
+			resolved, err := resolveToolPath(baseCWD, in.Path)
 			if err != nil {
 				return "", err
 			}
@@ -108,7 +109,11 @@ func newWriteFileTool(cwd string) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode write_file args: %w", err)
 			}
-			resolved, err := resolveToolPath(cwd, in.Path)
+			if err := guardForegroundSuperMutation(ctx, "write_file"); err != nil {
+				return "", err
+			}
+			baseCWD := effectiveToolCWD(ctx, cwd)
+			resolved, err := resolveToolPath(baseCWD, in.Path)
 			if err != nil {
 				return "", err
 			}
@@ -150,7 +155,11 @@ func newEditFileTool(cwd string) Tool {
 			if strings.TrimSpace(in.OldString) == "" {
 				return "", fmt.Errorf("old_string must not be empty")
 			}
-			resolved, err := resolveToolPath(cwd, in.Path)
+			if err := guardForegroundSuperMutation(ctx, "edit_file"); err != nil {
+				return "", err
+			}
+			baseCWD := effectiveToolCWD(ctx, cwd)
+			resolved, err := resolveToolPath(baseCWD, in.Path)
 			if err != nil {
 				return "", err
 			}
@@ -203,15 +212,16 @@ func newGlobTool(cwd string) Tool {
 			if limit <= 0 {
 				limit = 200
 			}
+			baseCWD := effectiveToolCWD(ctx, cwd)
 			matches := make([]string, 0, minInt(limit, 32))
-			err = filepath.WalkDir(cwd, func(current string, d fs.DirEntry, walkErr error) error {
+			err = filepath.WalkDir(baseCWD, func(current string, d fs.DirEntry, walkErr error) error {
 				if walkErr != nil {
 					return walkErr
 				}
-				if current == cwd {
+				if current == baseCWD {
 					return nil
 				}
-				rel, err := filepath.Rel(cwd, current)
+				rel, err := filepath.Rel(baseCWD, current)
 				if err != nil {
 					return err
 				}
@@ -271,9 +281,10 @@ func newGrepTool(cwd string) Tool {
 			if err != nil {
 				return "", err
 			}
-			searchRoot := cwd
+			baseCWD := effectiveToolCWD(ctx, cwd)
+			searchRoot := baseCWD
 			if strings.TrimSpace(in.Path) != "" {
-				searchRoot, err = resolveToolPath(cwd, in.Path)
+				searchRoot, err = resolveToolPath(baseCWD, in.Path)
 				if err != nil {
 					return "", err
 				}
@@ -300,7 +311,7 @@ func newGrepTool(cwd string) Tool {
 				lines := strings.Split(string(data), "\n")
 				for idx, line := range lines {
 					if re.MatchString(line) {
-						rel, _ := filepath.Rel(cwd, path)
+						rel, _ := filepath.Rel(baseCWD, path)
 						matches = append(matches, map[string]any{
 							"path": filepath.ToSlash(rel),
 							"line": idx + 1,
@@ -345,6 +356,9 @@ func newBashTool(cwd string) Tool {
 			if command == "" {
 				return "", fmt.Errorf("command must not be empty")
 			}
+			if err := guardForegroundSuperMutation(ctx, "bash"); err != nil {
+				return "", err
+			}
 			timeout := 30 * time.Second
 			if in.TimeoutMS > 0 {
 				timeout = time.Duration(in.TimeoutMS) * time.Millisecond
@@ -353,7 +367,7 @@ func newBashTool(cwd string) Tool {
 			defer cancel()
 
 			cmd := exec.CommandContext(runCtx, "/bin/sh", "-lc", command)
-			cmd.Dir = cwd
+			cmd.Dir = effectiveToolCWD(ctx, cwd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
@@ -392,7 +406,7 @@ func newGitStatusTool(cwd string) Tool {
 		Parameters:  jsonSchemaObject(map[string]any{}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			cmd := exec.CommandContext(ctx, "git", "status", "--short")
-			cmd.Dir = cwd
+			cmd.Dir = effectiveToolCWD(ctx, cwd)
 			data, err := cmd.CombinedOutput()
 			if err != nil {
 				return "", fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(string(data)))
@@ -424,7 +438,7 @@ func newGitDiffTool(cwd string) Tool {
 				argv = append(argv, "--", in.Path)
 			}
 			cmd := exec.CommandContext(ctx, "git", argv...)
-			cmd.Dir = cwd
+			cmd.Dir = effectiveToolCWD(ctx, cwd)
 			data, err := cmd.CombinedOutput()
 			if err != nil {
 				return "", fmt.Errorf("git diff: %w: %s", err, strings.TrimSpace(string(data)))
@@ -438,6 +452,31 @@ func newGitDiffTool(cwd string) Tool {
 			})
 		},
 	}
+}
+
+func effectiveToolCWD(ctx context.Context, defaultCWD string) string {
+	if ctx != nil {
+		if override := stringFromToolContext(ctx, toolCtxWorkingDir); override != "" {
+			if filepath.IsAbs(override) {
+				return filepath.Clean(override)
+			}
+			return filepath.Clean(filepath.Join(defaultCWD, override))
+		}
+	}
+	return filepath.Clean(defaultCWD)
+}
+
+func guardForegroundSuperMutation(ctx context.Context, tool string) error {
+	if strings.ToLower(strings.TrimSpace(os.Getenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE"))) != "worker_only" {
+		return nil
+	}
+	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileSuper {
+		return nil
+	}
+	if stringFromToolContext(ctx, toolCtxWorkingDir) != "" {
+		return nil
+	}
+	return fmt.Errorf("%s blocked for foreground super; delegate mutable work to a worker VM", tool)
 }
 
 func resolveToolPath(cwd, userPath string) (string, error) {

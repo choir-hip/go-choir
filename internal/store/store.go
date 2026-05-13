@@ -129,6 +129,89 @@ CREATE TABLE IF NOT EXISTS inbox_deliveries (
 	delivered_at         DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS run_memory_entries (
+	entry_id             TEXT PRIMARY KEY,
+	loop_id              TEXT NOT NULL,
+	owner_id             TEXT NOT NULL DEFAULT '',
+	agent_id             TEXT NOT NULL DEFAULT '',
+	parent_entry_id      TEXT NOT NULL DEFAULT '',
+	seq                  INTEGER NOT NULL,
+	kind                 TEXT NOT NULL,
+	role                 TEXT NOT NULL DEFAULT '',
+	message_json         TEXT NOT NULL DEFAULT '',
+	summary              TEXT NOT NULL DEFAULT '',
+	first_kept_entry_id  TEXT NOT NULL DEFAULT '',
+	tokens_before        INTEGER NOT NULL DEFAULT 0,
+	reason               TEXT NOT NULL DEFAULT '',
+	model                TEXT NOT NULL DEFAULT '',
+	details_json         TEXT NOT NULL DEFAULT '{}',
+	created_at           DATETIME NOT NULL,
+	UNIQUE(loop_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS promotion_candidates (
+	candidate_id        TEXT PRIMARY KEY,
+	owner_id            TEXT NOT NULL DEFAULT '',
+	status              TEXT NOT NULL,
+	source_loop_id      TEXT NOT NULL DEFAULT '',
+	trace_id            TEXT NOT NULL DEFAULT '',
+	vm_id               TEXT NOT NULL DEFAULT '',
+	snapshot_id         TEXT NOT NULL DEFAULT '',
+	base_sha            TEXT NOT NULL DEFAULT '',
+	worker_head_sha     TEXT NOT NULL DEFAULT '',
+	manifest_path       TEXT NOT NULL DEFAULT '',
+	patchset_path       TEXT NOT NULL DEFAULT '',
+	integration_branch  TEXT NOT NULL DEFAULT '',
+	destination_branch  TEXT NOT NULL DEFAULT '',
+	summary             TEXT NOT NULL DEFAULT '',
+	candidate_json      TEXT NOT NULL DEFAULT '{}',
+	contracts_json      TEXT NOT NULL DEFAULT '[]',
+	report_json         TEXT NOT NULL DEFAULT '{}',
+	error               TEXT NOT NULL DEFAULT '',
+	created_at          DATETIME NOT NULL,
+	updated_at          DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS run_continuations (
+	continuation_id    TEXT PRIMARY KEY,
+	owner_id           TEXT NOT NULL DEFAULT '',
+	source_loop_id     TEXT NOT NULL DEFAULT '',
+	next_loop_id       TEXT NOT NULL DEFAULT '',
+	objective          TEXT NOT NULL,
+	reason             TEXT NOT NULL DEFAULT '',
+	authority_profile  TEXT NOT NULL DEFAULT '',
+	lease_seconds      INTEGER NOT NULL DEFAULT 0,
+	status             TEXT NOT NULL,
+	details_json       TEXT NOT NULL DEFAULT '{}',
+	created_at         DATETIME NOT NULL,
+	updated_at         DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS browser_sessions (
+	session_id       TEXT PRIMARY KEY,
+	owner_id         TEXT NOT NULL DEFAULT '',
+	provider         TEXT NOT NULL DEFAULT '',
+	mode             TEXT NOT NULL DEFAULT '',
+	execution_scope  TEXT NOT NULL DEFAULT '',
+	backend_session_id TEXT NOT NULL DEFAULT '',
+	world_kind      TEXT NOT NULL DEFAULT '',
+	promotion_candidate_id TEXT NOT NULL DEFAULT '',
+	vm_id           TEXT NOT NULL DEFAULT '',
+	snapshot_id     TEXT NOT NULL DEFAULT '',
+	source_loop_id  TEXT NOT NULL DEFAULT '',
+	candidate_trace_id TEXT NOT NULL DEFAULT '',
+	state            TEXT NOT NULL DEFAULT '',
+	current_url      TEXT NOT NULL DEFAULT '',
+	title            TEXT NOT NULL DEFAULT '',
+	text_snapshot    TEXT NOT NULL DEFAULT '',
+	html_snapshot    TEXT NOT NULL DEFAULT '',
+	links_json       TEXT NOT NULL DEFAULT '[]',
+	screenshot_png_base64 TEXT NOT NULL DEFAULT '',
+	error            TEXT NOT NULL DEFAULT '',
+	created_at       DATETIME NOT NULL,
+	updated_at       DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS research_findings (
 	owner_id          TEXT NOT NULL DEFAULT '',
 	finding_id        TEXT NOT NULL DEFAULT '',
@@ -187,6 +270,16 @@ CREATE INDEX IF NOT EXISTS idx_channel_messages_to_agent_id ON channel_messages(
 CREATE INDEX IF NOT EXISTS idx_channel_messages_trajectory_id ON channel_messages(trajectory_id);
 CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_owner_target ON inbox_deliveries(owner_id, to_agent_id, delivered_at);
 CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(created_at);
+CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
+CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
+CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(parent_entry_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_candidates_owner_status ON promotion_candidates(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_promotion_candidates_source_loop ON promotion_candidates(source_loop_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_candidates_trace_id ON promotion_candidates(trace_id);
+CREATE INDEX IF NOT EXISTS idx_run_continuations_owner_status ON run_continuations(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_run_continuations_source_loop ON run_continuations(source_loop_id);
+CREATE INDEX IF NOT EXISTS idx_run_continuations_next_loop ON run_continuations(next_loop_id);
+CREATE INDEX IF NOT EXISTS idx_browser_sessions_owner_updated ON browser_sessions(owner_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_research_findings_channel_id ON research_findings(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_findings(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
@@ -295,6 +388,17 @@ func (s *Store) bootstrap() error {
 		{"channel_messages", "to_agent_id", "TEXT NOT NULL DEFAULT ''"},
 		{"channel_messages", "to_loop_id", "TEXT NOT NULL DEFAULT ''"},
 		{"channel_messages", "trajectory_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "html_snapshot", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "links_json", "TEXT NOT NULL DEFAULT '[]'"},
+		{"browser_sessions", "screenshot_png_base64", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "execution_scope", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "backend_session_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "world_kind", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "promotion_candidate_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "vm_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "snapshot_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "source_loop_id", "TEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "candidate_trace_id", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -1014,7 +1118,39 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 // EnqueueInboxDelivery persists a directed delivery for later runtime-owned
 // threading into an agent loop.
 func (s *Store) EnqueueInboxDelivery(ctx context.Context, delivery types.InboxDelivery) error {
-	_, err := s.db.ExecContext(ctx,
+	var existingID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT delivery_id
+		   FROM inbox_deliveries
+		  WHERE owner_id = ?
+		    AND to_agent_id = ?
+		    AND to_loop_id = ?
+		    AND from_agent_id = ?
+		    AND from_loop_id = ?
+		    AND channel_id = ?
+		    AND role = ?
+		    AND content = ?
+		    AND trajectory_id = ?
+		    AND delivered_at IS NULL
+		  LIMIT 1`,
+		delivery.OwnerID,
+		delivery.ToAgentID,
+		delivery.ToRunID,
+		delivery.FromAgentID,
+		delivery.FromRunID,
+		delivery.ChannelID,
+		delivery.Role,
+		delivery.Content,
+		delivery.TrajectoryID,
+	).Scan(&existingID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("query existing inbox delivery: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO inbox_deliveries (delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		delivery.DeliveryID,

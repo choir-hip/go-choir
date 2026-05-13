@@ -60,3 +60,12 @@ func TestLoadConfigReadsEnableTestAPIs(t *testing.T) {
 		t.Fatal("enable_test_apis = false, want true")
 	}
 }
+
+func TestLoadConfigReadsObscuraCDPScreenshots(t *testing.T) {
+	t.Setenv("CHOIR_OBSCURA_CDP_SCREENSHOTS", "true")
+
+	cfg := LoadConfig()
+	if !cfg.ObscuraCDPScreenshots {
+		t.Fatal("obscura_cdp_screenshots = false, want true")
+	}
+}

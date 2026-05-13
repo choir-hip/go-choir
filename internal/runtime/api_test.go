@@ -129,6 +129,30 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if got := metadataStringValue(rec.Metadata, "seed_prompt"); got != "Draft a research plan" {
 		t.Fatalf("seed_prompt: got %q", got)
 	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(rec.Result), &decision); err != nil {
+		t.Fatalf("decode prompt-bar decision: %v\n%s", err, rec.Result)
+	}
+	if decision.Action != "open_app" || decision.App != AgentProfileVText || decision.DocID == "" {
+		t.Fatalf("prompt-bar decision = %+v, want immediate vtext route", decision)
+	}
+	if !strings.Contains(decision.InitialContent, "Draft a research plan") {
+		t.Fatalf("initial_content = %q, want prompt-derived content", decision.InitialContent)
+	}
+
+	statusReq := authenticatedRequest(http.MethodGet, "/api/prompt-bar/submissions/"+resp.SubmissionID, "", "user-alice")
+	statusW := httptest.NewRecorder()
+	handler.HandlePromptBarSubmission(statusW, statusReq)
+	if statusW.Code != http.StatusOK {
+		t.Fatalf("status endpoint: got %d, want 200; body=%s", statusW.Code, statusW.Body.String())
+	}
+	var status promptBarSubmissionStatusResponse
+	if err := json.NewDecoder(statusW.Body).Decode(&status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if status.Decision == nil || status.Decision.DocID != decision.DocID {
+		t.Fatalf("status decision = %+v, want doc_id %q", status.Decision, decision.DocID)
+	}
 	superAgent, err := rt.store.GetAgent(context.Background(), persistentSuperAgentID("user-alice"))
 	if err != nil {
 		t.Fatalf("persistent super agent missing: %v", err)
@@ -149,6 +173,391 @@ func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBrowserCapabilitiesRequireAuthAndReportUnavailable(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	unauth := authenticatedRequest(http.MethodGet, "/api/browser/capabilities", "", "")
+	unauthW := httptest.NewRecorder()
+	handler.HandleBrowserCapabilities(unauthW, unauth)
+	if unauthW.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status = %d, want %d", unauthW.Code, http.StatusUnauthorized)
+	}
+
+	req := authenticatedRequest(http.MethodGet, "/api/browser/capabilities", "", "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandleBrowserCapabilities(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp browserCapabilitiesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Provider != "obscura" {
+		t.Fatalf("provider = %q, want obscura", resp.Provider)
+	}
+	if resp.Available || resp.Configured || resp.Status != "not_configured" {
+		t.Fatalf("unexpected unavailable response: %+v", resp)
+	}
+	if resp.Substrate != "frontend_iframe" {
+		t.Fatalf("substrate = %q, want frontend_iframe", resp.Substrate)
+	}
+	if resp.Supports["navigate"] || resp.Supports["screenshot"] || resp.Supports["cdp_screenshot"] || resp.Supports["input"] || resp.Supports["cdp"] {
+		t.Fatalf("unavailable support matrix should fail closed: %+v", resp.Supports)
+	}
+	if !resp.LegacyIframeAvailable {
+		t.Fatalf("legacy iframe fallback should remain available until backend sessions are implemented")
+	}
+}
+
+func TestBrowserCapabilitiesDetectConfiguredObscuraBinary(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	req := authenticatedRequest(http.MethodGet, "/api/browser/capabilities", "", "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandleBrowserCapabilities(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp browserCapabilitiesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.Available || !resp.Configured || resp.Mode != "backend" || resp.Status != "ready" {
+		t.Fatalf("unexpected available response: %+v", resp)
+	}
+	if resp.Substrate != "obscura_cli_fetch" {
+		t.Fatalf("substrate = %q, want obscura_cli_fetch", resp.Substrate)
+	}
+	if !resp.Supports["navigate"] || !resp.Supports["text"] || !resp.Supports["html"] || !resp.Supports["links"] {
+		t.Fatalf("snapshot support matrix missing expected support: %+v", resp.Supports)
+	}
+	if resp.Supports["screenshot"] || resp.Supports["cdp_screenshot"] || resp.Supports["bounded_input"] || resp.Supports["input"] || resp.Supports["cdp"] {
+		t.Fatalf("unexpected support matrix: %+v", resp.Supports)
+	}
+}
+
+func TestBrowserCapabilitiesReportOptInCDPScreenshotSubstrate(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+	rt.cfg.ObscuraCDPScreenshots = true
+
+	req := authenticatedRequest(http.MethodGet, "/api/browser/capabilities", "", "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandleBrowserCapabilities(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp browserCapabilitiesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Substrate != "obscura_cli_fetch+obscura_cdp_screenshot" {
+		t.Fatalf("substrate = %q, want hybrid cdp screenshot substrate", resp.Substrate)
+	}
+	if !resp.Supports["screenshot"] || !resp.Supports["cdp_screenshot"] || !resp.Supports["bounded_input"] || !resp.Supports["fill"] || !resp.Supports["click"] {
+		t.Fatalf("cdp bounded control support missing: %+v", resp.Supports)
+	}
+	if resp.Supports["input"] || resp.Supports["cdp"] {
+		t.Fatalf("cdp screenshot mode must not claim generic input/cdp: %+v", resp.Supports)
+	}
+}
+
+func TestBrowserSessionsNavigateThroughOwnerScopedBackendSnapshot(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "links" ]; then
+  printf 'https://example.com/learn\tLearn more\n'
+elif [ "$mode" = "html" ]; then
+  printf '<!doctype html><title>Example Backend Page</title><h1>Example Backend Page</h1>'
+else
+  printf 'Example Backend Page\n\nSnapshot from fake Obscura\n'
+fi
+`), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.OwnerID != "user-alice" || created.Mode != "backend" || created.State != types.BrowserSessionIdle {
+		t.Fatalf("unexpected created session: %+v", created)
+	}
+
+	otherUserW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/browser/sessions/"+created.SessionID, "", "user-bob")
+	if otherUserW.Code != http.StatusNotFound {
+		t.Fatalf("other user status = %d, want %d", otherUserW.Code, http.StatusNotFound)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/path#fragment"}`, "user-alice")
+	if navigateW.Code != http.StatusOK {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionReady {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionReady, navigated)
+	}
+	if navigated.ExecutionScope != "host_process" {
+		t.Fatalf("execution_scope = %q, want host_process", navigated.ExecutionScope)
+	}
+	if navigated.CurrentURL != "https://example.com/path" {
+		t.Fatalf("current_url = %q, want normalized URL without fragment", navigated.CurrentURL)
+	}
+	if navigated.Title != "Example Backend Page" {
+		t.Fatalf("title = %q, want first snapshot line", navigated.Title)
+	}
+	if !strings.Contains(navigated.TextSnapshot, "Snapshot from fake Obscura") {
+		t.Fatalf("text_snapshot missing fake output: %q", navigated.TextSnapshot)
+	}
+	if !strings.Contains(navigated.HTMLSnapshot, "<title>Example Backend Page</title>") {
+		t.Fatalf("html_snapshot missing fake output: %q", navigated.HTMLSnapshot)
+	}
+	if len(navigated.Links) != 1 || navigated.Links[0].URL != "https://example.com/learn" || navigated.Links[0].Text != "Learn more" {
+		t.Fatalf("links = %+v, want extracted fake link", navigated.Links)
+	}
+
+	traceID := browserSessionTraceID(created.SessionID)
+	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", traceID, 10)
+	if err != nil {
+		t.Fatalf("list browser trace events: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("browser trace event count = %d, want 2", len(events))
+	}
+	if events[0].Kind != types.EventBrowserSessionCreated || events[1].Kind != types.EventBrowserNavigationCompleted {
+		t.Fatalf("browser trace kinds = %q, %q", events[0].Kind, events[1].Kind)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("decode browser completion payload: %v", err)
+	}
+	if int(payload["links_count"].(float64)) != 1 {
+		t.Fatalf("links_count payload = %+v, want 1", payload)
+	}
+	if int(payload["html_snapshot_bytes"].(float64)) == 0 {
+		t.Fatalf("html_snapshot_bytes payload = %+v, want nonzero", payload)
+	}
+
+	traceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/trace/trajectories?limit=50", "", "user-alice")
+	if traceW.Code != http.StatusOK {
+		t.Fatalf("trace index status = %d, want %d; body: %s", traceW.Code, http.StatusOK, traceW.Body.String())
+	}
+	var traceResp traceTrajectoryListResponse
+	if err := json.NewDecoder(traceW.Body).Decode(&traceResp); err != nil {
+		t.Fatalf("decode trace index: %v", err)
+	}
+	foundTrace := false
+	for _, trajectory := range traceResp.Trajectories {
+		if trajectory.TrajectoryID == traceID {
+			foundTrace = true
+			if trajectory.MomentCount != 2 {
+				t.Fatalf("browser trace moment count = %d, want 2", trajectory.MomentCount)
+			}
+		}
+	}
+	if !foundTrace {
+		t.Fatalf("trace index missing event-only browser trajectory %q: %+v", traceID, traceResp.Trajectories)
+	}
+}
+
+func TestBrowserSessionBindsToOwnerScopedPromotionCandidateWorld(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+	candidate, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:   "candidate-browser-world",
+		OwnerID:       "user-alice",
+		Status:        types.PromotionCandidateQueued,
+		SourceRunID:   "source-browser-world",
+		TraceID:       "trace-browser-world",
+		VMID:          "vm-browser-world",
+		SnapshotID:    "snapshot-browser-world",
+		BaseSHA:       "base-browser-world",
+		WorkerHeadSHA: "head-browser-world",
+		ManifestPath:  "/tmp/browser-world-manifest.json",
+		PatchsetPath:  "/tmp/browser-world.patch",
+		Summary:       "Candidate world with browser identity",
+	})
+	if err != nil {
+		t.Fatalf("queue candidate: %v", err)
+	}
+
+	forged := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
+	if forged.Code != http.StatusBadRequest {
+		t.Fatalf("forged vm_id status = %d, want 400; body=%s", forged.Code, forged.Body.String())
+	}
+
+	other := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"`+candidate.CandidateID+`"}`, "user-bob")
+	if other.Code != http.StatusNotFound {
+		t.Fatalf("other owner candidate status = %d, want 404; body=%s", other.Code, other.Body.String())
+	}
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"`+candidate.CandidateID+`"}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body=%s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.WorldKind != "candidate_world" || created.CandidateID != candidate.CandidateID || created.VMID != candidate.VMID || created.SnapshotID != candidate.SnapshotID {
+		t.Fatalf("created session missing candidate-world identity: %+v", created)
+	}
+	if created.SourceRunID != candidate.SourceRunID || created.CandidateTraceID != candidate.TraceID {
+		t.Fatalf("created session missing candidate provenance: %+v", created)
+	}
+
+	traceID := browserSessionTraceID(created.SessionID)
+	events, err := rt.Store().ListEventsByTrajectory(ctx, "user-alice", traceID, 10)
+	if err != nil {
+		t.Fatalf("list browser trace events: %v", err)
+	}
+	if len(events) != 1 || events[0].Kind != types.EventBrowserSessionCreated {
+		t.Fatalf("browser trace events = %+v, want one create event", events)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("decode browser create payload: %v", err)
+	}
+	if payload["world_kind"] != "candidate_world" || payload["vm_id"] != candidate.VMID || payload["promotion_candidate_id"] != candidate.CandidateID {
+		t.Fatalf("browser create payload missing candidate-world identity: %+v", payload)
+	}
+}
+
+func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.State != types.BrowserSessionUnavailable {
+		t.Fatalf("created state = %q, want unavailable", created.State)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
+	if navigateW.Code != http.StatusServiceUnavailable {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusServiceUnavailable, navigateW.Body.String())
+	}
+	var blocked types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&blocked); err != nil {
+		t.Fatalf("decode blocked: %v", err)
+	}
+	if blocked.State != types.BrowserSessionUnavailable || blocked.Error == "" {
+		t.Fatalf("unexpected blocked session: %+v", blocked)
+	}
+	events, err := handler.rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
+	if err != nil {
+		t.Fatalf("list blocked browser trace events: %v", err)
+	}
+	if len(events) != 2 || events[1].Kind != types.EventBrowserNavigationFailed {
+		t.Fatalf("blocked browser trace events = %+v, want create + navigation failed", events)
+	}
+}
+
+func TestBrowserSessionCloseIsOwnerScopedIdempotentAndPreventsNavigation(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+case "$mode" in
+  links) printf 'https://example.com/learn\tLearn more\n' ;;
+  html) printf '<title>Example Backend Page</title>' ;;
+  *) printf 'Example Backend Page\n' ;;
+esac
+`), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	otherCloseW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-bob")
+	if otherCloseW.Code != http.StatusNotFound {
+		t.Fatalf("other user close status = %d, want %d", otherCloseW.Code, http.StatusNotFound)
+	}
+
+	closeW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
+	if closeW.Code != http.StatusOK {
+		t.Fatalf("close status = %d, want %d; body: %s", closeW.Code, http.StatusOK, closeW.Body.String())
+	}
+	var closed types.BrowserSessionRecord
+	if err := json.NewDecoder(closeW.Body).Decode(&closed); err != nil {
+		t.Fatalf("decode close: %v", err)
+	}
+	if closed.State != types.BrowserSessionClosed {
+		t.Fatalf("closed state = %q, want %q", closed.State, types.BrowserSessionClosed)
+	}
+
+	closeAgainW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
+	if closeAgainW.Code != http.StatusOK {
+		t.Fatalf("close again status = %d, want %d; body: %s", closeAgainW.Code, http.StatusOK, closeAgainW.Body.String())
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
+	if navigateW.Code != http.StatusConflict {
+		t.Fatalf("navigate closed status = %d, want %d; body: %s", navigateW.Code, http.StatusConflict, navigateW.Body.String())
+	}
+
+	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
+	if err != nil {
+		t.Fatalf("list close trace events: %v", err)
+	}
+	if len(events) != 2 || events[0].Kind != types.EventBrowserSessionCreated || events[1].Kind != types.EventBrowserSessionClosed {
+		t.Fatalf("close trace events = %+v, want create + single close", events)
 	}
 }
 
@@ -192,6 +601,232 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 	bad := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build","agent_profile":"super"}`, "user-alice")
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("prompt-bar metadata status: got %d, want %d", bad.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPromotionCandidatePublicListAndDetailAreOwnerScoped(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+
+	queued, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID: "candidate-api-read",
+		OwnerID:     "user-alice",
+		Status:      types.PromotionCandidateQueued,
+		Summary:     "Review launcher/uploads/themes candidate",
+	})
+	if err != nil {
+		t.Fatalf("queue candidate: %v", err)
+	}
+
+	listReq := authenticatedRequest(http.MethodGet, "/api/promotions", "", "user-alice")
+	listW := httptest.NewRecorder()
+	handler.HandlePromotionCandidatesRoot(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d; body=%s", listW.Code, listW.Body.String())
+	}
+	var list promotionCandidateListResponse
+	if err := json.NewDecoder(listW.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list.Candidates) != 1 || list.Candidates[0].CandidateID != queued.CandidateID {
+		t.Fatalf("list candidates = %+v, want %q", list.Candidates, queued.CandidateID)
+	}
+
+	detailReq := authenticatedRequest(http.MethodGet, "/api/promotions/"+queued.CandidateID, "", "user-alice")
+	detailW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(detailW, detailReq)
+	if detailW.Code != http.StatusOK {
+		t.Fatalf("detail status = %d; body=%s", detailW.Code, detailW.Body.String())
+	}
+	var detail types.PromotionCandidateRecord
+	if err := json.NewDecoder(detailW.Body).Decode(&detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if detail.CandidateID != queued.CandidateID || detail.OwnerID != "user-alice" {
+		t.Fatalf("detail = %+v", detail)
+	}
+
+	otherUserReq := authenticatedRequest(http.MethodGet, "/api/promotions/"+queued.CandidateID, "", "user-bob")
+	otherUserW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
+	if otherUserW.Code != http.StatusNotFound {
+		t.Fatalf("other user detail status = %d, want 404", otherUserW.Code)
+	}
+}
+
+func TestPromotionCandidatePublicReviewIsOwnerScopedAndNonPromoting(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+
+	reportJSON := json.RawMessage(`{"status":"verified","promotion_approved":false}`)
+	verified, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID: "candidate-api-review",
+		OwnerID:     "user-alice",
+		Status:      types.PromotionCandidateVerified,
+		Summary:     "Review verified candidate",
+		ReportJSON:  reportJSON,
+	})
+	if err != nil {
+		t.Fatalf("queue verified candidate: %v", err)
+	}
+
+	otherUserReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/approve", "", "user-bob")
+	otherUserW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
+	if otherUserW.Code != http.StatusBadRequest && otherUserW.Code != http.StatusNotFound {
+		t.Fatalf("other user approve status = %d, want 400/404", otherUserW.Code)
+	}
+
+	approveReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/approve", "", "user-alice")
+	approveW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(approveW, approveReq)
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("approve status = %d; body=%s", approveW.Code, approveW.Body.String())
+	}
+	var approved types.PromotionCandidateRecord
+	if err := json.NewDecoder(approveW.Body).Decode(&approved); err != nil {
+		t.Fatalf("decode approved: %v", err)
+	}
+	if approved.Status != types.PromotionCandidateVerified {
+		t.Fatalf("approved status = %s, want verified", approved.Status)
+	}
+	var approvedReport struct {
+		PromotionApproved bool `json:"promotion_approved"`
+	}
+	if err := json.Unmarshal(approved.ReportJSON, &approvedReport); err != nil {
+		t.Fatalf("decode approved report: %v", err)
+	}
+	if !approvedReport.PromotionApproved {
+		t.Fatalf("expected promotion_approved in report_json: %s", approved.ReportJSON)
+	}
+
+	rejectReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/reject", "", "user-alice")
+	rejectW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(rejectW, rejectReq)
+	if rejectW.Code != http.StatusOK {
+		t.Fatalf("reject status = %d; body=%s", rejectW.Code, rejectW.Body.String())
+	}
+	var rejected types.PromotionCandidateRecord
+	if err := json.NewDecoder(rejectW.Body).Decode(&rejected); err != nil {
+		t.Fatalf("decode rejected: %v", err)
+	}
+	if rejected.Status != types.PromotionCandidateRejected {
+		t.Fatalf("rejected status = %s, want rejected", rejected.Status)
+	}
+}
+
+func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	source, err := rt.StartRunWithMetadata(context.Background(), "finish controller API source", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start source run: %v", err)
+	}
+	done := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
+	if done.State != types.RunCompleted {
+		t.Fatalf("source state = %s", done.State)
+	}
+	if _, err := rt.QueuePromotionCandidate(context.Background(), types.PromotionCandidateRecord{
+		CandidateID:       "candidate-continuation-api",
+		OwnerID:           "user-alice",
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       done.RunID,
+		VMID:              "vm-continuation-api",
+		BaseSHA:           "base-continuation-api",
+		WorkerHeadSHA:     "worker-continuation-api",
+		ManifestPath:      "/tmp/continuation-api-manifest.json",
+		PatchsetPath:      "/tmp/continuation-api.patch",
+		IntegrationBranch: "agent/continuation-api/candidate",
+		DestinationBranch: "main",
+		Summary:           "Continuation API selected patchset",
+	}); err != nil {
+		t.Fatalf("queue candidate: %v", err)
+	}
+
+	unauth := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "")
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status = %d, want %d", unauth.Code, http.StatusUnauthorized)
+	}
+
+	selectW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "user-alice")
+	if selectW.Code != http.StatusAccepted {
+		t.Fatalf("select status = %d, want %d; body=%s", selectW.Code, http.StatusAccepted, selectW.Body.String())
+	}
+	var selected types.RunContinuationRecord
+	if err := json.NewDecoder(selectW.Body).Decode(&selected); err != nil {
+		t.Fatalf("decode selected: %v", err)
+	}
+	if selected.Status != types.RunContinuationSelected || selected.Details["candidate_id"] != "candidate-continuation-api" {
+		t.Fatalf("unexpected selected continuation: %+v", selected)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/continuations?source_loop_id="+done.RunID, "", "user-alice")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", listW.Code, http.StatusOK, listW.Body.String())
+	}
+	var listResp runContinuationListResponse
+	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listResp.Continuations) != 1 || listResp.Continuations[0].ContinuationID != selected.ContinuationID {
+		t.Fatalf("continuation list = %+v, want selected continuation", listResp.Continuations)
+	}
+
+	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/continuations/"+selected.ContinuationID, "", "user-bob")
+	if otherW.Code != http.StatusNotFound {
+		t.Fatalf("other user detail status = %d, want %d", otherW.Code, http.StatusNotFound)
+	}
+
+	startW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations/"+selected.ContinuationID+"/start", `{}`, "user-alice")
+	if startW.Code != http.StatusAccepted {
+		t.Fatalf("start status = %d, want %d; body=%s", startW.Code, http.StatusAccepted, startW.Body.String())
+	}
+	var started types.RunContinuationRecord
+	if err := json.NewDecoder(startW.Body).Decode(&started); err != nil {
+		t.Fatalf("decode started: %v", err)
+	}
+	if started.Status != types.RunContinuationStarted || started.NextRunID == "" {
+		t.Fatalf("unexpected started continuation: %+v", started)
+	}
+	child := waitForRunTerminalState(t, rt, started.NextRunID, "user-alice", 5*time.Second)
+	if child.AgentProfile != AgentProfileVSuper {
+		t.Fatalf("child agent profile = %q, want %q", child.AgentProfile, AgentProfileVSuper)
+	}
+}
+
+func TestInternalPromotionRoutesRequireInternalCallerAndQueueCandidate(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body := `{"candidate_id":"candidate-api-queue","owner_id":"user-alice","summary":"queued via internal API"}`
+
+	publicReq := httptest.NewRequest(http.MethodPost, "/internal/promotions", strings.NewReader(body))
+	publicW := httptest.NewRecorder()
+	handler.HandleInternalPromotionCandidatesRoot(publicW, publicReq)
+	if publicW.Code != http.StatusForbidden {
+		t.Fatalf("public internal queue status = %d, want 403", publicW.Code)
+	}
+
+	internalReq := httptest.NewRequest(http.MethodPost, "/internal/promotions", strings.NewReader(body))
+	internalReq.Header.Set("X-Internal-Caller", "true")
+	internalW := httptest.NewRecorder()
+	handler.HandleInternalPromotionCandidatesRoot(internalW, internalReq)
+	if internalW.Code != http.StatusAccepted {
+		t.Fatalf("internal queue status = %d; body=%s", internalW.Code, internalW.Body.String())
+	}
+	var queued types.PromotionCandidateRecord
+	if err := json.NewDecoder(internalW.Body).Decode(&queued); err != nil {
+		t.Fatalf("decode queued: %v", err)
+	}
+	if queued.CandidateID != "candidate-api-queue" || queued.Status != types.PromotionCandidateQueued {
+		t.Fatalf("queued = %+v", queued)
+	}
+
+	verifyReq := httptest.NewRequest(http.MethodPost, "/internal/promotions/"+queued.CandidateID+"/verify", strings.NewReader(`{"owner_id":"user-alice","repo_path":"/tmp/repo"}`))
+	verifyW := httptest.NewRecorder()
+	handler.HandleInternalPromotionCandidateRouter(verifyW, verifyReq)
+	if verifyW.Code != http.StatusForbidden {
+		t.Fatalf("public verify status = %d, want 403", verifyW.Code)
 	}
 }
 

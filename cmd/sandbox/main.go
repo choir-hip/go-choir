@@ -36,18 +36,22 @@ func main() {
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := runtime.LoadConfig()
 	rtCfg := runtime.Config{
-		SandboxID:           cfg.SandboxID,
-		StorePath:           cfg.StorePath,
-		PromptRoot:          rtRuntimeCfg.PromptRoot,
-		ProviderTimeout:     rtRuntimeCfg.ProviderTimeout,
-		SupervisionInterval: rtRuntimeCfg.SupervisionInterval,
-		ResearcherCount:     rtRuntimeCfg.ResearcherCount,
-		VTextWakeDebounce:   rtRuntimeCfg.VTextWakeDebounce,
-		VmctlURL:            rtRuntimeCfg.VmctlURL,
-		LLMProvider:         rtRuntimeCfg.LLMProvider,
-		LLMModel:            rtRuntimeCfg.LLMModel,
-		LLMReasoningEffort:  rtRuntimeCfg.LLMReasoningEffort,
-		EnableTestAPIs:      rtRuntimeCfg.EnableTestAPIs,
+		SandboxID:                       cfg.SandboxID,
+		StorePath:                       cfg.StorePath,
+		PromptRoot:                      rtRuntimeCfg.PromptRoot,
+		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
+		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
+		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
+		VTextWakeDebounce:               rtRuntimeCfg.VTextWakeDebounce,
+		VmctlURL:                        rtRuntimeCfg.VmctlURL,
+		LLMProvider:                     rtRuntimeCfg.LLMProvider,
+		LLMModel:                        rtRuntimeCfg.LLMModel,
+		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
+		ObscuraPath:                     rtRuntimeCfg.ObscuraPath,
+		ObscuraCDPScreenshots:           rtRuntimeCfg.ObscuraCDPScreenshots,
+		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
+		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
+		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = runtime.DefaultStorePath

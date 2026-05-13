@@ -35,6 +35,7 @@ func promptRoles() []string {
 		AgentProfileResearcher,
 		AgentProfileSuper,
 		AgentProfileCoSuper,
+		AgentProfileVSuper,
 	}
 }
 

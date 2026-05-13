@@ -87,6 +87,29 @@ type TokenUsage struct {
 // polled by the agent.
 type InjectUserTurnsFunc func(finalCheckpoint bool) ([]json.RawMessage, error)
 
+// ToolLoopMemoryHooks lets the runtime persist and rebuild provider context
+// around the tool loop without making the tool loop depend on a storage layer.
+type ToolLoopMemoryHooks struct {
+	BeforeProviderCall func(ctx context.Context, messages []json.RawMessage) ([]json.RawMessage, error)
+	AfterAppendMessage func(ctx context.Context, role string, msg json.RawMessage) error
+	OnProviderError    func(ctx context.Context, messages []json.RawMessage, err error) ([]json.RawMessage, bool, error)
+}
+
+type toolLoopOptions struct {
+	memoryHooks ToolLoopMemoryHooks
+}
+
+// ToolLoopOption configures optional tool-loop behavior.
+type ToolLoopOption func(*toolLoopOptions)
+
+// WithToolLoopMemoryHooks configures durable memory callbacks for context
+// persistence, compaction, and context-overflow retry.
+func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.memoryHooks = hooks
+	}
+}
+
 // maxToolLoopIterations prevents infinite tool-calling loops. If the LLM
 // keeps requesting tool use without reaching an end_turn, we bail out
 // after this many iterations.
@@ -97,17 +120,20 @@ const maxToolLoopIterations = 25
 // end_turn or the context is cancelled.
 //
 // This is adapted from Cogent's runToolLoop but simplified for go-choir:
-//   - No session history management (the runtime loop manages conversation
-//     state per task).
+//   - Runtime-owned memory hooks can persist/rebuild conversation state.
 //   - No steer/interrupt mechanism (runs are atomic from the runtime's
 //     perspective; steering belongs in the appagent layer).
-//   - No history compression (context window management is the provider's
-//     concern in go-choir's model).
 //   - Tool execution emits observable events through the event bus.
 //
 // Returns the final text result, total token usage, and any error.
-func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit EventEmitFunc, injectUserTurns InjectUserTurnsFunc) (string, TokenUsage, error) {
+func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, TokenUsage, error) {
 	var totalUsage TokenUsage
+	options := toolLoopOptions{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
 	messages := make([]json.RawMessage, len(initialMessages))
 	copy(messages, initialMessages)
 
@@ -117,7 +143,43 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
 	}
 
+	appendMessage := func(role string, msg json.RawMessage) error {
+		messages = append(messages, msg)
+		if options.memoryHooks.AfterAppendMessage != nil {
+			if err := options.memoryHooks.AfterAppendMessage(ctx, role, msg); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	appendInjected := func(injected []json.RawMessage) error {
+		for _, msg := range injected {
+			if err := appendMessage(runMemoryMessageRole(msg), msg); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	appendAssistantText := func(text string) error {
+		if text == "" {
+			return nil
+		}
+		assistantMsg, _ := json.Marshal(map[string]any{
+			"role":    "assistant",
+			"content": buildAssistantContent(text, nil),
+		})
+		return appendMessage("assistant", assistantMsg)
+	}
+
 	for i := 0; i < maxToolLoopIterations; i++ {
+		if options.memoryHooks.BeforeProviderCall != nil {
+			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
+			if err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop memory before iteration %d: %w", i, err)
+			}
+			messages = rebuilt
+		}
+
 		// Call the LLM with current conversation state.
 		resp, err := provider.CallWithTools(ctx, ToolLoopRequest{
 			System:          systemPrompt,
@@ -126,6 +188,16 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			MaxTokens:       maxTokens,
 		})
 		if err != nil {
+			if options.memoryHooks.OnProviderError != nil {
+				rebuilt, retry, hookErr := options.memoryHooks.OnProviderError(ctx, messages, err)
+				if hookErr != nil {
+					return "", totalUsage, hookErr
+				}
+				if retry {
+					messages = rebuilt
+					continue
+				}
+			}
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
 		}
 
@@ -153,7 +225,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"role":    "assistant",
 				"content": buildAssistantContent(resp.Text, resp.ToolCalls),
 			})
-			messages = append(messages, assistantMsg)
+			if err := appendMessage("assistant", assistantMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
+			}
 
 			// Execute tools and collect results.
 			toolResults := executeTools(ctx, registry, resp.ToolCalls, emit)
@@ -163,13 +237,17 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"role":    "user",
 				"content": buildToolResultContent(toolResults),
 			})
-			messages = append(messages, toolResultMsg)
+			if err := appendMessage("user", toolResultMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
+			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)
 				if err != nil {
 					return "", totalUsage, fmt.Errorf("tool loop inject turns after tools: %w", err)
 				}
-				messages = append(messages, injected...)
+				if err := appendInjected(injected); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist injected turns after tools: %w", err)
+				}
 			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
@@ -181,16 +259,17 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					return "", totalUsage, fmt.Errorf("tool loop final inbox checkpoint: %w", err)
 				}
 				if len(injected) > 0 {
-					if resp.Text != "" {
-						assistantMsg, _ := json.Marshal(map[string]any{
-							"role":    "assistant",
-							"content": buildAssistantContent(resp.Text, nil),
-						})
-						messages = append(messages, assistantMsg)
+					if err := appendAssistantText(resp.Text); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 					}
-					messages = append(messages, injected...)
+					if err := appendInjected(injected); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist final injected turns: %w", err)
+					}
 					continue
 				}
+			}
+			if err := appendAssistantText(resp.Text); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 			}
 			// Normal completion — return the text.
 			return resp.Text, totalUsage, nil

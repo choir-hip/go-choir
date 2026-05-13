@@ -154,6 +154,26 @@ const (
 	// EventRunBlocked is emitted when a run is blocked (e.g., provider failure).
 	EventRunBlocked EventKind = "loop.blocked"
 
+	// EventRunCompactionStarted is emitted before the runtime compacts a run's
+	// persisted context into an operational memory checkpoint.
+	EventRunCompactionStarted EventKind = "loop.compaction.started"
+
+	// EventRunCompactionCompleted is emitted after a run-memory checkpoint has
+	// been persisted and the provider context can be rebuilt from it.
+	EventRunCompactionCompleted EventKind = "loop.compaction.completed"
+
+	// EventRunRetry is emitted when the runtime retries a provider call after a
+	// recoverable context-management action such as overflow compaction.
+	EventRunRetry EventKind = "loop.retry"
+
+	// EventRunContinuationSelected is emitted when the runtime records the next
+	// objective that should continue a completed run.
+	EventRunContinuationSelected EventKind = "loop.continuation.selected"
+
+	// EventRunContinuationStarted is emitted when a selected continuation starts
+	// as a child run.
+	EventRunContinuationStarted EventKind = "loop.continuation.started"
+
 	// EventRunCancelled is emitted when a run is cancelled.
 	EventRunCancelled EventKind = "loop.cancelled"
 
@@ -176,6 +196,50 @@ const (
 	// channel, making inter-agent coordination observable through the
 	// event stream.
 	EventChannelMessage EventKind = "channel.message"
+
+	// EventBrowserSessionCreated is emitted when the backend Browser product
+	// path creates an owner-scoped browser session.
+	EventBrowserSessionCreated EventKind = "browser.session.created"
+
+	// EventBrowserSessionClosed is emitted when the backend Browser product
+	// path closes an owner-scoped browser session.
+	EventBrowserSessionClosed EventKind = "browser.session.closed"
+
+	// EventBrowserNavigationCompleted is emitted when a backend Browser
+	// session successfully captures a server-owned navigation snapshot.
+	EventBrowserNavigationCompleted EventKind = "browser.navigation.completed"
+
+	// EventBrowserNavigationFailed is emitted when a backend Browser session
+	// cannot navigate or snapshot the requested URL.
+	EventBrowserNavigationFailed EventKind = "browser.navigation.failed"
+
+	// EventBrowserControlCompleted is emitted when a backend Browser session
+	// completes a bounded input/control action.
+	EventBrowserControlCompleted EventKind = "browser.control.completed"
+
+	// EventBrowserControlFailed is emitted when a backend Browser session
+	// rejects or fails a bounded input/control action.
+	EventBrowserControlFailed EventKind = "browser.control.failed"
+
+	// EventPromotionCandidateQueued is emitted when a candidate-world patchset
+	// enters the durable promotion queue.
+	EventPromotionCandidateQueued EventKind = "promotion.candidate.queued"
+
+	// EventPromotionCandidateVerified is emitted when verifier contracts accept
+	// an integrated candidate.
+	EventPromotionCandidateVerified EventKind = "promotion.candidate.verified"
+
+	// EventPromotionCandidateFailed is emitted when verifier contracts reject an
+	// integrated candidate.
+	EventPromotionCandidateFailed EventKind = "promotion.candidate.failed"
+
+	// EventPromotionCandidatePromoted is emitted when an approved verified
+	// candidate advances canonical git state.
+	EventPromotionCandidatePromoted EventKind = "promotion.candidate.promoted"
+
+	// EventPromotionCandidateReviewed is emitted when the owning user records
+	// an explicit approve/reject decision for a candidate.
+	EventPromotionCandidateReviewed EventKind = "promotion.candidate.reviewed"
 
 	// EventVTextAgentRevisionStarted is emitted when an appagent-driven
 	// document revision starts executing. The payload includes the doc_id
@@ -250,6 +314,104 @@ type EventRecord struct {
 
 	// Payload carries the event-specific data as a JSON blob.
 	Payload json.RawMessage `json:"payload"`
+}
+
+// RunMemoryEntryKind describes the durable entry type in a run's context log.
+type RunMemoryEntryKind string
+
+const (
+	// RunMemoryEntryMessage stores a provider-facing conversation message.
+	RunMemoryEntryMessage RunMemoryEntryKind = "message"
+
+	// RunMemoryEntryCompaction stores an operational summary checkpoint and
+	// the first raw message retained after that checkpoint.
+	RunMemoryEntryCompaction RunMemoryEntryKind = "compaction"
+)
+
+// RunMemoryEntry is a durable, ordered context record for a runtime run. The
+// provider context is rebuilt from these entries, allowing runs to survive
+// process restarts and context-window compaction.
+type RunMemoryEntry struct {
+	EntryID          string             `json:"entry_id"`
+	RunID            string             `json:"loop_id"`
+	OwnerID          string             `json:"owner_id"`
+	AgentID          string             `json:"agent_id,omitempty"`
+	ParentEntryID    string             `json:"parent_entry_id,omitempty"`
+	Seq              int64              `json:"seq"`
+	Kind             RunMemoryEntryKind `json:"kind"`
+	Role             string             `json:"role,omitempty"`
+	Message          json.RawMessage    `json:"message,omitempty"`
+	Summary          string             `json:"summary,omitempty"`
+	FirstKeptEntryID string             `json:"first_kept_entry_id,omitempty"`
+	TokensBefore     int                `json:"tokens_before,omitempty"`
+	Reason           string             `json:"reason,omitempty"`
+	Model            string             `json:"model,omitempty"`
+	Details          map[string]any     `json:"details,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
+// PromotionCandidateStatus is the state of a candidate-world patchset as it
+// moves from worker export through verification and optional promotion.
+type PromotionCandidateStatus string
+
+const (
+	PromotionCandidateQueued             PromotionCandidateStatus = "queued"
+	PromotionCandidateIntegrated         PromotionCandidateStatus = "integrated"
+	PromotionCandidateVerified           PromotionCandidateStatus = "verified"
+	PromotionCandidateVerificationFailed PromotionCandidateStatus = "verification_failed"
+	PromotionCandidatePromoted           PromotionCandidateStatus = "promoted"
+	PromotionCandidateRejected           PromotionCandidateStatus = "rejected"
+)
+
+// PromotionCandidateRecord is the runtime queue record that makes a background
+// VM patchset reviewable before canonical promotion.
+type PromotionCandidateRecord struct {
+	CandidateID       string                   `json:"candidate_id"`
+	OwnerID           string                   `json:"owner_id"`
+	Status            PromotionCandidateStatus `json:"status"`
+	SourceRunID       string                   `json:"source_loop_id,omitempty"`
+	TraceID           string                   `json:"trace_id,omitempty"`
+	VMID              string                   `json:"vm_id,omitempty"`
+	SnapshotID        string                   `json:"snapshot_id,omitempty"`
+	BaseSHA           string                   `json:"base_sha,omitempty"`
+	WorkerHeadSHA     string                   `json:"worker_head_sha,omitempty"`
+	ManifestPath      string                   `json:"manifest_path,omitempty"`
+	PatchsetPath      string                   `json:"patchset_path,omitempty"`
+	IntegrationBranch string                   `json:"integration_branch,omitempty"`
+	DestinationBranch string                   `json:"destination_branch,omitempty"`
+	Summary           string                   `json:"summary,omitempty"`
+	CandidateJSON     json.RawMessage          `json:"candidate_json,omitempty"`
+	ContractsJSON     json.RawMessage          `json:"contracts_json,omitempty"`
+	ReportJSON        json.RawMessage          `json:"report_json,omitempty"`
+	Error             string                   `json:"error,omitempty"`
+	CreatedAt         time.Time                `json:"created_at"`
+	UpdatedAt         time.Time                `json:"updated_at"`
+}
+
+// RunContinuationStatus is the lifecycle of a durable next-goal selection.
+type RunContinuationStatus string
+
+const (
+	RunContinuationSelected RunContinuationStatus = "selected"
+	RunContinuationStarted  RunContinuationStatus = "started"
+	RunContinuationBlocked  RunContinuationStatus = "blocked"
+)
+
+// RunContinuationRecord records the next objective chosen after a run has
+// completed and compacted enough context for safe continuation.
+type RunContinuationRecord struct {
+	ContinuationID   string                `json:"continuation_id"`
+	OwnerID          string                `json:"owner_id"`
+	SourceRunID      string                `json:"source_loop_id"`
+	NextRunID        string                `json:"next_loop_id,omitempty"`
+	Objective        string                `json:"objective"`
+	Reason           string                `json:"reason,omitempty"`
+	AuthorityProfile string                `json:"authority_profile,omitempty"`
+	LeaseSeconds     int                   `json:"lease_seconds,omitempty"`
+	Status           RunContinuationStatus `json:"status"`
+	Details          map[string]any        `json:"details,omitempty"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
 }
 
 // ToolCall represents a single tool invocation request from the LLM provider.

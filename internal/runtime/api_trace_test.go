@@ -185,6 +185,143 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 }
 
+func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	parent, _ := seedTraceTrajectory(t, rt)
+	ctx := context.Background()
+	compactionEntry, err := rt.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:        parent.RunID,
+		OwnerID:      parent.OwnerID,
+		AgentID:      parent.AgentID,
+		Kind:         types.RunMemoryEntryCompaction,
+		Summary:      "Kept the operational checkpoint.",
+		TokensBefore: 240000,
+		Reason:       "threshold",
+		Details:      map[string]any{"tokens_after": 48000},
+	})
+	if err != nil {
+		t.Fatalf("append compaction artifact: %v", err)
+	}
+	compactionPayload, _ := json.Marshal(map[string]any{
+		"entry_id":      compactionEntry.EntryID,
+		"reason":        "threshold",
+		"tokens_before": 240000,
+		"tokens_after":  48000,
+	})
+	rt.emitEvent(ctx, parent, types.EventRunCompactionCompleted, "run_memory", compactionPayload)
+	continuation, err := rt.store.CreateRunContinuation(ctx, types.RunContinuationRecord{
+		ContinuationID:   "cont-123",
+		OwnerID:          parent.OwnerID,
+		SourceRunID:      parent.RunID,
+		Objective:        "Continue the run geometry slice",
+		AuthorityProfile: AgentProfileVSuper,
+		LeaseSeconds:     60,
+		Status:           types.RunContinuationSelected,
+		Details:          map[string]any{"objective_fingerprint": "abcdef1234567890"},
+	})
+	if err != nil {
+		t.Fatalf("create continuation artifact: %v", err)
+	}
+	continuationPayload, _ := json.Marshal(map[string]any{
+		"continuation_id":       continuation.ContinuationID,
+		"objective_fingerprint": "abcdef1234567890",
+		"next_loop_id":          "loop-next-123",
+	})
+	rt.emitEvent(ctx, parent, types.EventRunContinuationSelected, "run_memory", continuationPayload)
+	promotionCandidate, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:       "candidate-123456",
+		OwnerID:           parent.OwnerID,
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       parent.RunID,
+		TraceID:           parent.RunID,
+		VMID:              "vm-trace-artifact",
+		BaseSHA:           "base-trace-artifact",
+		WorkerHeadSHA:     "worker-trace-artifact",
+		ManifestPath:      "/tmp/trace-manifest.json",
+		PatchsetPath:      "/tmp/trace.patch",
+		IntegrationBranch: "agent/trace-artifact/candidate",
+		DestinationBranch: "main",
+		Summary:           "Trace artifact promotion candidate",
+		ReportJSON:        json.RawMessage(`{"rollback":{"revert_command":"git reset --hard base-trace-artifact"}}`),
+	})
+	if err != nil {
+		t.Fatalf("queue promotion artifact: %v", err)
+	}
+
+	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID, "", "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandleTraceTrajectories(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp traceTrajectorySnapshotResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	summaries := map[types.EventKind]traceMomentSummary{}
+	for _, moment := range resp.Moments {
+		summaries[moment.Kind] = moment
+	}
+	if got := summaries[types.EventRunCompactionCompleted].Summary; got != "compacted context 240000 -> 48000 tokens" {
+		t.Fatalf("compaction summary = %q", got)
+	}
+	if got := summaries[types.EventRunContinuationSelected].Summary; !strings.Contains(got, "selected continuation") || !strings.Contains(got, "abcdef") {
+		t.Fatalf("continuation summary = %q", got)
+	}
+	if got := summaries[types.EventPromotionCandidateQueued].Summary; !strings.Contains(got, "queued promotion candidate") {
+		t.Fatalf("promotion summary = %q", got)
+	}
+	if summaries[types.EventRunCompactionCompleted].Tone != "success" ||
+		summaries[types.EventRunContinuationSelected].Tone != "active" ||
+		summaries[types.EventPromotionCandidateQueued].Tone != "active" {
+		t.Fatalf("unexpected tones: compaction=%q continuation=%q promotion=%q",
+			summaries[types.EventRunCompactionCompleted].Tone,
+			summaries[types.EventRunContinuationSelected].Tone,
+			summaries[types.EventPromotionCandidateQueued].Tone)
+	}
+
+	for kind, assertArtifact := range map[types.EventKind]func(traceMomentDetailResponse){
+		types.EventRunCompactionCompleted: func(detail traceMomentDetailResponse) {
+			if detail.References.RunMemoryEntryID != compactionEntry.EntryID {
+				t.Fatalf("run memory reference = %q, want %q", detail.References.RunMemoryEntryID, compactionEntry.EntryID)
+			}
+			if detail.Artifacts.RunMemory == nil || detail.Artifacts.RunMemory.EntryID != compactionEntry.EntryID {
+				t.Fatalf("run memory artifact = %+v, want %s", detail.Artifacts.RunMemory, compactionEntry.EntryID)
+			}
+		},
+		types.EventRunContinuationSelected: func(detail traceMomentDetailResponse) {
+			if detail.References.ContinuationID != continuation.ContinuationID {
+				t.Fatalf("continuation reference = %q, want %q", detail.References.ContinuationID, continuation.ContinuationID)
+			}
+			if detail.Artifacts.Continuation == nil || detail.Artifacts.Continuation.ContinuationID != continuation.ContinuationID {
+				t.Fatalf("continuation artifact = %+v, want %s", detail.Artifacts.Continuation, continuation.ContinuationID)
+			}
+		},
+		types.EventPromotionCandidateQueued: func(detail traceMomentDetailResponse) {
+			if detail.References.PromotionCandidateID != promotionCandidate.CandidateID {
+				t.Fatalf("promotion reference = %q, want %q", detail.References.PromotionCandidateID, promotionCandidate.CandidateID)
+			}
+			if detail.Artifacts.PromotionCandidate == nil || detail.Artifacts.PromotionCandidate.CandidateID != promotionCandidate.CandidateID {
+				t.Fatalf("promotion artifact = %+v, want %s", detail.Artifacts.PromotionCandidate, promotionCandidate.CandidateID)
+			}
+		},
+	} {
+		moment := summaries[kind]
+		detailReq := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID+"/moments/"+moment.MomentID, "", "user-alice")
+		detailW := httptest.NewRecorder()
+		handler.HandleTraceTrajectories(detailW, detailReq)
+		if detailW.Code != http.StatusOK {
+			t.Fatalf("detail status for %s = %d, body=%s", kind, detailW.Code, detailW.Body.String())
+		}
+		var detail traceMomentDetailResponse
+		if err := json.Unmarshal(detailW.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode detail for %s: %v", kind, err)
+		}
+		assertArtifact(detail)
+	}
+}
+
 func TestBuildTraceSearchSummaryAggregatesProviderAttempts(t *testing.T) {
 	events := []types.EventRecord{
 		{

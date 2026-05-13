@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,10 @@ type Runtime struct {
 	vtextWakeAfter   func(time.Duration, func()) vtextWakeTimer
 	vtextEditMu      sync.Mutex
 	conductorRouteMu sync.Mutex
+	browserOpMu      sync.Mutex
+	browserOps       map[string]*sync.Mutex
+	browserCDPMu     sync.Mutex
+	browserCDP       map[string]*browserCDPSession
 }
 
 type vtextWakeTimer interface {
@@ -64,6 +69,8 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		promptStore:      NewPromptStore(cfg.PromptRoot),
 		vtextWakePending: make(map[string]pendingVTextWake),
 		vtextWakeAfter:   func(d time.Duration, fn func()) vtextWakeTimer { return time.AfterFunc(d, fn) },
+		browserOps:       make(map[string]*sync.Mutex),
+		browserCDP:       make(map[string]*browserCDPSession),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -101,6 +108,28 @@ func metadataBoolValue(metadata map[string]any, key string) bool {
 		return strings.EqualFold(strings.TrimSpace(value), "true")
 	default:
 		return false
+	}
+}
+
+func metadataIntValue(metadata map[string]any, key string) int {
+	if metadata == nil {
+		return 0
+	}
+	switch value := metadata[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		n, _ := value.Int64()
+		return int(n)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(value))
+		return n
+	default:
+		return 0
 	}
 }
 
@@ -266,12 +295,17 @@ func withVTextWakeAfterFuncForTest(after func(time.Duration, func()) vtextWakeTi
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.recoverInterruptedRuns(ctx)
 	rt.reconcileAllVTextDocuments(ctx)
+	go func() {
+		<-ctx.Done()
+		rt.closeAllBrowserCDPSessions()
+	}()
 	log.Printf("runtime: started (sandbox=%s)", rt.cfg.SandboxID)
 }
 
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
+	rt.closeAllBrowserCDPSessions()
 	rt.mu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
@@ -807,6 +841,13 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	})
 	initialMessages = append(initialMessages, userMsg)
 
+	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
+	initialMessages, err := memory.initialize(ctx, initialMessages)
+	if err != nil {
+		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
+		return
+	}
+
 	systemPrompt, err := rt.systemPromptForRun(rec)
 	if err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -816,7 +857,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, 4096, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
 		return rt.injectPendingInboxTurns(context.Background(), rec, finalCheckpoint)
-	})
+	}, WithToolLoopMemoryHooks(memory.hooks()))
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
@@ -869,7 +910,32 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
 	rt.notifyParent(persistCtx, rec)
+	rt.maybeStartConfiguredContinuation(persistCtx, rec)
+}
 
+// CompactRunMemory forces a durable run-memory checkpoint for an existing run.
+// It is the runtime primitive behind manual compaction controls and uses the
+// same compaction/event path as automatic threshold and overflow recovery.
+func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason string) error {
+	rec, err := rt.GetRun(ctx, runID, ownerID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(reason) == "" {
+		reason = "manual"
+	}
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
+	}
+	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
+	compacted, err := memory.compactIfNeeded(ctx, reason, true)
+	if err != nil {
+		return err
+	}
+	if !compacted {
+		return fmt.Errorf("run memory compaction skipped: no compactable entries")
+	}
+	return nil
 }
 
 func (rt *Runtime) injectPendingInboxTurns(ctx context.Context, rec *types.RunRecord, finalCheckpoint bool) ([]json.RawMessage, error) {
@@ -976,6 +1042,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 
 	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
 	rt.notifyParent(persistCtx, rec)
+	rt.maybeStartConfiguredContinuation(persistCtx, rec)
 
 }
 
@@ -1196,6 +1263,33 @@ func buildInitialVTextTitle(seedPrompt, objective string) string {
 	return title
 }
 
+func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDecision) string {
+	if rec == nil || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
+		return ""
+	}
+	if conductorRequestedApp(rec) != AgentProfileVText {
+		return ""
+	}
+	seedPrompt := strings.TrimSpace(decision.SeedPrompt)
+	if seedPrompt == "" {
+		seedPrompt = conductorSeedPrompt(rec)
+	}
+	if seedPrompt == "" {
+		return ""
+	}
+	title := strings.TrimSpace(decision.Title)
+	if title == "" {
+		title = conductorWindowTitle(rec, seedPrompt)
+	}
+	if title == "" {
+		title = buildInitialVTextTitle(seedPrompt, "")
+	}
+	if title == "" || strings.EqualFold(title, seedPrompt) {
+		return seedPrompt
+	}
+	return "# " + title + "\n\n" + seedPrompt
+}
+
 func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (conductorDecision, error) {
 	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
 		return conductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
@@ -1228,6 +1322,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	now := time.Now().UTC()
 	decision := fillConductorDecisionFromRun(rec, parsedDecision)
 	initialContent = strings.TrimSpace(initialContent)
+	if initialContent == "" {
+		initialContent = fallbackPromptBarInitialContent(rec, decision)
+	}
 	if initialContent == "" {
 		return conductorDecision{}, fmt.Errorf("conductor vtext route requires initial_content")
 	}
@@ -1750,12 +1847,20 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		state = types.RunCancelled
 		kind = types.EventRunCancelled
 		cause = events.CauseTaskLifecycle
+	} else if isRunMemoryBlockedError(err) {
+		state = types.RunBlocked
+		kind = types.EventRunBlocked
+		cause = events.CauseSupervisorRecovery
 	}
 
 	rec.State = state
 	rec.Error = err.Error()
 	rec.UpdatedAt = now
-	rec.FinishedAt = &now
+	if state.Terminal() {
+		rec.FinishedAt = &now
+	} else {
+		rec.FinishedAt = nil
+	}
 
 	// Use background context for persistence so that cancelled-run state
 	// transitions are persisted even when the run context is cancelled.

@@ -46,14 +46,18 @@ func newExportPatchsetTool(cwd string) Tool {
 		}, []string{"repo_path", "base_sha"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			profile := stringFromToolContext(ctx, toolCtxProfile)
-			if profile != AgentProfileSuper && profile != AgentProfileCoSuper {
-				return "", fmt.Errorf("export_patchset is only available to super and co-super agents")
+			if profile != AgentProfileSuper && profile != AgentProfileCoSuper && profile != AgentProfileVSuper {
+				return "", fmt.Errorf("export_patchset is only available to super, co-super, and vsuper agents")
+			}
+			if err := guardForegroundSuperMutation(ctx, "export_patchset"); err != nil {
+				return "", err
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode export_patchset args: %w", err)
 			}
-			repoPath, err := resolveToolPath(cwd, in.RepoPath)
+			baseCWD := effectiveToolCWD(ctx, cwd)
+			repoPath, err := resolveToolPath(baseCWD, in.RepoPath)
 			if err != nil {
 				return "", fmt.Errorf("repo_path: %w", err)
 			}
@@ -78,7 +82,7 @@ func newExportPatchsetTool(cwd string) Tool {
 			if outputDir == "" {
 				outputDir = filepath.Join(".choir", "exports", sanitizeExportPart(runID))
 			}
-			outputPath, err := resolveToolPath(cwd, outputDir)
+			outputPath, err := resolveToolPath(baseCWD, outputDir)
 			if err != nil {
 				return "", fmt.Errorf("output_dir: %w", err)
 			}
@@ -99,14 +103,19 @@ func newExportPatchsetTool(cwd string) Tool {
 			}
 
 			return toolResultJSON(map[string]any{
-				"status":        report.Status,
-				"base_sha":      report.BaseSHA,
-				"worker_head":   report.HeadSHA,
-				"manifest_path": report.ManifestPath,
-				"patchset_path": report.PatchsetPath,
-				"checks":        report.Checks,
-				"exported_at":   report.ExportedAt,
-				"github_push":   false,
+				"status":          report.Status,
+				"run_id":          runID,
+				"trace_id":        traceID,
+				"vm_id":           vmID,
+				"snapshot_id":     strings.TrimSpace(in.SnapshotID),
+				"base_sha":        report.BaseSHA,
+				"worker_head":     report.HeadSHA,
+				"worker_head_sha": report.HeadSHA,
+				"manifest_path":   report.ManifestPath,
+				"patchset_path":   report.PatchsetPath,
+				"checks":          report.Checks,
+				"exported_at":     report.ExportedAt,
+				"github_push":     false,
 			})
 		},
 	}

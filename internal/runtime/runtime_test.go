@@ -332,6 +332,51 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	}
 }
 
+func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) {
+	rt, s := testRuntime(t)
+	provider := rt.provider.(*StubProvider)
+	provider.Result = `{"action":"open_app","app":"vtext","title":"Fallback document"}`
+	rt.Start(context.Background())
+
+	rec, err := rt.StartRunWithMetadata(context.Background(), "Draft fallback content", "user-alice", map[string]any{
+		runMetadataAgentProfile:  AgentProfileConductor,
+		runMetadataAgentRole:     AgentProfileConductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          AgentProfileVText,
+		"seed_prompt":            "Draft fallback content",
+		"initial_document_title": "Fallback document",
+	})
+	if err != nil {
+		t.Fatalf("start conductor run: %v", err)
+	}
+
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
+	if stored.State != types.RunCompleted {
+		t.Fatalf("state = %q error=%q", stored.State, stored.Error)
+	}
+	var result conductorDecision
+	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, stored.Result)
+	}
+	if result.Action != "open_app" || result.App != AgentProfileVText || result.DocID == "" {
+		t.Fatalf("conductor result = %+v, want materialized vtext route", result)
+	}
+	if !strings.Contains(result.InitialContent, "Draft fallback content") {
+		t.Fatalf("initial_content = %q, want seed prompt content", result.InitialContent)
+	}
+	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
+	if err != nil {
+		t.Fatalf("get materialized document: %v", err)
+	}
+	rev, err := s.GetRevision(context.Background(), doc.CurrentRevisionID, "user-alice")
+	if err != nil {
+		t.Fatalf("get fallback revision: %v", err)
+	}
+	if !strings.Contains(rev.Content, "Draft fallback content") {
+		t.Fatalf("fallback revision content = %q, want seed prompt content", rev.Content)
+	}
+}
+
 func TestProviderPromptUsesPromptOverride(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if _, err := rt.PromptStore().Save("user-alice", AgentProfileConductor, "Custom conductor prompt"); err != nil {

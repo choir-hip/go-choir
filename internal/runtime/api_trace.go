@@ -34,6 +34,7 @@ type traceMomentDetailResponse struct {
 	Messages     []types.ChannelMessage        `json:"messages"`
 	Findings     []types.ResearchFindingRecord `json:"findings"`
 	References   traceMomentReferences         `json:"references"`
+	Artifacts    traceMomentArtifacts          `json:"artifacts,omitempty"`
 }
 
 type traceTrajectorySummary struct {
@@ -119,11 +120,21 @@ type traceMomentSummary struct {
 }
 
 type traceMomentReferences struct {
-	DocID             string   `json:"doc_id,omitempty"`
-	RevisionID        string   `json:"revision_id,omitempty"`
-	CurrentRevisionID string   `json:"current_revision_id,omitempty"`
-	FindingID         string   `json:"finding_id,omitempty"`
-	EvidenceIDs       []string `json:"evidence_ids,omitempty"`
+	DocID                string   `json:"doc_id,omitempty"`
+	RevisionID           string   `json:"revision_id,omitempty"`
+	CurrentRevisionID    string   `json:"current_revision_id,omitempty"`
+	FindingID            string   `json:"finding_id,omitempty"`
+	EvidenceIDs          []string `json:"evidence_ids,omitempty"`
+	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
+	ContinuationID       string   `json:"continuation_id,omitempty"`
+	PromotionCandidateID string   `json:"promotion_candidate_id,omitempty"`
+	ObjectiveFingerprint string   `json:"objective_fingerprint,omitempty"`
+}
+
+type traceMomentArtifacts struct {
+	RunMemory          *types.RunMemoryEntry           `json:"run_memory,omitempty"`
+	Continuation       *types.RunContinuationRecord    `json:"continuation,omitempty"`
+	PromotionCandidate *types.PromotionCandidateRecord `json:"promotion_candidate,omitempty"`
 }
 
 type traceTrajectoryBundle struct {
@@ -253,12 +264,15 @@ func (h *APIHandler) handleTraceTrajectoryMomentDetail(w http.ResponseWriter, r 
 	}
 
 	moment := buildTraceMomentSummary(selected, bundle.agentIndex)
+	payload := parseTracePayload(selected.Payload)
+	references := buildTraceMomentReferences(payload)
 	detail := traceMomentDetailResponse{
 		TrajectoryID: trajectoryID,
 		Moment:       moment,
 		Events:       []types.EventRecord{selected},
-		References:   buildTraceMomentReferences(parseTracePayload(selected.Payload)),
+		References:   references,
 	}
+	detail.Artifacts = h.buildTraceMomentArtifacts(r.Context(), ownerID, selected, references, payload)
 
 	messageSeq := moment.MessageSeq
 	channelID := strings.TrimSpace(moment.ChannelID)
@@ -410,9 +424,6 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 }
 
 func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecord) []traceTrajectorySummary {
-	if len(runs) == 0 {
-		return nil
-	}
 	groupedRuns := make(map[string][]types.RunRecord)
 	for _, run := range runs {
 		trajectoryID := traceTrajectoryIDForRun(run)
@@ -427,13 +438,23 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 		groupedEvents[trajectoryID] = append(groupedEvents[trajectoryID], ev)
 	}
 
-	summaries := make([]traceTrajectorySummary, 0, len(groupedRuns))
+	summaries := make([]traceTrajectorySummary, 0, len(groupedRuns)+len(groupedEvents))
+	seen := make(map[string]bool, len(groupedRuns)+len(groupedEvents))
 	for trajectoryID, runGroup := range groupedRuns {
 		agents, _ := buildTraceAgentNodes(runGroup)
 		edges := buildTraceAgentEdges(runGroup)
 		moments := buildTraceMomentSummaries(groupedEvents[trajectoryID], nil)
 		search := buildTraceSearchSummary(groupedEvents[trajectoryID])
 		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, runGroup, agents, edges, moments, nil, nil, search))
+		seen[trajectoryID] = true
+	}
+	for trajectoryID, eventGroup := range groupedEvents {
+		if seen[trajectoryID] {
+			continue
+		}
+		moments := buildTraceMomentSummaries(eventGroup, nil)
+		search := buildTraceSearchSummary(eventGroup)
+		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, nil, nil, nil, moments, nil, nil, search))
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].LatestActivityAt > summaries[j].LatestActivityAt
@@ -798,12 +819,69 @@ func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAg
 
 func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 	return traceMomentReferences{
-		DocID:             payloadString(payload, "doc_id"),
-		RevisionID:        payloadString(payload, "revision_id"),
-		CurrentRevisionID: payloadString(payload, "current_revision_id"),
-		FindingID:         payloadString(payload, "finding_id"),
-		EvidenceIDs:       payloadStringSlice(payload, "evidence_ids"),
+		DocID:                payloadString(payload, "doc_id"),
+		RevisionID:           payloadString(payload, "revision_id"),
+		CurrentRevisionID:    payloadString(payload, "current_revision_id"),
+		FindingID:            payloadString(payload, "finding_id"),
+		EvidenceIDs:          payloadStringSlice(payload, "evidence_ids"),
+		RunMemoryEntryID:     payloadString(payload, "entry_id"),
+		ContinuationID:       payloadString(payload, "continuation_id"),
+		PromotionCandidateID: payloadString(payload, "candidate_id"),
+		ObjectiveFingerprint: payloadString(payload, "objective_fingerprint"),
 	}
+}
+
+func (h *APIHandler) buildTraceMomentArtifacts(ctx context.Context, ownerID string, ev types.EventRecord, refs traceMomentReferences, payload map[string]any) traceMomentArtifacts {
+	artifacts := traceMomentArtifacts{}
+	if h == nil || h.rt == nil || h.rt.Store() == nil {
+		return artifacts
+	}
+	if refs.RunMemoryEntryID != "" || ev.Kind == types.EventRunCompactionCompleted {
+		if entry, ok := h.findTraceRunMemoryArtifact(ctx, ownerID, ev, refs, payload); ok {
+			artifacts.RunMemory = &entry
+		}
+	}
+	if refs.ContinuationID != "" {
+		if rec, err := h.rt.Store().GetRunContinuation(ctx, ownerID, refs.ContinuationID); err == nil {
+			artifacts.Continuation = &rec
+		}
+	}
+	if refs.PromotionCandidateID != "" {
+		if rec, err := h.rt.Store().GetPromotionCandidate(ctx, ownerID, refs.PromotionCandidateID); err == nil {
+			artifacts.PromotionCandidate = &rec
+		}
+	}
+	return artifacts
+}
+
+func (h *APIHandler) findTraceRunMemoryArtifact(ctx context.Context, ownerID string, ev types.EventRecord, refs traceMomentReferences, payload map[string]any) (types.RunMemoryEntry, bool) {
+	runID := strings.TrimSpace(ev.RunID)
+	if runID == "" {
+		return types.RunMemoryEntry{}, false
+	}
+	entries, err := h.rt.Store().ListRunMemoryEntries(ctx, ownerID, runID)
+	if err != nil {
+		return types.RunMemoryEntry{}, false
+	}
+	reason := payloadString(payload, "reason")
+	tokensBefore := int(payloadInt64(payload, "tokens_before"))
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		if entry.Kind != types.RunMemoryEntryCompaction {
+			continue
+		}
+		if refs.RunMemoryEntryID != "" && entry.EntryID != refs.RunMemoryEntryID {
+			continue
+		}
+		if refs.RunMemoryEntryID == "" && reason != "" && entry.Reason != reason {
+			continue
+		}
+		if refs.RunMemoryEntryID == "" && tokensBefore > 0 && entry.TokensBefore != tokensBefore {
+			continue
+		}
+		return entry, true
+	}
+	return types.RunMemoryEntry{}, false
 }
 
 func collectFindingEvidenceIDs(findings []types.ResearchFindingRecord) []string {
@@ -928,8 +1006,86 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return fmt.Sprintf("%s -> %s: %s", from, shortTraceID(toAgent), traceNonEmpty(content, "message"))
 		}
 		return fmt.Sprintf("%s: %s", from, traceNonEmpty(content, "message"))
+	case types.EventBrowserSessionCreated:
+		sessionID := traceNonEmpty(payloadString(payload, "session_id"), "session")
+		mode := traceNonEmpty(payloadString(payload, "mode"), "browser")
+		if payloadString(payload, "world_kind") == "candidate_world" {
+			vmID := traceNonEmpty(payloadString(payload, "vm_id"), "vm")
+			return fmt.Sprintf("created candidate-world browser session %s for %s", shortTraceID(sessionID), shortTraceID(vmID))
+		}
+		return fmt.Sprintf("created %s browser session %s", mode, shortTraceID(sessionID))
+	case types.EventBrowserSessionClosed:
+		sessionID := traceNonEmpty(payloadString(payload, "session_id"), "session")
+		return fmt.Sprintf("closed browser session %s", shortTraceID(sessionID))
+	case types.EventBrowserNavigationCompleted:
+		title := payloadString(payload, "title")
+		if title == "" {
+			title = payloadString(payload, "url")
+		}
+		if payloadInt64(payload, "screenshot_png_bytes") > 0 {
+			return fmt.Sprintf("browser screenshot: %s", traceNonEmpty(traceExcerpt(title, 72), "navigation completed"))
+		}
+		return fmt.Sprintf("browser snapshot: %s", traceNonEmpty(traceExcerpt(title, 72), "navigation completed"))
+	case types.EventBrowserNavigationFailed:
+		if errText := payloadString(payload, "error"); errText != "" {
+			return fmt.Sprintf("browser navigation failed: %s", traceExcerpt(errText, 96))
+		}
+		return "browser navigation failed"
+	case types.EventBrowserControlCompleted:
+		action := traceNonEmpty(payloadString(payload, "action"), "control")
+		selector := traceNonEmpty(payloadString(payload, "selector"), "selector")
+		return fmt.Sprintf("browser %s: %s", action, traceExcerpt(selector, 72))
+	case types.EventBrowserControlFailed:
+		action := traceNonEmpty(payloadString(payload, "action"), "control")
+		if errText := payloadString(payload, "error"); errText != "" {
+			return fmt.Sprintf("browser %s failed: %s", action, traceExcerpt(errText, 96))
+		}
+		return fmt.Sprintf("browser %s failed", action)
 	case types.EventRunCompleted:
 		return "loop completed"
+	case types.EventRunCompactionStarted:
+		if tokens := payloadInt64(payload, "tokens_before"); tokens > 0 {
+			return fmt.Sprintf("compacting context (%d tokens)", tokens)
+		}
+		return "compacting context"
+	case types.EventRunCompactionCompleted:
+		before := payloadInt64(payload, "tokens_before")
+		after := payloadInt64(payload, "tokens_after")
+		if before > 0 && after > 0 {
+			return fmt.Sprintf("compacted context %d -> %d tokens", before, after)
+		}
+		return "context checkpoint completed"
+	case types.EventRunRetry:
+		if reason := payloadString(payload, "reason"); reason != "" {
+			return fmt.Sprintf("retry after %s", reason)
+		}
+		return "retrying provider call"
+	case types.EventRunContinuationSelected:
+		if fingerprint := payloadString(payload, "objective_fingerprint"); fingerprint != "" {
+			return fmt.Sprintf("selected continuation %s", shortTraceID(fingerprint))
+		}
+		return "selected continuation"
+	case types.EventRunContinuationStarted:
+		if nextRunID := payloadString(payload, "next_loop_id"); nextRunID != "" {
+			return fmt.Sprintf("started continuation %s", shortTraceID(nextRunID))
+		}
+		return "started continuation"
+	case types.EventPromotionCandidateQueued:
+		if candidateID := payloadString(payload, "candidate_id"); candidateID != "" {
+			return fmt.Sprintf("queued promotion candidate %s", shortTraceID(candidateID))
+		}
+		return "queued promotion candidate"
+	case types.EventPromotionCandidateVerified:
+		return "promotion candidate verified"
+	case types.EventPromotionCandidateFailed:
+		return "promotion candidate failed verification"
+	case types.EventPromotionCandidatePromoted:
+		return "promotion candidate promoted"
+	case types.EventPromotionCandidateReviewed:
+		if decision := payloadString(payload, "decision"); decision != "" {
+			return fmt.Sprintf("promotion %s", decision)
+		}
+		return "promotion reviewed"
 	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled:
 		if errText := payloadString(payload, "error"); errText != "" {
 			return errText
@@ -966,8 +1122,12 @@ func traceEventTone(ev types.EventRecord) string {
 	switch ev.Kind {
 	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventVTextAgentRevisionFailed:
 		return "error"
-	case types.EventRunCompleted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated:
+	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventPromotionCandidateVerified, types.EventPromotionCandidatePromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
+	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventBrowserSessionCreated:
+		return "active"
+	case types.EventPromotionCandidateFailed, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
+		return "error"
 	case types.EventChannelMessage:
 		return "message"
 	case types.EventToolInvoked, types.EventToolResult:

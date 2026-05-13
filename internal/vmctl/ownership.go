@@ -20,6 +20,7 @@ package vmctl
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -32,6 +33,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -118,6 +120,10 @@ type VMOwnership struct {
 	// Purpose is the caller-provided reason for this worker VM.
 	Purpose string `json:"purpose,omitempty"`
 
+	// ObjectiveFingerprint is a normalized objective identity used to collapse
+	// accidental duplicate worker requests without hiding explicit portfolios.
+	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
+
 	// MachineClass is the requested resource envelope for this VM.
 	MachineClass string `json:"machine_class,omitempty"`
 
@@ -156,27 +162,30 @@ type VMOwnership struct {
 
 // WorkerRequest is the typed internal vmctl request for a background worker VM.
 type WorkerRequest struct {
-	UserID        string `json:"user_id"`
-	DesktopID     string `json:"desktop_id,omitempty"`
-	ParentAgentID string `json:"parent_agent_id"`
-	TrajectoryID  string `json:"trajectory_id,omitempty"`
-	Purpose       string `json:"purpose"`
-	MachineClass  string `json:"machine_class,omitempty"`
+	UserID               string `json:"user_id"`
+	DesktopID            string `json:"desktop_id,omitempty"`
+	ParentAgentID        string `json:"parent_agent_id"`
+	TrajectoryID         string `json:"trajectory_id,omitempty"`
+	Purpose              string `json:"purpose"`
+	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
+	MachineClass         string `json:"machine_class,omitempty"`
+	AllowParallel        bool   `json:"allow_parallel,omitempty"`
 }
 
 // WorkerVMHandle is the typed result returned when vmctl provisions a worker VM.
 type WorkerVMHandle struct {
-	Kind          VMKind  `json:"kind"`
-	WorkerID      string  `json:"worker_id"`
-	VMID          string  `json:"vm_id"`
-	UserID        string  `json:"user_id"`
-	DesktopID     string  `json:"desktop_id"`
-	ParentAgentID string  `json:"parent_agent_id,omitempty"`
-	TrajectoryID  string  `json:"trajectory_id,omitempty"`
-	Purpose       string  `json:"purpose"`
-	MachineClass  string  `json:"machine_class"`
-	SandboxURL    string  `json:"sandbox_url"`
-	State         VMState `json:"state"`
+	Kind                 VMKind  `json:"kind"`
+	WorkerID             string  `json:"worker_id"`
+	VMID                 string  `json:"vm_id"`
+	UserID               string  `json:"user_id"`
+	DesktopID            string  `json:"desktop_id"`
+	ParentAgentID        string  `json:"parent_agent_id,omitempty"`
+	TrajectoryID         string  `json:"trajectory_id,omitempty"`
+	Purpose              string  `json:"purpose"`
+	ObjectiveFingerprint string  `json:"objective_fingerprint,omitempty"`
+	MachineClass         string  `json:"machine_class"`
+	SandboxURL           string  `json:"sandbox_url"`
+	State                VMState `json:"state"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
@@ -558,18 +567,58 @@ func workerHandleFromOwnership(own *VMOwnership) *WorkerVMHandle {
 		return nil
 	}
 	return &WorkerVMHandle{
-		Kind:          VMKindWorker,
-		WorkerID:      own.WorkerID,
-		VMID:          own.VMID,
-		UserID:        own.UserID,
-		DesktopID:     own.DesktopID,
-		ParentAgentID: own.ParentAgentID,
-		TrajectoryID:  own.TrajectoryID,
-		Purpose:       own.Purpose,
-		MachineClass:  own.MachineClass,
-		SandboxURL:    own.SandboxURL,
-		State:         own.State,
+		Kind:                 VMKindWorker,
+		WorkerID:             own.WorkerID,
+		VMID:                 own.VMID,
+		UserID:               own.UserID,
+		DesktopID:            own.DesktopID,
+		ParentAgentID:        own.ParentAgentID,
+		TrajectoryID:         own.TrajectoryID,
+		Purpose:              own.Purpose,
+		ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
+		MachineClass:         own.MachineClass,
+		SandboxURL:           own.SandboxURL,
+		State:                own.State,
 	}
+}
+
+func workerObjectiveFingerprintForOwnership(own *VMOwnership) string {
+	if own == nil {
+		return ""
+	}
+	if strings.TrimSpace(own.ObjectiveFingerprint) != "" {
+		return strings.TrimSpace(own.ObjectiveFingerprint)
+	}
+	return workerObjectiveFingerprint(own.UserID, own.DesktopID, own.ParentAgentID, own.TrajectoryID, own.Purpose)
+}
+
+func workerObjectiveFingerprint(userID, desktopID, parentAgentID, trajectoryID, purpose string) string {
+	parts := []string{
+		strings.TrimSpace(userID),
+		normalizeDesktopID(desktopID),
+		strings.TrimSpace(parentAgentID),
+		strings.TrimSpace(trajectoryID),
+		normalizeObjectiveText(purpose),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeObjectiveText(raw string) string {
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace && b.Len() > 0 {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func normalizeWorkerMachineClass(raw string) (string, int, int, error) {
@@ -1090,6 +1139,7 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	req.ParentAgentID = strings.TrimSpace(req.ParentAgentID)
 	req.TrajectoryID = strings.TrimSpace(req.TrajectoryID)
 	req.Purpose = strings.TrimSpace(req.Purpose)
+	req.ObjectiveFingerprint = strings.TrimSpace(req.ObjectiveFingerprint)
 	if req.UserID == "" {
 		return nil, fmt.Errorf("user_id is required")
 	}
@@ -1103,9 +1153,21 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	if err != nil {
 		return nil, err
 	}
+	if req.ObjectiveFingerprint == "" {
+		req.ObjectiveFingerprint = workerObjectiveFingerprint(req.UserID, req.DesktopID, req.ParentAgentID, req.TrajectoryID, req.Purpose)
+	}
 
 	r.mu.RLock()
 	parent := r.ownerships[ownershipKey(req.UserID, req.DesktopID)]
+	if parent != nil && !req.AllowParallel {
+		for _, worker := range r.workerVMs {
+			if reusableWorkerLease(worker, req, machineClass) {
+				r.mu.RUnlock()
+				log.Printf("vmctl: reused worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", worker.VMID, req.UserID, req.DesktopID, worker.WorkerID, req.Purpose)
+				return worker, nil
+			}
+		}
+	}
 	r.mu.RUnlock()
 	if parent == nil {
 		return nil, fmt.Errorf("no parent desktop VM found for user %s desktop %s", req.UserID, req.DesktopID)
@@ -1115,21 +1177,22 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	vmID := generateVMID()
 	workerID := generateWorkerID()
 	own := &VMOwnership{
-		VMID:            vmID,
-		UserID:          req.UserID,
-		DesktopID:       req.DesktopID,
-		Kind:            VMKindWorker,
-		WorkerID:        workerID,
-		ParentAgentID:   req.ParentAgentID,
-		TrajectoryID:    req.TrajectoryID,
-		Purpose:         req.Purpose,
-		MachineClass:    machineClass,
-		SandboxURL:      r.sandboxURLForVM(vmID),
-		State:           VMStateBooting,
-		CreatedAt:       now,
-		LastActiveAt:    now,
-		Published:       false,
-		ParentDesktopID: "",
+		VMID:                 vmID,
+		UserID:               req.UserID,
+		DesktopID:            req.DesktopID,
+		Kind:                 VMKindWorker,
+		WorkerID:             workerID,
+		ParentAgentID:        req.ParentAgentID,
+		TrajectoryID:         req.TrajectoryID,
+		Purpose:              req.Purpose,
+		ObjectiveFingerprint: req.ObjectiveFingerprint,
+		MachineClass:         machineClass,
+		SandboxURL:           r.sandboxURLForVM(vmID),
+		State:                VMStateBooting,
+		CreatedAt:            now,
+		LastActiveAt:         now,
+		Published:            false,
+		ParentDesktopID:      "",
 	}
 
 	r.mu.Lock()
@@ -1167,6 +1230,23 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	r.transitionVM(vmID, VMStateActive)
 	log.Printf("vmctl: assigned worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", vmID, req.UserID, req.DesktopID, workerID, req.Purpose)
 	return own, nil
+}
+
+func reusableWorkerLease(worker *VMOwnership, req WorkerRequest, machineClass string) bool {
+	if worker == nil {
+		return false
+	}
+	switch worker.State {
+	case VMStateBooting, VMStateActive, VMStateDegraded:
+	default:
+		return false
+	}
+	return worker.UserID == req.UserID &&
+		worker.DesktopID == req.DesktopID &&
+		worker.ParentAgentID == req.ParentAgentID &&
+		worker.TrajectoryID == req.TrajectoryID &&
+		workerObjectiveFingerprintForOwnership(worker) == req.ObjectiveFingerprint &&
+		worker.MachineClass == machineClass
 }
 
 // PublishDesktop marks a background candidate desktop as user-switchable.

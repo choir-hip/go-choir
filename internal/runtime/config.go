@@ -39,6 +39,14 @@ const (
 	// DefaultVTextWakeDebounce is the initial coalescing window for worker
 	// findings before the runtime schedules the next vtext synthesis.
 	DefaultVTextWakeDebounce = 3 * time.Second
+
+	// DefaultRunMemoryContextThresholdTokens is the approximate context size at
+	// which the runtime creates a run-memory compaction checkpoint.
+	DefaultRunMemoryContextThresholdTokens = 160000
+
+	// DefaultRunMemoryKeepRecentTokens is the approximate amount of recent raw
+	// conversation retained after a compaction checkpoint.
+	DefaultRunMemoryKeepRecentTokens = 20000
 )
 
 // Config holds runtime configuration resolved from environment variables.
@@ -81,9 +89,25 @@ type Config struct {
 	// LLM calls.
 	LLMReasoningEffort string
 
+	// ObscuraPath is an optional path or executable name for the backend browser
+	// provider. Empty means the backend browser substrate is not configured.
+	ObscuraPath string
+
+	// ObscuraCDPScreenshots enables the opt-in CDP screenshot substrate for the
+	// backend Browser app. The default remains CLI snapshot extraction only.
+	ObscuraCDPScreenshots bool
+
 	// EnableTestAPIs exposes local-only browser test hooks. These endpoints are
 	// disabled by default and should never be enabled on deployed environments.
 	EnableTestAPIs bool
+
+	// RunMemoryContextThresholdTokens controls automatic context compaction for
+	// tool-loop runs. The estimator is intentionally approximate.
+	RunMemoryContextThresholdTokens int
+
+	// RunMemoryKeepRecentTokens controls how much recent raw context is kept
+	// alongside each run-memory compaction checkpoint.
+	RunMemoryKeepRecentTokens int
 }
 
 // LoadConfig resolves runtime configuration from environment variables.
@@ -101,7 +125,20 @@ func LoadConfig() Config {
 		LLMProvider:         os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:            os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort:  os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
-		EnableTestAPIs:      boolOr("RUNTIME_ENABLE_TEST_APIS", false),
+		ObscuraPath:         envOr("CHOIR_OBSCURA_BIN", os.Getenv("OBSCURA_BIN")),
+		ObscuraCDPScreenshots: boolOr(
+			"CHOIR_OBSCURA_CDP_SCREENSHOTS",
+			boolOr("OBSCURA_CDP_SCREENSHOTS", false),
+		),
+		EnableTestAPIs: boolOr("RUNTIME_ENABLE_TEST_APIS", false),
+		RunMemoryContextThresholdTokens: intOr(
+			"RUNTIME_RUN_MEMORY_CONTEXT_THRESHOLD_TOKENS",
+			DefaultRunMemoryContextThresholdTokens,
+		),
+		RunMemoryKeepRecentTokens: intOr(
+			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
+			DefaultRunMemoryKeepRecentTokens,
+		),
 	}
 }
 
@@ -114,6 +151,12 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.VTextWakeDebounce <= 0 {
 		cfg.VTextWakeDebounce = DefaultVTextWakeDebounce
+	}
+	if cfg.RunMemoryContextThresholdTokens <= 0 {
+		cfg.RunMemoryContextThresholdTokens = DefaultRunMemoryContextThresholdTokens
+	}
+	if cfg.RunMemoryKeepRecentTokens <= 0 {
+		cfg.RunMemoryKeepRecentTokens = DefaultRunMemoryKeepRecentTokens
 	}
 	return cfg
 }

@@ -3,26 +3,33 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
 		newForkDesktopTool(rt),
 		newPublishDesktopTool(rt),
 		newRequestWorkerVMTool(rt),
-		newDelegateWorkerVMTool(rt),
+		newDelegateWorkerVMTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -145,15 +152,17 @@ func newPublishDesktopTool(rt *Runtime) Tool {
 
 func newRequestWorkerVMTool(rt *Runtime) Tool {
 	type args struct {
-		Purpose      string `json:"purpose"`
-		MachineClass string `json:"machine_class,omitempty"`
+		Purpose       string `json:"purpose"`
+		MachineClass  string `json:"machine_class,omitempty"`
+		AllowParallel bool   `json:"allow_parallel,omitempty"`
 	}
 	return Tool{
 		Name:        "request_worker_vm",
 		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. Use delegate_worker_vm to run work inside it.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"purpose":       map[string]any{"type": "string"},
-			"machine_class": map[string]any{"type": "string"},
+			"purpose":        map[string]any{"type": "string"},
+			"machine_class":  map[string]any{"type": "string"},
+			"allow_parallel": map[string]any{"type": "boolean"},
 		}, []string{"purpose"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
@@ -195,6 +204,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 				TrajectoryID:  trajectoryID,
 				Purpose:       strings.TrimSpace(in.Purpose),
 				MachineClass:  strings.TrimSpace(in.MachineClass),
+				AllowParallel: in.AllowParallel,
 			})
 			if err != nil {
 				return "", err
@@ -208,7 +218,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 }
 
-func newDelegateWorkerVMTool(rt *Runtime) Tool {
+func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 	type args struct {
 		WorkerSandboxURL string `json:"worker_sandbox_url"`
 		WorkerID         string `json:"worker_id,omitempty"`
@@ -219,13 +229,13 @@ func newDelegateWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "delegate_worker_vm",
-		Description: "Start and monitor a co-super or researcher run inside a requested worker VM through internal runtime endpoints.",
+		Description: "Start and monitor a vsuper, co-super, or researcher run inside a requested worker VM through internal runtime endpoints.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},
 			"vm_id":              map[string]any{"type": "string"},
 			"objective":          map[string]any{"type": "string"},
-			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileCoSuper, AgentProfileResearcher}},
+			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
 			"timeout_seconds":    map[string]any{"type": "integer"},
 		}, []string{"worker_sandbox_url", "objective"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -247,12 +257,13 @@ func newDelegateWorkerVMTool(rt *Runtime) Tool {
 			if objective == "" {
 				return "", fmt.Errorf("objective must not be empty")
 			}
+			delegatedObjective := objective
 			profile := canonicalAgentProfile(in.Profile)
 			if profile == "" {
-				profile = AgentProfileCoSuper
+				profile = AgentProfileVSuper
 			}
-			if profile != AgentProfileCoSuper && profile != AgentProfileResearcher {
-				return "", fmt.Errorf("profile must be %s or %s", AgentProfileCoSuper, AgentProfileResearcher)
+			if profile != AgentProfileVSuper && profile != AgentProfileCoSuper && profile != AgentProfileResearcher {
+				return "", fmt.Errorf("profile must be %s, %s, or %s", AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher)
 			}
 			timeout := time.Duration(in.TimeoutSeconds) * time.Second
 			if timeout <= 0 {
@@ -290,6 +301,19 @@ func newDelegateWorkerVMTool(rt *Runtime) Tool {
 				metadata[runMetadataTrajectoryID] = trajectoryID
 			}
 
+			isolation, err := prepareSameRuntimeWorkerIsolation(ctx, cwd, in.WorkerSandboxURL, in.WorkerID, in.VMID, runID)
+			if err != nil {
+				return "", err
+			}
+			if isolation.Enabled {
+				metadata[runMetadataToolCWD] = isolation.WorktreePath
+				metadata[runMetadataWorkerIsolation] = isolation.Kind
+				metadata[runMetadataWorkerBaseSHA] = isolation.BaseSHA
+				metadata[runMetadataWorkerBranch] = isolation.Branch
+				metadata[runMetadataWorkerWorktree] = isolation.WorktreePath
+				objective = isolation.WorkerPrompt + "\n\n" + delegatedObjective
+			}
+
 			startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
 				OwnerID:  ownerID,
 				Prompt:   objective,
@@ -310,8 +334,22 @@ func newDelegateWorkerVMTool(rt *Runtime) Tool {
 				return "", err
 			}
 			exports := collectExportPatchsetResults(eventsResp.Events)
+			promotionCandidates, err := queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
+				OwnerID:             ownerID,
+				ParentRunID:         runID,
+				CandidateRunID:      finalResp.RunID,
+				TraceID:             trajectoryID,
+				WorkerVMID:          strings.TrimSpace(in.VMID),
+				WorkerID:            strings.TrimSpace(in.WorkerID),
+				ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
+				Objective:           delegatedObjective,
+				Exports:             exports,
+			})
+			if err != nil {
+				return "", err
+			}
 
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"status":             "worker_run_completed",
 				"worker_id":          strings.TrimSpace(in.WorkerID),
 				"worker_vm_id":       strings.TrimSpace(in.VMID),
@@ -323,10 +361,319 @@ func newDelegateWorkerVMTool(rt *Runtime) Tool {
 				"result":             finalResp.Result,
 				"error":              finalResp.Error,
 				"export_patchsets":   exports,
+				"promotion_queue":    promotionCandidates,
 				"event_count":        len(eventsResp.Events),
-			})
+			}
+			if isolation.Enabled {
+				result["worker_isolation"] = isolation.Kind
+				result["worker_worktree_path"] = isolation.WorktreePath
+				result["worker_branch"] = isolation.Branch
+				result["worker_base_sha"] = isolation.BaseSHA
+			}
+			return toolResultJSON(result)
 		},
 	}
+}
+
+type workerExportQueueContext struct {
+	OwnerID             string
+	ParentRunID         string
+	CandidateRunID      string
+	TraceID             string
+	WorkerVMID          string
+	WorkerID            string
+	ForegroundDesktopID string
+	Objective           string
+	Exports             []map[string]any
+}
+
+type localWorkerIsolation struct {
+	Enabled      bool
+	Kind         string
+	WorktreePath string
+	Branch       string
+	BaseSHA      string
+	WorkerPrompt string
+}
+
+func prepareSameRuntimeWorkerIsolation(ctx context.Context, cwd, workerSandboxURL, workerID, vmID, runID string) (localWorkerIsolation, error) {
+	if !sameRuntimeWorkerURL(workerSandboxURL) {
+		return localWorkerIsolation{}, nil
+	}
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("RUNTIME_LOCAL_WORKER_MODE")))
+	if mode == "" {
+		return localWorkerIsolation{}, fmt.Errorf("delegate_worker_vm refused same-runtime worker delegation without isolation; set RUNTIME_LOCAL_WORKER_MODE=worktree or use a distinct worker sandbox")
+	}
+	if mode != "worktree" {
+		return localWorkerIsolation{}, fmt.Errorf("delegate_worker_vm unsupported local worker isolation mode %q", mode)
+	}
+	return createLocalWorkerWorktree(ctx, cwd, workerID, vmID, runID)
+}
+
+func sameRuntimeWorkerURL(workerSandboxURL string) bool {
+	selfURL := strings.TrimSpace(os.Getenv("RUNTIME_SELF_URL"))
+	if selfURL == "" {
+		if port := strings.TrimSpace(os.Getenv("SANDBOX_PORT")); port != "" {
+			selfURL = "http://127.0.0.1:" + port
+		}
+	}
+	if selfURL == "" {
+		return false
+	}
+	return normalizedRuntimeBaseURL(workerSandboxURL) != "" &&
+		normalizedRuntimeBaseURL(workerSandboxURL) == normalizedRuntimeBaseURL(selfURL)
+}
+
+func normalizedRuntimeBaseURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return strings.ToLower(parsed.Scheme + "://" + parsed.Host)
+}
+
+func createLocalWorkerWorktree(ctx context.Context, cwd, workerID, vmID, runID string) (localWorkerIsolation, error) {
+	repoRoot, err := gitOutputInDir(ctx, cwd, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return localWorkerIsolation{}, fmt.Errorf("local worker isolation requires a git repository: %w", err)
+	}
+	repoRoot = strings.TrimSpace(repoRoot)
+	baseSHA, err := gitOutputInDir(ctx, repoRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return localWorkerIsolation{}, fmt.Errorf("local worker isolation base sha: %w", err)
+	}
+	baseSHA = strings.TrimSpace(baseSHA)
+	root := strings.TrimSpace(os.Getenv("RUNTIME_LOCAL_WORKER_ROOT"))
+	if root == "" {
+		root = filepath.Join(os.TempDir(), "go-choir-worker-worktrees")
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return localWorkerIsolation{}, fmt.Errorf("create local worker root: %w", err)
+	}
+	identity := sanitizeExportPart(firstNonEmpty(workerID, vmID, runID, uuid.NewString()))
+	suffix := uuid.NewString()[:8]
+	branch := "agent/local-worker/" + identity + "-" + suffix
+	worktreePath := filepath.Join(root, identity+"-"+suffix)
+	if _, err := gitOutputInDir(ctx, repoRoot, "worktree", "add", "-b", branch, worktreePath, baseSHA); err != nil {
+		return localWorkerIsolation{}, fmt.Errorf("create local worker worktree: %w", err)
+	}
+	prompt := strings.Join([]string{
+		"Local worker isolation is active.",
+		"The current working directory is an isolated git worktree for this worker, not the foreground repository.",
+		"Do not write outside the current working directory.",
+		"Commit any repo changes in this worktree before calling export_patchset.",
+		"Use repo_path \".\" and base_sha " + baseSHA + " when exporting a patchset.",
+	}, "\n")
+	return localWorkerIsolation{
+		Enabled:      true,
+		Kind:         "local_worktree",
+		WorktreePath: worktreePath,
+		Branch:       branch,
+		BaseSHA:      baseSHA,
+		WorkerPrompt: prompt,
+	}, nil
+}
+
+func gitOutputInDir(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(data)))
+	}
+	return string(data), nil
+}
+
+func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) string {
+	parts := []string{
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(trajectoryID),
+		strings.TrimSpace(parentRunID),
+		normalizeObjectiveText(objective),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeObjectiveText(raw string) string {
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace && b.Len() > 0 {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func patchsetDigest(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read patchset digest: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, f); err != nil {
+		return "", fmt.Errorf("hash patchset: %w", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func queuePromotionCandidatesForWorkerExports(ctx context.Context, rt *Runtime, in workerExportQueueContext) ([]map[string]any, error) {
+	if rt == nil || len(in.Exports) == 0 {
+		return nil, nil
+	}
+	objectiveFingerprint := objectiveFingerprint(in.OwnerID, in.TraceID, in.ParentRunID, in.Objective)
+	queued := make([]map[string]any, 0, len(in.Exports))
+	for _, export := range in.Exports {
+		candidateID := uuid.NewString()
+		vmID := firstNonEmpty(in.WorkerVMID, exportString(export, "vm_id"), in.WorkerID, "worker-vm")
+		candidateRunID := firstNonEmpty(exportString(export, "loop_id"), in.CandidateRunID)
+		patchsetSHA256, err := patchsetDigest(exportString(export, "patchset_path"))
+		if err != nil {
+			return nil, err
+		}
+		if existing, ok, err := existingPromotionCandidateForWorkerExport(ctx, rt, in, export, objectiveFingerprint, patchsetSHA256); err != nil {
+			return nil, err
+		} else if ok {
+			queued = append(queued, promotionCandidateQueueMap(existing))
+			continue
+		}
+		candidate := promotion.CandidateWorld{
+			CandidateID:          candidateID,
+			OwnerID:              in.OwnerID,
+			ForegroundDesktopID:  in.ForegroundDesktopID,
+			ParentRunID:          in.ParentRunID,
+			CandidateRunID:       candidateRunID,
+			VMID:                 vmID,
+			SnapshotID:           exportString(export, "snapshot_id"),
+			Purpose:              in.Objective,
+			ObjectiveFingerprint: objectiveFingerprint,
+			BaseSHA:              exportString(export, "base_sha"),
+			WorkerHeadSHA:        firstNonEmpty(exportString(export, "worker_head_sha"), exportString(export, "worker_head")),
+			PatchsetSHA256:       patchsetSHA256,
+			ManifestPath:         exportString(export, "manifest_path"),
+			PatchsetPath:         exportString(export, "patchset_path"),
+			IntegrationBranch:    "agent/" + sanitizeExportPart(candidateRunID) + "/candidate",
+			CreatedAt:            time.Now().UTC().Format(time.RFC3339),
+		}
+		candidateJSON, err := json.Marshal(candidate)
+		if err != nil {
+			return nil, fmt.Errorf("marshal queued promotion candidate: %w", err)
+		}
+		rec, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+			CandidateID:       candidateID,
+			OwnerID:           in.OwnerID,
+			Status:            types.PromotionCandidateQueued,
+			SourceRunID:       in.ParentRunID,
+			TraceID:           in.TraceID,
+			VMID:              vmID,
+			SnapshotID:        candidate.SnapshotID,
+			BaseSHA:           candidate.BaseSHA,
+			WorkerHeadSHA:     candidate.WorkerHeadSHA,
+			ManifestPath:      candidate.ManifestPath,
+			PatchsetPath:      candidate.PatchsetPath,
+			IntegrationBranch: candidate.IntegrationBranch,
+			DestinationBranch: "main",
+			Summary:           in.Objective,
+			CandidateJSON:     candidateJSON,
+			ContractsJSON:     json.RawMessage(`[]`),
+			ReportJSON:        json.RawMessage(`{}`),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("queue promotion candidate for worker export: %w", err)
+		}
+		queued = append(queued, promotionCandidateQueueMap(rec))
+	}
+	return queued, nil
+}
+
+func existingPromotionCandidateForWorkerExport(ctx context.Context, rt *Runtime, in workerExportQueueContext, export map[string]any, objectiveFingerprint, patchsetSHA256 string) (types.PromotionCandidateRecord, bool, error) {
+	workerHead := firstNonEmpty(exportString(export, "worker_head_sha"), exportString(export, "worker_head"))
+	patchsetPath := exportString(export, "patchset_path")
+	baseSHA := exportString(export, "base_sha")
+	manifestPath := exportString(export, "manifest_path")
+	if strings.TrimSpace(workerHead) == "" || strings.TrimSpace(patchsetPath) == "" || strings.TrimSpace(baseSHA) == "" {
+		return types.PromotionCandidateRecord{}, false, nil
+	}
+	candidates, err := rt.store.ListPromotionCandidates(ctx, in.OwnerID, 500)
+	if err != nil {
+		return types.PromotionCandidateRecord{}, false, fmt.Errorf("list promotion candidates for worker export dedupe: %w", err)
+	}
+	for _, rec := range candidates {
+		if rec.SourceRunID == in.ParentRunID &&
+			rec.BaseSHA == baseSHA &&
+			rec.WorkerHeadSHA == workerHead &&
+			rec.PatchsetPath == patchsetPath &&
+			rec.ManifestPath == manifestPath {
+			return rec, true, nil
+		}
+		var candidate promotion.CandidateWorld
+		if len(rec.CandidateJSON) == 0 || json.Unmarshal(rec.CandidateJSON, &candidate) != nil {
+			continue
+		}
+		if rec.SourceRunID == in.ParentRunID &&
+			rec.BaseSHA == baseSHA &&
+			strings.TrimSpace(objectiveFingerprint) != "" &&
+			strings.TrimSpace(patchsetSHA256) != "" &&
+			candidate.ObjectiveFingerprint == objectiveFingerprint &&
+			candidate.PatchsetSHA256 == patchsetSHA256 {
+			return rec, true, nil
+		}
+	}
+	return types.PromotionCandidateRecord{}, false, nil
+}
+
+func promotionCandidateQueueMap(rec types.PromotionCandidateRecord) map[string]any {
+	out := map[string]any{
+		"candidate_id":       rec.CandidateID,
+		"status":             rec.Status,
+		"source_loop_id":     rec.SourceRunID,
+		"candidate_loop_id":  candidateLoopIDForPromotionRecord(rec),
+		"vm_id":              rec.VMID,
+		"base_sha":           rec.BaseSHA,
+		"worker_head":        rec.WorkerHeadSHA,
+		"manifest_path":      rec.ManifestPath,
+		"patchset_path":      rec.PatchsetPath,
+		"integration_branch": rec.IntegrationBranch,
+		"destination_branch": rec.DestinationBranch,
+	}
+	if len(rec.CandidateJSON) != 0 {
+		var candidate promotion.CandidateWorld
+		if err := json.Unmarshal(rec.CandidateJSON, &candidate); err == nil {
+			if candidate.ObjectiveFingerprint != "" {
+				out["objective_fingerprint"] = candidate.ObjectiveFingerprint
+			}
+			if candidate.PatchsetSHA256 != "" {
+				out["patchset_sha256"] = candidate.PatchsetSHA256
+			}
+		}
+	}
+	return out
+}
+
+func candidateLoopIDForPromotionRecord(rec types.PromotionCandidateRecord) string {
+	if len(rec.CandidateJSON) == 0 {
+		return ""
+	}
+	var candidate promotion.CandidateWorld
+	if err := json.Unmarshal(rec.CandidateJSON, &candidate); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(candidate.CandidateRunID)
 }
 
 func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL string, body internalRunSubmitRequest) (*runStatusResponse, error) {
@@ -481,6 +828,20 @@ func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 		exports = append(exports, output)
 	}
 	return exports
+}
+
+func exportString(export map[string]any, key string) string {
+	value, _ := export[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func normalizeForkDesktopID(raw string) string {

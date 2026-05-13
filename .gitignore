@@ -35,6 +35,7 @@ frontend/frontend.log
 # Local dev artifacts
 auth.db
 auth.log
+gateway.log
 proxy.log
 sandbox.log
 

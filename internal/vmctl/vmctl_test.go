@@ -393,6 +393,47 @@ func TestOwnershipRegistry_RequestWorkerIncludedInList(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_RequestWorkerReusesActiveLeaseUnlessParallelAllowed(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	req := WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-1",
+		Purpose:       "Run the launch/upload/theme patch",
+		MachineClass:  "worker-small",
+	}
+	first, err := reg.RequestWorker(req)
+	if err != nil {
+		t.Fatalf("RequestWorker first: %v", err)
+	}
+	secondReq := req
+	secondReq.Purpose = " run THE LAUNCH/upload/theme patch!! "
+	second, err := reg.RequestWorker(secondReq)
+	if err != nil {
+		t.Fatalf("RequestWorker second: %v", err)
+	}
+	if second.WorkerID != first.WorkerID || second.VMID != first.VMID {
+		t.Fatalf("second worker = %s/%s, want reused %s/%s", second.WorkerID, second.VMID, first.WorkerID, first.VMID)
+	}
+	if first.ObjectiveFingerprint == "" || second.ObjectiveFingerprint != first.ObjectiveFingerprint {
+		t.Fatalf("objective fingerprints = first %q second %q, want same non-empty fingerprint", first.ObjectiveFingerprint, second.ObjectiveFingerprint)
+	}
+
+	req.AllowParallel = true
+	parallel, err := reg.RequestWorker(req)
+	if err != nil {
+		t.Fatalf("RequestWorker parallel: %v", err)
+	}
+	if parallel.WorkerID == first.WorkerID || parallel.VMID == first.VMID {
+		t.Fatalf("parallel worker reused %s/%s unexpectedly", parallel.WorkerID, parallel.VMID)
+	}
+}
+
 func TestOwnershipRegistry_SetSandboxCredential(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 

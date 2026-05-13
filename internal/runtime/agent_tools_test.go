@@ -45,6 +45,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 
 	super := rt.ToolRegistryForProfile(AgentProfileSuper)
 	coSuper := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	vSuper := rt.ToolRegistryForProfile(AgentProfileVSuper)
 	conductor := rt.ToolRegistryForProfile(AgentProfileConductor)
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
@@ -70,6 +71,23 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
+	}
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
+		if _, ok := vSuper.Lookup(name); !ok {
+			t.Fatalf("vsuper missing tool %q", name)
+		}
+	}
+	if _, ok := vSuper.Lookup("fork_desktop"); ok {
+		t.Fatalf("vsuper should not have fork_desktop")
+	}
+	if _, ok := vSuper.Lookup("publish_desktop"); ok {
+		t.Fatalf("vsuper should not have publish_desktop")
+	}
+	if _, ok := vSuper.Lookup("request_worker_vm"); ok {
+		t.Fatalf("vsuper should not have request_worker_vm")
+	}
+	if _, ok := vSuper.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("vsuper should not have delegate_worker_vm")
 	}
 	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent"} {
 		if _, ok := conductor.Lookup(name); !ok {
@@ -143,6 +161,42 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := super.Lookup("edit_vtext"); ok {
 		t.Fatalf("super should not have edit_vtext")
+	}
+}
+
+func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	t.Setenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE", "worker_only")
+
+	superRun, err := rt.StartRunWithMetadata(context.Background(), "try foreground mutation", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start super run: %v", err)
+	}
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	if _, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "bash", json.RawMessage(`{"command":"touch should-not-exist"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
+		t.Fatalf("super bash error = %v, want foreground mutation guard", err)
+	}
+	if _, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "write_file", json.RawMessage(`{"path":"should-not-exist.txt","content":"blocked"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
+		t.Fatalf("super write_file error = %v, want foreground mutation guard", err)
+	}
+
+	workerRun, err := rt.StartRunWithMetadata(context.Background(), "worker mutation", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileCoSuper,
+		runMetadataAgentRole:    AgentProfileCoSuper,
+		runMetadataToolCWD:      cwd,
+	})
+	if err != nil {
+		t.Fatalf("start worker run: %v", err)
+	}
+	workerRegistry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	if _, err := workerRegistry.Execute(WithToolExecutionContext(context.Background(), workerRun), "write_file", json.RawMessage(`{"path":"worker-ok.txt","content":"allowed"}`)); err != nil {
+		t.Fatalf("co-super write_file should be allowed: %v", err)
 	}
 }
 
@@ -232,6 +286,45 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	}
 	if len(deliveries) != 1 || deliveries[0].Content != "please inspect the runtime tool wiring" {
 		t.Fatalf("unexpected deliveries: %+v", deliveries)
+	}
+}
+
+func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
+	rt, s, _ := testRuntimeWithTempCWD(t)
+	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated work", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-repeat",
+		runMetadataTrajectoryID: "trajectory-repeat",
+	})
+	if err != nil {
+		t.Fatalf("start parent run: %v", err)
+	}
+	ctx := WithToolExecutionContext(context.Background(), parent)
+
+	for i := 0; i < 2; i++ {
+		if _, err := rt.ChannelCast(ctx, "doc-repeat-work", "agent-super-user-alice", "", "vtext", "user", "please run the same candidate-world probe"); err != nil {
+			t.Fatalf("channel cast %d: %v", i, err)
+		}
+	}
+
+	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", "agent-super-user-alice", 10)
+	if err != nil {
+		t.Fatalf("list pending deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("pending deliveries = %d, want one deduped delivery: %+v", len(deliveries), deliveries)
+	}
+	if deliveries[0].Content != "please run the same candidate-world probe" {
+		t.Fatalf("delivery content = %q", deliveries[0].Content)
+	}
+
+	messages, _, err := rt.ChannelRead("doc-repeat-work", 0)
+	if err != nil {
+		t.Fatalf("channel read: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("channel messages = %d, want audit log to retain both casts", len(messages))
 	}
 }
 
@@ -598,6 +691,67 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 	if resp.Handle.State != "active" {
 		t.Fatalf("state = %q, want active", resp.Handle.State)
+	}
+}
+
+func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+
+	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
+	if _, err := reg.ResolveOrAssignDesktop("user-alice", types.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve source desktop: %v", err)
+	}
+	handler := vmctl.NewHandler(reg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	vmctlSrv := httptest.NewServer(mux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	rt.cfg.VmctlURL = vmctlSrv.URL
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated execution", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+		runMetadataTrajectoryID: "traj-repeat",
+	})
+	if err != nil {
+		t.Fatalf("submit super task: %v", err)
+	}
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	request := func(raw json.RawMessage) string {
+		t.Helper()
+		out, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", raw)
+		if err != nil {
+			t.Fatalf("request_worker_vm: %v", err)
+		}
+		var resp struct {
+			Handle struct {
+				WorkerID             string `json:"worker_id"`
+				VMID                 string `json:"vm_id"`
+				ObjectiveFingerprint string `json:"objective_fingerprint"`
+			} `json:"handle"`
+		}
+		if err := json.Unmarshal([]byte(out), &resp); err != nil {
+			t.Fatalf("decode request_worker_vm: %v", err)
+		}
+		if resp.Handle.ObjectiveFingerprint == "" {
+			t.Fatalf("request_worker_vm returned empty objective fingerprint: %s", out)
+		}
+		return resp.Handle.WorkerID + "/" + resp.Handle.VMID
+	}
+
+	first := request(json.RawMessage(`{"purpose":"Run the same product patch","machine_class":"worker-small"}`))
+	second := request(json.RawMessage(`{"purpose":" run THE same/product patch!! ","machine_class":"worker-small"}`))
+	if second != first {
+		t.Fatalf("second worker = %s, want reused %s", second, first)
+	}
+	parallel := request(json.RawMessage(`{"purpose":"Run the same product patch","machine_class":"worker-small","allow_parallel":true}`))
+	if parallel == first {
+		t.Fatalf("parallel worker reused %s unexpectedly", parallel)
 	}
 }
 
@@ -1783,6 +1937,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		State           types.RunState   `json:"state"`
 		WorkerVMID      string           `json:"worker_vm_id"`
 		ExportPatchsets []map[string]any `json:"export_patchsets"`
+		PromotionQueue  []map[string]any `json:"promotion_queue"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -1795,6 +1950,307 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 	if got, _ := result.ExportPatchsets[0]["worker_head"].(string); strings.TrimSpace(got) == "" {
 		t.Fatalf("worker export missing worker_head: %+v", result.ExportPatchsets[0])
+	}
+	if len(result.PromotionQueue) != 1 {
+		t.Fatalf("expected one queued promotion candidate, got %+v", result.PromotionQueue)
+	}
+	if got, _ := result.PromotionQueue[0]["candidate_id"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("queued promotion missing candidate_id: %+v", result.PromotionQueue[0])
+	}
+}
+
+func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	t.Setenv("RUNTIME_SELF_URL", "http://127.0.0.1:8085")
+	t.Setenv("RUNTIME_LOCAL_WORKER_MODE", "")
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to local worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	_, err = registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(`{
+		"worker_sandbox_url": "http://127.0.0.1:8085",
+		"worker_id": "worker-local",
+		"vm_id": "vm-local",
+		"objective": "mutate in local fallback",
+		"profile": "co-super",
+		"timeout_seconds": 1
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "refused same-runtime worker delegation without isolation") {
+		t.Fatalf("delegate_worker_vm error = %v, want same-runtime isolation refusal", err)
+	}
+}
+
+func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := os.RemoveAll(activeCWD); err != nil {
+		t.Fatalf("reset active cwd: %v", err)
+	}
+	if err := os.MkdirAll(activeCWD, 0o755); err != nil {
+		t.Fatalf("recreate active cwd: %v", err)
+	}
+	runGit(t, activeCWD, "init")
+	runGit(t, activeCWD, "config", "user.name", "Choir Active")
+	runGit(t, activeCWD, "config", "user.email", "active@example.com")
+	if err := os.WriteFile(filepath.Join(activeCWD, "README.md"), []byte("foreground base\n"), 0o644); err != nil {
+		t.Fatalf("write active base: %v", err)
+	}
+	runGit(t, activeCWD, "add", "README.md")
+	runGit(t, activeCWD, "commit", "-m", "active base")
+	base := strings.TrimSpace(runGit(t, activeCWD, "rev-parse", "HEAD"))
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	workerDir := t.TempDir()
+	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerCWD := filepath.Join(workerDir, "files")
+	if err := os.MkdirAll(workerCWD, 0o755); err != nil {
+		t.Fatalf("create worker cwd: %v", err)
+	}
+
+	bashArgs, _ := json.Marshal(map[string]any{
+		"command": strings.Join([]string{
+			"printf 'local worker proof\\n' > isolated-worker-proof.txt",
+			"git add isolated-worker-proof.txt",
+			"git commit -m 'local worker isolated change'",
+		}, " && "),
+		"timeout_ms": 15000,
+	})
+	exportArgs, _ := json.Marshal(map[string]any{
+		"repo_path":   ".",
+		"output_dir":  ".choir/exports/local-worktree-proof",
+		"base_sha":    base,
+		"snapshot_id": "snapshot-local-worktree",
+		"summary":     "local worktree isolation proof",
+		"checks":      []string{"test -f isolated-worker-proof.txt"},
+	})
+	workerProvider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-bash",
+				Name:      "bash",
+				Arguments: bashArgs,
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-export",
+				Name:      "export_patchset",
+				Arguments: exportArgs,
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "Exported local worktree patchset.",
+		},
+	)
+	workerRT := New(Config{
+		SandboxID:           "sandbox-local-runtime",
+		StorePath:           filepath.Join(workerDir, "worker.db"),
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerDB, events.NewEventBus(), workerProvider)
+	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
+		t.Fatalf("install worker tools: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	workerRT.Start(ctx)
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerDB.Close()
+	})
+
+	workerHandler := NewAPIHandler(workerRT)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
+	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	t.Setenv("RUNTIME_SELF_URL", srv.URL)
+	t.Setenv("RUNTIME_LOCAL_WORKER_MODE", "worktree")
+	t.Setenv("RUNTIME_LOCAL_WORKER_ROOT", filepath.Join(t.TempDir(), "worktrees"))
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to local worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-local-worktree",
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-local-worktree",
+		"vm_id": "vm-local-worktree",
+		"objective": "Commit and export a local worktree proof.",
+		"profile": "co-super",
+		"timeout_seconds": 10
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		State           types.RunState   `json:"state"`
+		RunID           string           `json:"loop_id"`
+		WorkerIsolation string           `json:"worker_isolation"`
+		WorkerWorktree  string           `json:"worker_worktree_path"`
+		WorkerBranch    string           `json:"worker_branch"`
+		WorkerBaseSHA   string           `json:"worker_base_sha"`
+		ExportPatchsets []map[string]any `json:"export_patchsets"`
+		PromotionQueue  []map[string]any `json:"promotion_queue"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.State != types.RunCompleted || result.WorkerIsolation != "local_worktree" {
+		t.Fatalf("unexpected local worktree result: %+v\nraw=%s", result, raw)
+	}
+	if result.WorkerWorktree == "" || result.WorkerBranch == "" || result.WorkerBaseSHA != base {
+		t.Fatalf("missing worktree provenance: %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(activeCWD, "isolated-worker-proof.txt")); !os.IsNotExist(err) {
+		t.Fatalf("foreground repo was mutated; stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(result.WorkerWorktree, "isolated-worker-proof.txt")); err != nil {
+		t.Fatalf("worker proof missing from isolated worktree: %v", err)
+	}
+	if len(result.ExportPatchsets) != 1 || len(result.PromotionQueue) != 1 {
+		t.Fatalf("expected exported patchset and queued promotion: %+v", result)
+	}
+	if got, _ := result.PromotionQueue[0]["vm_id"].(string); got != "vm-local-worktree" {
+		t.Fatalf("queued promotion vm_id = %q, want vm-local-worktree; queue=%+v", got, result.PromotionQueue[0])
+	}
+}
+
+func TestQueuePromotionCandidatesForWorkerExportsDedupesExactExport(t *testing.T) {
+	rt, _, _ := testRuntimeWithTempCWD(t)
+	ctx := context.Background()
+	export := map[string]any{
+		"loop_id":         "candidate-loop-dedupe",
+		"vm_id":           "sandbox-dev",
+		"snapshot_id":     "snapshot-dedupe",
+		"base_sha":        "base-dedupe",
+		"worker_head":     "worker-head-dedupe",
+		"manifest_path":   "/tmp/dedupe-manifest.json",
+		"patchset_path":   "/tmp/dedupe.patch",
+		"worker_head_sha": "worker-head-dedupe",
+	}
+	in := workerExportQueueContext{
+		OwnerID:        "user-alice",
+		ParentRunID:    "super-run-dedupe",
+		CandidateRunID: "candidate-loop-dedupe",
+		TraceID:        "trace-dedupe",
+		WorkerVMID:     "vm-worker-dedupe",
+		WorkerID:       "worker-dedupe",
+		Objective:      "dedupe exact worker export",
+		Exports:        []map[string]any{export},
+	}
+
+	first, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
+	if err != nil {
+		t.Fatalf("queue first candidate: %v", err)
+	}
+	second, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
+	if err != nil {
+		t.Fatalf("queue duplicate candidate: %v", err)
+	}
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("queue results = first %+v second %+v, want one result each", first, second)
+	}
+	if first[0]["candidate_id"] != second[0]["candidate_id"] {
+		t.Fatalf("duplicate export queued new candidate: first=%+v second=%+v", first[0], second[0])
+	}
+	if first[0]["vm_id"] != "vm-worker-dedupe" || second[0]["vm_id"] != "vm-worker-dedupe" {
+		t.Fatalf("queued candidate should preserve worker VM id: first=%+v second=%+v", first[0], second[0])
+	}
+	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
+	if err != nil {
+		t.Fatalf("list candidates: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("stored candidates = %+v, want one deduped candidate", candidates)
+	}
+}
+
+func TestQueuePromotionCandidatesDedupesEquivalentPatchsetFingerprint(t *testing.T) {
+	rt, _, _ := testRuntimeWithTempCWD(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	patchA := filepath.Join(dir, "candidate-a.patch")
+	patchB := filepath.Join(dir, "candidate-b.patch")
+	patchContent := []byte("diff --git a/product.txt b/product.txt\n+same product patch\n")
+	if err := os.WriteFile(patchA, patchContent, 0o644); err != nil {
+		t.Fatalf("write patch A: %v", err)
+	}
+	if err := os.WriteFile(patchB, patchContent, 0o644); err != nil {
+		t.Fatalf("write patch B: %v", err)
+	}
+
+	in := workerExportQueueContext{
+		OwnerID:     "user-alice",
+		ParentRunID: "super-run-fingerprint",
+		TraceID:     "trace-fingerprint",
+		WorkerVMID:  "vm-worker-fingerprint",
+		WorkerID:    "worker-fingerprint",
+		Objective:   "Run the same product patch",
+		Exports: []map[string]any{{
+			"loop_id":         "candidate-loop-a",
+			"base_sha":        "base-fingerprint",
+			"worker_head":     "worker-head-a",
+			"manifest_path":   filepath.Join(dir, "manifest-a.json"),
+			"patchset_path":   patchA,
+			"worker_head_sha": "worker-head-a",
+		}},
+	}
+	first, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
+	if err != nil {
+		t.Fatalf("queue first candidate: %v", err)
+	}
+	in.Objective = " run THE same/product patch!! "
+	in.Exports = []map[string]any{{
+		"loop_id":         "candidate-loop-b",
+		"base_sha":        "base-fingerprint",
+		"worker_head":     "worker-head-b",
+		"manifest_path":   filepath.Join(dir, "manifest-b.json"),
+		"patchset_path":   patchB,
+		"worker_head_sha": "worker-head-b",
+	}}
+	second, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
+	if err != nil {
+		t.Fatalf("queue equivalent candidate: %v", err)
+	}
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("queue results = first %+v second %+v, want one result each", first, second)
+	}
+	if first[0]["candidate_id"] != second[0]["candidate_id"] {
+		t.Fatalf("equivalent export queued new candidate: first=%+v second=%+v", first[0], second[0])
+	}
+	if first[0]["objective_fingerprint"] == "" || first[0]["patchset_sha256"] == "" {
+		t.Fatalf("candidate queue missing fingerprint evidence: %+v", first[0])
+	}
+	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
+	if err != nil {
+		t.Fatalf("list candidates: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("stored candidates = %+v, want one fingerprint-deduped candidate", candidates)
 	}
 }
 

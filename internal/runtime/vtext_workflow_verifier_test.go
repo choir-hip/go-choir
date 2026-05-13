@@ -8,11 +8,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func TestVerifyVTextWorkflowDeterministicEventLog(t *testing.T) {
@@ -332,6 +335,243 @@ func TestVerifyVTextWorkflowSeededStochasticOrdering(t *testing.T) {
 		RequireToolBackedWorkerRuns: true,
 	}); err != nil {
 		t.Fatalf("verify stochastic vtext workflow: %v", err)
+	}
+}
+
+func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
+	const ownerID = "user-1"
+	provider := newVTextEditToolProvider(vtextReplaceAllResult("Choir dogfood working document.\n\nInitial product route is stable."))
+	h, _, rt := vtextAPISetupWithProvider(t, provider, true)
+	ctx := context.Background()
+
+	activeCWD := filepath.Join(t.TempDir(), "foreground")
+	if err := os.MkdirAll(activeCWD, 0o755); err != nil {
+		t.Fatalf("create active cwd: %v", err)
+	}
+	runGit(t, activeCWD, "init")
+	runGit(t, activeCWD, "config", "user.name", "Choir Active")
+	runGit(t, activeCWD, "config", "user.email", "active@example.com")
+	if err := os.WriteFile(filepath.Join(activeCWD, "README.md"), []byte("foreground base\n"), 0o644); err != nil {
+		t.Fatalf("write active base: %v", err)
+	}
+	runGit(t, activeCWD, "add", "README.md")
+	runGit(t, activeCWD, "commit", "-m", "active base")
+	base := strings.TrimSpace(runGit(t, activeCWD, "rev-parse", "HEAD"))
+
+	workerDir := t.TempDir()
+	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerCWD := filepath.Join(workerDir, "files")
+	if err := os.MkdirAll(workerCWD, 0o755); err != nil {
+		t.Fatalf("create worker cwd: %v", err)
+	}
+	bashArgs, _ := json.Marshal(map[string]any{
+		"command": strings.Join([]string{
+			"printf 'choir in choir product proof\\n' > choir-in-choir-proof.txt",
+			"git add choir-in-choir-proof.txt",
+			"git commit -m 'choir in choir product proof'",
+		}, " && "),
+		"timeout_ms": 15000,
+	})
+	exportArgs, _ := json.Marshal(map[string]any{
+		"repo_path":   ".",
+		"output_dir":  ".choir/exports/prompt-product-path",
+		"base_sha":    base,
+		"snapshot_id": "snapshot-prompt-product-path",
+		"summary":     "prompt bar to worker worktree promotion queue proof",
+		"checks":      []string{"test -f choir-in-choir-proof.txt"},
+	})
+	workerProvider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-bash",
+				Name:      "bash",
+				Arguments: bashArgs,
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-export",
+				Name:      "export_patchset",
+				Arguments: exportArgs,
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "Exported product-path patchset.",
+		},
+	)
+	workerRT := New(Config{
+		SandboxID:           "sandbox-prompt-product-worker",
+		StorePath:           filepath.Join(workerDir, "worker.db"),
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerDB, events.NewEventBus(), workerProvider)
+	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
+		t.Fatalf("install worker tools: %v", err)
+	}
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	workerRT.Start(workerCtx)
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerDB.Close()
+	})
+
+	workerHandler := NewAPIHandler(workerRT)
+	workerMux := http.NewServeMux()
+	workerMux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
+	workerMux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
+	workerSrv := httptest.NewServer(workerMux)
+	defer workerSrv.Close()
+
+	vmReg := vmctl.NewOwnershipRegistry(workerSrv.URL)
+	if _, err := vmReg.ResolveOrAssignDesktop(ownerID, types.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve primary desktop: %v", err)
+	}
+	vmHandler := vmctl.NewHandler(vmReg)
+	vmMux := http.NewServeMux()
+	vmMux.HandleFunc("/internal/vmctl/request-worker", vmHandler.HandleRequestWorker)
+	vmctlSrv := httptest.NewServer(vmMux)
+	defer vmctlSrv.Close()
+
+	rt.cfg.VmctlURL = vmctlSrv.URL
+	if err := rt.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	t.Setenv("RUNTIME_SELF_URL", workerSrv.URL)
+	t.Setenv("RUNTIME_LOCAL_WORKER_MODE", "worktree")
+	t.Setenv("RUNTIME_LOCAL_WORKER_ROOT", filepath.Join(t.TempDir(), "worktrees"))
+	t.Setenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE", "worker_only")
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Use Choir to develop one narrow Choir proof patch."}`, ownerID)
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(ctx, submission.SubmissionID, ownerID)
+	if err != nil {
+		t.Fatalf("get conductor: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not open vtext: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial vtext state = %q, want completed", state)
+	}
+	initialVTextRun, err := rt.GetRun(ctx, decision.InitialLoopID, ownerID)
+	if err != nil {
+		t.Fatalf("get initial vtext run: %v", err)
+	}
+
+	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
+	superResults := executeVerifierTools(t, rt, initialVTextRun, vtextRegistry, []types.ToolCall{{
+		ID:   "request-super-product-path",
+		Name: "request_super_execution",
+		Arguments: json.RawMessage(`{
+			"objective":"Request a background worker VM, export one narrow product proof patch, and queue it for promotion without mutating foreground.",
+			"channel_id":"` + decision.DocID + `"
+		}`),
+	}})
+	var superResp struct {
+		RunID   string `json:"loop_id"`
+		AgentID string `json:"agent_id"`
+	}
+	if err := json.Unmarshal([]byte(superResults[0].Output), &superResp); err != nil {
+		t.Fatalf("decode request_super_execution result: %v\n%s", err, superResults[0].Output)
+	}
+	if superResp.RunID == "" || superResp.AgentID != persistentSuperAgentID(ownerID) {
+		t.Fatalf("unexpected super response: %+v", superResp)
+	}
+	superRun, err := rt.GetRun(ctx, superResp.RunID, ownerID)
+	if err != nil {
+		t.Fatalf("get super run: %v", err)
+	}
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	workerHandleResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
+		ID:        "request-worker-product-path",
+		Name:      "request_worker_vm",
+		Arguments: json.RawMessage(`{"purpose":"Run a narrow Choir-in-Choir product proof","machine_class":"worker-small"}`),
+	}})
+	var workerHandleResp struct {
+		Status string `json:"status"`
+		Handle struct {
+			WorkerID   string `json:"worker_id"`
+			VMID       string `json:"vm_id"`
+			SandboxURL string `json:"sandbox_url"`
+			State      string `json:"state"`
+		} `json:"handle"`
+	}
+	if err := json.Unmarshal([]byte(workerHandleResults[0].Output), &workerHandleResp); err != nil {
+		t.Fatalf("decode request_worker_vm result: %v\n%s", err, workerHandleResults[0].Output)
+	}
+	if workerHandleResp.Status != "worker_requested" || workerHandleResp.Handle.WorkerID == "" || workerHandleResp.Handle.VMID == "" || workerHandleResp.Handle.SandboxURL != workerSrv.URL {
+		t.Fatalf("unexpected worker handle: %+v", workerHandleResp)
+	}
+
+	delegateArgs, _ := json.Marshal(map[string]any{
+		"worker_sandbox_url": workerHandleResp.Handle.SandboxURL,
+		"worker_id":          workerHandleResp.Handle.WorkerID,
+		"vm_id":              workerHandleResp.Handle.VMID,
+		"objective":          "Commit and export the narrow product proof from the isolated worker worktree.",
+		"profile":            AgentProfileCoSuper,
+		"timeout_seconds":    10,
+	})
+	delegateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
+		ID:        "delegate-worker-product-path",
+		Name:      "delegate_worker_vm",
+		Arguments: delegateArgs,
+	}})
+	var delegateResp struct {
+		State           types.RunState   `json:"state"`
+		RunID           string           `json:"loop_id"`
+		WorkerIsolation string           `json:"worker_isolation"`
+		WorkerWorktree  string           `json:"worker_worktree_path"`
+		WorkerBranch    string           `json:"worker_branch"`
+		WorkerBaseSHA   string           `json:"worker_base_sha"`
+		ExportPatchsets []map[string]any `json:"export_patchsets"`
+		PromotionQueue  []map[string]any `json:"promotion_queue"`
+	}
+	if err := json.Unmarshal([]byte(delegateResults[0].Output), &delegateResp); err != nil {
+		t.Fatalf("decode delegate_worker_vm result: %v\n%s", err, delegateResults[0].Output)
+	}
+	if delegateResp.State != types.RunCompleted || delegateResp.WorkerIsolation != "local_worktree" || delegateResp.WorkerBaseSHA != base {
+		t.Fatalf("unexpected delegate response: %+v", delegateResp)
+	}
+	if delegateResp.WorkerWorktree == "" || delegateResp.WorkerBranch == "" {
+		t.Fatalf("delegate response missing worktree provenance: %+v", delegateResp)
+	}
+	if len(delegateResp.ExportPatchsets) != 1 || len(delegateResp.PromotionQueue) != 1 {
+		t.Fatalf("expected exported patchset and queued promotion: %+v", delegateResp)
+	}
+	if _, err := os.Stat(filepath.Join(activeCWD, "choir-in-choir-proof.txt")); !os.IsNotExist(err) {
+		t.Fatalf("foreground repo was mutated; stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(delegateResp.WorkerWorktree, "choir-in-choir-proof.txt")); err != nil {
+		t.Fatalf("worker proof missing from isolated worktree: %v", err)
+	}
+	candidates, err := rt.Store().ListPromotionCandidates(ctx, ownerID, 10)
+	if err != nil {
+		t.Fatalf("list promotion candidates: %v", err)
+	}
+	if len(candidates) != 1 || candidates[0].Status != types.PromotionCandidateQueued || candidates[0].BaseSHA != base || candidates[0].VMID != workerHandleResp.Handle.VMID {
+		t.Fatalf("promotion queue = %+v, want one queued candidate at base %s for vm %s", candidates, base, workerHandleResp.Handle.VMID)
 	}
 }
 

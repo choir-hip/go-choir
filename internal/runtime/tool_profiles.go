@@ -16,31 +16,43 @@ const (
 	AgentProfileConductor  = "conductor"
 	AgentProfileSuper      = "super"
 	AgentProfileCoSuper    = "co-super"
+	AgentProfileVSuper     = "vsuper"
 	AgentProfileResearcher = "researcher"
 	AgentProfileVText      = "vtext"
 )
 
 const (
-	runMetadataAgentProfile = "agent_profile"
-	runMetadataChannelID    = "channel_id"
-	runMetadataAgentRole    = "agent_role"
-	runMetadataAgentID      = "agent_id"
-	runMetadataModel        = "model"
-	runMetadataDesktopID    = "desktop_id"
+	runMetadataAgentProfile     = "agent_profile"
+	runMetadataChannelID        = "channel_id"
+	runMetadataAgentRole        = "agent_role"
+	runMetadataAgentID          = "agent_id"
+	runMetadataModel            = "model"
+	runMetadataDesktopID        = "desktop_id"
+	runMetadataContObjective    = "continuation_objective"
+	runMetadataContReason       = "continuation_reason"
+	runMetadataContAuthority    = "continuation_authority_profile"
+	runMetadataContLeaseSeconds = "continuation_lease_seconds"
+	runMetadataContAutoStart    = "continuation_auto_start"
+	runMetadataToolCWD          = "tool_cwd"
+	runMetadataWorkerIsolation  = "worker_isolation"
+	runMetadataWorkerBaseSHA    = "worker_base_sha"
+	runMetadataWorkerBranch     = "worker_branch"
+	runMetadataWorkerWorktree   = "worker_worktree_path"
 )
 
 type toolContextKey string
 
 const (
-	toolCtxRunID     toolContextKey = "loop_id"
-	toolCtxAgentID   toolContextKey = "agent_id"
-	toolCtxOwnerID   toolContextKey = "owner_id"
-	toolCtxProfile   toolContextKey = "agent_profile"
-	toolCtxRole      toolContextKey = "agent_role"
-	toolCtxChannelID toolContextKey = "channel_id"
-	toolCtxSandboxID toolContextKey = "sandbox_id"
-	toolCtxDesktopID toolContextKey = "desktop_id"
-	toolCtxRunRecord toolContextKey = "run_record"
+	toolCtxRunID      toolContextKey = "loop_id"
+	toolCtxAgentID    toolContextKey = "agent_id"
+	toolCtxOwnerID    toolContextKey = "owner_id"
+	toolCtxProfile    toolContextKey = "agent_profile"
+	toolCtxRole       toolContextKey = "agent_role"
+	toolCtxChannelID  toolContextKey = "channel_id"
+	toolCtxSandboxID  toolContextKey = "sandbox_id"
+	toolCtxDesktopID  toolContextKey = "desktop_id"
+	toolCtxRunRecord  toolContextKey = "run_record"
+	toolCtxWorkingDir toolContextKey = "tool_cwd"
 )
 
 func WithToolExecutionContext(ctx context.Context, rec *types.RunRecord) context.Context {
@@ -53,6 +65,11 @@ func WithToolExecutionContext(ctx context.Context, rec *types.RunRecord) context
 	ctx = context.WithValue(ctx, toolCtxSandboxID, rec.SandboxID)
 	ctx = context.WithValue(ctx, toolCtxDesktopID, desktopIDForRun(rec))
 	ctx = context.WithValue(ctx, toolCtxRunRecord, rec)
+	if rec.Metadata != nil {
+		if cwd, _ := rec.Metadata[runMetadataToolCWD].(string); strings.TrimSpace(cwd) != "" {
+			ctx = context.WithValue(ctx, toolCtxWorkingDir, strings.TrimSpace(cwd))
+		}
+	}
 	return ctx
 }
 
@@ -205,6 +222,16 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowCoAgentTools:      true,
 			AllowedDelegateTargets: []string{AgentProfileResearcher},
 		}
+	case AgentProfileVSuper:
+		return AgentRoleSpec{
+			Profile:                AgentProfileVSuper,
+			AllowWritableFiles:     true,
+			AllowResearchTools:     true,
+			AllowEvidenceTools:     true,
+			AllowCodingTools:       true,
+			AllowCoAgentTools:      true,
+			AllowedDelegateTargets: []string{AgentProfileResearcher, AgentProfileCoSuper},
+		}
 	case AgentProfileSuper:
 		return AgentRoleSpec{
 			Profile:                AgentProfileSuper,
@@ -228,6 +255,8 @@ func canonicalAgentProfile(profile string) string {
 		return AgentProfileResearcher
 	case "cosuper", "co-super", "coagent", "co-agent":
 		return AgentProfileCoSuper
+	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
+		return AgentProfileVSuper
 	case "vtext", "vtext-agent", "document-agent":
 		return AgentProfileVText
 	case "super":
@@ -439,7 +468,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterVMControlTools(superRegistry, rt); err != nil {
+	if err := RegisterVMControlTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}
 	if err := RegisterWorkerUpdateTools(superRegistry, rt); err != nil {
@@ -456,6 +485,16 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		return err
 	}
 	if err := RegisterShipperTools(coSuperRegistry, cwd); err != nil {
+		return err
+	}
+	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVSuper), cwd, searchClient, httpClient)
+	if err != nil {
+		return err
+	}
+	if err := RegisterWorkerUpdateTools(vSuperRegistry, rt); err != nil {
+		return err
+	}
+	if err := RegisterShipperTools(vSuperRegistry, cwd); err != nil {
 		return err
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, httpClient)
@@ -487,6 +526,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[AgentProfileConductor] = conductorRegistry
 	rt.toolProfiles[AgentProfileSuper] = superRegistry
 	rt.toolProfiles[AgentProfileCoSuper] = coSuperRegistry
+	rt.toolProfiles[AgentProfileVSuper] = vSuperRegistry
 	rt.toolProfiles[AgentProfileResearcher] = researcherRegistry
 	rt.toolProfiles[AgentProfileVText] = vtextRegistry
 	return nil

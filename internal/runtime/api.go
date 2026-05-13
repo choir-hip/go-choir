@@ -59,6 +59,25 @@ type promptBarSubmissionStatusResponse struct {
 	Error        string             `json:"error,omitempty"`
 }
 
+type promotionCandidateListResponse struct {
+	Candidates []types.PromotionCandidateRecord `json:"candidates"`
+}
+
+type runContinuationListResponse struct {
+	Continuations []types.RunContinuationRecord `json:"continuations"`
+}
+
+type runContinuationSynthesizeRequest struct {
+	SourceRunID string `json:"source_loop_id"`
+	Start       bool   `json:"start,omitempty"`
+}
+
+type internalPromotionActionRequest struct {
+	OwnerID  string `json:"owner_id"`
+	RepoPath string `json:"repo_path"`
+	Approved bool   `json:"approved,omitempty"`
+}
+
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
 // It creates a child run linked to a parent, with an objective and optional
 // constraints (VAL-CHOIR-001).
@@ -313,6 +332,13 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rec, err = h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
+		if err == nil && requestedApp == AgentProfileVText {
+			if _, routeErr := h.rt.ensureConductorVTextRoute(r.Context(), rec, text, ""); routeErr != nil {
+				log.Printf("runtime api: materialize prompt-bar vtext route: %v", routeErr)
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
+				return
+			}
+		}
 	}
 	if err != nil {
 		log.Printf("runtime api: submit prompt-bar intent: %v", err)
@@ -393,6 +419,264 @@ func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Re
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func (h *APIHandler) HandlePromotionCandidatesRoot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid limit"})
+			return
+		}
+		limit = parsed
+	}
+	candidates, err := h.rt.store.ListPromotionCandidates(r.Context(), ownerID, limit)
+	if err != nil {
+		log.Printf("runtime api: list promotion candidates: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list promotion candidates"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, promotionCandidateListResponse{Candidates: candidates})
+}
+
+func (h *APIHandler) HandlePromotionCandidateDetail(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	const prefix = "/api/promotions/"
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(rest, "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
+		return
+	}
+	candidateID := strings.TrimSpace(parts[0])
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		rec, err := h.rt.store.GetPromotionCandidate(r.Context(), ownerID, candidateID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+		return
+	}
+	if len(parts) != 2 || r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
+		return
+	}
+	action := strings.TrimSpace(parts[1])
+	switch action {
+	case "approve":
+		rec, err := h.rt.ReviewPromotionCandidate(r.Context(), ownerID, candidateID, "approve")
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+	case "reject":
+		rec, err := h.rt.ReviewPromotionCandidate(r.Context(), ownerID, candidateID, "reject")
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+	default:
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
+	}
+}
+
+func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		sourceRunID := strings.TrimSpace(r.URL.Query().Get("source_loop_id"))
+		if sourceRunID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_loop_id is required"})
+			return
+		}
+		if _, err := h.rt.GetRun(r.Context(), sourceRunID, ownerID); err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source run not found"})
+			return
+		}
+		continuations, err := h.rt.store.ListRunContinuationsBySource(r.Context(), ownerID, sourceRunID)
+		if err != nil {
+			log.Printf("runtime api: list continuations: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list continuations"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, runContinuationListResponse{Continuations: continuations})
+	case http.MethodPost:
+		var req runContinuationSynthesizeRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid continuation request"})
+			return
+		}
+		sourceRunID := strings.TrimSpace(req.SourceRunID)
+		if sourceRunID == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_loop_id is required"})
+			return
+		}
+		rec, err := h.rt.SelectSynthesizedRunContinuation(r.Context(), sourceRunID, ownerID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		if req.Start {
+			rec, err = h.rt.StartRunContinuation(r.Context(), ownerID, rec.ContinuationID)
+			if err != nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+				return
+			}
+		}
+		writeAPIJSON(w, http.StatusAccepted, rec)
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+func (h *APIHandler) HandleRunContinuationDetail(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	const prefix = "/api/continuations/"
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(rest, "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation not found"})
+		return
+	}
+	continuationID := strings.TrimSpace(parts[0])
+	if len(parts) == 1 {
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		rec, err := h.rt.store.GetRunContinuation(r.Context(), ownerID, continuationID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "start" {
+		if r.Method != http.MethodPost {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		rec, err := h.rt.StartRunContinuation(r.Context(), ownerID, continuationID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusAccepted, rec)
+		return
+	}
+	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation action not found"})
+}
+
+func (h *APIHandler) HandleInternalPromotionCandidatesRoot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	var rec types.PromotionCandidateRecord
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rec); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion candidate request"})
+		return
+	}
+	queued, err := h.rt.QueuePromotionCandidate(r.Context(), rec)
+	if err != nil {
+		log.Printf("runtime api: queue promotion candidate: %v", err)
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusAccepted, queued)
+}
+
+func (h *APIHandler) HandleInternalPromotionCandidateRouter(w http.ResponseWriter, r *http.Request) {
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	const prefix = "/internal/promotions/"
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
+		return
+	}
+	candidateID := strings.TrimSpace(parts[0])
+	action := strings.TrimSpace(parts[1])
+	var req internalPromotionActionRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion action request"})
+		return
+	}
+	ownerID := strings.TrimSpace(req.OwnerID)
+	repoPath := strings.TrimSpace(req.RepoPath)
+	if ownerID == "" || repoPath == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and repo_path are required"})
+		return
+	}
+	switch action {
+	case "verify":
+		if r.Method != http.MethodPost {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		rec, err := h.rt.VerifyPromotionCandidate(r.Context(), ownerID, candidateID, repoPath)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+	case "promote":
+		if r.Method != http.MethodPost {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		rec, err := h.rt.PromotePromotionCandidate(r.Context(), ownerID, candidateID, repoPath, req.Approved)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
+	default:
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
+	}
 }
 
 // HandleRunSubmission handles POST /api/agent/loop.
@@ -536,9 +820,9 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		return
 	}
 	switch profile {
-	case AgentProfileCoSuper, AgentProfileResearcher:
+	case AgentProfileCoSuper, AgentProfileResearcher, AgentProfileVSuper:
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super or researcher profiles"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super, researcher, or vsuper profiles"})
 		return
 	}
 	req.Metadata[runMetadataAgentProfile] = profile
@@ -1142,9 +1426,18 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
 	s.HandleFunc("/api/content/", h.HandleContentRouter)
+	s.HandleFunc("/api/browser/capabilities", h.HandleBrowserCapabilities)
+	s.HandleFunc("/api/browser/sessions", h.HandleBrowserSessionsRoot)
+	s.HandleFunc("/api/browser/sessions/", h.HandleBrowserSessionRouter)
 	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
+	s.HandleFunc("/api/promotions", h.HandlePromotionCandidatesRoot)
+	s.HandleFunc("/api/promotions/", h.HandlePromotionCandidateDetail)
+	s.HandleFunc("/api/continuations", h.HandleRunContinuationsRoot)
+	s.HandleFunc("/api/continuations/", h.HandleRunContinuationDetail)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
+	s.HandleFunc("/internal/promotions", h.HandleInternalPromotionCandidatesRoot)
+	s.HandleFunc("/internal/promotions/", h.HandleInternalPromotionCandidateRouter)
 	if h.rt.cfg.EnableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)

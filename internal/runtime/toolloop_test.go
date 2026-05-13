@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -103,6 +104,106 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected loop.progress event from loop iteration")
+	}
+}
+
+func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
+	provider := newMockToolLoopProvider(&ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "done",
+		Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+		Model:      "test-model",
+	})
+
+	var appended []string
+	hooks := ToolLoopMemoryHooks{
+		AfterAppendMessage: func(ctx context.Context, role string, msg json.RawMessage) error {
+			appended = append(appended, role+":"+string(msg))
+			return nil
+		},
+	}
+
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		4096,
+		func(types.EventKind, string, json.RawMessage) {},
+		nil,
+		WithToolLoopMemoryHooks(hooks),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text: got %q, want done", text)
+	}
+	if len(appended) != 1 {
+		t.Fatalf("appended messages: got %d, want 1", len(appended))
+	}
+	if !strings.HasPrefix(appended[0], "assistant:") {
+		t.Fatalf("appended role: got %q, want assistant", appended[0])
+	}
+}
+
+type overflowThenSuccessProvider struct {
+	Provider
+	calls int32
+}
+
+func (p *overflowThenSuccessProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	call := atomic.AddInt32(&p.calls, 1)
+	if call == 1 {
+		return nil, fmt.Errorf("maximum context length exceeded")
+	}
+	return &ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       fmt.Sprintf("recovered with %d messages", len(req.Messages)),
+		Usage:      TokenUsage{InputTokens: 2, OutputTokens: 3},
+		Model:      "test-model",
+	}, nil
+}
+
+func TestRunToolLoopMemoryHookCanRetryProviderOverflow(t *testing.T) {
+	provider := &overflowThenSuccessProvider{}
+	var retried bool
+	hooks := ToolLoopMemoryHooks{
+		OnProviderError: func(ctx context.Context, messages []json.RawMessage, err error) ([]json.RawMessage, bool, error) {
+			if !isContextOverflowError(err) {
+				return nil, false, nil
+			}
+			retried = true
+			return []json.RawMessage{json.RawMessage(`{"role":"user","content":"compacted"}`)}, true, nil
+		},
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"very long"}`)},
+		"You are helpful.",
+		4096,
+		func(types.EventKind, string, json.RawMessage) {},
+		nil,
+		WithToolLoopMemoryHooks(hooks),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if !retried {
+		t.Fatalf("expected retry hook")
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 2 {
+		t.Fatalf("provider calls: got %d, want 2", got)
+	}
+	if text != "recovered with 1 messages" {
+		t.Fatalf("text: got %q", text)
+	}
+	if usage.InputTokens != 2 || usage.OutputTokens != 3 {
+		t.Fatalf("usage: got %+v", usage)
 	}
 }
 

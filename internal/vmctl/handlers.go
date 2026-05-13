@@ -46,25 +46,26 @@ type resolveResponse struct {
 
 // ownershipResponse is the JSON response for ownership queries.
 type ownershipResponse struct {
-	VMID            string `json:"vm_id"`
-	UserID          string `json:"user_id"`
-	DesktopID       string `json:"desktop_id"`
-	Kind            VMKind `json:"kind,omitempty"`
-	ParentDesktopID string `json:"parent_desktop_id,omitempty"`
-	ParentVMID      string `json:"parent_vm_id,omitempty"`
-	SnapshotKind    string `json:"snapshot_kind,omitempty"`
-	WorkerID        string `json:"worker_id,omitempty"`
-	ParentAgentID   string `json:"parent_agent_id,omitempty"`
-	TrajectoryID    string `json:"trajectory_id,omitempty"`
-	Purpose         string `json:"purpose,omitempty"`
-	MachineClass    string `json:"machine_class,omitempty"`
-	Published       bool   `json:"published"`
-	SandboxURL      string `json:"sandbox_url"`
-	State           string `json:"state"`
-	CreatedAt       string `json:"created_at"`
-	LastActiveAt    string `json:"last_active_at"`
-	Epoch           int64  `json:"epoch"`
-	StoppedBy       string `json:"stopped_by,omitempty"`
+	VMID                 string `json:"vm_id"`
+	UserID               string `json:"user_id"`
+	DesktopID            string `json:"desktop_id"`
+	Kind                 VMKind `json:"kind,omitempty"`
+	ParentDesktopID      string `json:"parent_desktop_id,omitempty"`
+	ParentVMID           string `json:"parent_vm_id,omitempty"`
+	SnapshotKind         string `json:"snapshot_kind,omitempty"`
+	WorkerID             string `json:"worker_id,omitempty"`
+	ParentAgentID        string `json:"parent_agent_id,omitempty"`
+	TrajectoryID         string `json:"trajectory_id,omitempty"`
+	Purpose              string `json:"purpose,omitempty"`
+	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
+	MachineClass         string `json:"machine_class,omitempty"`
+	Published            bool   `json:"published"`
+	SandboxURL           string `json:"sandbox_url"`
+	State                string `json:"state"`
+	CreatedAt            string `json:"created_at"`
+	LastActiveAt         string `json:"last_active_at"`
+	Epoch                int64  `json:"epoch"`
+	StoppedBy            string `json:"stopped_by,omitempty"`
 }
 
 type forkDesktopRequest struct {
@@ -74,12 +75,14 @@ type forkDesktopRequest struct {
 }
 
 type requestWorkerRequest struct {
-	UserID        string `json:"user_id"`
-	DesktopID     string `json:"desktop_id,omitempty"`
-	ParentAgentID string `json:"parent_agent_id"`
-	TrajectoryID  string `json:"trajectory_id,omitempty"`
-	Purpose       string `json:"purpose"`
-	MachineClass  string `json:"machine_class,omitempty"`
+	UserID               string `json:"user_id"`
+	DesktopID            string `json:"desktop_id,omitempty"`
+	ParentAgentID        string `json:"parent_agent_id"`
+	TrajectoryID         string `json:"trajectory_id,omitempty"`
+	Purpose              string `json:"purpose"`
+	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
+	MachineClass         string `json:"machine_class,omitempty"`
+	AllowParallel        bool   `json:"allow_parallel,omitempty"`
 }
 
 // Handler provides HTTP handlers for the vmctl service.
@@ -290,12 +293,14 @@ func (h *Handler) HandleRequestWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	own, err := h.registry.RequestWorker(WorkerRequest{
-		UserID:        req.UserID,
-		DesktopID:     req.DesktopID,
-		ParentAgentID: req.ParentAgentID,
-		TrajectoryID:  req.TrajectoryID,
-		Purpose:       req.Purpose,
-		MachineClass:  req.MachineClass,
+		UserID:               req.UserID,
+		DesktopID:            req.DesktopID,
+		ParentAgentID:        req.ParentAgentID,
+		TrajectoryID:         req.TrajectoryID,
+		Purpose:              req.Purpose,
+		ObjectiveFingerprint: req.ObjectiveFingerprint,
+		MachineClass:         req.MachineClass,
+		AllowParallel:        req.AllowParallel,
 	})
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
@@ -337,25 +342,26 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		WorkerID:        own.WorkerID,
-		ParentAgentID:   own.ParentAgentID,
-		TrajectoryID:    own.TrajectoryID,
-		Purpose:         own.Purpose,
-		MachineClass:    own.MachineClass,
-		Published:       own.Published,
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
-		CreatedAt:       own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		LastActiveAt:    own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-		Epoch:           own.Epoch,
-		StoppedBy:       own.StoppedBy,
+		VMID:                 own.VMID,
+		UserID:               own.UserID,
+		DesktopID:            own.DesktopID,
+		Kind:                 own.Kind,
+		ParentDesktopID:      own.ParentDesktopID,
+		ParentVMID:           own.ParentVMID,
+		SnapshotKind:         own.SnapshotKind,
+		WorkerID:             own.WorkerID,
+		ParentAgentID:        own.ParentAgentID,
+		TrajectoryID:         own.TrajectoryID,
+		Purpose:              own.Purpose,
+		ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
+		MachineClass:         own.MachineClass,
+		Published:            own.Published,
+		SandboxURL:           own.SandboxURL,
+		State:                string(own.State),
+		CreatedAt:            own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		LastActiveAt:         own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+		Epoch:                own.Epoch,
+		StoppedBy:            own.StoppedBy,
 	})
 }
 
@@ -638,25 +644,26 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	result := make([]ownershipResponse, 0, len(ownerships))
 	for _, own := range ownerships {
 		result = append(result, ownershipResponse{
-			VMID:            own.VMID,
-			UserID:          own.UserID,
-			DesktopID:       own.DesktopID,
-			Kind:            own.Kind,
-			ParentDesktopID: own.ParentDesktopID,
-			ParentVMID:      own.ParentVMID,
-			SnapshotKind:    own.SnapshotKind,
-			WorkerID:        own.WorkerID,
-			ParentAgentID:   own.ParentAgentID,
-			TrajectoryID:    own.TrajectoryID,
-			Purpose:         own.Purpose,
-			MachineClass:    own.MachineClass,
-			Published:       own.Published,
-			SandboxURL:      own.SandboxURL,
-			State:           string(own.State),
-			CreatedAt:       own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			LastActiveAt:    own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-			Epoch:           own.Epoch,
-			StoppedBy:       own.StoppedBy,
+			VMID:                 own.VMID,
+			UserID:               own.UserID,
+			DesktopID:            own.DesktopID,
+			Kind:                 own.Kind,
+			ParentDesktopID:      own.ParentDesktopID,
+			ParentVMID:           own.ParentVMID,
+			SnapshotKind:         own.SnapshotKind,
+			WorkerID:             own.WorkerID,
+			ParentAgentID:        own.ParentAgentID,
+			TrajectoryID:         own.TrajectoryID,
+			Purpose:              own.Purpose,
+			ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
+			MachineClass:         own.MachineClass,
+			Published:            own.Published,
+			SandboxURL:           own.SandboxURL,
+			State:                string(own.State),
+			CreatedAt:            own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			LastActiveAt:         own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+			Epoch:                own.Epoch,
+			StoppedBy:            own.StoppedBy,
 		})
 	}
 
