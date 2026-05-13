@@ -38,6 +38,7 @@ auth.log
 gateway.log
 proxy.log
 sandbox.log
+vmctl.log
 
 # GStack
 .gstack/*
