@@ -103,9 +103,9 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   const surface = page.locator('[data-desktop-surface]');
   await expect(surface).toBeVisible();
 
-  // Should have exactly 6 desktop icons (Files, Browser, Terminal, Settings, VText, Trace)
+  // Should have exactly 7 desktop icons (Files, Browser, Terminal, Settings, VText, Trace, Podcast)
   const icons = surface.locator('[data-desktop-icon]');
-  await expect(icons).toHaveCount(6);
+  await expect(icons).toHaveCount(7);
 
   // Verify each app icon is present
   await expect(surface.locator('[data-desktop-icon-id="files"]')).toBeVisible();
@@ -114,6 +114,7 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   await expect(surface.locator('[data-desktop-icon-id="settings"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="vtext"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="trace"]')).toBeVisible();
+  await expect(surface.locator('[data-desktop-icon-id="podcast"]')).toBeVisible();
 
   // Each icon should have an emoji and a label
   const filesEmoji = surface.locator('[data-desktop-icon-id="files"] [data-desktop-icon-emoji]');
@@ -142,6 +143,21 @@ test('VText appears as a first-class desktop app', async ({ page, authenticator 
 
   const titleText = page.locator('[data-window-titlebar] .titlvtext');
   await expect(titleText.first()).toContainText('VText');
+});
+
+test('bottom-left Start menu launches registered apps', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await page.locator('[data-start-button]').click();
+  const startMenu = page.locator('[data-start-menu]');
+  await expect(startMenu).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="files"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="settings"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="podcast"]')).toBeVisible();
+
+  await startMenu.locator('[data-start-app-id="files"]').click();
+  await expect(page.locator('[data-files-app]').last()).toBeVisible({ timeout: 10000 });
 });
 
 test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
@@ -448,13 +464,28 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
   await expect(editor).toContainText(/Ahaha/);
   await expect(editor).not.toContainText(/Conductor framing|Use this vtext|User request:/);
 
-  const fileNameHandle = await page.waitForFunction(async () => {
+  const manifestDocId = await vtextWindow.locator('[data-vtext-editor]').getAttribute('data-vtext-doc-id');
+  expect(manifestDocId).toBeTruthy();
+
+  const fileNameHandle = await page.waitForFunction(async (docId) => {
     const res = await fetch('/api/files', { credentials: 'include' });
     if (!res.ok) return null;
     const entries = await res.json();
-    const entry = Array.isArray(entries) ? entries.find((item) => item?.name?.endsWith('.vtext')) : null;
-    return entry?.name || null;
-  }, null, { timeout: 10000 });
+    if (!Array.isArray(entries)) return null;
+    for (const entry of entries) {
+      if (!entry?.name?.endsWith('.vtext')) continue;
+      const fileRes = await fetch('/api/files/' + encodeURIComponent(entry.name), { credentials: 'include' });
+      if (!fileRes.ok) continue;
+      const text = await fileRes.text();
+      try {
+        const shortcut = JSON.parse(text);
+        if (shortcut?.kind === 'vtext' && shortcut?.doc_id === docId) return entry.name;
+      } catch {
+        // Keep scanning; malformed files are not the shortcut for this doc.
+      }
+    }
+    return null;
+  }, manifestDocId, { timeout: 10000 });
   const fileName = await fileNameHandle.jsonValue();
   expect(fileName.endsWith('.vtext')).toBe(true);
 
@@ -466,8 +497,7 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
   }, filePath);
   const parsedBefore = JSON.parse(shortcutBefore);
   expect(parsedBefore.kind).toBe('vtext');
-  expect(parsedBefore.doc_id).toBeTruthy();
-  const manifestDocId = parsedBefore.doc_id;
+  expect(parsedBefore.doc_id).toBe(manifestDocId);
 
   const revisedContent = 'Ahaha with a real file alias';
   await editor.fill(revisedContent);

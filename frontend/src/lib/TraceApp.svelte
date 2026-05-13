@@ -6,6 +6,8 @@
     getTrajectorySnapshot,
     listTrajectories,
     openTrajectoryEventStream,
+    startContinuation,
+    synthesizeContinuation,
   } from './trace.js';
 
   const dispatch = createEventDispatcher();
@@ -24,6 +26,9 @@
   let streamStatus = 'idle';
   let lastStreamSeq = 0;
   let refreshTimer = null;
+  let continuationBusy = false;
+  let continuationError = '';
+  let selectedContinuation = null;
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -83,6 +88,43 @@
       { label: 'findings', value: trajectory?.finding_count || 0 },
       { label: 'searches', value: trajectory?.search_attempt_count || 0 },
     ];
+  }
+
+  function runGeometryStats(items) {
+    const stats = { compactions: 0, continuations: 0, retries: 0, promotions: 0 };
+    for (const moment of items || []) {
+      const kind = String(moment?.kind || '');
+      if (kind.startsWith('loop.compaction')) stats.compactions += 1;
+      if (kind.startsWith('loop.continuation')) stats.continuations += 1;
+      if (kind === 'loop.retry') stats.retries += 1;
+      if (kind.startsWith('promotion.candidate')) stats.promotions += 1;
+    }
+    return { ...stats, total: stats.compactions + stats.continuations + stats.retries + stats.promotions };
+  }
+
+  function runGeometryMetrics(stats) {
+    return [
+      { label: 'compactions', value: stats.compactions },
+      { label: 'continuations', value: stats.continuations },
+      { label: 'retries', value: stats.retries },
+      { label: 'promotions', value: stats.promotions },
+    ].filter((metric) => metric.value > 0);
+  }
+
+  function hasArtifacts(artifacts) {
+    return !!(artifacts?.run_memory || artifacts?.continuation || artifacts?.promotion_candidate);
+  }
+
+  function latestRunId(items) {
+    for (let index = (items || []).length - 1; index >= 0; index -= 1) {
+      const runId = (items[index]?.loop_id || '').trim();
+      if (runId) return runId;
+    }
+    return '';
+  }
+
+  function canSelectContinuation(item, runId) {
+    return !!runId && (item?.state === 'completed' || item?.state === 'blocked');
   }
 
   function buildGraphLayout(agents, edges) {
@@ -283,6 +325,8 @@
     selectedAgentId = '';
     selectedMomentId = '';
     momentDetails = {};
+    selectedContinuation = null;
+    continuationError = '';
     await loadTrajectorySnapshot(trajectoryId);
   }
 
@@ -296,6 +340,43 @@
     selectedAgentId = selectedAgentId === agentId ? '' : agentId;
   }
 
+  async function selectNextContinuation() {
+    if (!continuableRunId || continuationBusy) return;
+    continuationBusy = true;
+    continuationError = '';
+    try {
+      selectedContinuation = await synthesizeContinuation(continuableRunId);
+      await loadTrajectorySnapshot(selectedTrajectoryId, { silent: true });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      continuationError = err.message || 'Failed to select continuation';
+    } finally {
+      continuationBusy = false;
+    }
+  }
+
+  async function startSelectedContinuation() {
+    if (!selectedContinuation?.continuation_id || continuationBusy) return;
+    continuationBusy = true;
+    continuationError = '';
+    try {
+      selectedContinuation = await startContinuation(selectedContinuation.continuation_id);
+      await loadTrajectorySnapshot(selectedTrajectoryId, { silent: true });
+      await loadTrajectoryIndex();
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      continuationError = err.message || 'Failed to start continuation';
+    } finally {
+      continuationBusy = false;
+    }
+  }
+
   $: trajectory = snapshot?.trajectory || trajectories.find((item) => item.trajectory_id === selectedTrajectoryId) || null;
   $: graphAgents = snapshot?.agents || [];
   $: graphEdges = snapshot?.edges || [];
@@ -304,6 +385,9 @@
   $: graphLayout = buildGraphLayout(graphAgents, graphEdges);
   $: activeMoment = moments.find((moment) => moment.moment_id === selectedMomentId) || moments[moments.length - 1] || null;
   $: activeDetail = selectedMomentId ? momentDetails[selectedMomentId] : null;
+  $: geometry = runGeometryStats(moments);
+  $: continuableRunId = latestRunId(moments) || (trajectory?.state ? trajectory?.trajectory_id : '');
+  $: canContinueTrajectory = canSelectContinuation(trajectory, continuableRunId);
 
   onMount(() => {
     loadTrajectoryIndex();
@@ -368,10 +452,50 @@
           <p>{trajectory.subtitle || trajectory.trajectory_id}</p>
         </div>
         <div class="trace-header-right">
+          {#if canContinueTrajectory}
+            <button
+              class="ghost-btn"
+              data-trace-select-continuation
+              on:click={selectNextContinuation}
+              disabled={continuationBusy}
+            >
+              {continuationBusy ? 'Working...' : 'Next Objective'}
+            </button>
+          {/if}
           <span class={`status-pill ${stateTone(trajectory.state)}`}>{trajectory.live ? 'live' : trajectory.state || 'idle'}</span>
           <span class="status-pill neutral">{formatTime(trajectory.latest_activity_at)}</span>
         </div>
       </header>
+
+      {#if continuationError}
+        <div class="error-banner" data-trace-continuation-error>{continuationError}</div>
+      {/if}
+
+      {#if selectedContinuation}
+        <section class="panel continuation-panel" data-trace-continuation-proposal>
+          <div class="panel-header">
+            <div>
+              <h4>Next objective</h4>
+              <p>{selectedContinuation.reason || selectedContinuation.status}</p>
+            </div>
+            <span class="status-pill active">{selectedContinuation.status}</span>
+          </div>
+          <pre class="payload-block compact">{selectedContinuation.objective}</pre>
+          <div class="continuation-actions">
+            <span>{selectedContinuation.authority_profile || 'bounded'} · lease {selectedContinuation.lease_seconds || 0}s</span>
+            {#if selectedContinuation.status === 'selected'}
+              <button
+                class="ghost-btn"
+                data-trace-start-continuation
+                on:click={startSelectedContinuation}
+                disabled={continuationBusy}
+              >
+                Start
+              </button>
+            {/if}
+          </div>
+        </section>
+      {/if}
 
       <div class="metric-row">
         {#each traceMetrics(trajectory) as metric}
@@ -381,6 +505,26 @@
           </div>
         {/each}
       </div>
+
+      {#if geometry.total > 0}
+        <section class="panel geometry-panel" data-trace-run-geometry>
+          <div class="panel-header">
+            <div>
+              <h4>Run geometry</h4>
+              <p>Memory, continuation, retry, and promotion control points in this trajectory.</p>
+            </div>
+            <span class="status-pill active">{geometry.total} control moments</span>
+          </div>
+          <div class="geometry-grid">
+            {#each runGeometryMetrics(geometry) as metric}
+              <div class="geometry-chip" data-trace-run-geometry-metric={metric.label}>
+                <strong>{metric.value}</strong>
+                <span>{metric.label}</span>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
 
       {#if searchSummary.attempts > 0}
         <section class="panel search-panel" data-trace-search-stats>
@@ -553,6 +697,61 @@
               <div class="empty-state">Loading selected moment…</div>
             {:else}
               <div class="detail-stack">
+                {#if hasArtifacts(activeDetail?.artifacts)}
+                  <section class="detail-section" data-trace-artifacts>
+                    <h5>Artifacts</h5>
+                    {#if activeDetail.artifacts.run_memory}
+                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="run_memory">
+                        <div class="detail-card-top">
+                          <strong>Run memory checkpoint</strong>
+                          <span>seq {activeDetail.artifacts.run_memory.seq}</span>
+                        </div>
+                        <div class="detail-meta">
+                          {activeDetail.artifacts.run_memory.reason || 'compaction'} · entry {excerpt(activeDetail.artifacts.run_memory.entry_id, 18)}
+                        </div>
+                        {#if activeDetail.artifacts.run_memory.summary}
+                          <pre class="payload-block compact">{activeDetail.artifacts.run_memory.summary}</pre>
+                        {/if}
+                        {#if activeDetail.artifacts.run_memory.details}
+                          <pre class="payload-block compact">{formatPayload(activeDetail.artifacts.run_memory.details)}</pre>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    {#if activeDetail.artifacts.continuation}
+                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="continuation">
+                        <div class="detail-card-top">
+                          <strong>Continuation</strong>
+                          <span>{activeDetail.artifacts.continuation.status}</span>
+                        </div>
+                        <div class="detail-meta">
+                          {activeDetail.artifacts.continuation.authority_profile || 'bounded'} · lease {activeDetail.artifacts.continuation.lease_seconds || 0}s
+                        </div>
+                        <pre class="payload-block compact">{activeDetail.artifacts.continuation.objective}</pre>
+                        {#if activeDetail.artifacts.continuation.details}
+                          <pre class="payload-block compact">{formatPayload(activeDetail.artifacts.continuation.details)}</pre>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    {#if activeDetail.artifacts.promotion_candidate}
+                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="promotion">
+                        <div class="detail-card-top">
+                          <strong>Promotion candidate</strong>
+                          <span>{activeDetail.artifacts.promotion_candidate.status}</span>
+                        </div>
+                        <div class="detail-meta">
+                          {activeDetail.artifacts.promotion_candidate.vm_id || 'vm'} · {activeDetail.artifacts.promotion_candidate.destination_branch || 'main'}
+                        </div>
+                        <pre class="payload-block compact">{activeDetail.artifacts.promotion_candidate.summary || activeDetail.artifacts.promotion_candidate.candidate_id}</pre>
+                        {#if activeDetail.artifacts.promotion_candidate.report_json?.rollback}
+                          <pre class="payload-block compact">{formatPayload(activeDetail.artifacts.promotion_candidate.report_json.rollback)}</pre>
+                        {/if}
+                      </div>
+                    {/if}
+                  </section>
+                {/if}
+
                 <section class="detail-section">
                   <h5>Events</h5>
                   {#each activeDetail?.events || [] as eventRecord (`${eventRecord.event_id}`)}
@@ -811,6 +1010,41 @@
     letter-spacing: 0.04em;
   }
 
+  .geometry-panel {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .geometry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.65rem;
+  }
+
+  .geometry-chip {
+    border: 1px solid rgba(96, 165, 250, 0.2);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.58);
+    padding: 0.72rem 0.78rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .geometry-chip strong {
+    color: #dbeafe;
+    font-size: 0.95rem;
+  }
+
+  .geometry-chip span {
+    color: #93c5fd;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
   .main-grid {
     min-height: 0;
     display: grid;
@@ -943,6 +1177,20 @@
     background: rgba(15, 23, 42, 0.42);
     color: #cbd5e1;
     cursor: pointer;
+  }
+
+  .ghost-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .continuation-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.78rem;
   }
 
   .moment-strip {

@@ -21,8 +21,8 @@
     minimizedWindows,
     restoreWindow,
     focusWindow,
-    showDesktopMode,
     toggleShowDesktop,
+    APP_REGISTRY,
   } from './stores/desktop.js';
 
   export let currentUser = null;
@@ -38,13 +38,33 @@
   let bottomBarResizeObserver = null;
   let menuOpen = false;
 
+  const startApps = APP_REGISTRY.filter((app) =>
+    ['files', 'browser', 'candidate-desktop', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
+  );
+
   function handleRestore(windowId) {
     restoreWindow(windowId);
   }
 
+  function handleStartButton() {
+    menuOpen = !menuOpen;
+  }
+
   function handleShowDesktop() {
     toggleShowDesktop();
-    menuOpen = !menuOpen;
+    menuOpen = false;
+  }
+
+  function handleLaunchApp(app) {
+    dispatch('launchapp', {
+      appId: app.id,
+      appName: app.name,
+      icon: app.icon,
+      appContext: app.id === 'podcast'
+        ? { appHint: 'podcast', windowTitle: 'Podcast' }
+        : {},
+    });
+    menuOpen = false;
   }
 
   function handlePromptKeydown(event) {
@@ -112,21 +132,46 @@
 </script>
 
 <div class="bottom-bar" data-bottom-bar bind:this={bottomBarEl}>
-  <!-- Left section: show desktop + minimized windows -->
+  <!-- Left section: Start menu + minimized windows -->
   <div class="bar-left">
-    <!-- Show Desktop button -->
     <button
       class="show-desktop-btn"
       data-show-desktop-btn
-      on:click={handleShowDesktop}
-      aria-label="Show Desktop"
-      title="Show Desktop"
+      data-start-button
+      on:click={handleStartButton}
+      aria-label="Open Start menu"
+      title="Open Start menu"
     >
       <span class="show-desktop-icon">⊞</span>
     </button>
 
     {#if menuOpen}
-      <div class="desktop-menu" data-desktop-menu>
+      <div class="desktop-menu" data-desktop-menu data-start-menu>
+        <div class="start-apps" data-start-apps>
+          {#each startApps as app}
+            <button
+              class="start-app"
+              data-start-app
+              data-start-app-id={app.id}
+              on:click={() => handleLaunchApp(app)}
+              aria-label={app.name}
+            >
+              <span class="start-app-icon">{app.icon}</span>
+              <span class="start-app-copy">
+                <span class="start-app-name">{app.name}</span>
+                <span class="start-app-desc">{app.description}</span>
+              </span>
+            </button>
+          {/each}
+        </div>
+        <button
+          class="menu-show-desktop-btn"
+          data-start-show-desktop
+          on:click={handleShowDesktop}
+          aria-label="Show desktop"
+        >
+          Show desktop
+        </button>
         <div class="menu-section" data-bottom-user data-desktop-user data-shell-user>
           <span class="menu-label">Signed in</span>
           <span class="menu-email">{currentUser?.email || 'unknown'}</span>
@@ -205,12 +250,12 @@
     bottom: 0;
     left: 0;
     right: 0;
-    min-height: var(--choir-bottom-bar-height, 56px);
+    min-height: 56px;
     background: var(--choir-panel-strong, #11111b);
     border-top: 1px solid var(--choir-border, #2a2a3a);
     display: flex;
     align-items: flex-end;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
     z-index: 100;
     gap: 12px;
   }
@@ -270,8 +315,80 @@
   .menu-section {
     display: grid;
     gap: 0.2rem;
-    margin-bottom: 0.65rem;
+    margin: 0.7rem 0 0.65rem;
     min-width: 0;
+  }
+
+  .start-apps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .start-app {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.55rem;
+    align-items: center;
+    min-height: 3.1rem;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: var(--choir-radius-md, 12px);
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--choir-fg, #e5eefc);
+    cursor: pointer;
+    padding: 0.5rem;
+    text-align: left;
+  }
+
+  .start-app:hover,
+  .start-app:focus-visible {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.12);
+  }
+
+  .start-app-icon {
+    font-size: 1.25rem;
+    text-align: center;
+  }
+
+  .start-app-copy {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .start-app-name {
+    overflow: hidden;
+    color: #e2e8f0;
+    font-size: 0.84rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .start-app-desc {
+    overflow: hidden;
+    color: #94a3b8;
+    font-size: 0.68rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .menu-show-desktop-btn {
+    width: 100%;
+    margin-top: 0.55rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: var(--choir-radius-md, 12px);
+    background: rgba(15, 23, 42, 0.68);
+    color: #dbeafe;
+    cursor: pointer;
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    font-weight: 760;
+  }
+
+  .menu-show-desktop-btn:hover {
+    background: rgba(30, 41, 59, 0.9);
   }
 
   .menu-label {
@@ -441,7 +558,7 @@
   /* Responsive: Mobile */
   @media (max-width: 768px) {
     .bottom-bar {
-      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+      padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
       gap: 8px;
     }
 

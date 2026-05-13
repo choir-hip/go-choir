@@ -214,6 +214,10 @@
       windowTitle: ctx?.windowTitle || '',
       initialContent: ctx?.initialContent || '',
       seedPrompt: ctx?.seedPrompt || '',
+      sourceUrl: ctx?.sourceUrl || '',
+      sourceContentId: ctx?.sourceContentId || '',
+      appHint: ctx?.appHint || '',
+      createdFrom: ctx?.createdFrom || '',
       createInitialVersion: !!ctx?.createInitialVersion,
     };
     return JSON.stringify(key);
@@ -309,11 +313,16 @@
   }
 
   function buildRevisionMetadata() {
-    return {
+    const metadata = {
       source_path: appContext.sourcePath || '',
       seed_prompt: appContext.seedPrompt || '',
       conductor_loop_id: appContext.conductorLoopId || '',
     };
+    if (appContext.sourceUrl) metadata.source_url = appContext.sourceUrl;
+    if (appContext.sourceContentId) metadata.source_content_id = appContext.sourceContentId;
+    if (appContext.appHint) metadata.app_hint = appContext.appHint;
+    if (appContext.createdFrom) metadata.created_from = appContext.createdFrom;
+    return metadata;
   }
 
   function hasAppAgentRevision() {
@@ -642,7 +651,7 @@
             authorLabel: getAuthorLabel(),
             metadata: {
               ...buildRevisionMetadata(),
-              created_from: 'conductor',
+              created_from: appContext.createdFrom || 'conductor',
             },
           });
           await reloadDocument(initialRevision.revision_id);
@@ -833,7 +842,7 @@
   });
 </script>
 
-<div class="vtext-editor" data-vtext-editor>
+<div class="vtext-editor" data-vtext-editor data-vtext-doc-id={currentDoc?.doc_id || ''}>
   {#if showRecent}
     <section class="recent-panel" data-vtext-recent>
       <div class="recent-hero">

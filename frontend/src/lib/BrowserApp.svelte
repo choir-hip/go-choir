@@ -1,12 +1,13 @@
 <!--
-  BrowserApp — simple web browser app for the ChoirOS desktop.
+  BrowserApp — Web Lens / Web Import app for the ChoirOS desktop.
 
   Features:
     - URL input bar at the top of the content area
     - Basic navigation: back, forward, reload
     - Loading indicator while page loads
-    - iframe loads URLs directly (no server-side proxy)
-    - Graceful error message when sites block iframe embedding
+    - backend Web Lens snapshots when configured
+    - iframe fallback when backend browser is unavailable
+    - Graceful Web Lens fallback language when sites block iframe embedding
     - Works in floating window and mobile focus mode
 
   Data attributes for test targeting:
@@ -22,14 +23,11 @@
     data-browser-error      — error message display
 -->
 <script>
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
+  import { AuthRequiredError, fetchWithRenewal } from './auth.js';
 
   export let appContext = {};
-
-  // Auto-focus action for inputs
-  function autofocus(node) {
-    node.focus();
-  }
+  const dispatch = createEventDispatcher();
 
   // ---- State ----
   let urlInput = appContext?.initialUrl || appContext?.sourceUrl || 'https://en.wikipedia.org';
@@ -37,6 +35,17 @@
   let loading = false;
   let error = '';
   let iframeEl = null;
+  let browserCapabilities = null;
+  let capabilityError = '';
+  let backendSession = null;
+  let backendSnapshot = '';
+  let backendHTML = '';
+  let backendLinks = [];
+  let backendScreenshotPNG = '';
+  let controlSelector = '';
+  let controlValue = '';
+  let controlStatus = '';
+  let backendNavigationSeq = 0;
 
   // Navigation history
   let history = [];
@@ -82,6 +91,17 @@
       history.push(normalized);
       historyIndex = history.length - 1;
     }
+
+    if (browserCapabilities?.available) {
+      navigateBackend(normalized);
+    }
+  }
+
+  function clearBackendSnapshots() {
+    backendSnapshot = '';
+    backendHTML = '';
+    backendLinks = [];
+    backendScreenshotPNG = '';
   }
 
   function handleGo() {
@@ -120,12 +140,16 @@
     if (currentUrl) {
       loading = true;
       error = '';
-      // Force reload by briefly clearing the src
       const url = currentUrl;
-      currentUrl = '';
-      requestAnimationFrame(() => {
-        currentUrl = url;
-      });
+      if (browserCapabilities?.available) {
+        navigateBackend(url);
+      } else {
+        // Force iframe reload by briefly clearing the src.
+        currentUrl = '';
+        requestAnimationFrame(() => {
+          currentUrl = url;
+        });
+      }
     }
   }
 
@@ -138,7 +162,186 @@
 
   function handleIframeError() {
     loading = false;
-    error = 'Failed to load this page. The website may be unavailable or block iframe embedding.';
+    error = 'This site may block embedding. Use Web Lens snapshots for text, links, source, and import when the backend is available.';
+  }
+
+  function handleAuthError(err) {
+    if (err instanceof AuthRequiredError) {
+      dispatch('authexpired');
+      return true;
+    }
+    return false;
+  }
+
+  async function loadBrowserCapabilities() {
+    capabilityError = '';
+    try {
+      const res = await fetchWithRenewal('/api/browser/capabilities', { method: 'GET' });
+      if (!res.ok) {
+        capabilityError = `Web Lens capability check failed (${res.status})`;
+        return;
+      }
+      browserCapabilities = await res.json();
+      if (browserCapabilities?.available) {
+        await ensureBackendSession();
+        if (currentUrl) {
+          navigateBackend(currentUrl);
+        }
+      }
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      capabilityError = 'Web Lens capability check failed';
+    }
+  }
+
+  async function ensureBackendSession() {
+    if (backendSession?.session_id && backendSession.state !== 'closed') return backendSession;
+    const res = await fetchWithRenewal('/api/browser/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initial_url: currentUrl || '' }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || `backend session failed (${res.status})`);
+    }
+    backendSession = body;
+    return backendSession;
+  }
+
+  async function navigateBackend(targetUrl) {
+    const seq = ++backendNavigationSeq;
+    loading = true;
+    error = '';
+    try {
+      const session = await ensureBackendSession();
+      const res = await fetchWithRenewal(`/api/browser/sessions/${encodeURIComponent(session.session_id)}/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (seq !== backendNavigationSeq) return;
+      if (!res.ok) {
+        backendSession = body.session_id ? body : backendSession;
+        clearBackendSnapshots();
+        error = body.error || `Web Lens snapshot failed (${res.status})`;
+        loading = false;
+        return;
+      }
+      backendSession = body;
+      backendSnapshot = body.text_snapshot || '';
+      backendHTML = body.html_snapshot || '';
+      backendLinks = Array.isArray(body.links) ? body.links : [];
+      backendScreenshotPNG = body.screenshot_png_base64 || '';
+      controlStatus = '';
+      error = '';
+      loading = false;
+    } catch (err) {
+      if (seq !== backendNavigationSeq) return;
+      if (handleAuthError(err)) return;
+      clearBackendSnapshots();
+      error = err.message || 'Web Lens snapshot failed';
+      loading = false;
+    }
+  }
+
+  async function applyBackendControl(action) {
+    if (!backendSession?.session_id || backendSession.state === 'closed') return;
+    const selector = controlSelector.trim();
+    if (!selector) {
+      error = 'Backend control selector is required';
+      return;
+    }
+    const seq = ++backendNavigationSeq;
+    loading = true;
+    error = '';
+    controlStatus = '';
+    try {
+      const res = await fetchWithRenewal(`/api/browser/sessions/${encodeURIComponent(backendSession.session_id)}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, selector, value: controlValue }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (seq !== backendNavigationSeq) return;
+      const nextSession = body.session || body;
+      if (nextSession?.session_id) {
+        backendSession = nextSession;
+        backendScreenshotPNG = nextSession.screenshot_png_base64 || backendScreenshotPNG;
+      }
+      const control = body.control || {};
+      controlStatus = control.error || control.value || control.document_text || control.text || '';
+      if (!res.ok || control.ok === false) {
+        error = control.error || body.error || `Web Lens control failed (${res.status})`;
+        loading = false;
+        return;
+      }
+      loading = false;
+    } catch (err) {
+      if (seq !== backendNavigationSeq) return;
+      if (handleAuthError(err)) return;
+      error = err.message || 'Web Lens control failed';
+      loading = false;
+    }
+  }
+
+  async function closeBackendSession() {
+    if (!backendSession?.session_id || backendSession.state === 'closed') return;
+    const seq = ++backendNavigationSeq;
+    loading = true;
+    error = '';
+    try {
+      const res = await fetchWithRenewal(`/api/browser/sessions/${encodeURIComponent(backendSession.session_id)}/close`, {
+        method: 'POST',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (seq !== backendNavigationSeq) return;
+      if (!res.ok) {
+        error = body.error || `Web Lens close failed (${res.status})`;
+        loading = false;
+        return;
+      }
+      backendSession = body;
+      currentUrl = '';
+      clearBackendSnapshots();
+      loading = false;
+    } catch (err) {
+      if (seq !== backendNavigationSeq) return;
+      if (handleAuthError(err)) return;
+      error = err.message || 'Web Lens close failed';
+      loading = false;
+    }
+  }
+
+  function importSnapshotToVText() {
+    if (!backendSession?.session_id || !backendSnapshot) return;
+    const lines = [
+      `# Web Lens import`,
+      ``,
+      `Source: ${currentUrl || backendSession.current_url || 'unknown'}`,
+      `Session: ${backendSession.session_id}`,
+      ``,
+      `## Snapshot`,
+      ``,
+      backendSnapshot,
+    ];
+    if (backendLinks.length) {
+      lines.push('', '## Links', '');
+      for (const link of backendLinks.slice(0, 30)) {
+        lines.push(`- ${link.text || link.url}: ${link.url}`);
+      }
+    }
+    dispatch('openvtext', {
+      title: backendSession.title || 'Web Lens Import',
+      initialContent: lines.join('\n'),
+      seedPrompt: `Import Web Lens snapshot for ${currentUrl || backendSession.current_url || 'web page'}`,
+      sourceUrl: currentUrl || backendSession.current_url || '',
+      sourceContentId: backendSession.session_id,
+      appHint: 'web_lens',
+      createdFrom: 'web_lens',
+      toastMessage: 'Opened Web Lens snapshot in VText',
+    });
   }
 
   // Monitor for iframe load timeout (sites that block may not fire error event)
@@ -149,7 +352,7 @@
     loadTimeout = setTimeout(() => {
       // If still loading after 15 seconds, show a message
       if (loading) {
-        error = 'Page is taking too long to load. The website may block iframe embedding.';
+        error = 'This page is taking too long to embed. If the site blocks iframes, use Web Lens snapshots instead of treating this as a full browser.';
         loading = false;
       }
     }, 15000);
@@ -158,8 +361,7 @@
   // ---- Lifecycle ----
 
   onMount(() => {
-    // Navigate to default URL
-    navigateToUrl(urlInput);
+    loadBrowserCapabilities();
   });
 </script>
 
@@ -216,6 +418,100 @@
     </button>
   </div>
 
+  <div
+    class="backend-status"
+    data-browser-backend-status
+    data-browser-backend-mode={browserCapabilities?.mode || 'unknown'}
+    data-browser-backend-substrate={browserCapabilities?.substrate || 'unknown'}
+    data-browser-backend-available={browserCapabilities?.available ? 'true' : 'false'}
+    data-browser-supports-text={browserCapabilities?.supports?.text ? 'true' : 'false'}
+    data-browser-supports-html={browserCapabilities?.supports?.html ? 'true' : 'false'}
+    data-browser-supports-links={browserCapabilities?.supports?.links ? 'true' : 'false'}
+    data-browser-supports-screenshot={browserCapabilities?.supports?.screenshot ? 'true' : 'false'}
+    data-browser-supports-cdp-screenshot={browserCapabilities?.supports?.cdp_screenshot ? 'true' : 'false'}
+    data-browser-supports-bounded-input={browserCapabilities?.supports?.bounded_input ? 'true' : 'false'}
+    data-browser-supports-input={browserCapabilities?.supports?.input ? 'true' : 'false'}
+    data-browser-supports-cdp={browserCapabilities?.supports?.cdp ? 'true' : 'false'}
+    data-browser-session-id={backendSession?.session_id || ''}
+    data-browser-execution-scope={backendSession?.execution_scope || ''}
+    data-browser-backend-session-id={backendSession?.backend_session_id || ''}
+    data-browser-world-kind={backendSession?.world_kind || ''}
+    data-browser-promotion-candidate-id={backendSession?.promotion_candidate_id || ''}
+    data-browser-vm-id={backendSession?.vm_id || ''}
+    data-browser-snapshot-id={backendSession?.snapshot_id || ''}
+    data-browser-source-loop-id={backendSession?.source_loop_id || ''}
+    data-browser-candidate-trace-id={backendSession?.candidate_trace_id || ''}
+    data-browser-session-state={backendSession?.state || ''}
+  >
+    <span>
+      {#if browserCapabilities?.available}
+        {#if backendSession?.state === 'closed'}
+          Web Lens snapshot closed: {browserCapabilities.provider}
+        {:else}
+          Web Lens snapshot ready: {browserCapabilities.provider}
+        {/if}
+      {:else if capabilityError}
+        {capabilityError}
+      {:else}
+        Iframe preview mode - Web Lens backend not configured
+      {/if}
+    </span>
+    {#if browserCapabilities?.available && backendSession?.session_id && backendSession.state !== 'closed'}
+      <button
+        class="backend-close"
+        data-browser-close-session
+        on:click={closeBackendSession}
+        disabled={loading}
+        title="Close Web Lens session"
+        aria-label="Close Web Lens session"
+      >
+        Close
+      </button>
+    {/if}
+  </div>
+
+  {#if browserCapabilities?.supports?.bounded_input && backendSession?.session_id && backendSession.state !== 'closed'}
+    <div
+      class="backend-control"
+      data-browser-backend-control
+      data-browser-control-status={controlStatus}
+    >
+      <input
+        class="control-selector"
+        data-browser-control-selector
+        bind:value={controlSelector}
+        placeholder="CSS selector"
+        aria-label="Backend control selector"
+      />
+      <input
+        class="control-value"
+        data-browser-control-value
+        bind:value={controlValue}
+        placeholder="Value"
+        aria-label="Backend control value"
+      />
+      <button
+        class="control-btn"
+        data-browser-control-fill
+        on:click={() => applyBackendControl('fill')}
+        disabled={loading}
+      >
+        Fill
+      </button>
+      <button
+        class="control-btn"
+        data-browser-control-click
+        on:click={() => applyBackendControl('click')}
+        disabled={loading}
+      >
+        Click
+      </button>
+      {#if controlStatus}
+        <span class="control-status" data-browser-control-status-text>{controlStatus}</span>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Loading indicator -->
   {#if loading}
     <div class="loading-bar" data-browser-loading>
@@ -241,20 +537,85 @@
 
   <!-- iframe -->
   {#if currentUrl}
-    <div class="iframe-container">
+    {#if browserCapabilities?.available}
+      <div class="backend-snapshot" data-browser-backend-snapshot>
+        {#if backendSnapshot}
+          <div class="backend-snapshot-layout">
+            <div class="backend-main">
+              <div class="snapshot-actions">
+                <span>Semantic snapshot</span>
+                <button
+                  class="import-btn"
+                  data-browser-import-vtext
+                  on:click={importSnapshotToVText}
+                  disabled={!backendSnapshot}
+                >
+                  Open in VText
+                </button>
+              </div>
+              {#if backendScreenshotPNG}
+                <figure
+                  class="backend-screenshot"
+                  data-browser-backend-screenshot
+                  data-browser-backend-screenshot-bytes={Math.floor((backendScreenshotPNG.length * 3) / 4)}
+                >
+                  <img
+                    src={`data:image/png;base64,${backendScreenshotPNG}`}
+                    alt="Web Lens visual proof"
+                  />
+                </figure>
+              {/if}
+              <pre>{backendSnapshot}</pre>
+            </div>
+            {#if backendLinks.length || backendHTML}
+              <aside
+                class="backend-links"
+                data-browser-backend-links
+                data-browser-backend-links-count={backendLinks.length}
+              >
+                {#if backendLinks.length}
+                  <h3>Links</h3>
+                  {#each backendLinks as link}
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-browser-backend-link
+                    >
+                      <span>{link.text || link.url}</span>
+                      <small>{link.url}</small>
+                    </a>
+                  {/each}
+                {/if}
+                {#if backendHTML}
+                  <details class="backend-html" data-browser-backend-html>
+                    <summary>HTML source</summary>
+                    <pre>{backendHTML}</pre>
+                  </details>
+                {/if}
+              </aside>
+            {/if}
+          </div>
+        {:else}
+          <span>Loading Web Lens snapshot...</span>
+        {/if}
+      </div>
+    {:else}
+      <div class="iframe-container">
       <!-- svelte-ignore a11y-missing-attribute -->
-      <iframe
-        class="browser-iframe"
-        data-browser-iframe
-        bind:this={iframeEl}
-        src={currentUrl}
-        on:load={handleIframeLoad}
-        on:error={handleIframeError}
-        title="Browser content"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-        allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
-      ></iframe>
-    </div>
+        <iframe
+          class="browser-iframe"
+          data-browser-iframe
+          bind:this={iframeEl}
+          src={currentUrl}
+          on:load={handleIframeLoad}
+          on:error={handleIframeError}
+          title="Browser content"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+          allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+        ></iframe>
+      </div>
+    {/if}
   {:else}
     <div class="empty-state">
       <span class="empty-icon">🌐</span>
@@ -342,6 +703,88 @@
     background: rgba(59, 130, 246, 0.25);
   }
 
+  .backend-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #252538;
+    padding: 5px 10px;
+    color: #93a4bd;
+    background: #141421;
+    font-size: 0.74rem;
+  }
+
+  .backend-close {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.62);
+    color: #cbd5e1;
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 3px 8px;
+  }
+
+  .backend-close:hover:not(:disabled) {
+    background: rgba(30, 41, 59, 0.84);
+  }
+
+  .backend-close:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .backend-control {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(80px, 1fr) auto auto minmax(0, 1.2fr);
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #252538;
+    padding: 6px 8px;
+    background: #111827;
+  }
+
+  .control-selector,
+  .control-value {
+    min-width: 0;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 0.74rem;
+    padding: 5px 7px;
+  }
+
+  .control-btn {
+    border: 1px solid rgba(59, 130, 246, 0.34);
+    border-radius: 4px;
+    background: rgba(30, 64, 175, 0.24);
+    color: #bfdbfe;
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 5px 8px;
+  }
+
+  .control-btn:hover:not(:disabled) {
+    background: rgba(37, 99, 235, 0.34);
+  }
+
+  .control-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .control-status {
+    min-width: 0;
+    overflow: hidden;
+    color: #a7f3d0;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* ---- Loading bar ---- */
   .loading-bar {
     height: 2px;
@@ -420,6 +863,143 @@
     display: block;
   }
 
+  .backend-snapshot {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 18px;
+    background: #f6f7fb;
+    color: #151821;
+  }
+
+  .backend-snapshot pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font: 0.9rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .backend-snapshot-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+    gap: 18px;
+    min-height: 100%;
+  }
+
+  .backend-main {
+    min-width: 0;
+  }
+
+  .snapshot-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .import-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #1d4ed8;
+    cursor: pointer;
+    font-size: 0.74rem;
+    padding: 5px 9px;
+  }
+
+  .import-btn:hover:not(:disabled) {
+    border-color: #93b4f6;
+    background: #f8fbff;
+  }
+
+  .import-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .backend-screenshot {
+    margin: 0 0 14px;
+    overflow: hidden;
+    border: 1px solid #d9deea;
+    border-radius: 4px;
+    background: #ffffff;
+  }
+
+  .backend-screenshot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .backend-links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-left: 1px solid #d7dce8;
+    padding-left: 14px;
+  }
+
+  .backend-links h3 {
+    margin: 0 0 4px;
+    color: #3d4657;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .backend-links a {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border: 1px solid #d9deea;
+    border-radius: 4px;
+    color: #1d4ed8;
+    background: #ffffff;
+    text-decoration: none;
+  }
+
+  .backend-links a:hover {
+    border-color: #93b4f6;
+    background: #f8fbff;
+  }
+
+  .backend-links small {
+    overflow-wrap: anywhere;
+    color: #64748b;
+    font-size: 0.7rem;
+  }
+
+  .backend-html {
+    margin-top: 8px;
+    border-top: 1px solid #d7dce8;
+    padding-top: 10px;
+  }
+
+  .backend-html summary {
+    cursor: pointer;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .backend-html pre {
+    margin-top: 8px;
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid #d9deea;
+    border-radius: 4px;
+    background: #fff;
+    padding: 8px;
+    color: #1f2937;
+    font: 0.72rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
   /* ---- Empty state ---- */
   .empty-state {
     display: flex;
@@ -458,6 +1038,17 @@
     .go-btn {
       padding: 8px 10px;
       min-height: 36px;
+    }
+
+    .backend-snapshot-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .backend-links {
+      border-left: none;
+      border-top: 1px solid #d7dce8;
+      padding-left: 0;
+      padding-top: 12px;
     }
   }
 </style>

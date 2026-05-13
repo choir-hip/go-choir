@@ -22,7 +22,8 @@ import { writable, derived } from 'svelte/store';
 
 export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
-  { id: 'browser', name: 'Browser', icon: '🌐', description: 'Web Browser', singleton: true },
+  { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
+  { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
   { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
@@ -47,7 +48,7 @@ export const APP_REGISTRY = [
 
 /** The main apps shown as floating desktop icons */
 export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
-  ['files', 'browser', 'terminal', 'settings', 'vtext', 'trace'].includes(app.id)
+  ['files', 'browser', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
 );
 
 // ---- Window counter ----

@@ -34,6 +34,7 @@
   import { openFileDocument } from './vtext.js';
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
+  import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
   import TerminalApp from './TerminalApp.svelte';
   import ContentViewer from './ContentViewer.svelte';
   import {
@@ -432,6 +433,26 @@
     }
   }
 
+  function handleOpenVTextFromContent(event) {
+    if (!desktopReady) {
+      showToast('Desktop is still connecting');
+      return;
+    }
+    const detail = event.detail || {};
+    openApp('vtext', 'VText', '📝', {
+      windowTitle: detail.title || 'Radio Brief',
+      initialContent: detail.initialContent || '',
+      seedPrompt: detail.seedPrompt || '',
+      createInitialVersion: true,
+      allowMultiple: true,
+      sourceUrl: detail.sourceUrl || '',
+      sourceContentId: detail.sourceContentId || '',
+      appHint: detail.appHint || '',
+      createdFrom: detail.createdFrom || 'content_viewer',
+    });
+    showToast(detail.toastMessage || 'Opened in VText');
+  }
+
   function handleIconPositionsChanged() {
     scheduleSave();
   }
@@ -534,7 +555,15 @@
               </div>
             {:else if win.appId === 'browser'}
               <div class="app-content browser-content" data-browser-app-container>
-                <BrowserApp appContext={win.appContext} />
+                <BrowserApp
+                  appContext={win.appContext}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:openvtext={handleOpenVTextFromContent}
+                />
+              </div>
+            {:else if win.appId === 'candidate-desktop'}
+              <div class="app-content candidate-desktop-content" data-candidate-desktop-window>
+                <CandidateDesktopViewer appContext={win.appContext} />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>
@@ -558,7 +587,11 @@
               </div>
             {:else if ['pdf', 'epub', 'image', 'video', 'audio', 'podcast'].includes(win.appId)}
               <div class="app-content content-viewer-content" data-content-window>
-                <ContentViewer appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <ContentViewer
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:openvtext={handleOpenVTextFromContent}
+                />
               </div>
             {:else}
               <div class="app-content">
@@ -589,6 +622,7 @@
     {promptPlaceholder}
     on:logout={handleLogout}
     on:promptsubmit={handlePromptSubmit}
+    on:launchapp={handleLaunchApp}
   />
 </div>
 
@@ -654,6 +688,11 @@
   .settings-content {
     padding: 0;
     background: #171827;
+  }
+
+  .candidate-desktop-content {
+    padding: 0;
+    background: #0d1117;
   }
 
   .toast-stack {

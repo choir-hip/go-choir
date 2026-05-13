@@ -24,7 +24,7 @@
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage } from './lib/auth.js';
-  import { DEFAULT_THEME, applyThemeToElement } from './lib/theme.js';
+  import { DEFAULT_THEME, THEME_STORAGE_KEY, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in'} */
   let authState = 'checking';
@@ -37,6 +37,8 @@
 
   /** Whether a passkey ceremony is in progress. */
   let ceremonyInProgress = false;
+
+  let currentTheme = DEFAULT_THEME;
 
   async function checkSession() {
     try {
@@ -117,10 +119,45 @@
     passkeyError = '';
   }
 
+  function applyTheme(theme, persist = true) {
+    const normalized = normalizeThemeConfig(theme);
+    const validation = validateThemeConfig(normalized);
+    if (!validation.ok) {
+      return validation;
+    }
+    currentTheme = normalized;
+    applyThemeToElement(document.documentElement, normalized);
+    if (persist) {
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(normalized));
+      } catch (_err) {
+        // Theme application should not depend on storage availability.
+      }
+    }
+    return validation;
+  }
+
+  function loadStoredTheme() {
+    try {
+      const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (!raw) return DEFAULT_THEME;
+      const parsed = JSON.parse(raw);
+      const validation = validateThemeConfig(parsed);
+      return validation.ok ? normalizeThemeConfig(parsed) : DEFAULT_THEME;
+    } catch (_err) {
+      return DEFAULT_THEME;
+    }
+  }
+
   import { onMount } from 'svelte';
   onMount(() => {
-    applyThemeToElement(document.documentElement, DEFAULT_THEME);
+    applyTheme(loadStoredTheme(), false);
     checkSession();
+
+    function handleThemeChange(event) {
+      applyTheme(event.detail?.theme || DEFAULT_THEME);
+    }
+    window.addEventListener('choir-theme-change', handleThemeChange);
 
     // Prevent bfcache from resurrecting an authenticated shell after
     // logout. When the page is restored from back/forward cache, the
@@ -148,13 +185,14 @@
     window.addEventListener('focus', handleFocus);
 
     return () => {
+      window.removeEventListener('choir-theme-change', handleThemeChange);
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('focus', handleFocus);
     };
   });
 </script>
 
-<div class="app-root" data-theme-id={DEFAULT_THEME.id}>
+<div class="app-root" data-theme-id={currentTheme.id}>
   {#if authState === 'checking'}
     <div class="loading">
       <p>Loading…</p>

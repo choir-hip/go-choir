@@ -29,6 +29,30 @@ export function getTrajectoryMomentDetail(trajectoryId, momentId) {
   );
 }
 
+export async function synthesizeContinuation(sourceRunId, { start = false } = {}) {
+  const res = await fetchWithRenewal('/api/continuations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_loop_id: sourceRunId, start }),
+  });
+  if (!res.ok) {
+    await decodeError(res, `Continuation synthesis failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function startContinuation(continuationId) {
+  const res = await fetchWithRenewal(`/api/continuations/${encodeURIComponent(continuationId)}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) {
+    await decodeError(res, `Continuation start failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export function openTrajectoryEventStream(trajectoryId, { afterSeq = 0, onEvent, onError } = {}) {
   const params = new URLSearchParams();
   if (afterSeq > 0) {

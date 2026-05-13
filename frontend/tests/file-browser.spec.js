@@ -50,14 +50,6 @@ async function seedTestFiles(page) {
   }
 }
 
-// Helper: create a file via the filesystem (since there's no upload API, we use
-// the sandbox's direct file root). We'll write via the API or page evaluate.
-async function createTestFile(page, dirPath, fileName, content) {
-  // Since there's no file upload API, we need to use the sandbox directly.
-  // For testing, we'll rely on directory-based operations only, as the file
-  // listing can still be tested with directories.
-}
-
 // ---------------------------------------------------------------
 // Test: File browser launches from left rail (VAL-FILES-001)
 // ---------------------------------------------------------------
@@ -220,22 +212,47 @@ test('create folder via UI with inline input', async ({ desktopSession }) => {
 });
 
 // ---------------------------------------------------------------
+// Test: upload file via UI (VAL-FILES-019)
+// ---------------------------------------------------------------
+test('upload file via UI writes into current folder', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await openFilesApp(page);
+
+  const uploadInput = page.locator('[data-upload-input]');
+  await uploadInput.setInputFiles({
+    name: 'uploaded-note.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('hello from upload UI'),
+  });
+
+  await expect(page.locator('[data-upload-status]')).toContainText('Uploaded uploaded-note.txt');
+  const uploaded = page.locator('[data-file-item]').filter({ hasText: 'uploaded-note.txt' });
+  await expect(uploaded).toBeVisible({ timeout: 5000 });
+
+  await uploaded.click();
+  const editorArea = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  await expect(editorArea).toContainText('hello from upload UI');
+});
+
+// ---------------------------------------------------------------
 // Test: delete with inline confirmation (VAL-FILES-011)
 // ---------------------------------------------------------------
 test('delete with inline confirmation', async ({ desktopSession }) => {
   const { page } = desktopSession;
+  const folderName = `delete-me-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // Create a folder to delete via API
-  const createResult = await page.evaluate(async () => {
-    const res = await fetch('/api/files/delete-me', { method: 'POST', credentials: 'include' });
+  const createResult = await page.evaluate(async (name) => {
+    const res = await fetch('/api/files/' + encodeURIComponent(name), { method: 'POST', credentials: 'include' });
     return res.status;
-  });
+  }, folderName);
   expect([201, 409]).toContain(createResult);
 
   await openFilesApp(page);
+  await page.locator('[data-breadcrumb-segment]').first().click();
 
   // Find the folder
-  const deleteItem = page.locator('[data-file-item]').filter({ hasText: 'delete-me' });
+  const deleteItem = page.locator('[data-file-item]').filter({ hasText: folderName });
   await expect(deleteItem).toBeVisible({ timeout: 5000 });
 
   // Click its delete button
@@ -249,7 +266,7 @@ test('delete with inline confirmation', async ({ desktopSession }) => {
   await confirmDelete.click();
 
   // Item should be removed from listing
-  await expect(page.locator('[data-file-name]').filter({ hasText: 'delete-me' })).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('[data-file-name]').filter({ hasText: folderName })).toHaveCount(0, { timeout: 5000 });
 });
 
 // ---------------------------------------------------------------

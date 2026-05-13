@@ -55,7 +55,7 @@ Delivered features (10):
 4. **Responsive layout** -- Desktop/tablet/mobile breakpoints. Same floating desktop/window model at all sizes, with tighter default geometry on smaller screens.
 5. **File browser backend** -- CRUD API endpoints (`/api/files`) with path traversal protection.
 6. **File browser frontend** -- Component with breadcrumb navigation, folder creation, inline delete, file download.
-7. **Browser app** -- iframe-based web browsing with URL bar, back/forward/reload navigation, graceful error handling for blocked iframes.
+7. **Web Lens app** -- external web inspection surface with iframe preview when allowed, Obscura semantic snapshots when configured, VText import, and explicit fallback states for iframe-blocked sites.
 8. **Terminal backend** -- PTY WebSocket endpoint (`/api/terminal/ws`) with auth gating, per-session management, cleanup on disconnect, multiple concurrent sessions.
 9. **Terminal frontend** -- ghostty-web WASM terminal emulator with dark theme, FitAddon responsive fit, 10000-line scrollback, WebSocket PTY connection.
 10. **Cross-area integration** -- Deploy-readiness tests for new layout, all cross-area flows verified.
@@ -192,7 +192,7 @@ internal/
   store/        Persistence layer (stub)
   types/        Core domain types (stub)
   vmmanager/    Firecracker VM management
-frontend/       Svelte SPA: email auth UI, desktop shell, versioned document UI (`vtext`), choir-in-choir controls
+frontend/       Svelte SPA: email auth UI, desktop shell, versioned document UI (`vtext`), Web Lens, candidate desktop viewer, choir-in-choir controls
   tests/        Playwright e2e tests (auth flows, shell, rehydration, logout, re-login)
 nix/
   node-b.nix    NixOS module: systemd services, Caddy config

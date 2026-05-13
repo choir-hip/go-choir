@@ -63,6 +63,12 @@
   let deleteTarget = null; // { name, type }
   let deleteError = '';
 
+  // Upload state
+  let uploadInputEl = null;
+  let uploading = false;
+  let uploadStatus = '';
+  let uploadError = '';
+
   // ---- API calls ----
 
   async function fetchDirectory(pathSegments) {
@@ -184,6 +190,52 @@
     }
   }
 
+  async function uploadSelectedFiles(files) {
+    uploadError = '';
+    uploadStatus = '';
+    const selected = Array.from(files || []);
+    if (selected.length === 0) return;
+    uploading = true;
+    try {
+      for (const file of selected) {
+        if (!file?.name || file.name.includes('/') || file.name.includes('\\')) {
+          uploadError = 'File names cannot contain / or \\';
+          return;
+        }
+        const path = currentPath.length > 0
+          ? '/api/files/' + [...currentPath, file.name].map(encodeURIComponent).join('/')
+          : '/api/files/' + encodeURIComponent(file.name);
+        const res = await fetchWithRenewal(path, {
+          method: 'PUT',
+          headers: file.type ? { 'Content-Type': file.type } : {},
+          body: file,
+        });
+        if (!res.ok) {
+          if (res.status === 401) {
+            dispatch('authexpired');
+            return;
+          }
+          const body = await res.json().catch(() => ({}));
+          uploadError = body.error || `Failed to upload ${file.name}.`;
+          return;
+        }
+      }
+      uploadStatus = selected.length === 1
+        ? `Uploaded ${selected[0].name}`
+        : `Uploaded ${selected.length} files`;
+      await fetchDirectory(currentPath);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      uploadError = 'Upload failed.';
+    } finally {
+      uploading = false;
+      if (uploadInputEl) uploadInputEl.value = '';
+    }
+  }
+
   // ---- Navigation ----
 
   function navigateTo(pathSegments) {
@@ -194,6 +246,8 @@
     newFolderError = '';
     deleteTarget = null;
     deleteError = '';
+    uploadError = '';
+    uploadStatus = '';
 
     // Update history
     // Trim forward history when navigating
@@ -221,6 +275,8 @@
       newFolderError = '';
       deleteTarget = null;
       deleteError = '';
+      uploadError = '';
+      uploadStatus = '';
       fetchDirectory(currentPath);
     }
   }
@@ -234,6 +290,8 @@
       newFolderError = '';
       deleteTarget = null;
       deleteError = '';
+      uploadError = '';
+      uploadStatus = '';
       fetchDirectory(currentPath);
     }
   }
@@ -296,6 +354,10 @@
     showNewFolderInput = true;
     newFolderName = '';
     newFolderError = '';
+  }
+
+  function handleUploadClick() {
+    uploadInputEl?.click();
   }
 
   function cancelNewFolder() {
@@ -399,6 +461,25 @@
     >
       + Folder
     </button>
+    <button
+      class="action-btn upload-btn"
+      data-upload-btn
+      on:click={handleUploadClick}
+      disabled={uploading}
+      title="Upload files"
+      aria-label="Upload files"
+    >
+      {uploading ? 'Uploading...' : 'Upload'}
+    </button>
+    <input
+      class="upload-input"
+      data-upload-input
+      bind:this={uploadInputEl}
+      type="file"
+      multiple
+      on:change={(event) => uploadSelectedFiles(event.currentTarget.files)}
+      aria-label="Choose files to upload"
+    />
   </div>
 
   <!-- New folder inline input -->
@@ -452,6 +533,19 @@
     <div class="error-message" data-error-message role="alert">
       <span class="error-icon">⚠️</span>
       {deleteError}
+    </div>
+  {/if}
+
+  {#if uploadStatus}
+    <div class="status-message" data-upload-status role="status">
+      {uploadStatus}
+    </div>
+  {/if}
+
+  {#if uploadError}
+    <div class="error-message" data-upload-error role="alert">
+      <span class="error-icon">⚠️</span>
+      {uploadError}
     </div>
   {/if}
 
@@ -635,6 +729,19 @@
     background: rgba(59, 130, 246, 0.25);
   }
 
+  .action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .upload-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
   /* ---- Inline input (new folder) ---- */
   .inline-input-row {
     display: flex;
@@ -719,6 +826,15 @@
 
   .error-icon {
     font-size: 1rem;
+  }
+
+  .status-message {
+    padding: 10px 16px;
+    background: rgba(34, 197, 94, 0.1);
+    border-bottom: 1px solid rgba(34, 197, 94, 0.22);
+    color: #bbf7d0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
   }
 
   /* ---- Loading state ---- */

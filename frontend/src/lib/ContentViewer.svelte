@@ -10,6 +10,12 @@
   let item = appContext?.contentItem || null;
   let loading = false;
   let error = '';
+  let podcastLibrary = [];
+  let podcastLibraryLoading = false;
+  let podcastLibraryError = '';
+  let podcastImportUrl = '';
+  let podcastImporting = false;
+  let radioStatus = '';
 
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: filePath = item?.file_path || appContext?.filePath || '';
@@ -20,7 +26,10 @@
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
     if (item) return;
-    if (!contentId && !(appHint === 'podcast' && sourceUrl)) return;
+    if (!contentId && !(appHint === 'podcast' && sourceUrl)) {
+      if (appHint === 'podcast') await loadPodcastLibrary();
+      return;
+    }
     loading = true;
     error = '';
     try {
@@ -52,6 +61,78 @@
     }
   }
 
+  async function loadPodcastLibrary() {
+    if (podcastLibraryLoading) return;
+    podcastLibraryLoading = true;
+    podcastLibraryError = '';
+    try {
+      const res = await fetchWithRenewal('/api/content/items?limit=100');
+      if (!res.ok) {
+        if (res.status === 401) {
+          dispatch('authexpired');
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        podcastLibraryError = body.error || `Podcast library failed (${res.status})`;
+        return;
+      }
+      const body = await res.json();
+      podcastLibrary = (body.items || []).filter((content) =>
+        content.app_hint === 'podcast' ||
+        content.media_type === 'application/rss+xml' ||
+        /podcast|rss/i.test(`${content.source_url || ''} ${content.file_path || ''}`)
+      );
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      podcastLibraryError = 'Podcast library failed';
+    } finally {
+      podcastLibraryLoading = false;
+    }
+  }
+
+  async function importPodcastFeed() {
+    const url = podcastImportUrl.trim();
+    if (!url || podcastImporting) return;
+    podcastImporting = true;
+    podcastLibraryError = '';
+    try {
+      const res = await fetchWithRenewal('/api/content/import-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, query: url }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          dispatch('authexpired');
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        podcastLibraryError = body.error || `Podcast import failed (${res.status})`;
+        return;
+      }
+      item = await res.json();
+      podcastImportUrl = '';
+      podcastLibrary = [item, ...podcastLibrary.filter((content) => content.content_id !== item.content_id)];
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      podcastLibraryError = 'Podcast import failed';
+    } finally {
+      podcastImporting = false;
+    }
+  }
+
+  function openPodcastItem(content) {
+    item = content;
+    error = '';
+    radioStatus = '';
+  }
+
   function apiFileURL(path) {
     return '/api/files/' + String(path || '').split('/').map(encodeURIComponent).join('/');
   }
@@ -75,9 +156,11 @@
   $: embedUrl = mediaType === 'video/youtube' || /youtube\\.com|youtu\\.be/.test(sourceUrl)
     ? youtubeEmbedURL(sourceUrl)
     : '';
-  $: podcastEpisodes = appHint === 'podcast' && item?.text_content
-    ? parsePodcastEpisodes(item.text_content)
-    : [];
+  $: podcastFeed = appHint === 'podcast' && item?.text_content
+    ? parsePodcastFeed(item.text_content, item)
+    : null;
+  $: podcastEpisodes = podcastFeed?.episodes || [];
+  $: listenPath = podcastFeed ? buildListenPath(podcastFeed, item) : null;
 
   function textFromFirst(parent, tagName) {
     return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
@@ -95,6 +178,12 @@
       .trim();
   }
 
+  function excerpt(value, limit = 260) {
+    const clean = stripMarkup(value).replace(/\s+/g, ' ').trim();
+    if (clean.length <= limit) return clean;
+    return `${clean.slice(0, limit - 1).trim()}...`;
+  }
+
   function firstTagText(source, tagName) {
     const match = new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}>`, 'i').exec(source);
     return stripMarkup(match?.[1] || '');
@@ -106,17 +195,42 @@
     return stripMarkup(attr?.[1] || '');
   }
 
+  function stableId(value) {
+    let hash = 5381;
+    for (const char of String(value || '')) {
+      hash = ((hash << 5) + hash) ^ char.charCodeAt(0);
+    }
+    return Math.abs(hash >>> 0).toString(36);
+  }
+
+  function normalizeEpisode(episode, index) {
+    const key = episode.guid || episode.audioUrl || episode.link || `${episode.title}:${index}`;
+    return {
+      id: `episode-${stableId(key)}`,
+      title: stripMarkup(episode.title) || 'Untitled episode',
+      description: excerpt(episode.description, 420),
+      publishedAt: stripMarkup(episode.publishedAt),
+      duration: stripMarkup(episode.duration),
+      guid: stripMarkup(episode.guid),
+      link: stripMarkup(episode.link),
+      audioUrl: stripMarkup(episode.audioUrl),
+    };
+  }
+
   function parsePodcastEpisodesLoosely(xmlText) {
     return Array.from(String(xmlText || '').matchAll(/<item\b[\s\S]*?<\/item>/gi))
       .slice(0, 24)
-      .map((match) => {
+      .map((match, index) => {
         const source = match[0];
-        return {
+        return normalizeEpisode({
           title: firstTagText(source, 'title') || 'Untitled episode',
           description: firstTagText(source, 'description'),
           publishedAt: firstTagText(source, 'pubDate'),
+          duration: firstTagText(source, 'itunes:duration') || firstTagText(source, 'duration'),
+          guid: firstTagText(source, 'guid'),
+          link: firstTagText(source, 'link'),
           audioUrl: firstAttribute(source, 'enclosure', 'url') || firstAttribute(source, 'media:content', 'url'),
-        };
+        }, index);
       })
       .filter((episode) => episode.title || episode.audioUrl);
   }
@@ -125,19 +239,125 @@
     try {
       const parsed = new DOMParser().parseFromString(xmlText, 'application/xml');
       if (parsed.querySelector('parsererror')) return parsePodcastEpisodesLoosely(xmlText);
-      return Array.from(parsed.getElementsByTagName('item')).slice(0, 24).map((episode) => {
+      return Array.from(parsed.getElementsByTagName('item')).slice(0, 24).map((episode, index) => {
         const enclosure = episode.getElementsByTagName('enclosure')[0];
         const mediaContent = episode.getElementsByTagName('media:content')[0];
-        return {
+        return normalizeEpisode({
           title: textFromFirst(episode, 'title') || 'Untitled episode',
-          description: textFromFirst(episode, 'description'),
+          description: textFromFirst(episode, 'itunes:summary') || textFromFirst(episode, 'description'),
           publishedAt: textFromFirst(episode, 'pubDate'),
+          duration: textFromFirst(episode, 'itunes:duration') || textFromFirst(episode, 'duration'),
+          guid: textFromFirst(episode, 'guid'),
+          link: textFromFirst(episode, 'link'),
           audioUrl: enclosure?.getAttribute('url') || mediaContent?.getAttribute('url') || '',
-        };
+        }, index);
       }).filter((episode) => episode.title || episode.audioUrl);
     } catch (err) {
       return parsePodcastEpisodesLoosely(xmlText);
     }
+  }
+
+  function parsePodcastFeedLoosely(xmlText, contentItem) {
+    const channel = /<channel\b[\s\S]*?<\/channel>/i.exec(String(xmlText || ''))?.[0] || String(xmlText || '');
+    return {
+      title: firstTagText(channel, 'title') || contentItem?.title || 'Podcast feed',
+      description: excerpt(firstTagText(channel, 'description'), 520),
+      link: firstTagText(channel, 'link') || contentItem?.canonical_url || contentItem?.source_url || '',
+      episodes: parsePodcastEpisodesLoosely(xmlText),
+    };
+  }
+
+  function parsePodcastFeed(xmlText, contentItem) {
+    try {
+      const parsed = new DOMParser().parseFromString(xmlText, 'application/xml');
+      if (parsed.querySelector('parsererror')) return parsePodcastFeedLoosely(xmlText, contentItem);
+      const channel = parsed.getElementsByTagName('channel')[0] || parsed;
+      return {
+        title: textFromFirst(channel, 'title') || contentItem?.title || 'Podcast feed',
+        description: excerpt(textFromFirst(channel, 'itunes:summary') || textFromFirst(channel, 'description'), 520),
+        link: textFromFirst(channel, 'link') || contentItem?.canonical_url || contentItem?.source_url || '',
+        episodes: parsePodcastEpisodes(xmlText),
+      };
+    } catch (err) {
+      return parsePodcastFeedLoosely(xmlText, contentItem);
+    }
+  }
+
+  function buildListenPath(feed, contentItem) {
+    const pathSource = contentItem?.source_url || feed.link || '';
+    const playable = feed.episodes.filter((episode) => episode.audioUrl);
+    return {
+      id: `listen-${stableId(`${contentItem?.content_id || ''}:${pathSource}:${feed.title}`)}`,
+      title: feed.title || contentItem?.title || 'Podcast feed',
+      sourceUrl: pathSource,
+      contentId: contentItem?.content_id || '',
+      episodeCount: feed.episodes.length,
+      playableCount: playable.length,
+      episodes: feed.episodes.map((episode, index) => ({
+        ...episode,
+        position: index + 1,
+      })),
+    };
+  }
+
+  function markdownLink(label, url) {
+    const cleanLabel = String(label || '').replace(/\]/g, '\\]');
+    const cleanUrl = String(url || '').trim();
+    return cleanUrl ? `[${cleanLabel}](${cleanUrl})` : cleanLabel;
+  }
+
+  function buildRadioBrief() {
+    if (!podcastFeed || !listenPath) return '';
+    const briefTitle = /radio$/i.test(listenPath.title.trim())
+      ? `${listenPath.title} Brief`
+      : `${listenPath.title} Radio Brief`;
+    const lines = [
+      `# ${briefTitle}`,
+      '',
+      '## Source',
+      `- Feed: ${markdownLink(listenPath.sourceUrl || podcastFeed.link || 'source feed', listenPath.sourceUrl || podcastFeed.link)}`,
+      `- Content artifact: ${listenPath.contentId || 'not recorded'}`,
+      `- Listen path: ${listenPath.id}`,
+      `- Episodes parsed: ${listenPath.episodeCount}`,
+      `- Playable episodes: ${listenPath.playableCount}`,
+      '',
+      '## Feed Note',
+      podcastFeed.description || 'No feed description was provided.',
+      '',
+      '## Listen Path',
+    ];
+
+    for (const episode of listenPath.episodes.slice(0, 12)) {
+      lines.push(`${episode.position}. ${markdownLink(episode.title, episode.audioUrl || episode.link)}`);
+      if (episode.publishedAt) lines.push(`   - Published: ${episode.publishedAt}`);
+      if (episode.duration) lines.push(`   - Duration: ${episode.duration}`);
+      if (episode.guid) lines.push(`   - Episode id: ${episode.guid}`);
+      if (episode.description) lines.push(`   - Note: ${episode.description}`);
+    }
+
+    lines.push(
+      '',
+      '## Radio Work Queue',
+      '- Select claims, clips, and narration beats worth promoting.',
+      '- Attach source anchors before turning this into public memory.',
+      '- Keep unresolved tensions visible instead of smoothing them into narration.'
+    );
+
+    return lines.join('\n');
+  }
+
+  function openRadioBrief() {
+    const content = buildRadioBrief();
+    if (!content) return;
+    dispatch('openvtext', {
+      title: /radio$/i.test(listenPath.title.trim()) ? `${listenPath.title} Brief` : `Radio Brief - ${listenPath.title}`,
+      initialContent: content,
+      sourceUrl: listenPath.sourceUrl,
+      sourceContentId: listenPath.contentId,
+      appHint: 'podcast',
+      createdFrom: 'podcast_radio_brief',
+    });
+    radioStatus = 'Opening radio brief in VText...';
   }
 
   onMount(loadContentItem);
@@ -160,14 +380,74 @@
     <p class="error" role="alert">{error}</p>
   {:else}
     <div class="preview-shell">
-      {#if appHint === 'podcast' && podcastEpisodes.length > 0}
-        <div class="podcast-list" data-podcast-feed>
+      {#if appHint === 'podcast' && !item}
+        <div class="podcast-library" data-podcast-library>
+          <div class="library-header">
+            <div>
+              <h3>Podcast Library</h3>
+              <p>Durable RSS feed artifacts that can become VText radio briefs.</p>
+            </div>
+            <button type="button" on:click={loadPodcastLibrary} disabled={podcastLibraryLoading} data-podcast-refresh>
+              {podcastLibraryLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+          <form class="podcast-import" on:submit|preventDefault={importPodcastFeed} data-podcast-import>
+            <input
+              bind:value={podcastImportUrl}
+              type="url"
+              placeholder="https://example.com/feed.rss"
+              aria-label="Podcast RSS feed URL"
+              data-podcast-import-url
+            />
+            <button type="submit" disabled={podcastImporting || !podcastImportUrl.trim()} data-podcast-import-submit>
+              {podcastImporting ? 'Importing...' : 'Import'}
+            </button>
+          </form>
+          {#if podcastLibraryError}
+            <p class="error" role="alert">{podcastLibraryError}</p>
+          {:else if podcastLibraryLoading}
+            <p class="status">Loading podcast artifacts...</p>
+          {:else if podcastLibrary.length === 0}
+            <p class="status">No podcast feed artifacts yet.</p>
+          {:else}
+            <div class="library-list">
+              {#each podcastLibrary as content}
+                <button
+                  class="library-item"
+                  type="button"
+                  on:click={() => openPodcastItem(content)}
+                  data-podcast-library-item
+                >
+                  <strong>{content.title || content.source_url || 'Podcast feed'}</strong>
+                  <span>{content.source_url || content.file_path || content.content_id}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {:else if appHint === 'podcast' && podcastEpisodes.length > 0}
+        <div class="podcast-list" data-podcast-feed data-listen-path-id={listenPath?.id || ''}>
+          <div class="radio-panel" data-radio-listen-path>
+            <div>
+              <p class="eyebrow">Radio listen path</p>
+              <h3>{podcastFeed.title}</h3>
+              {#if podcastFeed.description}<p>{podcastFeed.description}</p>{/if}
+              <p class="path-meta">
+                {listenPath.episodeCount} episodes - {listenPath.playableCount} playable - {listenPath.id}
+              </p>
+            </div>
+            <button type="button" on:click={openRadioBrief} data-podcast-open-vtext>
+              Open in VText
+            </button>
+          </div>
+          {#if radioStatus}<p class="status" data-radio-status>{radioStatus}</p>{/if}
           {#each podcastEpisodes as episode}
-            <article class="podcast-episode" data-podcast-episode>
+            <article class="podcast-episode" data-podcast-episode data-episode-id={episode.id}>
               <div>
                 <h3>{episode.title}</h3>
                 {#if episode.publishedAt}<p class="episode-date">{episode.publishedAt}</p>{/if}
-                {#if episode.description}<p>{episode.description.replace(/<[^>]+>/g, '').slice(0, 420)}</p>{/if}
+                {#if episode.duration}<p class="episode-date">{episode.duration}</p>{/if}
+                {#if episode.description}<p>{episode.description}</p>{/if}
               </div>
               {#if episode.audioUrl}
                 <audio src={episode.audioUrl} controls data-podcast-audio />
@@ -290,6 +570,83 @@
     padding: 18px;
   }
 
+  .podcast-library {
+    display: grid;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .library-header,
+  .radio-panel {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    border: 1px solid rgba(120, 135, 170, 0.26);
+    border-radius: 18px;
+    padding: 16px;
+    background: rgba(12, 17, 30, 0.86);
+  }
+
+  .library-header h3,
+  .radio-panel h3 {
+    margin: 0 0 6px;
+  }
+
+  .library-header p,
+  .radio-panel p {
+    margin: 0;
+    color: var(--choir-muted, #a8adbd);
+  }
+
+  .podcast-import {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .podcast-import input {
+    min-width: 0;
+    border: 1px solid var(--choir-border, rgba(120, 135, 170, 0.28));
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: var(--choir-fg, #f5f7ff);
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  button {
+    border: 1px solid rgba(99, 153, 255, 0.45);
+    border-radius: 12px;
+    padding: 9px 13px;
+    color: #e7efff;
+    background: rgba(19, 33, 58, 0.78);
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.56;
+  }
+
+  .library-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .library-item {
+    display: grid;
+    gap: 5px;
+    width: 100%;
+    text-align: left;
+  }
+
+  .library-item span,
+  .path-meta {
+    color: var(--choir-muted, #a8adbd);
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+  }
+
   .podcast-episode {
     display: grid;
     gap: 12px;
@@ -316,6 +673,19 @@
   .podcast-episode audio {
     margin: 0;
     width: 100%;
+  }
+
+  @media (max-width: 720px) {
+    .library-header,
+    .radio-panel,
+    .podcast-import {
+      grid-template-columns: 1fr;
+    }
+
+    .library-header,
+    .radio-panel {
+      display: grid;
+    }
   }
 
   .metadata-card {
