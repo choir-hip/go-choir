@@ -25,7 +25,11 @@ async function registerAndLoadDesktop(page, email) {
 
 async function fetchJSON(page, path) {
   return page.evaluate(async (requestPath) => {
-    const res = await fetch(requestPath, { credentials: 'include' });
+    let res = await fetch(requestPath, { credentials: 'include' });
+    if (res.status === 401) {
+      await fetch('/auth/session', { credentials: 'include' }).catch(() => null);
+      res = await fetch(requestPath, { credentials: 'include' });
+    }
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`${requestPath} failed: ${res.status} ${body}`);

@@ -16,7 +16,11 @@ function uniqueEmail() {
 
 async function fetchJSON(page, path) {
   return page.evaluate(async (requestPath) => {
-    const res = await fetch(requestPath, { credentials: 'include' });
+    let res = await fetch(requestPath, { credentials: 'include' });
+    if (res.status === 401) {
+      await fetch('/auth/session', { credentials: 'include' }).catch(() => null);
+      res = await fetch(requestPath, { credentials: 'include' });
+    }
     const body = await res.text();
     if (!res.ok) {
       throw new Error(`${requestPath} failed: ${res.status} ${body}`);
