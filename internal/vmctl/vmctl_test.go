@@ -2359,6 +2359,70 @@ func TestOwnershipRegistry_ReattachesPersistedVMWhenManagerCanAdopt(t *testing.T
 	}
 }
 
+func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
+	ensured := make(chan string, 1)
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/provider/v1/credentials/ensure" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("ensure method = %s, want POST", r.Method)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Errorf("missing internal caller header")
+		}
+		var req struct {
+			RawToken string `json:"raw_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode ensure request: %v", err)
+		}
+		ensured <- req.RawToken
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sandbox_id":"vm-reattach-old-token","status":"imported"}`))
+	}))
+	t.Cleanup(gateway.Close)
+
+	rawToken := "vm-reattach-old-token:token-from-host-persistent-dir"
+	now := time.Now()
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetGatewayURL(gateway.URL)
+	own := &VMOwnership{
+		VMID:         "vm-reattach-old-token",
+		UserID:       "user-old-account",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateStopped,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Epoch:        3,
+		Published:    true,
+		StoppedBy:    "vmctl-restart",
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	reg.SetVMManager(&mockVMManager{
+		tokens: map[string]string{
+			own.VMID: rawToken,
+		},
+	})
+
+	select {
+	case got := <-ensured:
+		if got != rawToken {
+			t.Fatalf("ensured raw token = %q, want %q", got, rawToken)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for reattached VM gateway credential reconciliation")
+	}
+}
+
 // --- Gateway Token Issuance Tests ---
 
 func TestIssueGatewayToken_Success(t *testing.T) {

@@ -484,6 +484,7 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	}
 	r.mu.Unlock()
 
+	reattached := false
 	for _, own := range candidates {
 		vmID := own.VMID
 		hostURL := own.SandboxURL
@@ -501,8 +502,12 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 			cur.LastActiveAt = time.Now()
 			cur.StoppedBy = ""
 			r.saveLocked()
+			reattached = true
 		}
 		r.mu.Unlock()
+	}
+	if reattached {
+		go r.ReconcileReadyGatewayCredentials()
 	}
 }
 
@@ -511,8 +516,12 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 // booting so the guest sandbox can authenticate to the gateway.
 func (r *OwnershipRegistry) SetGatewayURL(url string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.gatewayURL = url
+	vmIDs := r.readyVMIDsLocked()
+	r.mu.Unlock()
+	if len(vmIDs) > 0 {
+		go r.reconcileGatewayCredentialsForVMs(vmIDs)
+	}
 }
 
 // SetIdleTimeout configures the idle timeout for automatic VM lifecycle
@@ -686,6 +695,12 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		r.mu.Unlock()
 		return
 	}
+	mgr := r.vmManager
+	reader, ok := mgr.(vmGatewayTokenReader)
+	if !ok {
+		r.mu.Unlock()
+		return
+	}
 	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) {
 		r.mu.Unlock()
 		return
@@ -693,13 +708,8 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 	// Suppress request stampedes while still allowing quick retry if the
 	// gateway is temporarily unavailable or starting during deploy.
 	r.gatewayCredentialNextCheck[vmID] = now.Add(gatewayCredentialEnsureFailureInterval)
-	mgr := r.vmManager
 	r.mu.Unlock()
 
-	reader, ok := mgr.(vmGatewayTokenReader)
-	if !ok {
-		return
-	}
 	rawToken, err := reader.ReadGatewayToken(vmID)
 	if err != nil {
 		log.Printf("vmctl: gateway credential ensure skipped for VM %s: %v", vmID, err)
@@ -739,6 +749,48 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 	r.mu.Lock()
 	r.gatewayCredentialNextCheck[vmID] = time.Now().Add(gatewayCredentialEnsureSuccessInterval)
 	r.mu.Unlock()
+}
+
+// ReconcileReadyGatewayCredentials imports host-held gateway credentials for
+// all currently active VMs. This is the deploy/restart safety net: vmctl can
+// reattach Firecracker processes that kept running while the gateway restarted
+// with an empty in-memory credential registry.
+func (r *OwnershipRegistry) ReconcileReadyGatewayCredentials() int {
+	r.mu.RLock()
+	vmIDs := r.readyVMIDsLocked()
+	r.mu.RUnlock()
+	r.reconcileGatewayCredentialsForVMs(vmIDs)
+	return len(vmIDs)
+}
+
+func (r *OwnershipRegistry) readyVMIDsLocked() []string {
+	vmIDs := make([]string, 0, len(r.ownerships)+len(r.workerVMs))
+	for _, own := range r.ownerships {
+		if own != nil && own.IsReady() {
+			vmIDs = append(vmIDs, own.VMID)
+		}
+	}
+	for _, own := range r.workerVMs {
+		if own != nil && own.IsReady() {
+			vmIDs = append(vmIDs, own.VMID)
+		}
+	}
+	return vmIDs
+}
+
+func (r *OwnershipRegistry) reconcileGatewayCredentialsForVMs(vmIDs []string) {
+	seen := make(map[string]struct{}, len(vmIDs))
+	for _, vmID := range vmIDs {
+		vmID = strings.TrimSpace(vmID)
+		if vmID == "" {
+			continue
+		}
+		if _, ok := seen[vmID]; ok {
+			continue
+		}
+		seen[vmID] = struct{}{}
+		r.ensureExistingGatewayCredential(vmID)
+	}
 }
 
 // ResolveOrAssign resolves the VM ownership for the primary desktop of the
