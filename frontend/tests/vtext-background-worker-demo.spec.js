@@ -114,6 +114,58 @@ async function waitForDocumentContent(page, docId, checks, timeout = 180_000) {
   throw new Error(`final vtext document did not include background worker proof material; head=${JSON.stringify(state.head)}`);
 }
 
+function exportedPatchsetsFromResults(results) {
+  return results.flatMap((result) =>
+    (result.output?.export_patchsets || [])
+      .filter((item) => item?.status === 'exported')
+      .map((item) => ({
+        worker_vm_id: result.output.worker_vm_id,
+        manifest_path: item.manifest_path,
+        patchset_path: item.patchset_path,
+        base_sha: item.base_sha,
+        worker_head: item.worker_head,
+        github_push: item.github_push,
+      }))
+  );
+}
+
+function contentIncludesExport(content, item) {
+  return Boolean(
+    item?.worker_vm_id &&
+    item?.manifest_path &&
+    item?.patchset_path &&
+    item?.base_sha &&
+    item?.worker_head &&
+    content.includes(item.worker_vm_id) &&
+    content.includes(item.manifest_path) &&
+    content.includes(item.patchset_path) &&
+    content.includes(item.base_sha) &&
+    content.includes(item.worker_head)
+  );
+}
+
+async function waitForDocumentContentWithExport(page, docId, trajectoryId, marker, timeout = 180_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const state = await loadVTextState(page, docId);
+    const content = state.head?.content || '';
+    const delegated = await loadToolResults(page, trajectoryId, 'delegate_worker_vm');
+    const exportedPatchsets = exportedPatchsetsFromResults(delegated.results);
+    const matchedExport = exportedPatchsets.find((item) => contentIncludesExport(content, item));
+    if (
+      state.head?.metadata?.source === 'edit_vtext' &&
+      content.includes(marker) &&
+      /verified|verification|grep|passed/i.test(content) &&
+      matchedExport
+    ) {
+      return { state, matchedExport, exportedPatchsets };
+    }
+    await page.waitForTimeout(1500);
+  }
+  const state = await loadVTextState(page, docId);
+  throw new Error(`final vtext document did not include concrete exported patchset proof material; head=${JSON.stringify(state.head)}`);
+}
+
 test('prompt bar can route coding work through a background worker VM export', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, uniqueEmail());
 
@@ -176,19 +228,19 @@ test('prompt bar can route coding work through a background worker VM export', a
     )
   );
 
-  const exportResult = delegated.match.output.export_patchsets.find((item) => item?.status === 'exported');
-  expect(exportResult.github_push).toBe(false);
+  const initialExportedPatchsets = exportedPatchsetsFromResults(delegated.results);
+  expect(initialExportedPatchsets.length).toBeGreaterThan(0);
+  expect(initialExportedPatchsets.every((item) => item.github_push === false)).toBe(true);
 
-  const finalState = await waitForDocumentContent(page, decision.doc_id, [
-    marker,
-    delegated.match.output.worker_vm_id,
-    exportResult.manifest_path,
-    exportResult.patchset_path,
-    exportResult.base_sha,
-    exportResult.worker_head,
-    /verified|verification|grep|passed/i,
-  ]);
+  const { state: finalState, exportedPatchsets } = await waitForDocumentContentWithExport(
+    page,
+    decision.doc_id,
+    submitted.submission_id,
+    marker
+  );
   expect(finalState.head.metadata.source).toBe('edit_vtext');
+  const finalContent = finalState.head.content || '';
+  expect(exportedPatchsets.some((item) => contentIncludesExport(finalContent, item))).toBe(true);
 
   expect(forbiddenBrowserRequests).toHaveLength(0);
 
