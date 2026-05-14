@@ -1,6 +1,6 @@
 # MissionGradient: Run Acceptance Verification v0
 
-Status: proposed documentation-and-verification mission
+Status: active documentation-and-verification mission
 Date: 2026-05-13
 
 ## Real Artifact
@@ -125,6 +125,18 @@ Better verification means lower divergence between the intended run state machin
 ## Acceptance Record
 
 Introduce or synthesize a durable `RunAcceptanceRecord` as the canonical verifier object.
+
+The v0 product API shape is:
+
+```text
+POST /api/run-acceptances/synthesize
+GET  /api/run-acceptances?trajectory_id=...
+GET  /api/run-acceptances/{acceptance_id}
+```
+
+The synthesize endpoint is authenticated and owner-scoped. It derives
+checkpoints from existing run, Trace, worker export, promotion, and build
+identity evidence; callers do not submit arbitrary checkpoint lists.
 
 Suggested shape:
 

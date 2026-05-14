@@ -1,6 +1,6 @@
 # Runtime Invariants
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-13
 
 This file captures implementation invariants. For full context, read
 [docs/current-architecture.md](current-architecture.md).
@@ -19,6 +19,16 @@ Do not edit or sync git-tracked files directly into `/opt/go-choir` on Node B.
 Runtime secrets, service environment files, guest images, and generated Nix
 artifacts may live in designated runtime paths, but source/config changes must
 land through git and the GitHub Actions deploy flow.
+
+Behavior-changing work must include commit, push to `origin/main`, CI
+monitoring, Node B staging deploy monitoring, deployed health/build identity
+verification, and a deployed product-path acceptance proof. Documentation-only
+commits are exempt from automatic CI/deploy and should remain covered by the
+workflow path filters for `docs/**` and top-level `*.md`.
+
+`https://draft.choir-ip.com` is the acceptance environment for vmctl, gateway,
+live model/search calls, background/candidate VMs, promotion, rollback,
+auth/session, and Choir-in-Choir claims.
 
 ## Agent Roles
 
@@ -42,9 +52,13 @@ and does not own document text.
 `super` is the per-user privileged orchestration root. It can request `vmctl`
 resources such as background VM forks and promotions.
 
+`vsuper` is the sovereign worker inside a background VM or candidate world. It
+can mutate candidate state within scope and can spawn subordinate cosupers
+inside its own VM boundary. It cannot promote canonical state.
+
 `cosuper` is a durable execution co-agent, usually in a background VM. Only
-`super` can spawn cosupers; cosupers coordinate within their assigned work but
-do not create more privileged execution roots.
+`super` or `vsuper` authority can lease cosuper work; cosupers coordinate within
+their assigned work but do not create more privileged execution roots.
 
 `worker` is the general category for delegated agents such as researcher, super,
 cosuper, and future specialized workers with their own tools.
@@ -63,6 +77,10 @@ Background work returns artifacts, findings, branch/commit refs, previews, test
 results, and proposed merges. A background VM can merge back into active state or
 be promoted to active while the previous active snapshot remains available for
 rollback.
+
+Candidate worlds are background mutation contexts. They are allowed to break,
+install dependencies, run tests, and fail. They produce deltas and evidence.
+They do not mutate canonical foreground state directly.
 
 Shared worker VMs are not a current invariant. They may become a later cost
 optimization, but the immediate model is active VM plus capacity-gated background
@@ -127,3 +145,25 @@ artifacts, versions, and publication candidates.
 
 Trace should make causality visible without forcing the user to read every raw
 message.
+
+## Run Acceptance
+
+Run acceptance records are durable verifier objects synthesized from existing
+product/control evidence. They must not be manually seeded as success records in
+product-path tests.
+
+Acceptance levels are explicit:
+
+- `docs-level`
+- `staging-smoke-level`
+- `export-level`
+- `promotion-level`
+- `continuation-level`
+
+Do not claim `promotion-level` without verifier contract evidence plus owner
+review and promotion or rollback evidence. Do not claim `continuation-level`
+without run-memory/compaction and bounded continuation evidence.
+
+Browser acceptance may use public authenticated product APIs. It must not use
+browser-public internal orchestration routes such as `/api/agent/*`,
+`/api/prompts`, `/api/test/*`, `/internal/*`, or raw event mutation endpoints.

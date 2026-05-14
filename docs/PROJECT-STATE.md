@@ -1,11 +1,16 @@
 # go-choir Project State
 
-**Last Updated:** 2026-04-15
-**Current Mission:** Make local `vtext` + MAS real before `vmctl` deepening
+**Last Updated:** 2026-05-13
+**Current Status:** Historical snapshot, not the current operating entrypoint
 
 > Historical snapshot. For current architecture, read
-> `docs/current-architecture.md`, `docs/runtime-invariants.md`, and
-> `docs/implementation-scope.md`.
+> `../README.md`, `../AGENTS.md`, `docs/README.md`,
+> `docs/current-architecture.md`, `docs/runtime-invariants.md`,
+> `docs/implementation-scope.md`, and the active MissionGradient mission.
+>
+> This file preserves older milestone context. It contains stale mission
+> numbering and status language and should not override the staging-first
+> operating model.
 
 ---
 

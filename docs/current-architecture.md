@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-13
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -18,6 +18,18 @@ a web desktop with apps. Some apps grow into appagents; most apps can remain
 plain display/control surfaces. The hidden product machinery is a dark factory
 of researchers, supers, cosupers, background VMs, evidence, artifacts, document
 versions, and eventually publications.
+
+The operating stance is now staging-first. Meaningful claims about vmctl,
+gateway credentials, live model/search calls, background/candidate VMs,
+promotion, rollback, auth/session renewal, and Choir-in-Choir must be proven on
+`https://draft.choir-ip.com` after commit, push, CI, deploy, and staging health
+identity checks. Local development remains useful for fast frontend iteration
+and focused unit shaping, but local proof does not establish product readiness.
+
+Run acceptance is a first-class artifact. A `RunAcceptanceRecord` should be
+synthesized from existing product/control evidence: runs, Trace moments, worker
+exports, promotion candidates, verifier contracts, rollback refs, and deployed
+build identity. It replaces ad hoc claims like "the Trace looked good."
 
 ## Priority Order
 
@@ -140,13 +152,18 @@ edits and worker updates into durable document state.
 `researcher` reads local files and the web, then writes findings/evidence to
 Dolt. Researcher does not own canonical document text.
 
-`super` is the per-user privileged orchestration root for resource-heavy or
+`super` is the per-user foreground orchestration root for resource-heavy or
 mutable execution. The useful distinction is authority: `super` can request
-`vmctl` resources such as background VM forks and promotions.
+`vmctl` resources such as background/candidate worker worlds and promotions.
+
+`vsuper` is the sovereign worker inside a background VM or candidate world. It
+may mutate candidate state within scope and may spawn local cosupers inside that
+VM boundary. It cannot promote canonical state.
 
 `cosuper` is a durable execution co-agent, usually running inside a background
-VM. Only `super` can spawn cosupers. They should not be treated as one-shot
-subagents that disappear without live coordination.
+VM or under a vsuper. Only `super`/`vsuper` authority can lease cosuper work.
+Cosupers should not be treated as one-shot subagents that disappear without live
+coordination.
 
 `worker` is the general category for delegated agents such as researcher, super,
 cosuper, and future specialized workers with their own tools.
@@ -178,6 +195,16 @@ VMs, the simple product model is multiple user accounts.
   tests, and proposed merges.
 - Can merge back into the active VM, or be promoted to active while the previous
   active snapshot remains available for rollback.
+
+`candidate_world`:
+
+- A background VM, isolated worktree, or future microVM-backed state branch that
+  is allowed to mutate and fail.
+- Produces exports, findings, manifests, patchsets, traces, diagnostics, and
+  promotion candidates.
+- Does not mutate canonical foreground state directly.
+- Becomes canonical only through promotion after verifier contracts and owner
+  decision, or remains discardable/archivable with rollback evidence.
 
 Shared worker VMs are not a current architecture primitive. They may become a
 later cost optimization, but they should not complicate the immediate model.

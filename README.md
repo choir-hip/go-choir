@@ -1,211 +1,171 @@
 # go-choir
 
-Distributed multiagent living-document desktop -- Go rewrite of ChoirOS, informed by Cogent runtime patterns. Five services, Caddy edge proxy, Svelte SPA, per-user appagent runtime, and `vmctl`-managed microVM capacity.
+Choir is a deployed web desktop for durable multiagent work over versioned artifacts. The visible product is an authenticated desktop with apps such as VText, Files, Browser, Trace, Terminal, Podcast, and Settings. The core product path is a control system:
 
-Choir is the deployed Automatic Computer: a multitenant web desktop where apps, appagents, researchers, supers, cosupers, and VM forks produce durable living documents, evidence, artifacts, and eventually publishable citation-network contributions.
-
-Choir is not primarily a chat app or a generic coding-agent runner. Its first product unit is `vtext`: a versioned living document that accumulates user edits, appagent synthesis, worker findings, artifacts, publication state, and later citations.
-
-## North Star
-
-Read these before changing runtime, `vtext`, Trace, Dolt, `vmctl`, worker tools, or appagent behavior:
-
-- `docs/current-architecture.md` -- current architecture memo: deployed reality, vtext contract, VM fork/promotion model, state placement, publication sequencing, and anti-collapse rules.
-- `docs/north-star.md` -- Automatic Computer context, priority order, and short invariants.
-- `docs/runtime-invariants.md` -- agent roles, VM classes, Dolt layers, hot-path message delivery plus durable handoff records, and the development-tooling boundary.
-- `docs/implementation-scope.md` -- near-term implementation order and current non-goals.
-
-Current phase: stabilize the already-deployed Automatic Computer around machine-verifiable `vtext`, researcher/super behavior, user edits, Trace, and background VM execution. Do not implement CHIPS, wallets, staking, public citation scoring, or token-denominated billing yet. Do preserve provenance, evidence, citations/citation candidates, artifacts, VM/model attribution, publication boundaries, and compute usage where available.
-
-## Architecture
-
-```
-Browser --> Caddy (TLS, static assets, Svelte SPA)
-             |-- /auth/*      --> auth     (8081)
-             |-- /api/*       --> proxy    (8082)
-
-vmctl (8083) -- manages VM ownership and lifecycle, using host-process fallback locally and Firecracker on Linux/KVM hosts
-gateway (8084) -- host-side provider/search gateway, reachable from host-local callers and guest VMs, not from the public browser edge
-sandbox (8085) -- local runtime + desktop apps + agent/tool loop; host-process fallback locally, target runtime moves into per-user microVMs
+```text
+prompt bar -> conductor -> VText/appagent -> super -> vmctl worker/candidate world
+-> worker export -> promotion candidate -> verification/owner decision -> promotion or rollback
 ```
 
-**Five services:**
+The near-term goal is Choir developing Choir through that product path, with staging evidence strong enough that a reviewer can trust what happened without reading raw logs.
 
-| Service   | Port | Role |
-|-----------|------|------|
-| auth      | 8081 | Email/passkey registration + login, JWT access + refresh token sessions, SQLite persistence |
-| proxy     | 8082 | Auth-gated HTTP and WebSocket proxying to the sandbox, user-context injection |
-| vmctl     | 8083 | VM ownership + lifecycle control, host-process fallback locally, Firecracker lifecycle on supported hosts |
-| gateway   | 8084 | Provider-neutral LLM/search gateway with adapter-specific auth and SSE streaming |
-| sandbox   | 8085 | Local runtime: desktop shell APIs, `vtext`, agent tool loop, files, terminal, and event streaming |
+## Operating Model
 
-**Frontend:** Svelte SPA with email auth UI, desktop shell, `vtext`, and an early trace/debugging app for the MAS.
+`https://draft.choir-ip.com` is the staging acceptance environment. Behavior-changing work is not complete because local tests pass; it is complete when the pushed commit is running on staging and the deployed product path is verified there.
 
-All services expose a `/health` endpoint.
+The required landing loop for behavior changes is:
 
-## Status
+```text
+commit -> push origin main -> monitor CI -> monitor staging deploy
+-> verify staging commit identity -> run deployed acceptance proof
+```
 
-**Mission 6 COMPLETE: Desktop UX Rewrite.** Converted the web desktop from a top-bar paradigm to a traditional OS-style desktop with floating icons, floating windows, and full responsive support.
+Documentation-only commits intentionally do not trigger automatic CI/deploy. The GitHub workflow ignores `docs/**` and top-level `*.md` for push and pull-request CI. Do not remove those path filters just to make docs-only commits run CI. If docs need a check, run the specific check directly or use an explicit manual workflow when one exists.
 
-Delivered features (10):
+Local development is for fast frontend iteration, narrow unit shaping, and reproducing a staging failure after staging evidence identifies the failing transition. Local proof does not satisfy claims about live vmctl behavior, gateway credentials, model/search calls, auth/session renewal, background/candidate VMs, promotion, rollback, or Choir-in-Choir product behavior.
 
-1. **Floating desktop icons** -- Freely-draggable app icons on the desktop surface with emoji + labels, position persistence, double-click to launch, Show Desktop button to minimize all windows.
-2. **Bottom bar** -- Fixed bottom bar with prompt input, minimized window indicators, user info, logout, and live connection status.
-3. **Floating windows** -- Simplified resize (bottom-right handle only), cascade positioning, active highlight, z-index management, minimize/maximize/restore.
-4. **Responsive layout** -- Desktop/tablet/mobile breakpoints. Same floating desktop/window model at all sizes, with tighter default geometry on smaller screens.
-5. **File browser backend** -- CRUD API endpoints (`/api/files`) with path traversal protection.
-6. **File browser frontend** -- Component with breadcrumb navigation, folder creation, inline delete, file download.
-7. **Web Lens app** -- external web inspection surface with iframe preview when allowed, Obscura semantic snapshots when configured, VText import, and explicit fallback states for iframe-blocked sites.
-8. **Terminal backend** -- PTY WebSocket endpoint (`/api/terminal/ws`) with auth gating, per-session management, cleanup on disconnect, multiple concurrent sessions.
-9. **Terminal frontend** -- ghostty-web WASM terminal emulator with dark theme, FitAddon responsive fit, 10000-line scrollback, WebSocket PTY connection.
-10. **Cross-area integration** -- Deploy-readiness tests for new layout, all cross-area flows verified.
+## Services
 
-Deferred to Mission 7:
+The deployed stack has five Go services behind Caddy:
 
-- **Settings backend** -- Runtime LLM provider CRUD with AES-GCM encrypted API keys, provider reload mechanism.
-- **Settings frontend** -- Settings UI for managing providers (add/edit/delete, toggle active, inline validation).
-  (Deferred until prompt-bar routing and provider policy have a clean product surface.)
+| Service | Port | Role |
+| --- | --- | --- |
+| `auth` | 8081 | Email/passkey registration, login, JWT access/refresh sessions |
+| `proxy` | 8082 | Auth-gated HTTP/WebSocket proxy, user-context injection, VM routing |
+| `vmctl` | 8083 | Desktop and worker VM ownership/lifecycle, host-process fallback where Firecracker is unavailable |
+| `gateway` | 8084 | Provider-neutral LLM/search gateway reachable by host/guest callers, not the public browser edge |
+| `sandbox` | 8085 | Runtime, desktop APIs, VText, Trace, files, terminal, browser sessions, agent/tool loop |
 
-Prior milestones still in place:
+Every service exposes `/health`. The sandbox health response includes build/deploy identity used by staging verification.
 
-- Email/password auth with JWT sessions (Mission 4)
-- Multi-provider LLM gateway with SSE streaming (Mission 4)
-- Auth-gated HTTP and WebSocket proxy with user-context injection
-- Desktop state persistence (window positions + icon positions) across reload and tabs
-- Playwright e2e test suite (168+ tests passing)
-- Go unit tests (all packages passing)
+## Agent Contract
 
-Next:
-- make `vtext` machine-verifiable: `v0` user input, `v1` initial document seed, user edit versions, worker updates, and event-log causality
-- ensure researcher and super work produce typed updates/artifacts rather than direct document patches
-- run risky mutable super/cosuper work in background VM forks, then merge or promote back to active state
-- clarify embedded Dolt versus snapshot filesystem ownership for `vtext`, artifacts, uploads, and aliases
-- add ingestion skills, media display apps, publication, Pretext transclusion, citations, then CHIPS economics
+Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo. The short version:
 
-## Current Prompt Flow
+- `conductor` routes exogenous user/app input and does not own semantic outcomes.
+- Appagents own durable app artifacts; `vtext` is the current canonical semantic surface.
+- `super` is the foreground orchestration root and mints bounded execution authority.
+- Worker/candidate mutation belongs in background VMs or isolated worker worlds.
+- Canonical state changes only through explicit promotion after verification and owner acceptance.
+- Verification is a contract and evidence record, not a separate agent caste.
 
-This is the live prompt path today:
+## Run Acceptance
 
-1. Bottom bar input emits `promptsubmit` from `frontend/src/lib/BottomBar.svelte`
-2. `frontend/src/lib/Desktop.svelte` handles that event
-3. The desktop submits top-level input as plain user intent to `POST /api/prompt-bar` via `frontend/src/lib/conductor.js`
-4. The desktop waits for the conductor decision JSON and then either shows a toast or opens the chosen app
-5. When conductor opens `vtext`, the runtime materializes a real document, writes `v0` from user input, and writes `v1` as an initial document seed
-6. The `vtext` window opens on that real `doc_id` with `v1` displayed as current state
-7. Worker updates attach to the document trajectory as findings, evidence, artifacts, tests, refs, questions, or proposals; they are not document patches
-8. The `vtext` agent writes canonical later revisions, while the Revise button saves one user-authored revision and submits a plain revise event to `/api/vtext/documents/{id}/revise`
-9. The runtime compiles each backend-owned `vtext` request from document state, revision metadata, worker updates, and diff context in `internal/runtime/vtext.go`
-10. Role system prompts load from editable sandbox prompt files with per-user overrides through `internal/runtime/prompt_store.go`
+The durable verifier is the Run Acceptance System:
 
-This means prompt policy now lives in the sandbox, and conductor owns the route result that the desktop follows.
-Conductor is not the document workflow orchestrator: its current delegation target is `vtext` only. Research, execution, and verification requests start from the owning appagent (`vtext`) or from `super`-owned execution paths.
+- `POST /api/run-acceptances/synthesize` derives a `RunAcceptanceRecord` from existing runs, Trace tool results, worker exports, promotion candidates, build identity, and owner-scoped state.
+- `GET /api/run-acceptances?trajectory_id=...` lists acceptance records for a trajectory.
+- `GET /api/run-acceptances/{acceptance_id}` fetches one record.
 
-## Main Editable Prompt Surfaces
+Acceptance levels are explicit so the system does not overclaim:
 
-- sandbox prompt files under the runtime prompt root, loaded by `internal/runtime/prompt_store.go`
-- backend-only/test-gated prompt APIs for engineering diagnostics; browser product UI cannot mutate prompts
-- `internal/runtime/vtext.go` for backend `vtext` revise request compilation
-- `internal/runtime/tool_profiles.go` for role-aware system prompt composition around the sandbox prompt files
+- `docs-level`
+- `staging-smoke-level`
+- `export-level`
+- `promotion-level`
+- `continuation-level`
 
-Those are the main places to edit when you want to change orchestration behavior without pushing prompt policy back into the frontend.
+The current target for staging proof is at least `export-level`: prompt bar to VText to super to vmctl worker to worker export to promotion candidate, with rollback evidence and structured evidence refs.
 
 ## Development Setup
 
-- Go 1.25+
-- Node.js 22+ and pnpm 10+
-- Nix (for NixOS deployment config)
+Requirements:
 
-## Run Locally
+- Go 1.25+
+- Node.js 22+
+- pnpm 10+
+- Nix for Node B deployment config and reproducible Linux builds
+- ICU headers/libs for local Go tests that touch Dolt-backed packages
+
+Install frontend dependencies:
 
 ```sh
-# Install frontend dependencies once.
-cd frontend && pnpm install && cd ..
+cd frontend
+pnpm install
+cd ..
+```
 
-# Start the local stack. This generates local signing keys if needed.
+Start the local stack only when local iteration is appropriate:
+
+```sh
 ./start-services.sh
 ```
 
-Manual service startup:
-
-```sh
-# Keep auth and proxy on the same local signing key if you restart either one.
-export CHOIR_AUTH_SIGNING_KEY_PATH="${CHOIR_AUTH_SIGNING_KEY_PATH:-/tmp/go-choir-m2/auth-signing-key}"
-
-# Start services (each in its own terminal)
-AUTH_PORT=8081 AUTH_RP_ID="localhost" AUTH_RP_ORIGINS="http://localhost:4173" \
-  AUTH_ACCESS_TOKEN_TTL="5m" AUTH_REFRESH_TOKEN_TTL="720h" AUTH_COOKIE_SECURE="false" \
-  AUTH_JWT_PRIVATE_KEY_PATH="$CHOIR_AUTH_SIGNING_KEY_PATH" \
-  go run ./cmd/auth
-
-VMCTL_PORT=8083 VMCTL_SANDBOX_URL_BASE="http://127.0.0.1:8085" VMCTL_IDLE_TIMEOUT="30m" go run ./cmd/vmctl
-
-PROXY_PORT=8082 PROXY_SANDBOX_URL="http://127.0.0.1:8085" \
-  PROXY_AUTH_PUBLIC_KEY_PATH="${CHOIR_AUTH_SIGNING_KEY_PATH}.pub" \
-  PROXY_VMCTL_URL="http://127.0.0.1:8083" \
-  go run ./cmd/proxy
-
-GATEWAY_PORT=8084 go run ./cmd/gateway
-
-SANDBOX_PORT=8085 SANDBOX_ID="sandbox-dev" go run ./cmd/sandbox
-
-# Frontend (serves on http://localhost:4173, proxies /auth/* and /api/* to backend)
-cd frontend && pnpm install && pnpm dev
-```
+The script uses local auth keys and service ports. For detailed manual service startup, inspect `start-services.sh` and the relevant `cmd/*` package configs.
 
 ## Tests
 
-```sh
-# Go unit tests
-go test ./... -count=1 -p 4
+Focused Go tests on macOS need ICU flags:
 
-# Playwright e2e tests (requires auth, proxy, sandbox, and frontend running)
-cd frontend && pnpm exec playwright test --workers=1
+```sh
+CGO_CFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_CXXFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_LDFLAGS='-L/opt/homebrew/opt/icu4c@78/lib' \
+go test -count=1 ./internal/store ./internal/runtime
 ```
+
+Full local test shaping:
+
+```sh
+CGO_CFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_CXXFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_LDFLAGS='-L/opt/homebrew/opt/icu4c@78/lib' \
+go test ./... -count=1
+
+cd frontend
+pnpm run build
+pnpm exec playwright test --workers=1
+```
+
+Opt-in deployed worker acceptance proof:
+
+```sh
+cd frontend
+GO_CHOIR_RUN_BACKGROUND_WORKER_DEMO=1 \
+GO_CHOIR_WORKER_DEMO_BASE_URL=https://draft.choir-ip.com \
+pnpm exec playwright test tests/vtext-background-worker-demo.spec.js --workers=1
+```
+
+That Playwright proof must go through the visible prompt bar and authenticated product APIs. It must not call browser-public internal orchestration routes such as `/api/agent/*`, `/api/prompts`, `/api/test/*`, `/internal/*`, or raw event mutation endpoints.
 
 ## Deploy
 
-Push to `main`. GitHub Actions will:
+Push behavior-changing commits to `origin/main`. GitHub Actions runs Go vet/test/build, frontend build, then deploys Node B via NixOS rebuild and health checks.
 
-1. Run `go vet` and `go test`
-2. Build all Go binaries and the frontend
-3. SSH into Node B, pull latest code, run `nixos-rebuild switch`
-4. Smoke-test all health endpoints
+After CI/deploy, verify:
 
-Target: `https://draft.choir-ip.com`
-
-## Project Structure
-
+```sh
+curl -s https://draft.choir-ip.com/health
 ```
-cmd/
-  auth/         Auth service entry point
-  proxy/        Proxy service entry point
-  vmctl/        VM controller entry point
-  gateway/      Provider-neutral LLM/search gateway entry point
-  sandbox/      Sandbox entry point
-internal/
-  server/       Shared HTTP server, health endpoint, graceful shutdown
-  auth/         Email/password handlers, JWT issuance, SQLite store, session management
-  proxy/        Auth-gated HTTP/WS reverse proxy, user-context injection
-  sandbox/      Placeholder bootstrap/echo/WS handlers
-  gateway/      Multi-provider LLM routing, SSE streaming, provider key management
-  runtime/      Agent runtime (stub)
-  store/        Persistence layer (stub)
-  types/        Core domain types (stub)
-  vmmanager/    Firecracker VM management
-frontend/       Svelte SPA: email auth UI, desktop shell, versioned document UI (`vtext`), Web Lens, candidate desktop viewer, choir-in-choir controls
-  tests/        Playwright e2e tests (auth flows, shell, rehydration, logout, re-login)
-nix/
-  node-b.nix    NixOS module: systemd services, Caddy config
-  hardware.nix  Hardware configuration for Node B
-  disks.nix     Disk layout for Node B
-docs/
-  current-architecture.md           Current canonical architecture memo
-  north-star.md                      Product north star: living documents, publishing, citations, CHIPS phase boundaries
-  runtime-invariants.md              Agent, VM, Dolt, mailbox, and tooling invariants
-  implementation-scope.md            Near-term implementation order and non-goals
-  architecture.md                    Full architecture spec
-  mission-1-deploy-pipeline.md       Mission 1 brief (complete)
-  mission-2-build-system.md          Mission 2 brief (Milestone 1 complete)
-  mission-3-remaining-system-milestones.md  Remaining milestones
+
+The reported commit/deployed commit must match the pushed behavior-changing commit before staging acceptance evidence can count.
+
+## Documentation Map
+
+Start here:
+
+- [AGENTS.md](AGENTS.md): repository agent operating contract.
+- [docs/README.md](docs/README.md): documentation index and cleanup status.
+- [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
+- [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
+- [docs/mission-run-acceptance-verification-v0.md](docs/mission-run-acceptance-verification-v0.md): current MissionGradient mission.
+- [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
+- [docs/north-star.md](docs/north-star.md): longer product direction.
+
+Many dated `docs/*-proof-2026-05-13.md` files are evidence artifacts from earlier runs. Keep them as history unless a cleanup mission explicitly deletes or archives them.
+
+## Repository Shape
+
+```text
+cmd/                 service entrypoints
+internal/auth/       passkey/JWT auth
+internal/proxy/      auth-gated proxy and VM routing
+internal/vmctl/      VM ownership/lifecycle API
+internal/gateway/    LLM/search gateway
+internal/runtime/    agent runtime, product APIs, VText/Trace/browser/control surfaces
+internal/store/      SQLite runtime store plus embedded VText workspace
+internal/promotion/  candidate-world integration and promotion helpers
+frontend/            Svelte desktop and Playwright tests
+nix/                 Node B NixOS configuration
+docs/                architecture, missions, proofs, and historical notes
 ```
-# CI trigger: Sat Apr 11 21:33:07 EDT 2026
