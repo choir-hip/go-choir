@@ -551,14 +551,14 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 	if interval <= 0 {
 		interval = time.Minute
 	}
-	go func() {
-		sweep := func() {
-			if stopped := r.StopIdleVMs(); stopped > 0 {
-				log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
-			}
+	sweep := func() {
+		if stopped := r.StopIdleVMs(); stopped > 0 {
+			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}
-		sweep()
+	}
+	sweep()
 
+	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
