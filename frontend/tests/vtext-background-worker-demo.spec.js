@@ -20,7 +20,7 @@ async function registerAndLoadDesktop(page, email) {
   await page.goto(BASE_URL);
   await registerPasskey(page, email, BASE_URL);
   await page.reload();
-  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-desktop].desktop-ready').waitFor({ state: 'visible', timeout: 120000 });
 }
 
 async function fetchJSON(page, path) {
