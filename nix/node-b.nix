@@ -198,6 +198,9 @@ in
         # through vmctl instead of using the static sandbox URL
         # (VAL-VM-001, VAL-VM-002).
         "PROXY_VMCTL_URL=http://127.0.0.1:8083"
+        # Must exceed VM_BOOT_READY_TIMEOUT so cold user-computer boots can
+        # finish readiness probing instead of timing out in the proxy first.
+        "PROXY_VMCTL_TIMEOUT=75s"
       ];
     };
   };

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -32,6 +33,11 @@ type Config struct {
 	// resolves user VM ownership through vmctl instead of using the static
 	// SandboxURL (VAL-VM-001, VAL-VM-002).
 	VmctlURL string
+
+	// VmctlTimeout is the proxy -> vmctl request timeout. It must exceed the
+	// vmmanager boot-ready timeout so cold computer boots do not fail halfway
+	// through normal readiness probing.
+	VmctlTimeout time.Duration
 }
 
 const (
@@ -47,6 +53,10 @@ const (
 
 	// DefaultAuthPublicKeyPath is the default path to the auth public key.
 	DefaultAuthPublicKeyPath = defaultLocalDir + "/auth-signing-key.pub"
+
+	// DefaultVmctlTimeout keeps proxy resolve calls aligned with the staging
+	// VM_BOOT_READY_TIMEOUT=60s deployment setting.
+	DefaultVmctlTimeout = 75 * time.Second
 )
 
 // LoadConfig resolves a Config from PROXY_* environment variables.
@@ -58,6 +68,7 @@ func LoadConfig() (*Config, error) {
 		SandboxURL:        envOr("PROXY_SANDBOX_URL", DefaultSandboxURL),
 		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
 		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
+		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -77,6 +88,9 @@ func (c *Config) validate() error {
 	}
 	if c.AuthPublicKeyPath == "" {
 		return fmt.Errorf("proxy config: PROXY_AUTH_PUBLIC_KEY_PATH must not be empty")
+	}
+	if c.VmctlTimeout <= 0 {
+		return fmt.Errorf("proxy config: PROXY_VMCTL_TIMEOUT must be positive")
 	}
 	return nil
 }
@@ -153,6 +167,15 @@ func LoadPublicKey(path string) (ed25519.PublicKey, error) {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func durationEnvOr(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
 	}
 	return fallback
 }

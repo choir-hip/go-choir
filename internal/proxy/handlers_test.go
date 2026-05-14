@@ -2776,3 +2776,27 @@ func TestConfig_VmctlRoutingEnabled(t *testing.T) {
 		t.Error("expected vmctl routing disabled when URL is empty")
 	}
 }
+
+func TestLoadConfig_VMctlTimeout(t *testing.T) {
+	t.Setenv("PROXY_VMCTL_TIMEOUT", "90s")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.VmctlTimeout != 90*time.Second {
+		t.Fatalf("VmctlTimeout = %s, want 90s", cfg.VmctlTimeout)
+	}
+}
+
+func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
+	t.Setenv("PROXY_VMCTL_TIMEOUT", "not-a-duration")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.VmctlTimeout != DefaultVmctlTimeout {
+		t.Fatalf("VmctlTimeout = %s, want default %s", cfg.VmctlTimeout, DefaultVmctlTimeout)
+	}
+}

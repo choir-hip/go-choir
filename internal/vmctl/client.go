@@ -18,12 +18,22 @@ type Client struct {
 	httpClient *http.Client
 }
 
+const DefaultClientTimeout = 75 * time.Second
+
 // NewClient creates a vmctl client pointing at the given base URL.
 func NewClient(baseURL string) *Client {
+	return NewClientWithTimeout(baseURL, DefaultClientTimeout)
+}
+
+// NewClientWithTimeout creates a vmctl client with an explicit request timeout.
+func NewClientWithTimeout(baseURL string, timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = DefaultClientTimeout
+	}
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }

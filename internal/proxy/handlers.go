@@ -169,8 +169,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	// Optional vmctl client for VM-backed routing.
 	var vmctlCli *vmctl.Client
 	if cfg.VmctlRoutingEnabled() {
-		vmctlCli = vmctl.NewClient(cfg.VmctlURL)
-		log.Printf("proxy: vmctl-backed routing enabled (vmctl=%s)", cfg.VmctlURL)
+		vmctlCli = vmctl.NewClientWithTimeout(cfg.VmctlURL, cfg.VmctlTimeout)
+		log.Printf("proxy: vmctl-backed routing enabled (vmctl=%s timeout=%s)", cfg.VmctlURL, cfg.VmctlTimeout)
 	}
 
 	return &Handler{
