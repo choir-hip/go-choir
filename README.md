@@ -148,7 +148,8 @@ Start here:
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
-- [docs/mission-run-acceptance-verification-v0.md](docs/mission-run-acceptance-verification-v0.md): current MissionGradient mission.
+- [docs/mission-choir-in-choir-controller-v0.md](docs/mission-choir-in-choir-controller-v0.md): current MissionGradient mission.
+- [docs/mission-run-acceptance-verification-v0.md](docs/mission-run-acceptance-verification-v0.md): completed export-level run acceptance mission.
 - [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
 - [docs/north-star.md](docs/north-star.md): longer product direction.
 

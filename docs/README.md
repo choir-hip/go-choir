@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-13
+Last reviewed: 2026-05-14
 
 This directory contains canonical architecture docs, active MissionGradient missions, proof artifacts, and older milestone notes. Do not treat every file here as equally current.
 
@@ -12,11 +12,12 @@ This directory contains canonical architecture docs, active MissionGradient miss
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
-- `docs/mission-run-acceptance-verification-v0.md` - active staging-first mission for docs cleanup and durable run acceptance verification.
+- `docs/mission-choir-in-choir-controller-v0.md` - active next staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 
 ## Current Mission Family
 
-- `docs/mission-run-acceptance-verification-v0.md` - current mission.
+- `docs/mission-choir-in-choir-controller-v0.md` - current mission.
+- `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-choir-in-choir-deformation-v0.md` - earlier deformation mission.
 - `docs/mission-choir-in-choir-controller-v0.md` - controller/run-memory continuation direction.
