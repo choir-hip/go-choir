@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Ownership Registry Tests ---
 
 func TestOwnershipRegistry_ResolveOrAssignCreatesVM(t *testing.T) {
@@ -571,6 +580,200 @@ func TestHandler_Health(t *testing.T) {
 	}
 	if result.ByState[string(VMStateActive)] != 2 {
 		t.Fatalf("health state counts = %+v, want two active", result.ByState)
+	}
+	if result.Reclaim.Mode != PressureReclaimModeOff {
+		t.Fatalf("default reclaim mode = %s, want off", result.Reclaim.Mode)
+	}
+}
+
+func TestOwnershipRegistry_PressureReclaimDryRunOrdersIdleWorkersBeforeInteractive(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   10 * time.Minute,
+		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
+		MinMemoryAvailablePercent: 15,
+		MaxMemorySomeAvg10:        1,
+		MaxIOSomeAvg10:            5,
+		StateDir:                  t.TempDir(),
+		MaxCandidates:             5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   512 * 1024 * 1024,
+			MemoryAvailablePercent: 6.25,
+			MemorySomeAvg10:        2.5,
+		}
+	})
+
+	if _, err := reg.ResolveOrAssign("interactive-old"); err != nil {
+		t.Fatalf("resolve interactive-old: %v", err)
+	}
+	if _, err := reg.ResolveOrAssign("interactive-recent"); err != nil {
+		t.Fatalf("resolve interactive-recent: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "interactive-old",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-1",
+		Purpose:       "background indexing",
+		MachineClass:  "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request worker: %v", err)
+	}
+
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("interactive-old", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-2 * time.Hour)
+	reg.ownerships[ownershipKey("interactive-recent", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Minute)
+	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-3 * time.Hour)
+	reg.mu.Unlock()
+
+	plan := reg.PressureReclaimPlan()
+	if plan.Mode != PressureReclaimModeDryRun {
+		t.Fatalf("mode = %s, want dry-run", plan.Mode)
+	}
+	if plan.Decision != "would_reclaim" {
+		t.Fatalf("decision = %s, want would_reclaim (plan=%+v)", plan.Decision, plan)
+	}
+	if !plan.Pressure.Pressure || !plan.Pressure.MemoryPressure {
+		t.Fatalf("expected memory pressure in plan: %+v", plan.Pressure)
+	}
+	if plan.Inventory.Eligible != 2 || plan.Inventory.Protected != 1 {
+		t.Fatalf("inventory eligible/protected = %d/%d, want 2/1", plan.Inventory.Eligible, plan.Inventory.Protected)
+	}
+	if len(plan.Candidates) < 3 {
+		t.Fatalf("expected at least 3 candidates, got %+v", plan.Candidates)
+	}
+	if plan.Candidates[0].Kind != VMKindWorker || plan.Candidates[0].Protected {
+		t.Fatalf("first candidate = %+v, want eligible worker", plan.Candidates[0])
+	}
+	if plan.Candidates[1].Kind != VMKindInteractive || plan.Candidates[1].Protected {
+		t.Fatalf("second candidate = %+v, want eligible interactive", plan.Candidates[1])
+	}
+	if !plan.Candidates[2].Protected || !containsString(plan.Candidates[2].ProtectedReasons, "recent_activity") {
+		t.Fatalf("third candidate = %+v, want recent_activity protected", plan.Candidates[2])
+	}
+}
+
+func TestOwnershipRegistry_PressureReclaimProtectsCriticalWorkerPurpose(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:          PressureReclaimModeDryRun,
+		MinIdle:       10 * time.Minute,
+		MaxCandidates: 5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   512 * 1024 * 1024,
+			MemoryAvailablePercent: 6.25,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("user-promote"); err != nil {
+		t.Fatalf("resolve user-promote: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-promote",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-promote",
+		Purpose:       "promotion verifier with rollback evidence",
+		MachineClass:  "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request worker: %v", err)
+	}
+	reg.mu.Lock()
+	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-2 * time.Hour)
+	reg.mu.Unlock()
+
+	plan := reg.PressureReclaimPlan()
+	if plan.Inventory.Protected != 2 || plan.Inventory.Eligible != 0 {
+		t.Fatalf("inventory protected/eligible = %d/%d, want 2/0", plan.Inventory.Protected, plan.Inventory.Eligible)
+	}
+	if len(plan.Candidates) < 1 {
+		t.Fatalf("expected candidates, got %+v", plan.Candidates)
+	}
+	if !containsString(plan.Candidates[0].ProtectedReasons, "critical_worker_purpose") {
+		t.Fatalf("candidate reasons = %+v, want critical_worker_purpose", plan.Candidates[0].ProtectedReasons)
+	}
+}
+
+func TestOwnershipRegistry_PressureReclaimNoPressureObservesOnly(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   10 * time.Minute,
+		MinMemoryAvailableBytes:   1024,
+		MinMemoryAvailablePercent: 10,
+		MaxMemorySomeAvg10:        1,
+		MaxIOSomeAvg10:            5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   6 * 1024 * 1024 * 1024,
+			MemoryAvailablePercent: 75,
+			MemorySomeAvg10:        0,
+			IOSomeAvg10:            0,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("idle-user"); err != nil {
+		t.Fatalf("resolve idle-user: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("idle-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-2 * time.Hour)
+	reg.mu.Unlock()
+
+	plan := reg.PressureReclaimPlan()
+	if plan.Decision != "observe" {
+		t.Fatalf("decision = %s, want observe", plan.Decision)
+	}
+	if plan.Pressure.Pressure {
+		t.Fatalf("expected no pressure, got %+v", plan.Pressure)
+	}
+	if plan.Inventory.Eligible != 1 {
+		t.Fatalf("eligible = %d, want 1", plan.Inventory.Eligible)
+	}
+}
+
+func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
+	srv, reg := newTestServer(t)
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:          PressureReclaimModeDryRun,
+		MinIdle:       10 * time.Minute,
+		MaxCandidates: 5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{SampledAt: "2026-05-14T12:00:00Z"}
+	})
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/idle-check", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("idle-check request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result struct {
+		Status  string              `json:"status"`
+		Reclaim PressureReclaimPlan `json:"reclaim"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode idle-check: %v", err)
+	}
+	if result.Status != "ok" {
+		t.Fatalf("status = %s, want ok", result.Status)
+	}
+	if result.Reclaim.Mode != PressureReclaimModeDryRun {
+		t.Fatalf("reclaim mode = %s, want dry-run", result.Reclaim.Mode)
 	}
 }
 

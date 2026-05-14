@@ -263,6 +263,14 @@ in
         # This is a coarse safety valve until pressure-aware reclaim exists.
         "VMCTL_IDLE_TIMEOUT=6h"
         "VMCTL_IDLE_SWEEP_INTERVAL=5m"
+        "VMCTL_PRESSURE_RECLAIM_MODE=dry-run"
+        "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m"
+        "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=2048"
+        "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15"
+        "VMCTL_PRESSURE_MAX_MEMORY_SOME_AVG10=1.0"
+        "VMCTL_PRESSURE_MAX_CPU_SOME_AVG10=90.0"
+        "VMCTL_PRESSURE_MAX_IO_SOME_AVG10=5.0"
+        "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

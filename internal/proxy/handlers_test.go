@@ -2332,6 +2332,7 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	vmctlMux.HandleFunc("/internal/vmctl/publish-desktop", vmctlHandler.HandlePublishDesktop)
 	vmctlMux.HandleFunc("/internal/vmctl/lookup", vmctlHandler.HandleLookup)
 	vmctlMux.HandleFunc("/internal/vmctl/list", vmctlHandler.HandleList)
+	vmctlMux.HandleFunc("/health", vmctlHandler.HandleHealth)
 
 	vmctlServer := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlServer.Close() })
@@ -2658,6 +2659,12 @@ func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
 	}
 	if result.VMctlURL == "" {
 		t.Error("expected non-empty vmctl_url")
+	}
+	if result.VMctlHealth == nil {
+		t.Fatal("expected vmctl health summary")
+	}
+	if result.VMctlHealth.Reclaim.Mode != vmctl.PressureReclaimModeOff {
+		t.Fatalf("vmctl reclaim mode = %s, want off", result.VMctlHealth.Reclaim.Mode)
 	}
 }
 

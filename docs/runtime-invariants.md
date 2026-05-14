@@ -36,6 +36,25 @@ verifier evidence, and rollback.
 live model/search calls, background/candidate computers, platform promotion, rollback,
 auth/session, and Choir-in-Choir claims.
 
+## Computer Lifecycle And Reclaim
+
+Active user computers should stay warm when capacity allows. Fixed idle timeout
+is only a coarse safety valve; pressure-aware lifecycle policy must observe host
+memory, CPU, I/O, disk, PID headroom, VM inventory, and protected-work state
+before proposing reclaim.
+
+The current pressure-aware policy is dry-run only. It may report aggregate
+pressure, protected counts, and ranked candidate summaries through health, but
+it must not hibernate or kill a VM by pressure decision until active reclaim is
+explicitly enabled and proven on staging.
+
+Foreground active computers outrank background/candidate computers for
+retention. Recent activity, unknown last-active state, and verifier, promotion,
+rollback, or publication work are protected from pressure reclaim in the current
+implementation. Future active reclaim must expand protection to live prompt
+submissions, LLM calls, file writes, verifier runs, promotions, and publication
+actions before hibernating by pressure.
+
 ## Agent Roles
 
 `conductor` routes top-level user and connector input. It does not mutate

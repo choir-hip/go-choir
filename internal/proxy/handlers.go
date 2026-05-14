@@ -43,13 +43,23 @@ type errorResponse struct {
 // reachability status, and vmctl routing status, making the
 // protected-request backend health observable for VAL-DEPLOY-008.
 type proxyHealthResponse struct {
-	Status        string          `json:"status"`
-	Service       string          `json:"service"`
-	Upstream      string          `json:"upstream"`
-	VMctlRouting  string          `json:"vmctl_routing,omitempty"`
-	VMctlURL      string          `json:"vmctl_url,omitempty"`
-	Build         buildinfo.Info  `json:"build"`
-	UpstreamBuild *buildinfo.Info `json:"upstream_build,omitempty"`
+	Status        string                   `json:"status"`
+	Service       string                   `json:"service"`
+	Upstream      string                   `json:"upstream"`
+	VMctlRouting  string                   `json:"vmctl_routing,omitempty"`
+	VMctlURL      string                   `json:"vmctl_url,omitempty"`
+	VMctlHealth   *proxyVMctlHealthSummary `json:"vmctl_health,omitempty"`
+	Build         buildinfo.Info           `json:"build"`
+	UpstreamBuild *buildinfo.Info          `json:"upstream_build,omitempty"`
+}
+
+type proxyVMctlHealthSummary struct {
+	Status          string                    `json:"status"`
+	Service         string                    `json:"service"`
+	ActiveVMs       int                       `json:"active_vms"`
+	TotalOwnerships int                       `json:"total_ownerships"`
+	IdleEligible    int                       `json:"idle_eligible"`
+	Reclaim         vmctl.PressureReclaimPlan `json:"reclaim"`
 }
 
 // AuthResult holds the result of access JWT validation.
@@ -645,10 +655,40 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h.cfg.VmctlRoutingEnabled() {
 		resp.VMctlRouting = "enabled"
 		resp.VMctlURL = h.cfg.VmctlURL
+		if vmctlHealth, ok := h.probeVMctlHealth(); ok {
+			resp.VMctlHealth = vmctlHealth
+		} else {
+			resp.Status = "degraded"
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) probeVMctlHealth() (*proxyVMctlHealthSummary, bool) {
+	if h == nil || h.cfg == nil || strings.TrimSpace(h.cfg.VmctlURL) == "" {
+		return nil, false
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(h.cfg.VmctlURL, "/")+"/health", nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, false
+	}
+	var body proxyVMctlHealthSummary
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, false
+	}
+	return &body, true
 }
 
 // probeUpstreamHealth probes the upstream sandbox's /health endpoint with a

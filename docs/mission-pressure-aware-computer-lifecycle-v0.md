@@ -1,6 +1,6 @@
 # MissionGradient: Pressure-Aware Computer Lifecycle
 
-**Status:** proposed next mission
+**Status:** active implementation
 **Created:** 2026-05-14
 
 ## Real Artifact
@@ -72,6 +72,44 @@ Local learnings to preserve:
 - Staging currently uses `VMCTL_IDLE_TIMEOUT=6h` and
   `VMCTL_IDLE_SWEEP_INTERVAL=5m` as a coarse safety valve. This is temporary
   until pressure-aware reclaim exists.
+
+## Implementation Slice: Dry-Run Pressure Policy
+
+The first implementation slice introduces pressure-aware reclaim in observation
+mode only:
+
+```text
+host pressure sample
+-> active VM inventory
+-> protected-work reasons
+-> ranked reclaim candidates
+-> vmctl/proxy health summary
+```
+
+No VM is hibernated by pressure policy in this slice. The existing idle timeout
+path remains the only automatic hibernation path. Staging enables:
+
+```text
+VMCTL_PRESSURE_RECLAIM_MODE=dry-run
+VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m
+VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=2048
+VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15
+VMCTL_PRESSURE_MAX_MEMORY_SOME_AVG10=1.0
+VMCTL_PRESSURE_MAX_CPU_SOME_AVG10=90.0
+VMCTL_PRESSURE_MAX_IO_SOME_AVG10=5.0
+VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5
+```
+
+Dry-run telemetry reads `/proc/meminfo`, `/proc/pressure/{memory,cpu,io}`,
+state-dir filesystem headroom, and process-ID headroom. Candidate ranking favors
+worker/background computers before published branch desktops before primary
+interactive desktops. Protection currently covers recent activity, unknown
+last-active state, and worker purposes that look like verifier, promotion,
+rollback, or publication work.
+
+This is intentionally narrower than active reclaim. The next realism axis is to
+connect protected-work checks to live prompt/run/file/verifier/promotion state,
+then enable active reclaim behind a fast rollback knob.
 
 ## Invariants
 

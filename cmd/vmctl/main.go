@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -58,6 +60,11 @@ func main() {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			idleSweepInterval = d
 		}
+	}
+	if cfg, ok := pressureReclaimConfigFromEnv(); ok {
+		registry.SetPressureReclaimConfig(cfg)
+		idleSweeperEnabled = true
+		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates)
 	}
 
 	// Check if Firecracker is available on this host.
@@ -208,6 +215,54 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
+	mode := os.Getenv("VMCTL_PRESSURE_RECLAIM_MODE")
+	if strings.TrimSpace(mode) == "" {
+		return vmctl.PressureReclaimConfig{}, false
+	}
+	cfg := vmctl.DefaultPressureReclaimConfig()
+	cfg.Mode = mode
+	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_MIN_IDLE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.MinIdle = d
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB"); v != "" {
+		if mib, err := strconv.ParseUint(v, 10, 64); err == nil {
+			cfg.MinMemoryAvailableBytes = mib * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT"); v != "" {
+		if pct, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.MinMemoryAvailablePercent = pct
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MAX_MEMORY_SOME_AVG10"); v != "" {
+		if avg, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.MaxMemorySomeAvg10 = avg
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MAX_CPU_SOME_AVG10"); v != "" {
+		if avg, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.MaxCPUSomeAvg10 = avg
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MAX_IO_SOME_AVG10"); v != "" {
+		if avg, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.MaxIOSomeAvg10 = avg
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxCandidates = n
+		}
+	}
+	if v := os.Getenv("VM_STATE_DIR"); v != "" {
+		cfg.StateDir = v
+	}
+	return cfg, true
 }
 
 func envBool(key string, fallback bool) bool {

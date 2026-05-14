@@ -297,6 +297,12 @@ type OwnershipRegistry struct {
 	// is eligible for stop/hibernate. Zero means no idle timeout.
 	idleTimeout time.Duration
 
+	// pressureReclaim controls pressure-aware dry-run lifecycle observation.
+	// It ranks reclaim candidates from measured host pressure without changing
+	// VM state until a later mission explicitly enables active reclaim.
+	pressureReclaim PressureReclaimConfig
+	pressureSampler hostPressureSampler
+
 	// epochCounter tracks the global epoch counter for VM boot tracking.
 	// Each fresh boot or recovery increments this counter, providing a
 	// mechanism to prevent duplicate canonical effects (VAL-CROSS-117).
@@ -334,6 +340,8 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		gatewayCredentialNextCheck: make(map[string]time.Time),
 		sandboxURLBase:             sandboxURLBase,
 		idleTimeout:                0, // no idle timeout by default
+		pressureReclaim:            DefaultPressureReclaimConfig(),
+		pressureSampler:            sampleHostPressure,
 		epochCounter:               1,
 	}
 }
@@ -544,6 +552,21 @@ func (r *OwnershipRegistry) SetIdleTimeout(d time.Duration) {
 	r.idleTimeout = d
 }
 
+// SetPressureReclaimConfig configures pressure-aware lifecycle observation.
+// Only dry-run mode is currently supported; active reclaim continues to use
+// the existing idle timeout path until pressure policy has staging evidence.
+func (r *OwnershipRegistry) SetPressureReclaimConfig(cfg PressureReclaimConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pressureReclaim = normalizePressureReclaimConfig(cfg)
+}
+
+func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSampler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pressureSampler = sampler
+}
+
 // StartIdleSweeper periodically hibernates idle active VMs. It runs an
 // immediate sweep first so a vmctl restart can reclaim persisted stale VMs
 // before fresh desktop bootstrap requests compete for host capacity.
@@ -552,6 +575,10 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		interval = time.Minute
 	}
 	sweep := func() {
+		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
+			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
+				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
+		}
 		if stopped := r.StopIdleVMs(); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}

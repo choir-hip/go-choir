@@ -18,13 +18,14 @@ type vmctlErrorResponse struct {
 
 // vmctlHealthResponse is the JSON structure for GET /health.
 type vmctlHealthResponse struct {
-	Status          string         `json:"status"`
-	Service         string         `json:"service"`
-	ActiveVMs       int            `json:"active_vms"`
-	TotalOwnerships int            `json:"total_ownerships"`
-	IdleEligible    int            `json:"idle_eligible"`
-	ByState         map[string]int `json:"by_state,omitempty"`
-	ByKind          map[string]int `json:"by_kind,omitempty"`
+	Status          string              `json:"status"`
+	Service         string              `json:"service"`
+	ActiveVMs       int                 `json:"active_vms"`
+	TotalOwnerships int                 `json:"total_ownerships"`
+	IdleEligible    int                 `json:"idle_eligible"`
+	ByState         map[string]int      `json:"by_state,omitempty"`
+	ByKind          map[string]int      `json:"by_kind,omitempty"`
+	Reclaim         PressureReclaimPlan `json:"reclaim"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -129,6 +130,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		IdleEligible:    len(h.registry.CheckIdleOwnerships()),
 		ByState:         byState,
 		ByKind:          byKind,
+		Reclaim:         h.registry.PressureReclaimPlan(),
 	})
 }
 
@@ -635,6 +637,7 @@ func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
 		"status":      "ok",
 		"vms_stopped": stopped,
+		"reclaim":     h.registry.PressureReclaimPlan(),
 	})
 }
 
