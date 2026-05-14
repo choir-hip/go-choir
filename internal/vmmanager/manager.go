@@ -299,6 +299,78 @@ func (m *Manager) hostPortFromHostURL(hostURL string) (int, bool) {
 	return port, true
 }
 
+func (m *Manager) allocateHostPortLocked(vmID string) (int, error) {
+	const maxAttempts = 1024
+	for i := 0; i < maxAttempts; i++ {
+		hostPort := m.nextPort
+		m.nextPort++
+		if m.reclaimHostPortIfStale(vmID, hostPort) {
+			return hostPort, nil
+		}
+	}
+	return 0, fmt.Errorf("no free VM host subnet found after %d attempts", maxAttempts)
+}
+
+func (m *Manager) reclaimHostPortIfStale(vmID string, hostPort int) bool {
+	_, hostIP := m.guestAndHostIP(hostPort)
+	conflicts := m.interfacesForIPv4(hostIP)
+	if len(conflicts) == 0 {
+		return true
+	}
+	for _, iface := range conflicts {
+		if !strings.HasPrefix(iface, "vm-") {
+			log.Printf("vmmanager: host subnet %s is held by non-VM interface %s; skipping", hostIP, iface)
+			return false
+		}
+		if m.interfaceHasCarrier(iface) {
+			return false
+		}
+		log.Printf("vmmanager: deleting stale tap %s holding %s before assigning VM %s", iface, hostIP, vmID)
+		m.deleteTapDevice(iface)
+	}
+	return len(m.interfacesForIPv4(hostIP)) == 0
+}
+
+func (m *Manager) interfacesForIPv4(ip string) []string {
+	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
+	out, err := exec.Command(ipBin, "-o", "-4", "addr", "show", "to", ip+"/32").Output()
+	if err != nil {
+		return nil
+	}
+	return parseIPAddrShowInterfaces(out)
+}
+
+func parseIPAddrShowInterfaces(out []byte) []string {
+	lines := strings.Split(string(out), "\n")
+	ifaces := make([]string, 0, len(lines))
+	seen := make(map[string]struct{}, len(lines))
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		iface := strings.TrimSpace(fields[1])
+		if iface == "" {
+			continue
+		}
+		if _, ok := seen[iface]; ok {
+			continue
+		}
+		seen[iface] = struct{}{}
+		ifaces = append(ifaces, iface)
+	}
+	return ifaces
+}
+
+func (m *Manager) interfaceHasCarrier(iface string) bool {
+	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
+	out, err := exec.Command(ipBin, "-o", "link", "show", "dev", iface).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "LOWER_UP")
+}
+
 // Start begins the manager's background health checking loop.
 func (m *Manager) Start() {
 	m.mu.Lock()
@@ -403,9 +475,14 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 		m.cleanupOrphanedFirecrackerLocked(cfg.VMID)
 	}
 
-	// Assign a host port for this VM.
-	hostPort := m.nextPort
-	m.nextPort++
+	// Assign a host port/subnet for this VM. A vmctl restart can leave stale
+	// linkdown tap devices from failed boots holding old /30 routes; reclaim
+	// those before reusing a subnet or the guest can boot but never pass host
+	// readiness probes.
+	hostPort, err := m.allocateHostPortLocked(cfg.VMID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Ensure VM state directory exists before creating data image.
 	vmStateDir := filepath.Join(m.cfg.StateDir, cfg.VMID)
@@ -642,9 +719,12 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	// Clean up the old process.
 	m.forceCleanup(vmID)
 
-	// Assign a new host port (old one may be reused).
-	hostPort := m.nextPort
-	m.nextPort++
+	// Assign a new host port/subnet (old one may be reused if it is actually
+	// free, but stale linkdown taps from failed boots must not capture routing).
+	hostPort, err := m.allocateHostPortLocked(vmID)
+	if err != nil {
+		return nil, err
+	}
 
 	guestIP, _ := m.guestAndHostIP(hostPort)
 	hostURL := fmt.Sprintf("http://%s:%d", guestIP, inst.Config.GuestPort)

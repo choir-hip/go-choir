@@ -1239,6 +1239,24 @@ func TestGuestAndHostIP_TracksPerVMSubnet(t *testing.T) {
 	}
 }
 
+func TestParseIPAddrShowInterfaces(t *testing.T) {
+	out := []byte(`354: vm-vm-6298a-tap    inet 172.5.0.1/30 scope global vm-vm-6298a-tap\       valid_lft forever preferred_lft forever
+426: vm-vm-4993c-tap    inet 172.2.0.1/30 scope global vm-vm-4993c-tap\       valid_lft forever preferred_lft forever
+426: vm-vm-4993c-tap    inet 172.2.0.1/30 scope global secondary vm-vm-4993c-tap\       valid_lft forever preferred_lft forever
+`)
+
+	got := parseIPAddrShowInterfaces(out)
+	want := []string{"vm-vm-6298a-tap", "vm-vm-4993c-tap"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
 func TestWaitForGuestReady_EventuallySucceeds(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
