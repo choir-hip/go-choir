@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
@@ -44,10 +45,18 @@ func main() {
 	// Configure idle timeout for automatic VM lifecycle management.
 	// After this duration of inactivity, VMs transition to hibernated
 	// state (VAL-VM-008, VAL-CROSS-116).
+	idleSweeperEnabled := false
+	idleSweepInterval := time.Minute
 	if v := os.Getenv("VMCTL_IDLE_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			registry.SetIdleTimeout(d)
+			idleSweeperEnabled = true
 			log.Printf("vmctl: idle timeout set to %s", d)
+		}
+	}
+	if v := os.Getenv("VMCTL_IDLE_SWEEP_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			idleSweepInterval = d
 		}
 	}
 
@@ -81,6 +90,10 @@ func main() {
 			log.Fatal("vmctl: Firecracker not available and host-process fallback is disabled")
 		}
 		log.Printf("vmctl: Firecracker not available, using host-process sandbox mode")
+	}
+	if idleSweeperEnabled {
+		registry.StartIdleSweeper(context.Background(), idleSweepInterval)
+		log.Printf("vmctl: idle sweeper interval set to %s", idleSweepInterval)
 	}
 
 	handler := vmctl.NewHandler(registry)

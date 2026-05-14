@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1468,6 +1469,37 @@ func TestOwnershipRegistry_IdleTimeoutChecks(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_IdleSweeperHibernatesIdleVM(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetIdleTimeout(10 * time.Millisecond)
+
+	if _, err := reg.ResolveOrAssign("user-idle-sweeper"); err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("user-idle-sweeper", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Minute)
+	reg.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reg.StartIdleSweeper(ctx, 5*time.Millisecond)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		own := reg.GetOwnership("user-idle-sweeper")
+		if own != nil && own.State == VMStateHibernated {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	own := reg.GetOwnership("user-idle-sweeper")
+	if own == nil {
+		t.Fatal("expected ownership after idle sweep")
+	}
+	t.Fatalf("expected hibernated after idle sweep, got %s", own.State)
+}
+
 func TestOwnershipRegistry_HibernateRequiresRunningVM(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
@@ -2391,6 +2423,9 @@ func TestOwnershipRegistry_ReattachesPersistedVMWhenManagerCanAdopt(t *testing.T
 	}
 	if reattached.StoppedBy != "" {
 		t.Fatalf("reattached stopped_by = %q, want empty", reattached.StoppedBy)
+	}
+	if !reattached.LastActiveAt.Equal(own.LastActiveAt) {
+		t.Fatalf("reattach changed LastActiveAt = %s, want preserved %s", reattached.LastActiveAt, own.LastActiveAt)
 	}
 	if len(mock.reattaches) != 1 || mock.reattaches[0] != own.VMID {
 		t.Fatalf("reattaches = %+v, want [%s]", mock.reattaches, own.VMID)

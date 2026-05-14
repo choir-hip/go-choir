@@ -260,6 +260,7 @@ in
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Idle timeout: VMs idle for 30 minutes are hibernated (VAL-VM-008).
         "VMCTL_IDLE_TIMEOUT=30m"
+        "VMCTL_IDLE_SWEEP_INTERVAL=1m"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

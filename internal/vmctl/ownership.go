@@ -508,7 +508,9 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 			cur.State = VMStateActive
 			cur.SandboxURL = info.HostURL
 			cur.Epoch = info.Epoch
-			cur.LastActiveAt = time.Now()
+			if cur.LastActiveAt.IsZero() {
+				cur.LastActiveAt = time.Now()
+			}
 			cur.StoppedBy = ""
 			r.saveLocked()
 			reattached = true
@@ -540,6 +542,34 @@ func (r *OwnershipRegistry) SetIdleTimeout(d time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.idleTimeout = d
+}
+
+// StartIdleSweeper periodically hibernates idle active VMs. It runs an
+// immediate sweep first so a vmctl restart can reclaim persisted stale VMs
+// before fresh desktop bootstrap requests compete for host capacity.
+func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	go func() {
+		sweep := func() {
+			if stopped := r.StopIdleVMs(); stopped > 0 {
+				log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
+			}
+		}
+		sweep()
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sweep()
+			}
+		}
+	}()
 }
 
 // nextEpoch returns the next epoch value and increments the counter.
