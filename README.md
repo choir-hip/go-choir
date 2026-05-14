@@ -1,6 +1,6 @@
 # go-choir
 
-`go-choir` is the implementation repo for Choir: an artifact-native learning system built around versioned artifacts, appagents, candidate worlds, verification, promotion, and public memory.
+`go-choir` is the implementation repo for Choir: an artifact-native learning system built around persistent computers, versioned artifacts, appagents, candidate worlds, verification, promotion, and public memory.
 
 The short version:
 
@@ -14,7 +14,7 @@ The product vector is:
 automatic computer -> automatic newspaper -> automatic radio -> automatic capital
 ```
 
-- **Automatic computer**: the private agentic workspace where users and agents work over durable artifacts.
+- **Automatic computer**: the private persistent computer where users and agents work over durable artifacts, local apps, user-specific runtime state, and candidate branches.
 - **Automatic newspaper**: the public memory layer where selected artifacts become citeable, disputable, forkable, and reusable.
 - **Automatic radio**: the embodied traversal layer where artifact graphs become source-grounded audio experiences.
 - **Automatic capital**: the later capital-formation layer where future-relevant contribution can route resources and upside.
@@ -35,10 +35,10 @@ The core science object is:
 durable learning control over versioned artifacts
 ```
 
-The deployed product is currently a web desktop with apps such as VText, Files, Browser, Trace, Terminal, Podcast, and Settings. Behind the desktop is a control system:
+The deployed product is currently a web desktop served from a user computer, with apps such as VText, Files, Browser, Trace, Terminal, Podcast, and Settings. Behind the desktop is a control system:
 
 ```text
-prompt bar -> conductor -> VText/appagent -> super -> vmctl worker/candidate world
+prompt bar -> conductor -> VText/appagent -> super -> vmctl worker/candidate computer
 -> worker export -> promotion candidate -> verification/owner decision -> promotion or rollback
 ```
 
@@ -48,11 +48,13 @@ The objective is to maximize verified artifact improvement over time while minim
 
 The implementation centers on a few invariants:
 
-- canonical state stays stable;
-- risky or speculative mutation happens in background VMs / candidate worlds;
+- each user computer is a persistent, divergent stateful object;
+- canonical state stays stable inside that computer unless promoted;
+- risky or speculative mutation happens in background/candidate computers;
 - appagents own durable app artifacts;
 - workers produce evidence, deltas, candidates, or reports;
-- canonical state changes only through promotion after verification and owner acceptance;
+- personal computer state changes through local promotion after verification and rollback evidence;
+- platform/public state changes through higher-ceremony promotion after verification and owner acceptance;
 - compaction preserves what a run learned for future inference.
 
 A compact operating invariant:
@@ -62,6 +64,7 @@ Evidence enters through researchers.
 Meaning is owned by appagents.
 Computation is orchestrated by super.
 Mutation happens in candidate worlds.
+Computers diverge.
 Canonical state changes only by promotion.
 Radio is a traversal of promoted meaning.
 ```
@@ -76,9 +79,9 @@ The stack has five Go services:
 | `proxy` | 8082 | Auth-gated HTTP/WebSocket proxy, user-context injection, VM routing |
 | `vmctl` | 8083 | Desktop and worker VM ownership/lifecycle, host-process fallback where Firecracker is unavailable |
 | `gateway` | 8084 | Provider-neutral LLM/search gateway reachable by host/guest callers, not the public browser edge |
-| `sandbox` | 8085 | Runtime, desktop APIs, VText, Trace, files, terminal, browser sessions, agent/tool loop |
+| `sandbox` | 8085 | Runtime service currently named sandbox: desktop APIs, VText, Trace, files, terminal, browser sessions, agent/tool loop |
 
-Every service exposes `/health`. The sandbox health response includes build/deploy identity used by staging verification.
+Every service exposes `/health`. The sandbox service name is an implementation name, not the product ontology; the product object is a persistent computer. The sandbox health response includes build/deploy identity used by staging verification.
 
 ## Self-hosting and local development
 
@@ -108,7 +111,7 @@ Start the local stack when local iteration is appropriate:
 
 The script uses local auth keys and service ports. For detailed manual service startup, inspect `start-services.sh` and the relevant `cmd/*` package configs.
 
-Local development is useful for frontend iteration, focused unit shaping, and reproducing a transition identified by deployed evidence. It is not sufficient proof for claims about live vmctl behavior, provider credentials, background/candidate VMs, promotion, rollback, or production deployment.
+Local development is useful for frontend iteration, focused unit shaping, and reproducing a transition identified by deployed evidence. It is not sufficient proof for claims about live vmctl behavior, provider credentials, background/candidate computers, platform promotion, rollback, or production deployment.
 
 ## Tests
 
@@ -138,7 +141,9 @@ Documentation-only changes intentionally do not run automatic CI. The GitHub wor
 
 ## Deployment and staging proof
 
-Behavior-changing work uses staging as the acceptance environment. A behavior-changing mission is not complete because local tests pass; it is complete when the pushed commit is running on staging and the deployed product path is verified there.
+Platform behavior-changing work uses staging as the acceptance environment. A platform behavior-changing mission is not complete because local tests pass; it is complete when the pushed commit is running on staging and the deployed product path is verified there.
+
+Personal-computer evolution is different. A user should be able to fork their own computer, build a new Go runtime or Svelte UI, install packages, add apps, change prompts, and promote that candidate back into their own active computer without waiting for a global platform deploy. That path still needs lineage, typed deltas, verifier evidence, and rollback, but its target is the user's active computer rather than `origin/main`.
 
 Required landing loop for behavior changes:
 
@@ -156,7 +161,7 @@ Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo. The short
 - `conductor` routes exogenous user/app input and does not own semantic outcomes.
 - Appagents own durable app artifacts; `vtext` is the current canonical semantic surface.
 - `super` is the foreground orchestration root and mints bounded execution authority.
-- Worker/candidate mutation belongs in background VMs or isolated worker worlds.
+- Worker/candidate mutation belongs in background/candidate computers or isolated worker worlds.
 - Canonical state changes only through explicit promotion after verification and owner acceptance.
 - Verification is a contract and evidence record, not a separate agent caste.
 
@@ -184,9 +189,13 @@ Start here:
 
 - [AGENTS.md](AGENTS.md): repository agent operating contract.
 - [docs/mission-geometry.md](docs/mission-geometry.md): high-level mission geometry and product ontology.
+- [docs/computer-ontology.md](docs/computer-ontology.md): persistent computer, ledger, promotion, and update ontology.
+- [docs/project-goals.md](docs/project-goals.md): current goal continuum and absorbed historical mission signal.
+- [docs/glossary.md](docs/glossary.md): canonical vocabulary.
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
+- [docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision.
 - [docs/mission-choir-in-choir-controller-v0.md](docs/mission-choir-in-choir-controller-v0.md): current MissionGradient mission.
 - [docs/mission-run-acceptance-verification-v0.md](docs/mission-run-acceptance-verification-v0.md): completed export-level run acceptance mission.
 - [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
@@ -203,7 +212,7 @@ internal/proxy/      auth-gated proxy and VM routing
 internal/vmctl/      VM ownership/lifecycle API
 internal/gateway/    LLM/search gateway
 internal/runtime/    agent runtime, product APIs, VText/Trace/browser/control surfaces
-internal/store/      SQLite runtime store plus embedded VText workspace
+internal/store/      runtime persistence plus embedded VText/Dolt workspace
 internal/promotion/  candidate-world integration and promotion helpers
 frontend/            Svelte desktop and Playwright tests
 nix/                 deployment and NixOS configuration

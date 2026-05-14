@@ -6,18 +6,26 @@ This file is the repo-level contract for coding agents working on Choir.
 
 Staging is the acceptance environment: `https://draft.choir-ip.com`.
 
-Use local development only for fast frontend visual iteration, focused unit shaping, or reproducing a staging failure after staging evidence identifies the transition that failed. Do not claim local proof for vmctl, live worker/candidate VMs, gateway credentials, model/search calls, auth/session renewal, promotion, rollback, or Choir-in-Choir behavior.
+Use local development only for fast frontend visual iteration, focused unit shaping, or reproducing a staging failure after staging evidence identifies the transition that failed. Do not claim local proof for vmctl, live worker/candidate computers, gateway credentials, model/search calls, auth/session renewal, platform promotion, rollback, or Choir-in-Choir behavior.
+
+Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
 
 ## Landing Loop
 
-Every behavior-changing mission includes:
+Every platform behavior-changing mission includes:
 
 ```text
 commit -> push origin main -> monitor CI -> monitor staging deploy
 -> verify staging commit identity -> run deployed acceptance proof
 ```
 
-Do not stop at local tests or an unpushed commit when behavior changed.
+Do not stop at local tests or an unpushed commit when platform behavior changed.
+
+Personal-computer changes are different. Choir should eventually allow a user to
+fork their own computer, build or install local apps/runtime changes, and promote
+that candidate into their own active computer without a global platform deploy.
+That path still needs lineage, typed deltas, verifier evidence, route rollback,
+and no lost foreground updates.
 
 Docs-only commits are different. The CI workflow intentionally ignores `docs/**` and top-level `*.md`. Do not weaken those path filters to force docs-only CI. If documentation needs validation, run the specific check directly or use a manual workflow dispatch when one exists.
 
@@ -33,11 +41,11 @@ Do not turn MissionGradient into a brittle checklist. Preserve the invariant and
 - Appagents own durable app artifacts. `vtext` owns canonical document versions.
 - `researcher` writes structured findings/evidence, not canonical text or code.
 - `super` is the foreground orchestration root. It can request workers and candidate worlds.
-- `vsuper` owns a background VM/candidate world.
+- `vsuper` owns a background/candidate computer or candidate world.
 - `cosuper` is subordinate to the super/vsuper that leased it.
 - Verification is a contract over evidence, not a separate privileged caste.
 
-Foreground/canonical state stays stable. Background/candidate worlds mutate. Canonical state changes only by promotion.
+Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
 
 ## Product-Path Verification
 
@@ -88,7 +96,7 @@ If a behavior-changing commit is pushed:
 
 Assume the worktree may contain user or other-agent changes. Do not revert unrelated changes. Avoid destructive commands unless the user explicitly asked for them.
 
-Use background/candidate worlds for risky mutation. Failed candidates should leave diagnostics, rollback refs, and next safe probes.
+Use background/candidate computers or candidate worlds for risky mutation. Failed candidates should leave diagnostics, rollback refs, and next safe probes.
 
 ## Final Evidence
 
