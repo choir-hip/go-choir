@@ -674,6 +674,85 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	return 2, 512
 }
 
+func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
+	if own == nil || mgr == nil {
+		return false
+	}
+	if !vmInstanceInfoReady(mgr.GetVM(own.VMID)) {
+		return true
+	}
+	if own.LastActiveAt.IsZero() {
+		return true
+	}
+	return time.Since(own.LastActiveAt) >= activeResolveReadinessCheckInterval
+}
+
+func vmInstanceInfoReady(info *VMInstanceInfo) bool {
+	if info == nil || strings.TrimSpace(info.HostURL) == "" || !info.Healthy {
+		return false
+	}
+	state := strings.ToLower(strings.TrimSpace(info.State))
+	return state == "" || state == "running"
+}
+
+func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
+	if own == nil {
+		return nil, fmt.Errorf("ownership is required")
+	}
+	if mgr == nil {
+		return &VMInstanceInfo{
+			HostURL: own.SandboxURL,
+			Epoch:   own.Epoch,
+			Healthy: true,
+			State:   "running",
+		}, nil
+	}
+
+	info := mgr.GetVM(own.VMID)
+	if info == nil {
+		log.Printf("vmctl: active ownership for VM %s has no manager instance; starting existing VM", own.VMID)
+		return r.startExistingVM(own, mgr)
+	}
+
+	state := strings.ToLower(strings.TrimSpace(info.State))
+	switch state {
+	case "stopped", "hibernated":
+		log.Printf("vmctl: active ownership for VM %s found manager state=%s; resuming", own.VMID, state)
+		return r.startExistingVM(own, mgr)
+	case "", "running":
+		healthy, err := mgr.CheckHealth(own.VMID)
+		if err != nil {
+			log.Printf("vmctl: active VM %s health probe errored; recovering before routing: %v", own.VMID, err)
+			return r.recoverOrRestartActiveVM(own, mgr)
+		}
+		if healthy {
+			if refreshed := mgr.GetVM(own.VMID); refreshed != nil {
+				return refreshed, nil
+			}
+			return info, nil
+		}
+		log.Printf("vmctl: active VM %s is unhealthy on resolve; recovering before routing", own.VMID)
+		return r.recoverOrRestartActiveVM(own, mgr)
+	default:
+		log.Printf("vmctl: active ownership for VM %s found manager state=%s; recovering before routing", own.VMID, state)
+		return r.recoverOrRestartActiveVM(own, mgr)
+	}
+}
+
+func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
+	if mgr.GetVM(own.VMID) == nil {
+		return r.startExistingVM(own, mgr)
+	}
+	recovered, err := mgr.RecoverVM(own.VMID)
+	if err != nil {
+		if mgr.GetVM(own.VMID) == nil {
+			return r.startExistingVM(own, mgr)
+		}
+		return nil, err
+	}
+	return recovered, nil
+}
+
 func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil || mgr == nil {
 		return nil, nil
@@ -760,6 +839,7 @@ const (
 	gatewayCredentialRequestTimeout        = 5 * time.Second
 	gatewayCredentialEnsureSuccessInterval = 10 * time.Minute
 	gatewayCredentialEnsureFailureInterval = 30 * time.Second
+	activeResolveReadinessCheckInterval    = 10 * time.Second
 )
 
 func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
@@ -892,10 +972,41 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 	// Check if the desktop already has an active ownership.
 	if own, ok := r.ownerships[key]; ok {
 		if own.IsReady() {
+			mgr := r.vmManager
+			snapshot := *own
+			if activeOwnershipNeedsReadinessCheck(&snapshot, mgr) {
+				r.mu.Unlock()
+				info, err := r.ensureActiveVMReady(&snapshot, mgr)
+				if err != nil {
+					log.Printf("vmctl: active VM %s readiness check failed: %v", snapshot.VMID, err)
+					return nil, fmt.Errorf("failed to verify active VM %s: %w", snapshot.VMID, err)
+				}
+
+				r.mu.Lock()
+				current := r.ownerships[key]
+				if current == nil || current.VMID != snapshot.VMID || !current.IsReady() {
+					r.mu.Unlock()
+					return r.ResolveOrAssignDesktop(userID, desktopID)
+				}
+				if info != nil {
+					current.SandboxURL = info.HostURL
+					current.Epoch = info.Epoch
+				}
+				current.State = VMStateActive
+				current.LastActiveAt = time.Now()
+				current.StoppedBy = ""
+				r.saveLocked()
+				vmID := current.VMID
+				r.mu.Unlock()
+				r.ensureExistingGatewayCredential(vmID)
+				return current, nil
+			}
+
 			own.LastActiveAt = time.Now()
 			r.saveLocked()
+			vmID := own.VMID
 			r.mu.Unlock()
-			r.ensureExistingGatewayCredential(own.VMID)
+			r.ensureExistingGatewayCredential(vmID)
 			return own, nil
 		}
 

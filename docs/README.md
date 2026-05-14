@@ -79,6 +79,9 @@ old-mission cleanup. Remaining cleanup work is intentionally narrower:
 
 - gradually fold durable lessons from dated proof/evidence files into canonical
   architecture/invariant docs when they become current;
+- keep `docs/deferred-reliability-migrations-2026-05-14.md` as the holding
+  note for the later sandbox-to-computer hard rename and SQLite-to-Dolt cleanup
+  mission;
 - leave proof docs as evidence artifacts unless a cleanup mission explicitly
   indexes, extracts, and deletes them;
 - keep `docs/README.md`, `README.md`, and `AGENTS.md` current when missions

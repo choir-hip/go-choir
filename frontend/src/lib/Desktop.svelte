@@ -481,6 +481,7 @@
       try {
         const stable = await stabilizeBootstrap();
         if (!stable) {
+          liveStatus.set('error');
           return;
         }
         connectLiveChannel();
@@ -638,6 +639,11 @@
 
   .desktop.desktop-loading {
     visibility: hidden;
+  }
+
+  .desktop.desktop-loading :global(.bottom-bar),
+  .desktop.desktop-loading :global(.desktop-menu) {
+    visibility: visible;
   }
 
   .desktop.desktop-ready {

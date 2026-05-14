@@ -615,6 +615,28 @@ test('user info and logout in desktop menu', async ({ page, authenticator }) => 
   await expect(page.locator('[data-desktop]')).not.toBeVisible();
 });
 
+test('logout remains reachable when desktop bootstrap fails', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await page.route('**/api/shell/bootstrap', async (route) => {
+    await route.fulfill({
+      status: 502,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'stale desktop route' }),
+    });
+  });
+  await page.reload();
+
+  await expect(page.locator('[data-desktop]')).not.toBeVisible();
+  await expect(page.locator('[data-bottom-bar]')).toBeVisible();
+  await page.locator('[data-start-button]').click();
+  await expect(page.locator('[data-shell-logout]')).toBeVisible();
+
+  await page.locator('[data-shell-logout]').click();
+  await expect(page.locator('[data-auth-entry]')).toBeVisible();
+});
+
 test('Settings opens as safe product settings without prompt APIs', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);

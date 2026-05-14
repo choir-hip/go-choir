@@ -6,6 +6,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -16,11 +17,11 @@ import (
 
 // desktopStateGetResponse is the JSON response for GET /api/desktop/state.
 type desktopStateGetResponse struct {
-	OwnerID        string               `json:"owner_id"`
-	DesktopID      string               `json:"desktop_id"`
-	Windows        []types.WindowState  `json:"windows"`
-	ActiveWindowID string               `json:"active_window_id,omitempty"`
-	UpdatedAt      string               `json:"updated_at"`
+	OwnerID        string              `json:"owner_id"`
+	DesktopID      string              `json:"desktop_id"`
+	Windows        []types.WindowState `json:"windows"`
+	ActiveWindowID string              `json:"active_window_id,omitempty"`
+	UpdatedAt      string              `json:"updated_at"`
 }
 
 // desktopStateSaveRequest is the JSON payload for PUT /api/desktop/state.
@@ -49,6 +50,55 @@ func requestDesktopID(r *http.Request) string {
 	return types.PrimaryDesktopID
 }
 
+func sanitizeDesktopState(state types.DesktopState) types.DesktopState {
+	state.Windows, state.ActiveWindowID = sanitizeWindowStates(state.Windows, state.ActiveWindowID)
+	return state
+}
+
+func sanitizeWindowStates(windows []types.WindowState, activeWindowID string) ([]types.WindowState, string) {
+	activeWindowID = strings.TrimSpace(activeWindowID)
+	if len(windows) == 0 {
+		return []types.WindowState{}, ""
+	}
+
+	seen := make(map[string]struct{}, len(windows))
+	out := make([]types.WindowState, 0, len(windows))
+	for i, win := range windows {
+		baseID := strings.TrimSpace(win.WindowID)
+		if baseID == "" {
+			baseID = fmt.Sprintf("restored-window-%d", i+1)
+		}
+		windowID := baseID
+		for suffix := 2; ; suffix++ {
+			if _, exists := seen[windowID]; !exists {
+				break
+			}
+			windowID = fmt.Sprintf("%s-%d", baseID, suffix)
+		}
+		seen[windowID] = struct{}{}
+		win.WindowID = windowID
+
+		if !win.Mode.Valid() {
+			win.Mode = types.WindowNormal
+		}
+		if win.Geometry.Width <= 0 {
+			win.Geometry.Width = 600
+		}
+		if win.Geometry.Height <= 0 {
+			win.Geometry.Height = 400
+		}
+		if win.RestoredGeometry != nil && (win.RestoredGeometry.Width <= 0 || win.RestoredGeometry.Height <= 0) {
+			win.RestoredGeometry = nil
+		}
+		out = append(out, win)
+	}
+
+	if _, ok := seen[activeWindowID]; !ok {
+		activeWindowID = ""
+	}
+	return out, activeWindowID
+}
+
 // HandleDesktopStateGet handles GET /api/desktop/state.
 // It returns the persisted desktop state for the authenticated user,
 // including open windows, active window, geometry, and app context
@@ -72,6 +122,7 @@ func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get desktop state"})
 		return
 	}
+	state = sanitizeDesktopState(state)
 
 	writeAPIJSON(w, http.StatusOK, desktopStateGetResponse{
 		OwnerID:        state.OwnerID,
@@ -107,12 +158,13 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 	}
 
 	now := time.Now().UTC()
+	windows, activeWindowID := sanitizeWindowStates(req.Windows, req.ActiveWindowID)
 
 	state := types.DesktopState{
 		OwnerID:        ownerID,
 		DesktopID:      desktopID,
-		Windows:        req.Windows,
-		ActiveWindowID: req.ActiveWindowID,
+		Windows:        windows,
+		ActiveWindowID: activeWindowID,
 		UpdatedAt:      now,
 	}
 

@@ -1957,6 +1957,10 @@ type mockVMManager struct {
 	reattachError    error
 	recoverResponse  *VMInstanceInfo
 	recoverError     error
+	getVMs           map[string]*VMInstanceInfo
+	checkHealthOK    *bool
+	checkHealthError error
+	checkHealthCalls []string
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
@@ -2014,10 +2018,20 @@ func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 }
 
 func (m *mockVMManager) GetVM(vmID string) *VMInstanceInfo {
+	if m.getVMs != nil {
+		return m.getVMs[vmID]
+	}
 	return nil
 }
 
 func (m *mockVMManager) CheckHealth(vmID string) (bool, error) {
+	m.checkHealthCalls = append(m.checkHealthCalls, vmID)
+	if m.checkHealthError != nil {
+		return false, m.checkHealthError
+	}
+	if m.checkHealthOK != nil {
+		return *m.checkHealthOK, nil
+	}
 	return true, nil
 }
 
@@ -2092,6 +2106,121 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 	}
 	if ensuredRawToken != rawToken {
 		t.Fatalf("ensured raw token = %q, want %q", ensuredRawToken, rawToken)
+	}
+}
+
+func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *testing.T) {
+	healthy := false
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	now := time.Now().Add(-time.Minute)
+	own := &VMOwnership{
+		VMID:         "vm-stale-active",
+		UserID:       "user-old-account",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateActive,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Epoch:        3,
+		Published:    true,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	mock := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.SandboxURL,
+				Epoch:   own.Epoch,
+				Healthy: false,
+				State:   "running",
+			},
+		},
+		checkHealthOK: &healthy,
+		recoverResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9044",
+			Epoch:   4,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg.SetVMManager(mock)
+
+	resolved, err := reg.ResolveOrAssignDesktop("user-old-account", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if resolved.VMID != own.VMID {
+		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
+	}
+	if len(mock.checkHealthCalls) != 1 || mock.checkHealthCalls[0] != own.VMID {
+		t.Fatalf("health checks = %+v, want [%s]", mock.checkHealthCalls, own.VMID)
+	}
+	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
+		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9044" {
+		t.Fatalf("SandboxURL = %q, want recovered host URL", resolved.SandboxURL)
+	}
+	if resolved.Epoch != 4 {
+		t.Fatalf("Epoch = %d, want 4", resolved.Epoch)
+	}
+	if resolved.State != VMStateActive {
+		t.Fatalf("State = %s, want %s", resolved.State, VMStateActive)
+	}
+}
+
+func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	now := time.Now().Add(-time.Minute)
+	own := &VMOwnership{
+		VMID:         "vm-missing-manager-instance",
+		UserID:       "user-old-account",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateActive,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Epoch:        3,
+		Published:    true,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	mock := &mockVMManager{
+		resumeError: fmt.Errorf("vm not managed"),
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9045",
+			Epoch:   4,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg.SetVMManager(mock)
+
+	resolved, err := reg.ResolveOrAssignDesktop("user-old-account", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if resolved.VMID != own.VMID {
+		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
+	}
+	if mock.boots[0].VMID != own.VMID {
+		t.Fatalf("BootVM VMID = %q, want %q", mock.boots[0].VMID, own.VMID)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9045" {
+		t.Fatalf("SandboxURL = %q, want restarted host URL", resolved.SandboxURL)
 	}
 }
 

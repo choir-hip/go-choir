@@ -114,6 +114,88 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 	}
 }
 
+func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
+	_, h := testAPISetup(t)
+
+	saveReq := desktopStateSaveRequest{
+		Windows: []types.WindowState{
+			{
+				WindowID: "",
+				AppID:    "vtext",
+				Title:    "Missing ID",
+				Geometry: types.WindowGeometry{Width: 0, Height: -1},
+				Mode:     types.WindowMode("floating"),
+			},
+			{
+				WindowID: "dup",
+				AppID:    "terminal",
+				Title:    "Duplicate 1",
+				Geometry: types.WindowGeometry{Width: 300, Height: 200},
+				Mode:     types.WindowMinimized,
+			},
+			{
+				WindowID: "dup",
+				AppID:    "files",
+				Title:    "Duplicate 2",
+				Geometry: types.WindowGeometry{Width: 320, Height: 240},
+				Mode:     types.WindowNormal,
+			},
+		},
+		ActiveWindowID: "missing-active-window",
+	}
+
+	body, _ := json.Marshal(saveReq)
+	req := httptest.NewRequest(http.MethodPut, "/api/desktop/state", bytesReader(body))
+	req.Header.Set("X-Authenticated-User", "user-1")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.HandleDesktopStateSave(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
+	getReq.Header.Set("X-Authenticated-User", "user-1")
+	getW := httptest.NewRecorder()
+	h.HandleDesktopStateGet(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d", getW.Code, http.StatusOK)
+	}
+
+	var resp desktopStateGetResponse
+	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Windows) != 3 {
+		t.Fatalf("Windows count = %d, want 3", len(resp.Windows))
+	}
+	seen := map[string]struct{}{}
+	for _, win := range resp.Windows {
+		if win.WindowID == "" {
+			t.Fatalf("found empty WindowID in %+v", resp.Windows)
+		}
+		if _, ok := seen[win.WindowID]; ok {
+			t.Fatalf("found duplicate WindowID %q in %+v", win.WindowID, resp.Windows)
+		}
+		seen[win.WindowID] = struct{}{}
+		if !win.Mode.Valid() {
+			t.Fatalf("found invalid mode %q in %+v", win.Mode, resp.Windows)
+		}
+		if win.Geometry.Width <= 0 || win.Geometry.Height <= 0 {
+			t.Fatalf("found invalid geometry %+v in %+v", win.Geometry, resp.Windows)
+		}
+	}
+	if _, ok := seen["dup-2"]; !ok {
+		t.Fatalf("sanitized duplicate ID missing dup-2 in %+v", resp.Windows)
+	}
+	if resp.Windows[0].Mode != types.WindowNormal {
+		t.Fatalf("first window mode = %q, want %q", resp.Windows[0].Mode, types.WindowNormal)
+	}
+	if resp.ActiveWindowID != "" {
+		t.Fatalf("ActiveWindowID = %q, want empty for missing active window", resp.ActiveWindowID)
+	}
+}
+
 func TestDesktopStateSaveUnauthenticated(t *testing.T) {
 	_, h := testAPISetup(t)
 
