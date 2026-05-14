@@ -25,7 +25,9 @@ For the higher-level frame, read [docs/mission-geometry.md](docs/mission-geometr
 
 ## What Choir is
 
-Choir is not primarily a chat app, CMS, agent queue, desktop, publication tool, or radio app. Those are projections.
+Choir is not a chat app. It is not even a chat-shaped product with better tools behind it. Chat may appear as an input/control affordance where useful, but the product output is not a discussion thread. The user works with documents, artifacts, sources, versions, candidate worlds, and promoted state.
+
+A CMS, agent queue, desktop, publication tool, or radio app can be a projection of Choir. Chat is not the canonical projection; `vtext` and artifact state are.
 
 The core science object is:
 

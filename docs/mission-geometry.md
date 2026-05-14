@@ -4,7 +4,7 @@
 
 Choir is a learning system.
 
-It is not primarily a chat app, a desktop, a newspaper, a radio station, or a fund. Those are projections of the same underlying vector. Choir is an artifact-native learning system that turns human and machine activity into durable structure: vtexts, claims, sources, tools, agents, compactions, citations, candidate worlds, promotions, and public memory.
+It is not a chat app. It is not even a chat-shaped product with a stronger backend. It is not primarily a desktop, a newspaper, a radio station, or a fund either. Those are projections of the same underlying vector. Chat can be an input/control affordance, but the product output is not a discussion thread. Choir is an artifact-native learning system that turns human and machine activity into durable structure: vtexts, claims, sources, tools, agents, compactions, citations, candidate worlds, promotions, and public memory.
 
 The current vector is:
 
@@ -35,7 +35,7 @@ No retrieval without future use.
 
 ## General science object
 
-The general problem is not "build a better chat app" or "build an agent queue." The general problem is:
+The general problem is not "build a better chat app," because Choir is not a chat app. The general problem is:
 
 ```text
 durable learning control over versioned artifacts
