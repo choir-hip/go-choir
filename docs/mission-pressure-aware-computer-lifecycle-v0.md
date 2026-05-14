@@ -1,6 +1,6 @@
 # MissionGradient: Pressure-Aware Computer Lifecycle
 
-**Status:** active implementation
+**Status:** completed v0 dry-run mission
 **Created:** 2026-05-14
 
 ## Real Artifact
