@@ -4,7 +4,7 @@
 
 Choir is a learning system.
 
-It is not a chat app. It is not even a chat-shaped product with a stronger backend. It is not primarily a desktop, a newspaper, a radio station, or a fund either. Those are projections of the same underlying vector. Chat can be an input/control affordance, but the product output is not a discussion thread. Choir is an artifact-native learning system that turns human and machine activity into durable structure: vtexts, claims, sources, tools, agents, compactions, citations, candidate worlds, promotions, and public memory.
+It is not a chat app. It is not even a chat-shaped product with a stronger backend. It is not primarily a desktop, a newspaper, a radio station, or a fund either. Those are projections of the same underlying vector. Chat can be an input/control affordance, but the product output is not a discussion thread. Choir is an artifact-native learning system that turns human and machine activity into durable structure: computers, vtexts, claims, sources, tools, agents, compactions, citations, candidate worlds, promotions, and public memory.
 
 The current vector is:
 
@@ -22,7 +22,7 @@ It is statistical because models infer patterns, retrieve relevance, compress di
 
 It is symbolic because Choir stores durable relations: vtexts, claims, sources, citations, versions, obligations, tools, messages, permissions, code, database records, and promotion manifests.
 
-It is evolutionary because background VMs generate candidate worlds, agents mutate them, verifiers and appagents select, promotion retains, and compaction preserves what was learned.
+It is evolutionary because background/candidate computers generate candidate worlds, agents mutate them, verifiers and appagents select, promotion retains, and compaction preserves what was learned.
 
 The system learns only when work leaves a durable trace that improves future action. A successful run may promote code, update a vtext, create a tool, add a test, record a source, revise a claim, discover a failed route, or refine a compaction. A failed run can still teach the system if its failure becomes retained structure.
 
@@ -43,6 +43,7 @@ durable learning control over versioned artifacts
 
 A general artifact-native learning control system has:
 
+- persistent computers;
 - canonical state;
 - candidate worlds;
 - artifact owners;
@@ -66,6 +67,7 @@ Choir is one concrete product ontology over that science object.
 
 Choir-specific concepts include:
 
+- persistent computers;
 - `vtext`;
 - appagents;
 - automatic computer;
@@ -80,13 +82,15 @@ The key distinction is that the general control theory should not be confused wi
 
 ## Automatic computer
 
-The automatic computer is the private agentic workspace.
+The automatic computer is the private agentic workspace. Concretely, a user has a persistent **computer**, not merely a disposable sandbox: a stateful machine-world with VM/runtime state, Dolt/app state, source/build state, blobs, artifact provenance, and route identity.
 
-It is not a chatbot and not an assistant pretending to be a person. It is a durable runtime over artifacts. Agents operate inside bounded roles. The foreground world remains stable. Background VMs mutate candidate worlds. Canonical state changes only by promotion.
+It is not a chatbot and not an assistant pretending to be a person. It is a durable runtime over artifacts. Agents operate inside bounded roles. The foreground world remains stable. Candidate computers mutate. Canonical state changes only by promotion.
 
 The automatic computer exists to make long-running work possible without forcing the human to monitor every step. The human sets the gradient, supplies judgment, corrects the system, and approves irreversible transitions. The system handles context routing, compaction, candidate-world mutation, verification, and promotion.
 
 This is the substrate layer. If this layer is wrong, everything above it becomes slop.
+
+Read [computer-ontology.md](computer-ontology.md) for the ledger split between VM/runtime, Dolt/app state, source/build state, blobs, artifact provenance, and routes. The key distinction is that users can evolve their own computers quickly without global platform deploys, while shared/platform changes require typed artifacts and higher-ceremony promotion.
 
 ## Automatic newspaper
 
@@ -139,6 +143,7 @@ Evidence enters through researchers.
 Meaning is owned by appagents.
 Computation is orchestrated by super.
 Mutation happens in candidate worlds.
+Computers diverge.
 Canonical state changes only by promotion.
 Radio is a traversal of promoted meaning.
 ```

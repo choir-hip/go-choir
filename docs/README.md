@@ -21,6 +21,7 @@ Use these buckets when reading or editing docs:
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
+- `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
 - `docs/docs-state-report-2026-05-14.md` - current documentation audit and cleanup recommendation matrix.
 - `docs/current-architecture.md` - current product/runtime architecture.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
@@ -74,6 +75,7 @@ The next documentation cleanup should focus on:
 
 - moving/updating `PROJECT-GLOSSARY.md` into `docs/glossary.md`;
 - promoting `TODOS.md`'s SQLite/Dolt note into an ADR or runtime invariant, then deleting the root TODO;
+- folding the new computer ontology into `docs/glossary.md` so "sandbox" remains only an implementation/service name;
 - extracting live content from `PROJECT-GOALS.md`, then deleting or moving it;
 - replacing or deleting `docs/PROJECT-STATE.md`;
 - deleting old Mission 1/2/3/5/6/7 docs only after the docs-state report's extraction targets are handled;

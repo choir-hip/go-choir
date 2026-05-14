@@ -1,6 +1,6 @@
 # Runtime Invariants
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-14
 
 This file captures implementation invariants. For full context, read
 [docs/current-architecture.md](current-architecture.md).
@@ -13,21 +13,27 @@ user-visible feature, or required repository structure.
 
 ## Deployment Source Of Truth
 
-GitHub is the source of truth for tracked files deployed to Node B.
+GitHub is the source of truth for tracked platform files deployed to Node B.
 
 Do not edit or sync git-tracked files directly into `/opt/go-choir` on Node B.
 Runtime secrets, service environment files, guest images, and generated Nix
 artifacts may live in designated runtime paths, but source/config changes must
 land through git and the GitHub Actions deploy flow.
 
-Behavior-changing work must include commit, push to `origin/main`, CI
+Platform behavior-changing work must include commit, push to `origin/main`, CI
 monitoring, Node B staging deploy monitoring, deployed health/build identity
 verification, and a deployed product-path acceptance proof. Documentation-only
 commits are exempt from automatic CI/deploy and should remain covered by the
 workflow path filters for `docs/**` and top-level `*.md`.
 
+Personal computer changes are not automatically platform behavior changes. A
+user-local app, prompt, theme, package install, Go binary, Svelte build, or
+Dolt/app-state change may be promoted into that user's computer without global
+CI/deploy, provided the personal promotion records lineage, typed deltas,
+verifier evidence, and rollback.
+
 `https://draft.choir-ip.com` is the acceptance environment for vmctl, gateway,
-live model/search calls, background/candidate VMs, promotion, rollback,
+live model/search calls, background/candidate computers, platform promotion, rollback,
 auth/session, and Choir-in-Choir claims.
 
 ## Agent Roles
@@ -50,51 +56,57 @@ branches/commits, previews, tests, questions, constraints, or proposals.
 and does not own document text.
 
 `super` is the per-user privileged orchestration root. It can request `vmctl`
-resources such as background VM forks and promotions.
+resources such as background/candidate computer forks and promotions.
 
-`vsuper` is the sovereign worker inside a background VM or candidate world. It
+`vsuper` is the sovereign worker inside a background/candidate computer or candidate world. It
 can mutate candidate state within scope and can spawn subordinate cosupers
 inside its own VM boundary. It cannot promote canonical state.
 
-`cosuper` is a durable execution co-agent, usually in a background VM. Only
+`cosuper` is a durable execution co-agent, usually in a background computer. Only
 `super` or `vsuper` authority can lease cosuper work; cosupers coordinate within
 their assigned work but do not create more privileged execution roots.
 
 `worker` is the general category for delegated agents such as researcher, super,
 cosuper, and future specialized workers with their own tools.
 
-## VM Model
+## Computer Model
 
-`active_vm` is the user's primary desktop VM. It hosts visible appagents,
-per-user embedded Dolt, and private app state. It should stay stable and
-responsive.
+The product object is a persistent user **computer**, not a disposable sandbox.
+Use `sandbox` only for the current runtime service/process name.
 
-`background_vm` is a fork of the user's active VM. Risky mutable work goes
-there: code edits, package installs, tests, builds, deploy prep, generated files,
-and anything that can destabilize the active desktop.
+`active_computer` is the user's primary desktop computer. It hosts visible apps,
+appagents, per-user embedded Dolt, private app state, local files, prompts, and
+user-specific runtime state. It should stay stable and responsive.
+
+`background_computer` is a fork of the user's active computer. Risky mutable
+work goes there: code edits, package installs, tests, builds, deploy prep,
+generated files, and anything that can destabilize the active desktop.
 
 Background work returns artifacts, findings, branch/commit refs, previews, test
-results, and proposed merges. A background VM can merge back into active state or
-be promoted to active while the previous active snapshot remains available for
-rollback.
+results, and proposed merges. A background computer can merge back into active
+state, publish a typed package, or be promoted to active while the previous
+active snapshot remains available for rollback.
 
-Candidate worlds are background mutation contexts. They are allowed to break,
-install dependencies, run tests, and fail. They produce deltas and evidence.
-They do not mutate canonical foreground state directly.
+Candidate computers are background mutation contexts. They are allowed to break,
+install dependencies, run tests, build alternate runtimes, and fail. They produce
+deltas and evidence. They do not mutate canonical foreground state directly.
 
-Shared worker VMs are not a current invariant. They may become a later cost
-optimization, but the immediate model is active VM plus capacity-gated background
-VM forks, including for free users while capacity allows.
+Candidate worlds are the broader substrate-neutral term. A candidate world may
+be a computer, worktree, Dolt branch, package branch, or future state branch.
+
+Shared worker computers are not a current invariant. They may become a later cost
+optimization, but the immediate model is active computer plus capacity-gated
+background computer forks, including for free users while capacity allows.
 
 `platform_vm_pool` is a platform-level pool for public/unauthenticated and shared
 serving work. It is needed during the publication pass so published `vtext`
-artifacts can be served without hydrating private user VMs.
+artifacts can be served without hydrating private user computers.
 
 ## Super-Tier Execution Policy
 
 `super` and `cosuper` should not edit the live desktop directly. They may inspect
 or control it through typed APIs, but mutable workspace changes should happen in
-background VM forks.
+background/candidate computer forks.
 
 Do not over-design locks, leases, or predeclared edit scopes as the core safety
 model. The current safety model is VM placement, typed app APIs, durable
@@ -120,6 +132,29 @@ routing records, publication records, public artifact metadata, citation graph,
 compute accounting, and later CHIPS state.
 
 Platform Dolt is a ledger, not the network.
+
+Source/build state belongs in git-like source ledgers or typed app/package
+bundles. Uploaded/generated files belong in content-addressed blob storage with
+Dolt/artifact metadata. Runtime caches and temp files are machine state unless
+they are deliberately converted into typed artifacts.
+
+## Promotion
+
+Personal promotion and platform promotion are different invariants.
+
+Personal promotion changes one user's computer. It must preserve active
+foreground changes since the candidate fork, record conflicts instead of losing
+updates, verify the promoted state, switch routes atomically, and keep a rollback
+target for a TTL.
+
+Platform/public promotion changes shared state. It must use verifier contracts,
+owner/reviewer decision where required, rollback evidence, and staging/deployed
+proof when the change affects deployed platform behavior.
+
+Do not promote opaque VM state as if it were a clean semantic merge. Promote
+typed artifacts: Dolt commits/branches, source/build deltas, blob hashes,
+artifact graph records, app packages, agent packages, verifier results, and
+route-switch certificates.
 
 ## Messaging
 

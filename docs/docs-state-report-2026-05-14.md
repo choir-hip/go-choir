@@ -20,7 +20,7 @@ Choir is not a chat app. Chat may be an input/control affordance, but the produc
 
 ## Executive recommendations
 
-1. Keep `README.md`, `AGENTS.md`, `docs/mission-geometry.md`, `docs/current-architecture.md`, `docs/runtime-invariants.md`, `docs/implementation-scope.md`, `docs/north-star.md`, and `docs/README.md` as the canonical current spine.
+1. Keep `README.md`, `AGENTS.md`, `docs/mission-geometry.md`, `docs/computer-ontology.md`, `docs/current-architecture.md`, `docs/runtime-invariants.md`, `docs/implementation-scope.md`, `docs/north-star.md`, and `docs/README.md` as the canonical current spine.
 2. Promote the `TODOS.md` SQLite/Dolt note into canonical state docs or an ADR, then delete `TODOS.md`. The desired direction is stronger than “evaluate”: Dolt should be canonical product state; SQLite should remain only for narrow hot/runtime/cache/compatibility roles when explicitly justified.
 3. Move and update `PROJECT-GLOSSARY.md` into `docs/glossary.md`; it is useful but stale and misplaced at repo root.
 4. Extract live content from `PROJECT-GOALS.md` into canonical docs or a refreshed `docs/project-goals.md`, then remove the top-level file.
@@ -39,6 +39,7 @@ Choir is not a chat app. Chat may be an input/control affordance, but the produc
 | `PROJECT-GOALS.md` | 2026-05-04 `9894da8` | delete-after-extraction | high | high | extract live goals, then remove root file | `docs/current-architecture.md`, `docs/runtime-invariants.md`, possible `docs/project-goals.md` | Valuable vtext/conductor/Trace/Dolt content, but many checklists and next-runs are stale. |
 | `docs/README.md` | 2026-05-14 `a2c4430` | canonical-current | high | low | update taxonomy | n/a | Should explicitly explain canonical/current/evidence/historical/stale buckets. |
 | `docs/mission-geometry.md` | 2026-05-14 `4d964bf` | canonical-current | high | low | keep | n/a | High-level mission geometry and product ontology. |
+| `docs/computer-ontology.md` | 2026-05-14 new in this PR | canonical-current | high | low | keep | n/a | Names the persistent computer object, ledger split, personal promotion, platform promotion, and update algebra. |
 | `docs/current-architecture.md` | 2026-05-14 `a2c4430` | canonical-current | high | low | keep/edit incrementally | n/a | First architecture doc for current runtime changes. |
 | `docs/runtime-invariants.md` | 2026-05-13 `4db1144` | canonical-current | high | low | keep/edit; add Dolt canonical-state direction | n/a | Right place for durable state boundary invariants. |
 | `docs/implementation-scope.md` | 2026-05-04 `f4b65ea` | canonical-current | medium | medium | refresh dates/scope | `docs/current-architecture.md` | Near-term build order but older than latest mission geometry and controller work. |
@@ -126,7 +127,7 @@ That is acceptable only if `docs/README.md` makes the distinction explicit and a
 
 After this report is reviewed, open a second cleanup PR that:
 
-1. Moves/updates `PROJECT-GLOSSARY.md` -> `docs/glossary.md`.
+1. Moves/updates `PROJECT-GLOSSARY.md` -> `docs/glossary.md`, including the new computer ontology and deprecating sandbox as a product noun.
 2. Adds `docs/adr-dolt-as-canonical-state.md` and deletes `TODOS.md`.
 3. Extracts live content from `PROJECT-GOALS.md`, then deletes or moves it.
 4. Replaces `docs/PROJECT-STATE.md` with a short historical pointer, or deletes it.
@@ -143,6 +144,7 @@ After this report is reviewed, open a second cleanup PR that:
 | `TODOS.md` | 2026-04-30 1f5d151 Document vtext-first architecture and remove factory assumptions | delete-after-extraction | promote Dolt/SQLite invariant then delete | docs/runtime-invariants.md or docs/adr-dolt-as-canonical-state.md |
 | `docs/PROJECT-STATE.md` | 2026-05-13 4db1144 Refresh staging-first operational docs | stale-dangerous | replace with pointer or delete | docs/README.md / git history |
 | `docs/README.md` | 2026-05-14 a2c4430 docs: add Choir mission geometry | canonical-current | keep | n/a |
+| `docs/computer-ontology.md` | new in this PR | canonical-current | keep | n/a |
 | `docs/api-surface-and-vtext-workflow-review-2026-05-01.md` | 2026-05-04 f4b65ea feat: harden vtext workflow and runtime api | historical-signal | keep as dated artifact; extract live items | canonical docs if still live |
 | `docs/api-vtext-hard-cutover-checklist-2026-05-01.md` | 2026-05-04 f4b65ea feat: harden vtext workflow and runtime api | historical-signal | keep as dated artifact; extract live items | canonical docs if still live |
 | `docs/architecture.md` | 2026-04-30 1f5d151 Document vtext-first architecture and remove factory assumptions | historical-signal | keep/mark historical; extract durable lessons | canonical docs / ADRs |
