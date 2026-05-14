@@ -75,7 +75,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   if (await authenticatedDesktop.getAttribute('data-desktop-ready') !== 'true') {
     await expect(page.locator('[data-boot-console]')).toBeVisible({ timeout: 30_000 });
   }
-  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
+  await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
   const firstPromptRes = await firstPromptResponse;
   expect(firstPromptRes.status()).toBe(202);
   const firstBootstrap = await bootstrap(page);
@@ -98,7 +98,12 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   await page.locator('[data-login-toggle]').click();
   await page.locator('[data-login-view] input[type="email"]').fill(email);
   await page.locator('[data-login-view] [data-auth-submit]').click();
-  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
+  const returningAuthenticatedDesktop = page.locator('[data-desktop][data-authenticated="true"]');
+  await expect(returningAuthenticatedDesktop).toHaveCount(1, { timeout: 30_000 });
+  if (await returningAuthenticatedDesktop.getAttribute('data-desktop-ready') !== 'true') {
+    await expect(page.locator('[data-boot-console]')).toBeVisible({ timeout: 30_000 });
+  }
+  await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
   const returningBootstrap = await bootstrap(page);
   expect(returningBootstrap.sandbox_id).toBe(firstBootstrap.sandbox_id);
 
