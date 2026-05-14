@@ -6,7 +6,35 @@ This is the near-term build order. For the complete current architecture, read
 [docs/current-architecture.md](current-architecture.md). For the broader goal
 continuum, read [docs/project-goals.md](project-goals.md).
 
-## First Priority: Verifiable VText
+## Immediate Priority: Public Desktop And Auth-On-Mutation
+
+The immediate product bottleneck is now the access model:
+
+```text
+public desktop view
+-> mutation intent
+-> login/register overlay
+-> authenticated active/candidate computer
+-> product-path mutation
+```
+
+Required behavior:
+
+- Signed-out visitors see the real desktop shell, not a marketing placeholder.
+- Anonymous read-only inspection is allowed for public platform/user surfaces.
+- Prompt-bar submission or any durable mutation asks for auth at the boundary.
+- The typed prompt or mutation intent survives register/login.
+- After auth, mutation resumes through the normal product APIs and the user's
+  active or candidate computer.
+- Loading and LLM-call states are visible, recoverable, and tied to real request
+  or run state where possible.
+- Existing signed-in accounts still open the desktop and can always reach
+  logout.
+
+This mission is defined in
+[mission-public-desktop-auth-on-mutation-v0.md](mission-public-desktop-auth-on-mutation-v0.md).
+
+## Next Priority: Verifiable VText
 
 The current product bottleneck is:
 

@@ -49,17 +49,20 @@ build identity. It replaces ad hoc claims like "the Trace looked good."
 
 ## Priority Order
 
-1. Make `vtext`, researcher, super, and user edits work well and become
+1. Make the public desktop and auth-on-mutation access model work: signed-out
+   users can see the real desktop, while mutable moves ask for identity at the
+   boundary and then continue through an owned active/candidate computer.
+2. Make `vtext`, researcher, super, and user edits work well and become
    machine-verifiable.
-2. Add ingestion skills: URL to extracted text/content, YouTube transcripts, and
+3. Add ingestion skills: URL to extracted text/content, YouTube transcripts, and
    text/Markdown/PDF/EPUB upload. Later add audio/video/image display apps so
    uploaded, linked, or agent-retrieved media can open in the desktop and become
    available for `vtext` transclusion.
-3. Add publication.
-4. Add Pretext-based text rendering/transclusion for published `vtext` and web
+4. Add publication.
+5. Add Pretext-based text rendering/transclusion for published `vtext` and web
    content.
-5. Add citation mechanics.
-6. Add CHIPS and citation/compute economics.
+6. Add citation mechanics.
+7. Add CHIPS and citation/compute economics.
 
 Later layers should shape today's data model, but they should not be built
 before the vtext loop is reliable.
@@ -247,6 +250,29 @@ decision, not a reason to preserve shared workers now.
   platform-visible app surfaces.
 - Should not be confused with a user's active/background computer model.
 
+## Public Identity And Routing
+
+Public viewing and mutation authority are separate.
+
+```text
+choir-ip.com              -> public platform computer surface
+choir-ip.com/:handle      -> public user-selected handle surface
+custom-domain.example     -> verified alias to a selected public surface
+```
+
+Handles are chosen product identities, not privileged account names. A user may
+have multiple accounts during testing, and no account receives a special route
+because of who owns it. Custom domains are a roadmap value proposition: after a
+domain owner proves control, the domain can serve the same published personal
+desktop/newspaper surface that would otherwise live under `choir-ip.com/:handle`.
+
+Anonymous users may inspect public surfaces. When they attempt to mutate, Choir
+should ask them to register or log in, then create or resume a user-owned active
+or candidate computer. Platform/public mutation is a fork/proposal/promotion
+path, not direct anonymous mutation of the platform computer.
+
+Read [public-identity-and-custom-domains.md](public-identity-and-custom-domains.md).
+
 ## Promotion Paths
 
 Personal promotion changes one user's computer. It may promote a new local Go
@@ -375,6 +401,11 @@ as the first behavior.
 
 The UI should be easy to change. The desktop is the demo of the Automatic
 Computer, not a fixed visual doctrine.
+
+The root product should show the real desktop to signed-out visitors. Login is a
+mutation boundary, not a prerequisite for viewing. Prompt-bar input, file writes,
+LLM-backed actions, candidate creation, publication, and promotion should trigger
+auth when needed while preserving the user's current intent.
 
 The prompt bar should react optimistically to user input. Simple version: show a
 loading toast. Better version: animate or expand the prompt into the new `vtext`

@@ -27,15 +27,21 @@ Use these buckets when reading or editing docs:
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
 - `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
+- `docs/public-identity-and-custom-domains.md` - public handle, route, and
+  custom domain roadmap.
 - `docs/docs-state-report-2026-05-14.md` - current documentation audit and cleanup recommendation matrix.
 - `docs/current-architecture.md` - current product/runtime architecture.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
-- `docs/mission-choir-in-choir-controller-v0.md` - active next staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
+- `docs/mission-public-desktop-auth-on-mutation-v0.md` - active next
+  MissionGradient for public desktop access and auth-on-mutation.
+- `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 
 ## Current Mission Family
 
+- `docs/mission-public-desktop-auth-on-mutation-v0.md` - active next UX/access
+  model mission.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.

@@ -137,6 +137,25 @@ or chat wrapper:
 Apps do not need to become appagents immediately. They become appagents when
 they need durable domain ownership, prompts, dynamic UI, or semantic memory.
 
+### Public Identity And Domains
+
+Public viewing should not require login. Mutable work should require identity at
+the boundary where the user tries to write, run an LLM-backed action, create a
+candidate, publish, or promote.
+
+Default public routes should be:
+
+```text
+choir-ip.com              -> platform/public surface
+choir-ip.com/:handle      -> user-selected public handle surface
+```
+
+No user receives a special path by personal identity. Handles are selected and
+owned product records. The stretch goal is custom domain support, where a
+verified domain such as `mosiah.org` aliases to the user's selected public
+computer/newspaper surface. See
+[public-identity-and-custom-domains.md](public-identity-and-custom-domains.md).
+
 ### Ingestion, Publication, And Radio
 
 After the `vtext` loop is reliable, add ingestion and publication pressure:
@@ -166,15 +185,17 @@ Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 
 ## Near-Term Mission Pressure
 
-1. Keep documentation canonical enough that long-running agents do not follow
+1. Make the public desktop/auth-on-mutation slice real enough that users can see
+   Choir before logging in, but cannot mutate without identity.
+2. Keep documentation canonical enough that long-running agents do not follow
    stale mission files.
-2. Make run acceptance cover promotion-level and continuation-level self
+3. Make run acceptance cover promotion-level and continuation-level self
    development, not just export-level evidence.
-3. Make candidate computer lineage, typed delta export, verifier contracts, and
+4. Make candidate computer lineage, typed delta export, verifier contracts, and
    rollback certificates first-class.
-4. Use Playwright/Codex to prompt Choir to develop Choir once the product path
+5. Use Playwright/Codex to prompt Choir to develop Choir once the product path
    is safe enough, with Codex observing, learning, and repairing when needed.
-5. Build the small missing product surfaces that make this demonstrable:
+6. Build the small missing product surfaces that make this demonstrable:
    launcher, Files upload, theme editing, podcast/radio improvements, and
    browser surface rationalization.
 
