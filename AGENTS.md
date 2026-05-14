@@ -33,6 +33,8 @@ Docs-only commits are different. The CI workflow intentionally ignores `docs/**`
 
 For multi-hour, overnight, staging, self-development, or broad architectural work, use MissionGradient: define the real artifact, invariants, value criterion, homotopy axes, dense feedback, forbidden shortcuts, rollback, learning side-channel, and stopping condition.
 
+Read [docs/missiongradient-method.md](docs/missiongradient-method.md) before authoring or executing broad MissionGradient runs.
+
 Do not turn MissionGradient into a brittle checklist. Preserve the invariant and increase realism as evidence arrives.
 
 ## Authority Boundaries
