@@ -257,11 +257,12 @@ in
         "VM_MEM_MIB=512"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=3s"
+        "VM_BOOT_READY_TIMEOUT=60s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
-        # Staging idle timeout: idle VMs are hibernated aggressively enough
-        # to keep fresh product-path proof users from starving VM capacity.
-        "VMCTL_IDLE_TIMEOUT=10m"
-        "VMCTL_IDLE_SWEEP_INTERVAL=30s"
+        # Staging keeps personal computers warm for normal return visits.
+        # This is a coarse safety valve until pressure-aware reclaim exists.
+        "VMCTL_IDLE_TIMEOUT=6h"
+        "VMCTL_IDLE_SWEEP_INTERVAL=5m"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

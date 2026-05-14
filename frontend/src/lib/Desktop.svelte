@@ -92,11 +92,16 @@
   let stateLoaded = false;
   let saveTimer = null;
   const SAVE_DEBOUNCE_MS = 500;
-  const BOOTSTRAP_STABILITY_ATTEMPTS = 6;
-  const BOOTSTRAP_STABILITY_DELAY_MS = 800;
+  const BOOTSTRAP_STABILITY_DEADLINE_MS = 120_000;
+  const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
+  const MAX_BOOT_LINES = 9;
+  let bootPromptPlaceholder = 'Booting user computer...';
+  let bootLines = [];
+  let bootLineCounter = 0;
+  let bootStartedAt = 0;
 
   $: desktopReady = bootstrapStable && stateLoaded;
-  $: promptPlaceholder = desktopReady ? 'Ask anything...' : 'Connecting to desktop...';
+  $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
   $: if (mounted && authenticated !== lastAuthenticated) {
     lastAuthenticated = authenticated;
     if (authenticated) {
@@ -138,6 +143,8 @@
     refreshStatus = '';
     stateLoaded = true;
     desktopReady = true;
+    bootLines = [];
+    bootPromptPlaceholder = 'Booting user computer...';
     promptPlaceholder = 'Ask anything...';
     promptStatus = '';
     authenticatedStartupRunning = false;
@@ -155,28 +162,39 @@
     bootstrapStable = false;
     stateLoaded = false;
     desktopReady = false;
-    promptPlaceholder = 'Connecting to desktop...';
+    bootLines = [];
+    bootStartedAt = Date.now();
+    bootPromptPlaceholder = 'Booting user computer...';
     bootstrapError = '';
     refreshStatus = '';
     promptStatus = '';
     wsClosedByLogout = false;
+    liveStatus.set('connecting');
+    appendBootLine('Powering user computer');
 
     try {
       const stable = await stabilizeBootstrap();
       if (!authenticated) return;
       if (!stable) {
+        appendBootLine('Desktop route did not become ready in time', 'error');
         liveStatus.set('error');
         return;
       }
+      appendBootLine('Opening live channel');
       connectLiveChannel();
+      appendBootLine('Restoring desktop state');
       await loadDesktopState();
       desktopReady = bootstrapStable && stateLoaded;
+      if (desktopReady) {
+        promptStatus = '';
+      }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
       bootstrapError = 'Bootstrap request failed';
+      appendBootLine('Bootstrap request failed', 'error');
       liveStatus.set('error');
     } finally {
       authenticatedStartupRunning = false;
@@ -231,6 +249,17 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function appendBootLine(message, kind = 'info') {
+    const elapsedMs = bootStartedAt ? Date.now() - bootStartedAt : 0;
+    const elapsed = `${Math.max(0, Math.floor(elapsedMs / 1000)).toString().padStart(2, '0')}s`;
+    bootPromptPlaceholder = message;
+    promptStatus = desktopReady ? '' : message;
+    bootLines = [
+      ...bootLines.slice(-(MAX_BOOT_LINES - 1)),
+      { id: ++bootLineCounter, elapsed, message, kind },
+    ];
+  }
+
   function scheduleSave() {
     if (!authenticated || !stateLoaded) return;
     if (saveTimer) clearTimeout(saveTimer);
@@ -283,22 +312,44 @@
     bootstrapStable = false;
     bootstrapError = '';
     let previousSandboxId = '';
-    for (let attempt = 0; attempt < BOOTSTRAP_STABILITY_ATTEMPTS; attempt++) {
-      const res = await fetchWithRenewal('/api/shell/bootstrap', { method: 'GET' });
+    let attempt = 0;
+    const deadline = Date.now() + BOOTSTRAP_STABILITY_DEADLINE_MS;
+    appendBootLine('Resolving active computer');
+
+    while (authenticated && Date.now() < deadline) {
+      attempt++;
+      let res;
+      try {
+        res = await fetchWithRenewal('/api/shell/bootstrap', { method: 'GET' });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          throw err;
+        }
+        bootstrapError = 'Bootstrap request failed';
+        appendBootLine(`Bootstrap probe ${attempt} lost contact; retrying`, 'warn');
+        await delay(BOOTSTRAP_STABILITY_DELAY_MS);
+        continue;
+      }
       if (!res.ok) {
         bootstrapError = `Bootstrap failed (${res.status})`;
-        return false;
+        appendBootLine(`VM route returned ${res.status}; retrying`, 'warn');
+        await delay(BOOTSTRAP_STABILITY_DELAY_MS);
+        continue;
       }
       bootstrapData = await res.json();
       const sandboxId = (bootstrapData?.sandbox_id || '').trim();
       if (sandboxId !== '' && sandboxId === previousSandboxId) {
         bootstrapStable = true;
+        appendBootLine('Stable computer route confirmed');
         return true;
       }
-      previousSandboxId = sandboxId;
-      if (attempt < BOOTSTRAP_STABILITY_ATTEMPTS - 1) {
-        await delay(BOOTSTRAP_STABILITY_DELAY_MS);
+      if (sandboxId !== '') {
+        appendBootLine(previousSandboxId ? 'Waiting for route to stabilize' : 'Candidate computer route found');
+      } else {
+        appendBootLine('Waiting for computer identity');
       }
+      previousSandboxId = sandboxId;
+      await delay(BOOTSTRAP_STABILITY_DELAY_MS);
     }
     bootstrapError = 'Desktop routing is still stabilizing';
     return false;
@@ -747,6 +798,27 @@
     {/if}
   </div>
 
+  {#if authenticated && !desktopReady}
+    <div class="boot-console" data-boot-console aria-live="polite" role="status">
+      <div class="boot-console-header">
+        <span>CHOIR BIOS</span>
+        <span>{bootstrapError || 'VM bootstrap'}</span>
+      </div>
+      <div class="boot-lines" data-boot-lines>
+        {#each bootLines as line (line.id)}
+          <div class="boot-line" class:warn={line.kind === 'warn'} class:error={line.kind === 'error'} data-boot-line>
+            <span class="boot-time">{line.elapsed}</span>
+            <span class="boot-message">{line.message}</span>
+          </div>
+        {/each}
+        <div class="boot-line boot-cursor" data-boot-cursor>
+          <span class="boot-time">..</span>
+          <span class="boot-message">_</span>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if toasts.length > 0}
     <div class="toast-stack" aria-live="polite" aria-atomic="true">
       {#each toasts as toast (toast.id)}
@@ -785,7 +857,8 @@
   }
 
   .desktop.desktop-loading :global(.bottom-bar),
-  .desktop.desktop-loading :global(.desktop-menu) {
+  .desktop.desktop-loading :global(.desktop-menu),
+  .desktop.desktop-loading .boot-console {
     visibility: visible;
   }
 
@@ -809,6 +882,76 @@
 
   .desktop-area.state-loaded {
     visibility: visible;
+  }
+
+  .boot-console {
+    position: fixed;
+    left: clamp(16px, 6vw, 72px);
+    right: clamp(16px, 6vw, 72px);
+    bottom: calc(var(--choir-bottom-bar-height, 56px) + 24px);
+    max-width: 760px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 8px;
+    background: rgba(5, 8, 14, 0.92);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38);
+    color: #d1fae5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    z-index: 90;
+  }
+
+  .boot-console-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 0.65rem 0.8rem;
+    color: #bfdbfe;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .boot-lines {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .boot-line {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    gap: 0.6rem;
+    align-items: baseline;
+    min-width: 0;
+    color: #bbf7d0;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .boot-line.warn {
+    color: #fde68a;
+  }
+
+  .boot-line.error {
+    color: #fecaca;
+  }
+
+  .boot-time {
+    color: #7dd3fc;
+    font-size: 0.72rem;
+  }
+
+  .boot-message {
+    overflow-wrap: anywhere;
+  }
+
+  .boot-cursor .boot-message {
+    animation: boot-cursor-blink 1s steps(2, start) infinite;
+  }
+
+  @keyframes boot-cursor-blink {
+    0%, 45% { opacity: 1; }
+    46%, 100% { opacity: 0; }
   }
 
   /* App content inside windows */
@@ -883,5 +1026,27 @@
     font-size: 0.95rem;
     font-weight: 600;
     color: #c0c0d0;
+  }
+
+  @media (max-width: 768px) {
+    .boot-console {
+      left: 12px;
+      right: 12px;
+      bottom: calc(var(--choir-bottom-bar-height, 56px) + 12px);
+    }
+
+    .boot-console-header {
+      font-size: 0.66rem;
+      padding: 0.55rem 0.65rem;
+    }
+
+    .boot-lines {
+      padding: 0.65rem;
+    }
+
+    .boot-line {
+      grid-template-columns: 2.65rem minmax(0, 1fr);
+      font-size: 0.72rem;
+    }
   }
 </style>

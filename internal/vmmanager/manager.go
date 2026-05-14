@@ -395,6 +395,12 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 		}
 		// VM exists but is not running; clean up before relaunching.
 		m.forceCleanup(cfg.VMID)
+	} else {
+		// A previous vmctl process may have failed to reattach a Firecracker
+		// child whose PID file survived. Reclaim only processes whose cmdline
+		// still proves they are this VM's Firecracker instance; never kill an
+		// arbitrary reused PID from stale metadata.
+		m.cleanupOrphanedFirecrackerLocked(cfg.VMID)
 	}
 
 	// Assign a host port for this VM.
@@ -1124,6 +1130,28 @@ func (m *Manager) forceCleanup(vmID string) {
 	}
 }
 
+func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
+	pid, err := m.loadPID(vmID)
+	if err != nil {
+		return
+	}
+	if !processExists(pid) {
+		_ = os.Remove(m.pidPath(vmID))
+		return
+	}
+	if !firecrackerCmdlineMatchesVM(pid, vmID) {
+		log.Printf("vmmanager: ignoring stale pid file for VM %s; pid %d does not identify this Firecracker VM", vmID, pid)
+		_ = os.Remove(m.pidPath(vmID))
+		return
+	}
+	log.Printf("vmmanager: killing orphaned Firecracker process for VM %s (pid=%d) before restart", vmID, pid)
+	inst := &VMInstance{
+		Config: VMConfig{VMID: vmID},
+		PID:    pid,
+	}
+	m.killFirecrackerProcess(inst)
+}
+
 func (m *Manager) pidPath(vmID string) string {
 	return filepath.Join(m.cfg.StateDir, vmID, "firecracker.pid")
 }
@@ -1160,6 +1188,29 @@ func processExists(pid int) bool {
 		return false
 	}
 	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func firecrackerCmdlineMatchesVM(pid int, vmID string) bool {
+	if pid <= 0 || strings.TrimSpace(vmID) == "" {
+		return false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false
+	}
+	return firecrackerCmdlineBytesMatchVM(data, vmID)
+}
+
+func firecrackerCmdlineBytesMatchVM(data []byte, vmID string) bool {
+	cmdline := strings.ReplaceAll(string(data), "\x00", " ")
+	cmdline = strings.TrimSpace(cmdline)
+	if cmdline == "" {
+		return false
+	}
+	if !strings.Contains(cmdline, "firecracker") {
+		return false
+	}
+	return strings.Contains(cmdline, "--id "+vmID) || strings.Contains(cmdline, "--id="+vmID)
 }
 
 // probeGuestHealth attempts to reach the guest's /health endpoint.

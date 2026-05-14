@@ -2224,6 +2224,74 @@ func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *tes
 	}
 }
 
+func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesktop(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	now := time.Now().Add(-time.Hour)
+	own := &VMOwnership{
+		VMID:         "vm-failed-cold-resume",
+		UserID:       "user-existing-account",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateHibernated,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Epoch:        7,
+		Published:    true,
+		StoppedBy:    "idle",
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	mock := &mockVMManager{
+		resumeError: fmt.Errorf("vm vm-failed-cold-resume cannot be resumed (state=failed)"),
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.SandboxURL,
+				Epoch:   own.Epoch,
+				Healthy: false,
+				State:   "failed",
+			},
+		},
+		recoverResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9046",
+			Epoch:   8,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg.SetVMManager(mock)
+
+	resolved, err := reg.ResolveOrAssignDesktop(own.UserID, PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if len(mock.resumes) != 1 || mock.resumes[0] != own.VMID {
+		t.Fatalf("resumes = %+v, want [%s]", mock.resumes, own.VMID)
+	}
+	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
+		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
+	}
+	if len(mock.boots) != 0 {
+		t.Fatalf("expected recovery of failed manager instance, got %d boot calls", len(mock.boots))
+	}
+	if resolved.VMID != own.VMID {
+		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9046" {
+		t.Fatalf("SandboxURL = %q, want recovered host URL", resolved.SandboxURL)
+	}
+	if resolved.Epoch != 8 {
+		t.Fatalf("Epoch = %d, want 8", resolved.Epoch)
+	}
+	if resolved.State != VMStateActive || resolved.StoppedBy != "" {
+		t.Fatalf("resolved state=%s stopped_by=%q, want active/empty", resolved.State, resolved.StoppedBy)
+	}
+}
+
 func TestOwnershipRegistry_DelegatesBootToVMManager(t *testing.T) {
 	// When a VMManager is set, ResolveOrAssign should boot a real VM
 	// and use the returned HostURL instead of the static sandbox URL base.

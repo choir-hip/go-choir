@@ -629,6 +629,8 @@ test('logout remains reachable when desktop bootstrap fails', async ({ page, aut
   await page.reload();
 
   await expect(page.locator('[data-desktop]')).not.toBeVisible();
+  await expect(page.locator('[data-boot-console]')).toBeVisible();
+  await expect(page.locator('[data-boot-line]').first()).toContainText(/Powering|Resolving|returned 502/);
   await expect(page.locator('[data-bottom-bar]')).toBeVisible();
   await page.locator('[data-start-button]').click();
   await expect(page.locator('[data-shell-logout]')).toBeVisible();

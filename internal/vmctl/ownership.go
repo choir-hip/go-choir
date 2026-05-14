@@ -759,7 +759,15 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	}
 	if info, err := mgr.ResumeVM(own.VMID); err == nil {
 		return info, nil
-	} else if mgr.GetVM(own.VMID) != nil {
+	} else if existing := mgr.GetVM(own.VMID); existing != nil {
+		state := strings.ToLower(strings.TrimSpace(existing.State))
+		if state == "failed" || state == "pending" {
+			recovered, recoverErr := mgr.RecoverVM(own.VMID)
+			if recoverErr == nil {
+				return recovered, nil
+			}
+			return nil, fmt.Errorf("resume existing VM %s failed: %w; recovery also failed: %v", own.VMID, err, recoverErr)
+		}
 		return nil, err
 	}
 	cpu, mem := machineShapeForOwnership(own)

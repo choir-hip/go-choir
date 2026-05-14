@@ -656,6 +656,30 @@ func TestReattachVMRequiresPIDAndHealthyGuest(t *testing.T) {
 	}
 }
 
+func TestFirecrackerCmdlineBytesMatchVM(t *testing.T) {
+	vmID := "vm-existing-user"
+	matches := [][]byte{
+		[]byte("/nix/store/firecracker/bin/firecracker\x00--no-api\x00--id\x00vm-existing-user\x00--config-file\x00/state/fc-config.json"),
+		[]byte("firecracker --no-api --id=vm-existing-user --config-file /state/fc-config.json"),
+	}
+	for _, cmdline := range matches {
+		if !firecrackerCmdlineBytesMatchVM(cmdline, vmID) {
+			t.Fatalf("expected cmdline to match VM %s: %q", vmID, string(cmdline))
+		}
+	}
+
+	nonMatches := [][]byte{
+		[]byte("/bin/sleep\x0060"),
+		[]byte("firecracker --no-api --id vm-other-user --config-file /state/fc-config.json"),
+		[]byte(""),
+	}
+	for _, cmdline := range nonMatches {
+		if firecrackerCmdlineBytesMatchVM(cmdline, vmID) {
+			t.Fatalf("expected cmdline not to match VM %s: %q", vmID, string(cmdline))
+		}
+	}
+}
+
 func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
 	mgr := NewManager(ManagerConfig{HostBasePort: 9000})
 
