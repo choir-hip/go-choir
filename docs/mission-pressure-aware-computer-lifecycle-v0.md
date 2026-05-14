@@ -161,6 +161,16 @@ returningBootstrap VM: vm-4993ce225cab060d62b1d4e578cb8403
 mid-run reclaim protectedReasons: recent_activity
 ```
 
+Additional deployed loading-failure proof:
+
+```text
+test account: pressure-logout-loading-1778770210458@example.com
+bootConsoleDuringPersistent502: true
+logoutVisibleDuringBootstrapFailure: true
+logoutReturnedToPublicDesktop: true
+bootstrapInterceptions: 1
+```
+
 Local verification before push:
 
 ```text
