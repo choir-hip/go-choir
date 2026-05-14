@@ -260,9 +260,11 @@ in
         "VM_BOOT_READY_TIMEOUT=60s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Staging keeps personal computers warm for normal return visits.
-        # This is a coarse safety valve until pressure-aware reclaim exists.
+        # Primary computers remain online while the host is under capacity;
+        # pressure policy chooses lower-priority idle resources first.
         "VMCTL_IDLE_TIMEOUT=6h"
         "VMCTL_IDLE_SWEEP_INTERVAL=5m"
+        "VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity"
         "VMCTL_PRESSURE_RECLAIM_MODE=dry-run"
         "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=2048"

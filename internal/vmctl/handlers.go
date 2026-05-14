@@ -18,14 +18,15 @@ type vmctlErrorResponse struct {
 
 // vmctlHealthResponse is the JSON structure for GET /health.
 type vmctlHealthResponse struct {
-	Status          string              `json:"status"`
-	Service         string              `json:"service"`
-	ActiveVMs       int                 `json:"active_vms"`
-	TotalOwnerships int                 `json:"total_ownerships"`
-	IdleEligible    int                 `json:"idle_eligible"`
-	ByState         map[string]int      `json:"by_state,omitempty"`
-	ByKind          map[string]int      `json:"by_kind,omitempty"`
-	Reclaim         PressureReclaimPlan `json:"reclaim"`
+	Status          string                `json:"status"`
+	Service         string                `json:"service"`
+	ActiveVMs       int                   `json:"active_vms"`
+	TotalOwnerships int                   `json:"total_ownerships"`
+	IdleEligible    int                   `json:"idle_eligible"`
+	ByState         map[string]int        `json:"by_state,omitempty"`
+	ByKind          map[string]int        `json:"by_kind,omitempty"`
+	Reclaim         PressureReclaimPlan   `json:"reclaim"`
+	Warmness        WarmnessHealthSummary `json:"warmness"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -44,6 +45,7 @@ type resolveResponse struct {
 	ParentVMID      string `json:"parent_vm_id,omitempty"`
 	SnapshotKind    string `json:"snapshot_kind,omitempty"`
 	Published       bool   `json:"published"`
+	WarmnessClass   string `json:"warmness_class,omitempty"`
 	SandboxURL      string `json:"sandbox_url"`
 	State           string `json:"state"`
 }
@@ -63,6 +65,7 @@ type ownershipResponse struct {
 	Purpose              string `json:"purpose,omitempty"`
 	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
 	MachineClass         string `json:"machine_class,omitempty"`
+	WarmnessClass        string `json:"warmness_class,omitempty"`
 	Published            bool   `json:"published"`
 	SandboxURL           string `json:"sandbox_url"`
 	State                string `json:"state"`
@@ -122,15 +125,17 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		byState[string(own.State)]++
 		byKind[string(own.Kind)]++
 	}
+	idleEligible := h.registry.CheckIdleOwnerships()
 	writeVMCTLJSON(w, http.StatusOK, vmctlHealthResponse{
 		Status:          "ok",
 		Service:         "vmctl",
 		ActiveVMs:       h.registry.ActiveCount(),
 		TotalOwnerships: len(ownerships),
-		IdleEligible:    len(h.registry.CheckIdleOwnerships()),
+		IdleEligible:    len(idleEligible),
 		ByState:         byState,
 		ByKind:          byKind,
 		Reclaim:         h.registry.PressureReclaimPlan(),
+		Warmness:        h.registry.WarmnessSummary(idleEligible),
 	})
 }
 
@@ -189,6 +194,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		ParentVMID:      own.ParentVMID,
 		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
+		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
 	})
@@ -238,6 +244,7 @@ func (h *Handler) HandleForkDesktop(w http.ResponseWriter, r *http.Request) {
 		ParentVMID:      own.ParentVMID,
 		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
+		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
 	})
@@ -284,6 +291,7 @@ func (h *Handler) HandlePublishDesktop(w http.ResponseWriter, r *http.Request) {
 		ParentVMID:      own.ParentVMID,
 		SnapshotKind:    own.SnapshotKind,
 		Published:       own.Published,
+		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
 		SandboxURL:      own.SandboxURL,
 		State:           string(own.State),
 	})
@@ -370,6 +378,7 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		Purpose:              own.Purpose,
 		ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
 		MachineClass:         own.MachineClass,
+		WarmnessClass:        string(h.registry.WarmnessClassForOwnership(own)),
 		Published:            own.Published,
 		SandboxURL:           own.SandboxURL,
 		State:                string(own.State),

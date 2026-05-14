@@ -49,17 +49,19 @@ type proxyHealthResponse struct {
 	VMctlRouting  string                   `json:"vmctl_routing,omitempty"`
 	VMctlURL      string                   `json:"vmctl_url,omitempty"`
 	VMctlHealth   *proxyVMctlHealthSummary `json:"vmctl_health,omitempty"`
+	Lifecycle     lifecycleHealthSummary   `json:"lifecycle,omitempty"`
 	Build         buildinfo.Info           `json:"build"`
 	UpstreamBuild *buildinfo.Info          `json:"upstream_build,omitempty"`
 }
 
 type proxyVMctlHealthSummary struct {
-	Status          string                    `json:"status"`
-	Service         string                    `json:"service"`
-	ActiveVMs       int                       `json:"active_vms"`
-	TotalOwnerships int                       `json:"total_ownerships"`
-	IdleEligible    int                       `json:"idle_eligible"`
-	Reclaim         vmctl.PressureReclaimPlan `json:"reclaim"`
+	Status          string                      `json:"status"`
+	Service         string                      `json:"service"`
+	ActiveVMs       int                         `json:"active_vms"`
+	TotalOwnerships int                         `json:"total_ownerships"`
+	IdleEligible    int                         `json:"idle_eligible"`
+	Reclaim         vmctl.PressureReclaimPlan   `json:"reclaim"`
+	Warmness        vmctl.WarmnessHealthSummary `json:"warmness"`
 }
 
 // AuthResult holds the result of access JWT validation.
@@ -90,6 +92,7 @@ type Handler struct {
 	dialer       *websocket.Dialer
 	sandboxURL   *url.URL      // parsed sandbox URL for WS dial derivation
 	vmctlClient  *vmctl.Client // optional vmctl client for VM-backed routing
+	lifecycle    *lifecycleRecorder
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -185,6 +188,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		dialer:      websocket.DefaultDialer,
 		sandboxURL:  sandboxURL,
 		vmctlClient: vmctlCli,
+		lifecycle:   newLifecycleRecorder(),
 	}, nil
 }
 
@@ -250,28 +254,38 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 // X-Authenticated-User header and preserves the original request path, method,
 // query string, and upstream status/body.
 func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		h.lifecycle.record("bootstrap.method", "method_not_allowed", time.Since(started))
 		return
 	}
 
 	// Validate auth.
+	authStarted := time.Now()
 	authResult, err := h.validateAccessJWT(r)
 	if err != nil {
 		// Missing or invalid auth — deny with a machine-readable auth failure.
 		// Do NOT reach the upstream.
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		h.lifecycle.record("bootstrap.auth", "unauthorized", time.Since(authStarted))
+		h.lifecycle.record("bootstrap.total", "unauthorized", time.Since(started))
 		return
 	}
+	h.lifecycle.record("bootstrap.auth", "ok", time.Since(authStarted))
 
 	// Resolve the sandbox URL for this user.
 	desktopID := requestDesktopID(r)
+	resolveStarted := time.Now()
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		h.lifecycle.record("bootstrap.resolve", "error", time.Since(resolveStarted))
+		h.lifecycle.record("bootstrap.total", "resolve_error", time.Since(started))
 		return
 	}
+	h.lifecycle.record("bootstrap.resolve", "ok", time.Since(resolveStarted))
 
 	// Auth is valid. Store the trusted user context for the director to inject.
 	// Use X-Proxy-Trusted-User as an internal carrier; the director will
@@ -288,7 +302,11 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("X-Resolved-Sandbox-URL", sandboxURL)
 	}
 
-	h.reverseProxy.ServeHTTP(w, r)
+	upstreamStarted := time.Now()
+	recorder := &lifecycleStatusRecorder{ResponseWriter: w}
+	h.reverseProxy.ServeHTTP(recorder, r)
+	h.lifecycle.record("bootstrap.upstream", lifecycleHTTPStatus(recorder.status), time.Since(upstreamStarted))
+	h.lifecycle.record("bootstrap.total", lifecycleHTTPStatus(recorder.status), time.Since(started))
 }
 
 // HandleProtectedAPI is a generic handler for /api/* routes that require auth.
@@ -297,21 +315,34 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 // vmctl ownership instead of using the static sandbox URL (VAL-VM-001,
 // VAL-VM-002).
 func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	stagePrefix := "api"
+	if r != nil && r.URL != nil && r.URL.Path == "/api/prompt-bar" {
+		stagePrefix = "prompt_bar"
+	}
 	// Validate auth.
+	authStarted := time.Now()
 	authResult, err := h.validateAccessJWT(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		h.lifecycle.record(stagePrefix+".auth", "unauthorized", time.Since(authStarted))
+		h.lifecycle.record(stagePrefix+".total", "unauthorized", time.Since(started))
 		return
 	}
+	h.lifecycle.record(stagePrefix+".auth", "ok", time.Since(authStarted))
 
 	// Resolve the sandbox URL for this user.
 	desktopID := requestDesktopID(r)
+	resolveStarted := time.Now()
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		h.lifecycle.record(stagePrefix+".resolve", "error", time.Since(resolveStarted))
+		h.lifecycle.record(stagePrefix+".total", "resolve_error", time.Since(started))
 		return
 	}
+	h.lifecycle.record(stagePrefix+".resolve", "ok", time.Since(resolveStarted))
 
 	// Auth is valid. Store the trusted user context for the director.
 	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
@@ -323,7 +354,11 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("X-Resolved-Sandbox-URL", sandboxURL)
 	}
 
-	h.reverseProxy.ServeHTTP(w, r)
+	upstreamStarted := time.Now()
+	recorder := &lifecycleStatusRecorder{ResponseWriter: w}
+	h.reverseProxy.ServeHTTP(recorder, r)
+	h.lifecycle.record(stagePrefix+".upstream", lifecycleHTTPStatus(recorder.status), time.Since(upstreamStarted))
+	h.lifecycle.record(stagePrefix+".total", lifecycleHTTPStatus(recorder.status), time.Since(started))
 }
 
 // HandleAPI routes /api/* traffic. It applies auth gating for every HTTP
@@ -366,22 +401,31 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 // context via the X-Authenticated-User header on the sandbox dial and strips
 // any client-supplied identity headers.
 func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	// Step 1: Validate auth BEFORE upgrading. Missing or invalid auth is
 	// denied with a machine-readable 401 JSON response and no WS upgrade.
+	authStarted := time.Now()
 	authResult, err := h.validateAccessJWT(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		h.lifecycle.record("ws.auth", "unauthorized", time.Since(authStarted))
+		h.lifecycle.record("ws.total", "unauthorized", time.Since(started))
 		return
 	}
+	h.lifecycle.record("ws.auth", "ok", time.Since(authStarted))
 
 	// Step 2: Resolve the sandbox URL for this user (VAL-VM-006).
 	desktopID := requestDesktopID(r)
+	resolveStarted := time.Now()
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		h.lifecycle.record("ws.resolve", "error", time.Since(resolveStarted))
+		h.lifecycle.record("ws.total", "resolve_error", time.Since(started))
 		return
 	}
+	h.lifecycle.record("ws.resolve", "ok", time.Since(resolveStarted))
 
 	// Step 3: Upgrade the client connection to WebSocket.
 	clientConn, err := h.upgrader.Upgrade(w, r, nil)
@@ -400,14 +444,19 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	// The proxy is the trust boundary — only JWT-verified identity flows.
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
 
+	dialStarted := time.Now()
 	sandboxConn, _, err := h.dialer.Dial(sandboxWSURL, sandboxHeader)
 	if err != nil {
 		log.Printf("proxy WS: dial sandbox %s: %v", sandboxWSURL, err)
 		// Close the client connection since we can't reach the sandbox.
 		_ = clientConn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
+		h.lifecycle.record("ws.dial", "error", time.Since(dialStarted))
+		h.lifecycle.record("ws.total", "dial_error", time.Since(started))
 		return
 	}
+	h.lifecycle.record("ws.dial", "connected", time.Since(dialStarted))
+	h.lifecycle.record("ws.total", "connected", time.Since(started))
 	defer func() { _ = sandboxConn.Close() }()
 
 	// Step 5: Relay frames bidirectionally until either side closes or errors.
@@ -647,6 +696,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Status:        status,
 		Service:       "proxy",
 		Upstream:      upstreamStatus,
+		Lifecycle:     h.lifecycle.summary(),
 		Build:         buildinfo.Snapshot("proxy"),
 		UpstreamBuild: upstreamBuild,
 	}

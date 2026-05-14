@@ -163,6 +163,12 @@ test('signed-out prompt survives registration and resumes through product prompt
     const url = new URL(response.url());
     return url.pathname === '/api/prompt-bar' && response.request().method() === 'POST';
   }, { timeout: 30000 });
+  const prewarmPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === '/api/shell/bootstrap' &&
+      request.method() === 'GET' &&
+      request.headers()['x-choir-client-lifecycle-stage'] === 'post-auth-prewarm';
+  }, { timeout: 30000 });
 
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible' });
@@ -175,6 +181,9 @@ test('signed-out prompt survives registration and resumes through product prompt
 
   await expect(page.locator('[data-auth-overlay]')).toHaveCount(0, { timeout: 30000 });
   await expect(page.locator('[data-prompt-status]')).toContainText(/Routing|Waiting|Opening/, { timeout: 30000 });
+
+  const prewarmRequest = await prewarmPromise;
+  expect(new URL(prewarmRequest.url()).origin).toBe(BASE_URL);
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);

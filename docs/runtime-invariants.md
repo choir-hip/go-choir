@@ -43,6 +43,20 @@ is only a coarse safety valve; pressure-aware lifecycle policy must observe host
 memory, CPU, I/O, disk, PID headroom, VM inventory, and protected-work state
 before proposing reclaim.
 
+Private computer warmup must begin only after identity is proven. A signed-out
+public desktop view must not allocate or hydrate a private user computer.
+Post-auth prewarm may start immediately after register/login/session proof, but
+it must use the same authenticated product route and proxy/vmctl authority as
+normal bootstrap.
+
+Lifecycle policy should classify running work by warmness class, including
+public platform computer, primary user computer, premium always-on primary
+computer, candidate/background computer, ordinary worker computer, and critical
+protected verifier/promotion/publication work. Browser-public health may expose
+only aggregate counts, timing summaries, and policy names for these classes; it
+must not expose user ids, VM ids, desktop ids, emails, prompt text, credentials,
+or gateway tokens.
+
 The current pressure-aware policy is dry-run only. It may report aggregate
 pressure, protected counts, and ranked candidate summaries through health, but
 it must not hibernate or kill a VM by pressure decision until active reclaim is
@@ -54,6 +68,11 @@ rollback, or publication work are protected from pressure reclaim in the current
 implementation. Future active reclaim must expand protection to live prompt
 submissions, LLM calls, file writes, verifier runs, promotions, and publication
 actions before hibernating by pressure.
+
+Premium always-on primary computers are a first-class lifecycle class. Ordinary
+pressure reclaim must not silently demote them into best-effort idle keepalive;
+capacity reservation, migration, operator intervention, or an explicit
+entitlement policy change is required before they can lose 24/7 service.
 
 ## Agent Roles
 

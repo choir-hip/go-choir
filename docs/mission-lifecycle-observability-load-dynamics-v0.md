@@ -1,6 +1,6 @@
 # MissionGradient: Adaptive Computer Lifecycle Control
 
-**Status:** proposed next mission
+**Status:** active mission
 **Created:** 2026-05-14
 
 ## Real Artifact
@@ -127,6 +127,32 @@ fixed idle timeout
 -> paid/reserved always-on policy
 -> snapshot/restore and migration for larger fleets
 ```
+
+## Current V0 Implementation Target
+
+The first behavior-changing slice should make the policy real without pretending
+the full fleet scheduler exists yet:
+
+- vmctl exposes a typed warmness class for each ownership and a redacted
+  aggregate health summary.
+- The deployed vmctl default keeps primary user computers warm while host
+  pressure is below configured reclaim thresholds.
+- Ordinary candidate and worker computers remain eligible before primary
+  computers when pressure exists.
+- A premium `always-on` class is modeled, tested, and protected from ordinary
+  reclaim so a later 24/7 uptime tier does not require ontology changes.
+- The browser starts private bootstrap prewarm only after register/login has
+  proven identity, using the same authenticated product route as normal
+  bootstrap.
+- The proxy records aggregate lifecycle stage timings for bootstrap, protected
+  API, prompt-bar, and websocket flows without exposing user ids, VM ids,
+  prompt text, or credentials through public health.
+- Product-path Playwright proof covers signed-out public desktop, post-auth
+  prewarm, prompt mutation, returning login, warm primary reuse, deployed
+  warmness policy, and lifecycle stage visibility.
+- Load dynamics scripts cover public progressive, public stochastic, and
+  authenticated bootstrap progressive scenarios using only product/public
+  surfaces.
 
 ## Invariants
 

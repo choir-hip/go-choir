@@ -66,6 +66,9 @@ func main() {
 		idleSweeperEnabled = true
 		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates)
 	}
+	warmnessPolicy := warmnessPolicyConfigFromEnv()
+	registry.SetWarmnessPolicyConfig(warmnessPolicy)
+	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s always_on_user_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.AlwaysOnUserIDs))
 
 	// Check if Firecracker is available on this host.
 	// If so, create a VM manager for real Firecracker lifecycle management
@@ -263,6 +266,19 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 		cfg.StateDir = v
 	}
 	return cfg, true
+}
+
+func warmnessPolicyConfigFromEnv() vmctl.WarmnessPolicyConfig {
+	cfg := vmctl.DefaultWarmnessPolicyConfig()
+	cfg.PrimaryKeepaliveMode = envOr("VMCTL_PRIMARY_KEEPALIVE_MODE", vmctl.PrimaryKeepaliveModeUnderCapacity)
+	cfg.AlwaysOnUserIDs = map[string]bool{}
+	for _, raw := range strings.Split(os.Getenv("VMCTL_ALWAYS_ON_USER_IDS"), ",") {
+		userID := strings.TrimSpace(raw)
+		if userID != "" {
+			cfg.AlwaysOnUserIDs[userID] = true
+		}
+	}
+	return cfg
 }
 
 func envBool(key string, fallback bool) bool {

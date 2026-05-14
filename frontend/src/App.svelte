@@ -23,7 +23,7 @@
 <script>
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
-  import { registerPasskey, loginPasskey, passkeyErrorMessage } from './lib/auth.js';
+  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer } from './lib/auth.js';
   import { DEFAULT_THEME, THEME_STORAGE_KEY, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in'} */
@@ -44,9 +44,17 @@
   let promptReplay = null;
   let promptReplayCounter = 0;
   let sessionCheckSeq = 0;
+  let lastPrewarmStartedAt = 0;
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
+
+  function startAuthenticatedPrewarm() {
+    const now = Date.now();
+    if (now - lastPrewarmStartedAt < 5000) return;
+    lastPrewarmStartedAt = now;
+    prewarmAuthenticatedComputer().catch(() => {});
+  }
 
   async function checkSession() {
     const seq = ++sessionCheckSeq;
@@ -67,6 +75,7 @@
       if (data.authenticated && data.user) {
         authState = 'signed_in';
         currentUser = data.user;
+        startAuthenticatedPrewarm();
         return { authenticated: true, user: data.user };
       } else {
         authState = 'signed_out';
@@ -128,6 +137,8 @@
       } else {
         await loginPasskey(email);
       }
+
+      startAuthenticatedPrewarm();
 
       // Ceremony succeeded — re-check session to transition to
       // the authenticated state.

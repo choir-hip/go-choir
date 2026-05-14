@@ -210,6 +210,27 @@ export async function loginPasskey(email) {
   return finishRes.json();
 }
 
+/**
+ * Starts the authenticated computer bootstrap path immediately after identity
+ * is proven. This uses the normal product route and cookie-backed authority;
+ * it never runs before register/login/session proof succeeds.
+ *
+ * @returns {Promise<{ok: boolean, status: number, data?: object}>}
+ */
+export async function prewarmAuthenticatedComputer() {
+  try {
+    const res = await fetch(withDesktopSelector('/api/shell/bootstrap'), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'X-Choir-Client-Lifecycle-Stage': 'post-auth-prewarm' },
+    });
+    const data = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data };
+  } catch (_err) {
+    return { ok: false, status: 0 };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Session helpers
 // ---------------------------------------------------------------------------

@@ -584,6 +584,12 @@ func TestHandler_Health(t *testing.T) {
 	if result.Reclaim.Mode != PressureReclaimModeOff {
 		t.Fatalf("default reclaim mode = %s, want off", result.Reclaim.Mode)
 	}
+	if result.Warmness.Policy.PrimaryKeepaliveMode != PrimaryKeepaliveModeOff {
+		t.Fatalf("default warmness mode = %s, want off", result.Warmness.Policy.PrimaryKeepaliveMode)
+	}
+	if result.Warmness.ByClass[string(WarmnessClassPrimary)] != 1 || result.Warmness.ByClass[string(WarmnessClassWorker)] != 1 {
+		t.Fatalf("warmness class counts = %+v, want primary and worker", result.Warmness.ByClass)
+	}
 }
 
 func TestOwnershipRegistry_PressureReclaimDryRunOrdersIdleWorkersBeforeInteractive(t *testing.T) {
@@ -697,8 +703,15 @@ func TestOwnershipRegistry_PressureReclaimProtectsCriticalWorkerPurpose(t *testi
 	if len(plan.Candidates) < 1 {
 		t.Fatalf("expected candidates, got %+v", plan.Candidates)
 	}
-	if !containsString(plan.Candidates[0].ProtectedReasons, "critical_worker_purpose") {
-		t.Fatalf("candidate reasons = %+v, want critical_worker_purpose", plan.Candidates[0].ProtectedReasons)
+	foundCriticalWorker := false
+	for _, candidate := range plan.Candidates {
+		if candidate.Kind == VMKindWorker && containsString(candidate.ProtectedReasons, "critical_worker_purpose") {
+			foundCriticalWorker = true
+			break
+		}
+	}
+	if !foundCriticalWorker {
+		t.Fatalf("candidates = %+v, want protected critical worker", plan.Candidates)
 	}
 }
 
@@ -738,6 +751,150 @@ func TestOwnershipRegistry_PressureReclaimNoPressureObservesOnly(t *testing.T) {
 	}
 	if plan.Inventory.Eligible != 1 {
 		t.Fatalf("eligible = %d, want 1", plan.Inventory.Eligible)
+	}
+}
+
+func TestOwnershipRegistry_PrimaryKeepaliveSkipsIdlePrimaryUnderCapacity(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetIdleTimeout(10 * time.Millisecond)
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   time.Millisecond,
+		MinMemoryAvailableBytes:   1024,
+		MinMemoryAvailablePercent: 10,
+	})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   6 * 1024 * 1024 * 1024,
+			MemoryAvailablePercent: 75,
+		}
+	})
+
+	if _, err := reg.ResolveOrAssign("primary-warm"); err != nil {
+		t.Fatalf("resolve primary-warm: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("primary-warm", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.mu.Unlock()
+
+	idle := reg.CheckIdleOwnerships()
+	if len(idle) != 0 {
+		t.Fatalf("expected primary keepalive under capacity, got idle candidates: %+v", idle)
+	}
+	if stopped := reg.StopIdleVMs(); stopped != 0 {
+		t.Fatalf("stopped = %d, want 0", stopped)
+	}
+	if own := reg.GetOwnership("primary-warm"); own == nil || own.State != VMStateActive {
+		t.Fatalf("primary should remain active, got %+v", own)
+	}
+}
+
+func TestOwnershipRegistry_PrimaryKeepaliveReclaimsLowerPriorityFirstUnderPressure(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetIdleTimeout(10 * time.Millisecond)
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   time.Millisecond,
+		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
+		MinMemoryAvailablePercent: 15,
+	})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   512 * 1024 * 1024,
+			MemoryAvailablePercent: 6.25,
+		}
+	})
+
+	if _, err := reg.ResolveOrAssign("pressure-user"); err != nil {
+		t.Fatalf("resolve pressure-user: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "pressure-user",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-pressure",
+		Purpose:       "background indexing",
+		MachineClass:  "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request worker: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("pressure-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-2 * time.Hour)
+	reg.mu.Unlock()
+
+	idle := reg.CheckIdleOwnerships()
+	if len(idle) != 1 || idle[0].Kind != VMKindWorker {
+		t.Fatalf("idle candidates = %+v, want only lower-priority worker", idle)
+	}
+	if stopped := reg.StopIdleVMs(); stopped != 1 {
+		t.Fatalf("stopped = %d, want 1", stopped)
+	}
+	if own := reg.GetOwnership("pressure-user"); own == nil || own.State != VMStateActive {
+		t.Fatalf("primary should remain active while worker was reclaimable, got %+v", own)
+	}
+	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated {
+		t.Fatalf("worker should be hibernated, got %+v", workerOwn)
+	}
+}
+
+func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetIdleTimeout(10 * time.Millisecond)
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   time.Millisecond,
+		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
+		MinMemoryAvailablePercent: 15,
+	})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{
+		PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity,
+		AlwaysOnUserIDs:      map[string]bool{"premium-user": true},
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-14T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   512 * 1024 * 1024,
+			MemoryAvailablePercent: 6.25,
+		}
+	})
+
+	if _, err := reg.ResolveOrAssign("premium-user"); err != nil {
+		t.Fatalf("resolve premium-user: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("premium-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.mu.Unlock()
+
+	if idle := reg.CheckIdleOwnerships(); len(idle) != 0 {
+		t.Fatalf("premium always-on should not be idle-eligible, got %+v", idle)
+	}
+	plan := reg.PressureReclaimPlan()
+	if plan.Inventory.Protected != 1 || plan.Inventory.Eligible != 0 {
+		t.Fatalf("inventory protected/eligible = %d/%d, want 1/0", plan.Inventory.Protected, plan.Inventory.Eligible)
+	}
+	if len(plan.Candidates) == 0 || plan.Candidates[0].WarmnessClass != string(WarmnessClassPremiumAlwaysOn) {
+		t.Fatalf("candidate warmness = %+v, want premium always-on", plan.Candidates)
+	}
+	if !containsString(plan.Candidates[0].ProtectedReasons, "premium_always_on") {
+		t.Fatalf("candidate reasons = %+v, want premium_always_on", plan.Candidates[0].ProtectedReasons)
+	}
+	summary := reg.WarmnessSummary(nil)
+	if summary.Policy.PrimaryKeepaliveMode != PrimaryKeepaliveModeUnderCapacity {
+		t.Fatalf("policy mode = %s, want under-capacity", summary.Policy.PrimaryKeepaliveMode)
+	}
+	if summary.Policy.AlwaysOnUserCount != 1 {
+		t.Fatalf("always-on user count = %d, want 1", summary.Policy.AlwaysOnUserCount)
+	}
+	if summary.ByClass[string(WarmnessClassPremiumAlwaysOn)] != 1 {
+		t.Fatalf("warmness summary = %+v, want one premium class", summary)
 	}
 }
 

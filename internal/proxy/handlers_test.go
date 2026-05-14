@@ -2666,6 +2666,51 @@ func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
 	if result.VMctlHealth.Reclaim.Mode != vmctl.PressureReclaimModeOff {
 		t.Fatalf("vmctl reclaim mode = %s, want off", result.VMctlHealth.Reclaim.Mode)
 	}
+	if result.VMctlHealth.Warmness.Policy.PrimaryKeepaliveMode != vmctl.PrimaryKeepaliveModeOff {
+		t.Fatalf("vmctl warmness mode = %s, want off", result.VMctlHealth.Warmness.Policy.PrimaryKeepaliveMode)
+	}
+}
+
+func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
+	handler, priv, _, _ := testVMctlProxyEnv(t)
+	token := issueTestAccessJWT(priv, "lifecycle-user")
+
+	bootstrapReq := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	bootstrapReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	bootstrapW := httptest.NewRecorder()
+	handler.HandleBootstrap(bootstrapW, bootstrapReq)
+	if bootstrapW.Code != http.StatusOK {
+		t.Fatalf("bootstrap status = %d, want 200 body=%s", bootstrapW.Code, bootstrapW.Body.String())
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthW := httptest.NewRecorder()
+	handler.HandleHealth(healthW, healthReq)
+	if healthW.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", healthW.Code)
+	}
+	var result proxyHealthResponse
+	if err := json.NewDecoder(healthW.Body).Decode(&result); err != nil {
+		t.Fatalf("decode health: %v", err)
+	}
+	if len(result.Lifecycle.Stages) == 0 {
+		t.Fatalf("expected lifecycle stages in health")
+	}
+	var sawResolve, sawTotal bool
+	for _, stage := range result.Lifecycle.Stages {
+		if strings.Contains(stage.Stage, "lifecycle-user") {
+			t.Fatalf("lifecycle stage leaked user id: %+v", stage)
+		}
+		if stage.Stage == "bootstrap.resolve" && stage.Count > 0 {
+			sawResolve = true
+		}
+		if stage.Stage == "bootstrap.total" && stage.ByStatus["http_200"] > 0 {
+			sawTotal = true
+		}
+	}
+	if !sawResolve || !sawTotal {
+		t.Fatalf("lifecycle stages = %+v, want bootstrap.resolve and bootstrap.total http_200", result.Lifecycle.Stages)
+	}
 }
 
 // TestVMctlRouting_GracefulDegradation tests that when vmctl is unreachable,

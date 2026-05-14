@@ -74,6 +74,7 @@ type PressureReclaimCandidate struct {
 	Kind             VMKind   `json:"kind"`
 	State            VMState  `json:"state"`
 	Desktop          string   `json:"desktop,omitempty"`
+	WarmnessClass    string   `json:"warmness_class,omitempty"`
 	IdleSeconds      int64    `json:"idle_seconds"`
 	Protected        bool     `json:"protected"`
 	ProtectedReasons []string `json:"protected_reasons,omitempty"`
@@ -376,6 +377,7 @@ type pressureCandidateInternal struct {
 func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	r.mu.RLock()
 	cfg := r.pressureReclaim
+	warmnessPolicy := r.warmnessPolicy
 	sampler := r.pressureSampler
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
 	for _, own := range r.ownerships {
@@ -406,7 +408,7 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	plan.Pressure = sample
 
 	now := time.Now()
-	candidates := rankPressureCandidates(ownerships, cfg, now)
+	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now)
 	plan.Inventory = pressureInventory(ownerships, candidates)
 	limit := cfg.MaxCandidates
 	if limit > len(candidates) {
@@ -467,13 +469,13 @@ func pressureInventory(ownerships []*VMOwnership, candidates []pressureCandidate
 	return inv
 }
 
-func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig, now time.Time) []pressureCandidateInternal {
+func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) []pressureCandidateInternal {
 	candidates := make([]pressureCandidateInternal, 0, len(ownerships))
 	for _, own := range ownerships {
 		if own == nil || own.State != VMStateActive {
 			continue
 		}
-		candidates = append(candidates, pressureCandidateForOwnership(own, cfg, now))
+		candidates = append(candidates, pressureCandidateForOwnership(own, cfg, warmnessPolicy, now))
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
@@ -491,19 +493,14 @@ func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig
 	return candidates
 }
 
-func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, now time.Time) pressureCandidateInternal {
+func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) pressureCandidateInternal {
 	idle := time.Duration(0)
 	if !own.LastActiveAt.IsZero() {
 		idle = now.Sub(own.LastActiveAt)
 	}
-	reasons := protectedReclaimReasons(own, cfg, idle)
-	priority := 20
-	if own.Kind == VMKindWorker {
-		priority = 5
-	}
-	if own.Kind == VMKindInteractive && own.DesktopID != PrimaryDesktopID {
-		priority = 10
-	}
+	warmnessClass := warmnessClassForOwnership(own, warmnessPolicy)
+	reasons := protectedReclaimReasons(own, cfg, warmnessPolicy, idle)
+	priority := warmnessPriority(warmnessClass)
 	desktop := "primary"
 	if own.Kind == VMKindInteractive && own.DesktopID != PrimaryDesktopID {
 		desktop = "published"
@@ -516,6 +513,7 @@ func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, 
 			Kind:             own.Kind,
 			State:            own.State,
 			Desktop:          desktop,
+			WarmnessClass:    string(warmnessClass),
 			IdleSeconds:      int64(idle.Seconds()),
 			Protected:        len(reasons) > 0,
 			ProtectedReasons: reasons,
@@ -524,10 +522,16 @@ func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, 
 	}
 }
 
-func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, idle time.Duration) []string {
+func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, idle time.Duration) []string {
 	var reasons []string
 	if own == nil {
 		return []string{"missing_ownership"}
+	}
+	switch warmnessClassForOwnership(own, warmnessPolicy) {
+	case WarmnessClassPremiumAlwaysOn:
+		reasons = append(reasons, "premium_always_on")
+	case WarmnessClassCriticalProtected:
+		reasons = append(reasons, "critical_protected")
 	}
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "unknown_last_active")

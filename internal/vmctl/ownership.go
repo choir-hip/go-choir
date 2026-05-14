@@ -127,6 +127,10 @@ type VMOwnership struct {
 	// MachineClass is the requested resource envelope for this VM.
 	MachineClass string `json:"machine_class,omitempty"`
 
+	// WarmnessClass is the typed lifecycle policy class for keepalive and
+	// reclaim decisions. Public health exposes only aggregate counts.
+	WarmnessClass WarmnessClass `json:"warmness_class,omitempty"`
+
 	// Published indicates whether this desktop is user-switchable through the
 	// normal browser/proxy routing path. Background candidate desktops stay
 	// unpublished until explicitly published by the control plane.
@@ -303,6 +307,10 @@ type OwnershipRegistry struct {
 	pressureReclaim PressureReclaimConfig
 	pressureSampler hostPressureSampler
 
+	// warmnessPolicy controls under-capacity primary keepalive and future
+	// always-on tier modeling.
+	warmnessPolicy WarmnessPolicyConfig
+
 	// epochCounter tracks the global epoch counter for VM boot tracking.
 	// Each fresh boot or recovery increments this counter, providing a
 	// mechanism to prevent duplicate canonical effects (VAL-CROSS-117).
@@ -342,6 +350,7 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
 		pressureSampler:            sampleHostPressure,
+		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
 		epochCounter:               1,
 	}
 }
@@ -559,6 +568,15 @@ func (r *OwnershipRegistry) SetPressureReclaimConfig(cfg PressureReclaimConfig) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pressureReclaim = normalizePressureReclaimConfig(cfg)
+}
+
+// SetWarmnessPolicyConfig configures adaptive keepalive policy. It currently
+// controls whether primary computers stay warm while the host is under
+// configured pressure thresholds, and models a future always-on class.
+func (r *OwnershipRegistry) SetWarmnessPolicyConfig(cfg WarmnessPolicyConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.warmnessPolicy = normalizeWarmnessPolicyConfig(cfg)
 }
 
 func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSampler) {
@@ -1101,10 +1119,15 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 	epoch := r.nextEpoch()
 
 	own := &VMOwnership{
-		VMID:         vmID,
-		UserID:       userID,
-		DesktopID:    desktopID,
-		Kind:         VMKindInteractive,
+		VMID:      vmID,
+		UserID:    userID,
+		DesktopID: desktopID,
+		Kind:      VMKindInteractive,
+		WarmnessClass: warmnessClassForOwnership(&VMOwnership{
+			UserID:    userID,
+			DesktopID: desktopID,
+			Kind:      VMKindInteractive,
+		}, r.warmnessPolicy),
 		SandboxURL:   r.sandboxURLForVM(vmID),
 		State:        VMStateBooting,
 		CreatedAt:    time.Now(),
@@ -1248,6 +1271,7 @@ func (r *OwnershipRegistry) ForkDesktop(userID, sourceDesktopID, targetDesktopID
 		UserID:          userID,
 		DesktopID:       targetDesktopID,
 		Kind:            VMKindInteractive,
+		WarmnessClass:   WarmnessClassCandidate,
 		ParentDesktopID: sourceDesktopID,
 		ParentVMID:      sourceVMID,
 		SnapshotKind:    snapshotKind,
@@ -1363,12 +1387,22 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 		Purpose:              req.Purpose,
 		ObjectiveFingerprint: req.ObjectiveFingerprint,
 		MachineClass:         machineClass,
-		SandboxURL:           r.sandboxURLForVM(vmID),
-		State:                VMStateBooting,
-		CreatedAt:            now,
-		LastActiveAt:         now,
-		Published:            false,
-		ParentDesktopID:      "",
+		WarmnessClass: warmnessClassForOwnership(&VMOwnership{
+			UserID:               req.UserID,
+			DesktopID:            req.DesktopID,
+			Kind:                 VMKindWorker,
+			ParentAgentID:        req.ParentAgentID,
+			TrajectoryID:         req.TrajectoryID,
+			Purpose:              req.Purpose,
+			ObjectiveFingerprint: req.ObjectiveFingerprint,
+			MachineClass:         machineClass,
+		}, r.warmnessPolicy),
+		SandboxURL:      r.sandboxURLForVM(vmID),
+		State:           VMStateBooting,
+		CreatedAt:       now,
+		LastActiveAt:    now,
+		Published:       false,
+		ParentDesktopID: "",
 	}
 
 	r.mu.Lock()
@@ -1475,6 +1509,35 @@ func (r *OwnershipRegistry) ListOwnerships() []*VMOwnership {
 		result = append(result, own)
 	}
 	return result
+}
+
+// WarmnessSummary returns redacted aggregate lifecycle policy state. It never
+// includes user IDs, VM IDs, desktop IDs, or credentials.
+func (r *OwnershipRegistry) WarmnessSummary(idleEligible []*VMOwnership) WarmnessHealthSummary {
+	r.mu.RLock()
+	cfg := r.warmnessPolicy
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	for _, own := range r.ownerships {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	for _, own := range r.workerVMs {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	idle := make([]*VMOwnership, 0, len(idleEligible))
+	for _, own := range idleEligible {
+		idle = append(idle, cloneOwnership(own))
+	}
+	r.mu.RUnlock()
+	return warmnessSummary(cfg, ownerships, idle)
+}
+
+// WarmnessClassForOwnership returns the policy class for an ownership using
+// the registry's current warmness configuration.
+func (r *OwnershipRegistry) WarmnessClassForOwnership(own *VMOwnership) WarmnessClass {
+	r.mu.RLock()
+	cfg := r.warmnessPolicy
+	r.mu.RUnlock()
+	return warmnessClassForOwnership(own, cfg)
 }
 
 // StopVM stops the VM for the given user's primary desktop.
@@ -1787,23 +1850,40 @@ func (r *OwnershipRegistry) CheckIdleVMs() []string {
 // the idle timeout and should be stopped or hibernated.
 func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	if r.idleTimeout <= 0 {
+		r.mu.RUnlock()
 		return nil
 	}
 
-	var idle []*VMOwnership
-	now := time.Now()
+	idleTimeout := r.idleTimeout
+	warmnessPolicy := r.warmnessPolicy
+	pressureCfg := r.pressureReclaim
+	sampler := r.pressureSampler
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
 	for _, own := range r.ownerships {
-		if own.State == VMStateActive && now.Sub(own.LastActiveAt) > r.idleTimeout {
-			idle = append(idle, own)
-		}
+		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	for _, own := range r.workerVMs {
-		if own.State == VMStateActive && now.Sub(own.LastActiveAt) > r.idleTimeout {
-			idle = append(idle, own)
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	r.mu.RUnlock()
+
+	warmnessPolicy = normalizeWarmnessPolicyConfig(warmnessPolicy)
+	pressureCfg = normalizePressureReclaimConfig(pressureCfg)
+	var pressure HostPressureSample
+	if warmnessPolicy.PrimaryKeepaliveMode == PrimaryKeepaliveModeUnderCapacity {
+		if sampler == nil {
+			sampler = sampleHostPressure
 		}
+		pressure = sampler(pressureCfg)
+		annotatePressure(&pressure, pressureCfg)
+	}
+
+	now := time.Now()
+	candidates := idleOwnershipCandidates(ownerships, warmnessPolicy, pressure, idleTimeout, now)
+	idle := make([]*VMOwnership, 0, len(candidates))
+	for _, candidate := range candidates {
+		idle = append(idle, candidate.own)
 	}
 	return idle
 }
