@@ -111,6 +111,72 @@ This is intentionally narrower than active reclaim. The next realism axis is to
 connect protected-work checks to live prompt/run/file/verifier/promotion state,
 then enable active reclaim behind a fast rollback knob.
 
+## Evidence: 2026-05-14 Dry-Run Deployment
+
+Behavior commit:
+
+```text
+8f1de4b1e50afb957bca8202eb61ca35e043df4e
+```
+
+CI/deploy:
+
+```text
+GitHub Actions run: 25866357404
+Go Vet + Test + Build: success, job 76009398853
+Build Frontend: success, job 76009398873
+Deploy to Staging (Node B): success, job 76009793115
+```
+
+Staging identity:
+
+```text
+https://draft.choir-ip.com/health
+proxy deployed_commit:   8f1de4b1e50afb957bca8202eb61ca35e043df4e
+sandbox deployed_commit: 8f1de4b1e50afb957bca8202eb61ca35e043df4e
+deployed_at:             2026-05-14T14:42:36Z
+```
+
+Health proved the dry-run lifecycle surface:
+
+```text
+vmctl_health.reclaim.mode: dry-run
+decision: observe
+pressure sample: memory, CPU PSI, IO PSI, state-dir disk, PID headroom
+inventory: active VMs, total ownerships, protected/eligible/candidate counts
+candidate summaries: ranked, aggregate-only, no user IDs or VM IDs
+```
+
+Deployed Playwright product-path proof:
+
+```text
+baseURL: https://draft.choir-ip.com
+test account: pressure-lifecycle-1778770096021@example.com
+registered: true
+bootConsoleAfterSimulated502: true
+bootstrapInterceptions: 3
+bootstrap VM: vm-4993ce225cab060d62b1d4e578cb8403
+logoutPublicDesktop: true
+returningBootstrap VM: vm-4993ce225cab060d62b1d4e578cb8403
+mid-run reclaim protectedReasons: recent_activity
+```
+
+Local verification before push:
+
+```text
+go test ./internal/vmctl ./internal/proxy ./cmd/vmctl
+CGO_CFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_CXXFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
+CGO_LDFLAGS='-L/opt/homebrew/opt/icu4c@78/lib' go test ./...
+cd frontend && pnpm build
+git diff --check
+```
+
+Residual risk: active reclaim is intentionally not enabled. Protection is still
+coarse: recent activity, unknown last-active state, and critical worker purpose.
+The next realism axis is live in-flight prompt/run/file/verifier/promotion
+integration before any pressure policy hibernates computers.
+
 ## Invariants
 
 - The product object is a persistent user computer. `sandbox` remains an
