@@ -1,32 +1,72 @@
 # go-choir
 
-Choir is a deployed web desktop for durable multiagent work over versioned artifacts. The visible product is an authenticated desktop with apps such as VText, Files, Browser, Trace, Terminal, Podcast, and Settings. The core product path is a control system:
+`go-choir` is the implementation repo for Choir: an artifact-native learning system built around versioned artifacts, appagents, candidate worlds, verification, promotion, and public memory.
+
+The short version:
+
+```text
+Choir is a durable learning control system over versioned artifacts.
+```
+
+The product vector is:
+
+```text
+automatic computer -> automatic newspaper -> automatic radio -> automatic capital
+```
+
+- **Automatic computer**: the private agentic workspace where users and agents work over durable artifacts.
+- **Automatic newspaper**: the public memory layer where selected artifacts become citeable, disputable, forkable, and reusable.
+- **Automatic radio**: the embodied traversal layer where artifact graphs become source-grounded audio experiences.
+- **Automatic capital**: the later capital-formation layer where future-relevant contribution can route resources and upside.
+
+This repo is the left brain: runtime, services, APIs, tests, deployment, and control boundaries. [Mosiah.org](https://mosiah.org/) is currently the right brain: public writing, artifact-native theory, and the visible field of ideas that Choir is meant to operationalize. The long-term work is to unify them: make the repo's substrate capable of carrying the Mosiah-style artifact graph directly.
+
+For the higher-level frame, read [docs/mission-geometry.md](docs/mission-geometry.md).
+
+## What Choir is
+
+Choir is not primarily a chat app, CMS, agent queue, desktop, publication tool, or radio app. Those are projections.
+
+The core science object is:
+
+```text
+durable learning control over versioned artifacts
+```
+
+The deployed product is currently a web desktop with apps such as VText, Files, Browser, Trace, Terminal, Podcast, and Settings. Behind the desktop is a control system:
 
 ```text
 prompt bar -> conductor -> VText/appagent -> super -> vmctl worker/candidate world
 -> worker export -> promotion candidate -> verification/owner decision -> promotion or rollback
 ```
 
-The near-term goal is Choir developing Choir through that product path, with staging evidence strong enough that a reviewer can trust what happened without reading raw logs.
+The objective is to maximize verified artifact improvement over time while minimizing corruption, deadlock, human monitoring burden, and loss of understanding.
 
-## Operating Model
+## Runtime model
 
-`https://draft.choir-ip.com` is the staging acceptance environment. Behavior-changing work is not complete because local tests pass; it is complete when the pushed commit is running on staging and the deployed product path is verified there.
+The implementation centers on a few invariants:
 
-The required landing loop for behavior changes is:
+- canonical state stays stable;
+- risky or speculative mutation happens in background VMs / candidate worlds;
+- appagents own durable app artifacts;
+- workers produce evidence, deltas, candidates, or reports;
+- canonical state changes only through promotion after verification and owner acceptance;
+- compaction preserves what a run learned for future inference.
+
+A compact operating invariant:
 
 ```text
-commit -> push origin main -> monitor CI -> monitor staging deploy
--> verify staging commit identity -> run deployed acceptance proof
+Evidence enters through researchers.
+Meaning is owned by appagents.
+Computation is orchestrated by super.
+Mutation happens in candidate worlds.
+Canonical state changes only by promotion.
+Radio is a traversal of promoted meaning.
 ```
-
-Documentation-only commits intentionally do not trigger automatic CI/deploy. The GitHub workflow ignores `docs/**` and top-level `*.md` for push and pull-request CI. Do not remove those path filters just to make docs-only commits run CI. If docs need a check, run the specific check directly or use an explicit manual workflow when one exists.
-
-Local development is for fast frontend iteration, narrow unit shaping, and reproducing a staging failure after staging evidence identifies the failing transition. Local proof does not satisfy claims about live vmctl behavior, gateway credentials, model/search calls, auth/session renewal, background/candidate VMs, promotion, rollback, or Choir-in-Choir product behavior.
 
 ## Services
 
-The deployed stack has five Go services behind Caddy:
+The stack has five Go services:
 
 | Service | Port | Role |
 | --- | --- | --- |
@@ -38,44 +78,17 @@ The deployed stack has five Go services behind Caddy:
 
 Every service exposes `/health`. The sandbox health response includes build/deploy identity used by staging verification.
 
-## Agent Contract
+## Self-hosting and local development
 
-Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo. The short version:
-
-- `conductor` routes exogenous user/app input and does not own semantic outcomes.
-- Appagents own durable app artifacts; `vtext` is the current canonical semantic surface.
-- `super` is the foreground orchestration root and mints bounded execution authority.
-- Worker/candidate mutation belongs in background VMs or isolated worker worlds.
-- Canonical state changes only through explicit promotion after verification and owner acceptance.
-- Verification is a contract and evidence record, not a separate agent caste.
-
-## Run Acceptance
-
-The durable verifier is the Run Acceptance System:
-
-- `POST /api/run-acceptances/synthesize` derives a `RunAcceptanceRecord` from existing runs, Trace tool results, worker exports, promotion candidates, build identity, and owner-scoped state.
-- `GET /api/run-acceptances?trajectory_id=...` lists acceptance records for a trajectory.
-- `GET /api/run-acceptances/{acceptance_id}` fetches one record.
-
-Acceptance levels are explicit so the system does not overclaim:
-
-- `docs-level`
-- `staging-smoke-level`
-- `export-level`
-- `promotion-level`
-- `continuation-level`
-
-The current target for staging proof is at least `export-level`: prompt bar to VText to super to vmctl worker to worker export to promotion candidate, with rollback evidence and structured evidence refs.
-
-## Development Setup
+The repo is still a fast-moving system, but the intended local shape is straightforward: run the Go services plus the Svelte frontend, backed by local service configuration and runtime state.
 
 Requirements:
 
 - Go 1.25+
 - Node.js 22+
 - pnpm 10+
-- Nix for Node B deployment config and reproducible Linux builds
-- ICU headers/libs for local Go tests that touch Dolt-backed packages
+- Nix for reproducible Linux builds and deployment configuration
+- ICU headers/libs for Go tests that touch Dolt-backed packages
 
 Install frontend dependencies:
 
@@ -85,13 +98,15 @@ pnpm install
 cd ..
 ```
 
-Start the local stack only when local iteration is appropriate:
+Start the local stack when local iteration is appropriate:
 
 ```sh
 ./start-services.sh
 ```
 
 The script uses local auth keys and service ports. For detailed manual service startup, inspect `start-services.sh` and the relevant `cmd/*` package configs.
+
+Local development is useful for frontend iteration, focused unit shaping, and reproducing a transition identified by deployed evidence. It is not sufficient proof for claims about live vmctl behavior, provider credentials, background/candidate VMs, promotion, rollback, or production deployment.
 
 ## Tests
 
@@ -117,34 +132,56 @@ pnpm run build
 pnpm exec playwright test --workers=1
 ```
 
-Opt-in deployed worker acceptance proof:
+Documentation-only changes intentionally do not run automatic CI. The GitHub workflow ignores `docs/**` and top-level `*.md` for push and pull-request CI. Do not weaken those path filters just to make docs-only commits run CI.
 
-```sh
-cd frontend
-GO_CHOIR_RUN_BACKGROUND_WORKER_DEMO=1 \
-GO_CHOIR_WORKER_DEMO_BASE_URL=https://draft.choir-ip.com \
-pnpm exec playwright test tests/vtext-background-worker-demo.spec.js --workers=1
+## Deployment and staging proof
+
+Behavior-changing work uses staging as the acceptance environment. A behavior-changing mission is not complete because local tests pass; it is complete when the pushed commit is running on staging and the deployed product path is verified there.
+
+Required landing loop for behavior changes:
+
+```text
+commit -> push origin main -> monitor CI -> monitor staging deploy
+-> verify staging commit identity -> run deployed acceptance proof
 ```
 
-That Playwright proof must go through the visible prompt bar and authenticated product APIs. It must not call browser-public internal orchestration routes such as `/api/agent/*`, `/api/prompts`, `/api/test/*`, `/internal/*`, or raw event mutation endpoints.
+The current staging host is an implementation detail for this deployment, not the conceptual center of the project. Keep staging-host specifics in deployment docs, mission reports, or environment configuration rather than making the README read like a product page for one temporary domain.
 
-## Deploy
+## Agent contract
 
-Push behavior-changing commits to `origin/main`. GitHub Actions runs Go vet/test/build, frontend build, then deploys Node B via NixOS rebuild and health checks.
+Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo. The short version:
 
-After CI/deploy, verify:
+- `conductor` routes exogenous user/app input and does not own semantic outcomes.
+- Appagents own durable app artifacts; `vtext` is the current canonical semantic surface.
+- `super` is the foreground orchestration root and mints bounded execution authority.
+- Worker/candidate mutation belongs in background VMs or isolated worker worlds.
+- Canonical state changes only through explicit promotion after verification and owner acceptance.
+- Verification is a contract and evidence record, not a separate agent caste.
 
-```sh
-curl -s https://draft.choir-ip.com/health
-```
+## Run acceptance
 
-The reported commit/deployed commit must match the pushed behavior-changing commit before staging acceptance evidence can count.
+The durable verifier is the Run Acceptance System:
 
-## Documentation Map
+- `POST /api/run-acceptances/synthesize` derives a `RunAcceptanceRecord` from existing runs, Trace tool results, worker exports, promotion candidates, build identity, and owner-scoped state.
+- `GET /api/run-acceptances?trajectory_id=...` lists acceptance records for a trajectory.
+- `GET /api/run-acceptances/{acceptance_id}` fetches one record.
+
+Acceptance levels are explicit so the system does not overclaim:
+
+- `docs-level`
+- `staging-smoke-level`
+- `export-level`
+- `promotion-level`
+- `continuation-level`
+
+The current target for staging proof is at least `export-level`: prompt bar to VText to super to vmctl worker to worker export to promotion candidate, with rollback evidence and structured evidence refs.
+
+## Documentation map
 
 Start here:
 
 - [AGENTS.md](AGENTS.md): repository agent operating contract.
+- [docs/mission-geometry.md](docs/mission-geometry.md): high-level mission geometry and product ontology.
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
@@ -155,7 +192,7 @@ Start here:
 
 Many dated `docs/*-proof-2026-05-13.md` files are evidence artifacts from earlier runs. Keep them as history unless a cleanup mission explicitly deletes or archives them.
 
-## Repository Shape
+## Repository shape
 
 ```text
 cmd/                 service entrypoints
@@ -167,6 +204,6 @@ internal/runtime/    agent runtime, product APIs, VText/Trace/browser/control su
 internal/store/      SQLite runtime store plus embedded VText workspace
 internal/promotion/  candidate-world integration and promotion helpers
 frontend/            Svelte desktop and Playwright tests
-nix/                 Node B NixOS configuration
+nix/                 deployment and NixOS configuration
 docs/                architecture, missions, proofs, and historical notes
 ```

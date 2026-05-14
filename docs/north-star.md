@@ -12,15 +12,34 @@ streamlined architecture memo for the current phase.
 
 ## Product Frame
 
-Choir is a web desktop with apps. Some apps grow into appagents; most can remain
-plain display/control surfaces. The first appagent is `vtext`: a durable,
-versioned living document that accumulates user edits, appagent synthesis, worker
-findings, evidence, artifacts, and later publication history.
+Choir is a durable learning control system over versioned artifacts. The web
+desktop is the current general-purpose projection of that substrate, not the
+whole product ontology. The broader vector is:
+
+```text
+automatic computer -> automatic newspaper -> automatic radio -> automatic capital
+```
+
+Read [docs/mission-geometry.md](mission-geometry.md) for the high-level frame.
+
+The automatic computer is the private agentic workspace. Some desktop apps grow
+into appagents; most can remain plain display/control surfaces. The first
+appagent is `vtext`: a durable, versioned semantic artifact that accumulates user
+edits, appagent synthesis, worker findings, evidence, artifacts, and later
+publication history.
+
+The automatic newspaper is the public memory projection: selected vtexts,
+sources, claims, corrections, citations, and track records become discoverable,
+citeable, disputable, forkable, and reusable.
+
+The automatic radio is the embodied traversal projection. It is not a pivot away
+from `vtext`; it depends on `vtext`. Vtext is the score; radio is the
+performance.
 
 The dark factory behind the desktop contains researchers, supers, cosupers,
 background VMs, evidence, artifacts, tests, previews, and Trace. Its job is to
-advance living documents and produce publishable artifacts without making raw
-agent orchestration the primary UI.
+advance living artifacts and produce publishable/traversable state without
+making raw agent orchestration the primary UI.
 
 ## Sequence
 
