@@ -1,7 +1,10 @@
 # MissionGradient: Choir Self-Development Controller v0
 
-Status: next 8-24h staging mission, revised after export-level acceptance
+Status: stopped on invariant-level blocker after deployed export-bridge proof
 Date: 2026-05-14
+
+Outcome evidence: see
+[`docs/mission-choir-in-choir-controller-evidence-2026-05-14.md`](mission-choir-in-choir-controller-evidence-2026-05-14.md).
 
 ## Real Artifact
 
