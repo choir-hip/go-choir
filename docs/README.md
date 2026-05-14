@@ -8,6 +8,7 @@ This directory contains canonical architecture docs, active MissionGradient miss
 
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
+- `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
 - `docs/current-architecture.md` - current product/runtime architecture.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/implementation-scope.md` - near-term implementation scope.

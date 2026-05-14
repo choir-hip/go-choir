@@ -8,6 +8,12 @@ document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
 
 ## Current Reality
 
+Choir is a durable learning control system over versioned artifacts. The web
+desktop is the current general-purpose projection of that substrate, not the
+whole ontology. Read [docs/mission-geometry.md](mission-geometry.md) for the
+higher-level frame: automatic computer -> automatic newspaper -> automatic radio
+-> automatic capital.
+
 The Automatic Computer already exists in deployed form: a web desktop, backend
 services, appagents, and NixOS-on-NixOS VM infrastructure. The current work is
 not to invent the product from scratch. The current work is to stabilize the
@@ -17,7 +23,8 @@ Choir is not chat and not a generic coding-agent runner. The visible product is
 a web desktop with apps. Some apps grow into appagents; most apps can remain
 plain display/control surfaces. The hidden product machinery is a dark factory
 of researchers, supers, cosupers, background VMs, evidence, artifacts, document
-versions, and eventually publications.
+versions, candidate worlds, promotion records, and eventually publications,
+radio traversals, and citation/economic state.
 
 The operating stance is now staging-first. Meaningful claims about vmctl,
 gateway credentials, live model/search calls, background/candidate VMs,
