@@ -42,7 +42,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
-		ProviderTimeout:     50 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour, // don't run supervisor in most tests
 	}
 
@@ -508,13 +508,7 @@ func TestTaskCompletesSuccessfully(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to complete (stub provider has 50ms delay).
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := rt.GetRun(ctx, rec.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	got := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	if got.State != types.RunCompleted {
 		t.Errorf("state: got %q, want %q", got.State, types.RunCompleted)
@@ -553,7 +547,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     10 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 
@@ -570,13 +564,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to fail.
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := rt.GetRun(context.Background(), rec.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	got := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	if got.State != types.RunFailed {
 		t.Errorf("state: got %q, want %q", got.State, types.RunFailed)
@@ -609,12 +597,7 @@ func TestRuntimeRemainsAvailableAfterProviderFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit task: %v", err)
 	}
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := rt.GetRun(ctx, rec.RunID, "user-alice")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	got := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 	if got.State != types.RunCompleted {
 		t.Errorf("state: got %q, want %q", got.State, types.RunCompleted)
 	}
@@ -700,7 +683,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     50 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 	provider1 := NewStubProvider(50 * time.Millisecond)
@@ -711,8 +694,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for completion.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt1, rec.RunID, "user-alice", 5*time.Second)
 
 	// Stop the first runtime.
 	rt1.Stop()
@@ -795,7 +777,7 @@ func TestInterruptedRunningTasksRecoveredOnStart(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     50 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 	provider := NewStubProvider(50 * time.Millisecond)

@@ -44,7 +44,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
-		ProviderTimeout:     50 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 
@@ -1570,7 +1570,7 @@ func TestHandleRunStatusFailedOutcome(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     10 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 
@@ -1588,8 +1588,7 @@ func TestHandleRunStatusFailedOutcome(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to fail.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/status?loop_id=%s", rec.RunID), "", "user-alice")
@@ -1777,7 +1776,7 @@ func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     10 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 
@@ -1795,8 +1794,7 @@ func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to fail.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/%s/status", rec.RunID), "", "user-alice")
@@ -2369,7 +2367,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
-		ProviderTimeout:     10 * time.Millisecond,
+		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
 
@@ -2392,14 +2390,12 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 		t.Fatalf("status: got %d, want %d", w.Code, http.StatusAccepted)
 	}
 
-	// Wait for failure.
-	time.Sleep(200 * time.Millisecond)
-
 	// Check the failed task status.
 	var submitResp runSubmitResponse
 	if err := json.NewDecoder(w.Body).Decode(&submitResp); err != nil {
 		t.Fatalf("decode submit response: %v", err)
 	}
+	waitForRunTerminalState(t, rt, submitResp.RunID, "user-alice", 5*time.Second)
 
 	statusReq := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/status?loop_id=%s", submitResp.RunID), "", "user-alice")

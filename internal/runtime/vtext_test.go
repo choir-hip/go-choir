@@ -1234,6 +1234,68 @@ func waitForVTextQuiescent(t *testing.T, rt *Runtime, s *store.Store, ownerID, d
 	t.Fatalf("vtext doc %s did not become quiescent within %v; pending=%+v checkpoint=%+v", docID, timeout, pending, checkpoint)
 }
 
+func waitForWorkerUpdatesConsumed(t *testing.T, s *store.Store, docID, ownerID string, workerSeqs []uint64, timeout time.Duration) ([]types.Revision, map[int64]bool, bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastRevs []types.Revision
+	lastConsumed := map[int64]bool{}
+	lastBatched := false
+	for time.Now().Before(deadline) {
+		revs, err := s.ListRevisionsByDoc(context.Background(), docID, ownerID, 50)
+		if err != nil {
+			t.Fatalf("list revisions while waiting for worker consumption: %v", err)
+		}
+		consumedSeqs, batchedRevision := revisionWorkerConsumption(t, revs)
+		allConsumed := true
+		for _, seq := range workerSeqs {
+			if !consumedSeqs[int64(seq)] {
+				allConsumed = false
+				break
+			}
+		}
+		if allConsumed && batchedRevision {
+			return revs, consumedSeqs, batchedRevision
+		}
+		lastRevs = revs
+		lastConsumed = consumedSeqs
+		lastBatched = batchedRevision
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for worker updates %v to be consumed; consumed=%+v batched=%v revs=%+v", workerSeqs, lastConsumed, lastBatched, lastRevs)
+	return nil, nil, false
+}
+
+func revisionWorkerConsumption(t *testing.T, revs []types.Revision) (map[int64]bool, bool) {
+	t.Helper()
+	consumedSeqs := map[int64]bool{}
+	batchedRevision := false
+	for _, rev := range revs {
+		if rev.AuthorKind != types.AuthorAppAgent {
+			continue
+		}
+		meta := decodeRevisionMetadata(rev.Metadata)
+		if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
+			continue
+		}
+		consumed := metadataSlice(t, meta, "worker_updates_consumed")
+		if len(consumed) >= 2 {
+			batchedRevision = true
+		}
+		for _, item := range consumed {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				t.Fatalf("consumed worker metadata has type %T, want map", item)
+			}
+			seq, ok := entry["seq"].(float64)
+			if !ok {
+				t.Fatalf("consumed worker metadata missing seq: %+v", entry)
+			}
+			consumedSeqs[int64(seq)] = true
+		}
+	}
+	return consumedSeqs, batchedRevision
+}
+
 func createUserRevisionFromCurrentHead(t *testing.T, h *APIHandler, s *store.Store, docID, ownerID, content string) string {
 	t.Helper()
 	doc, err := s.GetDocument(context.Background(), docID, ownerID)
@@ -1866,40 +1928,13 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 	}
 	waitForVTextQuiescent(t, rt, s, ownerID, decision.DocID, maxWorkerSeq, 8*time.Second)
 
-	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, ownerID, 50)
-	if err != nil {
-		t.Fatalf("list stochastic revisions: %v", err)
-	}
-	consumedSeqs := map[int64]bool{}
-	batchedRevision := false
+	revs, consumedSeqs, batchedRevision := waitForWorkerUpdatesConsumed(t, s, decision.DocID, ownerID, workerSeqs, 8*time.Second)
 	for _, rev := range revs {
 		if strings.Contains(rev.Content, "Stale output") {
 			t.Fatalf("stale output materialized in revision %+v", rev)
 		}
 		if strings.Contains(rev.Content, "CANCELLED SHOULD NOT MATERIALIZE") {
 			t.Fatalf("cancelled output materialized in revision %+v", rev)
-		}
-		if rev.AuthorKind != types.AuthorAppAgent {
-			continue
-		}
-		meta := decodeRevisionMetadata(rev.Metadata)
-		if metadataString(meta, "source") != "edit_vtext" || metadataString(meta, "vtext_edit_kind") != "vtext_edit" {
-			continue
-		}
-		consumed := metadataSlice(t, meta, "worker_updates_consumed")
-		if len(consumed) >= 2 {
-			batchedRevision = true
-		}
-		for _, item := range consumed {
-			entry, ok := item.(map[string]any)
-			if !ok {
-				t.Fatalf("consumed worker metadata has type %T, want map", item)
-			}
-			seq, ok := entry["seq"].(float64)
-			if !ok {
-				t.Fatalf("consumed worker metadata missing seq: %+v", entry)
-			}
-			consumedSeqs[int64(seq)] = true
 		}
 	}
 	for _, seq := range workerSeqs {
