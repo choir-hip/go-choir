@@ -200,7 +200,7 @@ in
         "PROXY_VMCTL_URL=http://127.0.0.1:8083"
         # Must exceed VM_BOOT_READY_TIMEOUT so cold user-computer boots can
         # finish readiness probing instead of timing out in the proxy first.
-        "PROXY_VMCTL_TIMEOUT=75s"
+        "PROXY_VMCTL_TIMEOUT=180s"
       ];
     };
   };
@@ -260,7 +260,7 @@ in
         "VM_MEM_MIB=512"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=3s"
-        "VM_BOOT_READY_TIMEOUT=60s"
+        "VM_BOOT_READY_TIMEOUT=150s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Staging keeps personal computers warm for normal return visits.
         # Primary computers remain online while the host is under capacity;

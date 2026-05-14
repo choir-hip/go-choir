@@ -92,7 +92,7 @@
   let stateLoaded = false;
   let saveTimer = null;
   const SAVE_DEBOUNCE_MS = 500;
-  const BOOTSTRAP_STABILITY_DEADLINE_MS = 120_000;
+  const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
   const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';

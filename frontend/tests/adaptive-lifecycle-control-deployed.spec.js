@@ -28,7 +28,7 @@ async function bootstrap(page) {
 }
 
 test('adaptive lifecycle control deployed product path', async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
+  test.setTimeout(480_000);
   const email = uniqueEmail();
   const timings = {};
   const bootstrapRequests = [];
@@ -58,7 +58,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   const firstPromptResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return url.pathname === '/api/prompt-bar' && response.request().method() === 'POST';
-  }, { timeout: 60_000 });
+  }, { timeout: 300_000 });
 
   await page.locator('[data-prompt-input]').fill(prompt);
   await page.locator('[data-prompt-input]').press('Enter');
@@ -70,8 +70,12 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   timings.register_ms = Date.now() - registerStart;
   await expect.poll(() => prewarmRequests.length, { timeout: 30_000 }).toBeGreaterThan(0);
 
-  await expect(page.locator('[data-desktop][data-authenticated="true"]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 120_000 });
+  const authenticatedDesktop = page.locator('[data-desktop][data-authenticated="true"]');
+  await expect(authenticatedDesktop).toHaveCount(1, { timeout: 30_000 });
+  if (await authenticatedDesktop.getAttribute('data-desktop-ready') !== 'true') {
+    await expect(page.locator('[data-boot-console]')).toBeVisible({ timeout: 30_000 });
+  }
+  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
   const firstPromptRes = await firstPromptResponse;
   expect(firstPromptRes.status()).toBe(202);
   const firstBootstrap = await bootstrap(page);
@@ -94,7 +98,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
   await page.locator('[data-login-toggle]').click();
   await page.locator('[data-login-view] input[type="email"]').fill(email);
   await page.locator('[data-login-view] [data-auth-submit]').click();
-  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible({ timeout: 300_000 });
   const returningBootstrap = await bootstrap(page);
   expect(returningBootstrap.sandbox_id).toBe(firstBootstrap.sandbox_id);
 

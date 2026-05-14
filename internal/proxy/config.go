@@ -55,8 +55,8 @@ const (
 	DefaultAuthPublicKeyPath = defaultLocalDir + "/auth-signing-key.pub"
 
 	// DefaultVmctlTimeout keeps proxy resolve calls aligned with the staging
-	// VM_BOOT_READY_TIMEOUT=60s deployment setting.
-	DefaultVmctlTimeout = 75 * time.Second
+	// VM_BOOT_READY_TIMEOUT=150s deployment setting.
+	DefaultVmctlTimeout = 180 * time.Second
 )
 
 // LoadConfig resolves a Config from PROXY_* environment variables.
