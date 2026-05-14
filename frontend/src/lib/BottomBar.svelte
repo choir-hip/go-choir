@@ -26,9 +26,11 @@
   } from './stores/desktop.js';
 
   export let currentUser = null;
+  export let authenticated = false;
   export let liveStatus = 'disconnected';
   export let promptDisabled = false;
   export let promptPlaceholder = 'Ask anything...';
+  export let promptStatus = '';
 
   const dispatch = createEventDispatcher();
 
@@ -99,6 +101,11 @@
   function handleLogout() {
     menuOpen = false;
     dispatch('logout');
+  }
+
+  function handleAuthRequest() {
+    menuOpen = false;
+    dispatch('authrequest');
   }
 
   function getStatusColor() {
@@ -172,20 +179,36 @@
         >
           Show desktop
         </button>
-        <div class="menu-section" data-bottom-user data-desktop-user data-shell-user>
-          <span class="menu-label">Signed in</span>
-          <span class="menu-email">{currentUser?.email || 'unknown'}</span>
-        </div>
-        <button
-          class="menu-logout-btn"
-          data-bottom-logout
-          data-desktop-logout
-          data-shell-logout
-          on:click={handleLogout}
-          aria-label="Sign out"
-        >
-          Sign out
-        </button>
+        {#if authenticated}
+          <div class="menu-section" data-bottom-user data-desktop-user data-shell-user>
+            <span class="menu-label">Signed in</span>
+            <span class="menu-email">{currentUser?.email || 'unknown'}</span>
+          </div>
+          <button
+            class="menu-logout-btn"
+            data-bottom-logout
+            data-desktop-logout
+            data-shell-logout
+            on:click={handleLogout}
+            aria-label="Sign out"
+          >
+            Sign out
+          </button>
+        {:else}
+          <div class="menu-section" data-bottom-user data-desktop-user data-shell-user>
+            <span class="menu-label">Public desktop</span>
+            <span class="menu-email">Viewing only</span>
+          </div>
+          <button
+            class="menu-login-btn"
+            data-bottom-login
+            data-shell-login
+            on:click={handleAuthRequest}
+            aria-label="Sign in"
+          >
+            Sign in
+          </button>
+        {/if}
       </div>
     {/if}
 
@@ -209,6 +232,9 @@
   <!-- Center section: prompt bar -->
   <div class="bar-center">
     <div class="prompt-bar">
+      {#if promptStatus}
+        <div class="prompt-status" data-prompt-status aria-live="polite">{promptStatus}</div>
+      {/if}
       <textarea
         class="prompt-input"
         data-prompt-input
@@ -421,6 +447,22 @@
     background: rgba(127, 29, 29, 0.34);
   }
 
+  .menu-login-btn {
+    width: 100%;
+    border: 1px solid rgba(96, 165, 250, 0.34);
+    border-radius: 12px;
+    background: rgba(37, 99, 235, 0.2);
+    color: #dbeafe;
+    cursor: pointer;
+    padding: 0.62rem 0.75rem;
+    text-align: left;
+    font-weight: 760;
+  }
+
+  .menu-login-btn:hover {
+    background: rgba(37, 99, 235, 0.32);
+  }
+
   .minimized-indicators {
     display: flex;
     align-items: center;
@@ -476,6 +518,17 @@
   .prompt-bar {
     width: 100%;
     max-width: 600px;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .prompt-status {
+    min-height: 1rem;
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-align: center;
   }
 
   .prompt-input {

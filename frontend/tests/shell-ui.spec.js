@@ -155,9 +155,9 @@ test('authenticated shell shows live channel status indicator', async ({
 });
 
 // ---------------------------------------------------------------
-// Test: clicking logout returns to guest auth UI
+// Test: clicking logout returns to public desktop
 // ---------------------------------------------------------------
-test('clicking logout returns to guest auth UI', async ({
+test('clicking logout returns to public desktop', async ({
   page,
   authenticator,
 }) => {
@@ -169,13 +169,13 @@ test('clicking logout returns to guest auth UI', async ({
   const logoutBtn = page.locator('[data-shell-logout]');
   await logoutBtn.click();
 
-  // Should return to the guest auth UI.
-  const authEntry = page.locator('[data-auth-entry]');
-  await expect(authEntry).toBeVisible();
-
-  // Shell should no longer be visible.
   const shell = page.locator('[data-shell]');
-  await expect(shell).not.toBeVisible();
+  await expect(shell).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+
+  await openDesktopMenu(page);
+  await expect(page.locator('[data-shell-login]')).toBeVisible();
+  await expect(page.locator('[data-shell-logout]')).toHaveCount(0);
 
   // Session should be signed out.
   const session = await getSession(page, BASE_URL);

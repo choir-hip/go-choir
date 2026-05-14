@@ -59,6 +59,8 @@
   } from './stores/desktop.js';
 
   export let currentUser = null;
+  export let authenticated = false;
+  export let promptReplay = null;
 
   const dispatch = createEventDispatcher();
 
@@ -70,6 +72,11 @@
   let refreshStatus = '';
   let desktopReady = false;
   let promptPlaceholder = 'Connecting to desktop...';
+  let promptStatus = '';
+  let mounted = false;
+  let authenticatedStartupRunning = false;
+  let lastAuthenticated = null;
+  let lastPromptReplayId = null;
 
   // ---- WebSocket state ----
   let ws = null;
@@ -90,10 +97,98 @@
 
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : 'Connecting to desktop...';
+  $: if (mounted && authenticated !== lastAuthenticated) {
+    lastAuthenticated = authenticated;
+    if (authenticated) {
+      startAuthenticatedDesktop();
+    } else {
+      enterPublicDesktop();
+    }
+  }
+  $: if (
+    mounted &&
+    authenticated &&
+    desktopReady &&
+    promptReplay?.id &&
+    promptReplay.id !== lastPromptReplayId
+  ) {
+    lastPromptReplayId = promptReplay.id;
+    submitPromptText(promptReplay.text);
+  }
 
   // ---- Desktop state persistence ----
 
+  function closeLiveChannel() {
+    wsClosedByLogout = true;
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+    wsReconnectAttempt = 0;
+    wsReconnecting = false;
+    liveStatus.set('disconnected');
+  }
+
+  function enterPublicDesktop() {
+    closeLiveChannel();
+    bootstrapData = null;
+    bootstrapError = '';
+    bootstrapStable = true;
+    refreshing = false;
+    refreshStatus = '';
+    stateLoaded = true;
+    desktopReady = true;
+    promptPlaceholder = 'Ask anything...';
+    promptStatus = '';
+    authenticatedStartupRunning = false;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    setWindows([], '');
+    setIconPositions(getDefaultIconPositions());
+  }
+
+  async function startAuthenticatedDesktop() {
+    if (authenticatedStartupRunning) return;
+    authenticatedStartupRunning = true;
+    bootstrapStable = false;
+    stateLoaded = false;
+    desktopReady = false;
+    promptPlaceholder = 'Connecting to desktop...';
+    bootstrapError = '';
+    refreshStatus = '';
+    promptStatus = '';
+    wsClosedByLogout = false;
+
+    try {
+      const stable = await stabilizeBootstrap();
+      if (!authenticated) return;
+      if (!stable) {
+        liveStatus.set('error');
+        return;
+      }
+      connectLiveChannel();
+      await loadDesktopState();
+      desktopReady = bootstrapStable && stateLoaded;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      bootstrapError = 'Bootstrap request failed';
+      liveStatus.set('error');
+    } finally {
+      authenticatedStartupRunning = false;
+    }
+  }
+
   async function loadDesktopState() {
+    if (!authenticated) {
+      stateLoaded = true;
+      desktopReady = bootstrapStable && stateLoaded;
+      return;
+    }
     try {
       const state = await fetchDesktopState();
       if (state) {
@@ -129,6 +224,7 @@
       }
     }
     stateLoaded = true;
+    desktopReady = bootstrapStable && stateLoaded;
   }
 
   function delay(ms) {
@@ -136,11 +232,13 @@
   }
 
   function scheduleSave() {
+    if (!authenticated || !stateLoaded) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(persistDesktopState, SAVE_DEBOUNCE_MS);
   }
 
   async function persistDesktopState() {
+    if (!authenticated || !stateLoaded) return;
     try {
       let currentWindows;
       let currentActiveId;
@@ -207,6 +305,10 @@
   }
 
   async function handleRefresh() {
+    if (!authenticated) {
+      requestAuth({ kind: 'refresh' });
+      return;
+    }
     refreshing = true;
     refreshStatus = '';
     bootstrapError = '';
@@ -231,6 +333,7 @@
   // ---- Live channel (WebSocket) ----
 
   function connectLiveChannel() {
+    if (!authenticated) return;
     liveStatus.set('connecting');
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -258,6 +361,7 @@
   }
 
   async function attemptWsReconnection() {
+    if (!authenticated) return;
     if (wsReconnecting) return;
     if (wsClosedByLogout) return;
     if (wsReconnectAttempt >= MAX_WS_RECONNECT_ATTEMPTS) {
@@ -282,7 +386,21 @@
 
   // ---- Event handlers ----
 
+  function requestAuth(detail = {}) {
+    dispatch('authrequired', detail);
+  }
+
   function handleLaunchApp(event) {
+    if (!authenticated) {
+      requestAuth({
+        kind: 'app_launch',
+        appId: event.detail?.appId || '',
+        appName: event.detail?.appName || 'app',
+        icon: event.detail?.icon || '',
+        appContext: event.detail?.appContext || {},
+      });
+      return;
+    }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -334,17 +452,21 @@
   }
 
   function handleLogout() {
-    wsClosedByLogout = true;
-    if (ws) {
-      ws.close();
-      ws = null;
-    }
+    closeLiveChannel();
     dispatch('logout');
   }
 
   async function handlePromptSubmit(event) {
     const text = (event.detail?.text || '').trim();
     if (!text) return;
+    if (!authenticated) {
+      requestAuth({ kind: 'prompt', text });
+      return;
+    }
+    submitPromptText(text);
+  }
+
+  async function submitPromptText(text) {
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -353,21 +475,26 @@
     const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
 
     try {
+      promptStatus = 'Routing through conductor...';
       const submission = await submitConductorPrompt(text);
       const conductorSubmissionId = submission.submission_id || '';
+      promptStatus = 'Waiting for conductor decision...';
       const decision = await waitForConductorDecision(conductorSubmissionId);
 
       if (decision.action === 'toast') {
+        promptStatus = '';
         showToast(decision.message || 'Conductor acknowledged the request');
         return;
       }
 
       if (decision.action !== 'open_app') {
+        promptStatus = '';
         showToast('Conductor returned an unsupported route');
         return;
       }
 
       if (decision.app === 'vtext') {
+        promptStatus = `Opening ${decision.title || 'VText'}...`;
         openApp('vtext', 'VText', '📝', {
           windowTitle: decision.title || fallbackWindowTitle,
           docId: decision.doc_id || '',
@@ -376,9 +503,13 @@
           createInitialVersion: decision.create_initial_version !== false,
           conductorLoopId: conductorSubmissionId,
         });
+        setTimeout(() => {
+          if (promptStatus.startsWith('Opening ')) promptStatus = '';
+        }, 1800);
         return;
       }
 
+      promptStatus = `Opening ${decision.title || decision.app || 'app'}...`;
       openApp(decision.app || 'browser', decision.title || decision.app || fallbackWindowTitle, '', {
         windowTitle: decision.title || fallbackWindowTitle,
         sourceUrl: decision.source_url || text,
@@ -387,16 +518,24 @@
         contentId: decision.content_id || '',
         conductorLoopId: conductorSubmissionId,
       });
+      setTimeout(() => {
+        if (promptStatus.startsWith('Opening ')) promptStatus = '';
+      }, 1800);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
+      promptStatus = '';
       showToast(err.message || 'Conductor submission failed', { kind: 'error' });
     }
   }
 
   async function handleOpenTextFile(event) {
+    if (!authenticated) {
+      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'document' });
+      return;
+    }
     const pathSegments = event.detail?.pathSegments || [];
     const fileName = event.detail?.fileName || pathSegments[pathSegments.length - 1] || 'Document';
     const path = '/api/files/' + pathSegments.map(encodeURIComponent).join('/');
@@ -434,6 +573,10 @@
   }
 
   function handleOpenVTextFromContent(event) {
+    if (!authenticated) {
+      requestAuth({ kind: 'open_vtext', title: event.detail?.title || 'document' });
+      return;
+    }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -458,6 +601,10 @@
   }
 
   function handleResetDesktop() {
+    if (!authenticated) {
+      requestAuth({ kind: 'reset_desktop' });
+      return;
+    }
     setWindows([], '');
     setIconPositions(getDefaultIconPositions());
     scheduleSave();
@@ -477,23 +624,13 @@
   // ---- Lifecycle ----
 
   onMount(() => {
-    (async () => {
-      try {
-        const stable = await stabilizeBootstrap();
-        if (!stable) {
-          liveStatus.set('error');
-          return;
-        }
-        connectLiveChannel();
-        await loadDesktopState();
-      } catch (err) {
-        if (err instanceof AuthRequiredError) {
-          dispatch('authexpired');
-          return;
-        }
-        bootstrapError = 'Bootstrap request failed';
-      }
-    })();
+    mounted = true;
+    lastAuthenticated = authenticated;
+    if (authenticated) {
+      startAuthenticatedDesktop();
+    } else {
+      enterPublicDesktop();
+    }
 
     // Subscribe to store changes for auto-save
     unsubscribeWindows = windows.subscribe(() => {
@@ -508,11 +645,8 @@
   });
 
   onDestroy(() => {
-    wsClosedByLogout = true;
-    if (ws) {
-      ws.close();
-      ws = null;
-    }
+    mounted = false;
+    closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();
@@ -520,7 +654,13 @@
   });
 </script>
 
-<div class="desktop {desktopReady ? 'desktop-ready' : 'desktop-loading'}" data-desktop data-shell>
+<div
+  class="desktop {desktopReady ? 'desktop-ready' : 'desktop-loading'}"
+  data-desktop
+  data-shell
+  data-authenticated={authenticated}
+  data-desktop-ready={desktopReady}
+>
   <!-- Desktop surface (floating icons + windows, full viewport width) -->
   <div class="desktop-area {desktopReady ? 'state-loaded' : 'state-loading'}" data-desktop-windows>
     <!-- Floating desktop icons (z-index below windows) -->
@@ -618,10 +758,13 @@
   <!-- Bottom bar -->
   <BottomBar
     {currentUser}
+    {authenticated}
     liveStatus={$liveStatus}
     promptDisabled={!desktopReady}
     {promptPlaceholder}
+    {promptStatus}
     on:logout={handleLogout}
+    on:authrequest={() => requestAuth({ kind: 'sign_in' })}
     on:promptsubmit={handlePromptSubmit}
     on:launchapp={handleLaunchApp}
   />

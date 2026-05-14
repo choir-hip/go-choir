@@ -320,9 +320,9 @@ test('desktop restore preserves server-backed window state across fresh context'
 });
 
 // ---------------------------------------------------------------
-// Test: clicking logout returns to guest auth UI
+// Test: clicking logout returns to public desktop
 // ---------------------------------------------------------------
-test('clicking logout returns to guest auth UI from desktop', async ({
+test('clicking logout returns to public desktop from desktop', async ({
   page,
   authenticator,
 }) => {
@@ -332,13 +332,13 @@ test('clicking logout returns to guest auth UI from desktop', async ({
   // Click logout from the desktop/account menu.
   await clickDesktopLogout(page);
 
-  // Should return to the guest auth UI.
-  const authEntry = page.locator('[data-auth-entry]');
-  await expect(authEntry).toBeVisible();
-
-  // Desktop should no longer be visible.
   const desktop = page.locator('[data-desktop]');
-  await expect(desktop).not.toBeVisible();
+  await expect(desktop).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+
+  await page.locator('[data-show-desktop-btn]').click();
+  await expect(page.locator('[data-shell-login]')).toBeVisible();
+  await expect(page.locator('[data-desktop-logout]')).toHaveCount(0);
 
   // Session should be signed out.
   const session = await getSession(page, BASE_URL);
@@ -346,18 +346,14 @@ test('clicking logout returns to guest auth UI from desktop', async ({
 });
 
 // ---------------------------------------------------------------
-// Test: signed-out users do not see the desktop
+// Test: signed-out users see the public desktop
 // ---------------------------------------------------------------
-test('signed-out users do not see the desktop', async ({ page }) => {
+test('signed-out users see the public desktop', async ({ page }) => {
   await page.goto(BASE_URL);
 
-  // The auth entry should be visible (not the desktop).
-  const authEntry = page.locator('[data-auth-entry]');
-  await expect(authEntry).toBeVisible();
-
-  // The desktop should NOT be visible.
   const desktop = page.locator('[data-desktop]');
-  await expect(desktop).not.toBeVisible();
+  await expect(desktop).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------

@@ -607,12 +607,12 @@ test('user info and logout in desktop menu', async ({ page, authenticator }) => 
   // Click logout
   await logoutBtn.click();
 
-  // Should return to guest auth UI
-  const authEntry = page.locator('[data-auth-entry]');
-  await expect(authEntry).toBeVisible();
-
-  // Desktop should not be visible
-  await expect(page.locator('[data-desktop]')).not.toBeVisible();
+  // Should return to public desktop, with auth available from the menu.
+  await expect(page.locator('[data-desktop]')).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+  await page.locator('[data-show-desktop-btn]').click();
+  await expect(page.locator('[data-shell-login]')).toBeVisible();
+  await expect(page.locator('[data-bottom-logout]')).toHaveCount(0);
 });
 
 test('logout remains reachable when desktop bootstrap fails', async ({ page, authenticator }) => {
@@ -634,7 +634,8 @@ test('logout remains reachable when desktop bootstrap fails', async ({ page, aut
   await expect(page.locator('[data-shell-logout]')).toBeVisible();
 
   await page.locator('[data-shell-logout]').click();
-  await expect(page.locator('[data-auth-entry]')).toBeVisible();
+  await expect(page.locator('[data-desktop]')).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
 test('Settings opens as safe product settings without prompt APIs', async ({ page, authenticator }) => {

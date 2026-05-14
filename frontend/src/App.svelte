@@ -1,9 +1,9 @@
 <!--
   App — root Svelte component.
 
-  Checks auth state on mount via GET /auth/session. Renders the guest
-  auth entry UI when signed out and the placeholder desktop shell when
-  signed in.
+  Checks auth state on mount via GET /auth/session. Renders the desktop
+  shell for signed-out and signed-in visitors, then overlays AuthEntry
+  when a signed-out visitor chooses a mutable action.
 
   Rehydration and renewal behaviour (VAL-CROSS-004 / VAL-CROSS-005):
     - On mount (including hard reload / new tab), checkSession() calls
@@ -12,7 +12,7 @@
     - If the session is valid, the shell is rendered and bootstraps its
       protected routes (bootstrap + WS) using cookie-backed auth.
     - If both access and refresh state are invalid, the app falls back
-      to the guest auth UI (VAL-CROSS-008).
+      to the public desktop with auth available as an overlay (VAL-CROSS-008).
 
   Does NOT eagerly call protected routes (/api/shell/bootstrap, /api/ws)
   while the user is signed out.
@@ -39,27 +39,81 @@
   let ceremonyInProgress = false;
 
   let currentTheme = DEFAULT_THEME;
+  let authOverlayOpen = false;
+  let pendingAuthIntent = null;
+  let promptReplay = null;
+  let promptReplayCounter = 0;
+  let sessionCheckSeq = 0;
+
+  $: isAuthenticated = authState === 'signed_in';
+  $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
 
   async function checkSession() {
+    const seq = ++sessionCheckSeq;
+    const isCurrentCheck = () => seq === sessionCheckSeq;
     try {
       const res = await fetch('/auth/session', {
         method: 'GET',
         credentials: 'include',
       });
+      if (!isCurrentCheck()) return { authenticated: false, stale: true };
       if (!res.ok) {
         authState = 'signed_out';
-        return;
+        currentUser = null;
+        return { authenticated: false };
       }
       const data = await res.json();
+      if (!isCurrentCheck()) return { authenticated: false, stale: true };
       if (data.authenticated && data.user) {
         authState = 'signed_in';
         currentUser = data.user;
+        return { authenticated: true, user: data.user };
       } else {
         authState = 'signed_out';
+        currentUser = null;
+        return { authenticated: false };
       }
     } catch (_err) {
+      if (!isCurrentCheck()) return { authenticated: false, stale: true };
       // Network error or unreachable — stay signed out.
       authState = 'signed_out';
+      currentUser = null;
+      return { authenticated: false };
+    }
+  }
+
+  function getAuthIntentMessage(intent) {
+    if (!intent) return 'Sign in to continue.';
+    if (intent.kind === 'prompt') {
+      return `Sign in to run: ${intent.text}`;
+    }
+    if (intent.kind === 'session_expired') {
+      return 'Your session expired. Sign in to continue.';
+    }
+    if (intent.kind === 'app_launch') {
+      return `Sign in to open ${intent.appName || 'this app'}.`;
+    }
+    return 'Sign in to continue.';
+  }
+
+  function clearAuthOverlay() {
+    authOverlayOpen = false;
+    pendingAuthIntent = null;
+    passkeyError = '';
+  }
+
+  function handleAuthRequired(event) {
+    pendingAuthIntent = event.detail || { kind: 'sign_in' };
+    authOverlayOpen = true;
+    passkeyError = '';
+  }
+
+  function maybeReplayPendingIntent(intent) {
+    if (intent?.kind === 'prompt' && intent.text) {
+      promptReplay = {
+        id: `prompt-replay-${++promptReplayCounter}`,
+        text: intent.text,
+      };
     }
   }
 
@@ -77,7 +131,12 @@
 
       // Ceremony succeeded — re-check session to transition to
       // the authenticated state.
-      await checkSession();
+      const session = await checkSession();
+      if (session?.authenticated) {
+        maybeReplayPendingIntent(pendingAuthIntent);
+        authOverlayOpen = false;
+        pendingAuthIntent = null;
+      }
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out
       // state and display a retryable error message.
@@ -94,6 +153,11 @@
 
   async function handleLogout() {
     passkeyError = '';
+    sessionCheckSeq++;
+    authState = 'signed_out';
+    currentUser = null;
+    authOverlayOpen = false;
+    pendingAuthIntent = null;
     try {
       await fetch('/auth/logout', {
         method: 'POST',
@@ -103,8 +167,6 @@
       // Logout request failed — still transition to signed-out
       // state locally so the user is not stuck in the shell.
     }
-    authState = 'signed_out';
-    currentUser = null;
   }
 
   /**
@@ -114,9 +176,12 @@
    * cleanly to the guest auth state (VAL-CROSS-008).
    */
   function handleAuthExpired() {
+    sessionCheckSeq++;
     authState = 'signed_out';
     currentUser = null;
     passkeyError = '';
+    pendingAuthIntent = { kind: 'session_expired' };
+    authOverlayOpen = true;
   }
 
   function applyTheme(theme, persist = true) {
@@ -192,20 +257,42 @@
   });
 </script>
 
-<div class="app-root" data-theme-id={currentTheme.id}>
+<div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
   {#if authState === 'checking'}
     <div class="loading">
       <p>Loading…</p>
     </div>
-  {:else if authState === 'signed_out'}
-    <AuthEntry
-      {passkeyError}
-      {ceremonyInProgress}
-      on:authbegin={handleAuthBegin}
-      on:clearpasskeyerror={handleClearPasskeyError}
+  {:else}
+    <Desktop
+      {currentUser}
+      authenticated={isAuthenticated}
+      {promptReplay}
+      on:logout={handleLogout}
+      on:authexpired={handleAuthExpired}
+      on:authrequired={handleAuthRequired}
     />
-  {:else if authState === 'signed_in'}
-    <Desktop {currentUser} on:logout={handleLogout} on:authexpired={handleAuthExpired} />
+    {#if authOverlayOpen && !isAuthenticated}
+      <div class="auth-overlay" data-auth-overlay>
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to continue">
+          <button
+            class="auth-overlay-close"
+            data-auth-overlay-close
+            type="button"
+            on:click={clearAuthOverlay}
+            aria-label="Close sign in"
+          >
+            x
+          </button>
+          <p class="auth-intent" data-auth-intent>{authIntentMessage}</p>
+          <AuthEntry
+            {passkeyError}
+            {ceremonyInProgress}
+            on:authbegin={handleAuthBegin}
+            on:clearpasskeyerror={handleClearPasskeyError}
+          />
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -262,5 +349,59 @@
     justify-content: center;
     min-height: 100dvh;
     color: #888;
+  }
+
+  .auth-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(3, 7, 18, 0.62);
+    backdrop-filter: blur(10px);
+  }
+
+  .auth-overlay-panel {
+    position: relative;
+    width: min(100%, 430px);
+  }
+
+  .auth-overlay-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 2;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.86);
+    color: #e2e8f0;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .auth-overlay-close:hover {
+    background: rgba(30, 41, 59, 0.95);
+  }
+
+  .auth-intent {
+    margin: 0 0 0.65rem;
+    color: #dbeafe;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+
+  .auth-overlay :global(.auth-entry) {
+    min-height: auto;
+  }
+
+  .auth-overlay :global(.auth-card) {
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
   }
 </style>
