@@ -18,10 +18,13 @@ type vmctlErrorResponse struct {
 
 // vmctlHealthResponse is the JSON structure for GET /health.
 type vmctlHealthResponse struct {
-	Status          string `json:"status"`
-	Service         string `json:"service"`
-	ActiveVMs       int    `json:"active_vms"`
-	TotalOwnerships int    `json:"total_ownerships"`
+	Status          string         `json:"status"`
+	Service         string         `json:"service"`
+	ActiveVMs       int            `json:"active_vms"`
+	TotalOwnerships int            `json:"total_ownerships"`
+	IdleEligible    int            `json:"idle_eligible"`
+	ByState         map[string]int `json:"by_state,omitempty"`
+	ByKind          map[string]int `json:"by_kind,omitempty"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -111,11 +114,21 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerships := h.registry.ListOwnerships()
+	byState := make(map[string]int)
+	byKind := make(map[string]int)
+	for _, own := range ownerships {
+		byState[string(own.State)]++
+		byKind[string(own.Kind)]++
+	}
 	writeVMCTLJSON(w, http.StatusOK, vmctlHealthResponse{
 		Status:          "ok",
 		Service:         "vmctl",
 		ActiveVMs:       h.registry.ActiveCount(),
-		TotalOwnerships: len(h.registry.ListOwnerships()),
+		TotalOwnerships: len(ownerships),
+		IdleEligible:    len(h.registry.CheckIdleOwnerships()),
+		ByState:         byState,
+		ByKind:          byKind,
 	})
 }
 

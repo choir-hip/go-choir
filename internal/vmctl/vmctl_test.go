@@ -526,7 +526,21 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 }
 
 func TestHandler_Health(t *testing.T) {
-	srv, _ := newTestServer(t)
+	srv, reg := newTestServer(t)
+	reg.SetIdleTimeout(time.Millisecond)
+	if _, err := reg.ResolveOrAssign("health-user"); err != nil {
+		t.Fatalf("resolve health user: %v", err)
+	}
+	if _, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "health-user",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-health",
+		TrajectoryID:  "trace-health",
+		Purpose:       "health telemetry worker",
+		MachineClass:  "worker-small",
+	}); err != nil {
+		t.Fatalf("request health worker: %v", err)
+	}
 
 	resp, err := http.Get(srv.URL + "/health")
 	if err != nil {
@@ -548,6 +562,15 @@ func TestHandler_Health(t *testing.T) {
 	}
 	if result.Service != "vmctl" {
 		t.Errorf("expected vmctl service, got %s", result.Service)
+	}
+	if result.ActiveVMs != 2 || result.TotalOwnerships != 2 {
+		t.Fatalf("health counts active=%d total=%d, want 2/2", result.ActiveVMs, result.TotalOwnerships)
+	}
+	if result.ByKind[string(VMKindInteractive)] != 1 || result.ByKind[string(VMKindWorker)] != 1 {
+		t.Fatalf("health kind counts = %+v, want interactive and worker", result.ByKind)
+	}
+	if result.ByState[string(VMStateActive)] != 2 {
+		t.Fatalf("health state counts = %+v, want two active", result.ByState)
 	}
 }
 

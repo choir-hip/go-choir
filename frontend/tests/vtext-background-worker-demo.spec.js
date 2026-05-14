@@ -293,6 +293,9 @@ test('prompt bar can route coding work through a background worker VM export', a
     'rollback_available',
   ]));
   expect(acceptance.evidence_refs?.length || 0).toBeGreaterThan(4);
+  const promotionEvidence = (acceptance.evidence_refs || []).find((ref) => ref.kind === 'promotion_candidate');
+  expect(promotionEvidence?.details?.patchset_sha256 || '').toMatch(/^[a-f0-9]{64}$/);
+  expect(promotionEvidence?.details?.patchset_path || '').toContain('/promotion-artifacts/');
   expect(acceptance.gateway_provider_evidence || '').toContain('active_provider=');
   expect(acceptance.base_sha || '').toBeTruthy();
 

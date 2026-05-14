@@ -2,13 +2,18 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/shipper"
 )
+
+const maxInlinePatchsetBytes = 2 * 1024 * 1024
 
 func RegisterShipperTools(registry *ToolRegistry, cwd string) error {
 	for _, tool := range []Tool{
@@ -102,7 +107,7 @@ func newExportPatchsetTool(cwd string) Tool {
 				return "", err
 			}
 
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"status":          report.Status,
 				"run_id":          runID,
 				"trace_id":        traceID,
@@ -116,9 +121,49 @@ func newExportPatchsetTool(cwd string) Tool {
 				"checks":          report.Checks,
 				"exported_at":     report.ExportedAt,
 				"github_push":     false,
-			})
+			}
+			if manifestContent, ok, truncated, err := readInlineArtifact(report.ManifestPath); err != nil {
+				return "", err
+			} else if ok {
+				result["manifest_json"] = manifestContent
+			} else if truncated {
+				result["manifest_inline_truncated"] = true
+			}
+			if patchsetContent, ok, truncated, err := readInlineArtifact(report.PatchsetPath); err != nil {
+				return "", err
+			} else if ok {
+				sum := sha256.Sum256([]byte(patchsetContent))
+				result["patchset_content"] = patchsetContent
+				result["patchset_sha256"] = hex.EncodeToString(sum[:])
+			} else if truncated {
+				result["patchset_inline_truncated"] = true
+			}
+
+			return toolResultJSON(result)
 		},
 	}
+}
+
+func readInlineArtifact(path string) (string, bool, bool, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", false, false, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", false, false, fmt.Errorf("stat export artifact: %w", err)
+	}
+	if info.IsDir() {
+		return "", false, false, nil
+	}
+	if info.Size() > maxInlinePatchsetBytes {
+		return "", false, true, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false, false, fmt.Errorf("read export artifact: %w", err)
+	}
+	return string(data), true, false, nil
 }
 
 func sanitizeExportPart(raw string) string {

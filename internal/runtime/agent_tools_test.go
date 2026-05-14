@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -2251,6 +2252,78 @@ func TestQueuePromotionCandidatesDedupesEquivalentPatchsetFingerprint(t *testing
 	}
 	if len(candidates) != 1 {
 		t.Fatalf("stored candidates = %+v, want one fingerprint-deduped candidate", candidates)
+	}
+}
+
+func TestQueuePromotionCandidatesMaterializesInlineWorkerExportArtifacts(t *testing.T) {
+	rt, _, _ := testRuntimeWithTempCWD(t)
+	ctx := context.Background()
+	_ = os.RemoveAll(promotionArtifactRoot(rt))
+	patchContent := "diff --git a/product.txt b/product.txt\n--- a/product.txt\n+++ b/product.txt\n@@ -0,0 +1 @@\n+materialized worker patch\n"
+	manifestContent := `{"run_id":"candidate-loop-materialized","trace_id":"trace-materialized","vm_id":"vm-worker-materialized","base_sha":"base-materialized"}`
+	in := workerExportQueueContext{
+		OwnerID:     "user-alice",
+		ParentRunID: "super-run-materialized",
+		TraceID:     "trace-materialized",
+		WorkerVMID:  "vm-worker-materialized",
+		WorkerID:    "worker-materialized",
+		Objective:   "Materialize an inline worker export",
+		Exports: []map[string]any{{
+			"loop_id":          "candidate-loop-materialized",
+			"base_sha":         "base-materialized",
+			"worker_head":      "worker-head-materialized",
+			"worker_head_sha":  "worker-head-materialized",
+			"manifest_path":    "/worker-only/manifest.json",
+			"patchset_path":    "/worker-only/changes.patch",
+			"manifest_json":    manifestContent,
+			"patchset_content": patchContent,
+		}},
+	}
+
+	queued, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
+	if err != nil {
+		t.Fatalf("queue candidate: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("queued = %+v, want one candidate", queued)
+	}
+	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
+	if err != nil {
+		t.Fatalf("list candidates: %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("stored candidates = %+v, want one", candidates)
+	}
+	patchBytes, err := os.ReadFile(candidates[0].PatchsetPath)
+	if err != nil {
+		t.Fatalf("read materialized patch: %v", err)
+	}
+	if string(patchBytes) != patchContent {
+		t.Fatalf("materialized patch = %q, want %q", string(patchBytes), patchContent)
+	}
+	manifestBytes, err := os.ReadFile(candidates[0].ManifestPath)
+	if err != nil {
+		t.Fatalf("read materialized manifest: %v", err)
+	}
+	if string(manifestBytes) != manifestContent {
+		t.Fatalf("materialized manifest = %q, want %q", string(manifestBytes), manifestContent)
+	}
+	var world promotion.CandidateWorld
+	if err := json.Unmarshal(candidates[0].CandidateJSON, &world); err != nil {
+		t.Fatalf("decode candidate world: %v", err)
+	}
+	if world.PatchsetSHA256 == "" || world.PatchsetPath != candidates[0].PatchsetPath {
+		t.Fatalf("candidate world missing materialized patch evidence: %+v", world)
+	}
+	if _, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in); err != nil {
+		t.Fatalf("queue duplicate candidate: %v", err)
+	}
+	artifactDirs, err := os.ReadDir(promotionArtifactRoot(rt))
+	if err != nil {
+		t.Fatalf("read promotion artifact root: %v", err)
+	}
+	if len(artifactDirs) != 1 {
+		t.Fatalf("artifact dirs = %d, want one materialized candidate after duplicate export", len(artifactDirs))
 	}
 }
 

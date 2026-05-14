@@ -240,6 +240,12 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	if candidate := firstPromotionWithStatus(promotionCandidates, types.PromotionCandidateVerified, types.PromotionCandidatePromoted); candidate != nil {
 		builder.addCheckpoint("verification_passed", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{"candidate_id": candidate.CandidateID})
 	}
+	if candidate := firstPromotionWithOwnerReview(promotionCandidates); candidate != nil {
+		builder.addCheckpoint("owner_reviewed", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{
+			"candidate_id": candidate.CandidateID,
+			"status":       candidate.Status,
+		})
+	}
 	if candidate := firstPromotionWithStatus(promotionCandidates, types.PromotionCandidatePromoted); candidate != nil {
 		builder.addCheckpoint("promoted", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{"candidate_id": candidate.CandidateID})
 	}
@@ -509,6 +515,25 @@ func firstPromotionWithStatus(candidates []types.PromotionCandidateRecord, statu
 	return nil
 }
 
+func firstPromotionWithOwnerReview(candidates []types.PromotionCandidateRecord) *types.PromotionCandidateRecord {
+	for i := range candidates {
+		if candidates[i].Status == types.PromotionCandidatePromoted || candidates[i].Status == types.PromotionCandidateRejected {
+			return &candidates[i]
+		}
+		var report promotion.Report
+		if len(candidates[i].ReportJSON) == 0 || !json.Valid(candidates[i].ReportJSON) {
+			continue
+		}
+		if err := json.Unmarshal(candidates[i].ReportJSON, &report); err != nil {
+			continue
+		}
+		if report.PromotionApproved || strings.TrimSpace(report.PromotionDecisionAt) != "" {
+			return &candidates[i]
+		}
+	}
+	return nil
+}
+
 func acceptanceRollbackRefs(candidates []types.PromotionCandidateRecord) []types.RunAcceptanceRollbackRef {
 	var refs []types.RunAcceptanceRollbackRef
 	for _, candidate := range candidates {
@@ -573,7 +598,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 		level = types.RunAcceptanceExportLevel
 		state = types.RunAcceptanceAccepted
 	}
-	if has["verification_passed"] && (has["promoted"] || has["rollback_available"]) {
+	if has["verification_passed"] && has["owner_reviewed"] && (has["promoted"] || has["rollback_available"]) {
 		level = types.RunAcceptancePromotionLevel
 		state = types.RunAcceptanceAccepted
 	}
@@ -651,6 +676,19 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	}
 	if rec.AcceptanceLevel == types.RunAcceptanceExportLevel {
 		risks = append(risks, "promotion-level acceptance is not proven until verifier contracts, owner review, promotion or rollback evidence are recorded")
+	}
+	hasVerification := false
+	hasOwnerReview := false
+	for _, checkpoint := range rec.Checkpoints {
+		if checkpoint.Kind == "verification_passed" && checkpoint.State == "passed" {
+			hasVerification = true
+		}
+		if checkpoint.Kind == "owner_reviewed" && checkpoint.State == "passed" {
+			hasOwnerReview = true
+		}
+	}
+	if hasVerification && !hasOwnerReview {
+		risks = append(risks, "verified candidates still require durable owner review before promotion-level acceptance")
 	}
 	if !has["compacted"] {
 		risks = append(risks, "continuation-level acceptance is not proven until run-memory compaction and continuation evidence are recorded")

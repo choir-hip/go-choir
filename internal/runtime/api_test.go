@@ -240,6 +240,59 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+	seedRunAcceptanceTrajectory(t, rt)
+
+	candidate, err := rt.store.GetPromotionCandidate(ctx, "user-alice", "candidate-acceptance")
+	if err != nil {
+		t.Fatalf("get candidate: %v", err)
+	}
+	candidate.Status = types.PromotionCandidateVerified
+	candidate.ReportJSON = json.RawMessage(`{"status":"verified","promotion_approved":false}`)
+	if _, err := rt.store.UpdatePromotionCandidate(ctx, candidate); err != nil {
+		t.Fatalf("update verified candidate: %v", err)
+	}
+
+	body := `{"target_mission_id":"mission-run-acceptance-v0","trajectory_id":"traj-acceptance"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel {
+		t.Fatalf("acceptance level without owner review = %q, want export-level", rec.AcceptanceLevel)
+	}
+	if !acceptanceHasCheckpoint(rec, "verification_passed") {
+		t.Fatalf("verified candidate should create verification checkpoint: %+v", rec.Checkpoints)
+	}
+	if acceptanceHasCheckpoint(rec, "owner_reviewed") {
+		t.Fatalf("owner review checkpoint should not be present before durable review: %+v", rec.Checkpoints)
+	}
+
+	candidate.ReportJSON = json.RawMessage(`{"status":"verified","promotion_approved":true,"promotion_decision_at":"2026-05-14T00:00:00Z"}`)
+	if _, err := rt.store.UpdatePromotionCandidate(ctx, candidate); err != nil {
+		t.Fatalf("update reviewed candidate: %v", err)
+	}
+	w = registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize reviewed status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode reviewed acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptancePromotionLevel {
+		t.Fatalf("acceptance level with owner review = %q, want promotion-level; checkpoints=%+v", rec.AcceptanceLevel, rec.Checkpoints)
+	}
+	if !acceptanceHasCheckpoint(rec, "owner_reviewed") {
+		t.Fatalf("reviewed candidate missing owner_reviewed checkpoint: %+v", rec.Checkpoints)
+	}
+}
+
 func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 	t.Helper()
 	ctx := context.Background()

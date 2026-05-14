@@ -540,11 +540,19 @@ func queuePromotionCandidatesForWorkerExports(ctx context.Context, rt *Runtime, 
 	queued := make([]map[string]any, 0, len(in.Exports))
 	for _, export := range in.Exports {
 		candidateID := uuid.NewString()
-		vmID := firstNonEmpty(in.WorkerVMID, exportString(export, "vm_id"), in.WorkerID, "worker-vm")
-		candidateRunID := firstNonEmpty(exportString(export, "loop_id"), in.CandidateRunID)
-		patchsetSHA256, err := patchsetDigest(exportString(export, "patchset_path"))
-		if err != nil {
-			return nil, err
+		patchsetSHA256 := strings.TrimSpace(exportString(export, "patchset_sha256"))
+		if patchsetSHA256 == "" {
+			if content := exportRawString(export, "patchset_content"); content != "" {
+				sum := sha256.Sum256([]byte(content))
+				patchsetSHA256 = hex.EncodeToString(sum[:])
+			}
+		}
+		if patchsetSHA256 == "" {
+			var err error
+			patchsetSHA256, err = patchsetDigest(exportString(export, "patchset_path"))
+			if err != nil {
+				return nil, err
+			}
 		}
 		if existing, ok, err := existingPromotionCandidateForWorkerExport(ctx, rt, in, export, objectiveFingerprint, patchsetSHA256); err != nil {
 			return nil, err
@@ -552,6 +560,16 @@ func queuePromotionCandidatesForWorkerExports(ctx context.Context, rt *Runtime, 
 			queued = append(queued, promotionCandidateQueueMap(existing))
 			continue
 		}
+		materializedExport, err := materializeWorkerExportArtifacts(rt, candidateID, export)
+		if err != nil {
+			return nil, err
+		}
+		export = materializedExport
+		if patchsetSHA256 == "" {
+			patchsetSHA256 = strings.TrimSpace(exportString(export, "patchset_sha256"))
+		}
+		vmID := firstNonEmpty(in.WorkerVMID, exportString(export, "vm_id"), in.WorkerID, "worker-vm")
+		candidateRunID := firstNonEmpty(exportString(export, "loop_id"), in.CandidateRunID)
 		candidate := promotion.CandidateWorld{
 			CandidateID:          candidateID,
 			OwnerID:              in.OwnerID,
@@ -599,6 +617,65 @@ func queuePromotionCandidatesForWorkerExports(ctx context.Context, rt *Runtime, 
 		queued = append(queued, promotionCandidateQueueMap(rec))
 	}
 	return queued, nil
+}
+
+func materializeWorkerExportArtifacts(rt *Runtime, candidateID string, export map[string]any) (map[string]any, error) {
+	if len(export) == 0 {
+		return export, nil
+	}
+	manifestContent := exportRawString(export, "manifest_json")
+	patchsetContent := exportRawString(export, "patchset_content")
+	if strings.TrimSpace(manifestContent) == "" && strings.TrimSpace(patchsetContent) == "" {
+		return export, nil
+	}
+	root := promotionArtifactRoot(rt)
+	if root == "" {
+		return export, nil
+	}
+	dir := filepath.Join(root, sanitizeExportPart(candidateID))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create promotion artifact dir: %w", err)
+	}
+	out := make(map[string]any, len(export)+3)
+	for key, value := range export {
+		out[key] = value
+	}
+	if strings.TrimSpace(manifestContent) != "" {
+		manifestPath := filepath.Join(dir, "manifest.json")
+		if err := os.WriteFile(manifestPath, []byte(manifestContent), 0o644); err != nil {
+			return nil, fmt.Errorf("write materialized manifest: %w", err)
+		}
+		out["manifest_path"] = manifestPath
+	}
+	if strings.TrimSpace(patchsetContent) != "" {
+		patchPath := filepath.Join(dir, "changes.patch")
+		if err := os.WriteFile(patchPath, []byte(patchsetContent), 0o644); err != nil {
+			return nil, fmt.Errorf("write materialized patchset: %w", err)
+		}
+		sum := sha256.Sum256([]byte(patchsetContent))
+		out["patchset_path"] = patchPath
+		out["patchset_sha256"] = hex.EncodeToString(sum[:])
+	}
+	return out, nil
+}
+
+func promotionArtifactRoot(rt *Runtime) string {
+	base := ""
+	if rt != nil {
+		base = filepath.Dir(strings.TrimSpace(rt.cfg.StorePath))
+	}
+	if strings.TrimSpace(base) == "" || base == "." {
+		base = filepath.Join(os.TempDir(), "go-choir-promotion-artifacts")
+	}
+	return filepath.Join(base, "promotion-artifacts")
+}
+
+func exportRawString(export map[string]any, key string) string {
+	if export == nil {
+		return ""
+	}
+	value, _ := export[key].(string)
+	return value
 }
 
 func existingPromotionCandidateForWorkerExport(ctx context.Context, rt *Runtime, in workerExportQueueContext, export map[string]any, objectiveFingerprint, patchsetSHA256 string) (types.PromotionCandidateRecord, bool, error) {
