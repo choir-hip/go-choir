@@ -1,6 +1,6 @@
 # MissionGradient: Run Acceptance Verification v0
 
-Status: active documentation-and-verification mission
+Status: completed at export-level acceptance
 Date: 2026-05-13
 
 ## Real Artifact
@@ -340,6 +340,86 @@ Completion requires a final report naming:
 - evidence refs;
 - residual risks;
 - the next realism axis to increase.
+
+## Completion Evidence
+
+Completed on staging during the evening of 2026-05-13 EDT / 2026-05-14 UTC.
+
+Documentation and operating-contract changes:
+
+- `README.md` was rewritten as the current operational entrypoint.
+- `AGENTS.md` was added as the repository-level agent operating contract.
+- `docs/README.md`, `docs/current-architecture.md`, `docs/runtime-invariants.md`, and this mission doc were updated to distinguish canonical architecture, historical proof notes, and staging-first operation.
+
+Behavior-changing commits landed on `origin/main`:
+
+- `11a9e4e` - durable run acceptance verifier, store table, authenticated API, runtime synthesis, and deployed Playwright assertion path.
+- `2c7f0c2` - staged desktop readiness wait for the deployed worker proof.
+- `7628c9b` - async runtime test hardening after CI exposed timing flakes.
+- `795a2d0` - vmctl idle sweeper and preserved `LastActiveAt` on reattach.
+- `5aa5110` - synchronous initial idle reclaim plus Node B staging idle timeout tightening.
+
+Final CI/deploy evidence:
+
+- GitHub Actions CI run: `25835456007`.
+- Deploy job: `75909659651`.
+- Final pushed/deployed commit: `5aa5110cce9c0d0870e3b409c05ca67ac07c8712`.
+- `https://draft.choir-ip.com/health` reported proxy and sandbox `deployed_commit` as `5aa5110cce9c0d0870e3b409c05ca67ac07c8712`.
+- Node B deploy smoke reported vmctl reclaim success: `active_vms=0`, `total_ownerships=56`.
+
+Final deployed product-path proof:
+
+```bash
+GO_CHOIR_RUN_BACKGROUND_WORKER_DEMO=1 \
+GO_CHOIR_WORKER_DEMO_BASE_URL=https://draft.choir-ip.com \
+pnpm exec playwright test tests/vtext-background-worker-demo.spec.js --workers=1 --reporter=line
+```
+
+Result: `1 passed (3.0m)`.
+
+Acceptance record:
+
+- Acceptance id: `runacc-59bf5f6920e620c72e06`.
+- Trajectory id: `70d114b2-f85c-4294-8df5-61018a673e85`.
+- Acceptance level: `export-level`.
+- State: `accepted`.
+- Staging URL: `https://draft.choir-ip.com`.
+- Deployment commit and health commit: `5aa5110cce9c0d0870e3b409c05ca67ac07c8712`.
+- VM mode: `worker`.
+- Authority profile: `conductor > vtext > super`.
+- Gateway evidence: `active_provider=gateway`.
+
+Observed acceptance checkpoints:
+
+- `submitted`
+- `vtext_opened`
+- `super_requested`
+- `worker_leased`
+- `worker_delegated`
+- `export_observed`
+- `promotion_candidate_queued`
+- `rollback_available`
+
+Worker/export evidence:
+
+- Marker: `BACKGROUND_WORKER_DEMO_1778721025648`.
+- Worker VM id: `vm-43ddfd281cda0179a0d4f8ab218423fd`.
+- Successful export manifest: `/mnt/persistent/files/background_worker_demo_1778721025648_export/manifest.json`.
+- Successful patchset: `/mnt/persistent/files/background_worker_demo_1778721025648_export/changes.patch`.
+- Successful worker base SHA: `383c86d33093c604e6f63c7a2d97ce2b58a0fe01`.
+- Successful worker head SHA: `c6d21b3856d9a573d64fbfd00e7584c32f9ae44c`.
+- Verification command: `grep -n 'BACKGROUND_WORKER_DEMO_1778721025648' README.md`.
+- Verification output: `1:BACKGROUND_WORKER_DEMO_1778721025648`.
+- Promotion candidate id: `00c7a582-fc3f-45df-8082-fa0f58c833c8`.
+- Candidate integration branch: `agent/6cdcdb84-15a8-487b-b556-a94abcc73c70/candidate`.
+- GitHub push from the worker export: `false`.
+
+Residual risks and next realism axes:
+
+- The run proves `export-level` acceptance, not promotion-level acceptance. Owner review, integrated verification, explicit promotion, and rollback execution are still next realism axes.
+- The run still showed duplicate worker delegation recurrence. The proof recorded and tolerated it because both exports were concrete and bounded, but the next verifier pass should enforce or explain one-active-worker-per-objective more tightly.
+- Continuation-level acceptance remains unproven until run-memory compaction and automatic continuation are recorded as durable evidence.
+- The staging VM lifecycle blocker found during proof was fixed by idle reclaim; future runs should add structured vmctl lifecycle/capacity telemetry so this class of failure is visible without relying on deploy logs.
 
 ## One-Line Goal
 
