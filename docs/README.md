@@ -40,8 +40,9 @@ Use these buckets when reading or editing docs:
   MissionGradient for VM/computer warmness, pressure-aware reclaim, recovery,
   security, performance, and boot UX.
 - `docs/mission-lifecycle-observability-load-dynamics-v0.md` - proposed
-  MissionGradient for correlated lifecycle instrumentation, progressive and
-  stochastic load dynamics, and UX-driven performance optimization.
+  MissionGradient for adaptive computer lifecycle control: primary-computer
+  keepalive, future 24/7 uptime policy, correlated instrumentation,
+  progressive/stochastic load, and UX-driven performance optimization.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 
 ## Current Mission Family
@@ -52,8 +53,9 @@ Use these buckets when reading or editing docs:
   reliability/performance/UX mission for warm returning-account computers and
   pressure-aware reclaim.
 - `docs/mission-lifecycle-observability-load-dynamics-v0.md` - proposed next
-  observability and load mission for measuring and improving lifecycle
-  performance under real product-path dynamics.
+  adaptive lifecycle mission for keeping primary computers warm under capacity,
+  preparing an always-on tier, and measuring/improving behavior under real
+  product-path dynamics.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.

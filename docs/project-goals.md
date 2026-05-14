@@ -190,19 +190,23 @@ Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 2. Make returning-account active computers warm, recoverable, observable, and
    pressure-aware so users do not see black screens or pay avoidable cold-start
    latency, without weakening isolation or credential boundaries.
-3. Instrument the lifecycle and load dynamics of public, new-account, and
+3. Keep primary user computers online while capacity is available, reclaim
+   lower-priority idle resources first under pressure, and model a future
+   premium 24/7 uptime class before billing or product UI makes it harder to
+   add correctly.
+4. Instrument the lifecycle and load dynamics of public, new-account, and
    returning-account paths so optimization is driven by deployed p50/p95/p99
    evidence, stochastic/progressive load, and UX-visible waiting states rather
    than anecdote.
-4. Keep documentation canonical enough that long-running agents do not follow
+5. Keep documentation canonical enough that long-running agents do not follow
    stale mission files.
-5. Make run acceptance cover promotion-level and continuation-level self
+6. Make run acceptance cover promotion-level and continuation-level self
    development, not just export-level evidence.
-6. Make candidate computer lineage, typed delta export, verifier contracts, and
+7. Make candidate computer lineage, typed delta export, verifier contracts, and
    rollback certificates first-class.
-7. Use Playwright/Codex to prompt Choir to develop Choir once the product path
+8. Use Playwright/Codex to prompt Choir to develop Choir once the product path
    is safe enough, with Codex observing, learning, and repairing when needed.
-8. Build the small missing product surfaces that make this demonstrable:
+9. Build the small missing product surfaces that make this demonstrable:
    launcher, Files upload, theme editing, podcast/radio improvements, and
    browser surface rationalization.
 

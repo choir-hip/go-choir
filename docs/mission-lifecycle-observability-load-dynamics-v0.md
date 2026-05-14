@@ -1,36 +1,46 @@
-# MissionGradient: Lifecycle Observability And Load Dynamics
+# MissionGradient: Adaptive Computer Lifecycle Control
 
 **Status:** proposed next mission
 **Created:** 2026-05-14
 
 ## Real Artifact
 
-Optimize the deployed evidence loop for user-computer lifecycle performance:
+Optimize the deployed adaptive lifecycle control loop for user computers:
 
 ```text
 browser page load
 -> public desktop ready
 -> auth/register ceremony when needed
 -> authenticated computer resolve
+-> warmness entitlement and keepalive policy
 -> warm/resume/recover/boot decision
 -> gateway credential reconciliation
 -> guest health and bootstrap
 -> desktop state restored
 -> websocket connected
 -> mutation or LLM wait state
+-> pressure-aware keepalive/reclaim decision
 -> completed product-path outcome
 ```
 
 The artifact is not a dashboard, a synthetic benchmark, or a cosmetic loading
-animation. It is a correlated lifecycle instrumentation and load-dynamics
-harness that lets Choir improve latency, reliability, security, and perceived
-responsiveness without losing the computer ontology or authority boundaries.
+animation. It is a controller that measures, keeps warm, prefetches, protects,
+reclaims, explains, and verifies user-computer lifecycle behavior without losing
+the computer ontology or authority boundaries.
 
 The low-resolution artifact is still the real staging product on
 `https://draft.choir-ip.com`: public desktop, new registration, returning login,
-bootstrap, logout during loading, and a product-path mutation. Higher resolution
-adds stochastic arrivals, progressive load, websocket churn, restart/recovery
-bursts, pressure/reclaim interactions, and LLM/prompt wait states.
+post-auth private bootstrap, primary-computer keepalive while under capacity,
+logout during loading, and a product-path mutation. Higher resolution adds
+stochastic arrivals, progressive load, websocket churn, restart/recovery bursts,
+pressure/reclaim interactions, LLM/prompt wait states, tiered always-on
+computers, and eventually snapshot/restore paths.
+
+`v0` does not mean the mission is a narrow observability exercise. It means the
+first deployed resolution of the full control-loop gradient. Observability and
+load dynamics are instruments. The product outcome is that Choir should feel
+instant under normal use, remain honest under stress, and make always-on
+personal computers a policy shape rather than an afterthought.
 
 ## Prior Art And Local Learnings
 
@@ -71,6 +81,52 @@ Local learnings to preserve:
   reclaim as solved.
 - The frontend build currently warns that a `ghostty-web` chunk is large. Heavy
   app chunks are a likely UX/performance target after baseline measurement.
+- The most basic optimization is policy, not code cleverness: unless the host is
+  near resource pressure, keep primary user computers online. A user should not
+  pay cold-start latency merely because an arbitrary short idle timer fired.
+- A future paid 24/7 uptime tier should be represented now in lifecycle
+  vocabulary, policy tests, telemetry, and reclaim ordering even if billing and
+  product UI are not part of this mission.
+
+## Warmness And Uptime Policy
+
+The mission should introduce a typed policy model for computer warmness:
+
+```text
+public platform computer
+primary user computer
+premium always-on primary computer
+candidate/background computer
+worker computer
+critical verifier/promotion/publication computer
+```
+
+Default policy:
+
+- Keep primary user computers online while the host is below configured memory,
+  CPU, IO, disk, and PID pressure thresholds.
+- Start private primary-computer warmup immediately after identity is proven,
+  including register/login finish, session refresh, or a valid existing session
+  on page load.
+- Do not start a private primary computer before identity is proven.
+- Treat candidate/background and ordinary worker computers as lower keepalive
+  priority than the user's visible primary computer.
+- Treat verifier, promotion, rollback, publication, and live foreground prompt
+  work as protected, even when pressure exists.
+- Reserve a first-class policy lane for premium always-on primary computers.
+  The v0 implementation may only model, test, and report this lane, but it
+  should not require a later ontology rewrite to sell 24/7 uptime.
+
+The intended gradient is:
+
+```text
+fixed idle timeout
+-> keep primary computers warm while under capacity
+-> pressure-aware dry-run reclaim
+-> active reclaim of lower-priority idle resources
+-> paid/reserved always-on policy
+-> snapshot/restore and migration for larger fleets
+```
 
 ## Invariants
 
@@ -82,6 +138,17 @@ Local learnings to preserve:
   private computer during unauthenticated `login/begin` or `register/begin`.
 - Post-auth prefetch may start as soon as auth completes, provided it uses the
   same product route and authority that normal bootstrap uses.
+- A primary user computer should stay online while the host is not under
+  configured pressure. Short fixed idle timers are a fallback safety valve, not
+  the product policy.
+- A premium always-on primary computer must not be reclaimed by ordinary
+  pressure policy. It may require reserved capacity, migration, or explicit
+  operator intervention, but it should not silently degrade into best-effort
+  idle keepalive.
+- Resource pressure policy must choose lower-priority idle resources before
+  visible primary computers, and visible primary computers before protected
+  critical verifier/promotion/publication work only when the policy explicitly
+  allows it.
 - Mutable product-path work stays behind identity and normal auth/proxy/vmctl
   boundaries.
 - Public telemetry may expose aggregate health only. It must not expose raw
@@ -102,14 +169,17 @@ Local learnings to preserve:
 
 ## Value Criterion
 
-Minimize time-to-ready, uncertainty, and operator blindness while preserving
-security, durable state, and honest product-path proof.
+Maximize warm, secure, explainable computer availability per unit of host
+capacity while preserving durable state and honest product-path proof.
 
 Optimize:
 
 - p50/p95/p99 `time_to_public_desktop_ready`;
 - p50/p95/p99 `time_to_auth_finished`;
 - p50/p95/p99 `time_to_authenticated_desktop_ready`;
+- percentage of returning primary-computer visits served warm while below
+  pressure thresholds;
+- uptime and unexpected-reclaim rate by warmness class;
 - p50/p95/p99 computer resolve, warm/resume/recover/boot, guest health,
   bootstrap, websocket connect, and first mutation/LLM wait-state timings;
 - warm-hit, resume, recover, and fresh-boot ratios for returning users;
@@ -126,6 +196,10 @@ Penalize:
 - high-cardinality or sensitive metric labels;
 - benchmarks that improve by bypassing auth/proxy/vmctl/gateway boundaries;
 - resource warmup before identity proof;
+- reclaiming a primary user computer while lower-priority idle resources are
+  reclaimable;
+- treating a future always-on tier as a boolean config hack rather than a typed
+  policy class with verification;
 - killing host stability or live user work to satisfy synthetic throughput;
 - UI progress that launders failure into apparent forward motion;
 - local-only proof for deployed lifecycle claims.
@@ -141,7 +215,11 @@ Increase realism continuously along these axes:
   arrivals -> burst after deploy/restart -> multi-hour soak -> mixed browser and
   websocket churn.
 - Lifecycle state: public shell only -> warm computer -> resume/recover path ->
-  boot under pressure -> boot while dry-run reclaim reports candidates.
+  keepalive while under capacity -> boot under pressure -> boot while dry-run
+  reclaim reports candidates -> reserved always-on primary computer.
+- Warmness policy: fixed timeout -> under-capacity primary keepalive ->
+  priority-ranked dry-run reclaim -> active lower-priority reclaim ->
+  reserved always-on tier -> fleet migration/snapshot policy.
 - Mutation pressure: read-only desktop -> prompt typing auth boundary ->
   post-auth bootstrap -> LLM-backed prompt wait -> file or artifact write ->
   verifier/promotion-sensitive work.
@@ -159,7 +237,11 @@ Use feedback that reveals local error, not just pass/fail:
 - A canonical lifecycle event schema with stage name, monotonic timestamp,
   correlation id, auth state, lifecycle decision, retry count, status, and
   redaction policy.
+- A typed warmness policy schema with class, entitlement, pressure decision,
+  protected-work reason, and redacted aggregate reporting.
 - Go tests for stage emission, aggregation, redaction, and cardinality limits.
+- vmctl policy tests proving primary keepalive under no pressure, lower-priority
+  reclaim under pressure, and future always-on class protection.
 - Proxy/vmctl tests proving public health exposes only aggregate lifecycle and
   pressure summaries.
 - Frontend tests for public desktop readiness, boot console states, logout
@@ -174,12 +256,19 @@ Use feedback that reveals local error, not just pass/fail:
   thresholds, abort conditions, and residual risks.
 - Staging `/health` identity checks before accepting any measurement.
 - Baseline/after docs recording p50/p95/p99, warm-hit ratio, failure rates,
-  host pressure, deployed SHA, and exact command/config used.
+  primary keepalive ratio, uptime class behavior, host pressure, deployed SHA,
+  and exact command/config used.
 
 ## Forbidden Shortcuts
 
 - Do not preboot private computers before identity is proven.
 - Do not allocate private mutable computers for signed-out public viewing.
+- Do not use a short idle timeout as the primary product policy when capacity is
+  available.
+- Do not reclaim a visible primary computer before lower-priority idle
+  candidates without explicit policy evidence.
+- Do not model 24/7 uptime as a cosmetic account flag with no capacity,
+  keepalive, reclaim, and verification semantics.
 - Do not use browser-public internal or test-only routes for acceptance.
 - Do not make load tests pass by manually seeding sessions, run records,
   success artifacts, or VM state.
@@ -204,13 +293,15 @@ For staging proof, record:
 - GitHub Actions run and deploy job;
 - `/health` deployed proxy and sandbox commit identity;
 - instrumentation mode and any sampling/export configuration;
+- warmness policy configuration, pressure thresholds, and any uptime-class
+  assignments used by the proof;
 - load scenario, arrival rates, duration, thresholds, abort conditions, and
   generated test-account scope;
 - product-path Playwright command and result;
 - k6 command and result, if a load harness is part of the slice;
 - any created accounts, handles, computers, or durable artifacts;
-- rollback knobs for telemetry export, sampling, post-auth prefetch, and load
-  harness scheduling.
+- rollback knobs for telemetry export, sampling, post-auth prefetch, primary
+  keepalive, pressure reclaim, uptime-class policy, and load harness scheduling.
 
 Telemetry and prefetch should ship behind narrow configuration when they can
 change behavior or resource use. A failing or noisy metric path must be
@@ -220,14 +311,16 @@ disableable without disabling the desktop.
 
 Classify discoveries during the mission:
 
-- Tactical learning: update instrumentation, tests, thresholds, UI state, or
-  scripts directly.
+- Tactical learning: update instrumentation, keepalive policy, tests,
+  thresholds, UI state, or scripts directly.
 - Target-level learning: update this mission doc if the best first artifact is
-  an OpenTelemetry exporter, a product-specific event table, a k6 harness, or a
-  frontend readiness contract different from the first guess.
+  an adaptive keepalive policy, an OpenTelemetry exporter, a product-specific
+  event table, a k6 harness, or a frontend readiness contract different from
+  the first guess.
 - Invariant-level learning: stop and escalate before changing public/private
   state boundaries, credential placement, active-computer ownership,
-  auth/session semantics, or promotion/verifier proof semantics.
+  auth/session semantics, paid uptime semantics, or promotion/verifier proof
+  semantics.
 
 Durable learnings should land in:
 
@@ -244,6 +337,11 @@ The mission is complete when staging proves:
 
 - public, new-account, and returning-account desktop readiness are instrumented
   with correlated lifecycle stages;
+- primary user computers remain online while staging is below configured
+  pressure thresholds, and this is proven by policy tests plus deployed
+  aggregate evidence;
+- a future premium always-on primary-computer class exists in policy,
+  telemetry, and tests, even if billing/UI is deferred;
 - public health remains aggregate-only and redacted;
 - internal/operator evidence can explain where waiting occurred for a slow
   session without inspecting private content;
@@ -253,7 +351,8 @@ The mission is complete when staging proves:
 - progressive and stochastic load scripts exist with explicit thresholds and
   abort conditions;
 - a baseline report records p50/p95/p99 readiness, warm/resume/recover/boot
-  ratios, bootstrap retry rates, websocket behavior, and host pressure;
+  ratios, primary keepalive ratio, uptime-class behavior, bootstrap retry
+  rates, websocket behavior, and host pressure;
 - at least one UX-driven performance optimization is selected from measured
   evidence, such as post-auth bootstrap prefetch, heavy chunk splitting, desktop
   shell retention during private boot, or causal boot-status events;
@@ -263,9 +362,12 @@ The mission is complete when staging proves:
 ## Short Goal Prompt
 
 Use MissionGradient. Complete
-`docs/mission-lifecycle-observability-load-dynamics-v0.md` by instrumenting the
-deployed user-computer lifecycle, creating progressive and stochastic
-product-path load dynamics, and using the resulting evidence to optimize
-security, performance, and UX. Preserve public/private authority boundaries,
-avoid forbidden shortcuts, prove behavior on staging for platform changes, and
+`docs/mission-lifecycle-observability-load-dynamics-v0.md` by building the first
+deployed resolution of Choir's adaptive user-computer lifecycle control loop:
+keep primary computers warm while under capacity, start private warmup
+immediately after identity is proven, model a future premium 24/7 uptime class,
+instrument correlated lifecycle stages, create progressive and stochastic
+product-path load dynamics, and use the evidence to optimize security,
+performance, and UX. Preserve public/private authority boundaries, avoid
+forbidden shortcuts, prove behavior on staging for platform changes, and
 stop/escalate on invariant-level surprises.
