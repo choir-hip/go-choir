@@ -176,6 +176,263 @@ func TestHandlePromptBarRejectsBrowserRuntimeMetadata(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+	seedRunAcceptanceTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-run-acceptance-v0","trajectory_id":"traj-acceptance"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel {
+		t.Fatalf("acceptance level = %q, want export-level; record=%+v", rec.AcceptanceLevel, rec)
+	}
+	if rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("state = %q, want accepted", rec.State)
+	}
+	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "export_observed", "promotion_candidate_queued", "rollback_available"} {
+		if !acceptanceHasCheckpoint(rec, want) {
+			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
+		}
+	}
+	if rec.BaseSHA != "base-acceptance" {
+		t.Fatalf("base sha = %q", rec.BaseSHA)
+	}
+	if rec.VMMode != "worker" {
+		t.Fatalf("vm mode = %q", rec.VMMode)
+	}
+	if rec.GatewayProviderEvidence == "" || !strings.Contains(rec.GatewayProviderEvidence, "active_provider=") {
+		t.Fatalf("gateway provider evidence missing: %q", rec.GatewayProviderEvidence)
+	}
+	if len(rec.EvidenceRefs) < 5 {
+		t.Fatalf("expected structured evidence refs, got %+v", rec.EvidenceRefs)
+	}
+
+	loaded, err := rt.store.GetRunAcceptance(ctx, "user-alice", rec.AcceptanceID)
+	if err != nil {
+		t.Fatalf("acceptance not durable: %v", err)
+	}
+	if loaded.AcceptanceID != rec.AcceptanceID {
+		t.Fatalf("loaded acceptance id mismatch: %+v", loaded)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances?trajectory_id=traj-acceptance", "", "user-alice")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body=%s", listW.Code, listW.Body.String())
+	}
+	var list runAcceptanceListResponse
+	if err := json.Unmarshal(listW.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list.Acceptances) != 1 || list.Acceptances[0].AcceptanceID != rec.AcceptanceID {
+		t.Fatalf("list response mismatch: %+v", list)
+	}
+
+	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances/"+rec.AcceptanceID, "", "user-bob")
+	if otherW.Code != http.StatusNotFound {
+		t.Fatalf("other owner status = %d, want 404", otherW.Code)
+	}
+}
+
+func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	finishedAt := now.Add(15 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-acceptance",
+			AgentID:      "agent-conductor-acceptance",
+			ChannelID:    "channel-acceptance",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
+			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-acceptance"}`,
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+				"input_source":          "prompt_bar",
+			},
+		},
+		{
+			RunID:        "run-vtext-acceptance",
+			AgentID:      "agent-vtext-acceptance",
+			ChannelID:    "channel-acceptance",
+			ParentRunID:  "run-conductor-acceptance",
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Own the acceptance document.",
+			CreatedAt:    now.Add(3 * time.Second),
+			UpdatedAt:    now.Add(4 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileVText,
+				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+		{
+			RunID:        "run-super-acceptance",
+			AgentID:      "agent-super-acceptance",
+			ChannelID:    "channel-acceptance",
+			ParentRunID:  "run-vtext-acceptance",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Delegate a worker and export a patchset.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(12 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+	}
+	for _, run := range runs {
+		if err := rt.store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-submit-acceptance",
+		RunID:        "run-conductor-acceptance",
+		AgentID:      "agent-conductor-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now,
+		Kind:         types.EventRunSubmitted,
+		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-vtext-acceptance",
+		RunID:        "run-vtext-acceptance",
+		AgentID:      "agent-vtext-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now.Add(4 * time.Second),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
+	})
+	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
+		"agent_id": "agent-super-acceptance",
+		"loop_id":  "run-super-acceptance",
+		"state":    "running",
+	})
+	appendAcceptanceToolResult(t, rt, "event-worker-lease-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(6*time.Second), "request_worker_vm", map[string]any{
+		"status": "worker_requested",
+		"handle": map[string]any{
+			"kind":          "worker",
+			"worker_id":     "worker-acceptance",
+			"vm_id":         "vm-acceptance",
+			"desktop_id":    types.PrimaryDesktopID,
+			"machine_class": "standard",
+			"sandbox_url":   "http://127.0.0.1:8085",
+		},
+	})
+	appendAcceptanceToolResult(t, rt, "event-delegate-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", map[string]any{
+		"status":       "worker_run_completed",
+		"worker_vm_id": "vm-acceptance",
+		"loop_id":      "run-worker-acceptance",
+		"export_patchsets": []map[string]any{{
+			"status":          "exported",
+			"manifest_path":   "/tmp/acceptance-manifest.json",
+			"patchset_path":   "/tmp/acceptance.patch",
+			"base_sha":        "base-acceptance",
+			"worker_head":     "worker-head-acceptance",
+			"worker_head_sha": "worker-head-acceptance",
+			"github_push":     false,
+		}},
+	})
+	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:       "candidate-acceptance",
+		OwnerID:           "user-alice",
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       "run-super-acceptance",
+		TraceID:           "traj-acceptance",
+		VMID:              "vm-acceptance",
+		BaseSHA:           "base-acceptance",
+		WorkerHeadSHA:     "worker-head-acceptance",
+		ManifestPath:      "/tmp/acceptance-manifest.json",
+		PatchsetPath:      "/tmp/acceptance.patch",
+		IntegrationBranch: "agent/run-worker-acceptance/candidate",
+		DestinationBranch: "main",
+		Summary:           "Acceptance verifier test candidate",
+		CandidateJSON:     json.RawMessage(`{"objective_fingerprint":"fp-acceptance","patchset_sha256":"sha256-acceptance"}`),
+	}); err != nil {
+		t.Fatalf("queue promotion candidate: %v", err)
+	}
+}
+
+func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool string, output map[string]any) {
+	t.Helper()
+	outputJSON, err := json.Marshal(output)
+	if err != nil {
+		t.Fatalf("marshal tool output: %v", err)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"tool":     tool,
+		"call_id":  eventID + "-call",
+		"is_error": false,
+		"output":   string(outputJSON),
+	})
+	if err != nil {
+		t.Fatalf("marshal tool payload: %v", err)
+	}
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      eventID,
+		RunID:        runID,
+		AgentID:      agentID,
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    at,
+		Kind:         types.EventToolResult,
+		Payload:      payload,
+	})
+}
+
+func appendAcceptanceEvent(t *testing.T, rt *Runtime, rec types.EventRecord) {
+	t.Helper()
+	if err := rt.store.AppendEvent(context.Background(), &rec); err != nil {
+		t.Fatalf("append event %s: %v", rec.EventID, err)
+	}
+}
+
+func acceptanceHasCheckpoint(rec types.RunAcceptanceRecord, kind string) bool {
+	for _, checkpoint := range rec.Checkpoints {
+		if checkpoint.Kind == kind && checkpoint.State == "passed" {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBrowserCapabilitiesRequireAuthAndReportUnavailable(t *testing.T) {
 	_, handler := testAPISetup(t)
 

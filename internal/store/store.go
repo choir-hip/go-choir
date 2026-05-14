@@ -172,6 +172,35 @@ CREATE TABLE IF NOT EXISTS promotion_candidates (
 	updated_at          DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS run_acceptances (
+	acceptance_id        TEXT PRIMARY KEY,
+	target_mission_id    TEXT NOT NULL DEFAULT '',
+	source_prompt_or_objective TEXT NOT NULL DEFAULT '',
+	owner_id             TEXT NOT NULL DEFAULT '',
+	desktop_id           TEXT NOT NULL DEFAULT '',
+	trajectory_id        TEXT NOT NULL DEFAULT '',
+	loop_id              TEXT NOT NULL DEFAULT '',
+	authority_profile    TEXT NOT NULL DEFAULT '',
+	base_sha             TEXT NOT NULL DEFAULT '',
+	deployment_commit    TEXT NOT NULL DEFAULT '',
+	ci_run_id            TEXT NOT NULL DEFAULT '',
+	deploy_run_id        TEXT NOT NULL DEFAULT '',
+	staging_url          TEXT NOT NULL DEFAULT '',
+	health_commit        TEXT NOT NULL DEFAULT '',
+	acceptance_level     TEXT NOT NULL DEFAULT '',
+	vm_mode              TEXT NOT NULL DEFAULT '',
+	gateway_provider_evidence TEXT NOT NULL DEFAULT '',
+	state                TEXT NOT NULL DEFAULT '',
+	checkpoints_json     TEXT NOT NULL DEFAULT '[]',
+	invariant_checks_json TEXT NOT NULL DEFAULT '[]',
+	verifier_contracts_json TEXT NOT NULL DEFAULT '[]',
+	evidence_refs_json   TEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json   TEXT NOT NULL DEFAULT '[]',
+	failure_residual_risks_json TEXT NOT NULL DEFAULT '[]',
+	created_at           DATETIME NOT NULL,
+	updated_at           DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS run_continuations (
 	continuation_id    TEXT PRIMARY KEY,
 	owner_id           TEXT NOT NULL DEFAULT '',
@@ -276,6 +305,10 @@ CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(p
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_owner_status ON promotion_candidates(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_source_loop ON promotion_candidates(source_loop_id);
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_trace_id ON promotion_candidates(trace_id);
+CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_updated ON run_acceptances(owner_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_trajectory ON run_acceptances(owner_id, trajectory_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_loop ON run_acceptances(owner_id, loop_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_run_acceptances_target_mission ON run_acceptances(target_mission_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_run_continuations_owner_status ON run_continuations(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_run_continuations_source_loop ON run_continuations(source_loop_id);
 CREATE INDEX IF NOT EXISTS idx_run_continuations_next_loop ON run_continuations(next_loop_id);

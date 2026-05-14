@@ -72,6 +72,20 @@ type runContinuationSynthesizeRequest struct {
 	Start       bool   `json:"start,omitempty"`
 }
 
+type runAcceptanceSynthesizeRequest struct {
+	TargetMissionID       string `json:"target_mission_id"`
+	SourcePromptObjective string `json:"source_prompt_or_objective,omitempty"`
+	TrajectoryID          string `json:"trajectory_id,omitempty"`
+	RunID                 string `json:"loop_id,omitempty"`
+	CIRunID               string `json:"ci_run_id,omitempty"`
+	DeployRunID           string `json:"deploy_run_id,omitempty"`
+	StagingURL            string `json:"staging_url,omitempty"`
+}
+
+type runAcceptanceListResponse struct {
+	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
+}
+
 type internalPromotionActionRequest struct {
 	OwnerID  string `json:"owner_id"`
 	RepoPath string `json:"repo_path"`
@@ -597,6 +611,104 @@ func (h *APIHandler) HandleRunContinuationDetail(w http.ResponseWriter, r *http.
 		return
 	}
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation action not found"})
+}
+
+func (h *APIHandler) HandleRunAcceptancesRoot(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid limit"})
+			return
+		}
+		limit = parsed
+	}
+	trajectoryID := strings.TrimSpace(r.URL.Query().Get("trajectory_id"))
+	var records []types.RunAcceptanceRecord
+	if trajectoryID != "" {
+		records, err = h.rt.store.ListRunAcceptancesByTrajectory(r.Context(), ownerID, trajectoryID, limit)
+	} else {
+		records, err = h.rt.store.ListRunAcceptances(r.Context(), ownerID, limit)
+	}
+	if err != nil {
+		log.Printf("runtime api: list run acceptances: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list run acceptances"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, runAcceptanceListResponse{Acceptances: records})
+}
+
+func (h *APIHandler) HandleRunAcceptanceSynthesize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req runAcceptanceSynthesizeRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid run acceptance request"})
+		return
+	}
+	if strings.TrimSpace(req.StagingURL) == "" && r.Host != "" {
+		scheme := "https"
+		if r.TLS == nil && strings.Contains(r.Host, "localhost") {
+			scheme = "http"
+		}
+		req.StagingURL = scheme + "://" + r.Host
+	}
+	rec, err := h.rt.SynthesizeRunAcceptance(r.Context(), ownerID, runAcceptanceSynthesizeInput{
+		TargetMissionID:       req.TargetMissionID,
+		SourcePromptObjective: req.SourcePromptObjective,
+		TrajectoryID:          req.TrajectoryID,
+		RunID:                 req.RunID,
+		CIRunID:               req.CIRunID,
+		DeployRunID:           req.DeployRunID,
+		StagingURL:            req.StagingURL,
+	})
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusAccepted, rec)
+}
+
+func (h *APIHandler) HandleRunAcceptanceDetail(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	const prefix = "/api/run-acceptances/"
+	acceptanceID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	if acceptanceID == "" || strings.Contains(acceptanceID, "/") {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run acceptance not found"})
+		return
+	}
+	rec, err := h.rt.store.GetRunAcceptance(r.Context(), ownerID, acceptanceID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run acceptance not found"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, rec)
 }
 
 func (h *APIHandler) HandleInternalPromotionCandidatesRoot(w http.ResponseWriter, r *http.Request) {
@@ -1434,6 +1546,9 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/promotions/", h.HandlePromotionCandidateDetail)
 	s.HandleFunc("/api/continuations", h.HandleRunContinuationsRoot)
 	s.HandleFunc("/api/continuations/", h.HandleRunContinuationDetail)
+	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
+	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
+	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/promotions", h.HandleInternalPromotionCandidatesRoot)

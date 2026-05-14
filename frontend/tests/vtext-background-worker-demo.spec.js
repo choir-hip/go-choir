@@ -38,6 +38,31 @@ async function fetchJSON(page, path) {
   }, path);
 }
 
+async function postJSON(page, path, body) {
+  return page.evaluate(async ({ requestPath, payload }) => {
+    let res = await fetch(requestPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) {
+      await fetch('/auth/session', { credentials: 'include' }).catch(() => null);
+      res = await fetch(requestPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+    }
+    if (!res.ok) {
+      const responseBody = await res.text();
+      throw new Error(`${requestPath} failed: ${res.status} ${responseBody}`);
+    }
+    return res.json();
+  }, { requestPath: path, payload: body });
+}
+
 async function waitForPromptDecision(page, submissionId, timeout = 150_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -247,4 +272,30 @@ test('prompt bar can route coding work through a background worker VM export', a
   const trace = delegated.snapshot;
   const roles = (trace.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'vtext', 'super']));
+
+  const acceptance = await postJSON(page, '/api/run-acceptances/synthesize', {
+    target_mission_id: 'mission-run-acceptance-verification-v0',
+    source_prompt_or_objective: prompt,
+    trajectory_id: submitted.submission_id,
+    staging_url: new URL(BASE_URL).origin,
+  });
+  expect(acceptance.acceptance_level).toBe('export-level');
+  expect(acceptance.state).toBe('accepted');
+  const checkpointKinds = (acceptance.checkpoints || []).map((checkpoint) => checkpoint.kind);
+  expect(checkpointKinds).toEqual(expect.arrayContaining([
+    'submitted',
+    'vtext_opened',
+    'super_requested',
+    'worker_leased',
+    'worker_delegated',
+    'export_observed',
+    'promotion_candidate_queued',
+    'rollback_available',
+  ]));
+  expect(acceptance.evidence_refs?.length || 0).toBeGreaterThan(4);
+  expect(acceptance.gateway_provider_evidence || '').toContain('active_provider=');
+  expect(acceptance.base_sha || '').toBeTruthy();
+
+  const storedAcceptance = await fetchJSON(page, `/api/run-acceptances/${encodeURIComponent(acceptance.acceptance_id)}`);
+  expect(storedAcceptance.acceptance_id).toBe(acceptance.acceptance_id);
 });
