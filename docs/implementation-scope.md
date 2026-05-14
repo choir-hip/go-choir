@@ -1,9 +1,10 @@
 # Implementation Scope
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-14
 
 This is the near-term build order. For the complete current architecture, read
-[docs/current-architecture.md](current-architecture.md).
+[docs/current-architecture.md](current-architecture.md). For the broader goal
+continuum, read [docs/project-goals.md](project-goals.md).
 
 ## First Priority: Verifiable VText
 

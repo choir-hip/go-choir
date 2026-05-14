@@ -2,7 +2,9 @@
 
 Last reviewed: 2026-05-14
 
-This directory contains canonical architecture docs, active MissionGradient missions, proof artifacts, and older milestone notes. Do not treat every file here as equally current.
+This directory contains canonical architecture docs, active MissionGradient
+missions, proof artifacts, and a small number of historical pointers. Do not
+treat every file here as equally current.
 
 For the current documentation audit and cleanup recommendations, read `docs/docs-state-report-2026-05-14.md`.
 
@@ -22,6 +24,9 @@ Use these buckets when reading or editing docs:
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
+- `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
+- `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
+- `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
 - `docs/docs-state-report-2026-05-14.md` - current documentation audit and cleanup recommendation matrix.
 - `docs/current-architecture.md` - current product/runtime architecture.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
@@ -59,9 +64,9 @@ When proof docs contradict `README.md`, `AGENTS.md`, `current-architecture.md`, 
 
 ## Historical Or Stale Docs
 
-- `docs/PROJECT-STATE.md` is a stale/dangerous historical snapshot. It contains old operational/provider/credential references and should be replaced by a short historical pointer or deleted after live signal is extracted.
-- `docs/mission-1-deploy-pipeline.md` through `docs/mission-7-cogent-integration.md` are historical milestone docs unless explicitly reactivated. Mission 5/6/7 are likely delete-after-extraction candidates.
-- Top-level `TODOS.md`, `PROJECT-GOALS.md`, and `PROJECT-GLOSSARY.md` should not remain root-level long-term. See `docs/docs-state-report-2026-05-14.md` for recommended extraction/move targets.
+- `docs/PROJECT-STATE.md` is now a short historical pointer. The old snapshot was removed because it contained stale operational/provider/credential and continuation instructions.
+- Old Mission 1/2/3/5/6/7 milestone docs were deleted after live signal was folded into `docs/project-goals.md`, `docs/glossary.md`, `docs/adr-dolt-as-canonical-state.md`, and the canonical architecture docs. Use git history for the removed originals.
+- Top-level `TODOS.md`, `PROJECT-GOALS.md`, and `PROJECT-GLOSSARY.md` were removed after extraction.
 - `docs/api-vtext-hard-cutover-checklist-2026-05-01.md` and `docs/api-surface-and-vtext-workflow-review-2026-05-01.md` are useful audits from an earlier API cutover.
 - `docs/choir-origin-main-change-report-2026-05-10.md` is a historical change report.
 
@@ -69,14 +74,12 @@ Do not delete historical docs during ordinary feature work. Label, index, or upd
 
 ## Active Cleanup Notes
 
-This pass updated the repository entrypoints and added a current docs index rather than rewriting every proof artifact. The unresolved cleanup work is to gradually fold durable lessons from dated proof files into canonical architecture/invariant docs, then mark the source proof as historical.
+The 2026-05-14 cleanup applied the docs-state report's recommended root-doc and
+old-mission cleanup. Remaining cleanup work is intentionally narrower:
 
-The next documentation cleanup should focus on:
-
-- moving/updating `PROJECT-GLOSSARY.md` into `docs/glossary.md`;
-- promoting `TODOS.md`'s SQLite/Dolt note into an ADR or runtime invariant, then deleting the root TODO;
-- folding the new computer ontology into `docs/glossary.md` so "sandbox" remains only an implementation/service name;
-- extracting live content from `PROJECT-GOALS.md`, then deleting or moving it;
-- replacing or deleting `docs/PROJECT-STATE.md`;
-- deleting old Mission 1/2/3/5/6/7 docs only after the docs-state report's extraction targets are handled;
-- gradually folding durable lessons from dated proof files into canonical architecture/invariant docs, then leaving the proof docs as evidence artifacts.
+- gradually fold durable lessons from dated proof/evidence files into canonical
+  architecture/invariant docs when they become current;
+- leave proof docs as evidence artifacts unless a cleanup mission explicitly
+  indexes, extracts, and deletes them;
+- keep `docs/README.md`, `README.md`, and `AGENTS.md` current when missions
+  promote new operating rules.

@@ -117,7 +117,8 @@ provenance, Trace visibility, and merge/promotion review.
 Dolt is the desired canonical store for product state. SQLite may remain for
 narrow hot runtime, cache, local compatibility, or transitional implementation
 roles only when explicitly justified. Do not introduce new durable product truth
-into SQLite by default.
+into SQLite by default. The decision record is
+[adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 
 Per-user embedded Dolt holds private product state: app graph, appagent state,
 `vtext` document/version content, prompts, local trajectories, findings, evidence

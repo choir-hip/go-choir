@@ -20,13 +20,24 @@ Choir is not a chat app. Chat may be an input/control affordance, but the produc
 
 ## Executive recommendations
 
-1. Keep `README.md`, `AGENTS.md`, `docs/mission-geometry.md`, `docs/computer-ontology.md`, `docs/current-architecture.md`, `docs/runtime-invariants.md`, `docs/implementation-scope.md`, `docs/north-star.md`, and `docs/README.md` as the canonical current spine.
+1. Keep `README.md`, `AGENTS.md`, `docs/mission-geometry.md`, `docs/computer-ontology.md`, `docs/project-goals.md`, `docs/glossary.md`, `docs/adr-dolt-as-canonical-state.md`, `docs/current-architecture.md`, `docs/runtime-invariants.md`, `docs/implementation-scope.md`, `docs/north-star.md`, and `docs/README.md` as the canonical current spine.
 2. Promote the `TODOS.md` SQLite/Dolt note into canonical state docs or an ADR, then delete `TODOS.md`. The desired direction is stronger than “evaluate”: Dolt should be canonical product state; SQLite should remain only for narrow hot/runtime/cache/compatibility roles when explicitly justified.
 3. Move and update `PROJECT-GLOSSARY.md` into `docs/glossary.md`; it is useful but stale and misplaced at repo root.
 4. Extract live content from `PROJECT-GOALS.md` into canonical docs or a refreshed `docs/project-goals.md`, then remove the top-level file.
 5. Replace or delete `docs/PROJECT-STATE.md`. It is marked historical, but it contains stale operational/provider/credential material and old continuation instructions that are likely to mislead agents.
 6. Do not mass-delete proof docs in the first cleanup pass. Most `*-proof-*`, `*-dogfood-*`, `*-blocker-*`, and `*-next-frontier-*` files are evidence artifacts. Index them, then fold durable lessons into canonical docs over time.
 7. Old Mission 1-7 docs are mostly historical-signal or delete-after-extraction candidates. They should not remain visually equal to current MissionGradient docs.
+
+## Cleanup Execution In This PR
+
+The follow-up cleanup was applied in this same PR rather than a second PR:
+
+- `PROJECT-GLOSSARY.md` moved into the updated `docs/glossary.md`.
+- `TODOS.md` was promoted into `docs/adr-dolt-as-canonical-state.md` and deleted.
+- `PROJECT-GOALS.md` was extracted into `docs/project-goals.md` and deleted.
+- `docs/PROJECT-STATE.md` was replaced with a short historical pointer.
+- Old Mission 1/2/3/5/6/7 docs were deleted after their live signal was folded into canonical docs.
+- Proof, dogfood, blocker, and next-frontier evidence files were kept.
 
 ## Documentation matrix
 
@@ -40,6 +51,9 @@ Choir is not a chat app. Chat may be an input/control affordance, but the produc
 | `docs/README.md` | 2026-05-14 `a2c4430` | canonical-current | high | low | update taxonomy | n/a | Should explicitly explain canonical/current/evidence/historical/stale buckets. |
 | `docs/mission-geometry.md` | 2026-05-14 `4d964bf` | canonical-current | high | low | keep | n/a | High-level mission geometry and product ontology. |
 | `docs/computer-ontology.md` | 2026-05-14 new in this PR | canonical-current | high | low | keep | n/a | Names the persistent computer object, ledger split, personal promotion, platform promotion, and update algebra. |
+| `docs/project-goals.md` | 2026-05-14 new in this PR | canonical-current | high | low | keep | n/a | Current goal continuum and extracted live signal from root project goals and old mission docs. |
+| `docs/glossary.md` | 2026-05-14 new in this PR | canonical-current | high | low | keep | n/a | Updated canonical vocabulary replacing root `PROJECT-GLOSSARY.md`. |
+| `docs/adr-dolt-as-canonical-state.md` | 2026-05-14 new in this PR | canonical-current | high | low | keep | n/a | Dolt/SQLite decision record replacing root `TODOS.md`. |
 | `docs/current-architecture.md` | 2026-05-14 `a2c4430` | canonical-current | high | low | keep/edit incrementally | n/a | First architecture doc for current runtime changes. |
 | `docs/runtime-invariants.md` | 2026-05-13 `4db1144` | canonical-current | high | low | keep/edit; add Dolt canonical-state direction | n/a | Right place for durable state boundary invariants. |
 | `docs/implementation-scope.md` | 2026-05-04 `f4b65ea` | canonical-current | medium | medium | refresh dates/scope | `docs/current-architecture.md` | Near-term build order but older than latest mission geometry and controller work. |
@@ -123,17 +137,21 @@ The docs directory mixes several layers:
 
 That is acceptable only if `docs/README.md` makes the distinction explicit and agents are instructed not to treat every file equally.
 
-## Proposed next cleanup PR
+## Applied Cleanup
 
-After this report is reviewed, open a second cleanup PR that:
+This report originally recommended a second cleanup PR. That work is now part of
+this PR:
 
-1. Moves/updates `PROJECT-GLOSSARY.md` -> `docs/glossary.md`, including the new computer ontology and deprecating sandbox as a product noun.
-2. Adds `docs/adr-dolt-as-canonical-state.md` and deletes `TODOS.md`.
-3. Extracts live content from `PROJECT-GOALS.md`, then deletes or moves it.
-4. Replaces `docs/PROJECT-STATE.md` with a short historical pointer, or deletes it.
-5. Deletes old Mission 1/2/3/5/6/7 docs only after confirming their useful signal has been absorbed.
+1. `PROJECT-GLOSSARY.md` -> `docs/glossary.md`, including the computer ontology and the rule that `sandbox` is only a service/legacy name.
+2. `TODOS.md` -> `docs/adr-dolt-as-canonical-state.md`, then deleted.
+3. `PROJECT-GOALS.md` -> `docs/project-goals.md`, then deleted.
+4. `docs/PROJECT-STATE.md` -> short historical pointer.
+5. Old Mission 1/2/3/5/6/7 docs deleted after extraction.
 
 ## Full file inventory appendix
+
+This inventory records the pre-cleanup audit state. The cleanup execution status
+above names files moved, replaced, or deleted in this PR.
 
 | Path | Last touched | Status | Recommendation | Extraction target |
 | --- | --- | --- | --- | --- |
@@ -145,6 +163,9 @@ After this report is reviewed, open a second cleanup PR that:
 | `docs/PROJECT-STATE.md` | 2026-05-13 4db1144 Refresh staging-first operational docs | stale-dangerous | replace with pointer or delete | docs/README.md / git history |
 | `docs/README.md` | 2026-05-14 a2c4430 docs: add Choir mission geometry | canonical-current | keep | n/a |
 | `docs/computer-ontology.md` | new in this PR | canonical-current | keep | n/a |
+| `docs/project-goals.md` | new in this PR | canonical-current | keep | n/a |
+| `docs/glossary.md` | new in this PR | canonical-current | keep | n/a |
+| `docs/adr-dolt-as-canonical-state.md` | new in this PR | canonical-current | keep | n/a |
 | `docs/api-surface-and-vtext-workflow-review-2026-05-01.md` | 2026-05-04 f4b65ea feat: harden vtext workflow and runtime api | historical-signal | keep as dated artifact; extract live items | canonical docs if still live |
 | `docs/api-vtext-hard-cutover-checklist-2026-05-01.md` | 2026-05-04 f4b65ea feat: harden vtext workflow and runtime api | historical-signal | keep as dated artifact; extract live items | canonical docs if still live |
 | `docs/architecture.md` | 2026-04-30 1f5d151 Document vtext-first architecture and remove factory assumptions | historical-signal | keep/mark historical; extract durable lessons | canonical docs / ADRs |

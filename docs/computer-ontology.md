@@ -1,6 +1,6 @@
 # Choir Computer Ontology
 
-**Status:** canonical architecture vocabulary  
+**Status:** canonical architecture vocabulary
 **Last updated:** 2026-05-14
 
 This document names the durable object that Choir operates on.
@@ -166,8 +166,8 @@ join:
         A
 ```
 
-`B0 -> A` is the active foreground tail.  
-`B0 -> C` is the candidate delta.  
+`B0 -> A` is the active foreground tail.
+`B0 -> C` is the candidate delta.
 `M` is the merged computer state or an explicit conflict.
 
 Layer-specific joins differ:

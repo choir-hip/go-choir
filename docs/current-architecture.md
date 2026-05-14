@@ -4,7 +4,9 @@
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
-`vmctl`, publication, or appagent behavior.
+`vmctl`, publication, or appagent behavior. For current vocabulary, read
+[glossary.md](glossary.md). For project direction, read
+[project-goals.md](project-goals.md).
 
 ## Current Reality
 
@@ -268,6 +270,9 @@ the route pointer changes atomically with rollback.
 ## State Placement
 
 Choir needs multiple state ledgers with different merge laws.
+
+Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md) for the
+Dolt/SQLite decision record.
 
 Per-user embedded Dolt holds private product state:
 
