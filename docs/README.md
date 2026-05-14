@@ -36,12 +36,18 @@ Use these buckets when reading or editing docs:
 - `docs/north-star.md` - long-range product direction.
 - `docs/mission-public-desktop-auth-on-mutation-v0.md` - active next
   MissionGradient for public desktop access and auth-on-mutation.
+- `docs/mission-pressure-aware-computer-lifecycle-v0.md` - proposed
+  MissionGradient for VM/computer warmness, pressure-aware reclaim, recovery,
+  security, performance, and boot UX.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 
 ## Current Mission Family
 
 - `docs/mission-public-desktop-auth-on-mutation-v0.md` - active next UX/access
   model mission.
+- `docs/mission-pressure-aware-computer-lifecycle-v0.md` - proposed next
+  reliability/performance/UX mission for warm returning-account computers and
+  pressure-aware reclaim.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.

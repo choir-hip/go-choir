@@ -187,15 +187,18 @@ Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 
 1. Make the public desktop/auth-on-mutation slice real enough that users can see
    Choir before logging in, but cannot mutate without identity.
-2. Keep documentation canonical enough that long-running agents do not follow
+2. Make returning-account active computers warm, recoverable, observable, and
+   pressure-aware so users do not see black screens or pay avoidable cold-start
+   latency, without weakening isolation or credential boundaries.
+3. Keep documentation canonical enough that long-running agents do not follow
    stale mission files.
-3. Make run acceptance cover promotion-level and continuation-level self
+4. Make run acceptance cover promotion-level and continuation-level self
    development, not just export-level evidence.
-4. Make candidate computer lineage, typed delta export, verifier contracts, and
+5. Make candidate computer lineage, typed delta export, verifier contracts, and
    rollback certificates first-class.
-5. Use Playwright/Codex to prompt Choir to develop Choir once the product path
+6. Use Playwright/Codex to prompt Choir to develop Choir once the product path
    is safe enough, with Codex observing, learning, and repairing when needed.
-6. Build the small missing product surfaces that make this demonstrable:
+7. Build the small missing product surfaces that make this demonstrable:
    launcher, Files upload, theme editing, podcast/radio improvements, and
    browser surface rationalization.
 
