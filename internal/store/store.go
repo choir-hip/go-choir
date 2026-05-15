@@ -44,6 +44,7 @@ var ErrStaleDocumentHead = errors.New("stale document head")
 // run records, agent records, channel messages, and event records.
 type Store struct {
 	db        *sql.DB
+	readDB    *sql.DB
 	path      string
 	vtextDB   *sql.DB
 	vtextPath string
@@ -370,7 +371,7 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: enable foreign keys: %w", err)
 	}
 
-	// Limit concurrent connections for SQLite safety.
+	// Keep the primary connection serialized for SQLite write safety.
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
@@ -380,8 +381,21 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
 
+	readDB, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000")
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("runtime store: open read connection %s: %w", dbPath, err)
+	}
+	// WAL permits these control-plane reads to proceed while the primary
+	// connection holds a write transaction. This keeps status endpoints
+	// observable without allowing concurrent writer connections.
+	readDB.SetMaxOpenConns(4)
+	readDB.SetMaxIdleConns(4)
+	s.readDB = readDB
+
 	vtextDB, vtextPath, err := openVTextWorkspaceDB(dbPath)
 	if err != nil {
+		_ = readDB.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("runtime store: open vtext workspace: %w", err)
 	}
@@ -391,6 +405,7 @@ func Open(dbPath string) (*Store, error) {
 	// Apply the vtext schema to the embedded Dolt workspace.
 	if err := s.EnsureVTextSchema(); err != nil {
 		_ = vtextDB.Close()
+		_ = readDB.Close()
 		_ = db.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap vtext: %w", err)
 	}
@@ -516,6 +531,11 @@ func (s *Store) Close() error {
 			}
 		}()
 	}
+	if s.readDB != nil {
+		if closeErr := s.readDB.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
 	if s.db != nil {
 		// Checkpoint WAL before closing.
 		_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -609,7 +629,11 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 
 // GetRun returns the run with the given run ID.
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
-	row := s.db.QueryRowContext(ctx,
+	db := s.db
+	if s.readDB != nil {
+		db = s.readDB
+	}
+	row := db.QueryRowContext(ctx,
 		`SELECT loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE loop_id = ?`,

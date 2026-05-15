@@ -124,6 +124,47 @@ func TestGetRunNotFound(t *testing.T) {
 	}
 }
 
+func TestGetRunRespondsWhileWriteTransactionOpen(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	rec := types.RunRecord{
+		RunID:     "task-control-plane-read",
+		OwnerID:   "user-alice",
+		SandboxID: "sandbox-dev",
+		State:     types.RunRunning,
+		Prompt:    "status should remain observable",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE runs SET result = ? WHERE loop_id = ?`, "uncommitted", rec.RunID); err != nil {
+		t.Fatalf("hold write tx: %v", err)
+	}
+
+	readCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	got, err := s.GetRun(readCtx, rec.RunID)
+	if err != nil {
+		t.Fatalf("get run while write tx open: %v", err)
+	}
+	if got.RunID != rec.RunID {
+		t.Fatalf("run id = %q, want %q", got.RunID, rec.RunID)
+	}
+	if got.Result != "" {
+		t.Fatalf("read saw uncommitted result %q", got.Result)
+	}
+}
+
 func TestUpdateRun(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

@@ -1066,24 +1066,44 @@ func TestConcurrentWorkers_Spawn5WorkersRapidlyThenVerifyAllComplete(t *testing.
 		}
 	}
 
-	// Step 4: Confirm: all results received by parent.
-	// Results should be posted to the parent channel.
-	msgs, _, err := rt.ChannelRead(parentID, 0)
-	if err != nil {
-		t.Fatalf("parent channel read: %v", err)
-	}
-
-	childResults := make(map[string]bool)
-	for _, msg := range msgs {
-		if msg.Role == "result" {
-			childResults[msg.From] = true
+	// Step 4: Confirm: all results received by parent. Completion state is
+	// persisted just before parent notification, so wait for the channel
+	// evidence itself instead of assuming it is visible in the same read.
+	deadline = time.After(5 * time.Second)
+	var childResults map[string]bool
+	for {
+		select {
+		case <-deadline:
+			for i, id := range childIDs {
+				if !childResults[id] {
+					t.Errorf("worker %d (%s): result not found in parent channel", i, id[:8])
+				}
+			}
+			return
+		default:
 		}
-	}
 
-	for i, id := range childIDs {
-		if !childResults[id] {
-			t.Errorf("worker %d (%s): result not found in parent channel", i, id[:8])
+		msgs, _, err := rt.ChannelRead(parentID, 0)
+		if err != nil {
+			t.Fatalf("parent channel read: %v", err)
 		}
+		childResults = make(map[string]bool)
+		for _, msg := range msgs {
+			if msg.Role == "result" {
+				childResults[msg.From] = true
+			}
+		}
+		allResults := true
+		for _, id := range childIDs {
+			if !childResults[id] {
+				allResults = false
+				break
+			}
+		}
+		if allResults {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
