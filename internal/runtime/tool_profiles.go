@@ -22,22 +22,25 @@ const (
 )
 
 const (
-	runMetadataAgentProfile     = "agent_profile"
-	runMetadataChannelID        = "channel_id"
-	runMetadataAgentRole        = "agent_role"
-	runMetadataAgentID          = "agent_id"
-	runMetadataModel            = "model"
-	runMetadataDesktopID        = "desktop_id"
-	runMetadataContObjective    = "continuation_objective"
-	runMetadataContReason       = "continuation_reason"
-	runMetadataContAuthority    = "continuation_authority_profile"
-	runMetadataContLeaseSeconds = "continuation_lease_seconds"
-	runMetadataContAutoStart    = "continuation_auto_start"
-	runMetadataToolCWD          = "tool_cwd"
-	runMetadataWorkerIsolation  = "worker_isolation"
-	runMetadataWorkerBaseSHA    = "worker_base_sha"
-	runMetadataWorkerBranch     = "worker_branch"
-	runMetadataWorkerWorktree   = "worker_worktree_path"
+	runMetadataAgentProfile        = "agent_profile"
+	runMetadataChannelID           = "channel_id"
+	runMetadataAgentRole           = "agent_role"
+	runMetadataAgentID             = "agent_id"
+	runMetadataModel               = "model"
+	runMetadataDesktopID           = "desktop_id"
+	runMetadataContObjective       = "continuation_objective"
+	runMetadataContReason          = "continuation_reason"
+	runMetadataContAuthority       = "continuation_authority_profile"
+	runMetadataContLeaseSeconds    = "continuation_lease_seconds"
+	runMetadataContAutoStart       = "continuation_auto_start"
+	runMetadataToolCWD             = "tool_cwd"
+	runMetadataWorkerIsolation     = "worker_isolation"
+	runMetadataWorkerBaseSHA       = "worker_base_sha"
+	runMetadataWorkerBranch        = "worker_branch"
+	runMetadataWorkerWorktree      = "worker_worktree_path"
+	runMetadataWorkerRepoRemote    = "worker_repo_remote_url"
+	runMetadataWorkerRepoBaseSHA   = "worker_repo_base_sha"
+	runMetadataWorkerRepoBootstrap = "worker_repo_bootstrap"
 )
 
 type toolContextKey string
@@ -309,6 +312,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if strings.TrimSpace(rolePrompt) != "" {
 		b.WriteString("\n\nRole-specific instructions:\n")
 		b.WriteString(rolePrompt)
+	}
+	if skillContext := rt.skillContextForProfile(profile); strings.TrimSpace(skillContext) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(skillContext)
 	}
 	if profile == AgentProfileConductor {
 		requestedApp, _ := rec.Metadata["requested_app"].(string)

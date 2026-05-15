@@ -60,6 +60,10 @@ type Config struct {
 	// PromptRoot is the sandbox-owned filesystem root for editable role prompts.
 	PromptRoot string
 
+	// SkillsRoot is the repo-owned filesystem root for natural-language skills
+	// that should be summarized into selected agent prompts.
+	SkillsRoot string
+
 	// ProviderTimeout is the simulated work duration for the stub provider.
 	ProviderTimeout time.Duration
 
@@ -117,6 +121,7 @@ func LoadConfig() Config {
 		SandboxID:           envOr("SANDBOX_ID", "sandbox-dev"),
 		StorePath:           storePath,
 		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
+		SkillsRoot:          envOr("RUNTIME_SKILLS_ROOT", defaultSkillsRoot()),
 		ProviderTimeout:     durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
 		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", DefaultSupervisionInterval),
 		ResearcherCount:     intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearcherCount),
@@ -166,6 +171,36 @@ func defaultPromptRoot(storePath string) string {
 		storePath = DefaultStorePath
 	}
 	return filepath.Join(filepath.Dir(storePath), "prompts")
+}
+
+func defaultSkillsRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for dir := wd; dir != ""; dir = filepath.Dir(dir) {
+		candidate := filepath.Join(dir, "skills")
+		if hasRuntimeSkillFiles(candidate) {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
+	return ""
+}
+
+func hasRuntimeSkillFiles(root string) bool {
+	if strings.TrimSpace(root) == "" {
+		return false
+	}
+	for _, name := range []string{"mission-gradient", "cognitive-transform-portfolio"} {
+		if _, err := os.Stat(filepath.Join(root, name, "SKILL.md")); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func envOr(key, fallback string) string {

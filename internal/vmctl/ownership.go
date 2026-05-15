@@ -698,7 +698,7 @@ func normalizeObjectiveText(raw string) string {
 
 func normalizeWorkerMachineClass(raw string) (string, int, int, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "worker-small", "small":
+	case "", "default", "standard", "worker", "worker-standard", "worker-default", "worker-small", "small":
 		return "worker-small", 1, 256, nil
 	case "worker-medium", "medium":
 		return "worker-medium", 2, 512, nil

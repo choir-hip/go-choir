@@ -23,6 +23,7 @@ Use these buckets when reading or editing docs:
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
+- `docs/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for MissionGradient, MissionBag, Sweep, Leap, Fly, Cycle, and worker/verifier/orchestrator roles.
 - `docs/missiongradient-method.md` - run-geometry method entrypoint for long-running agent work; canonical skill lives at `skills/mission-gradient/SKILL.md`.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
@@ -46,6 +47,7 @@ Use these buckets when reading or editing docs:
   keepalive, future 24/7 uptime policy, correlated instrumentation,
   progressive/stochastic load, and UX-driven performance optimization.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
+- `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 
 ## Current Mission Family
 
@@ -59,6 +61,7 @@ Use these buckets when reading or editing docs:
   preparing an always-on tier, and measuring/improving behavior under real
   product-path dynamics.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
+- `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-choir-in-choir-deformation-v0.md` - earlier deformation mission.

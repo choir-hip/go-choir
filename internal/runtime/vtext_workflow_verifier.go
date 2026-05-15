@@ -119,7 +119,7 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 		if err := verifyCoSuperParents(trajectoryRuns); err != nil {
 			return report, err
 		}
-		guarantee("co-super execution was spawned only by super")
+		guarantee("co-super execution was spawned only by super or vsuper")
 	}
 
 	if opts.RequireSearchToolEvent && !eventsContainSuccessfulWebSearch(events) {
@@ -269,8 +269,9 @@ func verifyCoSuperParents(runs []types.RunRecord) error {
 		}
 		coSuperCount++
 		parent, ok := runByID[run.ParentRunID]
-		if !ok || agentProfileForRun(&parent) != AgentProfileSuper {
-			return fmt.Errorf("co-super run %s parent profile = %q, want super", run.RunID, agentProfileForRun(&parent))
+		parentProfile := agentProfileForRun(&parent)
+		if !ok || (parentProfile != AgentProfileSuper && parentProfile != AgentProfileVSuper) {
+			return fmt.Errorf("co-super run %s parent profile = %q, want super or vsuper", run.RunID, parentProfile)
 		}
 	}
 	if coSuperCount == 0 {
@@ -306,6 +307,10 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		case parentProfile == AgentProfileSuper && (childProfile == AgentProfileCoSuper || childProfile == AgentProfileResearcher):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
+			}
+		case parentProfile == AgentProfileVSuper && (childProfile == AgentProfileCoSuper || childProfile == AgentProfileResearcher):
+			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
+				return fmt.Errorf("%s run %s lacks parent vsuper spawn_agent result", childProfile, run.RunID)
 			}
 		case parentProfile == AgentProfileConductor && childProfile == AgentProfileVText:
 			// Initial vtext setup is product orchestration, not worker delegation.

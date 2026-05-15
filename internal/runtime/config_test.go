@@ -26,6 +26,7 @@ func TestLoadConfigReadsResearcherCount(t *testing.T) {
 	t.Setenv("RUNTIME_RESEARCHER_COUNT", "5")
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "3s")
+	t.Setenv("RUNTIME_SKILLS_ROOT", "/tmp/choir-skills")
 
 	cfg := LoadConfig()
 	if cfg.ResearcherCount != 5 {
@@ -39,6 +40,9 @@ func TestLoadConfigReadsResearcherCount(t *testing.T) {
 	}
 	if cfg.PromptRoot == "" {
 		t.Fatal("prompt_root should not be empty")
+	}
+	if cfg.SkillsRoot != "/tmp/choir-skills" {
+		t.Fatalf("skills_root = %q, want env value", cfg.SkillsRoot)
 	}
 }
 

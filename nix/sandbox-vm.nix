@@ -205,6 +205,7 @@ EOF
       # the sandbox falls back to its process-local default, which can disappear
       # across guest reboot/recovery even when runtime DB state survives.
       SANDBOX_FILES_ROOT = "/mnt/persistent/files";
+      RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";

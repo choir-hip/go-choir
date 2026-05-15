@@ -461,6 +461,63 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	}
 }
 
+func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
+	rt, _ := testRuntime(t)
+	skillsRoot := t.TempDir()
+	for _, skill := range []struct {
+		name        string
+		description string
+		body        string
+	}{
+		{
+			name:        "mission-gradient",
+			description: "Shape long-running work around invariants and evidence.",
+			body:        "# MissionGradient\n\nUse homotopy, not ladder.",
+		},
+		{
+			name:        "cognitive-transform-portfolio",
+			description: "Use route-changing lenses before stopping.",
+			body:        "# Cognitive Transform Portfolio\n\nA transform changes action.",
+		},
+	} {
+		dir := filepath.Join(skillsRoot, skill.name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create skill dir: %v", err)
+		}
+		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", skill.name, skill.description, skill.body)
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+			t.Fatalf("write skill: %v", err)
+		}
+	}
+	rt.cfg.SkillsRoot = skillsRoot
+
+	rec := &types.RunRecord{
+		RunID:        "run-vsuper-skills",
+		AgentID:      "vsuper:worker-1",
+		ChannelID:    "doc-1",
+		OwnerID:      "user-alice",
+		AgentProfile: AgentProfileVSuper,
+		Prompt:       "run a sweep",
+	}
+
+	prompt, err := rt.systemPromptForRun(rec)
+	if err != nil {
+		t.Fatalf("systemPromptForRun: %v", err)
+	}
+	for _, want := range []string{
+		"Available repo skills",
+		"natural-language use; no slash commands",
+		"mission-gradient: Shape long-running work around invariants and evidence.",
+		"cognitive-transform-portfolio: Use route-changing lenses before stopping.",
+		"Use homotopy, not ladder.",
+		"A transform changes action.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("skill prompt missing %q in %q", want, prompt)
+		}
+	}
+}
+
 func TestGetRunCallerScoped(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()

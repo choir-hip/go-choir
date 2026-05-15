@@ -39,6 +39,7 @@ func main() {
 		SandboxID:                       cfg.SandboxID,
 		StorePath:                       cfg.StorePath,
 		PromptRoot:                      rtRuntimeCfg.PromptRoot,
+		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
 		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
 		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
 		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,

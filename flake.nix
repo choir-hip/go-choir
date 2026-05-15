@@ -33,6 +33,7 @@
             type == "directory" ||
             (pkgs.lib.hasSuffix ".go" path) ||
             (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path && pkgs.lib.hasSuffix ".md" path) ||
+            (pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path) ||
             (baseNameOf path == "go.mod") ||
             (baseNameOf path == "go.sum");
         };
@@ -44,6 +45,12 @@
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${buildDate}"
         ];
+        postInstall = ''
+          if [ -d skills ]; then
+            mkdir -p $out/share/go-choir/skills
+            cp -R skills/. $out/share/go-choir/skills/
+          fi
+        '';
         doCheck = false; # Tests run separately in CI
       };
 

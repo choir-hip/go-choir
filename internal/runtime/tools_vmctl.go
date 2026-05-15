@@ -158,10 +158,10 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. Use delegate_worker_vm to run work inside it.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. Use delegate_worker_vm to run work inside it. Supported machine classes are worker-small, worker-medium, and worker-large; omit machine_class for worker-small.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
-			"machine_class":  map[string]any{"type": "string"},
+			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large"}},
 			"allow_parallel": map[string]any{"type": "boolean"},
 		}, []string{"purpose"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -197,24 +197,48 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			}
 
 			client := vmctl.NewClient(rt.cfg.VmctlURL)
+			requestedMachineClass := strings.TrimSpace(in.MachineClass)
+			machineClass := normalizeRuntimeWorkerMachineClass(requestedMachineClass)
 			handle, err := client.RequestWorker(vmctl.WorkerRequest{
 				UserID:        ownerID,
 				DesktopID:     desktopID,
 				ParentAgentID: parentAgentID,
 				TrajectoryID:  trajectoryID,
 				Purpose:       strings.TrimSpace(in.Purpose),
-				MachineClass:  strings.TrimSpace(in.MachineClass),
+				MachineClass:  machineClass,
 				AllowParallel: in.AllowParallel,
 			})
 			if err != nil {
 				return "", err
 			}
 
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"status": "worker_requested",
 				"handle": handle,
-			})
+			}
+			if requestedMachineClass != "" && requestedMachineClass != machineClass {
+				result["machine_class_normalized_from"] = requestedMachineClass
+				result["machine_class"] = handle.MachineClass
+			}
+			return toolResultJSON(result)
 		},
+	}
+}
+
+func normalizeRuntimeWorkerMachineClass(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "default":
+		return ""
+	case "standard", "worker", "worker-standard", "worker-default":
+		return "worker-small"
+	case "small":
+		return "worker-small"
+	case "medium":
+		return "worker-medium"
+	case "large":
+		return "worker-large"
+	default:
+		return strings.TrimSpace(raw)
 	}
 }
 
@@ -312,6 +336,13 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				metadata[runMetadataWorkerBranch] = isolation.Branch
 				metadata[runMetadataWorkerWorktree] = isolation.WorktreePath
 				objective = isolation.WorkerPrompt + "\n\n" + delegatedObjective
+			} else if bootstrap, err := prepareRemoteWorkerRepoBootstrap(ctx, cwd, in.WorkerSandboxURL, profile); err != nil {
+				return "", err
+			} else if bootstrap.Enabled {
+				metadata[runMetadataWorkerRepoBootstrap] = bootstrap.Kind
+				metadata[runMetadataWorkerRepoRemote] = bootstrap.RemoteURL
+				metadata[runMetadataWorkerRepoBaseSHA] = bootstrap.BaseSHA
+				objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
 			}
 
 			startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
@@ -370,6 +401,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				result["worker_branch"] = isolation.Branch
 				result["worker_base_sha"] = isolation.BaseSHA
 			}
+			if bootstrap := metadataStringValue(metadata, runMetadataWorkerRepoBootstrap); bootstrap != "" {
+				result["worker_repo_bootstrap"] = bootstrap
+				result["worker_repo_remote_url"] = metadataStringValue(metadata, runMetadataWorkerRepoRemote)
+				result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
+			}
 			return toolResultJSON(result)
 		},
 	}
@@ -394,6 +430,61 @@ type localWorkerIsolation struct {
 	Branch       string
 	BaseSHA      string
 	WorkerPrompt string
+}
+
+type remoteWorkerRepoBootstrap struct {
+	Enabled      bool
+	Kind         string
+	RemoteURL    string
+	BaseSHA      string
+	WorkerPrompt string
+}
+
+func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL, profile string) (remoteWorkerRepoBootstrap, error) {
+	if sameRuntimeWorkerURL(workerSandboxURL) {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	profile = canonicalAgentProfile(profile)
+	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	repoRoot, err := gitOutputInDir(ctx, cwd, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	repoRoot = strings.TrimSpace(repoRoot)
+	baseSHA, err := gitOutputInDir(ctx, repoRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	baseSHA = strings.TrimSpace(baseSHA)
+	remoteRaw, err := gitOutputInDir(ctx, repoRoot, "remote", "get-url", "origin")
+	if err != nil {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	remoteURL := safeWorkerGitRemote(remoteRaw)
+	if remoteURL == "" {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	prompt := strings.Join([]string{
+		"Remote worker repository bootstrap is available.",
+		"The worker VM may start in an empty files directory. Before repository work, create or use a checkout named go-choir-candidate under the current working directory.",
+		"Bootstrap commands:",
+		"git clone " + remoteURL + " go-choir-candidate",
+		"cd go-choir-candidate",
+		"git checkout " + baseSHA,
+		"Perform all repository edits inside go-choir-candidate. Do not push from the worker VM.",
+		"Commit candidate changes before calling export_patchset.",
+		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
+		"If clone, checkout, build, or export fails, report diagnostics with submit_worker_update instead of claiming repository work.",
+	}, "\n")
+	return remoteWorkerRepoBootstrap{
+		Enabled:      true,
+		Kind:         "remote_git_clone",
+		RemoteURL:    remoteURL,
+		BaseSHA:      baseSHA,
+		WorkerPrompt: prompt,
+	}, nil
 }
 
 func prepareSameRuntimeWorkerIsolation(ctx context.Context, cwd, workerSandboxURL, workerID, vmID, runID string) (localWorkerIsolation, error) {
@@ -482,6 +573,35 @@ func gitOutputInDir(ctx context.Context, dir string, args ...string) (string, er
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(data)))
 	}
 	return string(data), nil
+}
+
+func safeWorkerGitRemote(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "git@github.com:") {
+		path := strings.TrimPrefix(raw, "git@github.com:")
+		path = strings.TrimLeft(path, "/")
+		if path == "" || strings.ContainsAny(path, " \t\r\n") {
+			return ""
+		}
+		return "https://github.com/" + path
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return ""
+	}
+	if parsed.User != nil {
+		parsed.User = nil
+	}
+	if strings.ContainsAny(parsed.String(), " \t\r\n") {
+		return ""
+	}
+	return parsed.String()
 }
 
 func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) string {

@@ -695,6 +695,61 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 }
 
+func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+
+	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
+	if _, err := reg.ResolveOrAssignDesktop("user-alice", types.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve source desktop: %v", err)
+	}
+	handler := vmctl.NewHandler(reg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	vmctlSrv := httptest.NewServer(mux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	rt.cfg.VmctlURL = vmctlSrv.URL
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+	})
+	if err != nil {
+		t.Fatalf("submit super task: %v", err)
+	}
+
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", json.RawMessage(`{
+		"purpose":"Run background coding task",
+		"machine_class":"standard"
+	}`))
+	if err != nil {
+		t.Fatalf("request_worker_vm: %v", err)
+	}
+
+	var resp struct {
+		MachineClassNormalizedFrom string `json:"machine_class_normalized_from"`
+		MachineClass               string `json:"machine_class"`
+		Handle                     struct {
+			MachineClass string `json:"machine_class"`
+		} `json:"handle"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode request_worker_vm: %v", err)
+	}
+	if resp.MachineClassNormalizedFrom != "standard" {
+		t.Fatalf("machine_class_normalized_from = %q, want standard", resp.MachineClassNormalizedFrom)
+	}
+	if resp.MachineClass != "worker-small" || resp.Handle.MachineClass != "worker-small" {
+		t.Fatalf("machine class not normalized to worker-small: %+v", resp)
+	}
+}
+
 func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
@@ -1957,6 +2012,119 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 	if got, _ := result.PromotionQueue[0]["candidate_id"].(string); strings.TrimSpace(got) == "" {
 		t.Fatalf("queued promotion missing candidate_id: %+v", result.PromotionQueue[0])
+	}
+}
+
+func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := os.RemoveAll(activeCWD); err != nil {
+		t.Fatalf("reset active cwd: %v", err)
+	}
+	if err := os.MkdirAll(activeCWD, 0o755); err != nil {
+		t.Fatalf("recreate active cwd: %v", err)
+	}
+	runGit(t, activeCWD, "init")
+	runGit(t, activeCWD, "config", "user.name", "Choir Active")
+	runGit(t, activeCWD, "config", "user.email", "active@example.com")
+	if err := os.WriteFile(filepath.Join(activeCWD, "README.md"), []byte("foreground base\n"), 0o644); err != nil {
+		t.Fatalf("write active base: %v", err)
+	}
+	runGit(t, activeCWD, "add", "README.md")
+	runGit(t, activeCWD, "commit", "-m", "active base")
+	runGit(t, activeCWD, "remote", "add", "origin", "https://github.com/yusefmosiah/go-choir.git")
+	base := strings.TrimSpace(runGit(t, activeCWD, "rev-parse", "HEAD"))
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	workerDir := t.TempDir()
+	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerCWD := filepath.Join(workerDir, "files")
+	if err := os.MkdirAll(workerCWD, 0o755); err != nil {
+		t.Fatalf("create worker cwd: %v", err)
+	}
+	workerProvider := newMockToolLoopProvider(&ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "Received bootstrap instructions.",
+	})
+	workerRT := New(Config{
+		SandboxID:           "vm-worker-bootstrap",
+		StorePath:           filepath.Join(workerDir, "worker.db"),
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerDB, events.NewEventBus(), workerProvider)
+	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
+		t.Fatalf("install worker tools: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	workerRT.Start(ctx)
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerDB.Close()
+	})
+
+	workerHandler := NewAPIHandler(workerRT)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
+	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to distinct worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-worker-bootstrap",
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-bootstrap",
+		"vm_id": "vm-worker-bootstrap",
+		"objective": "Inspect the candidate checkout.",
+		"profile": "vsuper",
+		"timeout_seconds": 10
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		State               types.RunState `json:"state"`
+		RunID               string         `json:"loop_id"`
+		WorkerRepoBootstrap string         `json:"worker_repo_bootstrap"`
+		WorkerRepoRemoteURL string         `json:"worker_repo_remote_url"`
+		WorkerRepoBaseSHA   string         `json:"worker_repo_base_sha"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.State != types.RunCompleted || result.WorkerRepoBootstrap != "remote_git_clone" {
+		t.Fatalf("unexpected bootstrap result: %+v\nraw=%s", result, raw)
+	}
+	if result.WorkerRepoRemoteURL != "https://github.com/yusefmosiah/go-choir.git" || result.WorkerRepoBaseSHA != base {
+		t.Fatalf("bootstrap provenance mismatch: %+v", result)
+	}
+	workerRun, err := workerRT.GetRun(context.Background(), result.RunID, "user-alice")
+	if err != nil {
+		t.Fatalf("get worker run: %v", err)
+	}
+	for _, want := range []string{
+		"Remote worker repository bootstrap is available.",
+		"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+		"git checkout " + base,
+		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
+		"Inspect the candidate checkout.",
+	} {
+		if !strings.Contains(workerRun.Prompt, want) {
+			t.Fatalf("worker prompt missing %q in %q", want, workerRun.Prompt)
+		}
 	}
 }
 
