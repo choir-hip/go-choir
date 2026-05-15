@@ -37,6 +37,9 @@ func (s *Store) UpsertRunAcceptance(ctx context.Context, rec types.RunAcceptance
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = now
 	}
+	if now.Before(rec.CreatedAt) {
+		now = rec.CreatedAt
+	}
 	rec.UpdatedAt = now
 
 	checkpoints, err := marshalAcceptanceJSON(rec.Checkpoints)
@@ -74,31 +77,31 @@ func (s *Store) UpsertRunAcceptance(ctx context.Context, rec types.RunAcceptance
 			evidence_refs_json, rollback_refs_json, failure_residual_risks_json,
 			created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(acceptance_id) DO UPDATE SET
-			target_mission_id = excluded.target_mission_id,
-			source_prompt_or_objective = excluded.source_prompt_or_objective,
-			owner_id = excluded.owner_id,
-			desktop_id = excluded.desktop_id,
-			trajectory_id = excluded.trajectory_id,
-			loop_id = excluded.loop_id,
-			authority_profile = excluded.authority_profile,
-			base_sha = excluded.base_sha,
-			deployment_commit = excluded.deployment_commit,
-			ci_run_id = excluded.ci_run_id,
-			deploy_run_id = excluded.deploy_run_id,
-			staging_url = excluded.staging_url,
-			health_commit = excluded.health_commit,
-			acceptance_level = excluded.acceptance_level,
-			vm_mode = excluded.vm_mode,
-			gateway_provider_evidence = excluded.gateway_provider_evidence,
-			state = excluded.state,
-			checkpoints_json = excluded.checkpoints_json,
-			invariant_checks_json = excluded.invariant_checks_json,
-			verifier_contracts_json = excluded.verifier_contracts_json,
-			evidence_refs_json = excluded.evidence_refs_json,
-			rollback_refs_json = excluded.rollback_refs_json,
-			failure_residual_risks_json = excluded.failure_residual_risks_json,
-			updated_at = excluded.updated_at`,
+		ON DUPLICATE KEY UPDATE
+			target_mission_id = VALUES(target_mission_id),
+			source_prompt_or_objective = VALUES(source_prompt_or_objective),
+			owner_id = VALUES(owner_id),
+			desktop_id = VALUES(desktop_id),
+			trajectory_id = VALUES(trajectory_id),
+			loop_id = VALUES(loop_id),
+			authority_profile = VALUES(authority_profile),
+			base_sha = VALUES(base_sha),
+			deployment_commit = VALUES(deployment_commit),
+			ci_run_id = VALUES(ci_run_id),
+			deploy_run_id = VALUES(deploy_run_id),
+			staging_url = VALUES(staging_url),
+			health_commit = VALUES(health_commit),
+			acceptance_level = VALUES(acceptance_level),
+			vm_mode = VALUES(vm_mode),
+			gateway_provider_evidence = VALUES(gateway_provider_evidence),
+			state = VALUES(state),
+			checkpoints_json = VALUES(checkpoints_json),
+			invariant_checks_json = VALUES(invariant_checks_json),
+			verifier_contracts_json = VALUES(verifier_contracts_json),
+			evidence_refs_json = VALUES(evidence_refs_json),
+			rollback_refs_json = VALUES(rollback_refs_json),
+			failure_residual_risks_json = VALUES(failure_residual_risks_json),
+			updated_at = VALUES(updated_at)`,
 		rec.AcceptanceID,
 		rec.TargetMissionID,
 		rec.SourcePromptObjective,

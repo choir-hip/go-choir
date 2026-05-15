@@ -36,6 +36,22 @@ SQLite may remain for narrow hot runtime, auth/session, cache, local
 compatibility, or transitional implementation roles when explicitly justified.
 New durable product truth should not be added to SQLite by default.
 
+## Implementation Note: Runtime Cutover
+
+As of 2026-05-15, the sandbox runtime/control product tables for runs, events,
+Trace, run memory, continuations, promotion candidates, run acceptances, browser
+sessions, researcher findings, worker updates, and desktop state are opened in
+the same per-user embedded Dolt workspace that already owns VText state.
+
+The current filesystem path convention still uses the old runtime path as a
+marker and legacy-import source, but the canonical writer is the embedded Dolt
+workspace derived from that path. Existing non-empty legacy SQLite runtime files
+are imported once when the Dolt runtime tables are empty and are left in place as
+rollback inputs during cutover.
+
+Host auth/session and vmctl stores remain SQLite until the platform Dolt layer
+and routing/promotion records are designed separately.
+
 ## Per-User Embedded Dolt Owns
 
 - `vtext` documents and versions;

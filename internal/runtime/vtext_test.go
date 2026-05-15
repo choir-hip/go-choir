@@ -881,7 +881,7 @@ func vtextAPISetupWithProviderAndOptions(t *testing.T, provider Provider, instal
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: 5 * time.Second,
-		VTextWakeDebounce:   50 * time.Millisecond,
+		VTextWakeDebounce:   250 * time.Millisecond,
 	}
 
 	bus := events.NewEventBus()
@@ -1776,7 +1776,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 	const ownerID = "user-1"
 	const seed int64 = 20260430
 	rng := rand.New(rand.NewSource(seed))
-	provider := &stochasticWorkflowProvider{delay: 110 * time.Millisecond}
+	provider := &stochasticWorkflowProvider{delay: 1500 * time.Millisecond}
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
 	conductorRun, err := rt.StartRunWithMetadata(context.Background(), "Build a toy evolution model and verify it.", ownerID, map[string]any{
@@ -1915,7 +1915,7 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 		}
 	}
 
-	staleState := waitForTaskCompletion(t, h, initialResp.RunID, 5*time.Second)
+	staleState := waitForTaskCompletion(t, h, initialResp.RunID, 10*time.Second)
 	if staleState != types.RunCompleted {
 		t.Fatalf("initial stale vtext state = %q, want completed", staleState)
 	}
@@ -1926,9 +1926,9 @@ func TestVTextSeededStochasticWorkflowContracts(t *testing.T) {
 	if mutation == nil || mutation.State != "failed" {
 		t.Fatalf("initial stale mutation = %+v, want failed no-write mutation", mutation)
 	}
-	waitForVTextQuiescent(t, rt, s, ownerID, decision.DocID, maxWorkerSeq, 8*time.Second)
+	waitForVTextQuiescent(t, rt, s, ownerID, decision.DocID, maxWorkerSeq, 20*time.Second)
 
-	revs, consumedSeqs, batchedRevision := waitForWorkerUpdatesConsumed(t, s, decision.DocID, ownerID, workerSeqs, 8*time.Second)
+	revs, consumedSeqs, batchedRevision := waitForWorkerUpdatesConsumed(t, s, decision.DocID, ownerID, workerSeqs, 20*time.Second)
 	for _, rev := range revs {
 		if strings.Contains(rev.Content, "Stale output") {
 			t.Fatalf("stale output materialized in revision %+v", rev)

@@ -257,7 +257,9 @@ func waitForContinuationsBySource(t *testing.T, s interface {
 		if err != nil {
 			t.Fatalf("list continuations: %v", err)
 		}
-		if len(continuations) > 0 {
+		if len(continuations) > 0 &&
+			continuations[0].Status == types.RunContinuationStarted &&
+			continuations[0].NextRunID != "" {
 			return continuations
 		}
 		time.Sleep(25 * time.Millisecond)

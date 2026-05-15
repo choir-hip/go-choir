@@ -138,18 +138,17 @@ CREATE INDEX IF NOT EXISTS idx_content_items_owner_updated ON content_items(owne
 CREATE INDEX IF NOT EXISTS idx_content_items_owner_app ON content_items(owner_id, app_hint, updated_at DESC);
 `
 
-// OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for
-// vtext document storage only. It is mainly used by store-level tests and
-// by local sandbox workflows that need the document store without the rest
-// of the runtime SQLite tables.
+// OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for vtext
+// document storage only. It is mainly used by store-level tests and local
+// workflows that need the document store without the rest of the runtime tables.
 func OpenVTextWorkspace(path string) (*Store, error) {
-	db, workspacePath, err := openVTextWorkspaceDB(path)
+	db, workspacePath, connector, err := openVTextWorkspaceDB(path)
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{path: path, vtextDB: db, vtextPath: workspacePath}
+	s := &Store{path: path, vtextDB: db, vtextPath: workspacePath, doltConnector: connector}
 	if err := s.bootstrapVText(); err != nil {
-		_ = db.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("vtext workspace: bootstrap: %w", err)
 	}
 	return s, nil
@@ -166,13 +165,10 @@ func deriveVTextWorkspacePath(path string) string {
 	return trimmed + ".vtext"
 }
 
-func openVTextWorkspaceDB(path string) (*sql.DB, string, error) {
+func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
 	workspacePath := deriveVTextWorkspacePath(path)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		_ = os.RemoveAll(workspacePath)
-	}
 	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
-		return nil, "", fmt.Errorf("vtext workspace: create directory: %w", err)
+		return nil, "", nil, fmt.Errorf("vtext workspace: create directory: %w", err)
 	}
 
 	rootDSN := fmt.Sprintf(
@@ -181,25 +177,29 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, error) {
 	)
 	cfg, err := embedded.ParseDSN(rootDSN)
 	if err != nil {
-		return nil, "", fmt.Errorf("vtext workspace: parse dsn: %w", err)
+		return nil, "", nil, fmt.Errorf("vtext workspace: parse dsn: %w", err)
 	}
 	connector, err := embedded.NewConnector(cfg)
 	if err != nil {
-		return nil, "", fmt.Errorf("vtext workspace: new connector: %w", err)
+		return nil, "", nil, fmt.Errorf("vtext workspace: new connector: %w", err)
 	}
 	rootDB := sql.OpenDB(connector)
-	rootDB.SetMaxOpenConns(1)
-	rootDB.SetMaxIdleConns(1)
+	configureEmbeddedDoltDB(rootDB)
 	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS vtext"); err != nil {
 		_ = rootDB.Close()
-		return nil, "", fmt.Errorf("vtext workspace: create database: %w", err)
+		_ = connector.Close()
+		return nil, "", nil, fmt.Errorf("vtext workspace: create database: %w", err)
 	}
 	if err := rootDB.Close(); err != nil {
-		return nil, "", fmt.Errorf("vtext workspace: close bootstrap connection: %w", err)
+		_ = connector.Close()
+		return nil, "", nil, fmt.Errorf("vtext workspace: close bootstrap connection: %w", err)
+	}
+	if err := connector.Close(); err != nil {
+		return nil, "", nil, fmt.Errorf("vtext workspace: close bootstrap connector: %w", err)
 	}
 
 	dbDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&database=vtext&multistatements=true",
+		"file://%s?commitname=Choir&commitemail=system@choir.local&database=vtext&multistatements=true&clientfoundrows=true",
 		workspacePath,
 	)
 
@@ -207,21 +207,21 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, error) {
 	for attempt := range 8 {
 		dbCfg, err := embedded.ParseDSN(dbDSN)
 		if err != nil {
-			return nil, "", fmt.Errorf("vtext workspace: parse database dsn: %w", err)
+			return nil, "", nil, fmt.Errorf("vtext workspace: parse database dsn: %w", err)
 		}
 		dbConnector, err := embedded.NewConnector(dbCfg)
 		if err != nil {
 			lastErr = fmt.Errorf("vtext workspace: new database connector: %w", err)
 		} else {
 			db := sql.OpenDB(dbConnector)
-			db.SetMaxOpenConns(1)
-			db.SetMaxIdleConns(1)
+			configureEmbeddedDoltDB(db)
 			if pingErr := db.Ping(); pingErr == nil {
-				return db, workspacePath, nil
+				return db, workspacePath, dbConnector, nil
 			} else {
 				lastErr = fmt.Errorf("vtext workspace: ping database: %w", pingErr)
 			}
 			_ = db.Close()
+			_ = dbConnector.Close()
 		}
 
 		if !strings.Contains(strings.ToLower(lastErr.Error()), "non 0 lock") {
@@ -230,7 +230,7 @@ func openVTextWorkspaceDB(path string) (*sql.DB, string, error) {
 		time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
 	}
 
-	return nil, "", lastErr
+	return nil, "", nil, lastErr
 }
 
 func (s *Store) vtextHandle() *sql.DB {
@@ -238,6 +238,11 @@ func (s *Store) vtextHandle() *sql.DB {
 		return s.vtextDB
 	}
 	return s.db
+}
+
+func configureEmbeddedDoltDB(db *sql.DB) {
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 }
 
 // bootstrapVText applies the vtext schema DDL to the embedded workspace.

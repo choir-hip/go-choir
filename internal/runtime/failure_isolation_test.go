@@ -134,24 +134,26 @@ func TestFailureIsolation_FailedWorkerSendsErrorToParent(t *testing.T) {
 		t.Errorf("child error: got %q, want to contain 'simulated worker failure'", task.Error)
 	}
 
-	// Verify error message posted to parent channel.
-	msgs, _, err := rt.ChannelRead(parentID, 0)
-	if err != nil {
-		t.Fatalf("parent channel read: %v", err)
-	}
-
-	found := false
-	for _, msg := range msgs {
-		if msg.From == child.RunID && msg.Role == "error" {
-			found = true
-			if !strings.Contains(msg.Content, "simulated worker failure") {
-				t.Errorf("error message content: got %q, want to contain 'simulated worker failure'", msg.Content)
-			}
-			break
+	// Verify error message posted to parent channel. Run state is committed
+	// before the parent notification is visible, so poll for the channel fact.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs, _, err := rt.ChannelRead(parentID, 0)
+		if err != nil {
+			t.Fatalf("parent channel read: %v", err)
 		}
-	}
-	if !found {
-		t.Error("no error message found in parent channel from failed child")
+		for _, msg := range msgs {
+			if msg.From == child.RunID && msg.Role == "error" {
+				if !strings.Contains(msg.Content, "simulated worker failure") {
+					t.Errorf("error message content: got %q, want to contain 'simulated worker failure'", msg.Content)
+				}
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no error message found in parent channel from failed child")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -682,13 +684,23 @@ func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 	child1, _ := rt.StartChildRun(ctx, parentID, "fail task", "user-alice", nil)
 	waitForTaskState(t, rt, child1.RunID, 10*time.Second)
 
-	// Parent should still be responsive: check channel read works.
-	msgs, cursor, err := rt.ChannelRead(parentID, 0)
-	if err != nil {
-		t.Fatalf("parent channel read after child failure: %v", err)
-	}
-	if len(msgs) == 0 {
-		t.Error("parent should have at least one message from the failed child")
+	// Parent should still be responsive: check channel read works and the
+	// failure notification becomes visible.
+	var cursor uint64
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs, nextCursor, err := rt.ChannelRead(parentID, 0)
+		if err != nil {
+			t.Fatalf("parent channel read after child failure: %v", err)
+		}
+		if len(msgs) > 0 {
+			cursor = nextCursor
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("parent should have at least one message from the failed child")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// Parent should be able to spawn a new child.
@@ -699,12 +711,19 @@ func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 	waitForTaskState(t, rt, child2.RunID, 10*time.Second)
 
 	// Verify parent received messages from both children.
-	msgs2, _, err := rt.ChannelRead(parentID, cursor)
-	if err != nil {
-		t.Fatalf("parent channel read after second child: %v", err)
-	}
-	if len(msgs2) == 0 {
-		t.Error("parent should have messages from the second child")
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		msgs2, _, err := rt.ChannelRead(parentID, cursor)
+		if err != nil {
+			t.Fatalf("parent channel read after second child: %v", err)
+		}
+		if len(msgs2) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("parent should have messages from the second child")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

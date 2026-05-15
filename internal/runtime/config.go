@@ -7,8 +7,8 @@
 //     adapter-wrapper processes.
 //   - Provider is an interface; the stub provider simulates execution until
 //     the Bedrock/Z.AI bridge feature replaces it with a real provider.
-//   - All state is persisted through the store package (SQLite-backed) so
-//     task handles and events survive sandbox process restarts.
+//   - Product state is persisted through the store package's embedded Dolt
+//     workspace so task handles and events survive sandbox process restarts.
 //   - Health, degradation, and recovery are externally visible through the
 //     /health endpoint and event stream.
 package runtime
@@ -22,7 +22,8 @@ import (
 )
 
 const (
-	// DefaultStorePath is the default SQLite database path for runtime state.
+	// DefaultStorePath is the local marker/legacy-import path used to derive the
+	// embedded Dolt workspace for runtime state.
 	DefaultStorePath = "/tmp/go-choir-m3/runtime.db"
 
 	// DefaultProviderTimeout is how long the stub provider simulates work.
@@ -54,7 +55,8 @@ type Config struct {
 	// SandboxID is the stable identity of this sandbox instance.
 	SandboxID string
 
-	// StorePath is the path to the SQLite database for task/event persistence.
+	// StorePath is the marker/legacy-import path used to derive the embedded
+	// Dolt workspace for task/event persistence.
 	StorePath string
 
 	// PromptRoot is the sandbox-owned filesystem root for editable role prompts.

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -27,7 +28,7 @@ func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	path := testStorePath(t)
 	// Clean up any previous test database.
-	_ = os.Remove(path)
+	cleanupTestStorePath(path)
 
 	s, err := Open(path)
 	if err != nil {
@@ -35,14 +36,19 @@ func openTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() {
 		_ = s.Close()
-		_ = os.Remove(path)
+		cleanupTestStorePath(path)
 	})
 	return s
 }
 
+func cleanupTestStorePath(path string) {
+	_ = os.Remove(path)
+	_ = os.RemoveAll(deriveVTextWorkspacePath(path))
+}
+
 func TestOpenCreatesDatabase(t *testing.T) {
 	path := testStorePath(t)
-	_ = os.Remove(path)
+	cleanupTestStorePath(path)
 
 	s, err := Open(path)
 	if err != nil {
@@ -50,11 +56,136 @@ func TestOpenCreatesDatabase(t *testing.T) {
 	}
 	defer func() {
 		_ = s.Close()
-		_ = os.Remove(path)
+		cleanupTestStorePath(path)
 	}()
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Error("expected database file to be created")
+	if _, err := os.Stat(s.VTextPath()); os.IsNotExist(err) {
+		t.Error("expected unified Dolt workspace to be created")
+	}
+	for _, table := range []string{"runs", "events", "vtext_documents", "vtext_revisions"} {
+		if !testDoltTableExists(t, s, table) {
+			t.Fatalf("expected unified Dolt workspace table %s to exist", table)
+		}
+	}
+}
+
+func testDoltTableExists(t *testing.T, s *Store, table string) bool {
+	t.Helper()
+	var count int
+	if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name = ?`, table).Scan(&count); err != nil {
+		t.Fatalf("query information_schema.tables: %v", err)
+	}
+	return count > 0
+}
+
+func TestOpenImportsLegacySQLiteRuntimeState(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy sqlite: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
+	windowsJSON := `[{"window_id":"win-legacy","app_id":"vtext","title":"Legacy VText","geometry":{"x":1,"y":2,"width":640,"height":480},"mode":"normal","z_index":1}]`
+	for _, stmt := range []string{
+		`CREATE TABLE runs (
+			loop_id TEXT PRIMARY KEY,
+			owner_id TEXT NOT NULL,
+			sandbox_id TEXT NOT NULL,
+			state TEXT NOT NULL,
+			prompt TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT '',
+			error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			finished_at TEXT,
+			metadata_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE TABLE events (
+			event_id TEXT PRIMARY KEY,
+			loop_id TEXT NOT NULL DEFAULT '',
+			owner_id TEXT NOT NULL DEFAULT '',
+			seq INTEGER NOT NULL,
+			ts TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			phase TEXT NOT NULL DEFAULT '',
+			payload_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE TABLE desktop_state (
+			owner_id TEXT PRIMARY KEY,
+			windows_json TEXT NOT NULL DEFAULT '[]',
+			active_window TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		)`,
+	} {
+		if _, err := legacy.Exec(stmt); err != nil {
+			_ = legacy.Close()
+			t.Fatalf("create legacy schema: %v", err)
+		}
+	}
+	if _, err := legacy.Exec(
+		`INSERT INTO runs (loop_id, owner_id, sandbox_id, state, prompt, created_at, updated_at, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-run", "user-legacy", "sandbox-legacy", types.RunRunning, "migrate me", now, now, `{"source":"sqlite"}`,
+	); err != nil {
+		_ = legacy.Close()
+		t.Fatalf("insert legacy run: %v", err)
+	}
+	if _, err := legacy.Exec(
+		`INSERT INTO events (event_id, loop_id, owner_id, seq, ts, kind, phase, payload_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-event", "legacy-run", "user-legacy", 7, now, types.EventRunStarted, "start", `{"legacy":true}`,
+	); err != nil {
+		_ = legacy.Close()
+		t.Fatalf("insert legacy event: %v", err)
+	}
+	if _, err := legacy.Exec(
+		`INSERT INTO desktop_state (owner_id, windows_json, active_window, updated_at)
+		 VALUES (?, ?, ?, ?)`,
+		"user-legacy", windowsJSON, "win-legacy", now,
+	); err != nil {
+		_ = legacy.Close()
+		t.Fatalf("insert legacy desktop state: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy sqlite: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open migrated store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	got, err := s.GetRun(context.Background(), "legacy-run")
+	if err != nil {
+		t.Fatalf("get migrated run: %v", err)
+	}
+	if got.OwnerID != "user-legacy" || got.Prompt != "migrate me" || got.Metadata["source"] != "sqlite" {
+		t.Fatalf("migrated run = %+v", got)
+	}
+	events, err := s.ListEvents(context.Background(), "legacy-run", 10)
+	if err != nil {
+		t.Fatalf("list migrated events: %v", err)
+	}
+	if len(events) != 1 || events[0].EventID != "legacy-event" || events[0].StreamSeq != 7 {
+		t.Fatalf("migrated events = %+v", events)
+	}
+	desktop, err := s.GetDesktopState(context.Background(), "user-legacy")
+	if err != nil {
+		t.Fatalf("get migrated desktop state: %v", err)
+	}
+	if desktop.ActiveWindowID != "win-legacy" || len(desktop.Windows) != 1 || desktop.Windows[0].WindowID != "win-legacy" {
+		t.Fatalf("migrated desktop = %+v", desktop)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+		t.Fatalf("legacy sqlite rollback file was not preserved: info=%+v err=%v", info, err)
 	}
 }
 
@@ -554,7 +685,7 @@ func TestListEventsByOwner(t *testing.T) {
 
 func TestTaskRecoveryAcrossReopen(t *testing.T) {
 	path := testStorePath(t)
-	_ = os.Remove(path)
+	cleanupTestStorePath(path)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	ctx := context.Background()
@@ -588,7 +719,7 @@ func TestTaskRecoveryAcrossReopen(t *testing.T) {
 	}
 	defer func() {
 		_ = s2.Close()
-		_ = os.Remove(path)
+		cleanupTestStorePath(path)
 	}()
 
 	got, err := s2.GetRun(ctx, "task-recovery")
@@ -608,7 +739,7 @@ func TestTaskRecoveryAcrossReopen(t *testing.T) {
 
 func TestEventRecoveryAcrossReopen(t *testing.T) {
 	path := testStorePath(t)
-	_ = os.Remove(path)
+	cleanupTestStorePath(path)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	ctx := context.Background()
@@ -643,7 +774,7 @@ func TestEventRecoveryAcrossReopen(t *testing.T) {
 	}
 	defer func() {
 		_ = s2.Close()
-		_ = os.Remove(path)
+		cleanupTestStorePath(path)
 	}()
 
 	events, err := s2.ListEvents(ctx, "task-event-recovery", 10)

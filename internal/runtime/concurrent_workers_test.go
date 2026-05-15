@@ -906,23 +906,25 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 		t.Fatalf("child state: got %q, want failed", task.State)
 	}
 
-	// Check the parent channel for the error message.
-	msgs, _, err := rt.ChannelRead(parentRec.RunID, 0)
-	if err != nil {
-		t.Fatalf("parent channel read: %v", err)
-	}
-
 	// Should find an error message from the child.
-	found := false
-	for _, msg := range msgs {
-		if msg.From == rec.RunID && msg.Role == "error" {
-			found = true
-			break
+	deadline = time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Error("no error message found in parent channel from failed child")
+			return
+		default:
 		}
-	}
-
-	if !found {
-		t.Error("no error message found in parent channel from failed child")
+		msgs, _, err := rt.ChannelRead(parentRec.RunID, 0)
+		if err != nil {
+			t.Fatalf("parent channel read: %v", err)
+		}
+		for _, msg := range msgs {
+			if msg.From == rec.RunID && msg.Role == "error" {
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

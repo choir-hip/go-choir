@@ -1,25 +1,25 @@
 // Package store provides durable runtime storage for the go-choir sandbox runtime.
 //
 // The store persists run records, agent records, channel messages, and event
-// records using SQLite, enabling stable run IDs, durable agent/channel
-// identity, and restart-safe recovery (VAL-RUNTIME-003,
-// VAL-RUNTIME-010). The schema is designed to migrate toward Dolt-backed
-// per-user workspaces in later milestones.
+// records using the same embedded Dolt workspace that owns VText state, enabling
+// stable run IDs, durable agent/channel identity, and restart-safe recovery
+// (VAL-RUNTIME-003, VAL-RUNTIME-010).
 //
 // Design decisions:
-//   - SQLite with WAL mode for concurrent read performance, matching the
-//     existing auth store pattern.
-//   - Single database file per sandbox (host-process milestone) rather than
-//     per-user Dolt databases (that comes in the vtext milestone).
+//   - One embedded Dolt workspace per user computer owns both runtime/control
+//     state and VText/app state.
+//   - Legacy SQLite runtime files are imported into Dolt and left in place as
+//     rollback inputs during cutover.
 //   - Event sequence numbers are per-task, enabling incremental cursors for
 //     Trace projections and internal workflow verification.
-//   - The store interface is minimal: CreateRun, GetRun, UpdateRun,
-//     ListRuns, AppendEvent, ListEvents. Later features extend it.
+//   - Runtime writes are serialized through the main embedded connection while
+//     a shared-engine read handle keeps status reads observable during writes.
 package store
 
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,8 +27,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	_ "modernc.org/sqlite"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -40,243 +38,249 @@ var ErrNotFound = errors.New("record not found")
 // against an older parent while the document head has already moved on.
 var ErrStaleDocumentHead = errors.New("stale document head")
 
-// Store wraps a SQLite database connection and provides persistence for
-// run records, agent records, channel messages, and event records.
+// Store wraps the embedded Dolt connection and provides persistence for run
+// records, agent records, channel messages, event records, and VText state.
+type doltConnector interface {
+	driver.Connector
+	Close() error
+}
+
 type Store struct {
-	db        *sql.DB
-	readDB    *sql.DB
-	path      string
-	vtextDB   *sql.DB
-	vtextPath string
+	db            *sql.DB
+	readDB        *sql.DB
+	path          string
+	vtextDB       *sql.DB
+	vtextPath     string
+	doltConnector doltConnector
 }
 
 // schemaDDL creates the runtime tables if they do not already exist.
 const schemaDDL = `
 CREATE TABLE IF NOT EXISTS agents (
-	agent_id    TEXT PRIMARY KEY,
-	owner_id    TEXT NOT NULL,
-	sandbox_id  TEXT NOT NULL,
-	profile     TEXT NOT NULL DEFAULT '',
-	role        TEXT NOT NULL DEFAULT '',
-	channel_id  TEXT NOT NULL DEFAULT '',
+	agent_id    VARCHAR(255) PRIMARY KEY,
+	owner_id    VARCHAR(255) NOT NULL,
+	sandbox_id  VARCHAR(255) NOT NULL,
+	profile     VARCHAR(255) NOT NULL DEFAULT '',
+	role        VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
 	created_at  DATETIME NOT NULL,
 	updated_at  DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS runs (
-	loop_id     TEXT PRIMARY KEY,
-	agent_id    TEXT NOT NULL DEFAULT '',
-	channel_id  TEXT NOT NULL DEFAULT '',
-	parent_loop_id TEXT NOT NULL DEFAULT '',
-	agent_profile TEXT NOT NULL DEFAULT '',
-	agent_role TEXT NOT NULL DEFAULT '',
-	owner_id    TEXT NOT NULL,
-	sandbox_id  TEXT NOT NULL,
-	state       TEXT NOT NULL,
-	prompt      TEXT NOT NULL DEFAULT '',
-	result      TEXT NOT NULL DEFAULT '',
-	error       TEXT NOT NULL DEFAULT '',
+	loop_id     VARCHAR(255) PRIMARY KEY,
+	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
+	parent_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
+	agent_role VARCHAR(255) NOT NULL DEFAULT '',
+	owner_id    VARCHAR(255) NOT NULL,
+	sandbox_id  VARCHAR(255) NOT NULL,
+	state       VARCHAR(64) NOT NULL,
+	prompt      LONGTEXT NOT NULL DEFAULT '',
+	result      LONGTEXT NOT NULL DEFAULT '',
+	error       LONGTEXT NOT NULL DEFAULT '',
 	created_at  DATETIME NOT NULL,
 	updated_at  DATETIME NOT NULL,
 	finished_at DATETIME,
-	metadata_json TEXT NOT NULL DEFAULT '{}'
+	metadata_json LONGTEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS events (
-	event_id   TEXT NOT NULL,
-	loop_id    TEXT NOT NULL DEFAULT '',
-	agent_id   TEXT NOT NULL DEFAULT '',
-	channel_id TEXT NOT NULL DEFAULT '',
-	owner_id   TEXT NOT NULL DEFAULT '',
-	trajectory_id TEXT NOT NULL DEFAULT '',
-	seq        INTEGER NOT NULL,
-	stream_seq INTEGER NOT NULL DEFAULT 0,
+	event_id   VARCHAR(255) NOT NULL,
+	loop_id    VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id   VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id VARCHAR(255) NOT NULL DEFAULT '',
+	owner_id   VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
+	seq        BIGINT NOT NULL,
+	stream_seq BIGINT NOT NULL DEFAULT 0,
 	ts         DATETIME NOT NULL,
-	kind       TEXT NOT NULL,
-	phase      TEXT NOT NULL DEFAULT '',
-	payload_json TEXT NOT NULL DEFAULT '{}',
+	kind       VARCHAR(255) NOT NULL,
+	phase      VARCHAR(255) NOT NULL DEFAULT '',
+	payload_json LONGTEXT NOT NULL DEFAULT '{}',
 	PRIMARY KEY (event_id)
 );
 
 CREATE TABLE IF NOT EXISTS channel_messages (
-	channel_id      TEXT NOT NULL,
-	seq             INTEGER NOT NULL,
-	owner_id        TEXT NOT NULL DEFAULT '',
-	from_agent_id   TEXT NOT NULL DEFAULT '',
-	from_loop_id    TEXT NOT NULL DEFAULT '',
-	to_agent_id     TEXT NOT NULL DEFAULT '',
-	to_loop_id      TEXT NOT NULL DEFAULT '',
-	trajectory_id   TEXT NOT NULL DEFAULT '',
-	from_name       TEXT NOT NULL DEFAULT '',
-	role            TEXT NOT NULL DEFAULT '',
-	content         TEXT NOT NULL,
+	channel_id      VARCHAR(255) NOT NULL,
+	seq             BIGINT NOT NULL,
+	owner_id        VARCHAR(255) NOT NULL DEFAULT '',
+	from_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
+	from_loop_id    VARCHAR(255) NOT NULL DEFAULT '',
+	to_agent_id     VARCHAR(255) NOT NULL DEFAULT '',
+	to_loop_id      VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id   VARCHAR(255) NOT NULL DEFAULT '',
+	from_name       VARCHAR(255) NOT NULL DEFAULT '',
+	role            VARCHAR(64) NOT NULL DEFAULT '',
+	content         LONGTEXT NOT NULL,
 	created_at      DATETIME NOT NULL,
 	PRIMARY KEY (channel_id, seq)
 );
 
 CREATE TABLE IF NOT EXISTS inbox_deliveries (
-	delivery_id          TEXT PRIMARY KEY,
-	owner_id             TEXT NOT NULL DEFAULT '',
-	to_agent_id          TEXT NOT NULL DEFAULT '',
-	to_loop_id           TEXT NOT NULL DEFAULT '',
-	from_agent_id        TEXT NOT NULL DEFAULT '',
-	from_loop_id         TEXT NOT NULL DEFAULT '',
-	channel_id           TEXT NOT NULL DEFAULT '',
-	role                 TEXT NOT NULL DEFAULT '',
-	content              TEXT NOT NULL,
-	trajectory_id        TEXT NOT NULL DEFAULT '',
+	delivery_id          VARCHAR(255) PRIMARY KEY,
+	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
+	to_agent_id          VARCHAR(255) NOT NULL DEFAULT '',
+	to_loop_id           VARCHAR(255) NOT NULL DEFAULT '',
+	from_agent_id        VARCHAR(255) NOT NULL DEFAULT '',
+	from_loop_id         VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id           VARCHAR(255) NOT NULL DEFAULT '',
+	role                 VARCHAR(64) NOT NULL DEFAULT '',
+	content              LONGTEXT NOT NULL,
+	trajectory_id        VARCHAR(255) NOT NULL DEFAULT '',
 	created_at           DATETIME NOT NULL,
-	delivered_to_loop_id TEXT NOT NULL DEFAULT '',
+	delivered_to_loop_id VARCHAR(255) NOT NULL DEFAULT '',
 	delivered_at         DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS run_memory_entries (
-	entry_id             TEXT PRIMARY KEY,
-	loop_id              TEXT NOT NULL,
-	owner_id             TEXT NOT NULL DEFAULT '',
-	agent_id             TEXT NOT NULL DEFAULT '',
-	parent_entry_id      TEXT NOT NULL DEFAULT '',
-	seq                  INTEGER NOT NULL,
-	kind                 TEXT NOT NULL,
-	role                 TEXT NOT NULL DEFAULT '',
-	message_json         TEXT NOT NULL DEFAULT '',
-	summary              TEXT NOT NULL DEFAULT '',
-	first_kept_entry_id  TEXT NOT NULL DEFAULT '',
-	tokens_before        INTEGER NOT NULL DEFAULT 0,
-	reason               TEXT NOT NULL DEFAULT '',
-	model                TEXT NOT NULL DEFAULT '',
-	details_json         TEXT NOT NULL DEFAULT '{}',
+	entry_id             VARCHAR(255) PRIMARY KEY,
+	loop_id              VARCHAR(255) NOT NULL,
+	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id             VARCHAR(255) NOT NULL DEFAULT '',
+	parent_entry_id      VARCHAR(255) NOT NULL DEFAULT '',
+	seq                  BIGINT NOT NULL,
+	kind                 VARCHAR(64) NOT NULL,
+	role                 VARCHAR(64) NOT NULL DEFAULT '',
+	message_json         LONGTEXT NOT NULL DEFAULT '',
+	summary              LONGTEXT NOT NULL DEFAULT '',
+	first_kept_entry_id  VARCHAR(255) NOT NULL DEFAULT '',
+	tokens_before        BIGINT NOT NULL DEFAULT 0,
+	reason               LONGTEXT NOT NULL DEFAULT '',
+	model                VARCHAR(255) NOT NULL DEFAULT '',
+	details_json         LONGTEXT NOT NULL DEFAULT '{}',
 	created_at           DATETIME NOT NULL,
 	UNIQUE(loop_id, seq)
 );
 
 CREATE TABLE IF NOT EXISTS promotion_candidates (
-	candidate_id        TEXT PRIMARY KEY,
-	owner_id            TEXT NOT NULL DEFAULT '',
-	status              TEXT NOT NULL,
-	source_loop_id      TEXT NOT NULL DEFAULT '',
-	trace_id            TEXT NOT NULL DEFAULT '',
-	vm_id               TEXT NOT NULL DEFAULT '',
-	snapshot_id         TEXT NOT NULL DEFAULT '',
-	base_sha            TEXT NOT NULL DEFAULT '',
-	worker_head_sha     TEXT NOT NULL DEFAULT '',
-	manifest_path       TEXT NOT NULL DEFAULT '',
-	patchset_path       TEXT NOT NULL DEFAULT '',
-	integration_branch  TEXT NOT NULL DEFAULT '',
-	destination_branch  TEXT NOT NULL DEFAULT '',
-	summary             TEXT NOT NULL DEFAULT '',
-	candidate_json      TEXT NOT NULL DEFAULT '{}',
-	contracts_json      TEXT NOT NULL DEFAULT '[]',
-	report_json         TEXT NOT NULL DEFAULT '{}',
-	error               TEXT NOT NULL DEFAULT '',
+	candidate_id        VARCHAR(255) PRIMARY KEY,
+	owner_id            VARCHAR(255) NOT NULL DEFAULT '',
+	status              VARCHAR(64) NOT NULL,
+	source_loop_id      VARCHAR(255) NOT NULL DEFAULT '',
+	trace_id            VARCHAR(255) NOT NULL DEFAULT '',
+	vm_id               VARCHAR(255) NOT NULL DEFAULT '',
+	snapshot_id         VARCHAR(255) NOT NULL DEFAULT '',
+	base_sha            VARCHAR(128) NOT NULL DEFAULT '',
+	worker_head_sha     VARCHAR(128) NOT NULL DEFAULT '',
+	manifest_path       LONGTEXT NOT NULL DEFAULT '',
+	patchset_path       LONGTEXT NOT NULL DEFAULT '',
+	integration_branch  LONGTEXT NOT NULL DEFAULT '',
+	destination_branch  LONGTEXT NOT NULL DEFAULT '',
+	summary             LONGTEXT NOT NULL DEFAULT '',
+	candidate_json      LONGTEXT NOT NULL DEFAULT '{}',
+	contracts_json      LONGTEXT NOT NULL DEFAULT '[]',
+	report_json         LONGTEXT NOT NULL DEFAULT '{}',
+	error               LONGTEXT NOT NULL DEFAULT '',
 	created_at          DATETIME NOT NULL,
 	updated_at          DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS run_acceptances (
-	acceptance_id        TEXT PRIMARY KEY,
-	target_mission_id    TEXT NOT NULL DEFAULT '',
-	source_prompt_or_objective TEXT NOT NULL DEFAULT '',
-	owner_id             TEXT NOT NULL DEFAULT '',
-	desktop_id           TEXT NOT NULL DEFAULT '',
-	trajectory_id        TEXT NOT NULL DEFAULT '',
-	loop_id              TEXT NOT NULL DEFAULT '',
-	authority_profile    TEXT NOT NULL DEFAULT '',
-	base_sha             TEXT NOT NULL DEFAULT '',
-	deployment_commit    TEXT NOT NULL DEFAULT '',
-	ci_run_id            TEXT NOT NULL DEFAULT '',
-	deploy_run_id        TEXT NOT NULL DEFAULT '',
-	staging_url          TEXT NOT NULL DEFAULT '',
-	health_commit        TEXT NOT NULL DEFAULT '',
-	acceptance_level     TEXT NOT NULL DEFAULT '',
-	vm_mode              TEXT NOT NULL DEFAULT '',
-	gateway_provider_evidence TEXT NOT NULL DEFAULT '',
-	state                TEXT NOT NULL DEFAULT '',
-	checkpoints_json     TEXT NOT NULL DEFAULT '[]',
-	invariant_checks_json TEXT NOT NULL DEFAULT '[]',
-	verifier_contracts_json TEXT NOT NULL DEFAULT '[]',
-	evidence_refs_json   TEXT NOT NULL DEFAULT '[]',
-	rollback_refs_json   TEXT NOT NULL DEFAULT '[]',
-	failure_residual_risks_json TEXT NOT NULL DEFAULT '[]',
+	acceptance_id        VARCHAR(255) PRIMARY KEY,
+	target_mission_id    VARCHAR(255) NOT NULL DEFAULT '',
+	source_prompt_or_objective LONGTEXT NOT NULL DEFAULT '',
+	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
+	desktop_id           VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id        VARCHAR(255) NOT NULL DEFAULT '',
+	loop_id              VARCHAR(255) NOT NULL DEFAULT '',
+	authority_profile    VARCHAR(255) NOT NULL DEFAULT '',
+	base_sha             VARCHAR(128) NOT NULL DEFAULT '',
+	deployment_commit    VARCHAR(128) NOT NULL DEFAULT '',
+	ci_run_id            VARCHAR(255) NOT NULL DEFAULT '',
+	deploy_run_id        VARCHAR(255) NOT NULL DEFAULT '',
+	staging_url          LONGTEXT NOT NULL DEFAULT '',
+	health_commit        VARCHAR(128) NOT NULL DEFAULT '',
+	acceptance_level     VARCHAR(64) NOT NULL DEFAULT '',
+	vm_mode              VARCHAR(64) NOT NULL DEFAULT '',
+	gateway_provider_evidence LONGTEXT NOT NULL DEFAULT '',
+	state                VARCHAR(64) NOT NULL DEFAULT '',
+	checkpoints_json     LONGTEXT NOT NULL DEFAULT '[]',
+	invariant_checks_json LONGTEXT NOT NULL DEFAULT '[]',
+	verifier_contracts_json LONGTEXT NOT NULL DEFAULT '[]',
+	evidence_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
+	failure_residual_risks_json LONGTEXT NOT NULL DEFAULT '[]',
 	created_at           DATETIME NOT NULL,
 	updated_at           DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS run_continuations (
-	continuation_id    TEXT PRIMARY KEY,
-	owner_id           TEXT NOT NULL DEFAULT '',
-	source_loop_id     TEXT NOT NULL DEFAULT '',
-	next_loop_id       TEXT NOT NULL DEFAULT '',
-	objective          TEXT NOT NULL,
-	reason             TEXT NOT NULL DEFAULT '',
-	authority_profile  TEXT NOT NULL DEFAULT '',
-	lease_seconds      INTEGER NOT NULL DEFAULT 0,
-	status             TEXT NOT NULL,
-	details_json       TEXT NOT NULL DEFAULT '{}',
+	continuation_id    VARCHAR(255) PRIMARY KEY,
+	owner_id           VARCHAR(255) NOT NULL DEFAULT '',
+	source_loop_id     VARCHAR(255) NOT NULL DEFAULT '',
+	next_loop_id       VARCHAR(255) NOT NULL DEFAULT '',
+	objective          LONGTEXT NOT NULL,
+	reason             LONGTEXT NOT NULL DEFAULT '',
+	authority_profile  VARCHAR(255) NOT NULL DEFAULT '',
+	lease_seconds      BIGINT NOT NULL DEFAULT 0,
+	status             VARCHAR(64) NOT NULL,
+	details_json       LONGTEXT NOT NULL DEFAULT '{}',
 	created_at         DATETIME NOT NULL,
 	updated_at         DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS browser_sessions (
-	session_id       TEXT PRIMARY KEY,
-	owner_id         TEXT NOT NULL DEFAULT '',
-	provider         TEXT NOT NULL DEFAULT '',
-	mode             TEXT NOT NULL DEFAULT '',
-	execution_scope  TEXT NOT NULL DEFAULT '',
-	backend_session_id TEXT NOT NULL DEFAULT '',
-	world_kind      TEXT NOT NULL DEFAULT '',
-	promotion_candidate_id TEXT NOT NULL DEFAULT '',
-	vm_id           TEXT NOT NULL DEFAULT '',
-	snapshot_id     TEXT NOT NULL DEFAULT '',
-	source_loop_id  TEXT NOT NULL DEFAULT '',
-	candidate_trace_id TEXT NOT NULL DEFAULT '',
-	state            TEXT NOT NULL DEFAULT '',
-	current_url      TEXT NOT NULL DEFAULT '',
-	title            TEXT NOT NULL DEFAULT '',
-	text_snapshot    TEXT NOT NULL DEFAULT '',
-	html_snapshot    TEXT NOT NULL DEFAULT '',
-	links_json       TEXT NOT NULL DEFAULT '[]',
-	screenshot_png_base64 TEXT NOT NULL DEFAULT '',
-	error            TEXT NOT NULL DEFAULT '',
+	session_id       VARCHAR(255) PRIMARY KEY,
+	owner_id         VARCHAR(255) NOT NULL DEFAULT '',
+	provider         VARCHAR(255) NOT NULL DEFAULT '',
+	mode             VARCHAR(64) NOT NULL DEFAULT '',
+	execution_scope  VARCHAR(64) NOT NULL DEFAULT '',
+	backend_session_id VARCHAR(255) NOT NULL DEFAULT '',
+	world_kind      VARCHAR(64) NOT NULL DEFAULT '',
+	promotion_candidate_id VARCHAR(255) NOT NULL DEFAULT '',
+	vm_id           VARCHAR(255) NOT NULL DEFAULT '',
+	snapshot_id     VARCHAR(255) NOT NULL DEFAULT '',
+	source_loop_id  VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_trace_id VARCHAR(255) NOT NULL DEFAULT '',
+	state            VARCHAR(64) NOT NULL DEFAULT '',
+	current_url      LONGTEXT NOT NULL DEFAULT '',
+	title            LONGTEXT NOT NULL DEFAULT '',
+	text_snapshot    LONGTEXT NOT NULL DEFAULT '',
+	html_snapshot    LONGTEXT NOT NULL DEFAULT '',
+	links_json       LONGTEXT NOT NULL DEFAULT '[]',
+	screenshot_png_base64 LONGTEXT NOT NULL DEFAULT '',
+	error            LONGTEXT NOT NULL DEFAULT '',
 	created_at       DATETIME NOT NULL,
 	updated_at       DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS research_findings (
-	owner_id          TEXT NOT NULL DEFAULT '',
-	finding_id        TEXT NOT NULL DEFAULT '',
-	agent_id          TEXT NOT NULL DEFAULT '',
-	target_agent_id   TEXT NOT NULL DEFAULT '',
-	channel_id        TEXT NOT NULL DEFAULT '',
-	message_seq       INTEGER NOT NULL DEFAULT 0,
-	trajectory_id     TEXT NOT NULL DEFAULT '',
-	findings_json     TEXT NOT NULL DEFAULT '[]',
-	evidence_ids_json TEXT NOT NULL DEFAULT '[]',
-	notes_json        TEXT NOT NULL DEFAULT '[]',
-	questions_json    TEXT NOT NULL DEFAULT '[]',
-	content           TEXT NOT NULL DEFAULT '',
+	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
+	finding_id        VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
+	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
+	message_seq       BIGINT NOT NULL DEFAULT 0,
+	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
+	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
+	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
+	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
+	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
+	content           LONGTEXT NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, finding_id)
 );
 
 CREATE TABLE IF NOT EXISTS worker_updates (
-	owner_id          TEXT NOT NULL DEFAULT '',
-	update_id         TEXT NOT NULL DEFAULT '',
-	agent_id          TEXT NOT NULL DEFAULT '',
-	target_agent_id   TEXT NOT NULL DEFAULT '',
-	channel_id        TEXT NOT NULL DEFAULT '',
-	message_seq       INTEGER NOT NULL DEFAULT 0,
-	trajectory_id     TEXT NOT NULL DEFAULT '',
-	role              TEXT NOT NULL DEFAULT '',
-	findings_json     TEXT NOT NULL DEFAULT '[]',
-	evidence_ids_json TEXT NOT NULL DEFAULT '[]',
-	artifacts_json    TEXT NOT NULL DEFAULT '[]',
-	refs_json         TEXT NOT NULL DEFAULT '[]',
-	tests_json        TEXT NOT NULL DEFAULT '[]',
-	questions_json    TEXT NOT NULL DEFAULT '[]',
-	proposals_json    TEXT NOT NULL DEFAULT '[]',
-	notes_json        TEXT NOT NULL DEFAULT '[]',
-	content           TEXT NOT NULL DEFAULT '',
+	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
+	update_id         VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
+	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
+	message_seq       BIGINT NOT NULL DEFAULT 0,
+	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
+	role              VARCHAR(64) NOT NULL DEFAULT '',
+	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
+	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
+	artifacts_json    LONGTEXT NOT NULL DEFAULT '[]',
+	refs_json         LONGTEXT NOT NULL DEFAULT '[]',
+	tests_json        LONGTEXT NOT NULL DEFAULT '[]',
+	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
+	proposals_json    LONGTEXT NOT NULL DEFAULT '[]',
+	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
+	content           LONGTEXT NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, update_id)
 );
@@ -321,17 +325,17 @@ CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(
 CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
 
 CREATE TABLE IF NOT EXISTS desktop_state (
-	owner_id       TEXT PRIMARY KEY,
-	windows_json   TEXT NOT NULL DEFAULT '[]',
-	active_window  TEXT NOT NULL DEFAULT '',
+	owner_id       VARCHAR(255) PRIMARY KEY,
+	windows_json   LONGTEXT NOT NULL DEFAULT '[]',
+	active_window  VARCHAR(255) NOT NULL DEFAULT '',
 	updated_at     DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS desktop_workspaces (
-	owner_id       TEXT NOT NULL,
-	desktop_id     TEXT NOT NULL,
-	windows_json   TEXT NOT NULL DEFAULT '[]',
-	active_window  TEXT NOT NULL DEFAULT '',
+	owner_id       VARCHAR(255) NOT NULL,
+	desktop_id     VARCHAR(255) NOT NULL,
+	windows_json   LONGTEXT NOT NULL DEFAULT '[]',
+	active_window  VARCHAR(255) NOT NULL DEFAULT '',
 	updated_at     DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, desktop_id)
 );
@@ -339,75 +343,54 @@ CREATE TABLE IF NOT EXISTS desktop_workspaces (
 CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_owner_id ON desktop_workspaces(owner_id);
 `
 
-// Open opens (or creates) the SQLite database at dbPath and applies the
-// runtime schema. It returns a Store ready for use.
+// Open opens (or creates) the unified embedded Dolt workspace derived from
+// dbPath and applies the runtime and vtext schemas. If dbPath points at a
+// legacy runtime SQLite database, its rows are imported into Dolt once and the
+// SQLite file is left in place as a rollback source.
 func Open(dbPath string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("runtime store: create directory: %w", err)
 	}
 
-	// If the runtime SQLite file has been removed, treat this as a fresh store
-	// and clear any stale sibling vtext workspace left behind by a previous run.
-	// This keeps repeat test runs isolated while preserving reopen semantics for
-	// callers that keep the runtime DB file in place.
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+	freshStore := false
+	if _, err := os.Stat(dbPath); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("runtime store: stat marker or legacy sqlite: %w", err)
+		}
+		freshStore = true
 		_ = os.RemoveAll(deriveVTextWorkspacePath(dbPath))
 	}
 
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000")
+	db, workspacePath, connector, err := openVTextWorkspaceDB(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("runtime store: open %s: %w", dbPath, err)
+		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
 
-	// Enable WAL mode for better concurrent read performance.
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("runtime store: set WAL mode: %w", err)
-	}
+	readDB := sql.OpenDB(connector)
+	configureEmbeddedDoltDB(readDB)
 
-	// Enable foreign keys.
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("runtime store: enable foreign keys: %w", err)
-	}
-
-	// Keep the primary connection serialized for SQLite write safety.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
-	s := &Store{db: db, path: dbPath}
+	s := &Store{db: db, readDB: readDB, path: dbPath, vtextPath: workspacePath, doltConnector: connector}
 	if err := s.bootstrap(); err != nil {
-		_ = db.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
 
-	readDB, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000")
-	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("runtime store: open read connection %s: %w", dbPath, err)
-	}
-	// WAL permits these control-plane reads to proceed while the primary
-	// connection holds a write transaction. This keeps status endpoints
-	// observable without allowing concurrent writer connections.
-	readDB.SetMaxOpenConns(4)
-	readDB.SetMaxIdleConns(4)
-	s.readDB = readDB
-
-	vtextDB, vtextPath, err := openVTextWorkspaceDB(dbPath)
-	if err != nil {
-		_ = readDB.Close()
-		_ = db.Close()
-		return nil, fmt.Errorf("runtime store: open vtext workspace: %w", err)
-	}
-	s.vtextDB = vtextDB
-	s.vtextPath = vtextPath
-
 	// Apply the vtext schema to the embedded Dolt workspace.
 	if err := s.EnsureVTextSchema(); err != nil {
-		_ = vtextDB.Close()
-		_ = readDB.Close()
-		_ = db.Close()
+		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap vtext: %w", err)
+	}
+
+	if err := s.importLegacySQLiteRuntime(dbPath); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("runtime store: import legacy sqlite: %w", err)
+	}
+
+	if freshStore {
+		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
+			_ = s.Close()
+			return nil, fmt.Errorf("runtime store: write marker: %w", err)
+		}
 	}
 
 	return s, nil
@@ -424,42 +407,46 @@ func (s *Store) bootstrap() error {
 		name  string
 		ddl   string
 	}{
-		{"runs", "agent_id", "TEXT NOT NULL DEFAULT ''"},
-		{"runs", "channel_id", "TEXT NOT NULL DEFAULT ''"},
-		{"runs", "parent_loop_id", "TEXT NOT NULL DEFAULT ''"},
-		{"runs", "agent_profile", "TEXT NOT NULL DEFAULT ''"},
-		{"runs", "agent_role", "TEXT NOT NULL DEFAULT ''"},
-		{"events", "agent_id", "TEXT NOT NULL DEFAULT ''"},
-		{"events", "channel_id", "TEXT NOT NULL DEFAULT ''"},
-		{"events", "trajectory_id", "TEXT NOT NULL DEFAULT ''"},
-		{"events", "stream_seq", "INTEGER NOT NULL DEFAULT 0"},
-		{"channel_messages", "to_agent_id", "TEXT NOT NULL DEFAULT ''"},
-		{"channel_messages", "to_loop_id", "TEXT NOT NULL DEFAULT ''"},
-		{"channel_messages", "trajectory_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "html_snapshot", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "links_json", "TEXT NOT NULL DEFAULT '[]'"},
-		{"browser_sessions", "screenshot_png_base64", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "execution_scope", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "backend_session_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "world_kind", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "promotion_candidate_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "vm_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "snapshot_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "source_loop_id", "TEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "candidate_trace_id", "TEXT NOT NULL DEFAULT ''"},
+		{"runs", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "parent_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "agent_profile", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "agent_role", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"events", "stream_seq", "BIGINT NOT NULL DEFAULT 0"},
+		{"channel_messages", "to_agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"channel_messages", "to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"channel_messages", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "html_snapshot", "LONGTEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "links_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
+		{"browser_sessions", "screenshot_png_base64", "LONGTEXT NOT NULL DEFAULT ''"},
+		{"browser_sessions", "execution_scope", "VARCHAR(64) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "backend_session_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "world_kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "promotion_candidate_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "vm_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "snapshot_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "source_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"browser_sessions", "candidate_trace_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
 		}
-	}
-	if _, err := s.db.Exec(`UPDATE events SET stream_seq = rowid WHERE stream_seq = 0`); err != nil {
-		return fmt.Errorf("backfill events.stream_seq: %w", err)
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
+	}
+	return s.backfillDerivedRuntimeState()
+}
+
+func (s *Store) backfillDerivedRuntimeState() error {
+	if _, err := s.db.Exec(`UPDATE events SET stream_seq = seq WHERE stream_seq = 0`); err != nil {
+		return fmt.Errorf("backfill events.stream_seq: %w", err)
 	}
 	if _, err := s.db.Exec(`
 		INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
@@ -485,30 +472,26 @@ func normalizeDesktopID(desktopID string) string {
 }
 
 func (s *Store) ensureColumn(table, name, ddl string) error {
-	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return fmt.Errorf("pragma table_info(%s): %w", table, err)
+	if err := validateIdentifier(table); err != nil {
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-
-	for rows.Next() {
-		var (
-			cid      int
-			column   string
-			colType  string
-			notNull  int
-			defaultV sql.NullString
-			primaryK int
-		)
-		if err := rows.Scan(&cid, &column, &colType, &notNull, &defaultV, &primaryK); err != nil {
-			return fmt.Errorf("scan table_info(%s): %w", table, err)
-		}
-		if column == name {
-			return nil
-		}
+	if err := validateIdentifier(name); err != nil {
+		return err
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate table_info(%s): %w", table, err)
+	var count int
+	if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND column_name = ?`,
+		table,
+		name,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("information_schema.columns(%s.%s): %w", table, name, err)
+	}
+	if count > 0 {
+		return nil
 	}
 	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl)); err != nil {
 		return fmt.Errorf("alter table %s add column %s: %w", table, name, err)
@@ -516,30 +499,46 @@ func (s *Store) ensureColumn(table, name, ddl string) error {
 	return nil
 }
 
+func validateIdentifier(name string) error {
+	if name == "" {
+		return fmt.Errorf("empty SQL identifier")
+	}
+	for _, r := range name {
+		if r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		return fmt.Errorf("unsafe SQL identifier %q", name)
+	}
+	return nil
+}
+
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	var err error
-	if s.vtextDB != nil {
+	if db := s.vtextDB; db != nil {
 		func() {
 			defer func() {
 				if r := recover(); r != nil && err == nil {
 					err = fmt.Errorf("close vtext workspace: %v", r)
 				}
 			}()
-			if closeErr := s.vtextDB.Close(); closeErr != nil && err == nil {
+			if closeErr := db.Close(); closeErr != nil && err == nil {
 				err = closeErr
 			}
 		}()
 	}
-	if s.readDB != nil {
-		if closeErr := s.readDB.Close(); closeErr != nil && err == nil {
+	if db := s.readDB; db != nil {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}
-	if s.db != nil {
-		// Checkpoint WAL before closing.
-		_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-		if closeErr := s.db.Close(); err == nil {
+	if db := s.db; db != nil {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
+	if connector := s.doltConnector; connector != nil {
+		if closeErr := connector.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}
@@ -561,13 +560,13 @@ func (s *Store) UpsertAgent(ctx context.Context, rec types.AgentRecord) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agents (agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(agent_id) DO UPDATE SET
-		   owner_id = excluded.owner_id,
-		   sandbox_id = excluded.sandbox_id,
-		   profile = excluded.profile,
-		   role = excluded.role,
-		   channel_id = excluded.channel_id,
-		   updated_at = excluded.updated_at`,
+		 ON DUPLICATE KEY UPDATE
+		   owner_id = VALUES(owner_id),
+		   sandbox_id = VALUES(sandbox_id),
+		   profile = VALUES(profile),
+		   role = VALUES(role),
+		   channel_id = VALUES(channel_id),
+		   updated_at = VALUES(updated_at)`,
 		rec.AgentID,
 		rec.OwnerID,
 		rec.SandboxID,
@@ -1388,7 +1387,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 }
 
 // DispatchResearchFinding atomically persists the addressed channel message,
-// inbox delivery, and finding dispatch record inside the runtime SQLite store.
+// inbox delivery, and finding dispatch record inside the runtime store.
 // Evidence durability remains in the vtext workspace and should be handled
 // before calling this method with deterministic evidence IDs.
 func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.ResearchFindingRecord, message *types.ChannelMessage, delivery types.InboxDelivery) (types.ResearchFindingRecord, bool, error) {
@@ -1980,7 +1979,7 @@ func marshalJSON(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// formatTimePtr formats a *time.Time for SQLite, returning nil for nil.
+// formatTimePtr formats a *time.Time for SQL storage, returning nil for nil.
 func formatTimePtr(t *time.Time) any {
 	if t == nil {
 		return nil
@@ -2062,10 +2061,10 @@ func (s *Store) SaveDesktopStateForDesktop(ctx context.Context, state types.Desk
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
 		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(owner_id, desktop_id) DO UPDATE SET
-		   windows_json = excluded.windows_json,
-		   active_window = excluded.active_window,
-		   updated_at = excluded.updated_at`,
+		 ON DUPLICATE KEY UPDATE
+		   windows_json = VALUES(windows_json),
+		   active_window = VALUES(active_window),
+		   updated_at = VALUES(updated_at)`,
 		state.OwnerID,
 		desktopID,
 		string(windowsJSON),

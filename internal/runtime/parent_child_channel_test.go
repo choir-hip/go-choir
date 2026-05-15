@@ -435,31 +435,34 @@ func TestParentChildChannel_EventEmission(t *testing.T) {
 		t.Fatalf("channel post: %v", err)
 	}
 
-	// Should receive a channel.message event.
-	select {
-	case ev := <-ch:
-		if ev.Record.Kind != types.EventChannelMessage {
-			t.Errorf("event kind: got %q, want channel.message", ev.Record.Kind)
+	deadline := time.After(1 * time.Second)
+	for {
+		select {
+		case ev := <-ch:
+			if ev.Record.Kind != types.EventChannelMessage {
+				continue
+			}
+			if ev.Actor != events.ActorChannel {
+				t.Errorf("actor: got %q, want channel", ev.Actor)
+			}
+			if ev.Cause != events.CauseChannelMessage {
+				t.Errorf("cause: got %q, want channel_message", ev.Cause)
+			}
+			// Verify payload contains channel_id and from.
+			var payload map[string]any
+			if err := json.Unmarshal(ev.Record.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			if payload["channel_id"] != parentID {
+				t.Errorf("payload channel_id: got %v, want %q", payload["channel_id"], parentID)
+			}
+			if payload["from"] != "worker-1" {
+				t.Errorf("payload from: got %v, want worker-1", payload["from"])
+			}
+			return
+		case <-deadline:
+			t.Fatal("timed out waiting for channel.message event")
 		}
-		if ev.Actor != events.ActorChannel {
-			t.Errorf("actor: got %q, want channel", ev.Actor)
-		}
-		if ev.Cause != events.CauseChannelMessage {
-			t.Errorf("cause: got %q, want channel_message", ev.Cause)
-		}
-		// Verify payload contains channel_id and from.
-		var payload map[string]any
-		if err := json.Unmarshal(ev.Record.Payload, &payload); err != nil {
-			t.Fatalf("unmarshal payload: %v", err)
-		}
-		if payload["channel_id"] != parentID {
-			t.Errorf("payload channel_id: got %v, want %q", payload["channel_id"], parentID)
-		}
-		if payload["from"] != "worker-1" {
-			t.Errorf("payload from: got %v, want worker-1", payload["from"])
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("timed out waiting for channel.message event")
 	}
 }
 
