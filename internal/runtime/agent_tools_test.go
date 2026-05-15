@@ -285,8 +285,11 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list inbox deliveries: %v", err)
 	}
-	if len(deliveries) != 1 || deliveries[0].Content != "please inspect the runtime tool wiring" {
+	if len(deliveries) > 1 {
 		t.Fatalf("unexpected deliveries: %+v", deliveries)
+	}
+	if len(deliveries) == 1 && deliveries[0].Content != "please inspect the runtime tool wiring" {
+		t.Fatalf("unexpected delivery content: %+v", deliveries[0])
 	}
 }
 

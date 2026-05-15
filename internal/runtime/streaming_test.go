@@ -143,14 +143,8 @@ func TestStreamingProviderEmitsMultipleDeltas(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for task completion.
-	time.Sleep(300 * time.Millisecond)
-
 	// Verify task completed successfully.
-	stored, err := rt.GetRun(ctx, rec.RunID, "user-stream")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-stream", 5*time.Second)
 	if stored.State != types.RunCompleted {
 		t.Fatalf("state: got %q, want completed", stored.State)
 	}

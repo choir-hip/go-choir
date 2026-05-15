@@ -557,14 +557,8 @@ func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for completion.
-	time.Sleep(100 * time.Millisecond)
-
 	// Check task completed with tool-loop result.
-	fetched, err := store.GetRun(context.Background(), rec.RunID)
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	fetched := waitForStoredRunTerminalState(t, store, rec.RunID, 5*time.Second)
 	if fetched.State != types.RunCompleted {
 		t.Errorf("state: got %q, want completed", fetched.State)
 	}
@@ -768,4 +762,28 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider Provider, registr
 	})
 
 	return rt, s
+}
+
+func waitForStoredRunTerminalState(t *testing.T, s *store.Store, runID string, timeout time.Duration) types.RunRecord {
+	t.Helper()
+
+	ctx := context.Background()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		rec, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("get task: %v", err)
+		}
+		if rec.State.Terminal() {
+			return rec
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	rec, err := s.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get task after timeout: %v", err)
+	}
+	t.Fatalf("timeout waiting for task %s (state=%s)", runID[:8], rec.State)
+	return types.RunRecord{}
 }
