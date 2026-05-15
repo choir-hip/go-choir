@@ -146,7 +146,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if model := strings.TrimSpace(in.Model); model != "" {
 				objective += "\n\nRequested model: " + model
 			}
-			if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID, objective); err != nil {
+			if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
 				return "", err
 			} else if ok {
 				superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
@@ -172,6 +172,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 					"state":               state,
 					"request_source":      "super_inbox",
 					"deduped":             true,
+					"dedupe_reason":       "vtext_run_already_requested_super",
 				})
 			}
 			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
@@ -205,7 +206,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 	}
 }
 
-func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerID, channelID, superAgentID, requesterRunID, requesterAgentID, objective string) (types.ChannelMessage, bool, error) {
+func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerID, channelID, superAgentID, requesterRunID, requesterAgentID string) (types.ChannelMessage, bool, error) {
 	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(channelID) == "" || strings.TrimSpace(superAgentID) == "" || strings.TrimSpace(requesterRunID) == "" {
 		return types.ChannelMessage{}, false, nil
 	}
@@ -217,8 +218,7 @@ func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerI
 		if msg.ToAgentID == superAgentID &&
 			msg.FromRunID == requesterRunID &&
 			msg.FromAgentID == requesterAgentID &&
-			msg.Role == AgentProfileVText &&
-			strings.TrimSpace(msg.Content) == strings.TrimSpace(objective) {
+			msg.Role == AgentProfileVText {
 			return msg, true, nil
 		}
 	}

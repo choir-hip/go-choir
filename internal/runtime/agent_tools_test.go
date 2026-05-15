@@ -393,6 +393,76 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 	}
 }
 
+func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default tools: %v", err)
+	}
+	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request one privileged turn", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-super-turn-dedupe",
+		runMetadataChannelID:    "doc-super-turn-dedupe",
+		runMetadataTrajectoryID: "trace-super-turn-dedupe",
+	})
+	if err != nil {
+		t.Fatalf("start vtext run: %v", err)
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+		"objective":"Run one bounded candidate-world probe for onboarding copy.",
+		"channel_id":"doc-super-turn-dedupe"
+	}`))
+	if err != nil {
+		t.Fatalf("first request_super_execution: %v", err)
+	}
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+		"objective":"Also run a second candidate-world probe for prompt bar layout.",
+		"channel_id":"doc-super-turn-dedupe"
+	}`))
+	if err != nil {
+		t.Fatalf("second request_super_execution: %v", err)
+	}
+	var first, second struct {
+		AgentID      string `json:"agent_id"`
+		Cursor       int64  `json:"cursor"`
+		Deduped      bool   `json:"deduped"`
+		DedupeReason string `json:"dedupe_reason"`
+	}
+	if err := json.Unmarshal([]byte(firstRaw), &first); err != nil {
+		t.Fatalf("decode first result: %v\n%s", err, firstRaw)
+	}
+	if err := json.Unmarshal([]byte(secondRaw), &second); err != nil {
+		t.Fatalf("decode second result: %v\n%s", err, secondRaw)
+	}
+	if first.Deduped {
+		t.Fatalf("first request should not be deduped: %+v", first)
+	}
+	if !second.Deduped || second.DedupeReason != "vtext_run_already_requested_super" {
+		t.Fatalf("second request should be deduped by vtext turn: %+v", second)
+	}
+	if second.Cursor != first.Cursor {
+		t.Fatalf("second cursor = %d, want first cursor %d", second.Cursor, first.Cursor)
+	}
+	messages, err := s.ListChannelMessages(context.Background(), "user-alice", "doc-super-turn-dedupe", 0, 20)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("channel messages = %d, want one: %+v", len(messages), messages)
+	}
+	if !strings.Contains(messages[0].Content, "onboarding copy") {
+		t.Fatalf("dedupe should preserve first privileged objective, got %q", messages[0].Content)
+	}
+	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", first.AgentID, 20)
+	if err != nil {
+		t.Fatalf("list pending deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("pending deliveries = %d, want one: %+v", len(deliveries), deliveries)
+	}
+}
+
 func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
