@@ -606,6 +606,79 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
+	registry := NewToolRegistry()
+	var delegatedArgs struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerID         string `json:"worker_id"`
+		VMID             string `json:"vm_id"`
+		Profile          string `json:"profile"`
+		Objective        string `json:"objective"`
+	}
+	if err := registry.Register(Tool{
+		Name: "request_worker_vm",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"worker_requested","handle":{"purpose":"tiny UX copy edit","worker_id":"worker-1","vm_id":"vm-1","sandbox_url":"http://worker"},"next_required_tool":"delegate_worker_vm","next_required_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_worker_vm: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name: "delegate_worker_vm",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			if err := json.Unmarshal(args, &delegatedArgs); err != nil {
+				return "", err
+			}
+			return `{"status":"worker_run_completed","patchset_path":"/tmp/patch.diff"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register delegate_worker_vm: %v", err)
+	}
+
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "super-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileSuper,
+		Prompt:       "Full sweep objective goes here.",
+	})
+	var emitted []string
+	calls := []types.ToolCall{
+		{ID: "lease", Name: "request_worker_vm", Arguments: json.RawMessage(`{"purpose":"tiny UX copy edit"}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventToolResult {
+			return
+		}
+		var event struct {
+			Tool string `json:"tool"`
+		}
+		if err := json.Unmarshal(payload, &event); err == nil {
+			emitted = append(emitted, event.Tool)
+		}
+	})
+
+	if len(results) != 1 || results[0].IsError {
+		t.Fatalf("results = %#v, want one successful request result", results)
+	}
+	if delegatedArgs.WorkerSandboxURL != "http://worker" || delegatedArgs.WorkerID != "worker-1" || delegatedArgs.VMID != "vm-1" {
+		t.Fatalf("delegated args = %#v, want worker handle args", delegatedArgs)
+	}
+	if delegatedArgs.Profile != AgentProfileVSuper {
+		t.Fatalf("delegated profile = %q, want %q", delegatedArgs.Profile, AgentProfileVSuper)
+	}
+	if !strings.Contains(delegatedArgs.Objective, "Full sweep objective goes here.") {
+		t.Fatalf("delegated objective = %q, want parent prompt", delegatedArgs.Objective)
+	}
+	if !strings.Contains(results[0].Output, `"delegation_status":"worker_delegated"`) ||
+		!strings.Contains(results[0].Output, `"/tmp/patch.diff"`) {
+		t.Fatalf("request output = %s, want chained delegation evidence", results[0].Output)
+	}
+	if strings.Join(emitted, ",") != "request_worker_vm,delegate_worker_vm" {
+		t.Fatalf("emitted tool results = %#v, want request then delegate", emitted)
+	}
+}
+
 // --- buildSystemPromptWithTools Tests ---
 
 func TestBuildSystemPromptWithTools(t *testing.T) {

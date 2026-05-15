@@ -510,8 +510,10 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 		Arguments: json.RawMessage(`{"purpose":"Run a narrow Choir-in-Choir product proof","machine_class":"worker-small"}`),
 	}})
 	var workerHandleResp struct {
-		Status string `json:"status"`
-		Handle struct {
+		Status                  string          `json:"status"`
+		DelegationStatus        string          `json:"delegation_status"`
+		ChainedDelegationOutput json.RawMessage `json:"chained_delegation_output"`
+		Handle                  struct {
 			WorkerID   string `json:"worker_id"`
 			VMID       string `json:"vm_id"`
 			SandboxURL string `json:"sandbox_url"`
@@ -525,19 +527,6 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 		t.Fatalf("unexpected worker handle: %+v", workerHandleResp)
 	}
 
-	delegateArgs, _ := json.Marshal(map[string]any{
-		"worker_sandbox_url": workerHandleResp.Handle.SandboxURL,
-		"worker_id":          workerHandleResp.Handle.WorkerID,
-		"vm_id":              workerHandleResp.Handle.VMID,
-		"objective":          "Commit and export the narrow product proof from the isolated worker worktree.",
-		"profile":            AgentProfileCoSuper,
-		"timeout_seconds":    10,
-	})
-	delegateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
-		ID:        "delegate-worker-product-path",
-		Name:      "delegate_worker_vm",
-		Arguments: delegateArgs,
-	}})
 	var delegateResp struct {
 		State           types.RunState   `json:"state"`
 		RunID           string           `json:"loop_id"`
@@ -548,8 +537,30 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 		ExportPatchsets []map[string]any `json:"export_patchsets"`
 		PromotionQueue  []map[string]any `json:"promotion_queue"`
 	}
-	if err := json.Unmarshal([]byte(delegateResults[0].Output), &delegateResp); err != nil {
-		t.Fatalf("decode delegate_worker_vm result: %v\n%s", err, delegateResults[0].Output)
+	if len(workerHandleResp.ChainedDelegationOutput) > 0 {
+		if workerHandleResp.DelegationStatus != "worker_delegated" {
+			t.Fatalf("unexpected chained delegation status: %+v", workerHandleResp)
+		}
+		if err := json.Unmarshal(workerHandleResp.ChainedDelegationOutput, &delegateResp); err != nil {
+			t.Fatalf("decode chained delegate_worker_vm result: %v\n%s", err, workerHandleResp.ChainedDelegationOutput)
+		}
+	} else {
+		delegateArgs, _ := json.Marshal(map[string]any{
+			"worker_sandbox_url": workerHandleResp.Handle.SandboxURL,
+			"worker_id":          workerHandleResp.Handle.WorkerID,
+			"vm_id":              workerHandleResp.Handle.VMID,
+			"objective":          "Commit and export the narrow product proof from the isolated worker worktree.",
+			"profile":            AgentProfileCoSuper,
+			"timeout_seconds":    10,
+		})
+		delegateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
+			ID:        "delegate-worker-product-path",
+			Name:      "delegate_worker_vm",
+			Arguments: delegateArgs,
+		}})
+		if err := json.Unmarshal([]byte(delegateResults[0].Output), &delegateResp); err != nil {
+			t.Fatalf("decode delegate_worker_vm result: %v\n%s", err, delegateResults[0].Output)
+		}
 	}
 	if delegateResp.State != types.RunCompleted || delegateResp.WorkerIsolation != "local_worktree" || delegateResp.WorkerBaseSHA != base {
 		t.Fatalf("unexpected delegate response: %+v", delegateResp)

@@ -302,13 +302,7 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 				}
 			}
 
-			// Cap tool output to prevent context overflow.
-			const maxToolOutput = 100 * 1024 // 100KB
-			if len(output) > maxToolOutput {
-				output = output[:maxToolOutput] + fmt.Sprintf(
-					"\n\n[output truncated — %d bytes total, showing first %d bytes]",
-					len(output), maxToolOutput)
-			}
+			output = capToolOutput(output)
 
 			// Emit tool.result event after execution.
 			resultPayload, _ := json.Marshal(map[string]any{
@@ -329,7 +323,158 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	}
 	wg.Wait()
 
+	executeRequiredToolTransitions(ctx, registry, calls, results, emit)
+
 	return results
+}
+
+// Some tool results carry a mandatory next tool as structured control data.
+// Execute those state transitions here so critical handoffs do not depend on
+// the model noticing a prose instruction in the returned JSON.
+func executeRequiredToolTransitions(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, results []types.ToolResult, emit EventEmitFunc) {
+	if registry == nil || len(calls) == 0 || len(results) != len(calls) {
+		return
+	}
+	for _, call := range calls {
+		if call.Name == "delegate_worker_vm" {
+			return
+		}
+	}
+	for i, call := range calls {
+		if call.Name != "request_worker_vm" || results[i].IsError {
+			continue
+		}
+		chained, ok := buildRequiredWorkerDelegation(ctx, results[i].Output)
+		if !ok {
+			continue
+		}
+		callID := strings.TrimSpace(call.ID)
+		if callID == "" {
+			callID = "request_worker_vm"
+		}
+		chainedCallID := callID + ":delegate_worker_vm"
+		invokedPayload, _ := json.Marshal(map[string]any{
+			"tool":      "delegate_worker_vm",
+			"call_id":   chainedCallID,
+			"arguments": chained.Args,
+			"chained_from": map[string]string{
+				"tool":    call.Name,
+				"call_id": callID,
+			},
+		})
+		emit(types.EventToolInvoked, "tool_call", invokedPayload)
+
+		output, err := registry.Execute(ctx, "delegate_worker_vm", chained.Args)
+		isError := false
+		if err != nil {
+			output = fmt.Sprintf("tool_error: %v", err)
+			isError = true
+		}
+		output = capToolOutput(output)
+		resultPayload, _ := json.Marshal(map[string]any{
+			"tool":       "delegate_worker_vm",
+			"call_id":    chainedCallID,
+			"is_error":   isError,
+			"output_len": len(output),
+			"output":     output,
+			"chained_from": map[string]string{
+				"tool":    call.Name,
+				"call_id": callID,
+			},
+		})
+		emit(types.EventToolResult, "tool_call", resultPayload)
+
+		results[i].Output = capToolOutput(augmentWorkerRequestWithDelegation(results[i].Output, output, isError))
+		return
+	}
+}
+
+func capToolOutput(output string) string {
+	const maxToolOutput = 100 * 1024 // 100KB
+	if len(output) <= maxToolOutput {
+		return output
+	}
+	return output[:maxToolOutput] + fmt.Sprintf(
+		"\n\n[output truncated — %d bytes total, showing first %d bytes]",
+		len(output), maxToolOutput)
+}
+
+type requiredWorkerDelegation struct {
+	Args json.RawMessage
+}
+
+func buildRequiredWorkerDelegation(ctx context.Context, output string) (requiredWorkerDelegation, bool) {
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
+		return requiredWorkerDelegation{}, false
+	}
+	nextTool, _ := decoded["next_required_tool"].(string)
+	if strings.TrimSpace(nextTool) != "delegate_worker_vm" {
+		return requiredWorkerDelegation{}, false
+	}
+	args := map[string]any{}
+	if rawArgs, _ := decoded["next_required_args"].(map[string]any); rawArgs != nil {
+		for key, value := range rawArgs {
+			args[key] = value
+		}
+	}
+	if _, ok := args["profile"]; !ok {
+		args["profile"] = AgentProfileVSuper
+	}
+	objective := requiredWorkerDelegationObjective(ctx, decoded)
+	if objective == "" {
+		return requiredWorkerDelegation{}, false
+	}
+	args["objective"] = objective
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return requiredWorkerDelegation{}, false
+	}
+	return requiredWorkerDelegation{Args: raw}, true
+}
+
+func requiredWorkerDelegationObjective(ctx context.Context, requestOutput map[string]any) string {
+	var parts []string
+	if purpose, _ := requestOutput["purpose"].(string); strings.TrimSpace(purpose) != "" {
+		parts = append(parts, "Worker VM purpose:\n"+strings.TrimSpace(purpose))
+	}
+	if handle, _ := requestOutput["handle"].(map[string]any); handle != nil {
+		if purpose, _ := handle["purpose"].(string); strings.TrimSpace(purpose) != "" {
+			parts = append(parts, "Worker VM purpose:\n"+strings.TrimSpace(purpose))
+		}
+	}
+	if rec := ctxRunRecord(ctx); rec != nil && strings.TrimSpace(rec.Prompt) != "" {
+		parts = append(parts, "Full parent super objective:\n"+strings.TrimSpace(rec.Prompt))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "The parent super leased this worker VM and the runtime is completing the required delegation transition.\n\n" + strings.Join(parts, "\n\n")
+}
+
+func augmentWorkerRequestWithDelegation(requestOutput, delegateOutput string, delegateIsError bool) string {
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(requestOutput), &decoded); err != nil {
+		return requestOutput
+	}
+	status := "worker_delegated"
+	if delegateIsError {
+		status = "worker_delegation_failed"
+	}
+	decoded["delegation_status"] = status
+	decoded["chained_required_tool"] = "delegate_worker_vm"
+	decoded["chained_delegation_is_error"] = delegateIsError
+	var parsed any
+	if err := json.Unmarshal([]byte(delegateOutput), &parsed); err == nil {
+		decoded["chained_delegation_output"] = parsed
+	} else {
+		decoded["chained_delegation_output"] = delegateOutput
+	}
+	out, err := json.Marshal(decoded)
+	if err != nil {
+		return requestOutput
+	}
+	return string(out)
 }
 
 func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
