@@ -23,6 +23,8 @@ Use these buckets when reading or editing docs:
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
+- `docs/missiongradient-method.md` - run-geometry method entrypoint for long-running agent work; canonical skill lives at `skills/mission-gradient/SKILL.md`.
+- `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
