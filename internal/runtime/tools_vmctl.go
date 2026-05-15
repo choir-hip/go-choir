@@ -188,6 +188,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			if parentAgentID == "" {
 				return "", fmt.Errorf("request_worker_vm missing parent agent context")
 			}
+			parentRunID := stringFromToolContext(ctx, toolCtxRunID)
 
 			var trajectoryID string
 			if runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord); runRec != nil && runRec.Metadata != nil {
@@ -199,6 +200,49 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			client := vmctl.NewClient(rt.cfg.VmctlURL)
 			requestedMachineClass := strings.TrimSpace(in.MachineClass)
 			machineClass := normalizeRuntimeWorkerMachineClass(requestedMachineClass)
+			cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID)
+			if !in.AllowParallel && cacheKey != "" {
+				rt.workerRequestMu.Lock()
+				if cached := strings.TrimSpace(rt.workerRequests[cacheKey]); cached != "" {
+					rt.workerRequestMu.Unlock()
+					return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
+				}
+				if cached, ok, err := rt.findExistingWorkerVMRequest(ctx, parentRunID); err != nil {
+					rt.workerRequestMu.Unlock()
+					return "", err
+				} else if ok {
+					rt.workerRequests[cacheKey] = cached
+					rt.workerRequestMu.Unlock()
+					return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
+				}
+				handle, err := client.RequestWorker(vmctl.WorkerRequest{
+					UserID:        ownerID,
+					DesktopID:     desktopID,
+					ParentAgentID: parentAgentID,
+					TrajectoryID:  trajectoryID,
+					Purpose:       strings.TrimSpace(in.Purpose),
+					MachineClass:  machineClass,
+					AllowParallel: false,
+				})
+				if err != nil {
+					rt.workerRequestMu.Unlock()
+					return "", err
+				}
+				result := map[string]any{
+					"status": "worker_requested",
+					"handle": handle,
+				}
+				if requestedMachineClass != "" && requestedMachineClass != machineClass {
+					result["machine_class_normalized_from"] = requestedMachineClass
+					result["machine_class"] = handle.MachineClass
+				}
+				out, err := toolResultJSON(result)
+				if err == nil {
+					rt.workerRequests[cacheKey] = out
+				}
+				rt.workerRequestMu.Unlock()
+				return out, err
+			}
 			handle, err := client.RequestWorker(vmctl.WorkerRequest{
 				UserID:        ownerID,
 				DesktopID:     desktopID,
@@ -223,6 +267,59 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			return toolResultJSON(result)
 		},
 	}
+}
+
+func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID string) string {
+	ownerID = strings.TrimSpace(ownerID)
+	desktopID = strings.TrimSpace(desktopID)
+	parentAgentID = strings.TrimSpace(parentAgentID)
+	parentRunID = strings.TrimSpace(parentRunID)
+	if ownerID == "" || desktopID == "" || parentAgentID == "" || parentRunID == "" {
+		return ""
+	}
+	return ownerID + "\x00" + desktopID + "\x00" + parentAgentID + "\x00" + parentRunID
+}
+
+func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string) (string, bool, error) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return "", false, nil
+	}
+	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	if err != nil {
+		return "", false, fmt.Errorf("request_worker_vm dedupe scan: %w", err)
+	}
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload struct {
+			Tool    string `json:"tool"`
+			IsError bool   `json:"is_error"`
+			Output  string `json:"output"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "request_worker_vm" {
+			continue
+		}
+		var output map[string]any
+		if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
+			continue
+		}
+		status, _ := output["status"].(string)
+		if strings.TrimSpace(status) == "worker_requested" && output["handle"] != nil {
+			return payload.Output, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func markToolResultDeduped(raw, reason string) (string, error) {
+	var output map[string]any
+	if err := json.Unmarshal([]byte(raw), &output); err != nil {
+		return "", err
+	}
+	output["deduped"] = true
+	output["dedupe_reason"] = reason
+	return toolResultJSON(output)
 }
 
 func normalizeRuntimeWorkerMachineClass(raw string) string {

@@ -146,6 +146,8 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if model := strings.TrimSpace(in.Model); model != "" {
 				objective += "\n\nRequested model: " + model
 			}
+			rt.superRequestMu.Lock()
+			defer rt.superRequestMu.Unlock()
 			if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
 				return "", err
 			} else if ok {

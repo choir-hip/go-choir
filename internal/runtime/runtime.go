@@ -41,6 +41,9 @@ type Runtime struct {
 	vtextWakePending map[string]pendingVTextWake
 	vtextWakeAfter   func(time.Duration, func()) vtextWakeTimer
 	vtextEditMu      sync.Mutex
+	superRequestMu   sync.Mutex
+	workerRequestMu  sync.Mutex
+	workerRequests   map[string]string
 	conductorRouteMu sync.Mutex
 	browserOpMu      sync.Mutex
 	browserOps       map[string]*sync.Mutex
@@ -69,6 +72,7 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		promptStore:      NewPromptStore(cfg.PromptRoot),
 		vtextWakePending: make(map[string]pendingVTextWake),
 		vtextWakeAfter:   func(d time.Duration, fn func()) vtextWakeTimer { return time.AfterFunc(d, fn) },
+		workerRequests:   make(map[string]string),
 		browserOps:       make(map[string]*sync.Mutex),
 		browserCDP:       make(map[string]*browserCDPSession),
 	}

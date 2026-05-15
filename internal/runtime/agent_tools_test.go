@@ -945,6 +945,62 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 	}
 }
 
+func TestSuperRequestWorkerVMDedupesSameRunDifferentPurposes(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+
+	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
+	if _, err := reg.ResolveOrAssignDesktop("user-alice", types.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve source desktop: %v", err)
+	}
+	handler := vmctl.NewHandler(reg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	vmctlSrv := httptest.NewServer(mux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	rt.cfg.VmctlURL = vmctlSrv.URL
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate one worker lease", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+	})
+	if err != nil {
+		t.Fatalf("submit super task: %v", err)
+	}
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	request := func(raw json.RawMessage) (string, bool) {
+		t.Helper()
+		out, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", raw)
+		if err != nil {
+			t.Fatalf("request_worker_vm: %v", err)
+		}
+		var resp struct {
+			Deduped bool `json:"deduped"`
+			Handle  struct {
+				WorkerID string `json:"worker_id"`
+				VMID     string `json:"vm_id"`
+			} `json:"handle"`
+		}
+		if err := json.Unmarshal([]byte(out), &resp); err != nil {
+			t.Fatalf("decode request_worker_vm: %v", err)
+		}
+		return resp.Handle.WorkerID + "/" + resp.Handle.VMID, resp.Deduped
+	}
+
+	first, firstDeduped := request(json.RawMessage(`{"purpose":"Run onboarding copy candidate","machine_class":"worker-small"}`))
+	second, secondDeduped := request(json.RawMessage(`{"purpose":"Run prompt bar spacing candidate","machine_class":"worker-large"}`))
+	if firstDeduped {
+		t.Fatal("first worker request should not be deduped")
+	}
+	if second != first || !secondDeduped {
+		t.Fatalf("second worker = %s deduped=%v, want reused %s with dedupe marker", second, secondDeduped, first)
+	}
+}
+
 func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
