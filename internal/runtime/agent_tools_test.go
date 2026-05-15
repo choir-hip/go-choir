@@ -2404,6 +2404,52 @@ func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
 	}
 }
 
+func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+
+		if call == 1 {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatalf("response writer does not support hijack")
+			}
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				t.Fatalf("hijack: %v", err)
+			}
+			_ = conn.Close()
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, runStatusResponse{
+			RunID:        "run-transient-reset",
+			AgentID:      "agent-transient-reset",
+			AgentProfile: AgentProfileVSuper,
+			State:        types.RunCompleted,
+			OwnerID:      "user-alice",
+		})
+	}))
+	defer srv.Close()
+
+	resp, err := pollInternalWorkerRun(context.Background(), srv.Client(), srv.URL, "user-alice", "run-transient-reset", time.Second)
+	if err != nil {
+		t.Fatalf("pollInternalWorkerRun: %v", err)
+	}
+	if resp.State != types.RunCompleted || resp.RunID != "run-transient-reset" {
+		t.Fatalf("unexpected status response: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls < 2 {
+		t.Fatalf("expected retry after transient connection reset, calls=%d", calls)
+	}
+}
+
 func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testing.T) {
 	cwd := t.TempDir()
 	base := "5af8828e4e5087a2ce835d5d85de5d4acd936e7a"

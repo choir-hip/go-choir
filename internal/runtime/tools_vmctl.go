@@ -1168,8 +1168,15 @@ func shouldRetryWorkerStatusPoll(err error) bool {
 	if os.IsTimeout(err) {
 		return true
 	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
 	var netErr net.Error
-	return errors.As(err, &netErr) && netErr.Timeout()
+	if errors.As(err, &netErr) {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+	return false
 }
 
 func isRetryableWorkerStatusCode(statusCode int) bool {
