@@ -2327,6 +2327,83 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	}
 }
 
+func TestPollInternalWorkerRunRetriesTransientStatusTimeout(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+
+		if call == 1 {
+			time.Sleep(60 * time.Millisecond)
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, runStatusResponse{
+			RunID:        "run-transient-timeout",
+			AgentID:      "agent-transient-timeout",
+			AgentProfile: AgentProfileVSuper,
+			State:        types.RunCompleted,
+			OwnerID:      "user-alice",
+		})
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Timeout: 20 * time.Millisecond}
+	resp, err := pollInternalWorkerRun(context.Background(), client, srv.URL, "user-alice", "run-transient-timeout", time.Second)
+	if err != nil {
+		t.Fatalf("pollInternalWorkerRun: %v", err)
+	}
+	if resp.State != types.RunCompleted || resp.RunID != "run-transient-timeout" {
+		t.Fatalf("unexpected status response: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls < 2 {
+		t.Fatalf("expected retry after transient timeout, calls=%d", calls)
+	}
+}
+
+func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+
+		if call == 1 {
+			writeAPIJSON(w, http.StatusBadGateway, apiError{Error: "worker runtime starting"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, runStatusResponse{
+			RunID:        "run-transient-502",
+			AgentID:      "agent-transient-502",
+			AgentProfile: AgentProfileVSuper,
+			State:        types.RunCompleted,
+			OwnerID:      "user-alice",
+		})
+	}))
+	defer srv.Close()
+
+	resp, err := pollInternalWorkerRun(context.Background(), srv.Client(), srv.URL, "user-alice", "run-transient-502", time.Second)
+	if err != nil {
+		t.Fatalf("pollInternalWorkerRun: %v", err)
+	}
+	if resp.State != types.RunCompleted || resp.RunID != "run-transient-502" {
+		t.Fatalf("unexpected status response: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls < 2 {
+		t.Fatalf("expected retry after transient status code, calls=%d", calls)
+	}
+}
+
 func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testing.T) {
 	cwd := t.TempDir()
 	base := "5af8828e4e5087a2ce835d5d85de5d4acd936e7a"

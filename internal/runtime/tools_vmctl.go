@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +24,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+)
+
+const (
+	defaultDelegateWorkerVMTimeout = 8 * time.Minute
+	maxDelegateWorkerVMTimeout     = 15 * time.Minute
 )
 
 func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
@@ -401,10 +408,10 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			}
 			timeout := time.Duration(in.TimeoutSeconds) * time.Second
 			if timeout <= 0 {
-				timeout = 2 * time.Minute
+				timeout = defaultDelegateWorkerVMTimeout
 			}
-			if timeout > 15*time.Minute {
-				timeout = 15 * time.Minute
+			if timeout > maxDelegateWorkerVMTimeout {
+				timeout = maxDelegateWorkerVMTimeout
 			}
 			client := &http.Client{Timeout: 30 * time.Second}
 
@@ -1078,6 +1085,7 @@ func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL s
 func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ownerID, runID string, timeout time.Duration) (*runStatusResponse, error) {
 	deadline := time.Now().Add(timeout)
 	var last runStatusResponse
+	var lastStatusErr error
 	for {
 		values := url.Values{"owner_id": []string{ownerID}}
 		endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs/"+url.PathEscape(runID), values)
@@ -1091,7 +1099,18 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 		req.Header.Set("X-Internal-Caller", "true")
 		resp, err := client.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("delegate_worker_vm status: %w", err)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			statusErr := fmt.Errorf("delegate_worker_vm status: %w", err)
+			if shouldRetryWorkerStatusPoll(statusErr) && time.Now().Before(deadline) {
+				lastStatusErr = statusErr
+				if err := sleepUntilNextWorkerStatusPoll(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			return nil, statusErr
 		}
 		payload, readErr := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -1099,7 +1118,15 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 			return nil, readErr
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("delegate_worker_vm status failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+			statusErr := fmt.Errorf("delegate_worker_vm status failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+			if isRetryableWorkerStatusCode(resp.StatusCode) && time.Now().Before(deadline) {
+				lastStatusErr = statusErr
+				if err := sleepUntilNextWorkerStatusPoll(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			return nil, statusErr
 		}
 		if err := json.Unmarshal(payload, &last); err != nil {
 			return nil, fmt.Errorf("decode worker run status response: %w", err)
@@ -1108,13 +1135,49 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 			return &last, nil
 		}
 		if time.Now().After(deadline) {
+			if lastStatusErr != nil {
+				return nil, fmt.Errorf("worker run %s did not finish within %s; last state=%s; last status error=%v", runID, timeout, last.State, lastStatusErr)
+			}
 			return nil, fmt.Errorf("worker run %s did not finish within %s; last state=%s", runID, timeout, last.State)
 		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+		if err := sleepUntilNextWorkerStatusPoll(ctx); err != nil {
+			return nil, err
 		}
+	}
+}
+
+func sleepUntilNextWorkerStatusPoll(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(500 * time.Millisecond):
+		return nil
+	}
+}
+
+func shouldRetryWorkerStatusPoll(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if os.IsTimeout(err) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func isRetryableWorkerStatusCode(statusCode int) bool {
+	switch statusCode {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
 	}
 }
 
