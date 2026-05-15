@@ -329,6 +329,70 @@ func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
 	}
 }
 
+func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default tools: %v", err)
+	}
+	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request privileged work", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-super-dedupe",
+		runMetadataChannelID:    "doc-super-dedupe",
+		runMetadataTrajectoryID: "trace-super-dedupe",
+	})
+	if err != nil {
+		t.Fatalf("start vtext run: %v", err)
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	rawArgs := json.RawMessage(`{"objective":"Run exactly one bounded candidate-world probe.","channel_id":"doc-super-dedupe","model":"gpt-5-codex"}`)
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", rawArgs)
+	if err != nil {
+		t.Fatalf("first request_super_execution: %v", err)
+	}
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", rawArgs)
+	if err != nil {
+		t.Fatalf("second request_super_execution: %v", err)
+	}
+	var first, second struct {
+		AgentID string `json:"agent_id"`
+		Cursor  int64  `json:"cursor"`
+		Deduped bool   `json:"deduped"`
+	}
+	if err := json.Unmarshal([]byte(firstRaw), &first); err != nil {
+		t.Fatalf("decode first response: %v\n%s", err, firstRaw)
+	}
+	if err := json.Unmarshal([]byte(secondRaw), &second); err != nil {
+		t.Fatalf("decode second response: %v\n%s", err, secondRaw)
+	}
+	if first.AgentID == "" || second.AgentID != first.AgentID {
+		t.Fatalf("unexpected super agent ids: first=%+v second=%+v", first, second)
+	}
+	if first.Deduped || !second.Deduped || second.Cursor != first.Cursor {
+		t.Fatalf("unexpected dedupe responses: first=%+v second=%+v", first, second)
+	}
+	messages, err := s.ListChannelMessages(context.Background(), "user-alice", "doc-super-dedupe", 0, 20)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	superMessages := 0
+	for _, msg := range messages {
+		if msg.ToAgentID == first.AgentID && msg.FromRunID == vtextRun.RunID {
+			superMessages++
+		}
+	}
+	if superMessages != 1 {
+		t.Fatalf("super channel messages = %d, want one same-run request: %+v", superMessages, messages)
+	}
+	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), "user-alice", first.AgentID, 20)
+	if err != nil {
+		t.Fatalf("list pending deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("pending super deliveries = %d, want one: %+v", len(deliveries), deliveries)
+	}
+}
+
 func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {

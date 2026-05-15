@@ -146,6 +146,34 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if model := strings.TrimSpace(in.Model); model != "" {
 				objective += "\n\nRequested model: " + model
 			}
+			if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID, objective); err != nil {
+				return "", err
+			} else if ok {
+				superRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+				if err != nil {
+					return "", err
+				}
+				loopID := ""
+				state := ""
+				if superRun != nil {
+					loopID = superRun.RunID
+					state = string(superRun.State)
+				}
+				return toolResultJSON(map[string]any{
+					"agent_id":            superAgent.AgentID,
+					"loop_id":             loopID,
+					"channel_id":          channelID,
+					"cursor":              existing.Seq,
+					"profile":             superAgent.Profile,
+					"role":                superAgent.Role,
+					"requested_by":        requesterAgentID,
+					"requested_by_run_id": requesterRunID,
+					"persistent":          true,
+					"state":               state,
+					"request_source":      "super_inbox",
+					"deduped":             true,
+				})
+			}
 			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
 			if err != nil {
 				return "", err
@@ -175,6 +203,26 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerID, channelID, superAgentID, requesterRunID, requesterAgentID, objective string) (types.ChannelMessage, bool, error) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(channelID) == "" || strings.TrimSpace(superAgentID) == "" || strings.TrimSpace(requesterRunID) == "" {
+		return types.ChannelMessage{}, false, nil
+	}
+	messages, err := rt.store.ListChannelMessages(ctx, ownerID, channelID, 0, 1000)
+	if err != nil {
+		return types.ChannelMessage{}, false, fmt.Errorf("request_super_execution dedupe scan: %w", err)
+	}
+	for _, msg := range messages {
+		if msg.ToAgentID == superAgentID &&
+			msg.FromRunID == requesterRunID &&
+			msg.FromAgentID == requesterAgentID &&
+			msg.Role == AgentProfileVText &&
+			strings.TrimSpace(msg.Content) == strings.TrimSpace(objective) {
+			return msg, true, nil
+		}
+	}
+	return types.ChannelMessage{}, false, nil
 }
 
 func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs) (types.Revision, error) {
