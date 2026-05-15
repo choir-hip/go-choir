@@ -2450,6 +2450,105 @@ func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
 	}
 }
 
+func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	var mu sync.Mutex
+	submitted := 0
+	prompts := make([]string, 0, 2)
+	metadata := make([]map[string]any, 0, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			var req internalRunSubmitRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode submit: %v", err)
+			}
+			mu.Lock()
+			submitted++
+			call := submitted
+			prompts = append(prompts, req.Prompt)
+			metadata = append(metadata, req.Metadata)
+			mu.Unlock()
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        fmt.Sprintf("worker-run-%d", call),
+				AgentID:      fmt.Sprintf("worker-agent-%d", call),
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-1":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-run-1",
+				AgentID:      "worker-agent-1",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunFailed,
+				OwnerID:      "user-alice",
+				Error:        "runtime restarted, run interrupted",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-2":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-run-2",
+				AgentID:      "worker-agent-2",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-2/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: nil})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate retry", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-worker-retry",
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-retry",
+		"vm_id": "vm-worker-retry",
+		"objective": "export after retry",
+		"profile": "vsuper",
+		"timeout_seconds": 2
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+	var result struct {
+		RunID string         `json:"loop_id"`
+		State types.RunState `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.RunID != "worker-run-2" || result.State != types.RunCompleted {
+		t.Fatalf("unexpected delegate result: %+v\nraw=%s", result, raw)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if submitted != 2 {
+		t.Fatalf("submitted worker runs = %d, want 2", submitted)
+	}
+	if !strings.Contains(prompts[1], "Previous delegated worker run was interrupted") {
+		t.Fatalf("retry prompt missing interruption context: %q", prompts[1])
+	}
+	if got, _ := metadata[1]["retry_of_run_id"].(string); got != "worker-run-1" {
+		t.Fatalf("retry metadata retry_of_run_id = %q, want worker-run-1; metadata=%+v", got, metadata[1])
+	}
+}
+
 func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testing.T) {
 	cwd := t.TempDir()
 	base := "5af8828e4e5087a2ce835d5d85de5d4acd936e7a"

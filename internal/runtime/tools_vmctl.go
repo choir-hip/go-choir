@@ -29,6 +29,7 @@ import (
 const (
 	defaultDelegateWorkerVMTimeout = 8 * time.Minute
 	maxDelegateWorkerVMTimeout     = 15 * time.Minute
+	maxDelegateWorkerRunAttempts   = 2
 )
 
 func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
@@ -462,19 +463,38 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
 			}
 
-			startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
-				OwnerID:  ownerID,
-				Prompt:   objective,
-				Metadata: metadata,
-			})
-			if err != nil {
-				return "", err
-			}
-			finalResp, err := pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
-			if err != nil {
-				return "", err
-			}
-			if finalResp.State != types.RunCompleted {
+			var startResp *runStatusResponse
+			var finalResp *runStatusResponse
+			for attempt := 1; attempt <= maxDelegateWorkerRunAttempts; attempt++ {
+				attemptMetadata := copyMetadataMap(metadata)
+				attemptObjective := objective
+				if attempt > 1 && finalResp != nil {
+					attemptMetadata["retry_of_run_id"] = finalResp.RunID
+					attemptMetadata["retry_reason"] = strings.TrimSpace(finalResp.Error)
+					attemptObjective = strings.Join([]string{
+						"Previous delegated worker run was interrupted before completion.",
+						"Retry once on the same worker VM. If a go-choir-candidate checkout already exists, reset it to the requested base SHA before editing.",
+						objective,
+					}, "\n")
+				}
+				startResp, err = submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
+					OwnerID:  ownerID,
+					Prompt:   attemptObjective,
+					Metadata: attemptMetadata,
+				})
+				if err != nil {
+					return "", err
+				}
+				finalResp, err = pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
+				if err != nil {
+					return "", err
+				}
+				if finalResp.State == types.RunCompleted {
+					break
+				}
+				if attempt < maxDelegateWorkerRunAttempts && isInterruptedWorkerRun(finalResp) {
+					continue
+				}
 				return "", fmt.Errorf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error))
 			}
 			eventsResp, err := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID)
@@ -620,9 +640,12 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"Remote worker repository bootstrap is available.",
 		"The worker VM may start in an empty files directory. Before repository work, create or use a checkout named go-choir-candidate under the current working directory.",
 		"Bootstrap commands:",
-		"git clone " + remoteURL + " go-choir-candidate",
+		"if [ ! -d go-choir-candidate/.git ]; then git clone " + remoteURL + " go-choir-candidate; fi",
 		"cd go-choir-candidate",
+		"git fetch --all --prune",
 		"git checkout " + baseSHA,
+		"git reset --hard " + baseSHA,
+		"git clean -fdx",
 		"Perform all repository edits inside go-choir-candidate. Do not push from the worker VM.",
 		"Commit candidate changes before calling export_patchset.",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
@@ -1043,6 +1066,25 @@ func candidateLoopIDForPromotionRecord(rec types.PromotionCandidateRecord) strin
 		return ""
 	}
 	return strings.TrimSpace(candidate.CandidateRunID)
+}
+
+func copyMetadataMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func isInterruptedWorkerRun(resp *runStatusResponse) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.State != types.RunFailed {
+		return false
+	}
+	errText := strings.ToLower(strings.TrimSpace(resp.Error))
+	return strings.Contains(errText, "runtime restarted") && strings.Contains(errText, "interrupted")
 }
 
 func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL string, body internalRunSubmitRequest) (*runStatusResponse, error) {
