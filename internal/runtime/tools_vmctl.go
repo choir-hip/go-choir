@@ -532,6 +532,15 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"promotion_queue":    promotionCandidates,
 				"event_count":        len(eventsResp.Events),
 			}
+			if summary := summarizeWorkerRunEvents(eventsResp.Events); len(summary) > 0 {
+				result["worker_event_summary"] = summary
+			}
+			if profiles := collectWorkerSpawnProfiles(eventsResp.Events); len(profiles) > 0 {
+				result["worker_spawned_profiles"] = profiles
+			}
+			if count := countWorkerChannelMessages(eventsResp.Events); count > 0 {
+				result["worker_channel_message_count"] = count
+			}
 			if isolation.Enabled {
 				result["worker_isolation"] = isolation.Kind
 				result["worker_worktree_path"] = isolation.WorktreePath
@@ -1302,6 +1311,93 @@ func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 		exports = append(exports, output)
 	}
 	return exports
+}
+
+func summarizeWorkerRunEvents(events []types.EventRecord) []map[string]any {
+	summary := make([]map[string]any, 0, len(events))
+	for _, ev := range events {
+		switch ev.Kind {
+		case types.EventToolInvoked, types.EventToolResult, types.EventChannelMessage:
+		default:
+			continue
+		}
+		payload := map[string]any{}
+		_ = json.Unmarshal(ev.Payload, &payload)
+		item := map[string]any{
+			"seq":        ev.Seq,
+			"stream_seq": ev.StreamSeq,
+			"kind":       ev.Kind,
+		}
+		if tool := payloadString(payload, "tool"); tool != "" {
+			item["tool"] = tool
+		}
+		if isError, ok := payload["is_error"].(bool); ok {
+			item["is_error"] = isError
+		}
+		if role := payloadString(payload, "role"); role != "" {
+			item["role"] = role
+		}
+		if from := payloadString(payload, "from_agent_id"); from != "" {
+			item["from_agent_id"] = from
+		}
+		if to := payloadString(payload, "to_agent_id"); to != "" {
+			item["to_agent_id"] = to
+		}
+		if output := payloadString(payload, "output"); output != "" {
+			item["output_excerpt"] = workerEventExcerpt(output, 700)
+		}
+		if content := payloadString(payload, "content"); content != "" {
+			item["content_excerpt"] = workerEventExcerpt(content, 700)
+		}
+		summary = append(summary, item)
+		if len(summary) >= 80 {
+			break
+		}
+	}
+	return summary
+}
+
+func collectWorkerSpawnProfiles(events []types.EventRecord) []string {
+	seen := map[string]bool{}
+	var profiles []string
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payloadString(payload, "tool") != "spawn_agent" {
+			continue
+		}
+		output := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadString(payload, "output")), &output); err != nil {
+			continue
+		}
+		profile := firstNonEmpty(payloadString(output, "profile"), payloadString(output, "role"))
+		if profile == "" || seen[profile] {
+			continue
+		}
+		seen[profile] = true
+		profiles = append(profiles, profile)
+	}
+	return profiles
+}
+
+func countWorkerChannelMessages(events []types.EventRecord) int {
+	count := 0
+	for _, ev := range events {
+		if ev.Kind == types.EventChannelMessage {
+			count++
+		}
+	}
+	return count
+}
+
+func workerEventExcerpt(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if limit <= 0 || len(text) <= limit {
+		return text
+	}
+	return text[:limit] + fmt.Sprintf("…[%d bytes]", len(text))
 }
 
 func exportString(export map[string]any, key string) string {

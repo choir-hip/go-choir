@@ -679,6 +679,38 @@ func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
 	}
 }
 
+func TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence(t *testing.T) {
+	spawnPayload, _ := json.Marshal(map[string]any{
+		"tool":     "spawn_agent",
+		"is_error": false,
+		"output":   `{"profile":"co-super","role":"co-super","loop_id":"child-worker"}`,
+	})
+	channelPayload, _ := json.Marshal(map[string]any{
+		"from_agent_id": "vsuper",
+		"to_agent_id":   "co-super-worker",
+		"role":          "worker",
+		"content":       "verify the marker and report pass/fail",
+	})
+	events := []types.EventRecord{
+		{Seq: 1, Kind: types.EventToolResult, Payload: spawnPayload},
+		{Seq: 2, Kind: types.EventChannelMessage, Payload: channelPayload},
+	}
+
+	if got := collectWorkerSpawnProfiles(events); len(got) != 1 || got[0] != AgentProfileCoSuper {
+		t.Fatalf("spawned profiles = %#v, want co-super", got)
+	}
+	if got := countWorkerChannelMessages(events); got != 1 {
+		t.Fatalf("channel message count = %d, want 1", got)
+	}
+	summary := summarizeWorkerRunEvents(events)
+	if len(summary) != 2 {
+		t.Fatalf("summary length = %d, want 2: %#v", len(summary), summary)
+	}
+	if summary[0]["tool"] != "spawn_agent" || summary[1]["role"] != "worker" {
+		t.Fatalf("summary = %#v, want spawn tool and worker channel role", summary)
+	}
+}
+
 // --- buildSystemPromptWithTools Tests ---
 
 func TestBuildSystemPromptWithTools(t *testing.T) {

@@ -16,6 +16,13 @@ For nontrivial mutable work, act as orchestrator rather than sole worker:
 - The worker reports what changed and what evidence exists.
 - The verifier checks from evidence and direct tests. If verification fails, it messages the worker with the smallest actionable failure. Repeat until it passes or the blocker is real.
 
+When the objective explicitly asks for worker/verifier co-super roles, treat that
+split as a hard constraint, not a suggestion. Do not silently do the mutation
+yourself. First try to create and message the co-super worker and verifier. If
+the required tools or channel context are unavailable, record that exact
+capability blocker, then continue directly only as a fallback so the parent can
+see what substrate is missing.
+
 Meta-verify the final state yourself before export or handoff. A worker saying "done" is not verification. A verifier saying "failed" is not the end until a repair route has been tried.
 
 If repository checkout is missing, first diagnose with `pwd`, `git status`, and bounded filesystem discovery. When repo bootstrap instructions are present, follow them and work inside the candidate checkout. If bootstrap fails, report exact diagnostics instead of fabricating repo work.
