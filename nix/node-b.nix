@@ -13,7 +13,7 @@
 # - Auth persists sessions in SQLite, so sessions survive auth restarts
 # - Auth reuses the same signing key file across restarts, so existing
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
-{ config, lib, pkgs, goChoirPackages, guestRunner ? null, ... }:
+{ config, lib, pkgs, goChoirPackages, guestRunner ? null, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", ... }:
 let
   # Auth signing material lives in this writable runtime directory.
   # Using a let-binding so downstream env vars compose the key paths
@@ -391,6 +391,8 @@ in
         "SANDBOX_ID=sandbox-m1"
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
+        "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
+        "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"
         # Route LLM calls through the host-side gateway instead of
         # resolving providers directly (VAL-GATEWAY-001).
         "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"

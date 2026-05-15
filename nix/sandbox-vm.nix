@@ -19,7 +19,7 @@
 # the kernel, rootfs, and store disk from the microvm runner outputs.
 # It does NOT use the microvm runner scripts directly because vmmanager
 # needs per-VM networking, port assignment, and lifecycle control.
-{ config, lib, pkgs, goChoirPackages, ... }:
+{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", ... }:
 
 {
   networking.hostName = "go-choir-sandbox";
@@ -206,6 +206,8 @@ EOF
       # across guest reboot/recovery even when runtime DB state survives.
       SANDBOX_FILES_ROOT = "/mnt/persistent/files";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
+      RUNTIME_WORKER_REPO_REMOTE = sourceRepoRemote;
+      RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";

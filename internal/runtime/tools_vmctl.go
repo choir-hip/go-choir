@@ -448,25 +448,58 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
+	remoteURL, baseSHA := remoteWorkerRepoBootstrapSourceFromGit(ctx, cwd)
+	if remoteURL == "" || baseSHA == "" {
+		remoteURL, baseSHA = remoteWorkerRepoBootstrapSourceFromEnv()
+	}
+	if remoteURL == "" {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	if !usableWorkerRepoBaseSHA(baseSHA) {
+		return remoteWorkerRepoBootstrap{}, nil
+	}
+	prompt := remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA)
+	return remoteWorkerRepoBootstrap{
+		Enabled:      true,
+		Kind:         "remote_git_clone",
+		RemoteURL:    remoteURL,
+		BaseSHA:      baseSHA,
+		WorkerPrompt: prompt,
+	}, nil
+}
+
+func remoteWorkerRepoBootstrapSourceFromGit(ctx context.Context, cwd string) (string, string) {
 	repoRoot, err := gitOutputInDir(ctx, cwd, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return remoteWorkerRepoBootstrap{}, nil
+		return "", ""
 	}
 	repoRoot = strings.TrimSpace(repoRoot)
 	baseSHA, err := gitOutputInDir(ctx, repoRoot, "rev-parse", "HEAD")
 	if err != nil {
-		return remoteWorkerRepoBootstrap{}, nil
+		return "", ""
 	}
-	baseSHA = strings.TrimSpace(baseSHA)
 	remoteRaw, err := gitOutputInDir(ctx, repoRoot, "remote", "get-url", "origin")
 	if err != nil {
-		return remoteWorkerRepoBootstrap{}, nil
+		return "", ""
 	}
-	remoteURL := safeWorkerGitRemote(remoteRaw)
-	if remoteURL == "" {
-		return remoteWorkerRepoBootstrap{}, nil
-	}
-	prompt := strings.Join([]string{
+	return safeWorkerGitRemote(remoteRaw), strings.TrimSpace(baseSHA)
+}
+
+func remoteWorkerRepoBootstrapSourceFromEnv() (string, string) {
+	remoteURL := safeWorkerGitRemote(firstNonEmptyEnv(
+		"RUNTIME_WORKER_REPO_REMOTE",
+		"CHOIR_WORKER_REPO_REMOTE",
+	))
+	baseSHA := firstNonEmptyEnv(
+		"RUNTIME_WORKER_REPO_BASE_SHA",
+		"CHOIR_WORKER_REPO_BASE_SHA",
+		"CHOIR_DEPLOYED_COMMIT",
+	)
+	return remoteURL, normalizeWorkerRepoBaseSHA(baseSHA)
+}
+
+func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
+	return strings.Join([]string{
 		"Remote worker repository bootstrap is available.",
 		"The worker VM may start in an empty files directory. Before repository work, create or use a checkout named go-choir-candidate under the current working directory.",
 		"Bootstrap commands:",
@@ -478,13 +511,35 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
 		"If clone, checkout, build, or export fails, report diagnostics with submit_worker_update instead of claiming repository work.",
 	}, "\n")
-	return remoteWorkerRepoBootstrap{
-		Enabled:      true,
-		Kind:         "remote_git_clone",
-		RemoteURL:    remoteURL,
-		BaseSHA:      baseSHA,
-		WorkerPrompt: prompt,
-	}, nil
+}
+
+func usableWorkerRepoBaseSHA(baseSHA string) bool {
+	baseSHA = normalizeWorkerRepoBaseSHA(baseSHA)
+	if baseSHA == "" || baseSHA == "local" || baseSHA == "unknown" {
+		return false
+	}
+	if len(baseSHA) < 7 || len(baseSHA) > 64 {
+		return false
+	}
+	for _, r := range baseSHA {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeWorkerRepoBaseSHA(baseSHA string) string {
+	return strings.TrimSuffix(strings.TrimSpace(strings.ToLower(baseSHA)), "-dirty")
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func prepareSameRuntimeWorkerIsolation(ctx context.Context, cwd, workerSandboxURL, workerID, vmID, runID string) (localWorkerIsolation, error) {

@@ -24,6 +24,7 @@
       goModuleVersion = "0.1.0";
       buildCommit = self.rev or self.dirtyRev or "local";
       buildDate = self.lastModifiedDate or "unknown";
+      sourceRepoRemote = "https://github.com/yusefmosiah/go-choir.git";
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
@@ -196,6 +197,7 @@ EOF
         system = "x86_64-linux";
         specialArgs = {
           goChoirPackages = goChoirPackages;
+          inherit buildCommit sourceRepoRemote;
         };
         modules = [
           microvm.nixosModules.microvm
@@ -208,6 +210,7 @@ EOF
         system = "x86_64-linux";
         specialArgs = {
           goChoirPackages = goChoirPackages;
+          inherit buildCommit sourceRepoRemote;
           # Pass the guest VM runner artifacts to the host config so
           # the deploy pipeline can install them to /var/lib/go-choir/guest/.
           guestRunner = self.nixosConfigurations.go-choir-sandbox-vm.config.microvm.runner.firecracker;

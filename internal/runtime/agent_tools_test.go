@@ -2128,6 +2128,33 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	}
 }
 
+func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testing.T) {
+	cwd := t.TempDir()
+	base := "5af8828e4e5087a2ce835d5d85de5d4acd936e7a"
+	t.Setenv("RUNTIME_WORKER_REPO_REMOTE", "git@github.com:yusefmosiah/go-choir.git")
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", base+"-dirty")
+
+	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), cwd, "http://172.27.0.2:8085", AgentProfileVSuper)
+	if err != nil {
+		t.Fatalf("prepare bootstrap: %v", err)
+	}
+	if !bootstrap.Enabled || bootstrap.Kind != "remote_git_clone" {
+		t.Fatalf("bootstrap disabled or wrong kind: %+v", bootstrap)
+	}
+	if bootstrap.RemoteURL != "https://github.com/yusefmosiah/go-choir.git" || bootstrap.BaseSHA != base {
+		t.Fatalf("bootstrap provenance mismatch: %+v", bootstrap)
+	}
+	for _, want := range []string{
+		"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+		"git checkout " + base,
+		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
+	} {
+		if !strings.Contains(bootstrap.WorkerPrompt, want) {
+			t.Fatalf("worker prompt missing %q in %q", want, bootstrap.WorkerPrompt)
+		}
+	}
+}
+
 func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
