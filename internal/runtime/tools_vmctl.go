@@ -158,7 +158,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. Use delegate_worker_vm to run work inside it. Supported machine classes are worker-small, worker-medium, and worker-large; omit machine_class for worker-small.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call delegate_worker_vm next using next_required_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, and worker-large; omit machine_class for worker-small.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
 			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large"}},
@@ -228,10 +228,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					rt.workerRequestMu.Unlock()
 					return "", err
 				}
-				result := map[string]any{
-					"status": "worker_requested",
-					"handle": handle,
-				}
+				result := workerVMRequestResult(handle)
 				if requestedMachineClass != "" && requestedMachineClass != machineClass {
 					result["machine_class_normalized_from"] = requestedMachineClass
 					result["machine_class"] = handle.MachineClass
@@ -256,10 +253,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 				return "", err
 			}
 
-			result := map[string]any{
-				"status": "worker_requested",
-				"handle": handle,
-			}
+			result := workerVMRequestResult(handle)
 			if requestedMachineClass != "" && requestedMachineClass != machineClass {
 				result["machine_class_normalized_from"] = requestedMachineClass
 				result["machine_class"] = handle.MachineClass
@@ -267,6 +261,25 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			return toolResultJSON(result)
 		},
 	}
+}
+
+func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
+	result := map[string]any{
+		"status":              "worker_requested",
+		"handle":              handle,
+		"delegation_required": true,
+		"next_required_tool":  "delegate_worker_vm",
+		"next_instruction":    "Call delegate_worker_vm next with next_required_args plus the full execution objective; do not stop after leasing the worker VM.",
+	}
+	if handle != nil {
+		result["next_required_args"] = map[string]any{
+			"worker_sandbox_url": handle.SandboxURL,
+			"worker_id":          handle.WorkerID,
+			"vm_id":              handle.VMID,
+			"profile":            AgentProfileVSuper,
+		}
+	}
+	return result
 }
 
 func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID string) string {

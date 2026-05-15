@@ -776,8 +776,11 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 
 	var resp struct {
-		Status string `json:"status"`
-		Handle struct {
+		Status             string            `json:"status"`
+		DelegationRequired bool              `json:"delegation_required"`
+		NextRequiredTool   string            `json:"next_required_tool"`
+		NextRequiredArgs   map[string]string `json:"next_required_args"`
+		Handle             struct {
 			Kind          string `json:"kind"`
 			WorkerID      string `json:"worker_id"`
 			VMID          string `json:"vm_id"`
@@ -796,6 +799,9 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 	if resp.Status != "worker_requested" {
 		t.Fatalf("status = %q, want worker_requested", resp.Status)
+	}
+	if !resp.DelegationRequired || resp.NextRequiredTool != "delegate_worker_vm" {
+		t.Fatalf("delegation guidance missing: %+v", resp)
 	}
 	if resp.Handle.Kind != "worker" {
 		t.Fatalf("kind = %q, want worker", resp.Handle.Kind)
@@ -823,6 +829,9 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 	if resp.Handle.SandboxURL != "http://sandbox.test" {
 		t.Fatalf("sandbox_url = %q, want %q", resp.Handle.SandboxURL, "http://sandbox.test")
+	}
+	if resp.NextRequiredArgs["worker_sandbox_url"] != resp.Handle.SandboxURL || resp.NextRequiredArgs["worker_id"] != resp.Handle.WorkerID || resp.NextRequiredArgs["vm_id"] != resp.Handle.VMID {
+		t.Fatalf("next_required_args do not match handle: args=%+v handle=%+v", resp.NextRequiredArgs, resp.Handle)
 	}
 	if resp.Handle.State != "active" {
 		t.Fatalf("state = %q, want active", resp.Handle.State)
