@@ -285,6 +285,7 @@ func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
 			"worker_id":          handle.WorkerID,
 			"vm_id":              handle.VMID,
 			"profile":            AgentProfileVSuper,
+			"timeout_seconds":    int(defaultDelegateWorkerVMTimeout.Seconds()),
 		}
 	}
 	return result

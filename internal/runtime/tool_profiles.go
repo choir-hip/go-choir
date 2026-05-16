@@ -361,6 +361,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileSuper {
 		b.WriteString("\n\nSuper authority boundary: bounded local scratch work is allowed when it is read-only, ephemeral, or low-risk, including API calls, curl fetches, small data-processing scripts, and temporary inspection artifacts. Delegate work that changes Choir/app/harness behavior or crosses a durable/risky boundary. For repo edits, package installs, builds meant as candidate changes, runtime/app state mutation, Choir-in-Choir development, candidate-world exploration, worker/verifier loops, promotion/export work, or dangerous/privileged actions, first call request_worker_vm. The runtime will complete the required delegate_worker_vm transition to a vsuper run. Do not answer that class of request only with submit_worker_update unless the worker lease or delegation cannot complete, and then report the exact blocker.")
 	}
+	if profile == AgentProfileVSuper {
+		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent and channel messages to coordinate existing children; if the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
+	}
+	if profile == AgentProfileCoSuper {
+		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to export_patchset, submit_worker_update, or a precise blocker instead of running open-ended tool loops.")
+	}
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")
 		b.WriteString("\nUse web_search and fetch_url with the parallelism appropriate to the model, task, novelty, and provider health.")

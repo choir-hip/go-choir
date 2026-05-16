@@ -550,6 +550,13 @@ func (s *Store) Path() string {
 	return s.path
 }
 
+func (s *Store) queryDB() *sql.DB {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
+}
+
 // VTextPath returns the filesystem path backing the embedded vtext workspace.
 func (s *Store) VTextPath() string {
 	return s.vtextPath
@@ -628,11 +635,7 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 
 // GetRun returns the run with the given run ID.
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
-	db := s.db
-	if s.readDB != nil {
-		db = s.readDB
-	}
-	row := db.QueryRowContext(ctx,
+	row := s.queryDB().QueryRowContext(ctx,
 		`SELECT loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE loop_id = ?`,
@@ -728,6 +731,24 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 		limit = 100
 	}
 	return s.listRunsWhere(ctx, "owner_id = ? AND channel_id = ?", []any{ownerID, channelID}, limit)
+}
+
+// CountActiveChildRuns returns the number of non-terminal direct child runs
+// for the given parent. It is used by runtime authority budgets before
+// launching more child goroutines in constrained worker sandboxes.
+func (s *Store) CountActiveChildRuns(ctx context.Context, parentRunID string) (int, error) {
+	var count int
+	row := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		   FROM runs
+		  WHERE parent_loop_id = ?
+		    AND state IN ('pending', 'running', 'blocked')`,
+		parentRunID,
+	)
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("count active child runs: %w", err)
+	}
+	return count, nil
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.

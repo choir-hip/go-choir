@@ -779,10 +779,10 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 
 	var resp struct {
-		Status             string            `json:"status"`
-		DelegationRequired bool              `json:"delegation_required"`
-		NextRequiredTool   string            `json:"next_required_tool"`
-		NextRequiredArgs   map[string]string `json:"next_required_args"`
+		Status             string         `json:"status"`
+		DelegationRequired bool           `json:"delegation_required"`
+		NextRequiredTool   string         `json:"next_required_tool"`
+		NextRequiredArgs   map[string]any `json:"next_required_args"`
 		Handle             struct {
 			Kind          string `json:"kind"`
 			WorkerID      string `json:"worker_id"`
@@ -835,6 +835,9 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 	if resp.NextRequiredArgs["worker_sandbox_url"] != resp.Handle.SandboxURL || resp.NextRequiredArgs["worker_id"] != resp.Handle.WorkerID || resp.NextRequiredArgs["vm_id"] != resp.Handle.VMID {
 		t.Fatalf("next_required_args do not match handle: args=%+v handle=%+v", resp.NextRequiredArgs, resp.Handle)
+	}
+	if timeout, _ := resp.NextRequiredArgs["timeout_seconds"].(float64); int(timeout) != int(defaultDelegateWorkerVMTimeout.Seconds()) {
+		t.Fatalf("timeout_seconds = %v, want %d", resp.NextRequiredArgs["timeout_seconds"], int(defaultDelegateWorkerVMTimeout.Seconds()))
 	}
 	if resp.Handle.State != "active" {
 		t.Fatalf("state = %q, want active", resp.Handle.State)
@@ -1278,6 +1281,106 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 	}
 	if parentAfter.Metadata["doc_id"] != first.DocID || parentAfter.Metadata["initial_loop_id"] != first.LoopID {
 		t.Fatalf("parent route metadata = %+v, want doc %q loop %q", parentAfter.Metadata, first.DocID, first.LoopID)
+	}
+}
+
+func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-budget-parent",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate worker and verifier co-super agents.",
+		ChannelID:    "worker-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create vsuper parent: %v", err)
+	}
+
+	children := []types.RunRecord{
+		{
+			RunID:        "vsuper-budget-child-worker",
+			AgentID:      "agent-worker-child",
+			ChannelID:    parent.ChannelID,
+			ParentRunID:  parent.RunID,
+			AgentProfile: AgentProfileCoSuper,
+			AgentRole:    AgentProfileCoSuper,
+			OwnerID:      parent.OwnerID,
+			SandboxID:    parent.SandboxID,
+			State:        types.RunRunning,
+			Prompt:       "Implement candidate change.",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{runMetadataAgentProfile: AgentProfileCoSuper, runMetadataAgentRole: AgentProfileCoSuper},
+		},
+		{
+			RunID:        "vsuper-budget-child-verifier",
+			AgentID:      "agent-verifier-child",
+			ChannelID:    parent.ChannelID,
+			ParentRunID:  parent.RunID,
+			AgentProfile: AgentProfileCoSuper,
+			AgentRole:    AgentProfileCoSuper,
+			OwnerID:      parent.OwnerID,
+			SandboxID:    parent.SandboxID,
+			State:        types.RunRunning,
+			Prompt:       "Verify candidate change.",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+			Metadata:     map[string]any{runMetadataAgentProfile: AgentProfileCoSuper, runMetadataAgentRole: AgentProfileCoSuper},
+		},
+	}
+	for _, child := range children {
+		if err := s.CreateRun(ctx, child); err != nil {
+			t.Fatalf("create active child %s: %v", child.RunID, err)
+		}
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	_, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"start duplicate verifier",
+		"role":"co-super"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "vsuper active child-run limit reached") {
+		t.Fatalf("spawn error = %v, want active child budget refusal", err)
+	}
+
+	finishedAt := now.Add(time.Second)
+	children[1].State = types.RunCompleted
+	children[1].FinishedAt = &finishedAt
+	children[1].UpdatedAt = finishedAt
+	if err := s.UpdateRun(ctx, children[1]); err != nil {
+		t.Fatalf("complete verifier child: %v", err)
+	}
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"start replacement verifier",
+		"role":"co-super"
+	}`))
+	if err != nil {
+		t.Fatalf("spawn replacement co-super: %v", err)
+	}
+	var resp struct {
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode replacement spawn: %v", err)
+	}
+	if resp.Profile != AgentProfileCoSuper {
+		t.Fatalf("replacement profile = %q, want %q", resp.Profile, AgentProfileCoSuper)
 	}
 }
 

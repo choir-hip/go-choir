@@ -42,6 +42,7 @@ type Runtime struct {
 	vtextWakeAfter   func(time.Duration, func()) vtextWakeTimer
 	vtextEditMu      sync.Mutex
 	superRequestMu   sync.Mutex
+	childSpawnMu     sync.Mutex
 	workerRequestMu  sync.Mutex
 	workerRequests   map[string]string
 	conductorRouteMu sync.Mutex
@@ -466,6 +467,14 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		return nil, fmt.Errorf("lookup parent run: %w", err)
 	}
 
+	if rt.childSpawnBudgetApplies(&parentRec) {
+		rt.childSpawnMu.Lock()
+		defer rt.childSpawnMu.Unlock()
+		if err := rt.enforceChildSpawnBudget(ctx, &parentRec); err != nil {
+			return nil, err
+		}
+	}
+
 	now := time.Now().UTC()
 
 	// Build metadata from constraints and parent reference.
@@ -545,6 +554,29 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	}
 
 	return rec, nil
+}
+
+const maxVSuperActiveChildRuns = 2
+
+func (rt *Runtime) childSpawnBudgetApplies(parentRec *types.RunRecord) bool {
+	if parentRec == nil {
+		return false
+	}
+	return canonicalAgentProfile(agentProfileForRun(parentRec)) == AgentProfileVSuper
+}
+
+func (rt *Runtime) enforceChildSpawnBudget(ctx context.Context, parentRec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || parentRec == nil {
+		return nil
+	}
+	active, err := rt.store.CountActiveChildRuns(ctx, parentRec.RunID)
+	if err != nil {
+		return fmt.Errorf("check active child runs for vsuper budget: %w", err)
+	}
+	if active >= maxVSuperActiveChildRuns {
+		return fmt.Errorf("vsuper active child-run limit reached (%d/%d); coordinate existing worker/verifier agents over channels, cancel or wait for a child run, or submit a precise blocker instead of spawning more", active, maxVSuperActiveChildRuns)
+	}
+	return nil
 }
 
 func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
