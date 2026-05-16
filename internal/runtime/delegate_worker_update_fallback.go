@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -135,11 +137,14 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
 	}
+	provenance := delegateWorkerStructuredProvenance(output)
+	findings = append(findings, provenance.Findings...)
 
 	evidenceIDs := []string{"event:" + ev.EventID, "run:" + rec.RunID}
 	if workerLoopID != "" {
 		evidenceIDs = append(evidenceIDs, "worker_loop:"+workerLoopID)
 	}
+	evidenceIDs = append(evidenceIDs, provenance.EvidenceIDs...)
 
 	refs := []string{}
 	for _, ref := range []string{
@@ -153,7 +158,8 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 			refs = append(refs, ref)
 		}
 	}
-	artifacts := exportArtifactRefs(output)
+	refs = append(refs, provenance.Refs...)
+	artifacts := append(exportArtifactRefs(output), provenance.Artifacts...)
 	notes := []string{
 		"auto_synthesized_from=delegate_worker_vm_after_super_failure",
 		"provider_error=" + strings.TrimSpace(runErr.Error()),
@@ -164,6 +170,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	if eventCount > 0 {
 		notes = append(notes, fmt.Sprintf("worker_event_count=%d", eventCount))
 	}
+	notes = append(notes, provenance.Notes...)
 
 	return types.WorkerUpdateRecord{
 		UpdateID:      "delegate-worker-vm-" + sanitizeExportPart(rec.RunID),
@@ -173,14 +180,14 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
-		Findings:      trimNonEmpty(findings),
-		EvidenceIDs:   trimNonEmpty(evidenceIDs),
-		Artifacts:     trimNonEmpty(artifacts),
-		Refs:          trimNonEmpty(refs),
+		Findings:      trimDedupeNonEmpty(findings),
+		EvidenceIDs:   trimDedupeNonEmpty(evidenceIDs),
+		Artifacts:     trimDedupeNonEmpty(artifacts),
+		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
 			"Continue with a termination/export probe that makes vsuper call export_patchset or submit_worker_update before delegate timeout.",
 		},
-		Notes:     trimNonEmpty(notes),
+		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
 	}
 }
@@ -208,11 +215,14 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
 	}
+	provenance := delegateWorkerStructuredProvenance(output)
+	findings = append(findings, provenance.Findings...)
 
 	evidenceIDs := []string{"run:" + rec.RunID}
 	if workerLoopID != "" {
 		evidenceIDs = append(evidenceIDs, "worker_loop:"+workerLoopID)
 	}
+	evidenceIDs = append(evidenceIDs, provenance.EvidenceIDs...)
 	refs := []string{}
 	for _, ref := range []string{
 		"trajectory:" + metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
@@ -225,6 +235,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 			refs = append(refs, ref)
 		}
 	}
+	refs = append(refs, provenance.Refs...)
 	notes := []string{
 		"auto_synthesized_from=delegate_worker_vm_checkpoint",
 		"checkpoint_source=" + firstNonEmpty(source, "delegate_worker_vm_result"),
@@ -235,6 +246,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	if eventCount > 0 {
 		notes = append(notes, fmt.Sprintf("worker_event_count=%d", eventCount))
 	}
+	notes = append(notes, provenance.Notes...)
 	updateKey := firstNonEmpty(workerLoopID, status, "result")
 	return types.WorkerUpdateRecord{
 		UpdateID:      "delegate-worker-vm-checkpoint-" + sanitizeExportPart(rec.RunID) + "-" + sanitizeExportPart(updateKey),
@@ -244,14 +256,14 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
-		Findings:      trimNonEmpty(findings),
-		EvidenceIDs:   trimNonEmpty(evidenceIDs),
-		Artifacts:     trimNonEmpty(exportArtifactRefs(output)),
-		Refs:          trimNonEmpty(refs),
+		Findings:      trimDedupeNonEmpty(findings),
+		EvidenceIDs:   trimDedupeNonEmpty(evidenceIDs),
+		Artifacts:     trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...)),
+		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
 			"Continue with a termination/export probe that prevents candidate checkout races and requires export_patchset or submit_worker_update before delegate timeout.",
 		},
-		Notes:     trimNonEmpty(notes),
+		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
 	}
 }
@@ -308,8 +320,18 @@ func decodeToolResultPayload(ev types.EventRecord) (toolResultPayload, bool) {
 }
 
 func stringMapValue(m map[string]any, key string) string {
-	value, _ := m[key].(string)
-	return strings.TrimSpace(value)
+	value := m[key]
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	}
+	rv := reflect.ValueOf(value)
+	if rv.IsValid() && rv.Kind() == reflect.String {
+		return strings.TrimSpace(rv.String())
+	}
+	return ""
 }
 
 func intMapValue(m map[string]any, key string) int {
@@ -359,4 +381,297 @@ func exportArtifactRefs(output map[string]any) []string {
 		}
 	}
 	return refs
+}
+
+type delegateWorkerProvenance struct {
+	Findings    []string
+	EvidenceIDs []string
+	Refs        []string
+	Artifacts   []string
+	Notes       []string
+}
+
+func delegateWorkerStructuredProvenance(output map[string]any) delegateWorkerProvenance {
+	var provenance delegateWorkerProvenance
+	for _, childRunID := range stringSliceMapValue(output, "worker_child_run_ids") {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "worker_child_loop:"+childRunID)
+		provenance.Refs = append(provenance.Refs, "worker_child_loop:"+childRunID)
+	}
+	if counts := stringIntMapValue(output, "worker_child_event_counts"); len(counts) > 0 {
+		for _, runID := range sortedMapKeys(counts) {
+			provenance.Notes = append(provenance.Notes, fmt.Sprintf("worker_child_event_count:%s=%d", runID, counts[runID]))
+		}
+	}
+	if rootCount := intMapValue(output, "worker_root_event_count"); rootCount > 0 {
+		provenance.Notes = append(provenance.Notes, fmt.Sprintf("worker_root_event_count=%d", rootCount))
+	}
+	if profiles := stringSliceMapValue(output, "worker_spawned_profiles"); len(profiles) > 0 {
+		provenance.Findings = append(provenance.Findings, "worker spawned child profile(s): "+strings.Join(profiles, ", "))
+	}
+
+	for _, export := range mapSliceValue(output, "export_patchsets") {
+		provenance = appendExportProvenance(provenance, export)
+	}
+	for _, candidate := range mapSliceValue(output, "promotion_queue") {
+		provenance = appendPromotionProvenance(provenance, candidate)
+	}
+	for _, item := range mapSliceValue(output, "worker_event_summary") {
+		provenance = appendWorkerEventProvenance(provenance, item)
+	}
+	return provenance
+}
+
+func appendExportProvenance(provenance delegateWorkerProvenance, export map[string]any) delegateWorkerProvenance {
+	manifestPath := stringMapValue(export, "manifest_path")
+	patchsetPath := stringMapValue(export, "patchset_path")
+	baseSHA := stringMapValue(export, "base_sha")
+	workerHead := firstNonEmpty(stringMapValue(export, "worker_head_sha"), stringMapValue(export, "worker_head"))
+	patchSHA := stringMapValue(export, "patchset_sha256")
+	loopID := stringMapValue(export, "loop_id")
+	if manifestPath != "" {
+		provenance.Refs = append(provenance.Refs, "export_manifest:"+manifestPath)
+		provenance.Artifacts = append(provenance.Artifacts, manifestPath)
+	}
+	if patchsetPath != "" {
+		provenance.Refs = append(provenance.Refs, "export_patchset:"+patchsetPath)
+		provenance.Artifacts = append(provenance.Artifacts, patchsetPath)
+	}
+	if baseSHA != "" {
+		provenance.Refs = append(provenance.Refs, "export_base_sha:"+baseSHA)
+	}
+	if workerHead != "" {
+		provenance.Refs = append(provenance.Refs, "worker_head:"+workerHead)
+	}
+	if patchSHA != "" {
+		provenance.Refs = append(provenance.Refs, "patchset_sha256:"+patchSHA)
+	}
+	if loopID != "" {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "export_loop:"+loopID)
+	}
+	details := []string{}
+	for _, detail := range []string{
+		"manifest=" + manifestPath,
+		"patchset=" + patchsetPath,
+		"base_sha=" + baseSHA,
+		"worker_head=" + workerHead,
+		"patchset_sha256=" + patchSHA,
+	} {
+		if !strings.HasSuffix(detail, "=") {
+			details = append(details, detail)
+		}
+	}
+	if len(details) > 0 {
+		provenance.Findings = append(provenance.Findings, "worker export evidence: "+strings.Join(details, "; "))
+	}
+	return provenance
+}
+
+func appendPromotionProvenance(provenance delegateWorkerProvenance, candidate map[string]any) delegateWorkerProvenance {
+	candidateID := firstNonEmpty(stringMapValue(candidate, "candidate_id"), stringMapValue(candidate, "candidateID"))
+	if candidateID == "" {
+		return provenance
+	}
+	provenance.EvidenceIDs = append(provenance.EvidenceIDs, "promotion_candidate:"+candidateID)
+	provenance.Refs = append(provenance.Refs, "promotion_candidate:"+candidateID)
+	for _, key := range []string{"manifest_path", "patchset_path"} {
+		if value := stringMapValue(candidate, key); value != "" {
+			provenance.Artifacts = append(provenance.Artifacts, value)
+		}
+	}
+	details := []string{"id=" + candidateID}
+	for _, key := range []string{"status", "integration_branch", "destination_branch", "base_sha", "worker_head", "worker_head_sha", "patchset_sha256"} {
+		if value := stringMapValue(candidate, key); value != "" {
+			details = append(details, key+"="+value)
+		}
+	}
+	provenance.Findings = append(provenance.Findings, "promotion candidate queued: "+strings.Join(details, "; "))
+	return provenance
+}
+
+func appendWorkerEventProvenance(provenance delegateWorkerProvenance, item map[string]any) delegateWorkerProvenance {
+	kind := stringMapValue(item, "kind")
+	tool := stringMapValue(item, "tool")
+	role := stringMapValue(item, "role")
+	fromAgentID := stringMapValue(item, "from_agent_id")
+	toAgentID := stringMapValue(item, "to_agent_id")
+	if kind == "tool.result" && tool == "spawn_agent" {
+		if output := parseJSONMapString(stringMapValue(item, "output_excerpt")); output != nil {
+			provenance = appendSpawnAgentProvenance(provenance, output)
+		}
+	}
+	if kind == "tool.result" && tool == "export_patchset" {
+		if output := parseJSONMapString(stringMapValue(item, "output_excerpt")); output != nil {
+			provenance = appendExportProvenance(provenance, output)
+		}
+	}
+	if fromAgentID != "" || toAgentID != "" {
+		ref := "worker_channel_message"
+		if fromAgentID != "" || toAgentID != "" {
+			ref += ":" + fromAgentID + "->" + toAgentID
+		}
+		provenance.Refs = append(provenance.Refs, ref)
+		content := compactEvidenceText(stringMapValue(item, "content_excerpt"), 260)
+		parts := []string{}
+		for _, part := range []string{
+			"role=" + role,
+			"from=" + fromAgentID,
+			"to=" + toAgentID,
+			"content=" + content,
+		} {
+			if !strings.HasSuffix(part, "=") {
+				parts = append(parts, part)
+			}
+		}
+		if len(parts) > 0 {
+			provenance.Notes = append(provenance.Notes, "worker_channel_message:"+strings.Join(parts, "; "))
+		}
+	}
+	if isError, ok := item["is_error"].(bool); ok && isError {
+		provenance.Notes = append(provenance.Notes, "worker_tool_error:"+firstNonEmpty(tool, kind))
+	}
+	return provenance
+}
+
+func appendSpawnAgentProvenance(provenance delegateWorkerProvenance, output map[string]any) delegateWorkerProvenance {
+	agentID := stringMapValue(output, "agent_id")
+	loopID := firstNonEmpty(stringMapValue(output, "loop_id"), stringMapValue(output, "run_id"))
+	channelID := stringMapValue(output, "channel_id")
+	profile := firstNonEmpty(stringMapValue(output, "profile"), stringMapValue(output, "role"))
+	state := stringMapValue(output, "state")
+	if agentID != "" {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "worker_child_agent:"+agentID)
+		provenance.Refs = append(provenance.Refs, "worker_child_agent:"+agentID)
+	}
+	if loopID != "" {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "worker_child_loop:"+loopID)
+		provenance.Refs = append(provenance.Refs, "worker_child_loop:"+loopID)
+	}
+	if channelID != "" {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "worker_channel:"+channelID)
+		provenance.Refs = append(provenance.Refs, "worker_channel:"+channelID)
+	}
+	details := []string{}
+	for _, detail := range []string{
+		"profile=" + profile,
+		"agent_id=" + agentID,
+		"loop_id=" + loopID,
+		"channel_id=" + channelID,
+		"state=" + state,
+	} {
+		if !strings.HasSuffix(detail, "=") {
+			details = append(details, detail)
+		}
+	}
+	if len(details) > 0 {
+		provenance.Findings = append(provenance.Findings, "worker spawned child agent: "+strings.Join(details, "; "))
+	}
+	return provenance
+}
+
+func stringSliceMapValue(m map[string]any, key string) []string {
+	switch raw := m[key].(type) {
+	case []string:
+		return trimDedupeNonEmpty(raw)
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			switch typed := item.(type) {
+			case string:
+				out = append(out, typed)
+			case fmt.Stringer:
+				out = append(out, typed.String())
+			default:
+				rv := reflect.ValueOf(item)
+				if rv.IsValid() && rv.Kind() == reflect.String {
+					out = append(out, rv.String())
+				}
+			}
+		}
+		return trimDedupeNonEmpty(out)
+	default:
+		return nil
+	}
+}
+
+func stringIntMapValue(m map[string]any, key string) map[string]int {
+	out := map[string]int{}
+	switch raw := m[key].(type) {
+	case map[string]int:
+		for k, v := range raw {
+			if strings.TrimSpace(k) != "" {
+				out[strings.TrimSpace(k)] = v
+			}
+		}
+	case map[string]any:
+		for k, v := range raw {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+			out[strings.TrimSpace(k)] = anyToInt(v)
+		}
+	}
+	for key, value := range out {
+		if value == 0 {
+			delete(out, key)
+		}
+	}
+	return out
+}
+
+func anyToInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		parsed, _ := typed.Int64()
+		return int(parsed)
+	default:
+		return 0
+	}
+}
+
+func sortedMapKeys(m map[string]int) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func parseJSONMapString(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var mapped map[string]any
+	if err := json.Unmarshal([]byte(raw), &mapped); err != nil {
+		return nil
+	}
+	return mapped
+}
+
+func compactEvidenceText(raw string, limit int) string {
+	raw = strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+	if limit <= 0 || len(raw) <= limit {
+		return raw
+	}
+	return strings.TrimSpace(raw[:limit]) + "..."
+}
+
+func trimDedupeNonEmpty(items []string) []string {
+	out := make([]string, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range trimNonEmpty(items) {
+		if seen[item] {
+			continue
+		}
+		seen[item] = true
+		out = append(out, item)
+	}
+	return out
 }

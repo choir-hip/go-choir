@@ -140,6 +140,44 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	parent, child := seedTraceTrajectory(t, rt)
+	if _, err := rt.store.UpsertRunAcceptance(context.Background(), types.RunAcceptanceRecord{
+		AcceptanceID:          "acceptance-trace-1",
+		TargetMissionID:       "mission-trace-test",
+		SourcePromptObjective: "prove trace acceptances are visible",
+		OwnerID:               "user-alice",
+		DesktopID:             types.PrimaryDesktopID,
+		TrajectoryID:          parent.RunID,
+		RunID:                 child.RunID,
+		AuthorityProfile:      AgentProfileSuper,
+		DeploymentCommit:      "commit-trace-test",
+		AcceptanceLevel:       types.RunAcceptanceExportLevel,
+		State:                 types.RunAcceptanceAccepted,
+		Checkpoints: []types.RunAcceptanceCheckpoint{{
+			Kind:           "worker_delegated",
+			State:          "passed",
+			At:             time.Now().UTC(),
+			EvidenceRefIDs: []string{"event:trace-test"},
+			Details:        map[string]any{"worker_loop_id": child.RunID},
+		}},
+		EvidenceRefs: []types.RunAcceptanceEvidenceRef{{
+			RefID:   "event:trace-test",
+			Kind:    "tool.result",
+			Summary: "worker run exported concrete patchset evidence",
+			RunID:   child.RunID,
+			EventID: "event-trace-test",
+			Details: map[string]any{
+				"worker_child_run_ids": []string{"implementation-trace-test", "verifier-trace-test"},
+				"export_count":         1,
+			},
+		}},
+		RollbackRefs: []types.RunAcceptanceRollbackRef{{
+			Kind:    "git_base",
+			Ref:     "base-trace-test",
+			Summary: "discard candidate",
+		}},
+	}); err != nil {
+		t.Fatalf("seed run acceptance: %v", err)
+	}
 
 	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID, "", "user-alice")
 	w := httptest.NewRecorder()
@@ -161,6 +199,12 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 	if len(resp.Edges) == 0 {
 		t.Fatal("expected at least one delegation edge")
+	}
+	if len(resp.Acceptances) != 1 || resp.Acceptances[0].AcceptanceID != "acceptance-trace-1" {
+		t.Fatalf("acceptances: got %+v, want seeded acceptance", resp.Acceptances)
+	}
+	if len(resp.Acceptances[0].EvidenceRefs) != 1 || resp.Acceptances[0].EvidenceRefs[0].Details["worker_child_run_ids"] == nil {
+		t.Fatalf("acceptance evidence missing structured details: %+v", resp.Acceptances[0].EvidenceRefs)
 	}
 	foundEdge := false
 	for _, edge := range resp.Edges {

@@ -216,18 +216,10 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 				builder.record.BaseSHA = payloadString(export, "base_sha")
 			}
 		}
-		ref := builder.addEventEvidence(item.event, "worker run exported concrete patchset evidence", map[string]any{
-			"tool":           "delegate_worker_vm",
-			"worker_vm_id":   payloadString(item.output, "worker_vm_id"),
-			"worker_loop_id": payloadString(item.output, "loop_id"),
-			"export_count":   len(exports),
-		})
+		delegateDetails := acceptanceDelegateWorkerDetails(item.output, exports)
+		ref := builder.addEventEvidence(item.event, "worker run exported concrete patchset evidence", delegateDetails)
 		exportRefs = append(exportRefs, ref)
-		builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
-			"worker_vm_id":   payloadString(item.output, "worker_vm_id"),
-			"worker_loop_id": payloadString(item.output, "loop_id"),
-			"export_count":   len(exports),
-		})
+		builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, delegateDetails)
 	}
 	if exportCount == 0 {
 		delegateErrors := collectAcceptanceToolErrors(events, "delegate_worker_vm")
@@ -244,15 +236,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		}
 		if len(nonExportDelegateResults) > 0 {
 			for _, item := range nonExportDelegateResults {
-				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without export evidence", map[string]any{
-					"tool":                  "delegate_worker_vm",
-					"status":                payloadString(item.output, "status"),
-					"state":                 payloadString(item.output, "state"),
-					"worker_vm_id":          payloadString(item.output, "worker_vm_id"),
-					"worker_loop_id":        payloadString(item.output, "loop_id"),
-					"worker_event_summary":  item.output["worker_event_summary"],
-					"worker_channel_events": item.output["worker_channel_message_count"],
-				})
+				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without export evidence", acceptanceDelegateWorkerDetails(item.output, nil))
 				refs = append(refs, ref)
 				rememberLatest(item.event)
 			}
@@ -605,18 +589,167 @@ func traceToolErrorText(payload map[string]any) string {
 }
 
 func acceptanceOutputSlice(output map[string]any, key string) []map[string]any {
-	raw, ok := output[key].([]any)
-	if !ok {
+	switch raw := output[key].(type) {
+	case []map[string]any:
+		items := make([]map[string]any, 0, len(raw))
+		for _, item := range raw {
+			if item != nil {
+				items = append(items, item)
+			}
+		}
+		return items
+	case []any:
+		items := make([]map[string]any, 0, len(raw))
+		for _, item := range raw {
+			mapped, _ := item.(map[string]any)
+			if mapped != nil {
+				items = append(items, mapped)
+			}
+		}
+		return items
+	default:
 		return nil
 	}
-	items := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		mapped, _ := item.(map[string]any)
-		if mapped != nil {
-			items = append(items, mapped)
+}
+
+func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string]any) map[string]any {
+	if exports == nil {
+		exports = acceptanceOutputSlice(output, "export_patchsets")
+	}
+	details := map[string]any{
+		"tool":         "delegate_worker_vm",
+		"export_count": len(exports),
+	}
+	for _, key := range []string{
+		"status",
+		"state",
+		"worker_id",
+		"worker_vm_id",
+		"worker_sandbox_url",
+		"loop_id",
+		"agent_id",
+		"profile",
+		"terminal_error",
+		"error",
+	} {
+		if value := payloadString(output, key); value != "" {
+			details[key] = value
 		}
 	}
-	return items
+	if loopID := payloadString(output, "loop_id"); loopID != "" {
+		details["worker_loop_id"] = loopID
+	}
+	for _, key := range []string{"event_count", "worker_root_event_count", "worker_channel_message_count"} {
+		if value := output[key]; value != nil {
+			details[key] = value
+		}
+	}
+	if childRunIDs := acceptanceStringSlice(output, "worker_child_run_ids"); len(childRunIDs) > 0 {
+		details["worker_child_run_ids"] = childRunIDs
+	}
+	if counts := acceptanceStringAnyMap(output, "worker_child_event_counts"); len(counts) > 0 {
+		details["worker_child_event_counts"] = counts
+	}
+	if errors := acceptanceStringAnyMap(output, "worker_child_event_errors"); len(errors) > 0 {
+		details["worker_child_event_errors"] = errors
+	}
+	if profiles := acceptanceStringSlice(output, "worker_spawned_profiles"); len(profiles) > 0 {
+		details["worker_spawned_profiles"] = profiles
+	}
+	if summary := acceptanceOutputSlice(output, "worker_event_summary"); len(summary) > 0 {
+		details["worker_event_summary"] = summary
+	}
+	if len(exports) > 0 {
+		details["export_patchsets"] = acceptanceExportSummaries(exports)
+	}
+	if promotions := acceptanceOutputSlice(output, "promotion_queue"); len(promotions) > 0 {
+		details["promotion_queue"] = acceptancePromotionSummaries(promotions)
+	}
+	if checkpoint := output["worker_update_checkpoint"]; checkpoint != nil {
+		details["worker_update_checkpoint"] = checkpoint
+	}
+	return details
+}
+
+func acceptanceExportSummaries(exports []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(exports))
+	for _, export := range exports {
+		item := map[string]any{}
+		for _, key := range []string{"status", "loop_id", "manifest_path", "patchset_path", "base_sha", "worker_head", "worker_head_sha", "patchset_sha256"} {
+			if value := payloadString(export, key); value != "" {
+				item[key] = value
+			}
+		}
+		if len(item) > 0 {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func acceptancePromotionSummaries(candidates []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(candidates))
+	for _, candidate := range candidates {
+		item := map[string]any{}
+		for _, key := range []string{"candidate_id", "status", "source_loop_id", "candidate_loop_id", "trace_id", "vm_id", "base_sha", "worker_head", "worker_head_sha", "manifest_path", "patchset_path", "integration_branch", "destination_branch", "objective_fingerprint", "patchset_sha256"} {
+			if value := payloadString(candidate, key); value != "" {
+				item[key] = value
+			}
+		}
+		if len(item) > 0 {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func acceptanceStringSlice(output map[string]any, key string) []string {
+	switch raw := output[key].(type) {
+	case []string:
+		return compactStringRefs(raw)
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			text, _ := item.(string)
+			if text != "" {
+				out = append(out, text)
+			}
+		}
+		return compactStringRefs(out)
+	default:
+		return nil
+	}
+}
+
+func acceptanceStringAnyMap(output map[string]any, key string) map[string]any {
+	switch raw := output[key].(type) {
+	case map[string]any:
+		out := map[string]any{}
+		for k, v := range raw {
+			if strings.TrimSpace(k) != "" {
+				out[strings.TrimSpace(k)] = v
+			}
+		}
+		return out
+	case map[string]int:
+		out := map[string]any{}
+		for k, v := range raw {
+			if strings.TrimSpace(k) != "" {
+				out[strings.TrimSpace(k)] = v
+			}
+		}
+		return out
+	case map[string]string:
+		out := map[string]any{}
+		for k, v := range raw {
+			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
+				out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func (b *acceptanceBuilder) addRunEvidence(run types.RunRecord, summary string) string {

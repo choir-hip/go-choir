@@ -29,6 +29,7 @@
   let continuationBusy = false;
   let continuationError = '';
   let selectedContinuation = null;
+  let selectedAcceptanceId = '';
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -62,9 +63,9 @@
   }
 
   function stateTone(state) {
-    if (state === 'completed') return 'success';
-    if (state === 'running' || state === 'pending' || state === 'blocked') return 'active';
-    if (state === 'failed' || state === 'cancelled') return 'error';
+    if (state === 'completed' || state === 'passed' || state === 'accepted') return 'success';
+    if (state === 'running' || state === 'pending' || state === 'blocked' || state === 'synthesized') return 'active';
+    if (state === 'failed' || state === 'cancelled' || state === 'rejected') return 'error';
     return 'neutral';
   }
 
@@ -238,6 +239,10 @@
       const response = await getTrajectorySnapshot(trajectoryId);
       snapshot = response;
       lastStreamSeq = response?.trajectory?.latest_stream_seq || 0;
+      const nextAcceptances = response?.acceptances || [];
+      if (!nextAcceptances.some((item) => item.acceptance_id === selectedAcceptanceId)) {
+        selectedAcceptanceId = nextAcceptances[0]?.acceptance_id || '';
+      }
 
       const selectedStillExists = response.moments?.some((moment) => moment.moment_id === selectedMomentId);
       if (!selectedStillExists) {
@@ -326,6 +331,7 @@
     selectedMomentId = '';
     momentDetails = {};
     selectedContinuation = null;
+    selectedAcceptanceId = '';
     continuationError = '';
     await loadTrajectorySnapshot(trajectoryId);
   }
@@ -382,6 +388,9 @@
   $: graphEdges = snapshot?.edges || [];
   $: moments = snapshot?.moments || [];
   $: searchSummary = snapshot?.search || { providers: [] };
+  $: acceptances = snapshot?.acceptances || [];
+  $: activeAcceptance =
+    acceptances.find((item) => item.acceptance_id === selectedAcceptanceId) || acceptances[0] || null;
   $: graphLayout = buildGraphLayout(graphAgents, graphEdges);
   $: activeMoment = moments.find((moment) => moment.moment_id === selectedMomentId) || moments[moments.length - 1] || null;
   $: activeDetail = selectedMomentId ? momentDetails[selectedMomentId] : null;
@@ -505,6 +514,146 @@
           </div>
         {/each}
       </div>
+
+      {#if acceptances.length > 0}
+        <section class="panel acceptance-panel" data-trace-run-acceptance>
+          <div class="panel-header">
+            <div>
+              <h4>Run acceptance</h4>
+              <p>{activeAcceptance?.target_mission_id || activeAcceptance?.acceptance_id}</p>
+            </div>
+            {#if activeAcceptance}
+              <span class={`status-pill ${stateTone(activeAcceptance.state)}`}>{activeAcceptance.acceptance_level}</span>
+            {/if}
+          </div>
+
+          {#if acceptances.length > 1}
+            <div class="acceptance-tabs" role="tablist" aria-label="Run acceptances">
+              {#each acceptances as acceptance (acceptance.acceptance_id)}
+                <button
+                  class:selected={activeAcceptance?.acceptance_id === acceptance.acceptance_id}
+                  class="acceptance-tab"
+                  type="button"
+                  on:click={() => (selectedAcceptanceId = acceptance.acceptance_id)}
+                >
+                  <span>{acceptance.acceptance_level}</span>
+                  <small>{excerpt(acceptance.acceptance_id, 18)}</small>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if activeAcceptance}
+            <div class="acceptance-grid">
+              <div class="acceptance-card">
+                <span class="detail-meta">State</span>
+                <strong>{activeAcceptance.state}</strong>
+                <span>{activeAcceptance.authority_profile || 'authority unknown'}</span>
+              </div>
+              <div class="acceptance-card">
+                <span class="detail-meta">Build</span>
+                <strong>{excerpt(activeAcceptance.health_commit || activeAcceptance.deployment_commit || 'unknown', 18)}</strong>
+                <span>{activeAcceptance.staging_url || 'staging'}</span>
+              </div>
+              <div class="acceptance-card">
+                <span class="detail-meta">Run</span>
+                <strong>{excerpt(activeAcceptance.loop_id || 'loop unknown', 18)}</strong>
+                <span>{excerpt(activeAcceptance.trajectory_id || 'trajectory unknown', 24)}</span>
+              </div>
+              <div class="acceptance-card">
+                <span class="detail-meta">Evidence</span>
+                <strong>{activeAcceptance.evidence_refs?.length || 0}</strong>
+                <span>{activeAcceptance.rollback_refs?.length || 0} rollback refs</span>
+              </div>
+            </div>
+
+            <div class="acceptance-detail-grid">
+              <section class="acceptance-block">
+                <h5>Checkpoints</h5>
+                <div class="acceptance-list">
+                  {#each activeAcceptance.checkpoints || [] as checkpoint}
+                    <div class="acceptance-row" data-trace-acceptance-checkpoint>
+                      <div class="detail-card-top">
+                        <strong>{checkpoint.kind}</strong>
+                        <span class={`status-pill ${stateTone(checkpoint.state)}`}>{checkpoint.state}</span>
+                      </div>
+                      {#if checkpoint.evidence_ref_ids?.length}
+                        <div class="reference-row">
+                          {#each checkpoint.evidence_ref_ids as refId}
+                            <span class="ref-chip">{excerpt(refId, 28)}</span>
+                          {/each}
+                        </div>
+                      {/if}
+                      {#if checkpoint.details}
+                        <pre class="payload-block compact">{formatPayload(checkpoint.details)}</pre>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </section>
+
+              <section class="acceptance-block">
+                <h5>Evidence refs</h5>
+                <div class="acceptance-list">
+                  {#each activeAcceptance.evidence_refs || [] as ref (ref.ref_id)}
+                    <details class="evidence-detail" data-trace-acceptance-evidence>
+                      <summary>
+                        <span>{excerpt(ref.ref_id, 30)}</span>
+                        <small>{ref.kind || ref.summary}</small>
+                      </summary>
+                      <div class="detail-meta">{ref.summary}</div>
+                      {#if ref.url}
+                        <div class="detail-meta">{ref.url}</div>
+                      {/if}
+                      {#if ref.details}
+                        <pre class="payload-block compact">{formatPayload(ref.details)}</pre>
+                      {/if}
+                    </details>
+                  {/each}
+                </div>
+              </section>
+            </div>
+
+            {#if activeAcceptance.rollback_refs?.length || activeAcceptance.verifier_contracts?.length}
+              <div class="acceptance-detail-grid">
+                {#if activeAcceptance.verifier_contracts?.length}
+                  <section class="acceptance-block">
+                    <h5>Verifier contracts</h5>
+                    <div class="acceptance-list">
+                      {#each activeAcceptance.verifier_contracts as contract (contract.name)}
+                        <div class="acceptance-row">
+                          <div class="detail-card-top">
+                            <strong>{contract.name}</strong>
+                            <span class={`status-pill ${stateTone(contract.state)}`}>{contract.state}</span>
+                          </div>
+                          <div class="detail-meta">{contract.purpose}</div>
+                        </div>
+                      {/each}
+                    </div>
+                  </section>
+                {/if}
+
+                {#if activeAcceptance.rollback_refs?.length}
+                  <section class="acceptance-block">
+                    <h5>Rollback refs</h5>
+                    <div class="acceptance-list">
+                      {#each activeAcceptance.rollback_refs as rollback (`${rollback.kind}-${rollback.ref}`)}
+                        <div class="acceptance-row">
+                          <div class="detail-card-top">
+                            <strong>{rollback.kind}</strong>
+                            <span>{excerpt(rollback.ref, 24)}</span>
+                          </div>
+                          <div class="detail-meta">{rollback.summary}</div>
+                        </div>
+                      {/each}
+                    </div>
+                  </section>
+                {/if}
+              </div>
+            {/if}
+          {/if}
+        </section>
+      {/if}
 
       {#if geometry.total > 0}
         <section class="panel geometry-panel" data-trace-run-geometry>
@@ -1015,6 +1164,132 @@
     gap: 0.8rem;
   }
 
+  .acceptance-panel {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .acceptance-tabs,
+  .acceptance-grid,
+  .acceptance-detail-grid,
+  .acceptance-list {
+    min-width: 0;
+  }
+
+  .acceptance-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .acceptance-tab {
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(2, 6, 23, 0.42);
+    color: #cbd5e1;
+    cursor: pointer;
+    display: grid;
+    gap: 0.18rem;
+    text-align: left;
+  }
+
+  .acceptance-tab.selected {
+    border-color: rgba(96, 165, 250, 0.42);
+    background: rgba(15, 23, 42, 0.74);
+  }
+
+  .acceptance-tab small {
+    color: #94a3b8;
+    font-size: 0.72rem;
+  }
+
+  .acceptance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.65rem;
+  }
+
+  .acceptance-card,
+  .acceptance-row,
+  .evidence-detail {
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.34);
+  }
+
+  .acceptance-card {
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .acceptance-card strong {
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .acceptance-card span:last-child {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .acceptance-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .acceptance-block {
+    min-width: 0;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .acceptance-block h5 {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .acceptance-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .acceptance-row {
+    padding: 0.7rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .evidence-detail {
+    padding: 0.7rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .evidence-detail summary {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+  }
+
+  .evidence-detail summary small {
+    color: #94a3b8;
+    text-align: right;
+  }
+
   .geometry-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -1306,6 +1581,12 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   }
 
+  .payload-block.compact {
+    max-height: 240px;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+
   .finding-list {
     margin: 0;
     padding-left: 1rem;
@@ -1343,6 +1624,10 @@
       grid-template-columns: 1fr;
     }
 
+    .acceptance-detail-grid {
+      grid-template-columns: 1fr;
+    }
+
     .inspector-panel {
       position: static;
       max-height: 52vh;
@@ -1375,6 +1660,15 @@
       grid-template-columns: auto minmax(0, 1fr);
     }
 
+    .evidence-detail summary {
+      display: grid;
+      gap: 0.2rem;
+    }
+
+    .evidence-detail summary small {
+      text-align: left;
+    }
+
     .moment-summary,
     .moment-meta {
       grid-column: 2 / -1;
@@ -1387,6 +1681,10 @@
     }
 
     .main-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .acceptance-detail-grid {
       grid-template-columns: 1fr;
     }
 
@@ -1421,6 +1719,15 @@
 
     .moment-chip {
       grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .evidence-detail summary {
+      display: grid;
+      gap: 0.2rem;
+    }
+
+    .evidence-detail summary small {
+      text-align: left;
     }
 
     .moment-summary,

@@ -20,11 +20,12 @@ type traceTrajectoryListResponse struct {
 }
 
 type traceTrajectorySnapshotResponse struct {
-	Trajectory traceTrajectorySummary `json:"trajectory"`
-	Agents     []traceAgentNode       `json:"agents"`
-	Edges      []traceAgentEdge       `json:"edges"`
-	Moments    []traceMomentSummary   `json:"moments"`
-	Search     traceSearchSummary     `json:"search"`
+	Trajectory  traceTrajectorySummary      `json:"trajectory"`
+	Agents      []traceAgentNode            `json:"agents"`
+	Edges       []traceAgentEdge            `json:"edges"`
+	Moments     []traceMomentSummary        `json:"moments"`
+	Search      traceSearchSummary          `json:"search"`
+	Acceptances []types.RunAcceptanceRecord `json:"acceptances,omitempty"`
 }
 
 type traceMomentDetailResponse struct {
@@ -138,15 +139,16 @@ type traceMomentArtifacts struct {
 }
 
 type traceTrajectoryBundle struct {
-	Trajectory traceTrajectorySummary
-	Agents     []traceAgentNode
-	Edges      []traceAgentEdge
-	Moments    []traceMomentSummary
-	Search     traceSearchSummary
-	events     []types.EventRecord
-	messages   []types.ChannelMessage
-	findings   []types.ResearchFindingRecord
-	agentIndex map[string]traceAgentNode
+	Trajectory  traceTrajectorySummary
+	Agents      []traceAgentNode
+	Edges       []traceAgentEdge
+	Moments     []traceMomentSummary
+	Search      traceSearchSummary
+	Acceptances []types.RunAcceptanceRecord
+	events      []types.EventRecord
+	messages    []types.ChannelMessage
+	findings    []types.ResearchFindingRecord
+	agentIndex  map[string]traceAgentNode
 }
 
 func (h *APIHandler) HandleTraceTrajectories(w http.ResponseWriter, r *http.Request) {
@@ -224,11 +226,12 @@ func (h *APIHandler) handleTraceTrajectorySnapshot(w http.ResponseWriter, r *htt
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, traceTrajectorySnapshotResponse{
-		Trajectory: bundle.Trajectory,
-		Agents:     bundle.Agents,
-		Edges:      bundle.Edges,
-		Moments:    bundle.Moments,
-		Search:     bundle.Search,
+		Trajectory:  bundle.Trajectory,
+		Agents:      bundle.Agents,
+		Edges:       bundle.Edges,
+		Moments:     bundle.Moments,
+		Search:      bundle.Search,
+		Acceptances: bundle.Acceptances,
 	})
 }
 
@@ -399,8 +402,12 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 	if err != nil {
 		return traceTrajectoryBundle{}, fmt.Errorf("list trajectory findings: %w", err)
 	}
+	acceptances, err := h.rt.Store().ListRunAcceptancesByTrajectory(ctx, ownerID, trajectoryID, 100)
+	if err != nil {
+		return traceTrajectoryBundle{}, fmt.Errorf("list trajectory run acceptances: %w", err)
+	}
 
-	if len(filteredRuns) == 0 && len(events) == 0 && len(messages) == 0 && len(findings) == 0 {
+	if len(filteredRuns) == 0 && len(events) == 0 && len(messages) == 0 && len(findings) == 0 && len(acceptances) == 0 {
 		return traceTrajectoryBundle{}, store.ErrNotFound
 	}
 
@@ -411,15 +418,16 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 	trajectory := buildTraceTrajectorySummary(trajectoryID, filteredRuns, agents, edges, moments, messages, findings, search)
 
 	return traceTrajectoryBundle{
-		Trajectory: trajectory,
-		Agents:     agents,
-		Edges:      edges,
-		Moments:    moments,
-		Search:     search,
-		events:     events,
-		messages:   messages,
-		findings:   findings,
-		agentIndex: agentIndex,
+		Trajectory:  trajectory,
+		Agents:      agents,
+		Edges:       edges,
+		Moments:     moments,
+		Search:      search,
+		Acceptances: acceptances,
+		events:      events,
+		messages:    messages,
+		findings:    findings,
+		agentIndex:  agentIndex,
 	}, nil
 }
 

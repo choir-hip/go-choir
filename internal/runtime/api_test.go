@@ -213,6 +213,25 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	if len(rec.EvidenceRefs) < 5 {
 		t.Fatalf("expected structured evidence refs, got %+v", rec.EvidenceRefs)
 	}
+	delegated := acceptanceCheckpoint(rec, "worker_delegated", "passed")
+	if delegated == nil {
+		t.Fatalf("missing passed worker_delegated checkpoint: %+v", rec.Checkpoints)
+	}
+	if got, _ := delegated.Details["state"].(string); got != "completed" {
+		t.Fatalf("worker_delegated state = %q, want completed; details=%+v", got, delegated.Details)
+	}
+	if delegated.Details["worker_child_run_ids"] == nil {
+		t.Fatalf("worker_delegated missing child run ids: %+v", delegated.Details)
+	}
+	if delegated.Details["worker_event_summary"] == nil {
+		t.Fatalf("worker_delegated missing worker event summary: %+v", delegated.Details)
+	}
+	if delegated.Details["export_patchsets"] == nil {
+		t.Fatalf("worker_delegated missing export summaries: %+v", delegated.Details)
+	}
+	if delegated.Details["promotion_queue"] == nil {
+		t.Fatalf("worker_delegated missing promotion queue summary: %+v", delegated.Details)
+	}
 
 	loaded, err := rt.store.GetRunAcceptance(ctx, "user-alice", rec.AcceptanceID)
 	if err != nil {
@@ -548,9 +567,32 @@ func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 		},
 	})
 	appendAcceptanceToolResult(t, rt, "event-delegate-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", map[string]any{
-		"status":       "worker_run_completed",
-		"worker_vm_id": "vm-acceptance",
-		"loop_id":      "run-worker-acceptance",
+		"status":                       "worker_run_completed",
+		"state":                        "completed",
+		"worker_vm_id":                 "vm-acceptance",
+		"worker_id":                    "worker-acceptance",
+		"worker_sandbox_url":           "http://127.0.0.1:8085",
+		"loop_id":                      "run-worker-acceptance",
+		"event_count":                  22,
+		"worker_root_event_count":      9,
+		"worker_child_run_ids":         []string{"run-implementation-acceptance", "run-verifier-acceptance"},
+		"worker_child_event_counts":    map[string]int{"run-implementation-acceptance": 8, "run-verifier-acceptance": 5},
+		"worker_channel_message_count": 4,
+		"worker_spawned_profiles":      []string{AgentProfileCoSuper},
+		"worker_event_summary": []map[string]any{
+			{
+				"kind":           "tool.result",
+				"tool":           "spawn_agent",
+				"output_excerpt": `{"agent_id":"agent-implementation-acceptance","loop_id":"run-implementation-acceptance","channel_id":"channel-implementation-acceptance","profile":"co-super","state":"completed"}`,
+			},
+			{
+				"kind":            "channel.message",
+				"role":            "result",
+				"from_agent_id":   "agent-verifier-acceptance",
+				"to_agent_id":     "agent-vsuper-acceptance",
+				"content_excerpt": "Verifier observed the export manifest and rollback refs.",
+			},
+		},
 		"export_patchsets": []map[string]any{{
 			"status":          "exported",
 			"manifest_path":   "/tmp/acceptance-manifest.json",
@@ -558,7 +600,23 @@ func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 			"base_sha":        "base-acceptance",
 			"worker_head":     "worker-head-acceptance",
 			"worker_head_sha": "worker-head-acceptance",
+			"patchset_sha256": "sha256-acceptance",
 			"github_push":     false,
+		}},
+		"promotion_queue": []map[string]any{{
+			"candidate_id":       "candidate-acceptance",
+			"status":             "queued",
+			"source_loop_id":     "run-super-acceptance",
+			"candidate_loop_id":  "run-worker-acceptance",
+			"trace_id":           "traj-acceptance",
+			"vm_id":              "vm-acceptance",
+			"base_sha":           "base-acceptance",
+			"worker_head":        "worker-head-acceptance",
+			"manifest_path":      "/tmp/acceptance-manifest.json",
+			"patchset_path":      "/tmp/acceptance.patch",
+			"integration_branch": "agent/run-worker-acceptance/candidate",
+			"destination_branch": "main",
+			"patchset_sha256":    "sha256-acceptance",
 		}},
 	})
 	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
