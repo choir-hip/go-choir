@@ -231,7 +231,13 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to decode platform response"})
 			return
 		}
-		if state := h.deliverPublicationProposalToAuthor(r, out); state != "" {
+		if state := h.deliverPublicationProposalToAuthor(r, out); state != "" && state != out.DeliveryState {
+			if err := h.recordPublicationProposalDeliveryState(r, out, state); err != nil {
+				log.Printf("proxy: platform proposal delivery state update failed: %v", err)
+			} else {
+				out.DeliveryState = state
+			}
+		} else if state != "" {
 			out.DeliveryState = state
 		}
 		writeJSON(w, resp.StatusCode, publicationProposalClientResponse{
@@ -314,6 +320,44 @@ func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal p
 		return out.State
 	}
 	return "delivered"
+}
+
+func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, proposal platform.SubmitPublicationProposalResponse, state string) error {
+	state = strings.TrimSpace(state)
+	if state == "" || proposal.ProposalID == "" || proposal.DeliveryID == "" {
+		return nil
+	}
+	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/proposal-deliveries/state")
+	if err != nil {
+		return err
+	}
+	reqBody := platform.UpdateProposalDeliveryStateRequest{
+		ProposalID:    proposal.ProposalID,
+		DeliveryID:    proposal.DeliveryID,
+		DeliveryState: state,
+		DeliveryRef:   "author-runtime:" + state,
+		RecordedBy:    "proxy",
+	}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal platform delivery update: %w", err)
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("build platform delivery update: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := h.platformd.Do(req)
+	if err != nil {
+		return fmt.Errorf("call platform delivery update: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("platform delivery update status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int, error) {

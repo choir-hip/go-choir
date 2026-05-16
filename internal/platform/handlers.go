@@ -150,11 +150,35 @@ func (h *Handler) HandleInternalPublicationProposal(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+func (h *Handler) HandleInternalProposalDeliveryState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	var req UpdateProposalDeliveryStateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	resp, err := h.service.UpdateProposalDeliveryState(r.Context(), req)
+	if err != nil {
+		log.Printf("platformd: update proposal delivery: %v", err)
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/platform/publications/vtext", h.HandleInternalPublishVText)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
+	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
 }
 

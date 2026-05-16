@@ -133,6 +133,26 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if proposal.State != "proposed" || proposal.DeliveryState != "recorded_for_author" || len(proposal.TransclusionIDs) != 1 {
 		t.Fatalf("proposal response: %#v", proposal)
 	}
+	delivery, err := svc.UpdateProposalDeliveryState(context.Background(), UpdateProposalDeliveryStateRequest{
+		ProposalID:    proposal.ProposalID,
+		DeliveryID:    proposal.DeliveryID,
+		DeliveryState: "delivered",
+		DeliveryRef:   "author-runtime:delivered",
+		RecordedBy:    "proxy",
+	})
+	if err != nil {
+		t.Fatalf("UpdateProposalDeliveryState: %v", err)
+	}
+	if delivery.DeliveryState != "delivered" {
+		t.Fatalf("delivery state response: %#v", delivery)
+	}
+	var persistedDeliveryState string
+	if err := store.db.QueryRow(`SELECT delivery_state FROM proposal_delivery_records WHERE delivery_id = ?`, proposal.DeliveryID).Scan(&persistedDeliveryState); err != nil {
+		t.Fatalf("query delivery state: %v", err)
+	}
+	if persistedDeliveryState != "delivered" {
+		t.Fatalf("persisted delivery state = %q, want delivered", persistedDeliveryState)
+	}
 
 	var storageRef string
 	if err := store.db.QueryRow(`SELECT storage_ref FROM artifact_blobs WHERE artifact_manifest_id = ?`, resp.ArtifactManifestID).Scan(&storageRef); err != nil {

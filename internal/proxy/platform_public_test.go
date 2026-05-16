@@ -62,28 +62,40 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	}
 
 	var gotPlatformReq platform.SubmitPublicationProposalRequest
+	var gotDeliveryUpdate platform.UpdateProposalDeliveryStateRequest
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/platform/publications/pub-1/proposals" {
-			t.Fatalf("platformd path: got %s", r.URL.Path)
-		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("platformd missing internal caller header")
 		}
-		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
-			t.Fatalf("decode platform proposal request: %v", err)
+		switch r.URL.Path {
+		case "/internal/platform/publications/pub-1/proposals":
+			if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
+				t.Fatalf("decode platform proposal request: %v", err)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(platform.SubmitPublicationProposalResponse{
+				ProposalID:           "readerprop-1",
+				PublicationID:        "pub-1",
+				PublicationVersionID: "pubver-1",
+				SourceOwnerID:        "author-1",
+				SubmitterID:          "reader-1",
+				ContentHash:          "hash",
+				DeliveryID:           "delivery-1",
+				DeliveryState:        "recorded_for_author",
+				State:                "proposed",
+			})
+		case "/internal/platform/proposal-deliveries/state":
+			if err := json.NewDecoder(r.Body).Decode(&gotDeliveryUpdate); err != nil {
+				t.Fatalf("decode platform delivery update: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(platform.UpdateProposalDeliveryStateResponse{
+				ProposalID:    gotDeliveryUpdate.ProposalID,
+				DeliveryID:    gotDeliveryUpdate.DeliveryID,
+				DeliveryState: gotDeliveryUpdate.DeliveryState,
+			})
+		default:
+			t.Fatalf("platformd path: got %s", r.URL.Path)
 		}
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(platform.SubmitPublicationProposalResponse{
-			ProposalID:           "readerprop-1",
-			PublicationID:        "pub-1",
-			PublicationVersionID: "pubver-1",
-			SourceOwnerID:        "author-1",
-			SubmitterID:          "reader-1",
-			ContentHash:          "hash",
-			DeliveryID:           "delivery-1",
-			DeliveryState:        "recorded_for_author",
-			State:                "proposed",
-		})
 	}))
 	defer platformd.Close()
 
@@ -158,7 +170,17 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	if !delivered {
 		t.Fatalf("expected author delivery attempt")
 	}
+	if gotDeliveryUpdate.ProposalID != "readerprop-1" || gotDeliveryUpdate.DeliveryID != "delivery-1" || gotDeliveryUpdate.DeliveryState != "delivered" {
+		t.Fatalf("platform delivery update mismatch: %#v", gotDeliveryUpdate)
+	}
 	if strings.Contains(w.Body.String(), "source_owner_id") {
 		t.Fatalf("client proposal response leaked source owner: %s", w.Body.String())
+	}
+	var clientResp publicationProposalClientResponse
+	if err := json.NewDecoder(w.Body).Decode(&clientResp); err != nil {
+		t.Fatalf("decode client proposal response: %v", err)
+	}
+	if clientResp.DeliveryState != "delivered" {
+		t.Fatalf("client delivery_state = %q, want delivered", clientResp.DeliveryState)
 	}
 }

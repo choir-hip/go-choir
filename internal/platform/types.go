@@ -184,3 +184,17 @@ type SubmitPublicationProposalResponse struct {
 	DeliveryState        string   `json:"delivery_state"`
 	State                string   `json:"state"`
 }
+
+type UpdateProposalDeliveryStateRequest struct {
+	ProposalID    string `json:"proposal_id"`
+	DeliveryID    string `json:"delivery_id"`
+	DeliveryState string `json:"delivery_state"`
+	DeliveryRef   string `json:"delivery_ref,omitempty"`
+	RecordedBy    string `json:"recorded_by,omitempty"`
+}
+
+type UpdateProposalDeliveryStateResponse struct {
+	ProposalID    string `json:"proposal_id"`
+	DeliveryID    string `json:"delivery_id"`
+	DeliveryState string `json:"delivery_state"`
+}

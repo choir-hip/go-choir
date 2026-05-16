@@ -590,6 +590,57 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 	}, nil
 }
 
+func (s *Service) UpdateProposalDeliveryState(ctx context.Context, req UpdateProposalDeliveryStateRequest) (*UpdateProposalDeliveryStateResponse, error) {
+	if s == nil || s.store == nil || s.store.db == nil {
+		return nil, fmt.Errorf("platform service is not initialized")
+	}
+	req.ProposalID = strings.TrimSpace(req.ProposalID)
+	req.DeliveryID = strings.TrimSpace(req.DeliveryID)
+	req.DeliveryState = normalizeProposalDeliveryState(req.DeliveryState)
+	req.DeliveryRef = strings.TrimSpace(req.DeliveryRef)
+	if req.ProposalID == "" {
+		return nil, fmt.Errorf("proposal_id is required")
+	}
+	if req.DeliveryID == "" {
+		return nil, fmt.Errorf("delivery_id is required")
+	}
+	if req.DeliveryState == "" {
+		return nil, fmt.Errorf("delivery_state is required")
+	}
+	if req.DeliveryRef == "" {
+		req.DeliveryRef = "platform-dolt:proposal_delivery_records/" + req.DeliveryID
+	}
+	now := time.Now().UTC()
+	res, err := s.store.db.ExecContext(ctx, `
+UPDATE proposal_delivery_records
+   SET delivery_state = ?, delivery_ref = ?, updated_at = ?
+ WHERE proposal_id = ? AND delivery_id = ?`,
+		req.DeliveryState, req.DeliveryRef, now, req.ProposalID, req.DeliveryID)
+	if err != nil {
+		return nil, fmt.Errorf("platform proposal delivery: update record: %w", err)
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return nil, fmt.Errorf("proposal delivery not found")
+	}
+	if err := s.store.commitDolt(ctx, "record proposal delivery "+req.DeliveryState+" "+req.DeliveryID); err != nil {
+		return nil, err
+	}
+	return &UpdateProposalDeliveryStateResponse{
+		ProposalID:    req.ProposalID,
+		DeliveryID:    req.DeliveryID,
+		DeliveryState: req.DeliveryState,
+	}, nil
+}
+
+func normalizeProposalDeliveryState(state string) string {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "recorded_for_author", "queued", "delivered", "failed":
+		return strings.TrimSpace(strings.ToLower(state))
+	default:
+		return ""
+	}
+}
+
 func (s *Service) retrievalSpans(ctx context.Context, versionID, content string) ([]RetrievalSpan, string, error) {
 	rows, err := s.store.db.QueryContext(ctx, `
 SELECT rs.source_id, rsp.span_id, rsp.source_version_id, rsp.selector_kind,
