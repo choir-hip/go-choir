@@ -1215,6 +1215,7 @@
   .acceptance-row,
   .evidence-detail {
     min-width: 0;
+    max-width: 100%;
     border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 12px;
     background: rgba(2, 6, 23, 0.34);
@@ -1246,6 +1247,7 @@
 
   .acceptance-block {
     min-width: 0;
+    max-width: 100%;
     display: grid;
     gap: 0.55rem;
   }
@@ -1267,12 +1269,14 @@
     padding: 0.7rem;
     display: grid;
     gap: 0.45rem;
+    overflow: hidden;
   }
 
   .evidence-detail {
     padding: 0.7rem;
     display: grid;
     gap: 0.45rem;
+    overflow: hidden;
   }
 
   .evidence-detail summary {
@@ -1288,6 +1292,21 @@
   .evidence-detail summary small {
     color: #94a3b8;
     text-align: right;
+  }
+
+  .acceptance-panel .detail-card-top {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .acceptance-panel .detail-card-top strong,
+  .acceptance-panel .detail-meta,
+  .acceptance-panel .status-pill,
+  .acceptance-panel .ref-chip {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .geometry-grid {
