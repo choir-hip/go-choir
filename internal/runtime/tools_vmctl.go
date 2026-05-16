@@ -361,14 +361,6 @@ func normalizeRuntimeWorkerMachineClass(raw string) string {
 }
 
 func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
-	type args struct {
-		WorkerSandboxURL string `json:"worker_sandbox_url"`
-		WorkerID         string `json:"worker_id,omitempty"`
-		VMID             string `json:"vm_id,omitempty"`
-		Objective        string `json:"objective"`
-		Profile          string `json:"profile,omitempty"`
-		TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
-	}
 	return Tool{
 		Name:        "delegate_worker_vm",
 		Description: "Start and monitor a vsuper, co-super, or researcher run inside a requested worker VM through internal runtime endpoints.",
@@ -387,7 +379,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			if rt == nil {
 				return "", fmt.Errorf("delegate_worker_vm missing runtime")
 			}
-			var in args
+			var in delegateWorkerVMArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode delegate_worker_vm args: %w", err)
 			}
@@ -463,6 +455,52 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
 			}
 
+			baseResult := func(status string) map[string]any {
+				result := map[string]any{
+					"status":             status,
+					"worker_id":          strings.TrimSpace(in.WorkerID),
+					"worker_vm_id":       strings.TrimSpace(in.VMID),
+					"worker_sandbox_url": strings.TrimSpace(in.WorkerSandboxURL),
+					"export_patchsets":   []map[string]any{},
+					"promotion_queue":    []map[string]any{},
+					"event_count":        0,
+				}
+				if isolation.Enabled {
+					result["worker_isolation"] = isolation.Kind
+					result["worker_worktree_path"] = isolation.WorktreePath
+					result["worker_branch"] = isolation.Branch
+					result["worker_base_sha"] = isolation.BaseSHA
+				}
+				if bootstrap := metadataStringValue(metadata, runMetadataWorkerRepoBootstrap); bootstrap != "" {
+					result["worker_repo_bootstrap"] = bootstrap
+					result["worker_repo_remote_url"] = metadataStringValue(metadata, runMetadataWorkerRepoRemote)
+					result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
+				}
+				return result
+			}
+			resultWithWorkerEvents := func(result map[string]any, workerRunID string) map[string]any {
+				workerRunID = strings.TrimSpace(workerRunID)
+				if workerRunID == "" {
+					return result
+				}
+				eventsResp, eventsErr := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+				if eventsErr != nil {
+					result["worker_event_error"] = eventsErr.Error()
+					return result
+				}
+				result["event_count"] = len(eventsResp.Events)
+				if summary := summarizeWorkerRunEvents(eventsResp.Events); len(summary) > 0 {
+					result["worker_event_summary"] = summary
+				}
+				if profiles := collectWorkerSpawnProfiles(eventsResp.Events); len(profiles) > 0 {
+					result["worker_spawned_profiles"] = profiles
+				}
+				if count := countWorkerChannelMessages(eventsResp.Events); count > 0 {
+					result["worker_channel_message_count"] = count
+				}
+				return result
+			}
+
 			var startResp *runStatusResponse
 			var finalResp *runStatusResponse
 			for attempt := 1; attempt <= maxDelegateWorkerRunAttempts; attempt++ {
@@ -483,11 +521,41 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					Metadata: attemptMetadata,
 				})
 				if err != nil {
-					return "", err
+					result := baseResult("worker_run_submit_failed")
+					result["error"] = err.Error()
+					result["terminal_error"] = err.Error()
+					result["attempt"] = attempt
+					return toolResultJSON(result)
 				}
 				finalResp, err = pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
 				if err != nil {
-					return "", err
+					var pollErr *workerRunPollError
+					if errors.As(err, &pollErr) {
+						status := "worker_run_status_failed"
+						if pollErr.TimedOut {
+							status = "worker_run_timeout"
+						}
+						workerRunID := firstNonEmpty(pollErr.RunID, startResp.RunID)
+						result := baseResult(status)
+						result["loop_id"] = workerRunID
+						result["agent_id"] = pollErr.Last.AgentID
+						result["profile"] = pollErr.Last.AgentProfile
+						result["state"] = pollErr.Last.State
+						result["result"] = pollErr.Last.Result
+						result["error"] = err.Error()
+						result["terminal_error"] = err.Error()
+						result["attempt"] = attempt
+						result["timeout_seconds"] = int(timeout.Seconds())
+						result = resultWithWorkerEvents(result, workerRunID)
+						return toolResultJSON(result)
+					}
+					result := baseResult("worker_run_status_failed")
+					result["loop_id"] = startResp.RunID
+					result["error"] = err.Error()
+					result["terminal_error"] = err.Error()
+					result["attempt"] = attempt
+					result = resultWithWorkerEvents(result, startResp.RunID)
+					return toolResultJSON(result)
 				}
 				if finalResp.State == types.RunCompleted {
 					break
@@ -556,20 +624,26 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			if count := countWorkerChannelMessages(eventsResp.Events); count > 0 {
 				result["worker_channel_message_count"] = count
 			}
-			if isolation.Enabled {
-				result["worker_isolation"] = isolation.Kind
-				result["worker_worktree_path"] = isolation.WorktreePath
-				result["worker_branch"] = isolation.Branch
-				result["worker_base_sha"] = isolation.BaseSHA
-			}
-			if bootstrap := metadataStringValue(metadata, runMetadataWorkerRepoBootstrap); bootstrap != "" {
-				result["worker_repo_bootstrap"] = bootstrap
-				result["worker_repo_remote_url"] = metadataStringValue(metadata, runMetadataWorkerRepoRemote)
-				result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
+			for key, value := range baseResult("") {
+				if key == "status" {
+					continue
+				}
+				if _, ok := result[key]; !ok {
+					result[key] = value
+				}
 			}
 			return toolResultJSON(result)
 		},
 	}
+}
+
+type delegateWorkerVMArgs struct {
+	WorkerSandboxURL string `json:"worker_sandbox_url"`
+	WorkerID         string `json:"worker_id,omitempty"`
+	VMID             string `json:"vm_id,omitempty"`
+	Objective        string `json:"objective"`
+	Profile          string `json:"profile,omitempty"`
+	TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
 }
 
 func delegateWorkerRunStatus(state types.RunState) string {
@@ -1195,7 +1269,7 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 				}
 				continue
 			}
-			return nil, statusErr
+			return nil, newWorkerRunPollError(runID, timeout, last, statusErr, false)
 		}
 		payload, readErr := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -1211,7 +1285,7 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 				}
 				continue
 			}
-			return nil, statusErr
+			return nil, newWorkerRunPollError(runID, timeout, last, statusErr, false)
 		}
 		if err := json.Unmarshal(payload, &last); err != nil {
 			return nil, fmt.Errorf("decode worker run status response: %w", err)
@@ -1221,14 +1295,45 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 		}
 		if time.Now().After(deadline) {
 			if lastStatusErr != nil {
-				return nil, fmt.Errorf("worker run %s did not finish within %s; last state=%s; last status error=%v", runID, timeout, last.State, lastStatusErr)
+				return nil, newWorkerRunPollError(runID, timeout, last, fmt.Errorf("worker run %s did not finish within %s; last state=%s; last status error=%v", runID, timeout, last.State, lastStatusErr), true)
 			}
-			return nil, fmt.Errorf("worker run %s did not finish within %s; last state=%s", runID, timeout, last.State)
+			return nil, newWorkerRunPollError(runID, timeout, last, fmt.Errorf("worker run %s did not finish within %s; last state=%s", runID, timeout, last.State), true)
 		}
 		if err := sleepUntilNextWorkerStatusPoll(ctx); err != nil {
 			return nil, err
 		}
 	}
+}
+
+type workerRunPollError struct {
+	RunID    string
+	Timeout  time.Duration
+	Last     runStatusResponse
+	Err      error
+	TimedOut bool
+}
+
+func newWorkerRunPollError(runID string, timeout time.Duration, last runStatusResponse, err error, timedOut bool) *workerRunPollError {
+	if strings.TrimSpace(last.RunID) == "" {
+		last.RunID = strings.TrimSpace(runID)
+	}
+	return &workerRunPollError{
+		RunID:    strings.TrimSpace(runID),
+		Timeout:  timeout,
+		Last:     last,
+		Err:      err,
+		TimedOut: timedOut,
+	}
+}
+
+func (e *workerRunPollError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return fmt.Sprintf("worker run %s status polling failed", strings.TrimSpace(e.RunID))
 }
 
 func sleepUntilNextWorkerStatusPoll(ctx context.Context) error {
