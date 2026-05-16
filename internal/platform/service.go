@@ -241,7 +241,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
-	routePath = "/" + strings.TrimLeft(strings.TrimSpace(routePath), "/")
+	routePath = normalizePublicationRoutePath(routePath)
 	var rec struct {
 		RouteState           string
 		PublicationID        string
@@ -950,6 +950,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizePublicationRoutePath(routePath string) string {
+	normalized := "/" + strings.TrimLeft(strings.TrimSpace(routePath), "/")
+	if normalized != "/" && strings.HasPrefix(normalized, publicVTextPrefix) {
+		normalized = strings.TrimRight(normalized, "/")
+	}
+	return normalized
 }
 
 func slugify(raw string) string {

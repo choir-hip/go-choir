@@ -93,6 +93,13 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPublicationBundleByRoute: %v", err)
 	}
+	trailingSlashBundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath+"/")
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute trailing slash: %v", err)
+	}
+	if trailingSlashBundle.Route.Path != resp.RoutePath {
+		t.Fatalf("trailing slash route normalized to %q, want %q", trailingSlashBundle.Route.Path, resp.RoutePath)
+	}
 	if bundle.Artifact.Content != "A public note.\n\nThis is the published projection." {
 		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
