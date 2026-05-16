@@ -21,6 +21,20 @@ let
   # that Droid-Shield false-positives on.
   authSigningDir = "/var/lib/go-choir/auth-signing";
   sandboxFilesDir = "/var/lib/go-choir/files";
+  platformDoltDir = "/var/lib/go-choir/platform-dolt";
+  platformDoltDBDir = "${platformDoltDir}/platform";
+  platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
+  platformDoltInit = pkgs.writeShellScript "platform-dolt-init" ''
+    set -euo pipefail
+    export HOME="${platformDoltDir}"
+    install -d -m 0750 "${platformDoltDir}" "${platformDoltDBDir}"
+    cd "${platformDoltDBDir}"
+    ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
+    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir-ip.com" >/dev/null 2>&1 || true
+    if [ ! -d .dolt ]; then
+      ${pkgs.dolt}/bin/dolt init
+    fi
+  '';
 
   # Common systemd service hardening options applied to all go-choir
   # services. These restrict what the service process can do at the
@@ -105,8 +119,14 @@ in
         handle /api/* {
           reverse_proxy 127.0.0.1:8082
         }
+        handle /pub/* {
+          reverse_proxy 127.0.0.1:8086
+        }
         handle /provider/* {
           respond "provider routes are not available from the public edge" 403
+        }
+        handle /internal/* {
+          respond "internal routes are not available from the public edge" 403
         }
         handle /assets/* {
           root * ${goChoirPackages.frontend}
@@ -180,8 +200,8 @@ in
   systemd.services.go-choir-proxy = {
     description = "go-choir Proxy Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-auth.service" "go-choir-sandbox.service" ];
-    wants = [ "network-online.target" "go-choir-sandbox.service" ];
+    after = [ "network-online.target" "go-choir-auth.service" "go-choir-sandbox.service" "go-choir-platformd.service" ];
+    wants = [ "network-online.target" "go-choir-sandbox.service" "go-choir-platformd.service" ];
     requires = [ "go-choir-auth.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${goChoirPackages.proxy}/bin/proxy";
@@ -201,6 +221,46 @@ in
         # Must exceed VM_BOOT_READY_TIMEOUT so cold user-computer boots can
         # finish readiness probing instead of timing out in the proxy first.
         "PROXY_VMCTL_TIMEOUT=180s"
+        "PROXY_PLATFORMD_URL=http://127.0.0.1:8086"
+      ];
+    };
+  };
+
+  systemd.services.go-choir-platform-dolt = {
+    description = "go-choir Platform Dolt SQL Server";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = commonServiceHardening // {
+      ExecStartPre = platformDoltInit;
+      ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13306";
+      WorkingDirectory = platformDoltDBDir;
+      Restart = "on-failure";
+      RestartSec = 3;
+      StateDirectory = "go-choir/platform-dolt";
+      ReadWritePaths = [ platformDoltDir ];
+      Environment = [
+        "HOME=${platformDoltDir}"
+      ];
+    };
+  };
+
+  systemd.services.go-choir-platformd = {
+    description = "go-choir Platform Service";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" ];
+    wants = [ "network-online.target" ];
+    requires = [ "go-choir-platform-dolt.service" ];
+    serviceConfig = commonServiceHardening // {
+      ExecStart = "${goChoirPackages.platformd}/bin/platformd";
+      Restart = "on-failure";
+      RestartSec = 3;
+      StateDirectory = "go-choir/platform-artifacts";
+      ReadWritePaths = [ platformArtifactsDir ];
+      Environment = [
+        "PLATFORMD_PORT=8086"
+        "PLATFORMD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+        "PLATFORMD_ARTIFACTS_ROOT=${platformArtifactsDir}"
       ];
     };
   };
@@ -422,6 +482,10 @@ in
     "d /var/lib/go-choir/auth-signing 0750 root root -"
     "d /var/lib/go-choir/guest 0750 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
+    "d ${platformDoltDir} 0750 root root -"
+    "d ${platformDoltDBDir} 0750 root root -"
+    "d ${platformArtifactsDir} 0750 root root -"
+    "d ${platformArtifactsDir}/sha256 0750 root root -"
   ];
 
   # Nix settings
@@ -440,6 +504,7 @@ in
     git
     gnugrep
     gnused
+    dolt
     htop
     jq
     procps

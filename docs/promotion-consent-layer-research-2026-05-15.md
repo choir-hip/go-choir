@@ -751,6 +751,14 @@ still be a note, draft, or local artifact.
 The promotion system depends on typed ledgers. The most important current ledger
 mismatch is inside the user computer itself.
 
+Update, 2026-05-15: this section recorded the pre-migration state that led to
+the embedded Dolt runtime migration. The migration is now complete on staging at
+`c3b1a4b2547d672eadd9b3d74b76ba9371518648`; see
+[mission-embedded-dolt-runtime-migration-v0.md](mission-embedded-dolt-runtime-migration-v0.md)
+for deployed acceptance and Node B disk inspection evidence. The remaining live
+design pressure from this section is now the platform Dolt service and
+publication/retrieval/citation substrate, not another per-user runtime cutover.
+
 The canonical docs already say the right thing:
 
 - per-user embedded Dolt owns private computer/appagent state;
@@ -761,21 +769,21 @@ The canonical docs already say the right thing:
   graph, sessions, events, app state, desktop state, artifact metadata, and
   promotion records.
 
-The current implementation has only partially reached that state:
+The implementation has now reached that state for sandbox runtime/control state:
 
-- `vtext` document state is already backed by an embedded Dolt workspace;
-- runtime/control state is still a SQLite store with tables for runs, agents,
-  events, channel messages, run memory, promotion candidates, run acceptances,
-  browser sessions, desktop state, findings, and worker updates;
-- deployed VM sandboxes put that SQLite file on `/mnt/persistent`, so the Node B
-  issue is not that live product state is disappearing into `/tmp`;
-- nevertheless, the semantic problem remains: user-computer product state is
-  split across SQLite plus Dolt, so promotion, history, branch, merge, and
-  publication semantics are fractured.
+- VText documents and runtime/control product tables now open in the same
+  embedded Dolt workspace per user computer;
+- existing legacy SQLite runtime files are imported once when Dolt runtime
+  tables are empty and kept as rollback/import evidence during cutover;
+- fresh staging computers from the accepted run showed a zero-byte `/state`
+  marker and Dolt state under `/state.vtext/vtext/.dolt`, with no
+  `/state-wal` or `/state-shm` siblings;
+- host-side auth/session and vmctl state remain outside this per-user embedded
+  Dolt ledger until the platform Dolt and routing/promotion model is designed.
 
-This should now outrank the Promotion Queue UI as the next substrate mission.
-The queue is easier to build on top of the correct ledger than to build once on
-SQLite and migrate immediately afterward.
+The priority now moves to platform Dolt: publication, retrieval, citations,
+public provenance, durable routing/promotion records, and consent-bearing
+platform-visible state.
 
 ### Mission Gradient For The Migration
 
@@ -860,6 +868,9 @@ Stopping condition:
 ## Recommended Build Plan
 
 ### Slice 0: Collapse Sandbox Runtime State Into Embedded Dolt
+
+Status: complete on staging as of
+`c3b1a4b2547d672eadd9b3d74b76ba9371518648`.
 
 Goal:
 

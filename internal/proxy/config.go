@@ -38,6 +38,10 @@ type Config struct {
 	// vmmanager boot-ready timeout so cold computer boots do not fail halfway
 	// through normal readiness probing.
 	VmctlTimeout time.Duration
+
+	// PlatformdURL is the internal platform service URL. The proxy uses it
+	// for controlled private-computer to platform-publication transitions.
+	PlatformdURL string
 }
 
 const (
@@ -57,6 +61,9 @@ const (
 	// DefaultVmctlTimeout keeps proxy resolve calls aligned with the staging
 	// VM_BOOT_READY_TIMEOUT=150s deployment setting.
 	DefaultVmctlTimeout = 180 * time.Second
+
+	// DefaultPlatformdURL is the localhost-only platform service endpoint.
+	DefaultPlatformdURL = "http://127.0.0.1:8086"
 )
 
 // LoadConfig resolves a Config from PROXY_* environment variables.
@@ -69,6 +76,7 @@ func LoadConfig() (*Config, error) {
 		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
 		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
 		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
+		PlatformdURL:      envOr("PROXY_PLATFORMD_URL", DefaultPlatformdURL),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -91,6 +99,9 @@ func (c *Config) validate() error {
 	}
 	if c.VmctlTimeout <= 0 {
 		return fmt.Errorf("proxy config: PROXY_VMCTL_TIMEOUT must be positive")
+	}
+	if c.PlatformdURL == "" {
+		return fmt.Errorf("proxy config: PROXY_PLATFORMD_URL must not be empty")
 	}
 	return nil
 }

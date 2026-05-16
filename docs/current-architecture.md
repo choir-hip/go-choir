@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-16
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -47,6 +47,23 @@ synthesized from existing product/control evidence: runs, Trace moments, worker
 exports, promotion candidates, verifier contracts, rollback refs, and deployed
 build identity. It replaces ad hoc claims like "the Trace looked good."
 
+The embedded Dolt runtime migration is complete on staging. As of commit
+`c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
+tables and VText tables open in the same embedded Dolt workspace inside the
+user computer. The old `/state` path remains a marker and legacy-import source;
+fresh accepted staging computers showed no runtime SQLite WAL/SHM pair. Host
+auth/session state remains host-owned.
+
+Platform publication now has a first service boundary. A host-side `platformd`
+service writes to a separate localhost-only `dolt sql-server` primary and owns
+platform-visible publication, route, artifact manifest/blob, retrieval source/
+span, citation edge, provenance, consent/review, verifier, and rollback rows.
+The browser never talks to Dolt. A signed-in user calls the proxy product API to
+publish a selected private VText revision; the proxy reads that revision from
+the user's resolved computer and submits only the public projection to
+`platformd`. Public published snapshots render at `/pub/vtext/...` without
+granting platform services write access to the live private document.
+
 ## Priority Order
 
 1. Make the public desktop and auth-on-mutation access model work: signed-out
@@ -58,7 +75,8 @@ build identity. It replaces ad hoc claims like "the Trace looked good."
    text/Markdown/PDF/EPUB upload. Later add audio/video/image display apps so
    uploaded, linked, or agent-retrieved media can open in the desktop and become
    available for `vtext` transclusion.
-4. Add publication.
+4. Harden publication UX and review: owner-visible publish controls, retraction,
+   supersession, route management, and richer review evidence.
 5. Add Pretext-based text rendering/transclusion for published `vtext` and web
    content.
 6. Add citation mechanics.

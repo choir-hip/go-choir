@@ -90,6 +90,7 @@ type Handler struct {
 	reverseProxy *httputil.ReverseProxy
 	upgrader     websocket.Upgrader
 	dialer       *websocket.Dialer
+	platformd    *http.Client
 	sandboxURL   *url.URL      // parsed sandbox URL for WS dial derivation
 	vmctlClient  *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle    *lifecycleRecorder
@@ -102,6 +103,9 @@ type Handler struct {
 // through vmctl instead of falling back to the static host sandbox URL
 // (VAL-VM-001, VAL-VM-002).
 func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
+	if strings.TrimSpace(cfg.PlatformdURL) == "" {
+		cfg.PlatformdURL = DefaultPlatformdURL
+	}
 	sandboxURL, err := url.Parse(cfg.SandboxURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse sandbox URL %s: %w", cfg.SandboxURL, err)
@@ -186,6 +190,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 			},
 		},
 		dialer:      websocket.DefaultDialer,
+		platformd:   &http.Client{Timeout: 30 * time.Second},
 		sandboxURL:  sandboxURL,
 		vmctlClient: vmctlCli,
 		lifecycle:   newLifecycleRecorder(),
@@ -380,6 +385,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case path == "/api/terminal/ws":
 		h.HandleTerminalWS(w, r)
+		return
+	case path == "/api/platform/vtext/publications":
+		h.HandleVTextPublication(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and

@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-16
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -30,6 +30,9 @@ Use these buckets when reading or editing docs:
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
 - `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
+- `docs/platform-dolt-publication-retrieval-citation-research-2026-05-16.md`
+  - research/design input for platform Dolt, publication, retrieval, citations,
+  provenance, and the future citation economy.
 - `docs/public-identity-and-custom-domains.md` - public handle, route, and
   custom domain roadmap.
 - `docs/docs-state-report-2026-05-14.md` - current documentation audit and cleanup recommendation matrix.
@@ -48,6 +51,10 @@ Use these buckets when reading or editing docs:
   progressive/stochastic load, and UX-driven performance optimization.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
+- `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
+  active/landing MissionGradient for the first platform Dolt SQL-server
+  service, selected VText publication, public route, retrieval source/span
+  manifests, and citation candidates/edges.
 
 ## Current Mission Family
 
@@ -62,7 +69,13 @@ Use these buckets when reading or editing docs:
   product-path dynamics.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
+- `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
+  active/landing substrate mission for platform Dolt publication/retrieval/
+  citation.
 - `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
+- `docs/mission-embedded-dolt-runtime-migration-v0.md` - completed embedded
+  Dolt runtime/control migration with staging acceptance and Node B disk
+  evidence.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-choir-in-choir-deformation-v0.md` - earlier deformation mission.
 - `docs/mission-candidate-world-promotion-v0.md` - candidate-world promotion mission.
@@ -104,9 +117,10 @@ old-mission cleanup. Remaining cleanup work is intentionally narrower:
 
 - gradually fold durable lessons from dated proof/evidence files into canonical
   architecture/invariant docs when they become current;
-- keep `docs/deferred-reliability-migrations-2026-05-14.md` as the holding
-  note for the later sandbox-to-computer hard rename and SQLite-to-Dolt cleanup
-  mission;
+- keep `docs/deferred-reliability-migrations-2026-05-14.md` as historical
+  context for the later sandbox-to-computer hard rename; the runtime/control
+  SQLite-to-Dolt cutover itself is now complete and recorded in
+  `docs/mission-embedded-dolt-runtime-migration-v0.md`;
 - leave proof docs as evidence artifacts unless a cleanup mission explicitly
   indexes, extracts, and deletes them;
 - keep `docs/README.md`, `README.md`, and `AGENTS.md` current when missions

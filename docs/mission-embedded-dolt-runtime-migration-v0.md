@@ -1,8 +1,38 @@
 # MissionGradient: Embedded Dolt Runtime Migration v0
 
-Status: local implementation passing; staging landing pending
+Status: complete; deployed and accepted on staging
 Date: 2026-05-15
 Operator: Codex directly in the repo, not Choir-in-Choir
+
+## Final Evidence
+
+The mission completed on 2026-05-15.
+
+- Migration commit: `ec3441fc47560b73705f996e60b59c4793d5750f`
+- Follow-up test-stability commit:
+  `c3b1a4b2547d672eadd9b3d74b76ba9371518648`
+- GitHub Actions run: `25932772397`
+- Staging deployed commit:
+  `c3b1a4b2547d672eadd9b3d74b76ba9371518648`
+- Staging build identity: proxy and sandbox both reported
+  `built_at=20260515174912` and `deployed_at=2026-05-15T17:53:00Z`
+- Deployed product-path acceptance:
+  `GO_CHOIR_RUN_EMBEDDED_DOLT_ACCEPTANCE=1 ... npx playwright test
+  tmp-embedded-dolt-runtime-acceptance.spec.js`, passed in `3.0m`
+- Acceptance record: `runacc-89b60aac12c116a35412`
+- Acceptance level: `export-level`
+- Active computer: `vm-95a6b1f16210743b8900566e1e256813`
+- Worker computer: `vm-fac071195052b7d76f167ed3b9cba99f`
+- Trace/submission: `9b6ceb03-d31c-42c2-a6a6-67d01a7760d2`
+- VText document: `39ed59e3-58e2-4677-8243-ed99402e326e`
+- Promotion candidate: `55d7cb5f-1847-45db-879e-ca29ad82b53e`
+
+Read-only Node B inspection confirmed that both the active and worker computer
+images had `/state` as a zero-byte marker, no `/state-wal` or `/state-shm`
+runtime SQLite siblings, and a Dolt workspace under
+`/state.vtext/vtext/.dolt`. The acceptance marker
+`EMBEDDED_DOLT_ACCEPTANCE_1778870041639` was visible inside the Dolt noms data
+for both inspected computer images.
 
 ## Real Artifact
 

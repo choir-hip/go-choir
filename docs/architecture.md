@@ -16,9 +16,9 @@
 
 ## 1. System Identity
 
-**go-choir** is a **distributed multiagent operating system** composed of **five Go microservices**, a **Caddy** reverse proxy at the edge, and a **Svelte** single-page application. The name signals the Go rewrite of the ChoirOS lineage, now unified with Cogent's capabilities into one coherent platform. The host side provides thin, focused services (authentication, request routing, VM lifecycle management, and LLM provider proxying), while the **sandbox** binary running inside each Firecracker microVM contains the bulk of the product: conductor (input routing), scheduler (work registry), agent runtime, apps, persistence, and tools. Users interact through a web desktop served by Caddy and rendered by the Svelte SPA. Agents interact through the same API surface and through direct Go interfaces (in-process within a sandbox) or HTTP calls (cross-service). The system runs on bare-metal Linux hosts, isolates untrusted code execution in Firecracker microVMs, and manages LLM API access through a dedicated provider gateway service that holds all secrets.
+**go-choir** is a **distributed multiagent operating system** composed of Go services, a **Caddy** reverse proxy at the edge, and a **Svelte** single-page application. The name signals the Go rewrite of the ChoirOS lineage, now unified with Cogent's capabilities into one coherent platform. The host side provides thin, focused services (authentication, request routing, VM lifecycle management, LLM provider proxying, and platform publication), while the **sandbox** binary running inside each Firecracker microVM contains the bulk of the private user-computer product: conductor (input routing), scheduler (work registry), agent runtime, apps, persistence, and tools. Users interact through a web desktop served by Caddy and rendered by the Svelte SPA. Agents interact through the same API surface and through direct Go interfaces (in-process within a sandbox) or HTTP calls (cross-service). The system runs on bare-metal Linux hosts, isolates untrusted code execution in Firecracker microVMs, manages LLM API access through a dedicated provider gateway service that holds all secrets, and writes public publication facts through a separate platform Dolt service boundary.
 
-All five Go binaries are built in the **`go-choir`** repository, with a clean module structure designed for the 5-binary architecture: `go-choir/cmd/auth/`, `go-choir/cmd/proxy/`, `go-choir/cmd/vmctl/`, `go-choir/cmd/gateway/`, `go-choir/cmd/sandbox/`. Shared internal packages live under `go-choir/internal/`: `runtime/` (agent loop, tools, channels), `store/` (persistence), `types/` (core domain types), `gateway/` (provider routing), `auth/` (WebAuthn), `vmmanager/` (Firecracker), `proxy/` (request routing). Valuable internals are copied from the cogent repository: LLM streaming clients (`client_anthropic.go`, `client_openai.go`), tool-calling loop (`loop.go`), ToolRegistry and tool implementations (`tools*.go`), co-agent messaging (`channel.go`), core types and ID generation (`internal/core`), store schema and CRUD patterns (`internal/store`, adapted from SQLite to Dolt), EventBus pattern (`events.go`). The cogent repo is preserved as a reference.
+The Go binaries are built in the **`go-choir`** repository: `go-choir/cmd/auth/`, `go-choir/cmd/proxy/`, `go-choir/cmd/vmctl/`, `go-choir/cmd/gateway/`, `go-choir/cmd/platformd/`, and `go-choir/cmd/sandbox/`. Shared internal packages live under `go-choir/internal/`: `runtime/` (agent loop, tools, channels), `store/` (private user-computer persistence), `platform/` (public publication ledger/service), `types/` (core domain types), `gateway/` (provider routing), `auth/` (WebAuthn), `vmmanager/` (Firecracker), `proxy/` (request routing). Valuable internals are copied from the cogent repository: LLM streaming clients (`client_anthropic.go`, `client_openai.go`), tool-calling loop (`loop.go`), ToolRegistry and tool implementations (`tools*.go`), co-agent messaging (`channel.go`), core types and ID generation (`internal/core`), store schema and CRUD patterns (`internal/store`, adapted from SQLite to Dolt), EventBus pattern (`events.go`). The cogent repo is preserved as a reference.
 
 ---
 
@@ -121,7 +121,7 @@ sandbox (Go, inside each microVM) — conductor, scheduler, agent runtime, apps,
 Bare Metal Host (NixOS, OVH)
 ```
 
-### 2.3 The Five Go Binaries
+### 2.3 The Go Binaries
 
 All built from the same Go module in `go-choir`, different `cmd/` entry points:
 
@@ -131,6 +131,7 @@ All built from the same Go module in `go-choir`, different `cmd/` entry points:
 | `proxy` | Host | Routes authenticated API requests to the correct sandbox VM based on user session. Handles WebSocket upgrade and proxying. | HTTP (behind Caddy), vsock/virtio-net to VMs |
 | `vmctl` | Host | VM lifecycle management via firecracker-go-sdk. Boot, stop, hibernate, idle watchdog, memory pressure checks. Exposes internal API for proxy/auth to query VM status. | Internal API (not exposed to browser) |
 | `gateway` | Host | Provider gateway. Receives LLM API calls from sandboxes, injects real API keys, proxies to upstream providers (Anthropic, OpenAI, Bedrock, etc.), rate limiting per sandbox. | HTTP (called by sandboxes, not directly by browser) |
+| `platformd` | Host | Platform publication service backed by a separate Dolt SQL-server primary. Owns public publication rows, routes, artifact manifests, retrieval spans, citation edges, provenance, consent/review, and rollback refs. | HTTP internal API plus public `/pub/*` read routes |
 | `sandbox` | Inside each microVM | The full product: conductor (input routing), scheduler (work registry), agent runtime, apps, appagents, workers, vtext, tools, persistence (Dolt — all sandbox state). | HTTP API on internal port (reached via proxy) |
 
 ### 2.4 Caddy (Edge)
@@ -1231,7 +1232,7 @@ The important rule is that the document remains the primary organizing surface. 
 
 Dolt runs **in-process inside the sandbox binary** via the embedded driver. Each sandbox VM has its own Dolt database.
 
-**Storage location**: Within the sandbox VM filesystem, e.g., `/data/vtext/.dolt/` — one Dolt database per sandbox (per user). Completing this embedded Dolt `vtext` store is an architectural prerequisite for the deeper `vmctl` / microVM lifecycle pass, because we want to validate the VM path against the real version-native sandbox state model rather than a temporary SQLite-backed document store.
+**Storage location**: Within the user computer's persistent filesystem. Current staging computers use a zero-byte legacy marker at `/state` and the unified embedded Dolt workspace under `/state.vtext/vtext/.dolt`. That workspace contains VText plus runtime/control product tables. Older prose that describes a VText-only Dolt store is historical; the accepted direction is one embedded Dolt workspace per user computer for private product state.
 
 **Connection** (embedded mode):
 

@@ -122,6 +122,10 @@
           pname = "gateway";
           subPackage = "cmd/gateway";
         };
+        platformd = mkGoService {
+          pname = "platformd";
+          subPackage = "cmd/platformd";
+        };
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";

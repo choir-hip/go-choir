@@ -122,7 +122,7 @@ jobs:
             sleep 3
 
             echo "==> Smoke test: health endpoints"
-            for port in 8081 8082 8083 8084; do
+            for port in 8081 8082 8083 8084 8086; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done

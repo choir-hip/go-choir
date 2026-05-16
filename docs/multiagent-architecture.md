@@ -123,7 +123,7 @@ identity stays around; this only stops current work.
 
 ## Data Model
 
-### Core persistence tables — internal/store/store.go (SQLite)
+### Core persistence tables — internal/store/store.go (embedded Dolt)
 
 ```
 agents
@@ -379,7 +379,7 @@ Browser / Electron frontend  (frontend/dist/)
       ChannelManager (in-memory + durable channel_messages table)
       PromptStore (disk overrides + embedded defaults)
       EventBus (SSE fanout to connected clients)
-      SQLite store: agents, runs, events, channel_messages
+      embedded Dolt store: agents, runs, events, channel_messages
       Dolt store:   vtext_documents, vtext_revisions,
                     vtext_agent_mutations, agent_evidence
 ```

@@ -2,6 +2,12 @@
 
 Date: 2026-05-12
 
+Update, 2026-05-16: this skeleton remains useful background. The current
+platform Dolt/publication/retrieval/citation design pass is
+[platform-dolt-publication-retrieval-citation-research-2026-05-16.md](platform-dolt-publication-retrieval-citation-research-2026-05-16.md),
+and the implementation/landing mission is
+[mission-platform-dolt-publication-retrieval-citation-v0.md](mission-platform-dolt-publication-retrieval-citation-v0.md).
+
 This is the forward-compatible publication boundary for Choir. It is not a
 publication implementation and it does not introduce the citation economy,
 paywalls, collaboration markets, or CHIPS mechanics.
@@ -24,6 +30,8 @@ Platform publication state is public or platform-visible by explicit event.
 - Platform Dolt stores publication records, public artifact metadata, published
   revision refs, citation graph edges, public routing records, compute
   accounting, and later CHIPS state.
+- In v0, this is a separate host-side `dolt sql-server` primary plus
+  `platformd`; it is not embedded inside a user computer.
 - Platform Dolt is a ledger and index, not a hot-path mailbox or a dump of every
   private user event.
 - Large public artifacts should live in platform storage with content-addressed
@@ -174,5 +182,5 @@ CHIPS economics:
 - No public citation scoring.
 - No paywall implementation.
 - No collaboration marketplace.
-- No full platform Dolt deployment.
+- No clustered/replicated full platform Dolt deployment.
 - No migration of private user VText state into platform Dolt.
