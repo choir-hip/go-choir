@@ -1,6 +1,6 @@
 ---
 name: mission-gradient
-description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
+description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -25,6 +25,8 @@ Use it to:
 - preserve the real artifact topology;
 - maintain an explicit belief state;
 - act by short receding-horizon control intervals;
+- investigate blockers to root cause before treating them as stopping conditions;
+- transform the cognitive search space when the current route stalls;
 - improve quality after first correctness;
 - collect evidence without checklist theater;
 - preserve rollback and promotion discipline;
@@ -36,10 +38,27 @@ Do not:
 - optimize a checklist instead of the artifact;
 - treat code existence as behavioral proof;
 - hide uncertainty;
+- turn an actionable blocker into a final answer while authorized probes remain;
+- write a next mission instead of executing the next safe probe when it is inside the current authority boundary;
 - keep working after the mission identity has changed;
 - claim completion without named evidence.
 
 MissionGradient guides the trajectory. The evidence ledger records what was proven. Promotion changes reality. Do not confuse these layers.
+
+## Agentic Problem Solving Default
+
+MissionGradient is not a graceful-bailout format. A precise blocker is valuable only after the agent has investigated the failure surface and changed search strategy at least once.
+
+When a blocker appears:
+
+1. Classify it as tactical, target-level, invariant-level, or external.
+2. If it is tactical and the next probe or fix is inside current authority, execute the next receding-horizon loop: inspect evidence, form a root-cause hypothesis, instrument or patch the implicated layer, verify, and update belief state.
+3. If it is target-level but the invariant is intact, update the mission document or goal parameterization and continue.
+4. If it is invariant-level or external, stop or escalate with exact evidence and the smallest safe next probe.
+
+Before stopping on any nontrivial blocker, apply 2-5 route-changing cognitive transforms. Use the cognitive-transform-portfolio skill when available. The transforms must change the next probe, implementation route, verifier, scope, evidence plan, or stopping condition. Decorative reframing does not count.
+
+Default bias: if the final report can name an executable next objective inside the mission's authority boundary, the mission should usually run that objective instead of ending. Stop only when continuing would violate an invariant, cross an authorization boundary, become unsafe/destructive, or repeat already-falsified probes without new evidence.
 
 ## Thesis: Homotopy, Not Ladder
 
@@ -130,7 +149,9 @@ Operate in short control intervals:
 
 If observations are surprising, shrink scope and increase instrumentation.
 
-A clean stop with a precise blocker is better than continued work under a broken premise.
+A clean stop with a precise blocker is better than continued work under a
+broken premise only after root-cause probes and cognitive search-space
+transforms have been attempted or explicitly blocked.
 
 ## Evidence Ledger
 
@@ -270,6 +291,22 @@ State the starting belief model:
 
 Update this section when observations surprise the mission.
 
+### Investigation & Cognitive Reframing
+
+Define how the mission handles blockers without premature bailout.
+
+Include:
+
+- the root-cause investigation loop to run before stopping;
+- what diagnostics, logs, traces, tests, or instrumentation can be used;
+- which blockers are tactical and should trigger another autonomous probe;
+- which blockers are invariant-level or external and require escalation;
+- 2-5 cognitive transforms to apply before declaring a hard blocker;
+- how those transforms change the next probe, verifier, scope, or stopping condition.
+
+The mission should say explicitly: if a blocker defines an executable next
+probe inside the current authority boundary, run that probe instead of ending.
+
 ### Receding-Horizon Control
 
 Define the control interval size and mutation radius.
@@ -332,6 +369,10 @@ State which project artifacts receive learnings: mission doc notes, tests, archi
 Completion requires proof, not effort:
 
 - invariants verified or explicitly deferred with rationale;
+- root-cause investigation and cognitive reframing attempted before any hard
+  blocker stop;
+- no executable safe probe remains inside the current authority boundary, unless
+  success proof has already been reached;
 - no known topology-changing shortcut in the proof path;
 - quality level satisfied or residual quality debt stated;
 - deployed proof when deployment is part of the target;
@@ -363,7 +404,7 @@ Prefer a repo mission document plus a short `/goal`.
 Short `/goal` shape:
 
 ```text
-Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, belief-state updates, quality gradient, and verification criteria. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, and stop/escalate on invariant-level surprises.
+Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, belief-state updates, investigation loop, cognitive reframing, quality gradient, and verification criteria. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, execute safe next probes instead of stopping on tactical blockers, and stop/escalate only on success, invariant-level surprises, external authority boundaries, or hard blockers after root-cause probes.
 ```
 
 ## Review Questions
@@ -375,6 +416,8 @@ Before handing the mission to `/goal`, answer:
 - What quality level is expected?
 - What is the current belief state and what is uncertain?
 - What observable feedback tells the agent where error remains?
+- What root-cause probes should run before a blocker can be accepted?
+- Which cognitive transforms could change the next probe, verifier, or scope?
 - What would a reward-hacking implementation do?
 - Which simplifications preserve topology, and which create fake islands?
 - What local work is allowed, and what must happen in production-like infrastructure?
