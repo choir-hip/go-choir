@@ -1887,6 +1887,10 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		state = types.RunBlocked
 		kind = types.EventRunBlocked
 		cause = events.CauseSupervisorRecovery
+	} else if isProviderRateLimitError(err) {
+		state = types.RunBlocked
+		kind = types.EventRunBlocked
+		cause = events.CauseSupervisorRecovery
 	}
 
 	rec.State = state
@@ -1907,6 +1911,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
 	rt.emitEvent(persistCtx, rec, kind, cause, errPayload)
+	if synthErr := rt.synthesizeDelegateWorkerUpdateOnSuperFailure(persistCtx, rec, err); synthErr != nil {
+		log.Printf("runtime: synthesize delegate worker update for run %s: %v", rec.RunID, synthErr)
+	}
 
 	// If this is an vtext agent revision task, mark the mutation as failed
 	// and emit the vtext-specific failure event.

@@ -363,6 +363,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == AgentProfileVSuper {
 		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent and channel messages to coordinate existing children; if the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
+		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If the objective asks the worker helper to export, do not tell it not to export; either let it export or export yourself immediately after the commit evidence is present.")
 	}
 	if profile == AgentProfileCoSuper {
 		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to export_patchset, submit_worker_update, or a precise blocker instead of running open-ended tool loops.")

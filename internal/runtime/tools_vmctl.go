@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	defaultDelegateWorkerVMTimeout = 8 * time.Minute
+	defaultDelegateWorkerVMTimeout = 15 * time.Minute
 	maxDelegateWorkerVMTimeout     = 15 * time.Minute
 	maxDelegateWorkerRunAttempts   = 2
 )
@@ -455,6 +455,9 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				metadata[runMetadataWorkerRepoBaseSHA] = bootstrap.BaseSHA
 				objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
 			}
+			if profile == AgentProfileVSuper {
+				objective = workerVSuperDelegateContract(timeout) + "\n\n" + objective
+			}
 
 			baseResult := func(status string) map[string]any {
 				result := map[string]any{
@@ -768,6 +771,21 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"Commit candidate changes before calling export_patchset.",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
 		"If clone, checkout, build, or export fails, report diagnostics with submit_worker_update instead of claiming repository work.",
+	}, "\n")
+}
+
+func workerVSuperDelegateContract(timeout time.Duration) string {
+	reserve := 2 * time.Minute
+	if timeout < 4*time.Minute {
+		reserve = timeout / 3
+	}
+	return strings.Join([]string{
+		"Worker-vsuper delegate contract:",
+		"- Keep at most one implementation co-super and one verifier co-super active for candidate repo work.",
+		"- If the objective asks a helper to export, do not override that with \"do not export\"; either let the helper export or export yourself immediately after commit and verification evidence exists.",
+		"- Once a committed repo diff and focused verification evidence exist, call export_patchset before doing more coordination or repeated inspection.",
+		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",
+		"- A blocked submit_worker_update is preferred to running until the parent delegate timeout.",
 	}, "\n")
 }
 

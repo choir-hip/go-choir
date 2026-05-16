@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -117,6 +119,12 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 // toward longer or budget-governed execution.
 const maxToolLoopIterations = 200
 
+var providerRateLimitRetryDelays = []time.Duration{
+	5 * time.Second,
+	20 * time.Second,
+	60 * time.Second,
+}
+
 // RunToolLoop executes the tool-calling loop: call the LLM, execute any
 // requested tools, feed results back, and repeat until the model returns
 // end_turn or the context is cancelled.
@@ -182,13 +190,15 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			messages = rebuilt
 		}
 
-		// Call the LLM with current conversation state.
-		resp, err := provider.CallWithTools(ctx, ToolLoopRequest{
+		req := ToolLoopRequest{
 			System:          systemPrompt,
 			Messages:        messages,
 			ToolDefinitions: toolDefs,
 			MaxTokens:       maxTokens,
-		})
+		}
+
+		// Call the LLM with current conversation state.
+		resp, err := callToolLoopProviderWithRetries(ctx, provider, req, emit)
 		if err != nil {
 			if options.memoryHooks.OnProviderError != nil {
 				rebuilt, retry, hookErr := options.memoryHooks.OnProviderError(ctx, messages, err)
@@ -285,6 +295,58 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 
 	return "", totalUsage, fmt.Errorf("tool loop: exceeded %d iterations without end_turn", maxToolLoopIterations)
+}
+
+func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit EventEmitFunc) (*ToolLoopResponse, error) {
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		resp, err := provider.CallWithTools(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isProviderRateLimitError(err) || attempt >= len(providerRateLimitRetryDelays) {
+			return nil, lastErr
+		}
+		delay := providerRateLimitRetryDelays[attempt]
+		payload, _ := json.Marshal(map[string]any{
+			"reason":   "provider_rate_limit",
+			"attempt":  attempt + 1,
+			"delay_ms": delay.Milliseconds(),
+			"error":    err.Error(),
+		})
+		if emit != nil {
+			emit(types.EventRunRetry, "provider_rate_limit", payload)
+		}
+		if err := sleepContext(ctx, delay); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func isProviderRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "429") ||
+		strings.Contains(text, "too many requests") ||
+		strings.Contains(text, "rate limit") ||
+		strings.Contains(text, "rate_limited")
+}
+
+func sleepContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // buildAssistantContent constructs the content blocks for an assistant

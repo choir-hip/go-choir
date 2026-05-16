@@ -38,6 +38,15 @@ func toolSchemaStringEnum(schema map[string]any, property string) []string {
 	return out
 }
 
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -1941,6 +1950,128 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 	}
 	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
 		t.Fatalf("worker update target/channel = %q/%q, want vtext requester", update.TargetAgentID, update.ChannelID)
+	}
+}
+
+func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
+	ctx := context.Background()
+	rt, s, _ := testRuntimeWithTempCWD(t)
+	ownerID := "user-delegate-fallback"
+	docID := "doc-delegate-fallback"
+
+	now := time.Now().UTC()
+	superRun := &types.RunRecord{
+		RunID:        "super-run-delegate-fallback",
+		AgentID:      "super:" + ownerID,
+		ChannelID:    docID,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Delegate worker then report",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentID:      "super:" + ownerID,
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: "traj-delegate-fallback",
+			"requested_by_agent_id": "vtext:" + docID,
+			"requested_by_profile":  AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, *superRun); err != nil {
+		t.Fatalf("create super run: %v", err)
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "super:" + ownerID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileSuper,
+		Role:      AgentProfileSuper,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert super agent: %v", err)
+	}
+
+	delegateOutput := map[string]any{
+		"status":                       "worker_run_timeout",
+		"state":                        string(types.RunRunning),
+		"loop_id":                      "worker-run-timeout",
+		"worker_id":                    "worker-fallback",
+		"worker_vm_id":                 "vm-fallback",
+		"terminal_error":               "worker run worker-run-timeout did not finish within 15m0s",
+		"event_count":                  12,
+		"worker_channel_message_count": 2,
+		"export_patchsets":             []map[string]any{},
+	}
+	outputJSON, _ := json.Marshal(delegateOutput)
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     "delegate_worker_vm",
+		"is_error": false,
+		"output":   string(outputJSON),
+	})
+	if err := s.AppendEvent(ctx, &types.EventRecord{
+		EventID:      "event-delegate-fallback",
+		RunID:        superRun.RunID,
+		AgentID:      agentIDForRun(superRun),
+		ChannelID:    docID,
+		OwnerID:      ownerID,
+		TrajectoryID: "traj-delegate-fallback",
+		Timestamp:    time.Now().UTC(),
+		Kind:         types.EventToolResult,
+		Payload:      payload,
+	}); err != nil {
+		t.Fatalf("append delegate event: %v", err)
+	}
+
+	rt.handleExecutionError(ctx, superRun, fmt.Errorf("gateway call failed: chatgpt: status 429 Too Many Requests (sanitized)"))
+
+	storedRun, err := s.GetRun(ctx, superRun.RunID)
+	if err != nil {
+		t.Fatalf("get super run: %v", err)
+	}
+	if storedRun.State != types.RunBlocked {
+		t.Fatalf("super state = %q, want blocked", storedRun.State)
+	}
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(ctx, ownerID, "traj-delegate-fallback", 10)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker updates = %d, want 1", len(updates))
+	}
+	update := updates[0]
+	if update.UpdateID != "delegate-worker-vm-"+sanitizeExportPart(superRun.RunID) {
+		t.Fatalf("update id = %q", update.UpdateID)
+	}
+	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+		t.Fatalf("update target/channel = %q/%q", update.TargetAgentID, update.ChannelID)
+	}
+	if !containsString(update.EvidenceIDs, "event:event-delegate-fallback") || !containsString(update.EvidenceIDs, "worker_loop:worker-run-timeout") {
+		t.Fatalf("evidence ids missing delegate refs: %+v", update.EvidenceIDs)
+	}
+	if !strings.Contains(strings.Join(update.Findings, "\n"), "no export patchsets") {
+		t.Fatalf("findings missing export blocker: %+v", update.Findings)
+	}
+	if !strings.Contains(update.Content, "delegate_worker_vm returned") {
+		t.Fatalf("worker update content missing delegate summary: %q", update.Content)
+	}
+
+	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].ToAgentID != "vtext:"+docID {
+		t.Fatalf("channel messages = %+v", messages)
+	}
+	if !strings.Contains(messages[0].Content, "delegate_worker_vm returned") {
+		t.Fatalf("message content missing delegate summary: %q", messages[0].Content)
 	}
 }
 

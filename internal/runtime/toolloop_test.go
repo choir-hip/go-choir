@@ -207,6 +207,64 @@ func TestRunToolLoopMemoryHookCanRetryProviderOverflow(t *testing.T) {
 	}
 }
 
+type rateLimitThenSuccessProvider struct {
+	Provider
+	calls int32
+}
+
+func (p *rateLimitThenSuccessProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	call := atomic.AddInt32(&p.calls, 1)
+	if call == 1 {
+		return nil, fmt.Errorf("gateway call failed: chatgpt: status 429 Too Many Requests (sanitized)")
+	}
+	return &ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "recovered after rate limit",
+		Usage:      TokenUsage{InputTokens: 4, OutputTokens: 5},
+		Model:      "test-model",
+	}, nil
+}
+
+func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
+	originalDelays := providerRateLimitRetryDelays
+	providerRateLimitRetryDelays = []time.Duration{0}
+	defer func() { providerRateLimitRetryDelays = originalDelays }()
+
+	provider := &rateLimitThenSuccessProvider{}
+	var retryEvents int
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "provider_rate_limit" {
+			retryEvents++
+		}
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		4096,
+		emit,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "recovered after rate limit" {
+		t.Fatalf("text = %q", text)
+	}
+	if got := atomic.LoadInt32(&provider.calls); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
+	}
+	if retryEvents != 1 {
+		t.Fatalf("retry events = %d, want 1", retryEvents)
+	}
+	if usage.InputTokens != 4 || usage.OutputTokens != 5 {
+		t.Fatalf("usage = %+v", usage)
+	}
+}
+
 func TestRunToolLoopWithToolUse(t *testing.T) {
 	// LLM first returns tool_use, then end_turn after seeing tool result.
 	registry := NewToolRegistry()
