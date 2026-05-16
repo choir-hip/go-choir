@@ -1105,8 +1105,9 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 				}
 				return own, nil
 			}
-			r.mu.Unlock()
-			return nil, fmt.Errorf("vm %s is booting without a tracked assignment waiter", own.VMID)
+			// No pending waiter means this is a stale booting ownership, for
+			// example after a process restart. Fall through and recover it the
+			// same way as a failed/degraded ownership.
 		}
 
 		// VM exists but failed or is degraded. Create a new one
