@@ -1252,43 +1252,6 @@
     </div>
 
     <div class="document-body" data-vtext-document-body>
-      {#if publishedBundle}
-        <section
-          class="publication-panel"
-          data-vtext-published-reader
-          data-publication-id={publishedBundle.publication?.id || ''}
-          data-publication-version-id={publishedBundle.version?.id || ''}
-          data-content-hash={publishedBundle.version?.content_hash || ''}
-          data-source-revision-hash={publishedBundle.version?.source_revision_hash || ''}
-        >
-          <div class="publication-heading">
-            <p class="eyebrow">Published VText</p>
-            <h2>{titleForPublishedBundle()}</h2>
-          </div>
-          <div class="publication-facts">
-            <span>{shortHash(publishedBundle.version?.content_hash || '')}</span>
-            <span>{publishedLineCount} lines</span>
-            <span>{publishedBundle.retrieval?.spans?.length || 0} spans</span>
-          </div>
-          {#if sourceRef}
-            <div
-              class="transclusion-card"
-              data-vtext-transclusion-card
-              data-pretext-line-count={publishedLineCount}
-              data-source-kind={sourceRef.source_kind}
-              data-source-span-id={sourceRef.span_id || ''}
-              data-source-content-hash={sourceRef.content_hash || ''}
-            >
-              <div class="transclusion-meta">
-                <span>Source span</span>
-                <span>{shortHash(sourceRef.span_id || sourceRef.publication_version_id)}</span>
-              </div>
-              <p>{sourceRef.snapshot_text}</p>
-            </div>
-          {/if}
-        </section>
-      {/if}
-
       {#if publishResult}
         <section
           class="publication-panel publication-result"
@@ -1333,6 +1296,16 @@
         class:published-readonly={isPublishedReadOnly}
         data-vtext-editor-area
         data-vtext-rendered
+        data-vtext-published-reader={publishedBundle ? '' : undefined}
+        data-publication-id={publishedBundle?.publication?.id || undefined}
+        data-publication-version-id={publishedBundle?.version?.id || undefined}
+        data-content-hash={publishedBundle?.version?.content_hash || undefined}
+        data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
+        data-vtext-transclusion-card={sourceRef ? '' : undefined}
+        data-pretext-line-count={sourceRef ? publishedLineCount : undefined}
+        data-source-kind={sourceRef?.source_kind || undefined}
+        data-source-span-id={sourceRef?.span_id || undefined}
+        data-source-content-hash={sourceRef?.content_hash || undefined}
         bind:this={editorSurface}
         contenteditable={!isEditorReadOnly}
         role="textbox"
@@ -1495,6 +1468,7 @@
     padding: clamp(1.1rem, 2.2vw, 2rem);
     line-height: 1.72;
     color: #f8fafc;
+    user-select: text;
   }
 
   .editable-doc {
@@ -1585,8 +1559,7 @@
     white-space: nowrap;
   }
 
-  .publication-facts,
-  .transclusion-meta {
+  .publication-facts {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
@@ -1596,31 +1569,11 @@
     font-size: 0.68rem;
   }
 
-  .publication-facts span,
-  .transclusion-meta span {
+  .publication-facts span {
     max-width: 14rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .transclusion-card {
-    grid-column: 1 / -1;
-    border: 1px solid rgba(96, 165, 250, 0.18);
-    border-radius: 8px;
-    background: rgba(2, 6, 23, 0.36);
-    padding: 0.62rem 0.72rem;
-  }
-
-  .transclusion-card p {
-    margin: 0.35rem 0 0;
-    color: rgba(226, 232, 240, 0.84);
-    line-height: 1.48;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    font-size: 0.82rem;
-    max-height: 7.2rem;
-    overflow: auto;
   }
 
   .publication-result {

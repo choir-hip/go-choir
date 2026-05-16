@@ -363,6 +363,7 @@
     overflow: auto;
     position: relative;
     min-height: 0;
+    user-select: text;
   }
 
   /* ---- Resize handle: bottom-right corner only ---- */

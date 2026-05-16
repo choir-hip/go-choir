@@ -459,10 +459,48 @@
     dispatch('authrequired', detail);
   }
 
+  function normalizePublicRoutePath(routePath) {
+    const normalized = `/${String(routePath || '').trim().replace(/^\/+/, '')}`;
+    return normalized.startsWith('/pub/vtext/') ? normalized.replace(/\/+$/, '') : normalized;
+  }
+
+  function windowsSnapshot() {
+    let current = [];
+    windows.subscribe((items) => {
+      current = items || [];
+    })();
+    return current;
+  }
+
   function openPublishedVText(routePath, guest = false) {
+    const normalizedRoutePath = normalizePublicRoutePath(routePath);
+    const matchingWindows = windowsSnapshot().filter((win) =>
+      win.appId === 'vtext' &&
+      win.mode !== 'closed' &&
+      win.mode !== 'hidden' &&
+      normalizePublicRoutePath(win.appContext?.publishedRoutePath || '') === normalizedRoutePath
+    );
+
+    if (matchingWindows.length > 0) {
+      const primary = matchingWindows.reduce((best, win) =>
+        (win.zIndex || 0) > (best.zIndex || 0) ? win : best
+      );
+      for (const duplicate of matchingWindows) {
+        if (duplicate.windowId !== primary.windowId) {
+          closeWindow(duplicate.windowId);
+        }
+      }
+      if (primary.mode === 'minimized') {
+        restoreWindow(primary.windowId);
+      } else {
+        focusWindow(primary.windowId);
+      }
+      return;
+    }
+
     openApp('vtext', 'VText', '📝', {
       windowTitle: 'Published VText',
-      publishedRoutePath: routePath,
+      publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
       allowMultiple: true,
     });
