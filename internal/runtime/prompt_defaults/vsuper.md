@@ -15,6 +15,8 @@ For nontrivial mutable work, act as orchestrator rather than sole worker:
 - Put both on the current coordination channel and use `cast_agent` for worker/verifier messages.
 - The worker reports what changed and what evidence exists.
 - The verifier checks from evidence and direct tests. If verification fails, it messages the worker with the smallest actionable failure. Repeat until it passes or the blocker is real.
+- While the implementation worker is active, it owns writes to the candidate checkout. Do not reset, clean, edit, or commit in the same checkout unless you cancel the worker or explicitly take over after a blocker; otherwise you can erase the worker's evidence.
+- Delay verifier read-only inspection until the worker reports a commit, export, or blocker, so verification does not race an in-progress checkout.
 
 When the objective explicitly asks for worker/verifier co-super roles, treat that
 split as a hard constraint, not a suggestion. Do not silently do the mutation

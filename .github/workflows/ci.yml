@@ -110,11 +110,20 @@ jobs:
 
             echo "==> Building guest images (kernel + rootfs + initrd + store disk)"
             /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result
-            cp -f /tmp/guest-image-result/vmlinux /var/lib/go-choir/guest/vmlinux
-            cp -f /tmp/guest-image-result/rootfs.ext4 /var/lib/go-choir/guest/rootfs.ext4
-            cp -f /tmp/guest-image-result/initrd /var/lib/go-choir/guest/initrd
-            cp -f /tmp/guest-image-result/storedisk.erofs /var/lib/go-choir/guest/storedisk.erofs
-            cp -f /tmp/guest-image-result/kernel-params /var/lib/go-choir/guest/kernel-params
+            guest_dir=/var/lib/go-choir/guest
+            guest_tmp=$(mktemp -d "$guest_dir/.incoming.XXXXXX")
+            trap 'rm -rf "$guest_tmp"' EXIT
+            install -m 0644 /tmp/guest-image-result/vmlinux "$guest_tmp/vmlinux"
+            install -m 0644 /tmp/guest-image-result/rootfs.ext4 "$guest_tmp/rootfs.ext4"
+            install -m 0644 /tmp/guest-image-result/initrd "$guest_tmp/initrd"
+            install -m 0644 /tmp/guest-image-result/storedisk.erofs "$guest_tmp/storedisk.erofs"
+            install -m 0644 /tmp/guest-image-result/kernel-params "$guest_tmp/kernel-params"
+            sync
+            for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params; do
+              mv -f "$guest_tmp/$artifact" "$guest_dir/$artifact"
+            done
+            rmdir "$guest_tmp"
+            trap - EXIT
             echo "    Guest images deployed"
 
             echo "==> Restarting vmctl to pick up new guest images"

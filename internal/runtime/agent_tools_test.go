@@ -2905,7 +2905,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 }
 
 func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
-	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	activeRT, s, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
 	}
@@ -2965,6 +2965,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-worker-timeout",
+		runMetadataChannelID:    "doc-worker-timeout",
+		"requested_by_profile":  AgentProfileVText,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -3010,6 +3012,18 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	}
 	if result.WorkerChannelMessageCount != 1 {
 		t.Fatalf("channel evidence count = %d, want 1; raw=%s", result.WorkerChannelMessageCount, raw)
+	}
+	updates, err := s.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-worker-timeout", 10)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
+	}
+	if !strings.Contains(strings.Join(updates[0].Findings, "\n"), "worker_run_timeout") ||
+		!containsString(updates[0].Refs, "worker_vm:vm-worker-timeout") ||
+		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-timeout") {
+		t.Fatalf("worker update checkpoint missing delegate evidence: %+v", updates[0])
 	}
 }
 
@@ -3086,11 +3100,28 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 	}
 	for _, want := range []string{
 		"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+		"git config user.name \"Choir Worker\"",
+		"git config user.email \"worker@choir.local\"",
 		"git checkout " + base,
+		"Use set -euo pipefail for multi-step bash commands",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
 	} {
 		if !strings.Contains(bootstrap.WorkerPrompt, want) {
 			t.Fatalf("worker prompt missing %q in %q", want, bootstrap.WorkerPrompt)
+		}
+	}
+}
+
+func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
+	contract := workerVSuperDelegateContract(15 * time.Minute)
+	for _, want := range []string{
+		"exclusive writer for go-choir-candidate",
+		"do not run reset, clean, edit, or commit commands",
+		"verifier should inspect only after the implementation child has reported",
+		"export_patchset",
+	} {
+		if !strings.Contains(contract, want) {
+			t.Fatalf("delegate contract missing %q in %q", want, contract)
 		}
 	}
 }

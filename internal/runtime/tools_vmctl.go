@@ -504,6 +504,23 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				}
 				return result
 			}
+			checkpointDelegateResult := func(result map[string]any, source string) map[string]any {
+				status := stringMapValue(result, "status")
+				if status == "" {
+					return result
+				}
+				if status == "worker_run_completed" && len(mapSliceValue(result, "export_patchsets")) > 0 {
+					return result
+				}
+				updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, source); err != nil {
+					result["worker_update_error"] = err.Error()
+				} else {
+					result["worker_update_checkpoint"] = "submitted_or_existing"
+				}
+				return result
+			}
 
 			var startResp *runStatusResponse
 			var finalResp *runStatusResponse
@@ -529,6 +546,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					result["error"] = err.Error()
 					result["terminal_error"] = err.Error()
 					result["attempt"] = attempt
+					result = checkpointDelegateResult(result, "submit_failed")
 					return toolResultJSON(result)
 				}
 				finalResp, err = pollInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID, timeout)
@@ -551,6 +569,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 						result["attempt"] = attempt
 						result["timeout_seconds"] = int(timeout.Seconds())
 						result = resultWithWorkerEvents(result, workerRunID)
+						result = checkpointDelegateResult(result, status)
 						return toolResultJSON(result)
 					}
 					result := baseResult("worker_run_status_failed")
@@ -559,6 +578,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					result["terminal_error"] = err.Error()
 					result["attempt"] = attempt
 					result = resultWithWorkerEvents(result, startResp.RunID)
+					result = checkpointDelegateResult(result, "status_failed")
 					return toolResultJSON(result)
 				}
 				if finalResp.State == types.RunCompleted {
@@ -636,6 +656,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					result[key] = value
 				}
 			}
+			result = checkpointDelegateResult(result, "terminal_result")
 			return toolResultJSON(result)
 		},
 	}
@@ -763,11 +784,14 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"Bootstrap commands:",
 		"if [ ! -d go-choir-candidate/.git ]; then git clone " + remoteURL + " go-choir-candidate; fi",
 		"cd go-choir-candidate",
+		"git config user.name \"Choir Worker\"",
+		"git config user.email \"worker@choir.local\"",
 		"git fetch --all --prune",
 		"git checkout " + baseSHA,
 		"git reset --hard " + baseSHA,
 		"git clean -fdx",
 		"Perform all repository edits inside go-choir-candidate. Do not push from the worker VM.",
+		"Use set -euo pipefail for multi-step bash commands so a failed commit, test, or export cannot be hidden by a later successful command.",
 		"Commit candidate changes before calling export_patchset.",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
 		"If clone, checkout, build, or export fails, report diagnostics with submit_worker_update instead of claiming repository work.",
@@ -782,6 +806,8 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 	return strings.Join([]string{
 		"Worker-vsuper delegate contract:",
 		"- Keep at most one implementation co-super and one verifier co-super active for candidate repo work.",
+		"- If you spawn an implementation co-super, treat that child as the exclusive writer for go-choir-candidate while it is active; do not run reset, clean, edit, or commit commands in the same checkout unless you first cancel or explicitly take over from that child.",
+		"- The verifier should inspect only after the implementation child has reported a commit, export, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to export, do not override that with \"do not export\"; either let the helper export or export yourself immediately after commit and verification evidence exists.",
 		"- Once a committed repo diff and focused verification evidence exist, call export_patchset before doing more coordination or repeated inspection.",
 		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",

@@ -144,9 +144,11 @@
       #   - initrd (for systemd module loading)
       #   - store disk (erofs for the nix store closure)
       #
-      # The guest-image package bundles these for easy deployment:
+      # The guest-image package bundles these for deployment. Replace live
+      # guest artifacts atomically; running VMs may hold read-only image files
+      # open and must not see those files truncated in place.
       #   nix build .#guest-image
-      #   cp result/vmlinux result/rootfs.ext4 result/initrd result/storedisk.erofs /var/lib/go-choir/guest/
+      #   install to a temp dir, then mv artifacts into /var/lib/go-choir/guest/
       guestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm.config;
 
       # Guest kernel (vmlinux ELF binary for Firecracker).
@@ -164,7 +166,7 @@
       guestStoreDisk = guestVmConfig.microvm.storeDisk;
 
       # Convenience package that bundles all guest artifacts together.
-      # The CI deploy script copies these to /var/lib/go-choir/guest/.
+      # The CI deploy script atomically installs these to /var/lib/go-choir/guest/.
       guest-image = pkgs.runCommand "go-choir-guest-image" { } ''
         mkdir -p $out
         cp ${guestKernel}/vmlinux $out/vmlinux

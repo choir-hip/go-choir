@@ -208,6 +208,11 @@ EOF
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
       RUNTIME_WORKER_REPO_REMOTE = sourceRepoRemote;
       RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
+      # Worker candidate repos need non-interactive commits for export proof.
+      GIT_AUTHOR_NAME = "Choir Worker";
+      GIT_AUTHOR_EMAIL = "worker@choir.local";
+      GIT_COMMITTER_NAME = "Choir Worker";
+      GIT_COMMITTER_EMAIL = "worker@choir.local";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";
