@@ -185,6 +185,54 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 }
 
+func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
+	now := time.Now().UTC()
+	finishedAt := now.Add(30 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-live-summary",
+			AgentID:      "agent-conductor-live-summary",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			State:        types.RunCompleted,
+			Prompt:       "Open the mission VText.",
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-live-summary",
+			},
+		},
+		{
+			RunID:        "run-super-live-summary",
+			AgentID:      "agent-super-live-summary",
+			ParentRunID:  "run-conductor-live-summary",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			State:        types.RunRunning,
+			Prompt:       "Delegate to a worker VM.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(10 * time.Second),
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-live-summary",
+			},
+		},
+	}
+	agents, _ := buildTraceAgentNodes(runs)
+
+	summary := buildTraceTrajectorySummary("traj-live-summary", runs, agents, nil, nil, nil, nil, traceSearchSummary{})
+	if summary.State != types.RunRunning {
+		t.Fatalf("trajectory state = %q, want running", summary.State)
+	}
+	if !summary.Live {
+		t.Fatal("trajectory live = false, want true while super run is active")
+	}
+}
+
 func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
 	rt, handler := testAPISetup(t)
 

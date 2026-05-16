@@ -41,6 +41,12 @@ type acceptanceToolError struct {
 	output string
 }
 
+type acceptanceToolInvocation struct {
+	event     types.EventRecord
+	callID    string
+	arguments map[string]any
+}
+
 // SynthesizeRunAcceptance derives a durable run acceptance record from
 // product-path evidence already present in runs, Trace events, worker export
 // results, and promotion records. The caller chooses the target trajectory; the
@@ -235,6 +241,27 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			builder.addCheckpoint("worker_delegated", "blocked", last.event.Timestamp, last.event.StreamSeq, refs, map[string]any{
 				"error_count": len(delegateErrors),
 				"last_error":  last.output,
+			})
+		} else if pendingDelegates := collectAcceptancePendingToolInvocations(events, "delegate_worker_vm"); len(pendingDelegates) > 0 {
+			var refs []string
+			for _, item := range pendingDelegates {
+				ref := builder.addEventEvidence(item.event, "worker VM delegation was invoked without a terminal tool result", map[string]any{
+					"tool":               "delegate_worker_vm",
+					"call_id":            item.callID,
+					"worker_id":          payloadString(item.arguments, "worker_id"),
+					"worker_vm_id":       payloadString(item.arguments, "vm_id"),
+					"worker_sandbox_url": payloadString(item.arguments, "worker_sandbox_url"),
+				})
+				refs = append(refs, ref)
+			}
+			last := pendingDelegates[len(pendingDelegates)-1]
+			builder.addCheckpoint("worker_delegated", "blocked", last.event.Timestamp, last.event.StreamSeq, refs, map[string]any{
+				"pending_invocation_count": len(pendingDelegates),
+				"last_call_id":             last.callID,
+				"worker_id":                payloadString(last.arguments, "worker_id"),
+				"worker_vm_id":             payloadString(last.arguments, "vm_id"),
+				"worker_sandbox_url":       payloadString(last.arguments, "worker_sandbox_url"),
+				"status":                   "invoked_without_terminal_result",
 			})
 		}
 	}
@@ -434,6 +461,55 @@ func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acce
 		return results[i].event.StreamSeq < results[j].event.StreamSeq
 	})
 	return results
+}
+
+func collectAcceptancePendingToolInvocations(events []types.EventRecord, tool string) []acceptanceToolInvocation {
+	completedCallIDs := map[string]bool{}
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "tool") != tool {
+			continue
+		}
+		callID := payloadString(payload, "call_id")
+		if callID != "" {
+			completedCallIDs[callID] = true
+		}
+	}
+
+	var invocations []acceptanceToolInvocation
+	seenPendingCallIDs := map[string]bool{}
+	for _, ev := range events {
+		if ev.Kind != types.EventToolInvoked {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "tool") != tool {
+			continue
+		}
+		callID := payloadString(payload, "call_id")
+		if callID != "" && completedCallIDs[callID] {
+			continue
+		}
+		if callID != "" {
+			if seenPendingCallIDs[callID] {
+				continue
+			}
+			seenPendingCallIDs[callID] = true
+		}
+		args, _ := payload["arguments"].(map[string]any)
+		invocations = append(invocations, acceptanceToolInvocation{
+			event:     ev,
+			callID:    callID,
+			arguments: args,
+		})
+	}
+	sort.Slice(invocations, func(i, j int) bool {
+		return invocations[i].event.StreamSeq < invocations[j].event.StreamSeq
+	})
+	return invocations
 }
 
 func traceToolErrorText(payload map[string]any) string {

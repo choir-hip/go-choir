@@ -283,6 +283,40 @@ func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptancePendingDelegationTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-run-acceptance-pending-delegate","trajectory_id":"traj-pending-delegate"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel {
+		t.Fatalf("acceptance level = %q, want staging-smoke-level; record=%+v", rec.AcceptanceLevel, rec)
+	}
+	if rec.State != types.RunAcceptanceBlocked {
+		t.Fatalf("state = %q, want blocked", rec.State)
+	}
+	blocked := acceptanceCheckpoint(rec, "worker_delegated", "blocked")
+	if blocked == nil {
+		t.Fatalf("missing blocked worker_delegated checkpoint: %+v", rec.Checkpoints)
+	}
+	if got, _ := blocked.Details["status"].(string); got != "invoked_without_terminal_result" {
+		t.Fatalf("blocked status = %q, want invoked_without_terminal_result", got)
+	}
+	if got, _ := blocked.Details["worker_id"].(string); got != "worker-pending" {
+		t.Fatalf("blocked worker_id = %q, want worker-pending", got)
+	}
+	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "worker VM delegation did not complete") {
+		t.Fatalf("missing delegation residual risk: %+v", rec.FailureResidualRisks)
+	}
+}
+
 func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
@@ -604,6 +638,129 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 	appendAcceptanceToolError(t, rt, "event-delegate-restart-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", `tool_error: worker run run-worker-acceptance ended in state failed: runtime restarted, run interrupted`)
 }
 
+func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	finishedAt := now.Add(15 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-pending-delegate",
+			AgentID:      "agent-conductor-pending-delegate",
+			ChannelID:    "channel-pending-delegate",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
+			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-pending-delegate"}`,
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-pending-delegate",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+				"input_source":          "prompt_bar",
+			},
+		},
+		{
+			RunID:        "run-vtext-pending-delegate",
+			AgentID:      "agent-vtext-pending-delegate",
+			ChannelID:    "channel-pending-delegate",
+			ParentRunID:  "run-conductor-pending-delegate",
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Own the acceptance document.",
+			CreatedAt:    now.Add(3 * time.Second),
+			UpdatedAt:    now.Add(4 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileVText,
+				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataTrajectoryID: "traj-pending-delegate",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+		{
+			RunID:        "run-super-pending-delegate",
+			AgentID:      "agent-super-pending-delegate",
+			ChannelID:    "channel-pending-delegate",
+			ParentRunID:  "run-vtext-pending-delegate",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunRunning,
+			Prompt:       "Delegate a worker and export a patchset.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(8 * time.Second),
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-pending-delegate",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+	}
+	for _, run := range runs {
+		if err := rt.store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-submit-pending-delegate",
+		RunID:        "run-conductor-pending-delegate",
+		AgentID:      "agent-conductor-pending-delegate",
+		ChannelID:    "channel-pending-delegate",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-pending-delegate",
+		Timestamp:    now,
+		Kind:         types.EventRunSubmitted,
+		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-vtext-pending-delegate",
+		RunID:        "run-vtext-pending-delegate",
+		AgentID:      "agent-vtext-pending-delegate",
+		ChannelID:    "channel-pending-delegate",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-pending-delegate",
+		Timestamp:    now.Add(4 * time.Second),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      json.RawMessage(`{"doc_id":"doc-pending-delegate","revision_id":"rev-1"}`),
+	})
+	appendAcceptanceToolResult(t, rt, "event-super-pending-delegate", "run-vtext-pending-delegate", "agent-vtext-pending-delegate", now.Add(5*time.Second), "request_super_execution", map[string]any{
+		"agent_id": "agent-super-pending-delegate",
+		"loop_id":  "run-super-pending-delegate",
+		"state":    "running",
+	})
+	appendAcceptanceToolResult(t, rt, "event-worker-lease-pending-delegate", "run-super-pending-delegate", "agent-super-pending-delegate", now.Add(6*time.Second), "request_worker_vm", map[string]any{
+		"status": "worker_requested",
+		"handle": map[string]any{
+			"kind":          "worker",
+			"worker_id":     "worker-pending",
+			"vm_id":         "vm-pending",
+			"desktop_id":    types.PrimaryDesktopID,
+			"machine_class": "worker-medium",
+			"sandbox_url":   "http://127.0.0.1:8085",
+		},
+	})
+	appendAcceptanceToolInvoked(t, rt, "event-delegate-invoked-pending", "run-super-pending-delegate", "agent-super-pending-delegate", "traj-pending-delegate", "channel-pending-delegate", now.Add(7*time.Second), "delegate_worker_vm", "call-pending-delegate", map[string]any{
+		"worker_id":          "worker-pending",
+		"vm_id":              "vm-pending",
+		"worker_sandbox_url": "http://127.0.0.1:8085",
+		"profile":            AgentProfileVSuper,
+		"objective":          "candidate-world task",
+	})
+}
+
 func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool string, output map[string]any) {
 	t.Helper()
 	outputJSON, err := json.Marshal(output)
@@ -628,6 +785,29 @@ func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agent
 		TrajectoryID: "traj-acceptance",
 		Timestamp:    at,
 		Kind:         types.EventToolResult,
+		Payload:      payload,
+	})
+}
+
+func appendAcceptanceToolInvoked(t *testing.T, rt *Runtime, eventID, runID, agentID, trajectoryID, channelID string, at time.Time, tool, callID string, arguments map[string]any) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"tool":      tool,
+		"call_id":   callID,
+		"arguments": arguments,
+	})
+	if err != nil {
+		t.Fatalf("marshal tool invoked payload: %v", err)
+	}
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      eventID,
+		RunID:        runID,
+		AgentID:      agentID,
+		ChannelID:    channelID,
+		OwnerID:      "user-alice",
+		TrajectoryID: trajectoryID,
+		Timestamp:    at,
+		Kind:         types.EventToolInvoked,
 		Payload:      payload,
 	})
 }

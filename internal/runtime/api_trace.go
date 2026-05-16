@@ -521,12 +521,13 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		}
 	}
 
+	state := traceTrajectoryState(runs, latestRun.State)
 	return traceTrajectorySummary{
 		TrajectoryID:         trajectoryID,
 		Title:                title,
 		Subtitle:             subtitle,
-		State:                latestRun.State,
-		Live:                 latestRun.State == types.RunPending || latestRun.State == types.RunRunning || latestRun.State == types.RunBlocked,
+		State:                state,
+		Live:                 traceStateLive(state),
 		LatestActivityAt:     formatTraceTime(latestAt),
 		LeadAgents:           leadAgents,
 		AgentCount:           len(agents),
@@ -540,6 +541,21 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		SearchSuccessCount:   search.Successes,
 		SearchRateLimitCount: search.RateLimits,
 	}
+}
+
+func traceTrajectoryState(runs []types.RunRecord, fallback types.RunState) types.RunState {
+	for _, state := range []types.RunState{types.RunRunning, types.RunPending, types.RunBlocked} {
+		for _, run := range runs {
+			if run.State == state {
+				return state
+			}
+		}
+	}
+	return fallback
+}
+
+func traceStateLive(state types.RunState) bool {
+	return state == types.RunPending || state == types.RunRunning || state == types.RunBlocked
 }
 
 func buildTraceAgentNodes(runs []types.RunRecord) ([]traceAgentNode, map[string]traceAgentNode) {
