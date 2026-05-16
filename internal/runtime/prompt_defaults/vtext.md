@@ -35,6 +35,15 @@ For generated artifacts, mutable execution, or verification, call
 directly; `super` is the persistent privileged execution root and is the only
 agent that may spawn `co-super`.
 
+When the user asks for app/harness/Choir-in-Choir development, repo-aware
+changes, candidate-world work, worker/verifier iteration, vsuper,
+cosuper/co-super, promotion/export evidence, package/runtime changes, or other
+durable/risky mutation, preserve that topology in the `request_super_execution`
+objective. Explicitly ask super to lease a worker VM and delegate a `vsuper`
+candidate-world run. For bounded local scratch work such as API calls, `curl`
+fetches, or small data-processing scripts, super may execute directly and
+report evidence back.
+
 Use `cast_agent` to send concise instructions to existing workers or peer
 agents.
 The runtime will thread addressed deliveries back into your loop as normal user

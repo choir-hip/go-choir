@@ -355,7 +355,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nLet findings checkpoints, novelty, provider health, and rate-limit signals determine whether to widen, narrow, or continue.")
 		b.WriteString("\nIf the request needs live evidence, spawn a researcher on the document channel.")
 		b.WriteString("\nIf it needs generated artifacts, execution, or verification, call request_super_execution. Do not spawn super directly.")
+		b.WriteString("\nIf the request asks for app/harness/Choir-in-Choir development, repo-aware changes, candidate-world execution, worker/verifier iteration, vsuper, co-super/cosuper, promotion/export evidence, package/runtime changes, or other durable/risky mutation, preserve that topology in the request_super_execution objective and explicitly ask super to lease a worker VM and delegate a vsuper candidate-world run. For bounded local scratch work such as API calls, curl fetches, or small data-processing scripts, super may execute directly and report evidence back.")
 		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, call edit_vtext for the next revision instead of waiting for perfect coverage.")
+	}
+	if profile == AgentProfileSuper {
+		b.WriteString("\n\nSuper authority boundary: bounded local scratch work is allowed when it is read-only, ephemeral, or low-risk, including API calls, curl fetches, small data-processing scripts, and temporary inspection artifacts. Delegate work that changes Choir/app/harness behavior or crosses a durable/risky boundary. For repo edits, package installs, builds meant as candidate changes, runtime/app state mutation, Choir-in-Choir development, candidate-world exploration, worker/verifier loops, promotion/export work, or dangerous/privileged actions, first call request_worker_vm. The runtime will complete the required delegate_worker_vm transition to a vsuper run. Do not answer that class of request only with submit_worker_update unless the worker lease or delegation fails, and then report the exact blocker.")
 	}
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")

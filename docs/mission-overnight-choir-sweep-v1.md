@@ -44,6 +44,56 @@ also using a visible product slice as pressure.
   candidate worlds, promotion queue records, and run acceptance records exist,
   but live product-path sweep proof remains weak.
 
+## Control Update: Sweep As Substrate Training Ground
+
+The overnight sweep is not a UX bug bash with agent theater around it. The
+visible product sweep is the workload used to test and improve the actual
+Choir-in-Choir substrate.
+
+First control interval on 2026-05-16 submitted the inner prompt through the
+visible staging prompt bar after auth-on-mutation:
+
+- staging health: proxy and sandbox deployed commit
+  `d8185cc9b2f4c9eb8b765a891ef267f0160bd54c`;
+- submission / trajectory id: `b50b9d07-0a03-4168-b392-dfa60eb7535a`;
+- VText doc id: `b8a3561a-a406-4fb9-9934-602f258faa36`;
+- framing revision id: `69e9fdcf-f61e-4767-8011-ac06f0f80dbe`;
+- observed roles: `conductor`, `vtext`, `super`;
+- observed VText revisions: 3;
+- observed `submit_worker_update` results: 2;
+- missing evidence: no `request_worker_vm`, no `delegate_worker_vm`, no
+  `vsuper`, no worker/verifier `co-super`, no export/promotion evidence.
+
+Learning:
+
+- The runtime tool path already auto-completes `request_worker_vm` into
+  `delegate_worker_vm(profile=vsuper)`.
+- The failed transition is therefore upstream of tooling: the broad sweep
+  prompt reached `super`, but the role prompts did not make the authority
+  boundary clear enough. `super` may do bounded local scratch work such as API
+  calls, `curl` fetches, and small scripts, but app/harness/Choir-in-Choir
+  development, repo-aware changes, candidate-world work, worker/verifier loops,
+  package/runtime changes, export/promotion, and dangerous or durable mutation
+  should route through worker VM -> `vsuper`.
+- Trace UI itself exposed a verifier-surface issue: a VText window can intercept
+  desktop icon clicks during automated inspection, and the Trace window showed
+  a loading state rather than usable trajectory evidence in the screenshot.
+
+Route correction:
+
+- Treat prompt/substrate learning and prompt-default changes as first-class
+  mission output.
+- Keep the UX/onboarding sweep as the test workload, but do not spend effort on
+  UX fixes until the sweep workload reliably exercises
+  `super -> vsuper -> worker/verifier co-super`.
+- Strengthen VText and Super role prompts so app/harness/Choir-in-Choir
+  development, candidate-world, worker/verifier, vsuper/co-super, repo-aware
+  changes, export, promotion, package/runtime changes, and dangerous/durable
+  mutation preserve the intended worker-VM -> `vsuper` topology, while bounded
+  local scratch/API/script work remains available to `super`.
+- Rerun the smallest deployed product-path proof after the prompt fix; only
+  then continue into broader UX/onboarding sweep work.
+
 ## Value Criterion
 
 Maximize verified self-development capacity per unit of sleeping-human attention

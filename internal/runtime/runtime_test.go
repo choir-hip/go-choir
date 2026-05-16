@@ -426,6 +426,42 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("vtext system prompt should include coordination channel, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "explicitly ask super to lease a worker VM and delegate a vsuper candidate-world run") ||
+		!strings.Contains(prompt, "For bounded local scratch work such as API calls") {
+		t.Fatalf("vtext system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
+	}
+}
+
+func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
+	rt, _ := testRuntime(t)
+
+	rec := &types.RunRecord{
+		RunID:        "run-super-sweep",
+		AgentID:      "agent-super-user-alice",
+		ChannelID:    "doc-sweep",
+		OwnerID:      "user-alice",
+		AgentProfile: AgentProfileSuper,
+		Prompt:       "Run a MissionGradient sweep substrate proof with worker/verifier cosupers.",
+	}
+
+	prompt, err := rt.systemPromptForRun(rec)
+	if err != nil {
+		t.Fatalf("systemPromptForRun: %v", err)
+	}
+	for _, want := range []string{
+		"Super authority boundary",
+		"bounded local scratch work is allowed",
+		"API calls, curl fetches",
+		"Delegate work that changes Choir/app/harness behavior",
+		"first call request_worker_vm",
+		"delegate_worker_vm transition to a vsuper run",
+		"Do not answer that class of request only with submit_worker_update",
+		"worker-small",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("super system prompt missing %q in %q", want, prompt)
+		}
+	}
 }
 
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
