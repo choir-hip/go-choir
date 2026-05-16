@@ -512,9 +512,6 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				if status == "" {
 					return result
 				}
-				if status == "worker_run_completed" && len(mapSliceValue(result, "export_patchsets")) > 0 {
-					return result
-				}
 				updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, source); err != nil {

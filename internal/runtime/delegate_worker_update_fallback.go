@@ -326,14 +326,26 @@ func intMapValue(m map[string]any, key string) int {
 }
 
 func mapSliceValue(m map[string]any, key string) []map[string]any {
-	raw, _ := m[key].([]any)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		if entry, ok := item.(map[string]any); ok {
-			out = append(out, entry)
+	switch raw := m[key].(type) {
+	case []map[string]any:
+		out := make([]map[string]any, 0, len(raw))
+		for _, item := range raw {
+			if item != nil {
+				out = append(out, item)
+			}
 		}
+		return out
+	case []any:
+		out := make([]map[string]any, 0, len(raw))
+		for _, item := range raw {
+			if entry, ok := item.(map[string]any); ok {
+				out = append(out, entry)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
-	return out
 }
 
 func exportArtifactRefs(output map[string]any) []string {

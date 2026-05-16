@@ -2324,7 +2324,7 @@ func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
 }
 
 func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
-	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
 		t.Fatalf("install active tools: %v", err)
 	}
@@ -2408,6 +2408,9 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-worker-delegation",
+		runMetadataChannelID:    "doc-worker-delegation",
+		"requested_by_agent_id": "vtext:doc-worker-delegation",
+		"requested_by_profile":  AgentProfileVText,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -2448,6 +2451,21 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 	if got, _ := result.PromotionQueue[0]["candidate_id"].(string); strings.TrimSpace(got) == "" {
 		t.Fatalf("queued promotion missing candidate_id: %+v", result.PromotionQueue[0])
+	}
+	updates, err := activeStore.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-worker-delegation", 10)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
+	}
+	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	if !strings.Contains(joinedFindings, "returned 1 export patchset") || strings.Contains(joinedFindings, "no export patchsets") {
+		t.Fatalf("worker update checkpoint did not preserve successful export: %+v", updates[0])
+	}
+	if !containsString(updates[0].Artifacts, result.ExportPatchsets[0]["manifest_path"].(string)) ||
+		!containsString(updates[0].Artifacts, result.ExportPatchsets[0]["patchset_path"].(string)) {
+		t.Fatalf("worker update checkpoint missing export artifacts: %+v", updates[0])
 	}
 }
 
@@ -3051,6 +3069,14 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		!containsString(updates[0].Refs, "worker_vm:vm-worker-timeout") ||
 		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-timeout") {
 		t.Fatalf("worker update checkpoint missing delegate evidence: %+v", updates[0])
+	}
+	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	if !strings.Contains(joinedFindings, "returned 1 export patchset") || strings.Contains(joinedFindings, "no export patchsets") {
+		t.Fatalf("worker update checkpoint did not preserve child export evidence: %+v", updates[0])
+	}
+	if !containsString(updates[0].Artifacts, "/mnt/persistent/files/patchsets/manifest.json") ||
+		!containsString(updates[0].Artifacts, "/mnt/persistent/files/patchsets/patch.diff") {
+		t.Fatalf("worker update checkpoint missing child export artifacts: %+v", updates[0])
 	}
 }
 
