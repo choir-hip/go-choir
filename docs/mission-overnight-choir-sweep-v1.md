@@ -77,6 +77,10 @@ commit -> push origin main -> monitor CI -> monitor staging deploy
 - Do not use `/internal/*`, `/api/test/*`, `/api/agent/*`, `/api/prompts`, raw
   event mutation endpoints, direct service ports, or manually seeded success
   records.
+- Signed-out users should be able to use the public desktop for read/explore
+  actions. Ask for login only at mutation boundaries: saving state, editing,
+  publishing, creating proposals, launching owned/candidate computers, uploading
+  files, or calling LLM/search/worker-backed actions.
 - Foreground/canonical state stays stable until explicit promotion.
 - `super` delegates candidate-world orchestration to `vsuper`; `vsuper`
   delegates work and verification to bounded cosupers.
@@ -121,6 +125,8 @@ Required evidence:
 - visible prompt-bar submission id;
 - VText doc/revision id for the mission report;
 - Trace trajectory/run ids;
+- enough Trace UI usability evidence to inspect the run on desktop and mobile,
+  or a precise Trace-UI blocker that gets promoted above product polish;
 - browser request audit with forbidden-route count;
 - run acceptance record when enough evidence exists.
 
@@ -132,6 +138,9 @@ Targets:
 
 - repo-aware worker/candidate environment or precise blocker;
 - Trace evidence of super -> vsuper -> worker/verifier cosupers;
+- Trace is treated as an evidence instrument, not just a debug page: if its
+  current UI blocks inspection, especially on mobile, improve the smallest
+  reading/navigation slice needed to verify the sweep;
 - at least one worker/verifier channel message loop, pass/fail, or precise
   missing-substrate blocker;
 - candidate/export/promotion queue evidence if reachable;
@@ -147,9 +156,15 @@ Targets:
 
 - signed-out first view explains Choir through a VText-native artifact, not a
   marketing page;
-- login/register/auth-on-mutation flow is understandable;
+- logged-out desktop is useful without identity for read/explore/open-public
+  actions, and login/register appears only when the user tries to mutate state
+  or call an LLM/search/worker-backed action;
+- login/register/auth-on-mutation flow is understandable and preserves the
+  user's intent after authentication;
 - prompt bar remains usable when windows are open;
 - desktop/window chrome is less crowded and more legible;
+- Trace UI has a usable mobile layout for reading trajectory summaries, agents,
+  tool calls, messages, and evidence refs;
 - onboarding VText can be authored by one user, published, and selected as the
   platform guest startup explainer if the current publication system supports it.
 
@@ -188,6 +203,22 @@ Targets:
 - podcast index search as content artifact input;
 - radio/podcast traversal as a projection of VText, not a separate media toy.
 
+### P6: General Code Review And Quality Pass
+
+Run throughout the sweep and explicitly before stopping. This is not permission
+for unrelated refactoring. Review the changed surfaces and the highest-risk
+adjacent boundaries:
+
+- auth-on-mutation/public-read split;
+- Trace data/UI contracts;
+- VText/publication proposal contracts;
+- worker/vsuper/cosuper authority and evidence paths;
+- mobile/responsive layout of touched surfaces;
+- tests and acceptance commands that could be Goodharted.
+
+Fix small, high-confidence defects discovered during review. Record larger
+quality issues as next objectives instead of churning the overnight run.
+
 ## Inner Choir Prompt
 
 Submit through the visible staging prompt bar:
@@ -201,10 +232,13 @@ vsuper -> worker/verifier cosuper topology, have worker and verifier cosupers
 communicate over agent-to-agent channels until pass/fail or a real blocker, and
 record candidate/export/promotion/rollback evidence where available. If the
 substrate is coherent, spend the remaining effort on first-use UX/onboarding:
-signed-out platform desktop, login/register/auth-on-mutation clarity, an initial
-VText explainer for Choir/VText, prompt bar ergonomics with windows open, and
-desktop polish. Do not use slash commands, forbidden internal/test routes,
-manual success seeding, direct service ports, local-only proof, fake
+signed-out platform desktop that remains usable for read/explore actions until
+mutation or LLM/search/worker actions require auth, login/register
+auth-on-mutation clarity, an initial VText explainer for Choir/VText, prompt
+bar ergonomics with windows open, Trace UI readability including mobile, and
+desktop polish. Include a general code-review/quality pass over touched and
+high-risk adjacent surfaces. Do not use slash commands, forbidden internal/test
+routes, manual success seeding, direct service ports, local-only proof, fake
 transclusion panels, decorative citations, or canonical mutation without
 verification/promotion. Before stopping on a blocker, apply cognitive
 transforms and record the next safe probe. Before stopping successfully, do a
@@ -216,6 +250,9 @@ quality pass and record the next objective.
 - Register/login to staging through product auth only.
 - Drive the prompt through Playwright, not by private runtime mutation.
 - Inspect Trace, VText, public product APIs, and staging health.
+- Treat Trace readability as part of the verifier surface: if it is unusable on
+  mobile or cannot reveal agent/tool/evidence chains, fix the smallest coherent
+  slice or record it as a blocker.
 - If substrate fixes are needed, make repo changes locally, commit, push,
   monitor CI/deploy, verify staging commit identity, and rerun acceptance.
 - Do not let Choir-internal workers push or deploy platform changes.
@@ -228,6 +265,8 @@ quality pass and record the next objective.
 - Frontend build and focused Playwright for touched UI.
 - Deployed Playwright audit for prompt-bar, VText, Trace, published routes,
   reload behavior, and forbidden browser requests.
+- Desktop and mobile screenshots or DOM assertions for Trace when Trace UI is
+  changed or blocks verification.
 - Product/API evidence for run acceptance synthesis.
 - VText report and Trace evidence, not chat-only claims.
 
@@ -241,7 +280,9 @@ Stop successfully when:
 - Trace shows intended topology or a precise invariant-level blocker;
 - worker/verifier iteration, candidate/export/promotion evidence, or blocker
   evidence is named;
-- a quality pass and next objective record exist.
+- logged-out desktop/auth-on-mutation behavior and Trace mobile readability are
+  either improved/proven or recorded as named blockers;
+- a code-review/quality pass and next objective record exist.
 
 Stop unsuccessfully only after:
 
@@ -253,5 +294,5 @@ Stop unsuccessfully only after:
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-overnight-choir-sweep-v1.md as a Codex-operated MissionGradient mission: supervise a staging Choir-in-Choir overnight sweep through Playwright and the visible prompt bar, prioritize sweep substrate proof before first-use UX/onboarding, forbid fake-island placeholders such as fake transclusion panels, land any required platform fixes through git/CI/deploy, and finish with VText/Trace/run-acceptance evidence, rollback refs, quality pass, residual risks, and next objective.
+/goal Run docs/mission-overnight-choir-sweep-v1.md as a Codex-operated MissionGradient mission: supervise a staging Choir-in-Choir overnight sweep through Playwright and the visible prompt bar, prioritize sweep substrate proof before first-use UX/onboarding, keep the logged-out desktop usable until mutation or LLM/search/worker actions require auth, improve or precisely block Trace UI readability especially on mobile, forbid fake-island placeholders such as fake transclusion panels, land any required platform fixes through git/CI/deploy, and finish with VText/Trace/run-acceptance evidence, code-review quality pass, rollback refs, residual risks, and next objective.
 ```
