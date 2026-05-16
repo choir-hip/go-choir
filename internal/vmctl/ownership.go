@@ -1093,6 +1093,22 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 			return own, nil
 		}
 
+		if own.State == VMStateBooting {
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				ch := make(chan *VMOwnership, 1)
+				r.pendingWaiters[key] = append(waiters, ch)
+				r.mu.Unlock()
+
+				own := <-ch
+				if own == nil {
+					return nil, fmt.Errorf("vm assignment failed for user %s desktop %s", userID, desktopID)
+				}
+				return own, nil
+			}
+			r.mu.Unlock()
+			return nil, fmt.Errorf("vm %s is booting without a tracked assignment waiter", own.VMID)
+		}
+
 		// VM exists but failed or is degraded. Create a new one
 		// with a fresh epoch. Clean up the old mapping.
 		delete(r.vmByID, own.VMID)
