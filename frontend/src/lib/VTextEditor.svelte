@@ -8,7 +8,6 @@
 -->
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { prepare, layout } from '@chenglou/pretext';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     createDocument,
@@ -64,7 +63,6 @@
   let publishedProposal = null;
   let publishedActionPending = false;
   let publishResult = null;
-  let transclusionMetrics = null;
 
   const AUTOSAVE_DELAY_MS = 900;
 
@@ -385,19 +383,6 @@
     const text = String(value || '');
     if (text.length <= 18) return text;
     return `${text.slice(0, 10)}…${text.slice(-6)}`;
-  }
-
-  function measureTransclusionText(text) {
-    try {
-      const prepared = prepare(String(text || ''), '15px Inter', { whiteSpace: 'pre-wrap' });
-      const result = layout(prepared, 560, 24);
-      return {
-        lineCount: result.lineCount,
-        height: Math.round(result.height),
-      };
-    } catch {
-      return { lineCount: 0, height: 0 };
-    }
   }
 
   function buildPublishedTransclusionRef(bundle = publishedBundle) {
@@ -767,7 +752,6 @@
       publishedProposal = null;
       publishedActionPending = false;
       publishResult = null;
-      transclusionMetrics = null;
 
       if (shouldShowRecentLanding(appContext)) {
         showRecent = true;
@@ -835,7 +819,6 @@
     publishedRoutePath = bundle.route?.path || routePath;
     editorValue = bundle.artifact?.content || '';
     lastAutosavedContent = editorValue;
-    transclusionMetrics = measureTransclusionText(editorValue);
     const ref = buildPublishedTransclusionRef(bundle);
     publishedTransclusions = ref ? [ref] : [];
     saveStatus = currentUser ? 'Published VText loaded' : 'Guest published VText';
@@ -1107,8 +1090,6 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
-  $: publishedLineCount = transclusionMetrics?.lineCount || 0;
-  $: sourceRef = publishedTransclusions[0] || null;
   $: renderedMarkdown = renderMarkdown(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -1301,11 +1282,6 @@
         data-publication-version-id={publishedBundle?.version?.id || undefined}
         data-content-hash={publishedBundle?.version?.content_hash || undefined}
         data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
-        data-vtext-transclusion-card={sourceRef ? '' : undefined}
-        data-pretext-line-count={sourceRef ? publishedLineCount : undefined}
-        data-source-kind={sourceRef?.source_kind || undefined}
-        data-source-span-id={sourceRef?.span_id || undefined}
-        data-source-content-hash={sourceRef?.content_hash || undefined}
         bind:this={editorSurface}
         contenteditable={!isEditorReadOnly}
         role="textbox"
