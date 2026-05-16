@@ -112,7 +112,12 @@ jobs:
             /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result
             guest_dir=/var/lib/go-choir/guest
             guest_tmp=$(mktemp -d "$guest_dir/.incoming.XXXXXX")
-            trap 'rm -rf "$guest_tmp"' EXIT
+            cleanup_guest_tmp() {
+              if [ -n "${guest_tmp:-}" ] && [ -d "$guest_tmp" ]; then
+                rm -rf "$guest_tmp"
+              fi
+            }
+            trap cleanup_guest_tmp EXIT
             install -m 0644 /tmp/guest-image-result/vmlinux "$guest_tmp/vmlinux"
             install -m 0644 /tmp/guest-image-result/rootfs.ext4 "$guest_tmp/rootfs.ext4"
             install -m 0644 /tmp/guest-image-result/initrd "$guest_tmp/initrd"
@@ -123,6 +128,7 @@ jobs:
               mv -f "$guest_tmp/$artifact" "$guest_dir/$artifact"
             done
             rmdir "$guest_tmp"
+            guest_tmp=
             trap - EXIT
             echo "    Guest images deployed"
 
