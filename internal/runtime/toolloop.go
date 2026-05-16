@@ -112,8 +112,10 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 
 // maxToolLoopIterations prevents infinite tool-calling loops. If the LLM
 // keeps requesting tool use without reaching an end_turn, we bail out
-// after this many iterations.
-const maxToolLoopIterations = 25
+// after this many iterations. This is a temporary stability ceiling while
+// worker leases, cancellation, compaction, and budget backpressure mature
+// toward longer or budget-governed execution.
+const maxToolLoopIterations = 200
 
 // RunToolLoop executes the tool-calling loop: call the LLM, execute any
 // requested tools, feed results back, and repeat until the model returns

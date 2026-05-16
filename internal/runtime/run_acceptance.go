@@ -198,10 +198,13 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 
 	delegateResults := collectAcceptanceToolResults(events, "delegate_worker_vm")
 	var exportRefs []string
+	var nonExportDelegateResults []acceptanceToolResult
 	exportCount := 0
 	for _, item := range delegateResults {
 		exports := acceptanceOutputSlice(item.output, "export_patchsets")
-		if len(exports) == 0 {
+		status := payloadString(item.output, "status")
+		if len(exports) == 0 || (status != "" && status != "worker_run_completed") {
+			nonExportDelegateResults = append(nonExportDelegateResults, item)
 			continue
 		}
 		exportCount += len(exports)
@@ -228,22 +231,75 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	}
 	if exportCount == 0 {
 		delegateErrors := collectAcceptanceToolErrors(events, "delegate_worker_vm")
+		pendingDelegates := collectAcceptancePendingToolInvocations(events, "delegate_worker_vm")
+		var refs []string
+		details := map[string]any{}
+		var blockedAt time.Time
+		var blockedSeq int64
+		rememberLatest := func(ev types.EventRecord) {
+			if blockedAt.IsZero() || ev.Timestamp.After(blockedAt) {
+				blockedAt = ev.Timestamp
+				blockedSeq = ev.StreamSeq
+			}
+		}
+		if len(nonExportDelegateResults) > 0 {
+			for _, item := range nonExportDelegateResults {
+				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without export evidence", map[string]any{
+					"tool":                  "delegate_worker_vm",
+					"status":                payloadString(item.output, "status"),
+					"state":                 payloadString(item.output, "state"),
+					"worker_vm_id":          payloadString(item.output, "worker_vm_id"),
+					"worker_loop_id":        payloadString(item.output, "loop_id"),
+					"worker_event_summary":  item.output["worker_event_summary"],
+					"worker_channel_events": item.output["worker_channel_message_count"],
+				})
+				refs = append(refs, ref)
+				rememberLatest(item.event)
+			}
+			last := nonExportDelegateResults[len(nonExportDelegateResults)-1]
+			details["result_count"] = len(nonExportDelegateResults)
+			details["last_result_status"] = payloadString(last.output, "status")
+			details["last_result_state"] = payloadString(last.output, "state")
+			details["worker_id"] = payloadString(last.output, "worker_id")
+			details["worker_vm_id"] = payloadString(last.output, "worker_vm_id")
+			details["worker_loop_id"] = payloadString(last.output, "loop_id")
+			details["worker_sandbox_url"] = payloadString(last.output, "worker_sandbox_url")
+			if errText := payloadString(last.output, "error"); errText != "" {
+				details["last_worker_error"] = errText
+			}
+			if terminal := payloadString(last.output, "terminal_error"); terminal != "" {
+				details["terminal_error"] = terminal
+			}
+			if summary := last.output["worker_event_summary"]; summary != nil {
+				details["worker_event_summary"] = summary
+			}
+			if profiles := last.output["worker_spawned_profiles"]; profiles != nil {
+				details["worker_spawned_profiles"] = profiles
+			}
+			if count := last.output["worker_channel_message_count"]; count != nil {
+				details["worker_channel_message_count"] = count
+			}
+			if eventCount := last.output["event_count"]; eventCount != nil {
+				details["event_count"] = eventCount
+			}
+			if details["last_result_status"] != "" {
+				details["status"] = details["last_result_status"]
+			}
+		}
 		if len(delegateErrors) > 0 {
-			var refs []string
 			for _, item := range delegateErrors {
 				ref := builder.addEventEvidence(item.event, "worker VM delegation failed before export", map[string]any{
 					"tool":  "delegate_worker_vm",
 					"error": item.output,
 				})
 				refs = append(refs, ref)
+				rememberLatest(item.event)
 			}
 			last := delegateErrors[len(delegateErrors)-1]
-			builder.addCheckpoint("worker_delegated", "blocked", last.event.Timestamp, last.event.StreamSeq, refs, map[string]any{
-				"error_count": len(delegateErrors),
-				"last_error":  last.output,
-			})
-		} else if pendingDelegates := collectAcceptancePendingToolInvocations(events, "delegate_worker_vm"); len(pendingDelegates) > 0 {
-			var refs []string
+			details["error_count"] = len(delegateErrors)
+			details["last_error"] = last.output
+		}
+		if len(pendingDelegates) > 0 {
 			for _, item := range pendingDelegates {
 				ref := builder.addEventEvidence(item.event, "worker VM delegation was invoked without a terminal tool result", map[string]any{
 					"tool":               "delegate_worker_vm",
@@ -253,16 +309,24 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 					"worker_sandbox_url": payloadString(item.arguments, "worker_sandbox_url"),
 				})
 				refs = append(refs, ref)
+				rememberLatest(item.event)
 			}
 			last := pendingDelegates[len(pendingDelegates)-1]
-			builder.addCheckpoint("worker_delegated", "blocked", last.event.Timestamp, last.event.StreamSeq, refs, map[string]any{
-				"pending_invocation_count": len(pendingDelegates),
-				"last_call_id":             last.callID,
-				"worker_id":                payloadString(last.arguments, "worker_id"),
-				"worker_vm_id":             payloadString(last.arguments, "vm_id"),
-				"worker_sandbox_url":       payloadString(last.arguments, "worker_sandbox_url"),
-				"status":                   "invoked_without_terminal_result",
-			})
+			details["pending_invocation_count"] = len(pendingDelegates)
+			details["last_call_id"] = last.callID
+			details["last_pending_worker_id"] = payloadString(last.arguments, "worker_id")
+			details["last_pending_worker_vm_id"] = payloadString(last.arguments, "vm_id")
+			details["last_pending_worker_sandbox_url"] = payloadString(last.arguments, "worker_sandbox_url")
+			details["pending_status"] = "invoked_without_terminal_result"
+			if len(nonExportDelegateResults) == 0 && len(delegateErrors) == 0 {
+				details["worker_id"] = payloadString(last.arguments, "worker_id")
+				details["worker_vm_id"] = payloadString(last.arguments, "vm_id")
+				details["worker_sandbox_url"] = payloadString(last.arguments, "worker_sandbox_url")
+				details["status"] = "invoked_without_terminal_result"
+			}
+		}
+		if len(refs) > 0 {
+			builder.addCheckpoint("worker_delegated", "blocked", blockedAt, blockedSeq, refs, details)
 		}
 	}
 	if exportCount > 0 {

@@ -2552,6 +2552,124 @@ func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
 	}
 }
 
+func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	workerEvents := []types.EventRecord{
+		{
+			EventID:   "worker-event-spawn",
+			RunID:     "worker-run-failed",
+			AgentID:   "worker-agent-failed",
+			OwnerID:   "user-alice",
+			Timestamp: now,
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"spawn_agent",
+				"is_error":false,
+				"output":"{\"agent_id\":\"agent-worker-child\",\"profile\":\"co-super\"}"
+			}`),
+		},
+		{
+			EventID:   "worker-event-channel",
+			RunID:     "worker-run-failed",
+			AgentID:   "worker-agent-failed",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(time.Second),
+			Kind:      types.EventChannelMessage,
+			Payload:   json.RawMessage(`{"from_agent_id":"worker-agent-failed","to_agent_id":"agent-worker-child","content":"verification blocked before export"}`),
+		},
+		{
+			EventID:   "worker-event-update",
+			RunID:     "worker-run-failed",
+			AgentID:   "worker-agent-failed",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(2 * time.Second),
+			Kind:      types.EventToolResult,
+			Payload:   json.RawMessage(`{"tool":"submit_worker_update","is_error":false,"output":"{\"status\":\"blocked\",\"summary\":\"tool loop exhausted before export\"}"}`),
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        "worker-run-failed",
+				AgentID:      "worker-agent-failed",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-failed":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-run-failed",
+				AgentID:      "worker-agent-failed",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunFailed,
+				OwnerID:      "user-alice",
+				Error:        "tool loop: exceeded 200 iterations without end_turn",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-failed/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: workerEvents})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate failed worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-worker-failed",
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-failed",
+		"vm_id": "vm-worker-failed",
+		"objective": "export or return a precise blocker",
+		"profile": "vsuper",
+		"timeout_seconds": 2
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm should return structured failed-run evidence, got error: %v", err)
+	}
+
+	var result struct {
+		Status                    string           `json:"status"`
+		State                     types.RunState   `json:"state"`
+		Error                     string           `json:"error"`
+		TerminalError             string           `json:"terminal_error"`
+		EventCount                int              `json:"event_count"`
+		WorkerEventSummary        []map[string]any `json:"worker_event_summary"`
+		WorkerSpawnedProfiles     []string         `json:"worker_spawned_profiles"`
+		WorkerChannelMessageCount int              `json:"worker_channel_message_count"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_failed" || result.State != types.RunFailed {
+		t.Fatalf("unexpected failed worker result: %+v\nraw=%s", result, raw)
+	}
+	if !strings.Contains(result.Error, "exceeded 200 iterations") || !strings.Contains(result.TerminalError, "worker-run-failed") {
+		t.Fatalf("missing terminal failure details: %+v\nraw=%s", result, raw)
+	}
+	if result.EventCount != len(workerEvents) || len(result.WorkerEventSummary) != len(workerEvents) {
+		t.Fatalf("worker event evidence missing: %+v\nraw=%s", result, raw)
+	}
+	if len(result.WorkerSpawnedProfiles) != 1 || result.WorkerSpawnedProfiles[0] != "co-super" {
+		t.Fatalf("spawn profile evidence missing: %+v\nraw=%s", result, raw)
+	}
+	if result.WorkerChannelMessageCount != 1 {
+		t.Fatalf("channel evidence count = %d, want 1; raw=%s", result.WorkerChannelMessageCount, raw)
+	}
+}
+
 func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testing.T) {
 	cwd := t.TempDir()
 	base := "5af8828e4e5087a2ce835d5d85de5d4acd936e7a"

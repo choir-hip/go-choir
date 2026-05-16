@@ -283,6 +283,68 @@ func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvidence(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
+	now := time.Now().UTC()
+	appendAcceptanceToolResult(t, rt, "event-delegate-structured-failed", "run-super-acceptance", "agent-super-acceptance", now.Add(20*time.Second), "delegate_worker_vm", map[string]any{
+		"status":                       "worker_run_failed",
+		"state":                        "failed",
+		"worker_id":                    "worker-acceptance",
+		"worker_vm_id":                 "vm-acceptance",
+		"worker_sandbox_url":           "http://127.0.0.1:8085",
+		"loop_id":                      "run-worker-acceptance",
+		"error":                        "tool loop: exceeded 200 iterations without end_turn",
+		"terminal_error":               "worker run run-worker-acceptance ended in state failed: tool loop: exceeded 200 iterations without end_turn",
+		"event_count":                  3,
+		"worker_event_summary":         []map[string]any{{"kind": "tool.result", "tool": "submit_worker_update", "output_excerpt": "precise blocker"}},
+		"worker_spawned_profiles":      []string{"co-super"},
+		"worker_channel_message_count": 1,
+	})
+	appendAcceptanceToolInvoked(t, rt, "event-delegate-invoked-after-fail", "run-super-acceptance", "agent-super-acceptance", "traj-acceptance", "channel-acceptance", now.Add(21*time.Second), "delegate_worker_vm", "call-pending-after-fail", map[string]any{
+		"worker_id":          "worker-after-fail",
+		"vm_id":              "vm-after-fail",
+		"worker_sandbox_url": "http://127.0.0.1:8086",
+		"profile":            AgentProfileVSuper,
+		"objective":          "retry after failed worker",
+	})
+
+	body := `{"target_mission_id":"mission-run-acceptance-structured-failed","trajectory_id":"traj-acceptance"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	blocked := acceptanceCheckpoint(rec, "worker_delegated", "blocked")
+	if blocked == nil {
+		t.Fatalf("missing blocked worker_delegated checkpoint: %+v", rec.Checkpoints)
+	}
+	if len(blocked.EvidenceRefIDs) != 4 {
+		t.Fatalf("blocked evidence refs = %+v, want structured result + two errors + pending invocation", blocked.EvidenceRefIDs)
+	}
+	if got, _ := blocked.Details["result_count"].(float64); got != 1 {
+		t.Fatalf("result_count = %v, want 1; details=%+v", blocked.Details["result_count"], blocked.Details)
+	}
+	if got, _ := blocked.Details["error_count"].(float64); got != 2 {
+		t.Fatalf("error_count = %v, want 2; details=%+v", blocked.Details["error_count"], blocked.Details)
+	}
+	if got, _ := blocked.Details["pending_invocation_count"].(float64); got != 1 {
+		t.Fatalf("pending_invocation_count = %v, want 1; details=%+v", blocked.Details["pending_invocation_count"], blocked.Details)
+	}
+	if got, _ := blocked.Details["status"].(string); got != "worker_run_failed" {
+		t.Fatalf("status = %q, want worker_run_failed; details=%+v", got, blocked.Details)
+	}
+	if got, _ := blocked.Details["pending_status"].(string); got != "invoked_without_terminal_result" {
+		t.Fatalf("pending_status = %q, want invoked_without_terminal_result; details=%+v", got, blocked.Details)
+	}
+	if blocked.Details["worker_event_summary"] == nil {
+		t.Fatalf("missing worker_event_summary in blocked details: %+v", blocked.Details)
+	}
+}
+
 func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	seedRunAcceptancePendingDelegationTrajectory(t, rt)

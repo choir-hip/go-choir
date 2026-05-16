@@ -495,30 +495,39 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				if attempt < maxDelegateWorkerRunAttempts && isInterruptedWorkerRun(finalResp) {
 					continue
 				}
-				return "", fmt.Errorf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error))
+				break
 			}
-			eventsResp, err := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, startResp.RunID)
+			if finalResp == nil || startResp == nil {
+				return "", fmt.Errorf("delegate_worker_vm missing worker run status")
+			}
+			eventsResp, err := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID)
 			if err != nil {
-				return "", err
+				if finalResp.State == types.RunCompleted {
+					return "", err
+				}
+				eventsResp = &eventListResponse{}
 			}
 			exports := collectExportPatchsetResults(eventsResp.Events)
-			promotionCandidates, err := queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
-				OwnerID:             ownerID,
-				ParentRunID:         runID,
-				CandidateRunID:      finalResp.RunID,
-				TraceID:             trajectoryID,
-				WorkerVMID:          strings.TrimSpace(in.VMID),
-				WorkerID:            strings.TrimSpace(in.WorkerID),
-				ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
-				Objective:           delegatedObjective,
-				Exports:             exports,
-			})
-			if err != nil {
-				return "", err
+			var promotionCandidates []map[string]any
+			if finalResp.State == types.RunCompleted {
+				promotionCandidates, err = queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
+					OwnerID:             ownerID,
+					ParentRunID:         runID,
+					CandidateRunID:      finalResp.RunID,
+					TraceID:             trajectoryID,
+					WorkerVMID:          strings.TrimSpace(in.VMID),
+					WorkerID:            strings.TrimSpace(in.WorkerID),
+					ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
+					Objective:           delegatedObjective,
+					Exports:             exports,
+				})
+				if err != nil {
+					return "", err
+				}
 			}
 
 			result := map[string]any{
-				"status":             "worker_run_completed",
+				"status":             delegateWorkerRunStatus(finalResp.State),
 				"worker_id":          strings.TrimSpace(in.WorkerID),
 				"worker_vm_id":       strings.TrimSpace(in.VMID),
 				"worker_sandbox_url": strings.TrimSpace(in.WorkerSandboxURL),
@@ -531,6 +540,12 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"export_patchsets":   exports,
 				"promotion_queue":    promotionCandidates,
 				"event_count":        len(eventsResp.Events),
+			}
+			if finalResp.State != types.RunCompleted {
+				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error)))
+				if err != nil {
+					result["worker_event_error"] = err.Error()
+				}
 			}
 			if summary := summarizeWorkerRunEvents(eventsResp.Events); len(summary) > 0 {
 				result["worker_event_summary"] = summary
@@ -554,6 +569,25 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			}
 			return toolResultJSON(result)
 		},
+	}
+}
+
+func delegateWorkerRunStatus(state types.RunState) string {
+	switch state {
+	case types.RunCompleted:
+		return "worker_run_completed"
+	case types.RunFailed:
+		return "worker_run_failed"
+	case types.RunCancelled:
+		return "worker_run_cancelled"
+	case types.RunBlocked:
+		return "worker_run_blocked"
+	default:
+		stateText := strings.TrimSpace(string(state))
+		if stateText == "" {
+			return "worker_run_terminal"
+		}
+		return "worker_run_" + stateText
 	}
 }
 

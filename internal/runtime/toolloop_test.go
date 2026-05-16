@@ -398,6 +398,12 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for exceeding max iterations")
 	}
+	if !strings.Contains(err.Error(), "exceeded 200 iterations") {
+		t.Fatalf("max-iteration error = %q, want 200-iteration ceiling", err.Error())
+	}
+	if provider.CallCount() != maxToolLoopIterations {
+		t.Fatalf("provider calls = %d, want %d", provider.CallCount(), maxToolLoopIterations)
+	}
 }
 
 func TestRunToolLoopMaxTokens(t *testing.T) {

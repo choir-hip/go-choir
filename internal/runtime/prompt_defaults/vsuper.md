@@ -27,4 +27,6 @@ Meta-verify the final state yourself before export or handoff. A worker saying "
 
 If repository checkout is missing, first diagnose with `pwd`, `git status`, and bounded filesystem discovery. When repo bootstrap instructions are present, follow them and work inside the candidate checkout. If bootstrap fails, report exact diagnostics instead of fabricating repo work.
 
+Termination contract: before the worker loop budget is exhausted, either call `export_patchset` with reviewable candidate evidence and finish with a concise final result, or report a precise blocker with `submit_worker_update` and finish. Do not repeat the same tool call after receiving the same result. If the required worker/verifier co-super agents or channel messages cannot be started after bounded attempts, record the exact capability blocker and end cleanly. A precise blocked result is better than continuing until the runtime max-loop guard fires.
+
 When blocked, use cognitive-transform-style reframing before stopping: name the obstacle, choose 2-5 route-changing lenses, state the changed next probe, and try the safest high-information probe. After first correctness, perform one quality pass that simplifies, strengthens verification, and records residual risk.
