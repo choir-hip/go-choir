@@ -254,6 +254,9 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			if terminal := payloadString(last.output, "terminal_error"); terminal != "" {
 				details["terminal_error"] = terminal
 			}
+			if blocker := payloadString(last.output, "completion_blocker"); blocker != "" {
+				details["completion_blocker"] = blocker
+			}
 			if summary := last.output["worker_event_summary"]; summary != nil {
 				details["worker_event_summary"] = summary
 			}
@@ -265,6 +268,21 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			}
 			if eventCount := last.output["event_count"]; eventCount != nil {
 				details["event_count"] = eventCount
+			}
+			if childRunIDs := acceptanceStringSlice(last.output, "worker_child_run_ids"); len(childRunIDs) > 0 {
+				details["worker_child_run_ids"] = childRunIDs
+			}
+			if counts := acceptanceStringAnyMap(last.output, "worker_child_event_counts"); len(counts) > 0 {
+				details["worker_child_event_counts"] = counts
+			}
+			if errors := acceptanceStringAnyMap(last.output, "worker_child_event_errors"); len(errors) > 0 {
+				details["worker_child_event_errors"] = errors
+			}
+			if states := acceptanceStringAnyMap(last.output, "worker_child_run_states"); len(states) > 0 {
+				details["worker_child_run_states"] = states
+			}
+			if errors := acceptanceStringAnyMap(last.output, "worker_child_status_errors"); len(errors) > 0 {
+				details["worker_child_status_errors"] = errors
 			}
 			if details["last_result_status"] != "" {
 				details["status"] = details["last_result_status"]
@@ -631,6 +649,7 @@ func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string
 		"profile",
 		"terminal_error",
 		"error",
+		"completion_blocker",
 	} {
 		if value := payloadString(output, key); value != "" {
 			details[key] = value
@@ -652,6 +671,12 @@ func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string
 	}
 	if errors := acceptanceStringAnyMap(output, "worker_child_event_errors"); len(errors) > 0 {
 		details["worker_child_event_errors"] = errors
+	}
+	if states := acceptanceStringAnyMap(output, "worker_child_run_states"); len(states) > 0 {
+		details["worker_child_run_states"] = states
+	}
+	if errors := acceptanceStringAnyMap(output, "worker_child_status_errors"); len(errors) > 0 {
+		details["worker_child_status_errors"] = errors
 	}
 	if profiles := acceptanceStringSlice(output, "worker_spawned_profiles"); len(profiles) > 0 {
 		details["worker_spawned_profiles"] = profiles

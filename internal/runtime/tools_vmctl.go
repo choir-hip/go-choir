@@ -599,6 +599,9 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				}
 				evidence = workerRunEvidence{}
 			}
+			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted {
+				evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID, evidence, timeout)
+			}
 			exports := collectExportPatchsetResults(evidence.Events)
 			var promotionCandidates []map[string]any
 			if finalResp.State == types.RunCompleted {
@@ -633,6 +636,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"promotion_queue":    promotionCandidates,
 			}
 			applyWorkerRunEvidence(result, evidence)
+			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, exports) {
+				result["status"] = "worker_run_incomplete"
+				result["completion_blocker"] = "vsuper_completed_without_export_or_worker_update"
+				result["terminal_error"] = "worker vsuper completed after child coordination without export_patchset or submit_worker_update evidence"
+			}
 			if finalResp.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error)))
 				if err != nil {
@@ -806,10 +814,12 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 	return strings.Join([]string{
 		"Worker-vsuper delegate contract:",
 		"- Keep at most one implementation co-super and one verifier co-super active for candidate repo work.",
+		"- Put the implementation/verifier role and terminal obligation directly in each spawn_agent objective; do not depend on a later role-correction cast as the child's first authoritative instruction.",
 		"- If you spawn an implementation co-super, treat that child as the exclusive writer for go-choir-candidate while it is active; do not run reset, clean, edit, or commit commands in the same checkout unless you first cancel or explicitly take over from that child.",
 		"- The verifier should inspect only after the implementation child has reported a commit, export, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to export, do not override that with \"do not export\"; either let the helper export or export yourself immediately after commit and verification evidence exists.",
 		"- Once a committed repo diff and focused verification evidence exist, call export_patchset before doing more coordination or repeated inspection.",
+		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/export/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
 		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",
 		"- A blocked submit_worker_update is preferred to running until the parent delegate timeout.",
 	}, "\n")
@@ -1454,11 +1464,13 @@ func fetchInternalWorkerRunEvents(ctx context.Context, client *http.Client, base
 }
 
 type workerRunEvidence struct {
-	Events           []types.EventRecord
-	RootEventCount   int
-	ChildRunIDs      []string
-	ChildEventCounts map[string]int
-	ChildEventErrors map[string]string
+	Events            []types.EventRecord
+	RootEventCount    int
+	ChildRunIDs       []string
+	ChildEventCounts  map[string]int
+	ChildEventErrors  map[string]string
+	ChildRunStates    map[string]types.RunState
+	ChildStatusErrors map[string]string
 }
 
 func fetchWorkerRunEvidence(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string) (workerRunEvidence, error) {
@@ -1467,10 +1479,12 @@ func fetchWorkerRunEvidence(ctx context.Context, client *http.Client, baseURL, o
 		return workerRunEvidence{}, err
 	}
 	evidence := workerRunEvidence{
-		Events:           append([]types.EventRecord{}, rootResp.Events...),
-		RootEventCount:   len(rootResp.Events),
-		ChildEventCounts: map[string]int{},
-		ChildEventErrors: map[string]string{},
+		Events:            append([]types.EventRecord{}, rootResp.Events...),
+		RootEventCount:    len(rootResp.Events),
+		ChildEventCounts:  map[string]int{},
+		ChildEventErrors:  map[string]string{},
+		ChildRunStates:    map[string]types.RunState{},
+		ChildStatusErrors: map[string]string{},
 	}
 	for _, childRunID := range collectWorkerChildRunIDs(rootResp.Events) {
 		childResp, err := fetchInternalWorkerRunEvents(ctx, client, baseURL, ownerID, childRunID)
@@ -1483,6 +1497,38 @@ func fetchWorkerRunEvidence(ctx context.Context, client *http.Client, baseURL, o
 		evidence.Events = append(evidence.Events, childResp.Events...)
 	}
 	return evidence, nil
+}
+
+func followWorkerChildRuns(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string, evidence workerRunEvidence, timeout time.Duration) workerRunEvidence {
+	if len(evidence.ChildRunIDs) == 0 {
+		return evidence
+	}
+	states := map[string]types.RunState{}
+	statusErrors := map[string]string{}
+	deadline := time.Now().Add(timeout)
+	for _, childRunID := range evidence.ChildRunIDs {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			statusErrors[childRunID] = "delegate worker child follow-up budget exhausted"
+			continue
+		}
+		status, err := pollInternalWorkerRun(ctx, client, baseURL, ownerID, childRunID, remaining)
+		if err != nil {
+			statusErrors[childRunID] = err.Error()
+			continue
+		}
+		states[childRunID] = status.State
+	}
+	refreshed, err := fetchWorkerRunEvidence(ctx, client, baseURL, ownerID, rootRunID)
+	if err != nil {
+		evidence.ChildRunStates = states
+		evidence.ChildStatusErrors = statusErrors
+		evidence.ChildEventErrors["_refresh"] = err.Error()
+		return evidence
+	}
+	refreshed.ChildRunStates = states
+	refreshed.ChildStatusErrors = statusErrors
+	return refreshed
 }
 
 func applyWorkerRunEvidence(result map[string]any, evidence workerRunEvidence) {
@@ -1499,6 +1545,19 @@ func applyWorkerRunEvidence(result map[string]any, evidence workerRunEvidence) {
 	if len(evidence.ChildEventErrors) > 0 {
 		result["worker_child_event_errors"] = evidence.ChildEventErrors
 	}
+	if len(evidence.ChildRunStates) > 0 {
+		result["worker_child_run_states"] = evidence.ChildRunStates
+	}
+	if len(evidence.ChildStatusErrors) > 0 {
+		result["worker_child_status_errors"] = evidence.ChildStatusErrors
+	}
+}
+
+func vSuperDelegateIncomplete(evidence workerRunEvidence, exports []map[string]any) bool {
+	if len(evidence.ChildRunIDs) == 0 || len(exports) > 0 {
+		return false
+	}
+	return !hasSuccessfulToolResult(evidence.Events, "submit_worker_update")
 }
 
 func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {

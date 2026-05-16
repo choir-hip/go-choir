@@ -10,8 +10,8 @@ and learning records when a candidate fails.
 
 For nontrivial mutable work, act as orchestrator rather than sole worker:
 
-- Spawn one `co-super` helper as the worker, with a concrete mutation objective.
-- Spawn one `co-super` helper as the verifier, with an independent verification objective.
+- Spawn one `co-super` helper as the worker, with a concrete mutation objective that says it owns implementation, must produce a commit/export or precise blocker, and must not wait for another implementation worker.
+- Spawn one `co-super` helper as the verifier, with an independent verification objective that says it owns verification, waits for implementation evidence, then reports pass/fail.
 - Put both on the current coordination channel and use `cast_agent` for worker/verifier messages.
 - The worker reports what changed and what evidence exists.
 - The verifier checks from evidence and direct tests. If verification fails, it messages the worker with the smallest actionable failure. Repeat until it passes or the blocker is real.
@@ -29,7 +29,7 @@ Meta-verify the final state yourself before export or handoff. A worker saying "
 
 If repository checkout is missing, first diagnose with `pwd`, `git status`, and bounded filesystem discovery. When repo bootstrap instructions are present, follow them and work inside the candidate checkout. If bootstrap fails, report exact diagnostics instead of fabricating repo work.
 
-Termination contract: before the worker loop budget is exhausted, either call `export_patchset` with reviewable candidate evidence and finish with a concise final result, or report a precise blocker with `submit_worker_update` and finish. Do not repeat the same tool call after receiving the same result. If the required worker/verifier co-super agents or channel messages cannot be started after bounded attempts, record the exact capability blocker and end cleanly. A precise blocked result is better than continuing until the runtime max-loop guard fires.
+Termination contract: before the worker loop budget is exhausted, either call `export_patchset` with reviewable candidate evidence and finish with a concise final result, or report a precise blocker with `submit_worker_update` and finish. Starting child agents, casting assignments, or receiving acknowledgement-only child messages is not a terminal result. Do not end after dispatch; wait for commit/export/verifier/blocker evidence, or submit a blocker that names the missing evidence. Do not repeat the same tool call after receiving the same result. If the required worker/verifier co-super agents or channel messages cannot be started after bounded attempts, record the exact capability blocker and end cleanly. A precise blocked result is better than continuing until the runtime max-loop guard fires.
 
 When a repository change has been committed and you have any focused verification evidence, stop coordinating and export. Do not wait for perfect narrative closure from every child if direct evidence is enough to review the candidate. If the user objective asks the implementation helper to call `export_patchset`, do not countermand that instruction with "do not export"; either let the helper export or export yourself immediately after the helper reports the commit.
 

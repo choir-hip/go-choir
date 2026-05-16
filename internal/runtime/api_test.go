@@ -315,9 +315,13 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 		"loop_id":                      "run-worker-acceptance",
 		"error":                        "tool loop: exceeded 200 iterations without end_turn",
 		"terminal_error":               "worker run run-worker-acceptance ended in state failed: tool loop: exceeded 200 iterations without end_turn",
+		"completion_blocker":           "vsuper_completed_without_export_or_worker_update",
 		"event_count":                  3,
 		"worker_event_summary":         []map[string]any{{"kind": "tool.result", "tool": "submit_worker_update", "output_excerpt": "precise blocker"}},
 		"worker_spawned_profiles":      []string{"co-super"},
+		"worker_child_run_ids":         []string{"run-implementation-acceptance"},
+		"worker_child_run_states":      map[string]string{"run-implementation-acceptance": "completed"},
+		"worker_child_status_errors":   map[string]string{"run-verifier-acceptance": "status unavailable"},
 		"worker_channel_message_count": 1,
 	})
 	appendAcceptanceToolInvoked(t, rt, "event-delegate-invoked-after-fail", "run-super-acceptance", "agent-super-acceptance", "traj-acceptance", "channel-acceptance", now.Add(21*time.Second), "delegate_worker_vm", "call-pending-after-fail", map[string]any{
@@ -361,6 +365,12 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 	}
 	if blocked.Details["worker_event_summary"] == nil {
 		t.Fatalf("missing worker_event_summary in blocked details: %+v", blocked.Details)
+	}
+	if got, _ := blocked.Details["completion_blocker"].(string); got != "vsuper_completed_without_export_or_worker_update" {
+		t.Fatalf("completion_blocker = %q; details=%+v", got, blocked.Details)
+	}
+	if blocked.Details["worker_child_run_states"] == nil || blocked.Details["worker_child_status_errors"] == nil {
+		t.Fatalf("missing child status provenance in blocked details: %+v", blocked.Details)
 	}
 }
 

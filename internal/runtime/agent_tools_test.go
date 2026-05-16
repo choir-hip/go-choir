@@ -2469,6 +2469,265 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 }
 
+func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	rootEvents := []types.EventRecord{
+		{
+			EventID:   "root-spawn-child",
+			RunID:     "worker-root",
+			AgentID:   "agent-vsuper",
+			OwnerID:   "user-alice",
+			Timestamp: now,
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"spawn_agent",
+				"is_error":false,
+				"output":"{\"agent_id\":\"agent-child\",\"loop_id\":\"worker-child\",\"profile\":\"co-super\",\"state\":\"pending\"}"
+			}`),
+		},
+	}
+	childEvents := []types.EventRecord{
+		{
+			EventID:   "child-export",
+			RunID:     "worker-child",
+			AgentID:   "agent-child",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(time.Second),
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"export_patchset",
+				"is_error":false,
+				"output":"{\"status\":\"exported\",\"manifest_json\":\"{\\\"run_id\\\":\\\"worker-child\\\"}\",\"patchset_content\":\"diff --git a/TRACE.md b/TRACE.md\\n+TRACE_PROVENANCE_CHILD_FOLLOW\\n\",\"base_sha\":\"base-child\",\"worker_head\":\"head-child\",\"snapshot_id\":\"snapshot-child\"}"
+			}`),
+		},
+	}
+
+	var mu sync.Mutex
+	childStatusPolled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        "worker-root",
+				AgentID:      "agent-vsuper",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-root":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-root",
+				AgentID:      "agent-vsuper",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+				Result:       "spawned children; waiting for export",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-root/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: rootEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-child":
+			mu.Lock()
+			childStatusPolled = true
+			mu.Unlock()
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-child",
+				AgentID:      "agent-child",
+				AgentProfile: AgentProfileCoSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+				Result:       "exported child patchset",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-child/events":
+			mu.Lock()
+			ready := childStatusPolled
+			mu.Unlock()
+			if !ready {
+				writeAPIJSON(w, http.StatusOK, eventListResponse{Events: nil})
+				return
+			}
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate child follow", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-child-follow",
+		runMetadataChannelID:    "doc-child-follow",
+		"requested_by_profile":  AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-child-follow",
+		"vm_id": "vm-child-follow",
+		"objective": "spawn child and export",
+		"profile": "vsuper",
+		"timeout_seconds": 2
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		Status            string                    `json:"status"`
+		State             types.RunState            `json:"state"`
+		ExportPatchsets   []map[string]any          `json:"export_patchsets"`
+		WorkerChildRunIDs []string                  `json:"worker_child_run_ids"`
+		WorkerChildStates map[string]types.RunState `json:"worker_child_run_states"`
+		CompletionBlocker string                    `json:"completion_blocker"`
+		PromotionQueue    []map[string]any          `json:"promotion_queue"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_completed" || result.State != types.RunCompleted {
+		t.Fatalf("unexpected delegate status: %+v\nraw=%s", result, raw)
+	}
+	if result.CompletionBlocker != "" {
+		t.Fatalf("completed child export should not be marked incomplete: %+v\nraw=%s", result, raw)
+	}
+	if len(result.ExportPatchsets) != 1 || result.ExportPatchsets[0]["loop_id"] != "worker-child" {
+		t.Fatalf("child export was not collected after child follow-up: %+v\nraw=%s", result.ExportPatchsets, raw)
+	}
+	if !containsString(result.WorkerChildRunIDs, "worker-child") || result.WorkerChildStates["worker-child"] != types.RunCompleted {
+		t.Fatalf("child run follow-up evidence missing: %+v states=%+v raw=%s", result.WorkerChildRunIDs, result.WorkerChildStates, raw)
+	}
+	if len(result.PromotionQueue) != 1 {
+		t.Fatalf("child export should queue a promotion candidate, got %+v\nraw=%s", result.PromotionQueue, raw)
+	}
+}
+
+func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	rootEvents := []types.EventRecord{
+		{
+			EventID:   "root-spawn-child",
+			RunID:     "worker-root-incomplete",
+			AgentID:   "agent-vsuper-incomplete",
+			OwnerID:   "user-alice",
+			Timestamp: now,
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"spawn_agent",
+				"is_error":false,
+				"output":"{\"agent_id\":\"agent-child-incomplete\",\"loop_id\":\"worker-child-incomplete\",\"profile\":\"co-super\",\"state\":\"pending\"}"
+			}`),
+		},
+	}
+	childEvents := []types.EventRecord{
+		{
+			EventID:   "child-ack",
+			RunID:     "worker-child-incomplete",
+			AgentID:   "agent-child-incomplete",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(time.Second),
+			Kind:      types.EventChannelMessage,
+			Payload:   json.RawMessage(`{"from_agent_id":"agent-child-incomplete","role":"result","content":"Acknowledged; waiting for implementation evidence."}`),
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        "worker-root-incomplete",
+				AgentID:      "agent-vsuper-incomplete",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-root-incomplete":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-root-incomplete",
+				AgentID:      "agent-vsuper-incomplete",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+				Result:       "spawned child and ended before export",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-root-incomplete/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: rootEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-child-incomplete":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-child-incomplete",
+				AgentID:      "agent-child-incomplete",
+				AgentProfile: AgentProfileCoSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+				Result:       "acknowledgement only",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-child-incomplete/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate incomplete child", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-child-incomplete",
+		runMetadataChannelID:    "doc-child-incomplete",
+		"requested_by_profile":  AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-child-incomplete",
+		"vm_id": "vm-child-incomplete",
+		"objective": "spawn child and either export or block",
+		"profile": "vsuper",
+		"timeout_seconds": 2
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		Status            string                    `json:"status"`
+		State             types.RunState            `json:"state"`
+		CompletionBlocker string                    `json:"completion_blocker"`
+		TerminalError     string                    `json:"terminal_error"`
+		ExportPatchsets   []map[string]any          `json:"export_patchsets"`
+		WorkerChildStates map[string]types.RunState `json:"worker_child_run_states"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_incomplete" || result.State != types.RunCompleted {
+		t.Fatalf("unexpected incomplete delegate status: %+v\nraw=%s", result, raw)
+	}
+	if result.CompletionBlocker != "vsuper_completed_without_export_or_worker_update" || !strings.Contains(result.TerminalError, "completed after child coordination") {
+		t.Fatalf("missing completion blocker evidence: %+v\nraw=%s", result, raw)
+	}
+	if len(result.ExportPatchsets) != 0 {
+		t.Fatalf("unexpected export patchsets for incomplete delegate: %+v\nraw=%s", result.ExportPatchsets, raw)
+	}
+	if result.WorkerChildStates["worker-child-incomplete"] != types.RunCompleted {
+		t.Fatalf("child completion state missing: %+v\nraw=%s", result.WorkerChildStates, raw)
+	}
+}
+
 func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) {
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := os.RemoveAll(activeCWD); err != nil {
