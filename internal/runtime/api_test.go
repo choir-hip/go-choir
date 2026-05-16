@@ -240,6 +240,49 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-run-acceptance-blocked","trajectory_id":"traj-acceptance"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel {
+		t.Fatalf("acceptance level = %q, want staging-smoke-level; record=%+v", rec.AcceptanceLevel, rec)
+	}
+	if rec.State != types.RunAcceptanceBlocked {
+		t.Fatalf("state = %q, want blocked", rec.State)
+	}
+	if acceptanceHasCheckpoint(rec, "worker_delegated") {
+		t.Fatalf("failed delegation must not count as passed: %+v", rec.Checkpoints)
+	}
+	blocked := acceptanceCheckpoint(rec, "worker_delegated", "blocked")
+	if blocked == nil {
+		t.Fatalf("missing blocked worker_delegated checkpoint: %+v", rec.Checkpoints)
+	}
+	if len(blocked.EvidenceRefIDs) != 2 {
+		t.Fatalf("blocked checkpoint evidence refs = %+v, want 2 refs", blocked.EvidenceRefIDs)
+	}
+	lastError, _ := blocked.Details["last_error"].(string)
+	if !strings.Contains(lastError, "runtime restarted") {
+		t.Fatalf("last_error = %q, want runtime restart detail", lastError)
+	}
+	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "worker VM delegation did not complete") {
+		t.Fatalf("missing delegation residual risk: %+v", rec.FailureResidualRisks)
+	}
+	for _, check := range rec.InvariantChecks {
+		if check.Name == "worker_mutation_bounded" && check.State != "blocked" {
+			t.Fatalf("worker_mutation_bounded = %+v, want blocked", check)
+		}
+	}
+}
+
 func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ctx := context.Background()
@@ -442,6 +485,125 @@ func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 	}
 }
 
+func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	finishedAt := now.Add(15 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-acceptance",
+			AgentID:      "agent-conductor-acceptance",
+			ChannelID:    "channel-acceptance",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
+			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-acceptance"}`,
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+				"input_source":          "prompt_bar",
+			},
+		},
+		{
+			RunID:        "run-vtext-acceptance",
+			AgentID:      "agent-vtext-acceptance",
+			ChannelID:    "channel-acceptance",
+			ParentRunID:  "run-conductor-acceptance",
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Own the acceptance document.",
+			CreatedAt:    now.Add(3 * time.Second),
+			UpdatedAt:    now.Add(4 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileVText,
+				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+		{
+			RunID:        "run-super-acceptance",
+			AgentID:      "agent-super-acceptance",
+			ChannelID:    "channel-acceptance",
+			ParentRunID:  "run-vtext-acceptance",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Delegate a worker and export a patchset.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(12 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-acceptance",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+	}
+	for _, run := range runs {
+		if err := rt.store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-submit-acceptance",
+		RunID:        "run-conductor-acceptance",
+		AgentID:      "agent-conductor-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now,
+		Kind:         types.EventRunSubmitted,
+		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-vtext-acceptance",
+		RunID:        "run-vtext-acceptance",
+		AgentID:      "agent-vtext-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now.Add(4 * time.Second),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
+	})
+	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
+		"agent_id": "agent-super-acceptance",
+		"loop_id":  "run-super-acceptance",
+		"state":    "running",
+	})
+	appendAcceptanceToolResult(t, rt, "event-worker-lease-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(6*time.Second), "request_worker_vm", map[string]any{
+		"status": "worker_requested",
+		"handle": map[string]any{
+			"kind":          "worker",
+			"worker_id":     "worker-acceptance",
+			"vm_id":         "vm-acceptance",
+			"desktop_id":    types.PrimaryDesktopID,
+			"machine_class": "worker-medium",
+			"sandbox_url":   "http://127.0.0.1:8085",
+		},
+	})
+	appendAcceptanceToolError(t, rt, "event-delegate-timeout-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(9*time.Second), "delegate_worker_vm", `tool_error: delegate_worker_vm status: context deadline exceeded`)
+	appendAcceptanceToolError(t, rt, "event-delegate-restart-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", `tool_error: worker run run-worker-acceptance ended in state failed: runtime restarted, run interrupted`)
+}
+
 func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool string, output map[string]any) {
 	t.Helper()
 	outputJSON, err := json.Marshal(output)
@@ -470,6 +632,31 @@ func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agent
 	})
 }
 
+func appendAcceptanceToolError(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool, output string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"tool":       tool,
+		"call_id":    eventID + "-call",
+		"is_error":   true,
+		"output_len": len(output),
+		"output":     output,
+	})
+	if err != nil {
+		t.Fatalf("marshal tool error payload: %v", err)
+	}
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      eventID,
+		RunID:        runID,
+		AgentID:      agentID,
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    at,
+		Kind:         types.EventToolResult,
+		Payload:      payload,
+	})
+}
+
 func appendAcceptanceEvent(t *testing.T, rt *Runtime, rec types.EventRecord) {
 	t.Helper()
 	if err := rt.store.AppendEvent(context.Background(), &rec); err != nil {
@@ -484,6 +671,16 @@ func acceptanceHasCheckpoint(rec types.RunAcceptanceRecord, kind string) bool {
 		}
 	}
 	return false
+}
+
+func acceptanceCheckpoint(rec types.RunAcceptanceRecord, kind, state string) *types.RunAcceptanceCheckpoint {
+	for i := range rec.Checkpoints {
+		checkpoint := &rec.Checkpoints[i]
+		if checkpoint.Kind == kind && checkpoint.State == state {
+			return checkpoint
+		}
+	}
+	return nil
 }
 
 func TestBrowserCapabilitiesRequireAuthAndReportUnavailable(t *testing.T) {

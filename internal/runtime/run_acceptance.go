@@ -36,6 +36,11 @@ type acceptanceToolResult struct {
 	output map[string]any
 }
 
+type acceptanceToolError struct {
+	event  types.EventRecord
+	output string
+}
+
 // SynthesizeRunAcceptance derives a durable run acceptance record from
 // product-path evidence already present in runs, Trace events, worker export
 // results, and promotion records. The caller chooses the target trajectory; the
@@ -215,6 +220,24 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			"export_count":   len(exports),
 		})
 	}
+	if exportCount == 0 {
+		delegateErrors := collectAcceptanceToolErrors(events, "delegate_worker_vm")
+		if len(delegateErrors) > 0 {
+			var refs []string
+			for _, item := range delegateErrors {
+				ref := builder.addEventEvidence(item.event, "worker VM delegation failed before export", map[string]any{
+					"tool":  "delegate_worker_vm",
+					"error": item.output,
+				})
+				refs = append(refs, ref)
+			}
+			last := delegateErrors[len(delegateErrors)-1]
+			builder.addCheckpoint("worker_delegated", "blocked", last.event.Timestamp, last.event.StreamSeq, refs, map[string]any{
+				"error_count": len(delegateErrors),
+				"last_error":  last.output,
+			})
+		}
+	}
 	if exportCount > 0 {
 		builder.addCheckpoint("export_observed", "passed", time.Now().UTC(), 0, exportRefs, map[string]any{"export_count": exportCount})
 	}
@@ -386,6 +409,59 @@ func collectAcceptanceToolResults(events []types.EventRecord, tool string) []acc
 		return results[i].event.StreamSeq < results[j].event.StreamSeq
 	})
 	return results
+}
+
+func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acceptanceToolError {
+	var results []acceptanceToolError
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "tool") != tool {
+			continue
+		}
+		if isError, _ := payload["is_error"].(bool); !isError {
+			continue
+		}
+		output := traceToolErrorText(payload)
+		if output == "" {
+			continue
+		}
+		results = append(results, acceptanceToolError{event: ev, output: output})
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].event.StreamSeq < results[j].event.StreamSeq
+	})
+	return results
+}
+
+func traceToolErrorText(payload map[string]any) string {
+	switch value := payload["output"].(type) {
+	case string:
+		text := strings.TrimSpace(value)
+		if text == "" {
+			return ""
+		}
+		var decoded map[string]any
+		if json.Unmarshal([]byte(text), &decoded) == nil {
+			if raw := payloadString(decoded, "raw_output"); raw != "" {
+				return raw
+			}
+			if errText := payloadString(decoded, "error"); errText != "" {
+				return errText
+			}
+		}
+		return text
+	case map[string]any:
+		if raw := payloadString(value, "raw_output"); raw != "" {
+			return raw
+		}
+		if errText := payloadString(value, "error"); errText != "" {
+			return errText
+		}
+	}
+	return ""
 }
 
 func acceptanceOutputSlice(output map[string]any, key string) []map[string]any {
@@ -613,7 +689,9 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 	var lastSeq int64
 	orderOK := true
 	for _, checkpoint := range rec.Checkpoints {
-		kindSet[checkpoint.Kind] = true
+		if checkpoint.State == "passed" {
+			kindSet[checkpoint.Kind] = true
+		}
 		if checkpoint.StreamSeq > 0 {
 			if lastSeq > 0 && checkpoint.StreamSeq < lastSeq {
 				orderOK = false
@@ -671,8 +749,14 @@ func buildAcceptanceVerifierContracts(rec types.RunAcceptanceRecord) []types.Run
 func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	var risks []string
 	has := map[string]bool{}
+	delegationBlocked := false
 	for _, checkpoint := range rec.Checkpoints {
-		has[checkpoint.Kind] = checkpoint.State == "passed"
+		if checkpoint.State == "passed" {
+			has[checkpoint.Kind] = true
+		}
+		if checkpoint.Kind == "worker_delegated" && checkpoint.State == "blocked" {
+			delegationBlocked = true
+		}
 	}
 	if rec.AcceptanceLevel == types.RunAcceptanceExportLevel {
 		risks = append(risks, "promotion-level acceptance is not proven until verifier contracts, owner review, promotion or rollback evidence are recorded")
@@ -689,6 +773,9 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	}
 	if hasVerification && !hasOwnerReview {
 		risks = append(risks, "verified candidates still require durable owner review before promotion-level acceptance")
+	}
+	if delegationBlocked && !has["worker_delegated"] {
+		risks = append(risks, "worker VM delegation did not complete, so co-super, export, and promotion acceptance remain unproven")
 	}
 	if !has["compacted"] {
 		risks = append(risks, "continuation-level acceptance is not proven until run-memory compaction and continuation evidence are recorded")
