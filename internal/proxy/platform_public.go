@@ -294,7 +294,8 @@ func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal p
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := h.platformd.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("proxy: platform proposal author delivery failed: %v", err)
 		return "recorded_for_author"
