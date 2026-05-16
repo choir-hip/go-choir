@@ -464,6 +464,87 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 	}
 }
 
+func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
+	rt, _ := testRuntime(t)
+	metadata := map[string]any{
+		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
+		runMetadataWorkerRepoBaseSHA:   "abc123",
+		runMetadataWorkerRepoBootstrap: "remote_git_clone",
+	}
+
+	for _, tc := range []struct {
+		name    string
+		profile string
+	}{
+		{name: "vsuper", profile: AgentProfileVSuper},
+		{name: "co-super", profile: AgentProfileCoSuper},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &types.RunRecord{
+				RunID:        "run-" + tc.name,
+				AgentID:      tc.name + ":agent",
+				ChannelID:    "doc-1",
+				OwnerID:      "user-alice",
+				AgentProfile: tc.profile,
+				Metadata:     metadata,
+				Prompt:       "candidate repo work",
+			}
+			prompt, err := rt.systemPromptForRun(rec)
+			if err != nil {
+				t.Fatalf("systemPromptForRun: %v", err)
+			}
+			for _, want := range []string{
+				"Worker candidate repo bootstrap context",
+				"repo_path: go-choir-candidate",
+				"base_sha: abc123",
+				"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+				"git config user.name \"Choir Worker\"",
+				"git reset --hard abc123",
+				"Use set -euo pipefail",
+			} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("prompt missing %q in %q", want, prompt)
+				}
+			}
+		})
+	}
+}
+
+func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
+	rt, _ := testRuntime(t)
+	ctx := context.Background()
+	parent, err := rt.StartRun(ctx, "delegate worker", "user-alice")
+	if err != nil {
+		t.Fatalf("start parent: %v", err)
+	}
+	parent.Metadata = map[string]any{
+		runMetadataAgentProfile:        AgentProfileVSuper,
+		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
+		runMetadataWorkerRepoBaseSHA:   "abc123",
+		runMetadataWorkerRepoBootstrap: "remote_git_clone",
+	}
+	if err := rt.store.UpdateRun(ctx, *parent); err != nil {
+		t.Fatalf("update parent metadata: %v", err)
+	}
+
+	child, err := rt.StartChildRun(ctx, parent.RunID, "implementation child", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileCoSuper,
+		runMetadataAgentRole:    AgentProfileCoSuper,
+	})
+	if err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	for _, key := range []string{
+		runMetadataWorkerRepoRemote,
+		runMetadataWorkerRepoBaseSHA,
+		runMetadataWorkerRepoBootstrap,
+	} {
+		if got, want := metadataStringValue(child.Metadata, key), metadataStringValue(parent.Metadata, key); got != want {
+			t.Fatalf("child metadata %s = %q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	rt, _ := testRuntime(t)
 

@@ -364,10 +364,18 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileVSuper {
 		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent and channel messages to coordinate existing children; if the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
 		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/blocker or you explicitly cancel/take over; otherwise you can erase the worker's evidence.")
+		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
+			b.WriteString(repoContext)
+			b.WriteString("\nWhen spawning or casting to the implementation co-super, include these repo_path/base_sha/bootstrap details verbatim. Child co-supers must not have to rediscover the candidate checkout from scratch.")
+		}
 		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If the objective asks the worker helper to export, do not tell it not to export; either let it export or export yourself immediately after the commit evidence is present.")
 	}
 	if profile == AgentProfileCoSuper {
 		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to export_patchset, submit_worker_update, or a precise blocker instead of running open-ended tool loops.")
+		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
+			b.WriteString(repoContext)
+			b.WriteString("\nIf you are the implementation worker, run the bootstrap commands before repo work and then use repo_path \"go-choir-candidate\" with the listed base_sha for export_patchset. If you are the verifier, wait for implementation evidence before read-only inspection.")
+		}
 	}
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher loops must converge quickly.")
@@ -402,6 +410,63 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	b.WriteString("\nUse addressed casts for peer coordination and keep messages concise and actionable.")
 	return b.String(), nil
+}
+
+func inheritWorkerRepoMetadata(metadata map[string]any, parent *types.RunRecord) {
+	if metadata == nil || parent == nil || parent.Metadata == nil {
+		return
+	}
+	for _, key := range []string{
+		runMetadataWorkerRepoRemote,
+		runMetadataWorkerRepoBaseSHA,
+		runMetadataWorkerRepoBootstrap,
+	} {
+		if strings.TrimSpace(metadataStringValue(metadata, key)) != "" {
+			continue
+		}
+		if value := metadataStringValue(parent.Metadata, key); value != "" {
+			metadata[key] = value
+		}
+	}
+}
+
+func workerRepoContextForRun(rec *types.RunRecord) string {
+	if rec == nil || rec.Metadata == nil {
+		return ""
+	}
+	remoteURL := metadataStringValue(rec.Metadata, runMetadataWorkerRepoRemote)
+	baseSHA := metadataStringValue(rec.Metadata, runMetadataWorkerRepoBaseSHA)
+	if remoteURL == "" || baseSHA == "" {
+		return ""
+	}
+	bootstrap := metadataStringValue(rec.Metadata, runMetadataWorkerRepoBootstrap)
+	if bootstrap == "" {
+		bootstrap = "remote_git_clone"
+	}
+	var b strings.Builder
+	b.WriteString("\n\nWorker candidate repo bootstrap context:")
+	b.WriteString("\n- repo_path: go-choir-candidate")
+	b.WriteString("\n- base_sha: ")
+	b.WriteString(baseSHA)
+	b.WriteString("\n- remote_url: ")
+	b.WriteString(remoteURL)
+	b.WriteString("\n- bootstrap: ")
+	b.WriteString(bootstrap)
+	b.WriteString("\nBootstrap commands before repository work:")
+	b.WriteString("\nif [ ! -d go-choir-candidate/.git ]; then git clone ")
+	b.WriteString(remoteURL)
+	b.WriteString(" go-choir-candidate; fi")
+	b.WriteString("\ncd go-choir-candidate")
+	b.WriteString("\ngit config user.name \"Choir Worker\"")
+	b.WriteString("\ngit config user.email \"worker@choir.local\"")
+	b.WriteString("\ngit fetch --all --prune")
+	b.WriteString("\ngit checkout ")
+	b.WriteString(baseSHA)
+	b.WriteString("\ngit reset --hard ")
+	b.WriteString(baseSHA)
+	b.WriteString("\ngit clean -fdx")
+	b.WriteString("\nUse set -euo pipefail for multi-step bash commands.")
+	return b.String()
 }
 
 func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {

@@ -487,19 +487,22 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				if workerRunID == "" {
 					return result
 				}
-				eventsResp, eventsErr := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+				evidence, eventsErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
 				if eventsErr != nil {
 					result["worker_event_error"] = eventsErr.Error()
 					return result
 				}
-				result["event_count"] = len(eventsResp.Events)
-				if summary := summarizeWorkerRunEvents(eventsResp.Events); len(summary) > 0 {
+				applyWorkerRunEvidence(result, evidence)
+				if exports := collectExportPatchsetResults(evidence.Events); len(exports) > 0 {
+					result["export_patchsets"] = exports
+				}
+				if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
 					result["worker_event_summary"] = summary
 				}
-				if profiles := collectWorkerSpawnProfiles(eventsResp.Events); len(profiles) > 0 {
+				if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
 					result["worker_spawned_profiles"] = profiles
 				}
-				if count := countWorkerChannelMessages(eventsResp.Events); count > 0 {
+				if count := countWorkerChannelMessages(evidence.Events); count > 0 {
 					result["worker_channel_message_count"] = count
 				}
 				return result
@@ -592,14 +595,14 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			if finalResp == nil || startResp == nil {
 				return "", fmt.Errorf("delegate_worker_vm missing worker run status")
 			}
-			eventsResp, err := fetchInternalWorkerRunEvents(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID)
+			evidence, err := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID)
 			if err != nil {
 				if finalResp.State == types.RunCompleted {
 					return "", err
 				}
-				eventsResp = &eventListResponse{}
+				evidence = workerRunEvidence{}
 			}
-			exports := collectExportPatchsetResults(eventsResp.Events)
+			exports := collectExportPatchsetResults(evidence.Events)
 			var promotionCandidates []map[string]any
 			if finalResp.State == types.RunCompleted {
 				promotionCandidates, err = queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
@@ -631,21 +634,21 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"error":              finalResp.Error,
 				"export_patchsets":   exports,
 				"promotion_queue":    promotionCandidates,
-				"event_count":        len(eventsResp.Events),
 			}
+			applyWorkerRunEvidence(result, evidence)
 			if finalResp.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error)))
 				if err != nil {
 					result["worker_event_error"] = err.Error()
 				}
 			}
-			if summary := summarizeWorkerRunEvents(eventsResp.Events); len(summary) > 0 {
+			if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
 				result["worker_event_summary"] = summary
 			}
-			if profiles := collectWorkerSpawnProfiles(eventsResp.Events); len(profiles) > 0 {
+			if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
 				result["worker_spawned_profiles"] = profiles
 			}
-			if count := countWorkerChannelMessages(eventsResp.Events); count > 0 {
+			if count := countWorkerChannelMessages(evidence.Events); count > 0 {
 				result["worker_channel_message_count"] = count
 			}
 			for key, value := range baseResult("") {
@@ -1453,6 +1456,54 @@ func fetchInternalWorkerRunEvents(ctx context.Context, client *http.Client, base
 	return &out, nil
 }
 
+type workerRunEvidence struct {
+	Events           []types.EventRecord
+	RootEventCount   int
+	ChildRunIDs      []string
+	ChildEventCounts map[string]int
+	ChildEventErrors map[string]string
+}
+
+func fetchWorkerRunEvidence(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string) (workerRunEvidence, error) {
+	rootResp, err := fetchInternalWorkerRunEvents(ctx, client, baseURL, ownerID, rootRunID)
+	if err != nil {
+		return workerRunEvidence{}, err
+	}
+	evidence := workerRunEvidence{
+		Events:           append([]types.EventRecord{}, rootResp.Events...),
+		RootEventCount:   len(rootResp.Events),
+		ChildEventCounts: map[string]int{},
+		ChildEventErrors: map[string]string{},
+	}
+	for _, childRunID := range collectWorkerChildRunIDs(rootResp.Events) {
+		childResp, err := fetchInternalWorkerRunEvents(ctx, client, baseURL, ownerID, childRunID)
+		evidence.ChildRunIDs = append(evidence.ChildRunIDs, childRunID)
+		if err != nil {
+			evidence.ChildEventErrors[childRunID] = err.Error()
+			continue
+		}
+		evidence.ChildEventCounts[childRunID] = len(childResp.Events)
+		evidence.Events = append(evidence.Events, childResp.Events...)
+	}
+	return evidence, nil
+}
+
+func applyWorkerRunEvidence(result map[string]any, evidence workerRunEvidence) {
+	result["event_count"] = len(evidence.Events)
+	if evidence.RootEventCount > 0 {
+		result["worker_root_event_count"] = evidence.RootEventCount
+	}
+	if len(evidence.ChildRunIDs) > 0 {
+		result["worker_child_run_ids"] = evidence.ChildRunIDs
+	}
+	if len(evidence.ChildEventCounts) > 0 {
+		result["worker_child_event_counts"] = evidence.ChildEventCounts
+	}
+	if len(evidence.ChildEventErrors) > 0 {
+		result["worker_child_event_errors"] = evidence.ChildEventErrors
+	}
+}
+
 func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
@@ -1564,6 +1615,31 @@ func collectWorkerSpawnProfiles(events []types.EventRecord) []string {
 		profiles = append(profiles, profile)
 	}
 	return profiles
+}
+
+func collectWorkerChildRunIDs(events []types.EventRecord) []string {
+	seen := map[string]bool{}
+	var runIDs []string
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payloadString(payload, "tool") != "spawn_agent" {
+			continue
+		}
+		output := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadString(payload, "output")), &output); err != nil {
+			continue
+		}
+		runID := payloadString(output, "loop_id")
+		if runID == "" || seen[runID] {
+			continue
+		}
+		seen[runID] = true
+		runIDs = append(runIDs, runID)
+	}
+	return runIDs
 }
 
 func countWorkerChannelMessages(events []types.EventRecord) int {

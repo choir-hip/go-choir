@@ -2922,7 +2922,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			Payload: json.RawMessage(`{
 				"tool":"spawn_agent",
 				"is_error":false,
-				"output":"{\"agent_id\":\"agent-worker-verifier\",\"profile\":\"co-super\"}"
+				"output":"{\"agent_id\":\"agent-worker-verifier\",\"loop_id\":\"child-export-run\",\"profile\":\"co-super\"}"
 			}`),
 		},
 		{
@@ -2933,6 +2933,21 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			Timestamp: now.Add(time.Second),
 			Kind:      types.EventChannelMessage,
 			Payload:   json.RawMessage(`{"from_agent_id":"worker-agent-timeout","to_agent_id":"agent-worker-verifier","content":"verifier started before timeout"}`),
+		},
+	}
+	childEvents := []types.EventRecord{
+		{
+			EventID:   "worker-timeout-child-export",
+			RunID:     "child-export-run",
+			AgentID:   "agent-worker-verifier",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(2 * time.Second),
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"export_patchset",
+				"is_error":false,
+				"output":"{\"status\":\"exported\",\"manifest_path\":\"/mnt/persistent/files/patchsets/manifest.json\",\"patchset_path\":\"/mnt/persistent/files/patchsets/patch.diff\",\"base_sha\":\"base-timeout\",\"worker_head\":\"head-timeout\"}"
+			}`),
 		},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2955,6 +2970,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-timeout/events":
 			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: workerEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/child-export-run/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
@@ -2994,6 +3011,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		WorkerEventSummary        []map[string]any `json:"worker_event_summary"`
 		WorkerSpawnedProfiles     []string         `json:"worker_spawned_profiles"`
 		WorkerChannelMessageCount int              `json:"worker_channel_message_count"`
+		WorkerChildRunIDs         []string         `json:"worker_child_run_ids"`
+		ExportPatchsets           []map[string]any `json:"export_patchsets"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -3004,8 +3023,16 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	if !strings.Contains(result.Error, "did not finish within") || !strings.Contains(result.TerminalError, "worker-run-timeout") {
 		t.Fatalf("missing timeout details: %+v\nraw=%s", result, raw)
 	}
-	if result.EventCount != len(workerEvents) || len(result.WorkerEventSummary) != len(workerEvents) {
+	if result.EventCount != len(workerEvents)+len(childEvents) || len(result.WorkerEventSummary) != len(workerEvents)+len(childEvents) {
 		t.Fatalf("worker event evidence missing: %+v\nraw=%s", result, raw)
+	}
+	if !containsString(result.WorkerChildRunIDs, "child-export-run") {
+		t.Fatalf("child run evidence missing: %+v\nraw=%s", result, raw)
+	}
+	if len(result.ExportPatchsets) != 1 ||
+		result.ExportPatchsets[0]["manifest_path"] != "/mnt/persistent/files/patchsets/manifest.json" ||
+		result.ExportPatchsets[0]["loop_id"] != "child-export-run" {
+		t.Fatalf("child export evidence missing: %+v\nraw=%s", result.ExportPatchsets, raw)
 	}
 	if len(result.WorkerSpawnedProfiles) != 1 || result.WorkerSpawnedProfiles[0] != "co-super" {
 		t.Fatalf("spawn profile evidence missing: %+v\nraw=%s", result, raw)

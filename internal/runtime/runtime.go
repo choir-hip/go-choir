@@ -485,6 +485,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	for k, v := range constraints {
 		metadata[k] = v
 	}
+	inheritWorkerRepoMetadata(metadata, &parentRec)
 	runID := uuid.New().String()
 	if err := rt.channelMgr.ensureParentChildChannels(parentID, runID); err != nil {
 		return nil, err
