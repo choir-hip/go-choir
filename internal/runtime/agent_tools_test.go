@@ -3668,6 +3668,47 @@ func TestQueuePromotionCandidatesForWorkerExportsDedupesExactExport(t *testing.T
 	}
 }
 
+func TestCollectExportPatchsetResultsDedupesRepeatedExports(t *testing.T) {
+	exportEvent := func(runID, sha, patchsetPath, exportedAt string) types.EventRecord {
+		t.Helper()
+		output, err := json.Marshal(map[string]any{
+			"patchset_sha256": sha,
+			"patchset_path":   patchsetPath,
+			"exported_at":     exportedAt,
+		})
+		if err != nil {
+			t.Fatalf("marshal output: %v", err)
+		}
+		payload, err := json.Marshal(map[string]any{
+			"tool":     "export_patchset",
+			"is_error": false,
+			"output":   string(output),
+		})
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		return types.EventRecord{
+			EventID: "event-" + runID + "-" + exportedAt,
+			RunID:   runID,
+			Kind:    types.EventToolResult,
+			Payload: payload,
+		}
+	}
+
+	exports := collectExportPatchsetResults([]types.EventRecord{
+		exportEvent("loop-1", "sha-repeat", "/tmp/repeat.patch", "2026-05-16T01:00:00Z"),
+		exportEvent("loop-1", "sha-repeat", "/tmp/repeat.patch", "2026-05-16T01:01:00Z"),
+		exportEvent("loop-2", "sha-distinct", "/tmp/distinct.patch", "2026-05-16T01:02:00Z"),
+	})
+
+	if len(exports) != 2 {
+		t.Fatalf("exports = %+v, want two unique patchsets", exports)
+	}
+	if exports[0]["loop_id"] != "loop-1" || exports[1]["loop_id"] != "loop-2" {
+		t.Fatalf("deduped exports should preserve first loop ids: %+v", exports)
+	}
+}
+
 func TestQueuePromotionCandidatesDedupesEquivalentPatchsetFingerprint(t *testing.T) {
 	rt, _, _ := testRuntimeWithTempCWD(t)
 	ctx := context.Background()

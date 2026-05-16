@@ -20,12 +20,13 @@ type traceTrajectoryListResponse struct {
 }
 
 type traceTrajectorySnapshotResponse struct {
-	Trajectory  traceTrajectorySummary      `json:"trajectory"`
-	Agents      []traceAgentNode            `json:"agents"`
-	Edges       []traceAgentEdge            `json:"edges"`
-	Moments     []traceMomentSummary        `json:"moments"`
-	Search      traceSearchSummary          `json:"search"`
-	Acceptances []types.RunAcceptanceRecord `json:"acceptances,omitempty"`
+	Trajectory    traceTrajectorySummary       `json:"trajectory"`
+	Agents        []traceAgentNode             `json:"agents"`
+	Edges         []traceAgentEdge             `json:"edges"`
+	Moments       []traceMomentSummary         `json:"moments"`
+	Search        traceSearchSummary           `json:"search"`
+	MobileSummary traceProvenanceMobileSummary `json:"mobile_summary"`
+	Acceptances   []types.RunAcceptanceRecord  `json:"acceptances,omitempty"`
 }
 
 type traceMomentDetailResponse struct {
@@ -77,6 +78,23 @@ type traceSearchProviderStats struct {
 	AvgLatencyMs int64  `json:"avg_latency_ms,omitempty"`
 	LastStatus   string `json:"last_status,omitempty"`
 	LastError    string `json:"last_error,omitempty"`
+}
+
+type traceProvenanceMobileSummary struct {
+	Headline           string                   `json:"headline"`
+	AcceptanceState    types.RunAcceptanceState `json:"acceptance_state,omitempty"`
+	AcceptanceLevel    types.RunAcceptanceLevel `json:"acceptance_level,omitempty"`
+	AcceptanceID       string                   `json:"acceptance_id,omitempty"`
+	AgentCount         int                      `json:"agent_count"`
+	DelegationCount    int                      `json:"delegation_count"`
+	MomentCount        int                      `json:"moment_count"`
+	MessageCount       int                      `json:"message_count"`
+	EvidenceRefCount   int                      `json:"evidence_ref_count"`
+	RollbackRefCount   int                      `json:"rollback_ref_count"`
+	ReadableEvidence   []string                 `json:"readable_evidence,omitempty"`
+	RollbackRefs       []string                 `json:"rollback_refs,omitempty"`
+	PrimaryRollbackRef string                   `json:"primary_rollback_ref,omitempty"`
+	LatestAcceptedAt   string                   `json:"latest_accepted_at,omitempty"`
 }
 
 type traceAgentNode struct {
@@ -226,12 +244,13 @@ func (h *APIHandler) handleTraceTrajectorySnapshot(w http.ResponseWriter, r *htt
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, traceTrajectorySnapshotResponse{
-		Trajectory:  bundle.Trajectory,
-		Agents:      bundle.Agents,
-		Edges:       bundle.Edges,
-		Moments:     bundle.Moments,
-		Search:      bundle.Search,
-		Acceptances: bundle.Acceptances,
+		Trajectory:    bundle.Trajectory,
+		Agents:        bundle.Agents,
+		Edges:         bundle.Edges,
+		Moments:       bundle.Moments,
+		Search:        bundle.Search,
+		MobileSummary: buildTraceProvenanceMobileSummary(bundle),
+		Acceptances:   bundle.Acceptances,
 	})
 }
 
@@ -549,6 +568,106 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		SearchSuccessCount:   search.Successes,
 		SearchRateLimitCount: search.RateLimits,
 	}
+}
+
+func buildTraceProvenanceMobileSummary(bundle traceTrajectoryBundle) traceProvenanceMobileSummary {
+	summary := traceProvenanceMobileSummary{
+		Headline:        fmt.Sprintf("%d agents · %d moments · %d messages", bundle.Trajectory.AgentCount, bundle.Trajectory.MomentCount, bundle.Trajectory.MessageCount),
+		AgentCount:      bundle.Trajectory.AgentCount,
+		DelegationCount: bundle.Trajectory.DelegationCount,
+		MomentCount:     bundle.Trajectory.MomentCount,
+		MessageCount:    bundle.Trajectory.MessageCount,
+	}
+	if len(bundle.Acceptances) == 0 {
+		return summary
+	}
+
+	acceptance := bundle.Acceptances[0]
+	summary.AcceptanceState = acceptance.State
+	summary.AcceptanceLevel = acceptance.AcceptanceLevel
+	summary.AcceptanceID = acceptance.AcceptanceID
+	summary.EvidenceRefCount = len(acceptance.EvidenceRefs)
+	summary.RollbackRefCount = len(acceptance.RollbackRefs)
+	summary.ReadableEvidence = traceMobileReadableEvidence(acceptance.EvidenceRefs, 4)
+	summary.RollbackRefs = traceMobileRollbackRefs(acceptance.RollbackRefs, 3)
+	if len(summary.RollbackRefs) > 0 {
+		summary.PrimaryRollbackRef = summary.RollbackRefs[0]
+	}
+	if !acceptance.UpdatedAt.IsZero() {
+		summary.LatestAcceptedAt = formatTraceTime(acceptance.UpdatedAt)
+	} else if !acceptance.CreatedAt.IsZero() {
+		summary.LatestAcceptedAt = formatTraceTime(acceptance.CreatedAt)
+	}
+
+	level := strings.TrimSpace(string(acceptance.AcceptanceLevel))
+	if level == "" {
+		level = "unleveled"
+	}
+	state := strings.TrimSpace(string(acceptance.State))
+	if state == "" {
+		state = "unknown"
+	}
+	summary.Headline = fmt.Sprintf("%s · %s · %d evidence refs", level, state, summary.EvidenceRefCount)
+	return summary
+}
+
+func traceMobileReadableEvidence(refs []types.RunAcceptanceEvidenceRef, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	out := make([]string, 0, min(len(refs), limit))
+	for _, ref := range refs {
+		text := strings.TrimSpace(ref.Summary)
+		if text == "" {
+			text = strings.TrimSpace(ref.Kind)
+		}
+		if text == "" {
+			text = strings.TrimSpace(ref.RefID)
+		}
+		if ref.RunID != "" {
+			text = fmt.Sprintf("%s (%s)", text, shortTraceID(ref.RunID))
+		}
+		if text == "" {
+			continue
+		}
+		out = append(out, traceExcerpt(text, 160))
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func traceMobileRollbackRefs(refs []types.RunAcceptanceRollbackRef, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	out := make([]string, 0, min(len(refs), limit))
+	for _, ref := range refs {
+		parts := make([]string, 0, 3)
+		if ref.Kind != "" {
+			parts = append(parts, strings.TrimSpace(ref.Kind))
+		}
+		if ref.Ref != "" {
+			parts = append(parts, shortTraceID(ref.Ref))
+		}
+		label := strings.Join(parts, ": ")
+		if ref.Summary != "" {
+			if label == "" {
+				label = strings.TrimSpace(ref.Summary)
+			} else {
+				label = label + " - " + strings.TrimSpace(ref.Summary)
+			}
+		}
+		if label == "" {
+			continue
+		}
+		out = append(out, traceExcerpt(label, 160))
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func traceTrajectoryState(runs []types.RunRecord, fallback types.RunState) types.RunState {

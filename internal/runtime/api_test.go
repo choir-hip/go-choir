@@ -1578,6 +1578,24 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	if selected.Status != types.RunContinuationSelected || selected.Details["candidate_id"] != "candidate-continuation-api" {
 		t.Fatalf("unexpected selected continuation: %+v", selected)
 	}
+	sourceEvents, err := rt.store.ListEvents(context.Background(), done.RunID, 100)
+	if err != nil {
+		t.Fatalf("list source events: %v", err)
+	}
+	foundContinuationEvidence := false
+	for _, ev := range sourceEvents {
+		if ev.Kind != types.EventRunContinuationSelected {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "compaction_status") != "" && payloadString(payload, "candidate_id") == "candidate-continuation-api" {
+			foundContinuationEvidence = true
+			break
+		}
+	}
+	if !foundContinuationEvidence {
+		t.Fatalf("continuation selected event missing compaction/candidate evidence: %+v", sourceEvents)
+	}
 
 	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/continuations?source_loop_id="+done.RunID, "", "user-alice")
 	if listW.Code != http.StatusOK {

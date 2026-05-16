@@ -388,6 +388,11 @@
   $: graphEdges = snapshot?.edges || [];
   $: moments = snapshot?.moments || [];
   $: searchSummary = snapshot?.search || { providers: [] };
+  $: mobileSummary = snapshot?.mobile_summary || null;
+  $: showMobileSummary =
+    !!mobileSummary?.acceptance_state ||
+    !!mobileSummary?.readable_evidence?.length ||
+    !!mobileSummary?.rollback_refs?.length;
   $: acceptances = snapshot?.acceptances || [];
   $: activeAcceptance =
     acceptances.find((item) => item.acceptance_id === selectedAcceptanceId) || acceptances[0] || null;
@@ -503,6 +508,50 @@
               </button>
             {/if}
           </div>
+        </section>
+      {/if}
+
+      {#if showMobileSummary}
+        <section class="panel mobile-summary-panel" data-trace-mobile-summary>
+          <div class="panel-header">
+            <div>
+              <h4>Provenance summary</h4>
+              <p>{mobileSummary.headline}</p>
+            </div>
+            {#if mobileSummary.acceptance_state}
+              <span class={`status-pill ${stateTone(mobileSummary.acceptance_state)}`}>
+                {mobileSummary.acceptance_level || mobileSummary.acceptance_state}
+              </span>
+            {/if}
+          </div>
+
+          <div class="mobile-summary-strip">
+            <span>{mobileSummary.agent_count || 0} agents</span>
+            <span>{mobileSummary.delegation_count || 0} delegations</span>
+            <span>{mobileSummary.evidence_ref_count || 0} evidence refs</span>
+            <span>{mobileSummary.rollback_ref_count || 0} rollback refs</span>
+          </div>
+
+          {#if mobileSummary.readable_evidence?.length || mobileSummary.rollback_refs?.length}
+            <div class="mobile-summary-detail">
+              {#if mobileSummary.readable_evidence?.length}
+                <div>
+                  <h5>Evidence</h5>
+                  {#each mobileSummary.readable_evidence as evidence}
+                    <p>{evidence}</p>
+                  {/each}
+                </div>
+              {/if}
+              {#if mobileSummary.rollback_refs?.length}
+                <div>
+                  <h5>Rollback</h5>
+                  {#each mobileSummary.rollback_refs as rollback}
+                    <p>{rollback}</p>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </section>
       {/if}
 
@@ -1164,6 +1213,57 @@
     gap: 0.8rem;
   }
 
+  .mobile-summary-panel {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .mobile-summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .mobile-summary-strip span {
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 999px;
+    background: rgba(2, 6, 23, 0.34);
+    color: #cbd5e1;
+    font-size: 0.74rem;
+    padding: 0.25rem 0.55rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-summary-detail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .mobile-summary-detail div {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .mobile-summary-detail h5 {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .mobile-summary-detail p {
+    margin: 0;
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
   .acceptance-panel {
     display: grid;
     gap: 0.85rem;
@@ -1647,6 +1747,10 @@
       grid-template-columns: 1fr;
     }
 
+    .mobile-summary-detail {
+      grid-template-columns: 1fr;
+    }
+
     .inspector-panel {
       position: static;
       max-height: 52vh;
@@ -1704,6 +1808,10 @@
     }
 
     .acceptance-detail-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .mobile-summary-detail {
       grid-template-columns: 1fr;
     }
 

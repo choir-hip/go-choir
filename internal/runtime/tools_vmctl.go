@@ -1582,6 +1582,7 @@ func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {
 
 func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 	var exports []map[string]any
+	seen := make(map[string]bool)
 	for _, ev := range events {
 		if ev.Kind != types.EventToolResult {
 			continue
@@ -1599,9 +1600,53 @@ func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 			output = map[string]any{"raw_output": payload.Output}
 		}
 		output["loop_id"] = ev.RunID
+		if fingerprint := workerExportPatchsetResultFingerprint(output); fingerprint != "" {
+			if seen[fingerprint] {
+				continue
+			}
+			seen[fingerprint] = true
+		}
 		exports = append(exports, output)
 	}
 	return exports
+}
+
+func workerExportPatchsetResultFingerprint(output map[string]any) string {
+	if sha := workerExportPatchsetResultString(output, "patchset_sha256"); sha != "" {
+		return "patchset_sha256:" + sha
+	}
+	if patchsetPath := workerExportPatchsetResultString(output, "patchset_path"); patchsetPath != "" {
+		return "patchset_path:" + patchsetPath
+	}
+	if manifestPath := workerExportPatchsetResultString(output, "manifest_path"); manifestPath != "" {
+		return "manifest_path:" + manifestPath
+	}
+
+	parts := make([]string, 0, 4)
+	for _, key := range []string{"base_sha", "worker_head_sha", "worker_head", "loop_id"} {
+		if value := workerExportPatchsetResultString(output, key); value != "" {
+			parts = append(parts, key+"="+value)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "|")
+}
+
+func workerExportPatchsetResultString(output map[string]any, key string) string {
+	value, ok := output[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch value := value.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case fmt.Stringer:
+		return strings.TrimSpace(value.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
 }
 
 func summarizeWorkerRunEvents(events []types.EventRecord) []map[string]any {

@@ -326,7 +326,7 @@ func (rt *Runtime) emitContinuationEvent(ctx context.Context, source *types.RunR
 	if rt == nil || source == nil {
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{
+	payloadMap := map[string]any{
 		"continuation_id":       rec.ContinuationID,
 		"status":                rec.Status,
 		"objective":             rec.Objective,
@@ -334,7 +334,28 @@ func (rt *Runtime) emitContinuationEvent(ctx context.Context, source *types.RunR
 		"authority_profile":     rec.AuthorityProfile,
 		"next_loop_id":          rec.NextRunID,
 		"lease_seconds":         rec.LeaseSeconds,
-	})
+	}
+	if len(rec.Details) > 0 {
+		payloadMap["details"] = rec.Details
+		for _, key := range []string{
+			"compaction_status",
+			"compaction_error",
+			"candidate_id",
+			"trace_id",
+			"vm_id",
+			"base_sha",
+			"worker_head_sha",
+			"manifest_path",
+			"patchset_path",
+			"patchset_sha256",
+			"objective_fingerprint",
+		} {
+			if value, ok := rec.Details[key]; ok && value != nil {
+				payloadMap[key] = value
+			}
+		}
+	}
+	payload, _ := json.Marshal(payloadMap)
 	rt.emitEvent(ctx, source, kind, events.CauseSupervisorRecovery, payload)
 }
 

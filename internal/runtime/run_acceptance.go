@@ -937,8 +937,9 @@ func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilde
 		}
 		switch ev.Kind {
 		case types.EventRunCompactionCompleted:
-			ref := builder.addEventEvidence(ev, "run-memory compaction checkpoint recorded", map[string]any{"kind": ev.Kind})
-			builder.addCheckpoint("compacted", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, map[string]any{})
+			details := acceptanceCompactionEventDetails(ev)
+			ref := builder.addEventEvidence(ev, "run-memory compaction checkpoint recorded", details)
+			builder.addCheckpoint("compacted", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, details)
 			compacted = true
 		}
 	}
@@ -949,11 +950,59 @@ func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilde
 		}
 		switch ev.Kind {
 		case types.EventRunContinuationSelected, types.EventRunContinuationStarted:
-			ref := builder.addEventEvidence(ev, "run continuation selected or started", map[string]any{"kind": ev.Kind})
-			builder.addCheckpoint("continued", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, map[string]any{})
+			details := acceptanceContinuationEventDetails(ev)
+			ref := builder.addEventEvidence(ev, "run continuation selected or started", details)
+			builder.addCheckpoint("continued", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, details)
 			continued = true
 		}
 	}
+}
+
+func acceptanceCompactionEventDetails(ev types.EventRecord) map[string]any {
+	payload := parseTracePayload(ev.Payload)
+	details := map[string]any{"kind": ev.Kind}
+	for _, key := range []string{
+		"entry_id",
+		"reason",
+		"tokens_before",
+		"tokens_after",
+		"first_kept_entry_id",
+		"compacted_messages",
+		"kept_messages",
+	} {
+		if value, ok := payload[key]; ok && value != nil {
+			details[key] = value
+		}
+	}
+	return details
+}
+
+func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
+	payload := parseTracePayload(ev.Payload)
+	details := map[string]any{"kind": ev.Kind}
+	for _, key := range []string{
+		"continuation_id",
+		"status",
+		"objective_fingerprint",
+		"authority_profile",
+		"next_loop_id",
+		"lease_seconds",
+		"compaction_status",
+		"compaction_error",
+		"candidate_id",
+		"trace_id",
+		"vm_id",
+		"base_sha",
+		"worker_head_sha",
+		"manifest_path",
+		"patchset_path",
+		"patchset_sha256",
+	} {
+		if value, ok := payload[key]; ok && value != nil {
+			details[key] = value
+		}
+	}
+	return details
 }
 
 func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types.RunAcceptanceLevel, types.RunAcceptanceState) {

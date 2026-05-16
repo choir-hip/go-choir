@@ -206,6 +206,21 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	if len(resp.Acceptances[0].EvidenceRefs) != 1 || resp.Acceptances[0].EvidenceRefs[0].Details["worker_child_run_ids"] == nil {
 		t.Fatalf("acceptance evidence missing structured details: %+v", resp.Acceptances[0].EvidenceRefs)
 	}
+	if resp.MobileSummary.AcceptanceID != "acceptance-trace-1" {
+		t.Fatalf("mobile_summary acceptance_id = %q, want seeded acceptance", resp.MobileSummary.AcceptanceID)
+	}
+	if resp.MobileSummary.AcceptanceLevel != types.RunAcceptanceExportLevel || resp.MobileSummary.AcceptanceState != types.RunAcceptanceAccepted {
+		t.Fatalf("mobile_summary acceptance state/level = %+v", resp.MobileSummary)
+	}
+	if resp.MobileSummary.AgentCount < 2 || resp.MobileSummary.EvidenceRefCount != 1 || resp.MobileSummary.RollbackRefCount != 1 {
+		t.Fatalf("mobile_summary counts = %+v", resp.MobileSummary)
+	}
+	if len(resp.MobileSummary.ReadableEvidence) != 1 || !strings.Contains(resp.MobileSummary.ReadableEvidence[0], "exported concrete patchset") {
+		t.Fatalf("mobile_summary evidence = %+v", resp.MobileSummary.ReadableEvidence)
+	}
+	if resp.MobileSummary.PrimaryRollbackRef == "" || !strings.Contains(resp.MobileSummary.PrimaryRollbackRef, "discard candidate") {
+		t.Fatalf("mobile_summary rollback = %+v", resp.MobileSummary)
+	}
 	foundEdge := false
 	for _, edge := range resp.Edges {
 		if edge.FromAgentID == parent.AgentID && edge.ToAgentID == child.AgentID {
