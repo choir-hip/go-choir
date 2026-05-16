@@ -89,15 +89,49 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("citation ids: got %d, want at least 2", len(resp.CitationIDs))
 	}
 
-	page, err := svc.GetPublishedPage(context.Background(), resp.RoutePath)
+	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
 	if err != nil {
-		t.Fatalf("GetPublishedPage: %v", err)
+		t.Fatalf("GetPublicationBundleByRoute: %v", err)
 	}
-	if page.Content != "A public note.\n\nThis is the published projection." {
-		t.Fatalf("page content mismatch: %q", page.Content)
+	if bundle.Artifact.Content != "A public note.\n\nThis is the published projection." {
+		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
-	if page.ContentHash != resp.ContentHash || page.SourceRevisionHash != resp.SourceRevisionHash {
-		t.Fatalf("page hashes did not round trip")
+	if bundle.Citations[0].ToKind == "private_vtext_revision" || bundle.Citations[0].ToID == "rev-1" {
+		t.Fatalf("bundle leaked private revision citation: %#v", bundle.Citations[0])
+	}
+	if len(bundle.Artifact.RenderModel) == 0 || bundle.Artifact.RenderModel[0].SpanID == "" {
+		t.Fatalf("bundle render model missing retrieval span refs: %#v", bundle.Artifact.RenderModel)
+	}
+	search, err := svc.SearchPublished(context.Background(), "projection")
+	if err != nil {
+		t.Fatalf("SearchPublished: %v", err)
+	}
+	if len(search.Results) != 1 || search.Results[0].SpanID == "" {
+		t.Fatalf("search results: %#v", search.Results)
+	}
+	proposal, err := svc.SubmitPublicationProposal(context.Background(), SubmitPublicationProposalRequest{
+		PublicationID:        resp.PublicationID,
+		PublicationVersionID: resp.PublicationVersionID,
+		SubmitterID:          "reader-1",
+		SubmitterDocID:       "reader-doc-1",
+		SubmitterRevisionID:  "reader-rev-1",
+		Title:                "Reader proposal",
+		Content:              "A reader derivative with transcluded source.",
+		Transclusions: []TransclusionRef{{
+			SourceKind:           "published_vtext_span",
+			PublicationID:        resp.PublicationID,
+			PublicationVersionID: resp.PublicationVersionID,
+			SpanID:               resp.RetrievalSpanIDs[0],
+			ContentHash:          resp.ContentHash,
+			SnapshotText:         "A public note.",
+		}},
+		RequestedBy: "reader-1",
+	})
+	if err != nil {
+		t.Fatalf("SubmitPublicationProposal: %v", err)
+	}
+	if proposal.State != "proposed" || proposal.DeliveryState != "recorded_for_author" || len(proposal.TransclusionIDs) != 1 {
+		t.Fatalf("proposal response: %#v", proposal)
 	}
 
 	var storageRef string
@@ -112,14 +146,20 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 
 	for table, want := range map[string]int{
-		"publication_proposals": 1,
-		"publication_versions":  1,
-		"retrieval_sources":     1,
-		"retrieval_spans":       1,
-		"consent_records":       1,
-		"review_records":        1,
-		"rollback_refs":         1,
-		"verifier_attestations": 1,
+		"publication_proposals":         1,
+		"publication_versions":          1,
+		"retrieval_sources":             1,
+		"retrieval_spans":               1,
+		"consent_records":               1,
+		"review_records":                1,
+		"rollback_refs":                 1,
+		"verifier_attestations":         2,
+		"publication_version_proposals": 1,
+		"proposal_delivery_records":     1,
+		"provenance_entities":           4,
+		"provenance_agents":             2,
+		"provenance_activities":         2,
+		"provenance_edges":              2,
 	} {
 		var got int
 		if err := store.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&got); err != nil {

@@ -99,6 +99,47 @@ func vtextApplyEditsResult(edits []vtextTextEdit, baseRevisionIDs ...string) str
 	return string(data)
 }
 
+func TestHandleInternalVTextProposalDeliveryRecordsAuthorInbox(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	req := httptest.NewRequest(http.MethodPost, "/internal/vtext/proposals", strings.NewReader(`{
+		"owner_id":"author-1",
+		"proposal_id":"readerprop-1",
+		"publication_id":"pub-1",
+		"publication_version_id":"pubver-1",
+		"submitter_id":"reader-1",
+		"delivery_id":"delivery-1"
+	}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	h.HandleInternalVTextProposalDelivery(w, req)
+	if w.Code != http.StatusCreated && w.Code != http.StatusAccepted {
+		t.Fatalf("delivery status: got %d body %s", w.Code, w.Body.String())
+	}
+	var resp internalVTextProposalDeliveryResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode delivery response: %v", err)
+	}
+	if resp.OwnerID != "author-1" || resp.DeliveryID != "delivery-1" || resp.TargetAgentID == "" || resp.ChannelID == "" {
+		t.Fatalf("delivery response missing author routing: %+v", resp)
+	}
+	messages, err := s.ListChannelMessages(context.Background(), "author-1", resp.ChannelID, 0, 10)
+	if err != nil {
+		t.Fatalf("list author channel messages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].Role != "publication_proposal" || !strings.Contains(messages[0].Content, "proposal_id=readerprop-1") {
+		t.Fatalf("author proposal message mismatch: %+v", messages)
+	}
+	if resp.RunID != "" {
+		run, err := s.GetRun(context.Background(), resp.RunID)
+		if err != nil {
+			t.Fatalf("get proposal delivery run: %v", err)
+		}
+		if run.AgentProfile != AgentProfileSuper || run.OwnerID != "author-1" || !strings.Contains(run.Prompt, "readerprop-1") {
+			t.Fatalf("proposal delivery run mismatch: %+v", run)
+		}
+	}
+}
+
 type vtextEditToolProvider struct {
 	Provider
 	result     string

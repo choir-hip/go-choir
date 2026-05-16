@@ -119,9 +119,6 @@ in
         handle /api/* {
           reverse_proxy 127.0.0.1:8082
         }
-        handle /pub/* {
-          reverse_proxy 127.0.0.1:8086
-        }
         handle /provider/* {
           respond "provider routes are not available from the public edge" 403
         }

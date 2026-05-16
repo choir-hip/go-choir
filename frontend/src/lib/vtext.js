@@ -17,6 +17,10 @@
  *   GET    /api/vtext/revisions/{id}/blame        — blame revision
  *   GET    /api/vtext/documents/{id}/stream       — document-scoped stream
  *   POST   /api/vtext/documents/{id}/revise        — request a VText revision
+ *   POST   /api/platform/vtext/publications        — publish selected VText revision
+ *   GET    /api/platform/publications/resolve      — resolve public publication bundle
+ *   GET    /api/platform/retrieval/search          — search public published spans
+ *   POST   /api/platform/publications/{id}/proposals — submit reader derivative proposal
  */
 
 import { fetchWithRenewal } from './auth.js';
@@ -24,6 +28,10 @@ import { withDesktopSelector } from './desktop-selector.js';
 
 function vtextPath(path) {
   return `/api/vtext${path}`;
+}
+
+function platformPath(path) {
+  return `/api/platform${path}`;
 }
 
 async function decodeError(res, fallback) {
@@ -252,4 +260,69 @@ export function openDocumentStream(docId, { onEvent, onError } = {}) {
   };
 
   return source;
+}
+
+export async function publishVText(docId, { revisionId = '', slug = '' } = {}) {
+  const res = await fetchWithRenewal(platformPath('/vtext/publications'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      doc_id: docId,
+      revision_id: revisionId,
+      slug,
+    }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Publish VText failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function resolvePublication(routePath) {
+  const params = new URLSearchParams({ route: routePath });
+  const res = await fetch(platformPath(`/publications/resolve?${params.toString()}`), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Resolve publication failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function searchPublishedVText(query) {
+  const params = new URLSearchParams({ q: query || '' });
+  const res = await fetch(platformPath(`/retrieval/search?${params.toString()}`), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Search published VTexts failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function submitPublicationProposal(publicationId, { docId, revisionId = '', publicationVersionId = '', transclusions = [] } = {}) {
+  const res = await fetchWithRenewal(platformPath(`/publications/${encodeURIComponent(publicationId)}/proposals`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      doc_id: docId,
+      revision_id: revisionId,
+      publication_version_id: publicationVersionId,
+      transclusions,
+    }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Submit proposal failed (${res.status})`);
+  }
+
+  return res.json();
 }

@@ -1551,6 +1551,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
+	s.HandleFunc("/internal/vtext/proposals", h.HandleInternalVTextProposalDelivery)
 	s.HandleFunc("/internal/promotions", h.HandleInternalPromotionCandidatesRoot)
 	s.HandleFunc("/internal/promotions/", h.HandleInternalPromotionCandidateRouter)
 	if h.rt.cfg.EnableTestAPIs {

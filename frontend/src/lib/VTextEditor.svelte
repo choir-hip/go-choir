@@ -8,6 +8,7 @@
 -->
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { prepare, layout } from '@chenglou/pretext';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     createDocument,
@@ -18,7 +19,10 @@
     listDocuments,
     listRevisions,
     openDocumentStream,
+    publishVText,
+    resolvePublication,
     submitAgentRevision,
+    submitPublicationProposal,
   } from './vtext.js';
 
   export let currentUser = null;
@@ -53,6 +57,14 @@
   let autosaveInFlight = false;
   let autosaveQueued = false;
   let lastAutosavedContent = '';
+  let publishedBundle = null;
+  let publishedRoutePath = '';
+  let publishedDerivativeActive = false;
+  let publishedTransclusions = [];
+  let publishedProposal = null;
+  let publishedActionPending = false;
+  let publishResult = null;
+  let transclusionMetrics = null;
 
   const AUTOSAVE_DELAY_MS = 900;
 
@@ -78,6 +90,7 @@
     const blocks = [];
     let paragraph = [];
     let list = [];
+    let quote = [];
 
     function flushParagraph() {
       if (paragraph.length === 0) return;
@@ -91,12 +104,19 @@
       list = [];
     }
 
+    function flushQuote() {
+      if (quote.length === 0) return;
+      blocks.push(`<blockquote>${quote.map((item) => `<p>${renderInlineMarkdown(item)}</p>`).join('')}</blockquote>`);
+      quote = [];
+    }
+
     for (const rawLine of lines) {
       const line = rawLine.trimEnd();
       const trimmed = line.trim();
       if (!trimmed) {
         flushParagraph();
         flushList();
+        flushQuote();
         continue;
       }
 
@@ -104,6 +124,7 @@
       if (heading) {
         flushParagraph();
         flushList();
+        flushQuote();
         const level = heading[1].length;
         blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
         continue;
@@ -112,16 +133,27 @@
       const bullet = trimmed.match(/^[-*]\s+(.+)$/);
       if (bullet) {
         flushParagraph();
+        flushQuote();
         list.push(bullet[1]);
         continue;
       }
 
+      const quoteLine = trimmed.match(/^>\s?(.*)$/);
+      if (quoteLine) {
+        flushParagraph();
+        flushList();
+        quote.push(quoteLine[1]);
+        continue;
+      }
+
       flushList();
+      flushQuote();
       paragraph.push(trimmed);
     }
 
     flushParagraph();
     flushList();
+    flushQuote();
     return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
   }
 
@@ -167,6 +199,11 @@
       return Array.from(node.children)
         .filter((child) => child.tagName?.toLowerCase() === 'li')
         .map((child, index) => `${index + 1}. ${serializeInlineMarkdown(child).trim()}`)
+        .join('\n');
+    }
+    if (tag === 'blockquote') {
+      return Array.from(node.children)
+        .map((child) => `> ${serializeInlineMarkdown(child).trim()}`)
         .join('\n');
     }
     return serializeInlineMarkdown(node).trimEnd();
@@ -219,12 +256,16 @@
       appHint: ctx?.appHint || '',
       createdFrom: ctx?.createdFrom || '',
       createInitialVersion: !!ctx?.createInitialVersion,
+      publishedRoutePath: ctx?.publishedRoutePath || '',
+      publishedGuest: !!ctx?.publishedGuest,
+      startPublishedDerivative: !!ctx?.startPublishedDerivative,
     };
     return JSON.stringify(key);
   }
 
   function shouldShowRecentLanding(ctx) {
-    return !ctx?.docId &&
+    return !ctx?.publishedRoutePath &&
+      !ctx?.docId &&
       !ctx?.sourcePath &&
       !ctx?.initialContent &&
       !ctx?.seedPrompt &&
@@ -322,7 +363,91 @@
     if (appContext.sourceContentId) metadata.source_content_id = appContext.sourceContentId;
     if (appContext.appHint) metadata.app_hint = appContext.appHint;
     if (appContext.createdFrom) metadata.created_from = appContext.createdFrom;
+    if (publishedBundle?.publication?.id) {
+      metadata.source_publication_id = publishedBundle.publication.id;
+      metadata.source_publication_version_id = publishedBundle.version?.id || '';
+      metadata.transclusions = publishedTransclusions;
+    }
     return metadata;
+  }
+
+  function titleForPublishedBundle(bundle = publishedBundle) {
+    return bundle?.publication?.title || 'Published VText';
+  }
+
+  function truncateText(value, max = 360) {
+    const text = String(value || '').trim();
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 1).trimEnd()}…`;
+  }
+
+  function shortHash(value) {
+    const text = String(value || '');
+    if (text.length <= 18) return text;
+    return `${text.slice(0, 10)}…${text.slice(-6)}`;
+  }
+
+  function measureTransclusionText(text) {
+    try {
+      const prepared = prepare(String(text || ''), '15px Inter', { whiteSpace: 'pre-wrap' });
+      const result = layout(prepared, 560, 24);
+      return {
+        lineCount: result.lineCount,
+        height: Math.round(result.height),
+      };
+    } catch {
+      return { lineCount: 0, height: 0 };
+    }
+  }
+
+  function buildPublishedTransclusionRef(bundle = publishedBundle) {
+    if (!bundle?.publication?.id || !bundle?.version?.id) return null;
+    const firstSpan = bundle.retrieval?.spans?.[0] || null;
+    const firstBlock = bundle.artifact?.render_model?.[0] || null;
+    const selector = firstSpan?.selector || {
+      kind: 'document',
+      route_path: bundle.route?.path || publishedRoutePath || appContext.publishedRoutePath || '',
+    };
+    return {
+      source_kind: firstSpan?.id ? 'published_vtext_span' : 'publication_version',
+      publication_id: bundle.publication.id,
+      publication_version_id: bundle.version.id,
+      span_id: firstSpan?.id || firstBlock?.span_id || '',
+      content_hash: bundle.version?.content_hash || '',
+      selector,
+      snapshot_text: truncateText(firstSpan?.snippet || firstBlock?.text || bundle.artifact?.content || '', 720),
+    };
+  }
+
+  function derivativeContentForPublished(bundle = publishedBundle) {
+    const title = titleForPublishedBundle(bundle);
+    const source = String(bundle?.artifact?.content || '').trim();
+    const quoted = (source || 'Blank published VText.')
+      .split(/\r?\n/)
+      .map((line) => `> ${line}`)
+      .join('\n');
+    return `# My version of ${title}\n\n${quoted}\n\n## Notes\n\n`;
+  }
+
+  function publishedCitationPayload(ref) {
+    if (!ref) return [];
+    return [{
+      kind: 'published_vtext_span',
+      title: titleForPublishedBundle(),
+      publication_id: ref.publication_id,
+      publication_version_id: ref.publication_version_id,
+      span_id: ref.span_id,
+      content_hash: ref.content_hash,
+      selector: ref.selector,
+    }];
+  }
+
+  function requestPublishedEditAuth() {
+    dispatch('authrequired', {
+      kind: 'published_vtext_edit',
+      routePath: publishedRoutePath || appContext.publishedRoutePath || '',
+      title: titleForPublishedBundle(),
+    });
   }
 
   function hasAppAgentRevision() {
@@ -432,6 +557,20 @@
     await refreshRevisions(currentDoc.doc_id, preferredRevisionId);
   }
 
+  async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
+    if (!currentDoc) return null;
+    if (autosavePromise) {
+      saveStatus = 'Finishing draft save...';
+      await autosavePromise;
+    }
+    if (!currentRevision || editorValue !== (currentRevision.content || '')) {
+      saveStatus = statusPrefix;
+      await writeThroughToFile(editorValue);
+      return saveUserVersion();
+    }
+    return currentRevision;
+  }
+
   async function saveUserVersion() {
     const revision = await createRevision(currentDoc.doc_id, {
       content: editorValue,
@@ -452,7 +591,7 @@
   }
 
   function shouldAutosave() {
-    if (!currentDoc || loading || submitting || agentPending || isViewingHistorical) return false;
+    if (!currentDoc || loading || submitting || agentPending || isViewingHistorical || isPublishedReadOnly) return false;
     const savedContent = currentRevision?.content || '';
     if (editorValue === savedContent || editorValue === lastAutosavedContent) return false;
     if (!currentRevision && editorValue.trim() === '') return false;
@@ -621,10 +760,24 @@
     closeDocumentStream();
 
     try {
+      publishedBundle = null;
+      publishedRoutePath = '';
+      publishedDerivativeActive = false;
+      publishedTransclusions = [];
+      publishedProposal = null;
+      publishedActionPending = false;
+      publishResult = null;
+      transclusionMetrics = null;
+
       if (shouldShowRecentLanding(appContext)) {
         showRecent = true;
         saveStatus = 'Recent VTexts';
         await loadRecentDocuments();
+        return;
+      }
+
+      if (appContext.publishedRoutePath) {
+        await loadPublishedContext(appContext.publishedRoutePath);
         return;
       }
 
@@ -676,6 +829,22 @@
     }
   }
 
+  async function loadPublishedContext(routePath) {
+    const bundle = await resolvePublication(routePath);
+    publishedBundle = bundle;
+    publishedRoutePath = bundle.route?.path || routePath;
+    editorValue = bundle.artifact?.content || '';
+    lastAutosavedContent = editorValue;
+    transclusionMetrics = measureTransclusionText(editorValue);
+    const ref = buildPublishedTransclusionRef(bundle);
+    publishedTransclusions = ref ? [ref] : [];
+    saveStatus = currentUser ? 'Published VText loaded' : 'Guest published VText';
+
+    if (appContext.startPublishedDerivative && currentUser) {
+      await createPublishedDerivative({ auto: true });
+    }
+  }
+
   async function loadRecentDocuments() {
     recentLoading = true;
     error = '';
@@ -690,6 +859,51 @@
       error = err.message || 'Failed to load recent VTexts';
     } finally {
       recentLoading = false;
+    }
+  }
+
+  async function createPublishedDerivative({ auto = false } = {}) {
+    if (!publishedBundle) return;
+    if (!currentUser) {
+      requestPublishedEditAuth();
+      return;
+    }
+    if (publishedDerivativeActive && currentDoc) return;
+
+    publishedActionPending = true;
+    error = '';
+    saveStatus = auto ? 'Preparing private version...' : 'Creating private version...';
+    try {
+      const ref = buildPublishedTransclusionRef(publishedBundle);
+      publishedTransclusions = ref ? [ref] : [];
+      const title = `My version of ${titleForPublishedBundle()}`;
+      currentDoc = await createDocument(title);
+      editorValue = derivativeContentForPublished(publishedBundle);
+      const revision = await createRevision(currentDoc.doc_id, {
+        content: editorValue,
+        authorKind: 'user',
+        authorLabel: getAuthorLabel(),
+        citations: publishedCitationPayload(ref),
+        metadata: {
+          ...buildRevisionMetadata(),
+          created_from: 'published_vtext_derivative',
+          source_route_path: publishedRoutePath || appContext.publishedRoutePath || '',
+        },
+      });
+      publishedDerivativeActive = true;
+      await reloadDocument(revision.revision_id);
+      await ensureFileManifest();
+      connectDocumentStream(currentDoc.doc_id);
+      saveStatus = auto ? 'Private version ready' : 'Private version created';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to create private version';
+      saveStatus = 'Private version failed';
+    } finally {
+      publishedActionPending = false;
     }
   }
 
@@ -742,14 +956,7 @@
     saveStatus = 'Saving user version…';
 
     try {
-      if (autosavePromise) {
-        saveStatus = 'Finishing draft save...';
-        await autosavePromise;
-      }
-      if (!currentRevision || editorValue !== (currentRevision.content || '')) {
-        await writeThroughToFile(editorValue);
-        await saveUserVersion();
-      }
+      await ensureCurrentRevisionSaved('Saving user version…');
       saveStatus = 'Submitting revise event…';
       await submitAgentRevision(currentDoc.doc_id, {
         intent: 'revise',
@@ -766,6 +973,77 @@
       agentPending = false;
     } finally {
       submitting = false;
+    }
+  }
+
+  async function handlePublishCurrent() {
+    if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
+    publishedActionPending = true;
+    error = '';
+    publishResult = null;
+    try {
+      const revision = await ensureCurrentRevisionSaved('Saving selected revision...');
+      if (!revision?.revision_id) {
+        throw new Error('No revision is available to publish');
+      }
+      saveStatus = `Publishing ${versionLabel}...`;
+      publishResult = await publishVText(currentDoc.doc_id, {
+        revisionId: revision.revision_id,
+      });
+      saveStatus = `Published ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to publish VText';
+      saveStatus = 'Publish failed';
+    } finally {
+      publishedActionPending = false;
+    }
+  }
+
+  async function handleCreatePublishedDerivative() {
+    await createPublishedDerivative();
+  }
+
+  async function handleSubmitProposal() {
+    if (!publishedBundle) return;
+    if (!currentUser) {
+      requestPublishedEditAuth();
+      return;
+    }
+    publishedActionPending = true;
+    error = '';
+    publishedProposal = null;
+    try {
+      if (!publishedDerivativeActive || !currentDoc) {
+        await createPublishedDerivative({ auto: true });
+      }
+      if (!currentDoc) {
+        throw new Error('No private version is available to propose');
+      }
+      const revision = await ensureCurrentRevisionSaved('Saving proposal revision...');
+      if (!revision?.revision_id) {
+        throw new Error('No revision is available to propose');
+      }
+      saveStatus = 'Submitting proposal...';
+      publishedProposal = await submitPublicationProposal(publishedBundle.publication.id, {
+        docId: currentDoc.doc_id,
+        revisionId: revision.revision_id,
+        publicationVersionId: publishedBundle.version?.id || '',
+        transclusions: publishedTransclusions,
+      });
+      saveStatus = 'Proposal recorded for author';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to submit proposal';
+      saveStatus = 'Proposal failed';
+    } finally {
+      publishedActionPending = false;
     }
   }
 
@@ -826,6 +1104,11 @@
   $: versionLabel = activeRevisionIndex >= 0 ? `v${activeRevisionIndex}` : 'v0';
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
+  $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
+  $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
+  $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
+  $: publishedLineCount = transclusionMetrics?.lineCount || 0;
+  $: sourceRef = publishedTransclusions[0] || null;
   $: renderedMarkdown = renderMarkdown(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -908,7 +1191,13 @@
       </div>
 
       <div class="doc-state" data-vtext-state>
-        {#if isViewingHistorical}
+        {#if isPublishedMode && !publishedDerivativeActive}
+          {currentUser ? 'Published reader' : 'Guest reader'}
+        {:else if isPublishedMode && publishedDerivativeActive}
+          Private proposal draft
+        {:else if publishResult}
+          Published {versionLabel}
+        {:else if isViewingHistorical}
           Historical version
         {:else if isDirty}
           Unsaved edit
@@ -920,26 +1209,132 @@
       </div>
 
       <div class="doc-actions">
-        <button
-          class="prompt-btn"
-          data-vtext-prompt
-          data-vtext-save
-          on:click={handlePrompt}
-          disabled={loading || submitting || agentPending || isViewingHistorical}
-        >
-          {promptLabel}
-        </button>
+        {#if isPublishedMode && !publishedDerivativeActive}
+          <button
+            class="prompt-btn"
+            data-vtext-edit-published
+            on:click={handleCreatePublishedDerivative}
+            disabled={loading || publishedActionPending}
+          >
+            {publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}
+          </button>
+        {:else}
+          <button
+            class="prompt-btn"
+            data-vtext-prompt
+            data-vtext-save
+            on:click={handlePrompt}
+            disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
+          >
+            {promptLabel}
+          </button>
+          {#if isPublishedMode}
+            <button
+              class="secondary-action"
+              data-vtext-submit-proposal
+              on:click={handleSubmitProposal}
+              disabled={loading || submitting || agentPending || publishedActionPending || !currentDoc}
+            >
+              {publishedActionPending ? 'Submitting…' : 'Propose'}
+            </button>
+          {:else}
+            <button
+              class="secondary-action"
+              data-vtext-publish
+              on:click={handlePublishCurrent}
+              disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending || !currentDoc}
+            >
+              {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
+            </button>
+          {/if}
+        {/if}
       </div>
     </div>
 
     <div class="document-body" data-vtext-document-body>
+      {#if publishedBundle}
+        <section
+          class="publication-panel"
+          data-vtext-published-reader
+          data-publication-id={publishedBundle.publication?.id || ''}
+          data-publication-version-id={publishedBundle.version?.id || ''}
+          data-content-hash={publishedBundle.version?.content_hash || ''}
+          data-source-revision-hash={publishedBundle.version?.source_revision_hash || ''}
+        >
+          <div class="publication-heading">
+            <p class="eyebrow">Published VText</p>
+            <h2>{titleForPublishedBundle()}</h2>
+          </div>
+          <div class="publication-facts">
+            <span>{shortHash(publishedBundle.version?.content_hash || '')}</span>
+            <span>{publishedLineCount} lines</span>
+            <span>{publishedBundle.retrieval?.spans?.length || 0} spans</span>
+          </div>
+          {#if sourceRef}
+            <div
+              class="transclusion-card"
+              data-vtext-transclusion-card
+              data-pretext-line-count={publishedLineCount}
+              data-source-kind={sourceRef.source_kind}
+              data-source-span-id={sourceRef.span_id || ''}
+              data-source-content-hash={sourceRef.content_hash || ''}
+            >
+              <div class="transclusion-meta">
+                <span>Source span</span>
+                <span>{shortHash(sourceRef.span_id || sourceRef.publication_version_id)}</span>
+              </div>
+              <p>{sourceRef.snapshot_text}</p>
+            </div>
+          {/if}
+        </section>
+      {/if}
+
+      {#if publishResult}
+        <section
+          class="publication-panel publication-result"
+          data-vtext-publish-result
+          data-publication-id={publishResult.publication_id || ''}
+          data-publication-version-id={publishResult.publication_version_id || ''}
+          data-public-route={publishResult.route_path || ''}
+        >
+          <div class="publication-heading">
+            <p class="eyebrow">Published</p>
+            <h2>{publishResult.route_path || publishResult.public_url || 'Public route ready'}</h2>
+          </div>
+          <div class="publication-facts">
+            <span>{shortHash(publishResult.content_hash || '')}</span>
+            <span>{shortHash(publishResult.publication_version_id || '')}</span>
+          </div>
+        </section>
+      {/if}
+
+      {#if publishedProposal}
+        <section
+          class="publication-panel publication-result"
+          data-vtext-proposal-result
+          data-proposal-id={publishedProposal.proposal_id || ''}
+          data-proposal-state={publishedProposal.state || ''}
+          data-delivery-state={publishedProposal.delivery_state || ''}
+        >
+          <div class="publication-heading">
+            <p class="eyebrow">Proposal</p>
+            <h2>{publishedProposal.state || 'recorded'}</h2>
+          </div>
+          <div class="publication-facts">
+            <span>{publishedProposal.delivery_state || 'recorded_for_author'}</span>
+            <span>{shortHash(publishedProposal.proposal_revision_hash || '')}</span>
+          </div>
+        </section>
+      {/if}
+
       <div
         class="rendered-doc editable-doc"
-        class:readonly={isViewingHistorical || loading}
+        class:readonly={isEditorReadOnly}
+        class:published-readonly={isPublishedReadOnly}
         data-vtext-editor-area
         data-vtext-rendered
         bind:this={editorSurface}
-        contenteditable={!loading && !isViewingHistorical}
+        contenteditable={!isEditorReadOnly}
         role="textbox"
         aria-multiline="true"
         aria-label="VText document"
@@ -1035,6 +1430,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .nav-version {
@@ -1055,6 +1452,7 @@
 
   .nav-btn,
   .prompt-btn,
+  .secondary-action,
   .update-pill,
   .primary-action,
   .ghost-action {
@@ -1081,8 +1479,18 @@
     font-weight: 700;
   }
 
+  .secondary-action {
+    border-radius: 999px;
+    padding: 0.62rem 0.84rem;
+    font-size: 0.78rem;
+    font-weight: 720;
+    color: #c7d2fe;
+  }
+
   .rendered-doc {
-    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
     overflow: auto;
     padding: clamp(1.1rem, 2.2vw, 2rem);
     line-height: 1.72;
@@ -1105,6 +1513,10 @@
 
   .editable-doc.readonly {
     color: rgba(226, 232, 240, 0.82);
+  }
+
+  .editable-doc.published-readonly {
+    cursor: default;
   }
 
   .rendered-doc :global(h1),
@@ -1134,6 +1546,86 @@
     border-radius: 0.35rem;
     background: rgba(148, 163, 184, 0.14);
     padding: 0.08rem 0.3rem;
+  }
+
+  .rendered-doc :global(blockquote) {
+    margin: 0 0 1rem;
+    border-left: 3px solid rgba(96, 165, 250, 0.44);
+    padding: 0.1rem 0 0.1rem 0.9rem;
+    color: rgba(226, 232, 240, 0.86);
+    background: rgba(15, 23, 42, 0.34);
+  }
+
+  .rendered-doc :global(blockquote p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .publication-panel {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.72rem 0.86rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.72);
+  }
+
+  .publication-heading {
+    min-width: 0;
+  }
+
+  .publication-heading h2 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 1rem;
+    line-height: 1.24;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .publication-facts,
+  .transclusion-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: flex-end;
+    color: #9fb1cf;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.68rem;
+  }
+
+  .publication-facts span,
+  .transclusion-meta span {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .transclusion-card {
+    grid-column: 1 / -1;
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.36);
+    padding: 0.62rem 0.72rem;
+  }
+
+  .transclusion-card p {
+    margin: 0.35rem 0 0;
+    color: rgba(226, 232, 240, 0.84);
+    line-height: 1.48;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.82rem;
+    max-height: 7.2rem;
+    overflow: auto;
+  }
+
+  .publication-result {
+    background: rgba(20, 83, 45, 0.32);
+    border-bottom-color: rgba(134, 239, 172, 0.16);
   }
 
   .recent-panel {
@@ -1264,6 +1756,7 @@
 
   .nav-btn:hover:enabled,
   .prompt-btn:hover:enabled,
+  .secondary-action:hover:enabled,
   .update-pill:hover:enabled,
   .primary-action:hover:enabled,
   .ghost-action:hover:enabled {
@@ -1274,6 +1767,7 @@
 
   .nav-btn:disabled,
   .prompt-btn:disabled,
+  .secondary-action:disabled,
   .update-pill:disabled,
   .primary-action:disabled,
   .ghost-action:disabled {
@@ -1330,6 +1824,25 @@
     .prompt-btn {
       padding: 0.5rem 0.7rem;
       font-size: 0.75rem;
+    }
+
+    .secondary-action {
+      padding: 0.5rem 0.64rem;
+      font-size: 0.72rem;
+    }
+
+    .publication-panel {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.5rem;
+      padding: 0.62rem 0.7rem;
+    }
+
+    .publication-heading h2 {
+      font-size: 0.92rem;
+    }
+
+    .publication-facts {
+      justify-content: flex-start;
     }
 
     .update-pill {

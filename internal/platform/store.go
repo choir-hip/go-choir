@@ -217,6 +217,39 @@ CREATE TABLE IF NOT EXISTS citation_edges (
 	updated_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS publication_version_proposals (
+	proposal_id VARCHAR(255) PRIMARY KEY,
+	publication_id VARCHAR(255) NOT NULL,
+	publication_version_id VARCHAR(255) NOT NULL,
+	source_owner_id VARCHAR(255) NOT NULL,
+	submitter_id VARCHAR(255) NOT NULL,
+	submitter_doc_id VARCHAR(255) NOT NULL,
+	submitter_revision_id VARCHAR(255) NOT NULL,
+	submitter_revision_hash VARCHAR(128) NOT NULL,
+	content_hash VARCHAR(128) NOT NULL,
+	projection_hash VARCHAR(128) NOT NULL,
+	artifact_manifest_id VARCHAR(255) NOT NULL,
+	title LONGTEXT NOT NULL,
+	transclusions_json LONGTEXT NOT NULL DEFAULT '[]',
+	citations_json LONGTEXT NOT NULL DEFAULT '[]',
+	state VARCHAR(64) NOT NULL,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS proposal_delivery_records (
+	delivery_id VARCHAR(255) PRIMARY KEY,
+	proposal_id VARCHAR(255) NOT NULL,
+	target_owner_id VARCHAR(255) NOT NULL,
+	target_kind VARCHAR(64) NOT NULL,
+	target_id VARCHAR(255) NOT NULL,
+	delivery_state VARCHAR(64) NOT NULL,
+	delivery_ref LONGTEXT NOT NULL DEFAULT '',
+	error LONGTEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS verifier_attestations (
 	attestation_id VARCHAR(255) PRIMARY KEY,
 	target_kind VARCHAR(64) NOT NULL,

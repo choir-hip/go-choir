@@ -131,7 +131,7 @@ All built from the same Go module in `go-choir`, different `cmd/` entry points:
 | `proxy` | Host | Routes authenticated API requests to the correct sandbox VM based on user session. Handles WebSocket upgrade and proxying. | HTTP (behind Caddy), vsock/virtio-net to VMs |
 | `vmctl` | Host | VM lifecycle management via firecracker-go-sdk. Boot, stop, hibernate, idle watchdog, memory pressure checks. Exposes internal API for proxy/auth to query VM status. | Internal API (not exposed to browser) |
 | `gateway` | Host | Provider gateway. Receives LLM API calls from sandboxes, injects real API keys, proxies to upstream providers (Anthropic, OpenAI, Bedrock, etc.), rate limiting per sandbox. | HTTP (called by sandboxes, not directly by browser) |
-| `platformd` | Host | Platform publication service backed by a separate Dolt SQL-server primary. Owns public publication rows, routes, artifact manifests, retrieval spans, citation edges, provenance, consent/review, and rollback refs. | HTTP internal API plus public `/pub/*` read routes |
+| `platformd` | Host | Platform publication service backed by a separate Dolt SQL-server primary. Owns public publication rows, routes, artifact manifests, retrieval spans, citation edges, provenance, consent/review, proposal delivery records, and rollback refs. | Internal HTTP API only; public `/pub/vtext/*` is served by the Choir Svelte shell and proxy read APIs |
 | `sandbox` | Inside each microVM | The full product: conductor (input routing), scheduler (work registry), agent runtime, apps, appagents, workers, vtext, tools, persistence (Dolt — all sandbox state). | HTTP API on internal port (reached via proxy) |
 
 ### 2.4 Caddy (Edge)

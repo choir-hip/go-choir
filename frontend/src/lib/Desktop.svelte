@@ -61,6 +61,8 @@
   export let currentUser = null;
   export let authenticated = false;
   export let promptReplay = null;
+  export let appReplay = null;
+  export let publicRoutePath = '';
 
   const dispatch = createEventDispatcher();
 
@@ -77,6 +79,8 @@
   let authenticatedStartupRunning = false;
   let lastAuthenticated = null;
   let lastPromptReplayId = null;
+  let lastAppReplayId = null;
+  let lastOpenedPublicRoutePath = '';
 
   // ---- WebSocket state ----
   let ws = null;
@@ -119,6 +123,20 @@
   ) {
     lastPromptReplayId = promptReplay.id;
     submitPromptText(promptReplay.text);
+  }
+  $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
+    lastOpenedPublicRoutePath = publicRoutePath;
+    openPublishedVText(publicRoutePath, !authenticated);
+  }
+  $: if (
+    mounted &&
+    authenticated &&
+    desktopReady &&
+    appReplay?.id &&
+    appReplay.id !== lastAppReplayId
+  ) {
+    lastAppReplayId = appReplay.id;
+    openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {});
   }
 
   // ---- Desktop state persistence ----
@@ -439,6 +457,15 @@
 
   function requestAuth(detail = {}) {
     dispatch('authrequired', detail);
+  }
+
+  function openPublishedVText(routePath, guest = false) {
+    openApp('vtext', 'VText', '📝', {
+      windowTitle: 'Published VText',
+      publishedRoutePath: routePath,
+      publishedGuest: guest,
+      allowMultiple: true,
+    });
   }
 
   function handleLaunchApp(event) {
@@ -771,7 +798,13 @@
               </div>
             {:else if win.appId === 'vtext'}
               <div class="app-content vtext-content" data-vtext-app>
-                <VTextEditor {currentUser} appContext={win.appContext} on:authexpired={() => dispatch('authexpired')} />
+                <VTextEditor
+                  {currentUser}
+                  {authenticated}
+                  appContext={win.appContext}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:authrequired={(event) => requestAuth(event.detail || {})}
+                />
               </div>
             {:else if win.appId === 'trace'}
               <div class="app-content trace-content" data-trace-window>

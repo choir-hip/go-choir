@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-func TestInternalPublishRequiresInternalCallerAndPublicRouteRenders(t *testing.T) {
+func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts")))
 
@@ -40,17 +39,33 @@ func TestInternalPublishRequiresInternalCallerAndPublicRouteRenders(t *testing.T
 		t.Fatalf("decode publish response: %v", err)
 	}
 
-	pageReq := httptest.NewRequest(http.MethodGet, resp.RoutePath, nil)
-	pageW := httptest.NewRecorder()
-	handler.HandlePublicVText(pageW, pageReq)
-	if pageW.Code != http.StatusOK {
-		t.Fatalf("public route status: got %d body %s", pageW.Code, pageW.Body.String())
+	resolveReq := httptest.NewRequest(http.MethodGet, "/internal/platform/publications/resolve?route="+resp.RoutePath, nil)
+	resolveReq.Header.Set("X-Internal-Caller", "true")
+	resolveW := httptest.NewRecorder()
+	handler.HandleInternalResolvePublication(resolveW, resolveReq)
+	if resolveW.Code != http.StatusOK {
+		t.Fatalf("resolve status: got %d body %s", resolveW.Code, resolveW.Body.String())
 	}
-	html := pageW.Body.String()
-	if !strings.Contains(html, "Visible public content") {
-		t.Fatalf("public route missing content: %s", html)
+	var bundle PublicationBundle
+	if err := json.NewDecoder(resolveW.Body).Decode(&bundle); err != nil {
+		t.Fatalf("decode bundle: %v", err)
 	}
-	if !strings.Contains(html, resp.ContentHash) || !strings.Contains(html, resp.SourceRevisionHash) {
-		t.Fatalf("public route missing hashes")
+	if bundle.Artifact.Content != "Visible public content" {
+		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
+	}
+	if bundle.Version.ContentHash != resp.ContentHash || bundle.Version.SourceRevisionHash != resp.SourceRevisionHash {
+		t.Fatalf("bundle hashes did not round trip")
+	}
+	if len(bundle.Retrieval.Spans) != 1 {
+		t.Fatalf("bundle retrieval spans: got %d, want 1", len(bundle.Retrieval.Spans))
+	}
+	if len(bundle.Citations) == 0 {
+		t.Fatalf("bundle citations missing")
+	}
+
+	publicW := httptest.NewRecorder()
+	handler.HandlePublicVText(publicW, httptest.NewRequest(http.MethodGet, resp.RoutePath, nil))
+	if publicW.Code != http.StatusNotFound {
+		t.Fatalf("platformd public HTML route should be disabled, got %d", publicW.Code)
 	}
 }

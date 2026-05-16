@@ -389,6 +389,15 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/platform/vtext/publications":
 		h.HandleVTextPublication(w, r)
 		return
+	case path == "/api/platform/publications/resolve":
+		h.HandlePlatformPublicationResolve(w, r)
+		return
+	case path == "/api/platform/retrieval/search":
+		h.HandlePlatformRetrievalSearch(w, r)
+		return
+	case strings.HasPrefix(path, "/api/platform/publications/") && strings.HasSuffix(path, "/proposals"):
+		h.HandlePublicationProposal(w, r)
+		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
 		// forwarded to the sandbox with trusted user context injected. The

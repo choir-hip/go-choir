@@ -61,8 +61,12 @@ span, citation edge, provenance, consent/review, verifier, and rollback rows.
 The browser never talks to Dolt. A signed-in user calls the proxy product API to
 publish a selected private VText revision; the proxy reads that revision from
 the user's resolved computer and submits only the public projection to
-`platformd`. Public published snapshots render at `/pub/vtext/...` without
-granting platform services write access to the live private document.
+`platformd`. Public published snapshots now resolve through the Svelte Choir
+shell and VText app at `/pub/vtext/...`: signed-out visitors get a guest
+read-only VText surface, signed-in users can create private derivatives and
+proposals, and proxy read APIs fetch sanitized publication bundles from
+internal-only `platformd` endpoints. Platform services still never gain write
+access to the live private document.
 
 ## Priority Order
 
@@ -75,11 +79,11 @@ granting platform services write access to the live private document.
    text/Markdown/PDF/EPUB upload. Later add audio/video/image display apps so
    uploaded, linked, or agent-retrieved media can open in the desktop and become
    available for `vtext` transclusion.
-4. Harden publication UX and review: owner-visible publish controls, retraction,
-   supersession, route management, and richer review evidence.
-5. Add Pretext-based text rendering/transclusion for published `vtext` and web
-   content.
-6. Add citation mechanics.
+4. Harden publication UX and review: retraction, supersession, route
+   management, richer review evidence, and proposal inbox/acceptance flows.
+5. Deepen Pretext-based text rendering/transclusion for published `vtext` and
+   web content.
+6. Add richer citation mechanics.
 7. Add CHIPS and citation/compute economics.
 
 Later layers should shape today's data model, but they should not be built

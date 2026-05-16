@@ -43,8 +43,11 @@
   let pendingAuthIntent = null;
   let promptReplay = null;
   let promptReplayCounter = 0;
+  let appReplay = null;
+  let appReplayCounter = 0;
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
+  let publicRoutePath = '';
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
@@ -102,6 +105,9 @@
     if (intent.kind === 'app_launch') {
       return `Sign in to open ${intent.appName || 'this app'}.`;
     }
+    if (intent.kind === 'published_vtext_edit') {
+      return `Sign in to edit your version of ${intent.title || 'this published VText'}.`;
+    }
     return 'Sign in to continue.';
   }
 
@@ -122,6 +128,31 @@
       promptReplay = {
         id: `prompt-replay-${++promptReplayCounter}`,
         text: intent.text,
+      };
+      return;
+    }
+    if (intent?.kind === 'published_vtext_edit') {
+      appReplay = {
+        id: `app-replay-${++appReplayCounter}`,
+        appId: 'vtext',
+        appName: 'VText',
+        icon: '📝',
+        appContext: {
+          publishedRoutePath: intent.routePath || publicRoutePath || window.location.pathname,
+          windowTitle: intent.title || 'Published VText',
+          startPublishedDerivative: true,
+          allowMultiple: true,
+        },
+      };
+      return;
+    }
+    if (intent?.kind === 'app_launch' && intent.appId) {
+      appReplay = {
+        id: `app-replay-${++appReplayCounter}`,
+        appId: intent.appId,
+        appName: intent.appName || intent.appId,
+        icon: intent.icon || '',
+        appContext: intent.appContext || {},
       };
     }
   }
@@ -227,6 +258,7 @@
 
   import { onMount } from 'svelte';
   onMount(() => {
+    publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
     applyTheme(loadStoredTheme(), false);
     checkSession();
 
@@ -278,6 +310,8 @@
       {currentUser}
       authenticated={isAuthenticated}
       {promptReplay}
+      {appReplay}
+      {publicRoutePath}
       on:logout={handleLogout}
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}
