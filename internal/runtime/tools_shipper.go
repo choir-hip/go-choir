@@ -15,9 +15,9 @@ import (
 
 const maxInlinePatchsetBytes = 2 * 1024 * 1024
 
-func RegisterShipperTools(registry *ToolRegistry, cwd string) error {
+func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
-		newExportPatchsetTool(cwd),
+		newExportPatchsetTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -26,7 +26,7 @@ func RegisterShipperTools(registry *ToolRegistry, cwd string) error {
 	return nil
 }
 
-func newExportPatchsetTool(cwd string) Tool {
+func newExportPatchsetTool(rt *Runtime, cwd string) Tool {
 	type args struct {
 		RepoPath   string   `json:"repo_path"`
 		OutputDir  string   `json:"output_dir,omitempty"`
@@ -81,6 +81,19 @@ func newExportPatchsetTool(cwd string) Tool {
 			vmID := stringFromToolContext(ctx, toolCtxSandboxID)
 			if vmID == "" {
 				vmID = "unknown-sandbox"
+			}
+			if profile == AgentProfileVSuper && rt != nil && rt.store != nil {
+				if childExport, found, err := rt.latestChildExportPatchset(ctx, runID); err != nil {
+					return "", err
+				} else if found {
+					childExport["reused_child_export"] = true
+					childExport["parent_loop_id"] = runID
+					childExport["trace_id"] = traceID
+					if vmID != "" {
+						childExport["vm_id"] = vmID
+					}
+					return toolResultJSON(childExport)
+				}
 			}
 
 			outputDir := strings.TrimSpace(in.OutputDir)

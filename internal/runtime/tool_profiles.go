@@ -366,12 +366,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileVSuper {
 		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent and channel messages to coordinate existing children; if the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
 		b.WriteString("\nWhen you spawn child co-supers, set spawn_agent slot=\"implementation\" for the implementation worker and slot=\"verifier\" for the verifier. Put the same implementation/verifier role and terminal obligation directly in each spawn_agent objective. A later cast_agent correction may arrive after the child already acted, so do not rely on role correction as the only source of truth.")
-		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/blocker or you explicitly cancel/take over; otherwise you can erase the worker's evidence.")
+		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/blocker. Do not cancel a child that has produced export_patchset evidence; incorporate that child export instead.")
 		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
 			b.WriteString(repoContext)
 			b.WriteString("\nWhen spawning or casting to the implementation co-super, include these repo_path/base_sha/bootstrap details verbatim. Child co-supers must not have to rediscover the candidate checkout from scratch.")
 		}
-		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If the objective asks the worker helper to export, do not tell it not to export; either let it export or export yourself immediately after the commit evidence is present.")
+		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If an implementation child already exported, do not export again from the parent vsuper; summarize the child export, verifier state, rollback refs, and residual risks.")
 		b.WriteString("\nDo not end the run after only spawning children, casting assignments, or receiving acknowledgement-only child messages. End only after export_patchset, submit_worker_update with a precise blocker, or child-provided commit/export/verifier evidence that you have incorporated.")
 	}
 	if profile == AgentProfileCoSuper {
@@ -562,7 +562,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWorkerUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterShipperTools(superRegistry, cwd); err != nil {
+	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}
 	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, httpClient)
@@ -572,7 +572,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWorkerUpdateTools(coSuperRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterShipperTools(coSuperRegistry, cwd); err != nil {
+	if err := RegisterShipperTools(coSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
 	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVSuper), cwd, searchClient, httpClient)
@@ -582,7 +582,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWorkerUpdateTools(vSuperRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterShipperTools(vSuperRegistry, cwd); err != nil {
+	if err := RegisterShipperTools(vSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, httpClient)

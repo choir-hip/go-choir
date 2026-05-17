@@ -1475,6 +1475,193 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 	}
 }
 
+func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-cancel-parent",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate worker and verifier co-super agents.",
+		ChannelID:    "worker-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create vsuper parent: %v", err)
+	}
+	child := types.RunRecord{
+		RunID:        "vsuper-cancel-child",
+		AgentID:      "agent-exported-child",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Implement candidate change and export.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("create active child: %v", err)
+	}
+	appendRuntimeToolResult(t, s, child, "export_patchset", map[string]any{
+		"status":          "exported",
+		"patchset_sha256": "child-sha",
+		"worker_head_sha": "child-head",
+	})
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
+		"agent_id":"agent-exported-child"
+	}`))
+	if err != nil {
+		t.Fatalf("cancel exported child: %v", err)
+	}
+	var resp struct {
+		Status string `json:"status"`
+		LoopID string `json:"loop_id"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode cancel response: %v", err)
+	}
+	if resp.Status != "not_cancelled" || resp.LoopID != child.RunID || !strings.Contains(resp.Reason, "export_patchset") {
+		t.Fatalf("cancel response = %+v, want exported child preserved", resp)
+	}
+	stored, err := s.GetRun(ctx, child.RunID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if stored.State != types.RunRunning {
+		t.Fatalf("child state = %s, want running", stored.State)
+	}
+}
+
+func TestVSuperExportPatchsetReusesChildExport(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-export-parent",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate worker and verifier co-super agents.",
+		ChannelID:    "worker-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataTrajectoryID: "trace-child-export",
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create vsuper parent: %v", err)
+	}
+	child := types.RunRecord{
+		RunID:        "vsuper-export-child",
+		AgentID:      "agent-export-child",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunCompleted,
+		Prompt:       "Implement candidate change and export.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	appendRuntimeToolResult(t, s, child, "export_patchset", map[string]any{
+		"status":          "exported",
+		"patchset_sha256": "child-sha",
+		"patchset_path":   "/tmp/child.patch",
+		"manifest_path":   "/tmp/manifest.json",
+		"worker_head_sha": "child-head",
+	})
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "export_patchset", json.RawMessage(`{
+		"repo_path":"does-not-exist",
+		"base_sha":"base-sha"
+	}`))
+	if err != nil {
+		t.Fatalf("reuse child export: %v", err)
+	}
+	var resp struct {
+		PatchsetSHA256    string `json:"patchset_sha256"`
+		ChildLoopID       string `json:"child_loop_id"`
+		ChildSlot         string `json:"child_slot"`
+		ReusedChildExport bool   `json:"reused_child_export"`
+		ParentLoopID      string `json:"parent_loop_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode export response: %v", err)
+	}
+	if resp.PatchsetSHA256 != "child-sha" || resp.ChildLoopID != child.RunID || resp.ChildSlot != "implementation" || !resp.ReusedChildExport || resp.ParentLoopID != parent.RunID {
+		t.Fatalf("export response = %+v, want reused child export", resp)
+	}
+}
+
+func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, tool string, output map[string]any) {
+	t.Helper()
+	outputJSON, _ := json.Marshal(output)
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     tool,
+		"is_error": false,
+		"output":   string(outputJSON),
+	})
+	if err := s.AppendEvent(context.Background(), &types.EventRecord{
+		EventID:      run.RunID + "-" + tool + "-result",
+		RunID:        run.RunID,
+		AgentID:      run.AgentID,
+		ChannelID:    run.ChannelID,
+		OwnerID:      run.OwnerID,
+		TrajectoryID: metadataStringValue(run.Metadata, runMetadataTrajectoryID),
+		Timestamp:    time.Now().UTC(),
+		Kind:         types.EventToolResult,
+		Phase:        "tool_call",
+		Payload:      payload,
+	}); err != nil {
+		t.Fatalf("append %s result: %v", tool, err)
+	}
+}
+
 func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {

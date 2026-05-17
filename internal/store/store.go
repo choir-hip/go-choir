@@ -762,6 +762,16 @@ func (s *Store) ListActiveChildRuns(ctx context.Context, parentRunID string) ([]
 	)
 }
 
+// ListChildRuns returns direct child runs for the given parent, including
+// terminal children. Evidence collection uses this to avoid redoing or
+// cancelling work after a child has already exported a candidate artifact.
+func (s *Store) ListChildRuns(ctx context.Context, parentRunID string, limit int) ([]types.RunRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.listRunsWhere(ctx, "parent_loop_id = ?", []any{parentRunID}, limit)
+}
+
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	row := s.db.QueryRowContext(ctx,

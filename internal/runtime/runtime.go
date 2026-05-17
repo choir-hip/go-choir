@@ -618,6 +618,44 @@ func (rt *Runtime) activeChildRunForCoSuperSlot(ctx context.Context, parentRunID
 	return types.RunRecord{}, false, nil
 }
 
+func (rt *Runtime) latestChildExportPatchset(ctx context.Context, parentRunID string) (map[string]any, bool, error) {
+	if rt == nil || rt.store == nil {
+		return nil, false, nil
+	}
+	children, err := rt.store.ListChildRuns(ctx, parentRunID, 100)
+	if err != nil {
+		return nil, false, fmt.Errorf("list child runs for export reuse: %w", err)
+	}
+	var latestEvent types.EventRecord
+	var latestOutput map[string]any
+	found := false
+	for _, child := range children {
+		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
+			continue
+		}
+		childEvents, err := rt.store.ListEvents(ctx, child.RunID, 1000)
+		if err != nil {
+			return nil, false, fmt.Errorf("list child run events for export reuse: %w", err)
+		}
+		ev, output, ok := latestSuccessfulToolResultOutput(childEvents, "export_patchset")
+		if !ok {
+			continue
+		}
+		if !found || ev.Timestamp.After(latestEvent.Timestamp) || (ev.Timestamp.Equal(latestEvent.Timestamp) && ev.StreamSeq > latestEvent.StreamSeq) {
+			latestEvent = ev
+			latestOutput = output
+			latestOutput["loop_id"] = child.RunID
+			latestOutput["child_loop_id"] = child.RunID
+			latestOutput["child_agent_id"] = child.AgentID
+			if slot := metadataStringValue(child.Metadata, runMetadataCoSuperSlot); slot != "" {
+				latestOutput["child_slot"] = slot
+			}
+			found = true
+		}
+	}
+	return latestOutput, found, nil
+}
+
 func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return

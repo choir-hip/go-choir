@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -261,11 +262,34 @@ func newCancelAgentTool(rt *Runtime) Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("cancel_agent missing owner context")
 			}
-			if err := rt.CancelAgent(ctx, in.AgentID, ownerID); err != nil {
+			target, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, strings.TrimSpace(in.AgentID))
+			if err != nil {
+				if err == store.ErrNotFound {
+					return "", fmt.Errorf("agent not found: %s", in.AgentID)
+				}
+				return "", fmt.Errorf("lookup active agent run: %w", err)
+			}
+			if stringFromToolContext(ctx, toolCtxProfile) == AgentProfileVSuper &&
+				strings.TrimSpace(target.ParentRunID) == stringFromToolContext(ctx, toolCtxRunID) {
+				eventsForRun, err := rt.store.ListEvents(ctx, target.RunID, 1000)
+				if err != nil {
+					return "", fmt.Errorf("check child export evidence before cancel: %w", err)
+				}
+				if hasSuccessfulToolResult(eventsForRun, "export_patchset") {
+					return toolResultJSON(map[string]any{
+						"agent_id": in.AgentID,
+						"loop_id":  target.RunID,
+						"status":   "not_cancelled",
+						"reason":   "child already produced export_patchset evidence; incorporate the child export instead of cancelling it",
+					})
+				}
+			}
+			if err := rt.CancelRun(ctx, target.RunID, ownerID); err != nil {
 				return "", err
 			}
 			return toolResultJSON(map[string]any{
 				"agent_id": in.AgentID,
+				"loop_id":  target.RunID,
 				"status":   "cancelled",
 			})
 		},
