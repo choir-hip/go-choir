@@ -444,6 +444,67 @@ func TestOwnershipRegistry_RequestWorkerReusesActiveLeaseUnlessParallelAllowed(t
 	}
 }
 
+func TestNormalizeWorkerMachineClassResourceEnvelope(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       string
+		wantClass string
+		wantCPU   int
+		wantMem   int
+	}{
+		{name: "default", raw: "", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
+		{name: "standard alias", raw: "standard", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
+		{name: "small", raw: "worker-small", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
+		{name: "medium", raw: "worker-medium", wantClass: "worker-medium", wantCPU: 2, wantMem: 2048},
+		{name: "medium alias", raw: " medium ", wantClass: "worker-medium", wantCPU: 2, wantMem: 2048},
+		{name: "large", raw: "worker-large", wantClass: "worker-large", wantCPU: 4, wantMem: 4096},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotClass, gotCPU, gotMem, err := normalizeWorkerMachineClass(tt.raw)
+			if err != nil {
+				t.Fatalf("normalizeWorkerMachineClass(%q): %v", tt.raw, err)
+			}
+			if gotClass != tt.wantClass || gotCPU != tt.wantCPU || gotMem != tt.wantMem {
+				t.Fatalf("normalizeWorkerMachineClass(%q) = (%q, %d, %d), want (%q, %d, %d)", tt.raw, gotClass, gotCPU, gotMem, tt.wantClass, tt.wantCPU, tt.wantMem)
+			}
+		})
+	}
+}
+
+func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testing.T) {
+	mock := &mockVMManager{}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mock)
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	mock.boots = nil
+
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-1",
+		Purpose:       "Run a repo mutation and export verifier task",
+		MachineClass:  "medium",
+	})
+	if err != nil {
+		t.Fatalf("RequestWorker: %v", err)
+	}
+	if worker.MachineClass != "worker-medium" {
+		t.Fatalf("worker machine_class = %q, want worker-medium", worker.MachineClass)
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
+	}
+	got := mock.boots[0]
+	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 2048 {
+		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 2048 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
+	}
+}
+
 func TestOwnershipRegistry_SetSandboxCredential(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
