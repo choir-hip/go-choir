@@ -53,6 +53,8 @@ func main() {
 		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
 		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
 		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
+		PromotionSourceRepo:             rtRuntimeCfg.PromotionSourceRepo,
+		PromotionWorkspaceRoot:          rtRuntimeCfg.PromotionWorkspaceRoot,
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = runtime.DefaultStorePath

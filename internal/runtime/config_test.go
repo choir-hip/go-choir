@@ -65,6 +65,26 @@ func TestLoadConfigReadsEnableTestAPIs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree(t *testing.T) {
+	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", "")
+	t.Setenv("RUNTIME_WORKER_REPO_REMOTE", "")
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir temp: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWD)
+	})
+
+	cfg := LoadConfig()
+	if cfg.PromotionSourceRepo != DefaultPromotionSourceRepo {
+		t.Fatalf("promotion source repo = %q, want %q", cfg.PromotionSourceRepo, DefaultPromotionSourceRepo)
+	}
+}
+
 func TestLoadConfigReadsObscuraCDPScreenshots(t *testing.T) {
 	t.Setenv("CHOIR_OBSCURA_CDP_SCREENSHOTS", "true")
 

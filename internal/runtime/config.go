@@ -48,6 +48,10 @@ const (
 	// DefaultRunMemoryKeepRecentTokens is the approximate amount of recent raw
 	// conversation retained after a compaction checkpoint.
 	DefaultRunMemoryKeepRecentTokens = 20000
+
+	// DefaultPromotionSourceRepo is the canonical platform source repository
+	// used when an existing user computer predates promotion env wiring.
+	DefaultPromotionSourceRepo = "https://github.com/yusefmosiah/go-choir.git"
 )
 
 // Config holds runtime configuration resolved from environment variables.
@@ -127,7 +131,7 @@ type Config struct {
 // LoadConfig resolves runtime configuration from environment variables.
 func LoadConfig() Config {
 	storePath := envOr("RUNTIME_STORE_PATH", DefaultStorePath)
-	return Config{
+	return normalizeConfig(Config{
 		SandboxID:           envOr("SANDBOX_ID", "sandbox-dev"),
 		StorePath:           storePath,
 		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
@@ -159,7 +163,7 @@ func LoadConfig() Config {
 			os.Getenv("RUNTIME_WORKER_REPO_REMOTE"),
 		),
 		PromotionWorkspaceRoot: os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
-	}
+	})
 }
 
 func normalizeConfig(cfg Config) Config {
@@ -187,6 +191,9 @@ func normalizeConfig(cfg Config) Config {
 				cfg.PromotionSourceRepo = wd
 			}
 		}
+	}
+	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
+		cfg.PromotionSourceRepo = DefaultPromotionSourceRepo
 	}
 	return cfg
 }
