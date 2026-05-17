@@ -60,12 +60,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -82,7 +82,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -99,7 +99,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("vsuper should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent"} {
+	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent"} {
 		if _, ok := conductor.Lookup(name); !ok {
 			t.Fatalf("conductor missing tool %q", name)
 		}
@@ -129,7 +129,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"read_file", "web_search", "cast_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
+	for _, name := range []string{"read_file", "web_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
@@ -137,7 +137,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("spawn_agent"); ok {
 		t.Fatalf("researcher should not have spawn_agent")
 	}
-	for _, name := range []string{"spawn_agent", "cast_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
+	for _, name := range []string{"spawn_agent", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "read_evidence", "edit_vtext", "request_super_execution"} {
 		if _, ok := vtext.Lookup(name); !ok {
 			t.Fatalf("vtext missing tool %q", name)
 		}
@@ -299,6 +299,202 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	}
 	if len(deliveries) == 1 && deliveries[0].Content != "please inspect the runtime tool wiring" {
 		t.Fatalf("unexpected delivery content: %+v", deliveries[0])
+	}
+}
+
+func TestWaitAgentToolReceivesChildResult(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-wait-parent",
+		AgentID:      "agent-vsuper-wait",
+		ChannelID:    "worker-wait-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate implementation and verifier children.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create parent run: %v", err)
+	}
+	child := types.RunRecord{
+		RunID:        "co-super-wait-child",
+		AgentID:      "agent-impl-wait",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Implement candidate and report terminal evidence.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   child.AgentID,
+		OwnerID:   child.OwnerID,
+		SandboxID: child.SandboxID,
+		Profile:   child.AgentProfile,
+		Role:      child.AgentRole,
+		ChannelID: child.ChannelID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create child agent: %v", err)
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("create child run: %v", err)
+	}
+
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		_, _ = rt.PostChildResult(WithToolExecutionContext(context.Background(), &child), parent.ChannelID, child.RunID, "implementation committed abc123 and exported a reviewable patchset")
+	}()
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "wait_agent", json.RawMessage(`{
+		"agent_id":"agent-impl-wait",
+		"channel_id":"worker-wait-channel",
+		"roles":["result"],
+		"timeout_ms":1000
+	}`))
+	if err != nil {
+		t.Fatalf("wait_agent: %v", err)
+	}
+	var resp struct {
+		Status   string `json:"status"`
+		AgentID  string `json:"agent_id"`
+		Cursor   uint64 `json:"cursor"`
+		Messages []struct {
+			FromAgentID string `json:"from_agent_id"`
+			FromLoopID  string `json:"from_loop_id"`
+			Role        string `json:"role"`
+			Content     string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode wait response: %v\n%s", err, raw)
+	}
+	if resp.Status != "messages" || resp.AgentID != child.AgentID || resp.Cursor == 0 {
+		t.Fatalf("unexpected wait response: %+v", resp)
+	}
+	if len(resp.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1: %+v", len(resp.Messages), resp.Messages)
+	}
+	msg := resp.Messages[0]
+	if msg.FromAgentID != child.AgentID || msg.FromLoopID != child.RunID || msg.Role != "result" || !strings.Contains(msg.Content, "exported a reviewable patchset") {
+		t.Fatalf("unexpected waited message: %+v", msg)
+	}
+}
+
+func TestWaitAgentToolTimesOutWithRunState(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-timeout-parent",
+		AgentID:      "agent-vsuper-timeout",
+		ChannelID:    "worker-timeout-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate implementation and verifier children.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create parent run: %v", err)
+	}
+	child := types.RunRecord{
+		RunID:        "co-super-timeout-child",
+		AgentID:      "agent-impl-timeout",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Implement candidate and report terminal evidence.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   child.AgentID,
+		OwnerID:   child.OwnerID,
+		SandboxID: child.SandboxID,
+		Profile:   child.AgentProfile,
+		Role:      child.AgentRole,
+		ChannelID: child.ChannelID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create child agent: %v", err)
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("create child run: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "wait_agent", json.RawMessage(`{
+		"agent_id":"agent-impl-timeout",
+		"channel_id":"worker-timeout-channel",
+		"roles":["result"],
+		"timeout_ms":20
+	}`))
+	if err != nil {
+		t.Fatalf("wait_agent timeout: %v", err)
+	}
+	var resp struct {
+		Status          string `json:"status"`
+		Messages        []any  `json:"messages"`
+		LatestTargetRun struct {
+			LoopID string         `json:"loop_id"`
+			State  types.RunState `json:"state"`
+		} `json:"latest_target_run"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode wait timeout response: %v\n%s", err, raw)
+	}
+	if resp.Status != "timeout" || len(resp.Messages) != 0 {
+		t.Fatalf("unexpected timeout response: %+v", resp)
+	}
+	if resp.LatestTargetRun.LoopID != child.RunID || resp.LatestTargetRun.State != types.RunRunning {
+		t.Fatalf("latest run summary = %+v, want child running", resp.LatestTargetRun)
 	}
 }
 

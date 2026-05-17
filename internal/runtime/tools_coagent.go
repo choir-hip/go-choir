@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -13,6 +14,7 @@ import (
 func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
 	tools := []Tool{
 		newCastAgentTool(rt),
+		newWaitAgentTool(rt),
 		newCancelAgentTool(rt),
 	}
 	if len(spec.AllowedDelegateTargets) > 0 {
@@ -241,6 +243,260 @@ func newCastAgentTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func newWaitAgentTool(rt *Runtime) Tool {
+	type args struct {
+		AgentID     string   `json:"agent_id"`
+		ChannelID   string   `json:"channel_id,omitempty"`
+		Cursor      uint64   `json:"cursor,omitempty"`
+		Roles       []string `json:"roles,omitempty"`
+		TimeoutMS   int      `json:"timeout_ms,omitempty"`
+		MaxMessages int      `json:"max_messages,omitempty"`
+	}
+	return Tool{
+		Name:        "wait_agent",
+		Description: "Block briefly for channel messages from an existing agent. Use after spawn_agent or cast_agent when coordination depends on the child result; pass the cast_agent cursor when waiting for a reply to that cast.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"agent_id":     map[string]any{"type": "string"},
+			"channel_id":   map[string]any{"type": "string"},
+			"cursor":       map[string]any{"type": "integer", "minimum": 0, "description": "Channel cursor returned by cast_agent or a previous wait_agent call. Omit or use 0 to inspect existing messages."},
+			"roles":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional message roles to return, for example result, error, status, or verifier."},
+			"timeout_ms":   map[string]any{"type": "integer", "minimum": 1, "description": "Bounded wait duration. Defaults to 30000ms and is capped at 120000ms."},
+			"max_messages": map[string]any{"type": "integer", "minimum": 1, "description": "Maximum matching messages to return. Defaults to 10 and is capped at 25."},
+		}, []string{"agent_id"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode wait_agent args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("wait_agent missing owner context")
+			}
+			targetAgentID := strings.TrimSpace(in.AgentID)
+			if targetAgentID == "" {
+				return "", fmt.Errorf("agent_id must not be empty")
+			}
+			target, err := rt.store.GetAgent(ctx, targetAgentID)
+			if err != nil {
+				return "", fmt.Errorf("wait_agent target lookup: %w", err)
+			}
+			if strings.TrimSpace(target.OwnerID) != "" && strings.TrimSpace(target.OwnerID) != ownerID {
+				return "", fmt.Errorf("wait_agent target %s is not owned by caller", targetAgentID)
+			}
+			channelID := strings.TrimSpace(in.ChannelID)
+			if channelID == "" {
+				channelID = strings.TrimSpace(target.ChannelID)
+			}
+			if channelID == "" {
+				channelID = stringFromToolContext(ctx, toolCtxChannelID)
+			}
+			if channelID == "" {
+				return "", fmt.Errorf("wait_agent target %s has no channel_id", targetAgentID)
+			}
+			timeout := waitAgentTimeout(in.TimeoutMS)
+			maxMessages := waitAgentMaxMessages(in.MaxMessages)
+			roles := waitAgentRoleSet(in.Roles)
+
+			targetRuns, latestRun := waitAgentTargetRuns(ctx, rt, ownerID, channelID, targetAgentID)
+			cursor := in.Cursor
+			if matched, nextCursor, err := waitAgentReadMatching(rt, channelID, cursor, targetAgentID, targetRuns, roles, maxMessages); err != nil {
+				return "", err
+			} else if len(matched) > 0 {
+				return waitAgentResultJSON("messages", targetAgentID, channelID, nextCursor, matched, latestRun, targetRuns, maxMessages)
+			} else {
+				cursor = nextCursor
+			}
+			if latestRun != nil && latestRun.State.Terminal() {
+				return waitAgentResultJSON("target_terminal_without_new_message", targetAgentID, channelID, cursor, nil, latestRun, targetRuns, maxMessages)
+			}
+
+			waitCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			for {
+				msgs, nextCursor, err := rt.ChannelWait(waitCtx, channelID, cursor)
+				if err != nil {
+					targetRuns, latestRun = waitAgentTargetRuns(ctx, rt, ownerID, channelID, targetAgentID)
+					if waitCtx.Err() != nil {
+						status := "timeout"
+						if latestRun != nil && latestRun.State.Terminal() {
+							status = "target_terminal_without_matching_message"
+						}
+						return waitAgentResultJSON(status, targetAgentID, channelID, cursor, nil, latestRun, targetRuns, maxMessages)
+					}
+					return "", err
+				}
+				cursor = nextCursor
+				targetRuns, latestRun = waitAgentTargetRuns(ctx, rt, ownerID, channelID, targetAgentID)
+				matched := waitAgentFilterMessages(msgs, targetAgentID, targetRuns, roles, maxMessages)
+				if len(matched) > 0 {
+					return waitAgentResultJSON("messages", targetAgentID, channelID, cursor, matched, latestRun, targetRuns, maxMessages)
+				}
+				if latestRun != nil && latestRun.State.Terminal() {
+					return waitAgentResultJSON("target_terminal_without_matching_message", targetAgentID, channelID, cursor, nil, latestRun, targetRuns, maxMessages)
+				}
+			}
+		},
+	}
+}
+
+func waitAgentTimeout(timeoutMS int) time.Duration {
+	if timeoutMS <= 0 {
+		return 30 * time.Second
+	}
+	timeout := time.Duration(timeoutMS) * time.Millisecond
+	if timeout > 120*time.Second {
+		return 120 * time.Second
+	}
+	return timeout
+}
+
+func waitAgentMaxMessages(maxMessages int) int {
+	switch {
+	case maxMessages <= 0:
+		return 10
+	case maxMessages > 25:
+		return 25
+	default:
+		return maxMessages
+	}
+}
+
+func waitAgentRoleSet(roles []string) map[string]bool {
+	if len(roles) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		if role = strings.TrimSpace(role); role != "" {
+			out[role] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func waitAgentTargetRuns(ctx context.Context, rt *Runtime, ownerID, channelID, targetAgentID string) ([]types.RunRecord, *types.RunRecord) {
+	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, channelID, 200)
+	if err != nil {
+		return nil, nil
+	}
+	matches := make([]types.RunRecord, 0, 4)
+	for _, run := range runs {
+		if strings.TrimSpace(run.AgentID) != targetAgentID {
+			continue
+		}
+		matches = append(matches, run)
+	}
+	if len(matches) == 0 {
+		return matches, nil
+	}
+	latest := matches[0]
+	return matches, &latest
+}
+
+func waitAgentReadMatching(rt *Runtime, channelID string, cursor uint64, targetAgentID string, targetRuns []types.RunRecord, roles map[string]bool, maxMessages int) ([]ChannelMessage, uint64, error) {
+	msgs, nextCursor, err := rt.ChannelRead(channelID, cursor)
+	if err != nil {
+		return nil, cursor, err
+	}
+	return waitAgentFilterMessages(msgs, targetAgentID, targetRuns, roles, maxMessages), nextCursor, nil
+}
+
+func waitAgentFilterMessages(msgs []ChannelMessage, targetAgentID string, targetRuns []types.RunRecord, roles map[string]bool, maxMessages int) []ChannelMessage {
+	runIDs := make(map[string]bool, len(targetRuns))
+	for _, run := range targetRuns {
+		if runID := strings.TrimSpace(run.RunID); runID != "" {
+			runIDs[runID] = true
+		}
+	}
+	out := make([]ChannelMessage, 0, len(msgs))
+	for _, msg := range msgs {
+		if len(roles) > 0 && !roles[strings.TrimSpace(msg.Role)] {
+			continue
+		}
+		fromAgentID := strings.TrimSpace(msg.FromAgentID)
+		fromRunID := strings.TrimSpace(msg.FromRunID)
+		from := strings.TrimSpace(msg.From)
+		if fromAgentID != targetAgentID && from != targetAgentID && !runIDs[fromRunID] && !runIDs[from] {
+			continue
+		}
+		out = append(out, msg)
+		if len(out) >= maxMessages {
+			break
+		}
+	}
+	return out
+}
+
+func waitAgentResultJSON(status, targetAgentID, channelID string, cursor uint64, messages []ChannelMessage, latestRun *types.RunRecord, targetRuns []types.RunRecord, maxMessages int) (string, error) {
+	result := map[string]any{
+		"status":     status,
+		"agent_id":   targetAgentID,
+		"channel_id": channelID,
+		"cursor":     cursor,
+		"messages":   waitAgentMessageSummaries(messages),
+	}
+	if latestRun != nil {
+		result["latest_target_run"] = waitAgentRunSummary(*latestRun)
+	}
+	if len(targetRuns) > 0 {
+		limit := maxMessages
+		if limit > len(targetRuns) {
+			limit = len(targetRuns)
+		}
+		summaries := make([]map[string]any, 0, limit)
+		for _, run := range targetRuns[:limit] {
+			summaries = append(summaries, waitAgentRunSummary(run))
+		}
+		result["target_runs"] = summaries
+	}
+	return toolResultJSON(result)
+}
+
+func waitAgentMessageSummaries(messages []ChannelMessage) []map[string]any {
+	out := make([]map[string]any, 0, len(messages))
+	for _, msg := range messages {
+		out = append(out, map[string]any{
+			"seq":           msg.Seq,
+			"from":          msg.From,
+			"from_agent_id": msg.FromAgentID,
+			"from_loop_id":  msg.FromRunID,
+			"to_agent_id":   msg.ToAgentID,
+			"role":          msg.Role,
+			"content":       truncateWaitAgentText(msg.Content, 8000),
+			"timestamp":     msg.Timestamp.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	return out
+}
+
+func waitAgentRunSummary(run types.RunRecord) map[string]any {
+	summary := map[string]any{
+		"loop_id":    run.RunID,
+		"agent_id":   run.AgentID,
+		"profile":    run.AgentProfile,
+		"role":       run.AgentRole,
+		"state":      run.State,
+		"channel_id": run.ChannelID,
+	}
+	if run.Result != "" {
+		summary["result"] = truncateWaitAgentText(run.Result, 4000)
+	}
+	if run.Error != "" {
+		summary["error"] = truncateWaitAgentText(run.Error, 2000)
+	}
+	return summary
+}
+
+func truncateWaitAgentText(value string, limit int) string {
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + fmt.Sprintf("\n\n[truncated %d bytes, showing first %d bytes]", len(value), limit)
 }
 
 func newCancelAgentTool(rt *Runtime) Tool {
