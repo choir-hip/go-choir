@@ -41,6 +41,98 @@ async function openAppViaIcon(page, appId) {
   await icon.dblclick();
 }
 
+async function mockTraceTrajectory(page) {
+  const trajectoryId = 'trace-mobile-hit-target-regression';
+  const timestamp = '2026-05-17T02:47:00Z';
+  const trajectory = {
+    trajectory_id: trajectoryId,
+    title: 'A revise event was triggered for the current vtext document. Intent: inspect mobile Trace provenance readability.',
+    subtitle: 'conductor · super',
+    state: 'completed',
+    live: false,
+    agent_count: 3,
+    delegation_count: 2,
+    moment_count: 1,
+    message_count: 4,
+    finding_count: 0,
+    search_attempt_count: 0,
+    latest_activity_at: timestamp,
+    latest_stream_seq: 0,
+  };
+  const snapshot = {
+    trajectory,
+    agents: [
+      { agent_id: 'super', label: 'super', role: 'super', profile: 'foreground' },
+      { agent_id: 'implementation', label: 'implementation co-super', role: 'cosuper', profile: 'worker' },
+      { agent_id: 'verifier', label: 'verifier co-super', role: 'cosuper', profile: 'worker' },
+    ],
+    edges: [
+      { from_agent_id: 'super', to_agent_id: 'implementation', label: 'delegates' },
+      { from_agent_id: 'super', to_agent_id: 'verifier', label: 'verifies' },
+    ],
+    moments: [
+      {
+        moment_id: 'moment-export',
+        kind: 'loop.completed',
+        tone: 'success',
+        loop_id: 'loop-export',
+        summary: 'worker export completed',
+        created_at: timestamp,
+      },
+    ],
+    search: { providers: [] },
+    mobile_summary: {
+      headline: 'export-level · accepted · 6 evidence',
+      acceptance_state: 'accepted',
+      acceptance_level: 'export-level',
+      agent_count: 3,
+      delegation_count: 2,
+      evidence_ref_count: 6,
+      rollback_ref_count: 2,
+      readable_evidence: ['implementation export and verifier evidence linked'],
+      rollback_refs: ['base ccfd551'],
+    },
+    acceptances: [
+      {
+        acceptance_id: 'acceptance-export',
+        state: 'accepted',
+        acceptance_level: 'export-level',
+        summary: 'mocked acceptance for responsive layout regression',
+        checkpoints: [],
+        evidence_refs: [],
+        rollback_refs: [],
+      },
+    ],
+  };
+
+  await page.route('**/api/trace/trajectories?limit=200', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ trajectories: [trajectory] }),
+  }));
+  await page.route(`**/api/trace/trajectories/${trajectoryId}`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(snapshot),
+  }));
+  await page.route(`**/api/trace/trajectories/${trajectoryId}/moments/moment-export`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      moment: snapshot.moments[0],
+      messages: [],
+      artifacts: {},
+    }),
+  }));
+  await page.route(`**/api/trace/trajectories/${trajectoryId}/events**`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/event-stream',
+    body: '\n',
+  }));
+
+  return trajectoryId;
+}
+
 // ================================================================
 // DESKTOP BREAKPOINT (>1024px) — viewport 1280x800
 // ================================================================
@@ -343,6 +435,40 @@ test.describe('Cross-breakpoint checks', () => {
     const box = await windowEl.boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(7);
     expect(box.x + box.width).toBeLessThanOrEqual(383);
+  });
+
+  test('Trace mobile trajectory item remains inside its sidebar hit target', async ({ page, authenticator }) => {
+    const email = uniqueEmail();
+    await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
+    const trajectoryId = await mockTraceTrajectory(page);
+
+    await openAppViaIcon(page, 'trace');
+    const trace = page.locator('[data-trace-app]').last();
+    await expect(trace).toBeVisible({ timeout: 5000 });
+    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+
+    const metrics = await trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`).evaluate((item) => {
+      const sidebar = item.closest('.trace-sidebar');
+      const list = item.closest('[data-trace-trajectory-list]');
+      const itemRect = item.getBoundingClientRect();
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const x = Math.min(itemRect.right - 8, Math.max(itemRect.left + 8, itemRect.left + itemRect.width / 2));
+      const y = Math.min(itemRect.bottom - 8, Math.max(itemRect.top + 8, itemRect.top + itemRect.height / 2));
+      const hit = document.elementFromPoint(x, y);
+      return {
+        itemBottom: itemRect.bottom,
+        sidebarBottom: sidebarRect.bottom,
+        listScrolls: list.scrollHeight > list.clientHeight,
+        hitInsideItem: item === hit || item.contains(hit),
+        hitTag: hit?.tagName || '',
+      };
+    });
+
+    expect(metrics.itemBottom).toBeLessThanOrEqual(metrics.sidebarBottom + 1);
+    expect(metrics.hitInsideItem).toBe(true);
   });
 
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)

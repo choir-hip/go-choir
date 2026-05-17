@@ -1055,6 +1055,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
+    min-height: 0;
+    overflow: hidden;
     background: rgba(9, 12, 19, 0.92);
   }
 
@@ -1151,6 +1153,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+    min-height: 0;
     overflow: auto;
   }
 
@@ -1166,6 +1169,8 @@
   }
 
   .trajectory-item {
+    display: block;
+    width: 100%;
     padding: 0.75rem;
     text-align: left;
     color: inherit;
@@ -1178,9 +1183,11 @@
   }
 
   .trajectory-title {
+    min-width: 0;
     font-size: 0.86rem;
     font-weight: 600;
     line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 
   .trajectory-subtitle {
@@ -1776,12 +1783,34 @@
   @media (max-width: 860px) {
     .trace-app {
       grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, auto) minmax(0, 1fr);
     }
 
     .trace-sidebar {
       border-right: none;
       border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      max-height: 36%;
+      max-height: min(44vh, 18rem);
+    }
+
+    .sidebar-header,
+    .trace-header,
+    .panel-header,
+    .trajectory-item-top,
+    .trace-header-right {
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .trace-header {
+      flex-direction: column;
+    }
+
+    .trace-header-right {
+      justify-content: flex-start;
+    }
+
+    .status-pill {
+      flex-shrink: 0;
     }
 
     .metric-row {
@@ -1846,7 +1875,28 @@
     .trace-sidebar {
       border-right: none;
       border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      max-height: 36%;
+      max-height: min(44vh, 18rem);
+    }
+
+    .sidebar-header,
+    .trace-header,
+    .panel-header,
+    .trajectory-item-top,
+    .trace-header-right {
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .trace-header {
+      flex-direction: column;
+    }
+
+    .trace-header-right {
+      justify-content: flex-start;
+    }
+
+    .status-pill {
+      flex-shrink: 0;
     }
 
     .metric-row {
