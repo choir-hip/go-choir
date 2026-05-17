@@ -57,17 +57,19 @@ only aggregate counts, timing summaries, and policy names for these classes; it
 must not expose user ids, VM ids, desktop ids, emails, prompt text, credentials,
 or gateway tokens.
 
-The current pressure-aware policy is dry-run only. It may report aggregate
-pressure, protected counts, and ranked candidate summaries through health, but
-it must not hibernate or kill a VM by pressure decision until active reclaim is
-explicitly enabled and proven on staging.
+Pressure-aware policy supports both dry-run observation and active reclaim.
+Dry-run mode may report aggregate pressure, protected counts, and ranked
+candidate summaries through health without changing VM state. Active reclaim
+may hibernate only a bounded number of ranked, unprotected, idle candidates
+when host pressure crosses configured thresholds, and it must remain controlled
+by the fast rollback knob `VMCTL_PRESSURE_RECLAIM_MODE=off|dry-run|active`.
 
 Foreground active computers outrank background/candidate computers for
 retention. Recent activity, unknown last-active state, and verifier, promotion,
 rollback, or publication work are protected from pressure reclaim in the current
-implementation. Future active reclaim must expand protection to live prompt
-submissions, LLM calls, file writes, verifier runs, promotions, and publication
-actions before hibernating by pressure.
+implementation. Active reclaim must continue expanding protection to live
+prompt submissions, LLM calls, file writes, verifier runs, promotions, and
+publication actions as those states become first-class lifecycle signals.
 
 Premium always-on primary computers are a first-class lifecycle class. Ordinary
 pressure reclaim must not silently demote them into best-effort idle keepalive;

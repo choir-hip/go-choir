@@ -561,9 +561,9 @@ func (r *OwnershipRegistry) SetIdleTimeout(d time.Duration) {
 	r.idleTimeout = d
 }
 
-// SetPressureReclaimConfig configures pressure-aware lifecycle observation.
-// Only dry-run mode is currently supported; active reclaim continues to use
-// the existing idle timeout path until pressure policy has staging evidence.
+// SetPressureReclaimConfig configures pressure-aware lifecycle behavior.
+// Dry-run mode only observes and ranks candidates. Active mode hibernates a
+// bounded number of eligible idle candidates when the host is under pressure.
 func (r *OwnershipRegistry) SetPressureReclaimConfig(cfg PressureReclaimConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -596,6 +596,12 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
 			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
 				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
+		} else if plan.Mode == PressureReclaimModeActive {
+			log.Printf("vmctl: pressure reclaim active decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
+				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
+			if reclaimed := r.ReclaimPressureVMs(); reclaimed > 0 {
+				log.Printf("vmctl: pressure reclaim hibernated %d VM(s)", reclaimed)
+			}
 		}
 		if stopped := r.StopIdleVMs(); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
@@ -1662,6 +1668,10 @@ func (r *OwnershipRegistry) HibernateVM(userID string) error {
 }
 
 func (r *OwnershipRegistry) HibernateVMForDesktop(userID, desktopID string) error {
+	return r.hibernateVMForDesktopWithReason(userID, desktopID, "idle")
+}
+
+func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, reason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1681,15 +1691,19 @@ func (r *OwnershipRegistry) HibernateVMForDesktop(userID, desktopID string) erro
 
 	own.State = VMStateHibernated
 	own.LastActiveAt = time.Now()
-	own.StoppedBy = "idle"
+	own.StoppedBy = normalizeStopReason(reason)
 	r.saveLocked()
-	log.Printf("vmctl: hibernated VM %s for user %s desktop %s (epoch=%d)", own.VMID, userID, own.DesktopID, own.Epoch)
+	log.Printf("vmctl: hibernated VM %s for user %s desktop %s reason=%s (epoch=%d)", own.VMID, userID, own.DesktopID, own.StoppedBy, own.Epoch)
 	return nil
 }
 
 // HibernateWorker transitions the worker VM with the given typed handle to
 // hibernated state.
 func (r *OwnershipRegistry) HibernateWorker(workerID string) error {
+	return r.hibernateWorkerWithReason(workerID, "idle")
+}
+
+func (r *OwnershipRegistry) hibernateWorkerWithReason(workerID, reason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1705,10 +1719,42 @@ func (r *OwnershipRegistry) HibernateWorker(workerID string) error {
 	}
 	own.State = VMStateHibernated
 	own.LastActiveAt = time.Now()
-	own.StoppedBy = "idle"
+	own.StoppedBy = normalizeStopReason(reason)
 	r.saveLocked()
-	log.Printf("vmctl: hibernated worker VM %s for user %s desktop %s worker_id %s", own.VMID, own.UserID, own.DesktopID, own.WorkerID)
+	log.Printf("vmctl: hibernated worker VM %s for user %s desktop %s worker_id %s reason=%s", own.VMID, own.UserID, own.DesktopID, own.WorkerID, own.StoppedBy)
 	return nil
+}
+
+func normalizeStopReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "idle"
+	}
+	return reason
+}
+
+// ReclaimPressureVMs hibernates the top ranked pressure-reclaim candidates
+// when active pressure reclaim is enabled and the host is currently under
+// pressure. Candidate selection is bounded by MaxCandidates and excludes
+// protected computers such as premium always-on and critical verifier workers.
+func (r *OwnershipRegistry) ReclaimPressureVMs() int {
+	candidates := r.pressureReclaimActionCandidates()
+	reclaimed := 0
+	for _, candidate := range candidates {
+		if candidate.own == nil || candidate.public.Protected {
+			continue
+		}
+		var err error
+		if candidate.own.Kind == VMKindWorker {
+			err = r.hibernateWorkerWithReason(candidate.own.WorkerID, "pressure")
+		} else {
+			err = r.hibernateVMForDesktopWithReason(candidate.own.UserID, candidate.own.DesktopID, "pressure")
+		}
+		if err == nil {
+			reclaimed++
+		}
+	}
+	return reclaimed
 }
 
 // ResumeVM resumes a stopped or hibernated VM for the given user,

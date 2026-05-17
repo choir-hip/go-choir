@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,12 @@ var clientIdentityHeaders = []string{
 	"X-Remote-User",
 	"X-Auth-User",
 }
+
+var (
+	sandboxResolveRetryWindow    = 10 * time.Second
+	sandboxResolveRetryBaseDelay = 200 * time.Millisecond
+	sandboxResolveRetryMaxDelay  = time.Second
+)
 
 // errorResponse is a generic JSON error envelope.
 type errorResponse struct {
@@ -622,11 +629,49 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 // to route the user to their assigned VM (VAL-VM-001). When vmctl is not
 // configured, it falls back to the static SandboxURL for backward
 // compatibility.
-func (h *Handler) resolveSandboxURL(ctx interface{}, userID, desktopID string) (string, error) {
+func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID string) (string, error) {
 	if h.vmctlClient == nil {
 		return h.cfg.SandboxURL, nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
+	start := time.Now()
+	delay := sandboxResolveRetryBaseDelay
+	for attempt := 0; ; attempt++ {
+		sandboxURL, err := h.resolveSandboxURLOnce(userID, desktopID)
+		if err == nil {
+			if attempt > 0 {
+				log.Printf("proxy: resolved sandbox after transient vmctl error attempts=%d elapsed=%s", attempt+1, time.Since(start).Round(time.Millisecond))
+			}
+			return sandboxURL, nil
+		}
+		if !isTransientVMCTLResolveError(err) || time.Since(start) >= sandboxResolveRetryWindow {
+			return "", err
+		}
+		if delay <= 0 {
+			delay = time.Millisecond
+		}
+		if delay > sandboxResolveRetryMaxDelay {
+			delay = sandboxResolveRetryMaxDelay
+		}
+		if time.Since(start)+delay > sandboxResolveRetryWindow {
+			delay = sandboxResolveRetryWindow - time.Since(start)
+			if delay <= 0 {
+				return "", err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("resolve sandbox canceled after transient vmctl error: %w", err)
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
+}
+
+func (h *Handler) resolveSandboxURLOnce(userID, desktopID string) (string, error) {
 	desktopID = strings.TrimSpace(desktopID)
 	if desktopID == "" {
 		desktopID = vmctl.PrimaryDesktopID
@@ -655,6 +700,29 @@ func (h *Handler) resolveSandboxURL(ctx interface{}, userID, desktopID string) (
 	}
 
 	return resp.SandboxURL, nil
+}
+
+func isTransientVMCTLResolveError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"resolve call failed",
+		"lookup call failed",
+		"connect: connection refused",
+		"connection reset by peer",
+		"connection refused",
+		"eof",
+		"status 502",
+		"status 503",
+		"status 504",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // relayFrames copies WebSocket messages from src to dst until an error occurs

@@ -325,7 +325,10 @@ in
         "VMCTL_IDLE_TIMEOUT=6h"
         "VMCTL_IDLE_SWEEP_INTERVAL=5m"
         "VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity"
-        "VMCTL_PRESSURE_RECLAIM_MODE=dry-run"
+        # Active reclaim uses the same ranking exposed by dry-run mode, but
+        # hibernates a bounded number of lower-priority idle computers when
+        # host pressure crosses threshold.
+        "VMCTL_PRESSURE_RECLAIM_MODE=active"
         "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=2048"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15"

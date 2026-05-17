@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
@@ -2495,6 +2496,52 @@ func TestVMctlRouting_UnknownDesktopSelectorDoesNotMintVM(t *testing.T) {
 	}
 	if branch != nil {
 		t.Fatalf("browser-selected unknown desktop minted VM ownership: %+v", branch)
+	}
+}
+
+func TestResolveSandboxURLRetriesTransientVMctlFailure(t *testing.T) {
+	oldWindow := sandboxResolveRetryWindow
+	oldBaseDelay := sandboxResolveRetryBaseDelay
+	oldMaxDelay := sandboxResolveRetryMaxDelay
+	sandboxResolveRetryWindow = 100 * time.Millisecond
+	sandboxResolveRetryBaseDelay = time.Millisecond
+	sandboxResolveRetryMaxDelay = 5 * time.Millisecond
+	t.Cleanup(func() {
+		sandboxResolveRetryWindow = oldWindow
+		sandboxResolveRetryBaseDelay = oldBaseDelay
+		sandboxResolveRetryMaxDelay = oldMaxDelay
+	})
+
+	attempts := 0
+	vmctlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "vmctl warming up", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"vm_id":       "vm-retry",
+			"user_id":     "alice",
+			"desktop_id":  vmctl.PrimaryDesktopID,
+			"kind":        string(vmctl.VMKindInteractive),
+			"published":   true,
+			"sandbox_url": "http://127.0.0.1:8085",
+			"state":       string(vmctl.VMStateActive),
+		})
+	}))
+	defer vmctlSrv.Close()
+
+	handler := &Handler{vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	got, err := handler.resolveSandboxURL(context.Background(), "alice", vmctl.PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("resolveSandboxURL: %v", err)
+	}
+	if got != "http://127.0.0.1:8085" {
+		t.Fatalf("sandbox URL = %q, want proxy target", got)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
 	}
 }
 

@@ -14,11 +14,14 @@ import (
 const (
 	PressureReclaimModeOff    = "off"
 	PressureReclaimModeDryRun = "dry-run"
+	PressureReclaimModeActive = "active"
 )
 
-// PressureReclaimConfig controls pressure-aware reclaim observation. The first
-// production shape is dry-run only: it samples real host pressure and ranks
-// candidate computers without hibernating them.
+// PressureReclaimConfig controls pressure-aware reclaim. Dry-run mode samples
+// real host pressure and ranks candidate computers without hibernating them.
+// Active mode uses the same ranking and protection rules to hibernate a bounded
+// number of eligible idle computers when pressure crosses the configured
+// threshold.
 type PressureReclaimConfig struct {
 	Mode                      string
 	MinIdle                   time.Duration
@@ -125,6 +128,8 @@ func normalizePressureReclaimConfig(cfg PressureReclaimConfig) PressureReclaimCo
 		cfg.Mode = PressureReclaimModeOff
 	case "dryrun", "observe", "observation", PressureReclaimModeDryRun:
 		cfg.Mode = PressureReclaimModeDryRun
+	case "reclaim", "enforce", PressureReclaimModeActive:
+		cfg.Mode = PressureReclaimModeActive
 	default:
 		cfg.Mode = PressureReclaimModeOff
 	}
@@ -425,14 +430,69 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 		plan.Reason = "no active ownerships are eligible for pressure reclaim"
 		return plan
 	}
+	if plan.Inventory.Eligible == 0 {
+		plan.Decision = "observe"
+		plan.Reason = "no unprotected active ownerships are eligible for pressure reclaim"
+		return plan
+	}
+	if sample.Pressure && cfg.Mode == PressureReclaimModeActive {
+		plan.Decision = "reclaim"
+		plan.Reason = "host pressure crossed active threshold; eligible VMs may be hibernated"
+		return plan
+	}
 	if sample.Pressure {
 		plan.Decision = "would_reclaim"
 		plan.Reason = "host pressure crossed dry-run threshold; no VM hibernated"
 		return plan
 	}
 	plan.Decision = "observe"
-	plan.Reason = "host pressure below dry-run threshold"
+	plan.Reason = "host pressure below reclaim threshold"
 	return plan
+}
+
+func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidateInternal {
+	r.mu.RLock()
+	cfg := r.pressureReclaim
+	warmnessPolicy := r.warmnessPolicy
+	sampler := r.pressureSampler
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	for _, own := range r.ownerships {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	for _, own := range r.workerVMs {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	r.mu.RUnlock()
+
+	cfg = normalizePressureReclaimConfig(cfg)
+	if cfg.Mode != PressureReclaimModeActive {
+		return nil
+	}
+	if sampler == nil {
+		sampler = sampleHostPressure
+	}
+	sample := sampler(cfg)
+	annotatePressure(&sample, cfg)
+	if !sample.Pressure {
+		return nil
+	}
+
+	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, time.Now())
+	limit := cfg.MaxCandidates
+	if limit > len(ranked) {
+		limit = len(ranked)
+	}
+	selected := make([]pressureCandidateInternal, 0, limit)
+	for _, candidate := range ranked {
+		if candidate.public.Protected {
+			continue
+		}
+		selected = append(selected, candidate)
+		if len(selected) >= limit {
+			break
+		}
+	}
+	return selected
 }
 
 func cloneOwnership(own *VMOwnership) *VMOwnership {
