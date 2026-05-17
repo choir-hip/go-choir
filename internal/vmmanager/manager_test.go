@@ -461,6 +461,12 @@ func TestCreateDataImage_CreatesMissingFile(t *testing.T) {
 	}
 }
 
+func TestDataImageSizeCoversSelfDevelopmentWorkspace(t *testing.T) {
+	if dataImageSizeMB < 8192 {
+		t.Fatalf("dataImageSizeMB = %d, want at least 8192 for candidate repo, Dolt, cache, and export artifacts", dataImageSizeMB)
+	}
+}
+
 func TestCopySparseFileClonesDataImageContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(DefaultManagerConfig())
