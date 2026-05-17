@@ -259,6 +259,34 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	}
 }
 
+func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptanceExportedTimeoutTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-run-acceptance-timeout-export","trajectory_id":"traj-acceptance"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel || rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("acceptance = %s/%s, want export-level/accepted; checkpoints=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints)
+	}
+	delegated := acceptanceCheckpoint(rec, "worker_delegated", "passed")
+	if delegated == nil {
+		t.Fatalf("missing passed worker_delegated checkpoint: %+v", rec.Checkpoints)
+	}
+	if got, _ := delegated.Details["non_clean_delegate_status"].(string); got != "worker_run_timeout" {
+		t.Fatalf("non-clean status = %q, want worker_run_timeout; details=%+v", got, delegated.Details)
+	}
+	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "non-clean status worker_run_timeout") {
+		t.Fatalf("missing non-clean export residual risk: %+v", rec.FailureResidualRisks)
+	}
+}
+
 func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
@@ -462,6 +490,14 @@ func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.
 }
 
 func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
+	seedRunAcceptanceTrajectoryWithDelegateStatus(t, rt, "worker_run_completed", string(types.RunCompleted), "")
+}
+
+func seedRunAcceptanceExportedTimeoutTrajectory(t *testing.T, rt *Runtime) {
+	seedRunAcceptanceTrajectoryWithDelegateStatus(t, rt, "worker_run_timeout", string(types.RunRunning), "worker run run-worker-acceptance did not finish within 15m0s; last state=running")
+}
+
+func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, delegateStatus, delegateState, terminalError string) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -577,12 +613,14 @@ func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 		},
 	})
 	appendAcceptanceToolResult(t, rt, "event-delegate-acceptance", "run-super-acceptance", "agent-super-acceptance", now.Add(10*time.Second), "delegate_worker_vm", map[string]any{
-		"status":                       "worker_run_completed",
-		"state":                        "completed",
+		"status":                       delegateStatus,
+		"state":                        delegateState,
 		"worker_vm_id":                 "vm-acceptance",
 		"worker_id":                    "worker-acceptance",
 		"worker_sandbox_url":           "http://127.0.0.1:8085",
 		"loop_id":                      "run-worker-acceptance",
+		"terminal_error":               terminalError,
+		"completion_blocker":           map[bool]string{true: "vsuper_timed_out_after_reviewable_export", false: ""}[delegateStatus != "worker_run_completed"],
 		"event_count":                  22,
 		"worker_root_event_count":      9,
 		"worker_child_run_ids":         []string{"run-implementation-acceptance", "run-verifier-acceptance"},

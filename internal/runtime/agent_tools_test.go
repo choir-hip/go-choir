@@ -3518,6 +3518,14 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: workerEvents})
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/child-export-run/events":
 			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/child-export-run":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "child-export-run",
+				AgentID:      "agent-worker-verifier",
+				AgentProfile: AgentProfileCoSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+			})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
@@ -3548,17 +3556,21 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	}
 
 	var result struct {
-		Status                    string           `json:"status"`
-		RunID                     string           `json:"loop_id"`
-		State                     types.RunState   `json:"state"`
-		Error                     string           `json:"error"`
-		TerminalError             string           `json:"terminal_error"`
-		EventCount                int              `json:"event_count"`
-		WorkerEventSummary        []map[string]any `json:"worker_event_summary"`
-		WorkerSpawnedProfiles     []string         `json:"worker_spawned_profiles"`
-		WorkerChannelMessageCount int              `json:"worker_channel_message_count"`
-		WorkerChildRunIDs         []string         `json:"worker_child_run_ids"`
-		ExportPatchsets           []map[string]any `json:"export_patchsets"`
+		Status                    string            `json:"status"`
+		RunID                     string            `json:"loop_id"`
+		State                     types.RunState    `json:"state"`
+		Error                     string            `json:"error"`
+		TerminalError             string            `json:"terminal_error"`
+		EventCount                int               `json:"event_count"`
+		WorkerEventSummary        []map[string]any  `json:"worker_event_summary"`
+		WorkerSpawnedProfiles     []string          `json:"worker_spawned_profiles"`
+		WorkerChannelMessageCount int               `json:"worker_channel_message_count"`
+		WorkerChildRunIDs         []string          `json:"worker_child_run_ids"`
+		WorkerChildRunStates      map[string]string `json:"worker_child_run_states"`
+		ExportPatchsets           []map[string]any  `json:"export_patchsets"`
+		PromotionQueue            []map[string]any  `json:"promotion_queue"`
+		ReviewableExportObserved  bool              `json:"reviewable_export_observed"`
+		CompletionBlocker         string            `json:"completion_blocker"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -3579,6 +3591,15 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		result.ExportPatchsets[0]["manifest_path"] != "/mnt/persistent/files/patchsets/manifest.json" ||
 		result.ExportPatchsets[0]["loop_id"] != "child-export-run" {
 		t.Fatalf("child export evidence missing: %+v\nraw=%s", result.ExportPatchsets, raw)
+	}
+	if !result.ReviewableExportObserved || result.CompletionBlocker != "vsuper_timed_out_after_reviewable_export" {
+		t.Fatalf("timeout export should remain reviewable with blocker: %+v\nraw=%s", result, raw)
+	}
+	if result.WorkerChildRunStates["child-export-run"] != string(types.RunCompleted) {
+		t.Fatalf("child status evidence missing: %+v\nraw=%s", result.WorkerChildRunStates, raw)
+	}
+	if len(result.PromotionQueue) != 1 {
+		t.Fatalf("timeout export should queue reviewable promotion candidate: %+v\nraw=%s", result.PromotionQueue, raw)
 	}
 	if len(result.WorkerSpawnedProfiles) != 1 || result.WorkerSpawnedProfiles[0] != "co-super" {
 		t.Fatalf("spawn profile evidence missing: %+v\nraw=%s", result, raw)

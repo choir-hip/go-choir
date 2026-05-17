@@ -521,6 +521,22 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				}
 				return result
 			}
+			queueWorkerExportCandidates := func(candidateRunID string, exports []map[string]any) ([]map[string]any, error) {
+				if len(exports) == 0 {
+					return nil, nil
+				}
+				return queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
+					OwnerID:             ownerID,
+					ParentRunID:         runID,
+					CandidateRunID:      candidateRunID,
+					TraceID:             trajectoryID,
+					WorkerVMID:          strings.TrimSpace(in.VMID),
+					WorkerID:            strings.TrimSpace(in.WorkerID),
+					ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
+					Objective:           delegatedObjective,
+					Exports:             exports,
+				})
+			}
 
 			var startResp *runStatusResponse
 			var finalResp *runStatusResponse
@@ -568,7 +584,34 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 						result["terminal_error"] = err.Error()
 						result["attempt"] = attempt
 						result["timeout_seconds"] = int(timeout.Seconds())
-						result = resultWithWorkerEvents(result, workerRunID)
+						evidence, eventsErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+						if eventsErr != nil {
+							result["worker_event_error"] = eventsErr.Error()
+						} else {
+							applyWorkerRunEvidence(result, evidence)
+							exports := collectExportPatchsetResults(evidence.Events)
+							if len(exports) > 0 {
+								result["export_patchsets"] = exports
+								result["reviewable_export_observed"] = true
+								if pollErr.TimedOut {
+									result["completion_blocker"] = "vsuper_timed_out_after_reviewable_export"
+								}
+								if queued, queueErr := queueWorkerExportCandidates(workerRunID, exports); queueErr != nil {
+									result["promotion_queue_error"] = queueErr.Error()
+								} else if len(queued) > 0 {
+									result["promotion_queue"] = queued
+								}
+							}
+							if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
+								result["worker_event_summary"] = summary
+							}
+							if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
+								result["worker_spawned_profiles"] = profiles
+							}
+							if count := countWorkerChannelMessages(evidence.Events); count > 0 {
+								result["worker_channel_message_count"] = count
+							}
+						}
 						result = checkpointDelegateResult(result, status)
 						return toolResultJSON(result)
 					}
@@ -604,20 +647,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			}
 			exports := collectExportPatchsetResults(evidence.Events)
 			var promotionCandidates []map[string]any
-			if finalResp.State == types.RunCompleted {
-				promotionCandidates, err = queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
-					OwnerID:             ownerID,
-					ParentRunID:         runID,
-					CandidateRunID:      finalResp.RunID,
-					TraceID:             trajectoryID,
-					WorkerVMID:          strings.TrimSpace(in.VMID),
-					WorkerID:            strings.TrimSpace(in.WorkerID),
-					ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
-					Objective:           delegatedObjective,
-					Exports:             exports,
-				})
-				if err != nil {
-					return "", err
+			var promotionQueueErr error
+			if len(exports) > 0 {
+				promotionCandidates, promotionQueueErr = queueWorkerExportCandidates(finalResp.RunID, exports)
+				if promotionQueueErr != nil && finalResp.State == types.RunCompleted {
+					return "", promotionQueueErr
 				}
 			}
 
@@ -634,6 +668,13 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"error":              finalResp.Error,
 				"export_patchsets":   exports,
 				"promotion_queue":    promotionCandidates,
+			}
+			if promotionQueueErr != nil {
+				result["promotion_queue_error"] = promotionQueueErr.Error()
+			}
+			if finalResp.State != types.RunCompleted && len(exports) > 0 {
+				result["reviewable_export_observed"] = true
+				result["completion_blocker"] = firstNonEmpty(stringMapValue(result, "completion_blocker"), "vsuper_ended_non_completed_after_reviewable_export")
 			}
 			applyWorkerRunEvidence(result, evidence)
 			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, exports) {
@@ -829,6 +870,7 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 		"- The verifier should inspect only after the implementation child has reported a commit, export, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to export, do not override that with \"do not export\"; let the helper export, then report that child export.",
 		"- Once a committed repo diff and focused verification evidence exist, make exactly one export_patchset call for the candidate. If a child already exported, do not parent-export again.",
+		"- After export evidence exists, immediately produce the terminal summary or submit_worker_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the export is invalid and you are doing one focused repair.",
 		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/export/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
 		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",
 		"- A blocked submit_worker_update is preferred to running until the parent delegate timeout.",
@@ -1505,8 +1547,43 @@ func fetchWorkerRunEvidence(ctx context.Context, client *http.Client, baseURL, o
 		}
 		evidence.ChildEventCounts[childRunID] = len(childResp.Events)
 		evidence.Events = append(evidence.Events, childResp.Events...)
+		if status, err := fetchInternalWorkerRunStatus(ctx, client, baseURL, ownerID, childRunID); err != nil {
+			evidence.ChildStatusErrors[childRunID] = err.Error()
+		} else {
+			evidence.ChildRunStates[childRunID] = status.State
+		}
 	}
 	return evidence, nil
+}
+
+func fetchInternalWorkerRunStatus(ctx context.Context, client *http.Client, baseURL, ownerID, runID string) (*runStatusResponse, error) {
+	values := url.Values{"owner_id": []string{ownerID}}
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs/"+url.PathEscape(runID), values)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("delegate_worker_vm status: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("delegate_worker_vm status failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+	var out runStatusResponse
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return nil, fmt.Errorf("decode worker run status response: %w", err)
+	}
+	return &out, nil
 }
 
 func followWorkerChildRuns(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string, evidence workerRunEvidence, timeout time.Duration) workerRunEvidence {

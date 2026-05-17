@@ -371,7 +371,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString(repoContext)
 			b.WriteString("\nWhen spawning or casting to the implementation co-super, include these repo_path/base_sha/bootstrap details verbatim. Child co-supers must not have to rediscover the candidate checkout from scratch.")
 		}
-		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If an implementation child already exported, do not export again from the parent vsuper; summarize the child export, verifier state, rollback refs, and residual risks.")
+		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call export_patchset before further coordination. If an implementation child already exported, do not export again from the parent vsuper; immediately summarize the child export, verifier state, rollback refs, and residual risks, then finish the run. After export evidence exists, do not sleep, poll for narrative confirmation, or run broad discovery unless the export is invalid and you are performing one focused repair.")
 		b.WriteString("\nDo not end the run after only spawning children, casting assignments, or receiving acknowledgement-only child messages. End only after export_patchset, submit_worker_update with a precise blocker, or child-provided commit/export/verifier evidence that you have incorporated.")
 	}
 	if profile == AgentProfileCoSuper {

@@ -203,7 +203,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	for _, item := range delegateResults {
 		exports := acceptanceOutputSlice(item.output, "export_patchsets")
 		status := payloadString(item.output, "status")
-		if len(exports) == 0 || (status != "" && status != "worker_run_completed") {
+		if len(exports) == 0 {
 			nonExportDelegateResults = append(nonExportDelegateResults, item)
 			continue
 		}
@@ -217,7 +217,12 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			}
 		}
 		delegateDetails := acceptanceDelegateWorkerDetails(item.output, exports)
-		ref := builder.addEventEvidence(item.event, "worker run exported concrete patchset evidence", delegateDetails)
+		evidenceSummary := "worker run exported concrete patchset evidence"
+		if status != "" && status != "worker_run_completed" {
+			delegateDetails["non_clean_delegate_status"] = status
+			evidenceSummary = "worker run returned reviewable export evidence with non-clean delegate status"
+		}
+		ref := builder.addEventEvidence(item.event, evidenceSummary, delegateDetails)
 		exportRefs = append(exportRefs, ref)
 		builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, delegateDetails)
 	}
@@ -1097,12 +1102,18 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	var risks []string
 	has := map[string]bool{}
 	delegationBlocked := false
+	nonCleanExportStatus := ""
 	for _, checkpoint := range rec.Checkpoints {
 		if checkpoint.State == "passed" {
 			has[checkpoint.Kind] = true
 		}
 		if checkpoint.Kind == "worker_delegated" && checkpoint.State == "blocked" {
 			delegationBlocked = true
+		}
+		if checkpoint.Kind == "worker_delegated" && checkpoint.State == "passed" {
+			if status, _ := checkpoint.Details["non_clean_delegate_status"].(string); status != "" {
+				nonCleanExportStatus = status
+			}
 		}
 	}
 	if rec.AcceptanceLevel == types.RunAcceptanceExportLevel {
@@ -1123,6 +1134,9 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	}
 	if delegationBlocked && !has["worker_delegated"] {
 		risks = append(risks, "worker VM delegation did not complete, so co-super, export, and promotion acceptance remain unproven")
+	}
+	if nonCleanExportStatus != "" {
+		risks = append(risks, "worker export evidence was reviewable but delegate returned non-clean status "+nonCleanExportStatus+"; termination behavior still needs hardening before promotion-level acceptance")
 	}
 	if !has["compacted"] {
 		risks = append(risks, "continuation-level acceptance is not proven until run-memory compaction and continuation evidence are recorded")
