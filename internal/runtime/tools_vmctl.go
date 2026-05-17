@@ -1354,6 +1354,7 @@ func submitInternalWorkerRun(ctx context.Context, client *http.Client, baseURL s
 
 func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ownerID, runID string, timeout time.Duration) (*runStatusResponse, error) {
 	deadline := time.Now().Add(timeout)
+	notFoundRetryUntil := time.Now().Add(workerRunStatusNotFoundRetryWindow)
 	var last runStatusResponse
 	var lastStatusErr error
 	for {
@@ -1389,7 +1390,7 @@ func pollInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ow
 		}
 		if resp.StatusCode != http.StatusOK {
 			statusErr := fmt.Errorf("delegate_worker_vm status failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
-			if isRetryableWorkerStatusCode(resp.StatusCode) && time.Now().Before(deadline) {
+			if isRetryableWorkerStatusCode(resp.StatusCode, time.Now().Before(notFoundRetryUntil)) && time.Now().Before(deadline) {
 				lastStatusErr = statusErr
 				if err := sleepUntilNextWorkerStatusPoll(ctx); err != nil {
 					return nil, err
@@ -1447,6 +1448,8 @@ func (e *workerRunPollError) Error() string {
 	return fmt.Sprintf("worker run %s status polling failed", strings.TrimSpace(e.RunID))
 }
 
+const workerRunStatusNotFoundRetryWindow = 5 * time.Second
+
 func sleepUntilNextWorkerStatusPoll(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -1480,8 +1483,10 @@ func shouldRetryWorkerStatusPoll(err error) bool {
 	return false
 }
 
-func isRetryableWorkerStatusCode(statusCode int) bool {
+func isRetryableWorkerStatusCode(statusCode int, retryNotFound bool) bool {
 	switch statusCode {
+	case http.StatusNotFound:
+		return retryNotFound
 	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	default:
@@ -1612,14 +1617,34 @@ func followWorkerChildRuns(ctx context.Context, client *http.Client, baseURL, ow
 	}
 	refreshed, err := fetchWorkerRunEvidence(ctx, client, baseURL, ownerID, rootRunID)
 	if err != nil {
-		evidence.ChildRunStates = states
-		evidence.ChildStatusErrors = statusErrors
+		evidence = mergeFollowedWorkerChildRunStates(evidence, states, statusErrors)
 		evidence.ChildEventErrors["_refresh"] = err.Error()
 		return evidence
 	}
-	refreshed.ChildRunStates = states
-	refreshed.ChildStatusErrors = statusErrors
-	return refreshed
+	return mergeFollowedWorkerChildRunStates(refreshed, states, statusErrors)
+}
+
+func mergeFollowedWorkerChildRunStates(evidence workerRunEvidence, states map[string]types.RunState, statusErrors map[string]string) workerRunEvidence {
+	if evidence.ChildRunStates == nil {
+		evidence.ChildRunStates = map[string]types.RunState{}
+	}
+	if evidence.ChildStatusErrors == nil {
+		evidence.ChildStatusErrors = map[string]string{}
+	}
+	for childRunID := range evidence.ChildRunStates {
+		delete(evidence.ChildStatusErrors, childRunID)
+	}
+	for childRunID, state := range states {
+		evidence.ChildRunStates[childRunID] = state
+		delete(evidence.ChildStatusErrors, childRunID)
+	}
+	for childRunID, statusErr := range statusErrors {
+		if _, ok := evidence.ChildRunStates[childRunID]; ok {
+			continue
+		}
+		evidence.ChildStatusErrors[childRunID] = statusErr
+	}
+	return evidence
 }
 
 func applyWorkerRunEvidence(result map[string]any, evidence workerRunEvidence) {

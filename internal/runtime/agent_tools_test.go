@@ -3187,6 +3187,75 @@ func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
 	}
 }
 
+func TestPollInternalWorkerRunRetriesTransientNotFound(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+
+		if call == 1 {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found yet"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, runStatusResponse{
+			RunID:        "run-transient-404",
+			AgentID:      "agent-transient-404",
+			AgentProfile: AgentProfileCoSuper,
+			State:        types.RunCompleted,
+			OwnerID:      "user-alice",
+		})
+	}))
+	defer srv.Close()
+
+	resp, err := pollInternalWorkerRun(context.Background(), srv.Client(), srv.URL, "user-alice", "run-transient-404", time.Second)
+	if err != nil {
+		t.Fatalf("pollInternalWorkerRun: %v", err)
+	}
+	if resp.State != types.RunCompleted || resp.RunID != "run-transient-404" {
+		t.Fatalf("unexpected status response: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls < 2 {
+		t.Fatalf("expected retry after transient not found, calls=%d", calls)
+	}
+}
+
+func TestMergeFollowedWorkerChildRunStatesPreservesRefreshedState(t *testing.T) {
+	evidence := workerRunEvidence{
+		ChildRunStates: map[string]types.RunState{
+			"child-from-refresh": types.RunCompleted,
+		},
+		ChildStatusErrors: map[string]string{
+			"child-from-refresh": "delegate_worker_vm status failed: 404 Not Found",
+		},
+	}
+
+	got := mergeFollowedWorkerChildRunStates(evidence, map[string]types.RunState{
+		"child-from-poll": types.RunCompleted,
+	}, map[string]string{
+		"child-from-refresh": "delegate_worker_vm status failed: 404 Not Found",
+		"child-error":        "delegate worker child follow-up budget exhausted",
+	})
+
+	if got.ChildRunStates["child-from-refresh"] != types.RunCompleted {
+		t.Fatalf("refreshed child state was discarded: %+v", got.ChildRunStates)
+	}
+	if got.ChildRunStates["child-from-poll"] != types.RunCompleted {
+		t.Fatalf("polled child state was not merged: %+v", got.ChildRunStates)
+	}
+	if _, ok := got.ChildStatusErrors["child-from-refresh"]; ok {
+		t.Fatalf("status error should not survive for child with refreshed state: %+v", got.ChildStatusErrors)
+	}
+	if got.ChildStatusErrors["child-error"] == "" {
+		t.Fatalf("unresolved child status error missing: %+v", got.ChildStatusErrors)
+	}
+}
+
 func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
