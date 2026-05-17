@@ -212,6 +212,13 @@ EOF
       # the sandbox falls back to its process-local default, which can disappear
       # across guest reboot/recovery even when runtime DB state survives.
       SANDBOX_FILES_ROOT = "/mnt/persistent/files";
+      # Dolt/go-mysql-server transitively requires ICU headers for CGO builds.
+      # Worker verification commands are plain `go test`; surface the Nix ICU
+      # dev output through standard compiler/pkg-config environment variables.
+      CGO_CFLAGS = "-I${pkgs.icu.dev}/include";
+      CGO_CXXFLAGS = "-I${pkgs.icu.dev}/include";
+      CGO_LDFLAGS = "-L${pkgs.icu}/lib";
+      PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
       RUNTIME_WORKER_REPO_REMOTE = sourceRepoRemote;
       RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
