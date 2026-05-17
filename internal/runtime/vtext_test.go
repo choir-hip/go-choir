@@ -2789,6 +2789,7 @@ func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T
 	rt.Start(ctx)
 
 	revs := waitForRevisionCount(t, s2, doc.DocID, "user-1", 2, 5*time.Second)
+	waitForVTextQuiescent(t, rt, s2, "user-1", doc.DocID, uint64(message.Seq), 5*time.Second)
 	foundRecoveredRevision := false
 	for _, rev := range revs {
 		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "Recovered after restart and integrated the durable finding.") {

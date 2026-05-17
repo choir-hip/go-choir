@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Go Vet + Test + Build
+  go-vet-build:
+    name: Go Vet + Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +31,89 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
-      - name: Go test
-        run: go test ./... -count=1
-
       - name: Go build
         run: go build ./cmd/...
+
+  go-test:
+    name: Go Test (non-runtime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Go test non-runtime packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          go list ./... |
+            grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$' |
+            xargs go test -count=1
+
+  go-test-runtime:
+    name: Go Test (internal/runtime shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Go test internal/runtime shard
+        shell: bash
+        env:
+          TOTAL_SHARDS: 4
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          test_list=$(go test ./internal/runtime -list '^(Test|Example)')
+          mapfile -t tests < <(printf '%s\n' "$test_list" | grep -E '^(Test|Example)' || true)
+          selected=()
+          for i in "${!tests[@]}"; do
+            if (( i % TOTAL_SHARDS == SHARD_INDEX )); then
+              selected+=("${tests[$i]}")
+            fi
+          done
+          if (( ${#selected[@]} == 0 )); then
+            echo "No internal/runtime tests selected for shard ${SHARD_INDEX}/${TOTAL_SHARDS}"
+            exit 0
+          fi
+          regex="$(IFS='|'; echo "^(${selected[*]})$")"
+          echo "Running ${#selected[@]} of ${#tests[@]} internal/runtime tests in shard ${SHARD_INDEX}/${TOTAL_SHARDS}"
+          go test ./internal/runtime -count=1 -run "$regex"
+
+  check:
+    name: Go Vet + Test + Build
+    runs-on: ubuntu-latest
+    needs: [go-vet-build, go-test, go-test-runtime]
+    if: always()
+    steps:
+      - name: Confirm Go gates passed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.go-vet-build.result }}" != "success" ]]; then
+            echo "go-vet-build result: ${{ needs.go-vet-build.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.go-test.result }}" != "success" ]]; then
+            echo "go-test result: ${{ needs.go-test.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.go-test-runtime.result }}" != "success" ]]; then
+            echo "go-test-runtime result: ${{ needs.go-test-runtime.result }}" >&2
+            exit 1
+          fi
+          echo "Go vet, test, and build gates passed"
 
   build-frontend:
     name: Build Frontend
@@ -78,6 +156,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=6 root@${{ secrets.OVH_NODE_B_HOST }} '
             set -euo pipefail
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+            deploy_started_at=$(date +%s)
+            phase_started_at=$deploy_started_at
+            note_phase() {
+              local phase="$1"
+              local now
+              now=$(date +%s)
+              echo "    Phase ${phase}: $((now - phase_started_at))s (total $((now - deploy_started_at))s)"
+              phase_started_at=$now
+            }
 
             if [ ! -d /opt/go-choir/.git ]; then
               echo "==> Cloning go-choir repository"
@@ -94,22 +181,46 @@ jobs:
             install -d -m 0750 /var/lib/go-choir
             printf "CHOIR_DEPLOYED_AT=%s\nCHOIR_DEPLOYED_COMMIT=%s\n" "$deployed_at" "$current_commit" > /var/lib/go-choir/deploy.env
             chmod 0644 /var/lib/go-choir/deploy.env
+            note_phase "checkout"
 
             systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
 
-            echo "==> Pre-building NixOS closure"
-            /run/current-system/sw/bin/nix build .#nixosConfigurations.go-choir-b.config.system.build.toplevel -o /tmp/go-choir-nixos-result
-            echo "    Pre-build complete"
+            echo "==> Building NixOS closure and guest images"
+            host_build_log=$(mktemp)
+            guest_build_log=$(mktemp)
+            /run/current-system/sw/bin/nix build .#nixosConfigurations.go-choir-b.config.system.build.toplevel -o /tmp/go-choir-nixos-result >"$host_build_log" 2>&1 &
+            host_build_pid=$!
+            /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result >"$guest_build_log" 2>&1 &
+            guest_build_pid=$!
+
+            host_status=0
+            wait "$host_build_pid" || host_status=$?
+            echo "==> Host NixOS closure build log"
+            cat "$host_build_log"
+
+            guest_status=0
+            wait "$guest_build_pid" || guest_status=$?
+            echo "==> Guest image build log"
+            cat "$guest_build_log"
+
+            rm -f "$host_build_log" "$guest_build_log"
+            if [ "$host_status" -ne 0 ] || [ "$guest_status" -ne 0 ]; then
+              echo "Nix build failed: host=${host_status} guest=${guest_status}" >&2
+              exit 1
+            fi
+            echo "    Nix builds complete"
+            note_phase "nix build"
 
             echo "==> Activating NixOS config"
             /run/current-system/sw/bin/nixos-rebuild switch --flake .#go-choir-b
             echo "    Switch complete"
+            note_phase "nixos switch"
 
             echo "==> Waiting for services to start"
             sleep 5
+            note_phase "service settle"
 
-            echo "==> Building guest images (kernel + rootfs + initrd + store disk)"
-            /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result
+            echo "==> Installing guest images (kernel + rootfs + initrd + store disk)"
             guest_dir=/var/lib/go-choir/guest
             guest_tmp=$(mktemp -d "$guest_dir/.incoming.XXXXXX")
             cleanup_guest_tmp() {
@@ -131,16 +242,19 @@ jobs:
             guest_tmp=
             trap - EXIT
             echo "    Guest images deployed"
+            note_phase "guest image install"
 
             echo "==> Restarting vmctl to pick up new guest images"
             systemctl restart go-choir-vmctl
             sleep 3
+            note_phase "vmctl restart"
 
             echo "==> Smoke test: health endpoints"
             for port in 8081 8082 8083 8084 8086; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done
+            note_phase "health checks"
 
             echo "==> Staging deploy complete"
           '
