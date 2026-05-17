@@ -207,6 +207,25 @@ func (rt *Runtime) preparePromotionWorkspace(ctx context.Context, rec types.Prom
 	return repoPath, filepath.Join(candidateDir, "promotion-report.json"), nil
 }
 
+func (rt *Runtime) promotionWorkspaceRepoPath(ctx context.Context, rec types.PromotionCandidateRecord, report promotion.Report) (string, error) {
+	root := strings.TrimSpace(rt.cfg.PromotionWorkspaceRoot)
+	if root == "" {
+		return "", fmt.Errorf("promotion workspace: RUNTIME_PROMOTION_WORKSPACE_ROOT is not configured")
+	}
+	candidateDir, err := safePromotionChildPath(root, rec.CandidateID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(report.ReportPath) != "" && !pathIsInside(candidateDir, report.ReportPath) {
+		return "", fmt.Errorf("promotion workspace: report_path is outside candidate workspace")
+	}
+	repoPath := filepath.Join(candidateDir, "repo")
+	if _, err := runPromotionGit(ctx, repoPath, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return "", fmt.Errorf("promotion workspace: verified repo is unavailable; rerun verify first: %w", err)
+	}
+	return repoPath, nil
+}
+
 func productPromotionVerifierContracts(rec types.PromotionCandidateRecord) []promotion.VerifierContract {
 	target := "go-choir"
 	if strings.TrimSpace(rec.Summary) != "" {
@@ -242,6 +261,22 @@ func promotionArtifactPathAllowed(rt *Runtime, path string) bool {
 		return false
 	}
 	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func pathIsInside(root, path string) bool {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func safePromotionChildPath(root, child string) (string, error) {
@@ -305,6 +340,57 @@ func (rt *Runtime) PromotePromotionCandidate(ctx context.Context, ownerID, candi
 		return rec, fmt.Errorf("promote promotion candidate: owner approval is required")
 	}
 	promoted, err := promotion.ApplyVerifiedPromotion(ctx, repoPath, &report, approved)
+	if err != nil {
+		rec.Error = err.Error()
+		if updated, updateErr := rt.store.UpdatePromotionCandidate(ctx, rec); updateErr == nil {
+			rec = updated
+		}
+		return rec, err
+	}
+	rec = updateRecordFromPromotionReport(rec, promoted)
+	rec.Status = types.PromotionCandidatePromoted
+	rec.Error = ""
+	rec, err = rt.store.UpdatePromotionCandidate(ctx, rec)
+	if err != nil {
+		return types.PromotionCandidateRecord{}, err
+	}
+	rt.emitPromotionQueueEvent(ctx, rec, types.EventPromotionCandidatePromoted, nil)
+	return rec, nil
+}
+
+// PromotePromotionCandidateInWorkspace applies an approved verified candidate
+// inside the server-owned promotion workspace created by public verification.
+// Browser callers provide only the candidate id; they never choose a repo path.
+func (rt *Runtime) PromotePromotionCandidateInWorkspace(ctx context.Context, ownerID, candidateID string) (types.PromotionCandidateRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.PromotionCandidateRecord{}, fmt.Errorf("promote promotion candidate in workspace: runtime store is unavailable")
+	}
+	rec, err := rt.store.GetPromotionCandidate(ctx, ownerID, candidateID)
+	if err != nil {
+		return types.PromotionCandidateRecord{}, err
+	}
+	if rec.Status != types.PromotionCandidateVerified {
+		return rec, fmt.Errorf("promote promotion candidate in workspace: candidate status %q is not verified", rec.Status)
+	}
+	var report promotion.Report
+	if len(rec.ReportJSON) == 0 || !json.Valid(rec.ReportJSON) {
+		return rec, fmt.Errorf("promote promotion candidate in workspace: report_json is missing")
+	}
+	if err := json.Unmarshal(rec.ReportJSON, &report); err != nil {
+		return rec, fmt.Errorf("decode promotion report: %w", err)
+	}
+	if !report.PromotionApproved {
+		return rec, fmt.Errorf("promote promotion candidate in workspace: owner approval is required")
+	}
+	repoPath, err := rt.promotionWorkspaceRepoPath(ctx, rec, report)
+	if err != nil {
+		rec.Error = err.Error()
+		if updated, updateErr := rt.store.UpdatePromotionCandidate(ctx, rec); updateErr == nil {
+			rec = updated
+		}
+		return rec, err
+	}
+	promoted, err := promotion.ApplyVerifiedPromotion(ctx, repoPath, &report, true)
 	if err != nil {
 		rec.Error = err.Error()
 		if updated, updateErr := rt.store.UpdatePromotionCandidate(ctx, rec); updateErr == nil {

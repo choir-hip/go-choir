@@ -1642,6 +1642,47 @@ func TestPromotionCandidatePublicVerifyUsesServerOwnedWorkspace(t *testing.T) {
 	if !strings.Contains(string(verified.ReportJSON), "product-safe-patch-import") {
 		t.Fatalf("public verify report missing safe verifier contract: %s", verified.ReportJSON)
 	}
+
+	repoPathPromoteReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{"repo_path":"/tmp/evil"}`, "user-alice")
+	repoPathPromoteW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(repoPathPromoteW, repoPathPromoteReq)
+	if repoPathPromoteW.Code != http.StatusBadRequest {
+		t.Fatalf("repo_path promote status = %d, want 400; body=%s", repoPathPromoteW.Code, repoPathPromoteW.Body.String())
+	}
+
+	promoteBeforeReviewReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{}`, "user-alice")
+	promoteBeforeReviewW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(promoteBeforeReviewW, promoteBeforeReviewReq)
+	if promoteBeforeReviewW.Code != http.StatusBadRequest {
+		t.Fatalf("promote before review status = %d, want 400; body=%s", promoteBeforeReviewW.Code, promoteBeforeReviewW.Body.String())
+	}
+
+	approveReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/approve", "", "user-alice")
+	approveW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(approveW, approveReq)
+	if approveW.Code != http.StatusOK {
+		t.Fatalf("approve status = %d; body=%s", approveW.Code, approveW.Body.String())
+	}
+
+	promoteReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{}`, "user-alice")
+	promoteW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(promoteW, promoteReq)
+	if promoteW.Code != http.StatusOK {
+		t.Fatalf("promote status = %d; body=%s", promoteW.Code, promoteW.Body.String())
+	}
+	var promoted types.PromotionCandidateRecord
+	if err := json.NewDecoder(promoteW.Body).Decode(&promoted); err != nil {
+		t.Fatalf("decode promoted: %v", err)
+	}
+	if promoted.Status != types.PromotionCandidatePromoted {
+		t.Fatalf("promoted status = %s, want promoted", promoted.Status)
+	}
+	if strings.Contains(string(promoted.ReportJSON), "/tmp/evil") {
+		t.Fatalf("public promote report used caller repo_path: %s", promoted.ReportJSON)
+	}
+	if !strings.Contains(string(promoted.ReportJSON), `"canonical_mutated":true`) {
+		t.Fatalf("public promote report missing workspace promotion evidence: %s", promoted.ReportJSON)
+	}
 }
 
 func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T) {

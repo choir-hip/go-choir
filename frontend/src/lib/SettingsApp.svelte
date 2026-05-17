@@ -85,6 +85,10 @@
     return candidate?.status === 'verified' && !promotionApproved(candidate);
   }
 
+  function canPromotePromotion(candidate) {
+    return candidate?.status === 'verified' && promotionApproved(candidate);
+  }
+
   function canVerifyPromotion(candidate) {
     return candidate && ['queued', 'integrated', 'verification_failed'].includes(candidate.status);
   }
@@ -100,7 +104,7 @@
     try {
       const res = await fetchWithRenewal(`/api/promotions/${encodeURIComponent(candidate.candidate_id)}/${action}`, {
         method: 'POST',
-        body: action === 'verify' ? '{}' : undefined,
+        body: ['verify', 'promote'].includes(action) ? '{}' : undefined,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -281,7 +285,7 @@
                 {#if promotionApproved(candidate)}
                   <p class="promotion-approved" data-settings-promotion-approved>Owner approved</p>
                 {/if}
-                {#if canVerifyPromotion(candidate) || canApprovePromotion(candidate) || canRejectPromotion(candidate)}
+                {#if canVerifyPromotion(candidate) || canApprovePromotion(candidate) || canPromotePromotion(candidate) || canRejectPromotion(candidate)}
                   <div class="promotion-actions" data-settings-promotion-actions>
                     {#if canVerifyPromotion(candidate)}
                       <button
@@ -301,6 +305,16 @@
                         disabled={promotionActingId === `${candidate.candidate_id}:approve`}
                       >
                         {promotionActingId === `${candidate.candidate_id}:approve` ? 'Approving…' : 'Approve'}
+                      </button>
+                    {/if}
+                    {#if canPromotePromotion(candidate)}
+                      <button
+                        class="promotion-action approve"
+                        data-settings-promotion-promote
+                        on:click={() => reviewPromotion(candidate, 'promote')}
+                        disabled={promotionActingId === `${candidate.candidate_id}:promote`}
+                      >
+                        {promotionActingId === `${candidate.candidate_id}:promote` ? 'Promoting…' : 'Promote'}
                       </button>
                     {/if}
                     {#if canRejectPromotion(candidate)}

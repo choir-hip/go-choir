@@ -208,6 +208,36 @@ func TestRuntimePromotionWorkspaceVerifiesQueuedExportWithoutCanonicalMutation(t
 	if sourceHead := strings.TrimSpace(runGit(t, baseRepo, "rev-parse", "main")); sourceHead != base {
 		t.Fatalf("source repo mutated by verification: got %s want %s", sourceHead, base)
 	}
+	if _, err := rt.PromotePromotionCandidateInWorkspace(ctx, "user-alice", queued.CandidateID); err == nil {
+		t.Fatal("workspace promotion should require owner approval")
+	}
+	approved, err := rt.ReviewPromotionCandidate(ctx, "user-alice", queued.CandidateID, "approve")
+	if err != nil {
+		t.Fatalf("approve promotion candidate: %v", err)
+	}
+	if approved.Status != types.PromotionCandidateVerified {
+		t.Fatalf("approved status = %s", approved.Status)
+	}
+	promoted, err := rt.PromotePromotionCandidateInWorkspace(ctx, "user-alice", queued.CandidateID)
+	if err != nil {
+		t.Fatalf("promote candidate in workspace: %v", err)
+	}
+	if promoted.Status != types.PromotionCandidatePromoted {
+		t.Fatalf("promoted status = %s", promoted.Status)
+	}
+	var promotedReport promotion.Report
+	if err := json.Unmarshal(promoted.ReportJSON, &promotedReport); err != nil {
+		t.Fatalf("decode promoted report: %v", err)
+	}
+	if promotedReport.Status != "promoted" || !promotedReport.CanonicalMutated || promotedReport.PromotionCommitSHA == "" {
+		t.Fatalf("promoted report missing canonical promotion evidence: %+v", promotedReport)
+	}
+	if got := runtimeReadFile(t, filepath.Join(workspaceRepo, "frontend/src/lib/Launcher.svelte")); !strings.Contains(got, "launch-with-uploads-themes") {
+		t.Fatalf("promoted workspace main missing product marker: %s", got)
+	}
+	if sourceHead := strings.TrimSpace(runGit(t, baseRepo, "rev-parse", "main")); sourceHead != base {
+		t.Fatalf("source repo mutated by workspace promotion: got %s want %s", sourceHead, base)
+	}
 }
 
 func prepareRuntimeLauncherCandidate(t *testing.T) (baseRepo, workerRepo, base, workerHead string, exportReport *shipper.ExportReport) {
