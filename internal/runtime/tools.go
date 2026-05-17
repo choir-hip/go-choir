@@ -483,6 +483,11 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 		return nil
 	}
 	skipped := make(map[int]string)
+	setSkip := func(index int, reason string) {
+		if _, exists := skipped[index]; !exists {
+			skipped[index] = reason
+		}
+	}
 
 	switch profile {
 	case AgentProfileConductor:
@@ -495,7 +500,7 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 				if firstVText == -1 {
 					firstVText = i
 				} else {
-					skipped[i] = "tool_error: conductor already routed this prompt to vtext; do not create duplicate vtext routes"
+					setSkip(i, "tool_error: conductor already routed this prompt to vtext; do not create duplicate vtext routes")
 				}
 			}
 		}
@@ -504,15 +509,103 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 				if i == firstVText || call.Name != "spawn_agent" {
 					continue
 				}
-				skipped[i] = "tool_error: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests"
+				setSkip(i, "tool_error: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests")
 			}
 		}
 	}
+	planSideEffectToolSkips(profile, calls, setSkip)
 
 	if len(skipped) == 0 {
 		return nil
 	}
 	return skipped
+}
+
+func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
+	seenVSuperSpawn := map[string]int{}
+	seenCast := map[string]int{}
+	seenExport := map[string]int{}
+
+	for i, call := range calls {
+		switch call.Name {
+		case "spawn_agent":
+			if profile != AgentProfileVSuper {
+				continue
+			}
+			key, ok := toolCallVSuperCoSuperSpawnKey(call)
+			if !ok {
+				continue
+			}
+			if previous, exists := seenVSuperSpawn[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
+				continue
+			}
+			seenVSuperSpawn[key] = i
+		case "cast_agent":
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenCast[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate cast_agent payload already planned in this turn at call %s; one addressed channel message is enough", calls[previous].ID))
+				continue
+			}
+			seenCast[key] = i
+		case "export_patchset":
+			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenExport[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate export_patchset payload already planned in this turn at call %s; one export attempt per candidate state is allowed", calls[previous].ID))
+				continue
+			}
+			seenExport[key] = i
+		}
+	}
+}
+
+func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
+	var in struct {
+		Role      string `json:"role"`
+		Profile   string `json:"profile"`
+		Slot      string `json:"slot"`
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return "", false
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	if profile != AgentProfileCoSuper {
+		return "", false
+	}
+	slot := normalizeVSuperCoSuperSlot(in.Slot)
+	if slot == "" {
+		return "", false
+	}
+	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
+}
+
+func normalizedToolCallArgs(call types.ToolCall) string {
+	raw := strings.TrimSpace(string(call.Arguments))
+	if raw == "" {
+		return "{}"
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return raw
+	}
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
 }
 
 func toolCallSpawnProfile(call types.ToolCall) string {

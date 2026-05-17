@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -559,6 +560,108 @@ func TestExecuteToolsConductorVTextRouteSkipsOtherSpawn(t *testing.T) {
 	}
 	if results[1].IsError || results[1].Output != AgentProfileVText {
 		t.Fatalf("vtext spawn result = %#v, want success", results[1])
+	}
+}
+
+func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	counts := map[string]int{}
+	registerCountingTool := func(name string) {
+		t.Helper()
+		if err := registry.Register(Tool{
+			Name: name,
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				mu.Lock()
+				counts[name]++
+				mu.Unlock()
+				return name + " ok", nil
+			},
+		}); err != nil {
+			t.Fatalf("register %s: %v", name, err)
+		}
+	}
+	registerCountingTool("spawn_agent")
+	registerCountingTool("cast_agent")
+	registerCountingTool("export_patchset")
+
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "vsuper-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileVSuper,
+	})
+	calls := []types.ToolCall{
+		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
+		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
+		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
+		{ID: "cast-1", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
+		{ID: "cast-2", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
+		{ID: "export-1", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-2", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	mu.Lock()
+	gotCounts := map[string]int{
+		"spawn_agent":     counts["spawn_agent"],
+		"cast_agent":      counts["cast_agent"],
+		"export_patchset": counts["export_patchset"],
+	}
+	mu.Unlock()
+	if gotCounts["spawn_agent"] != 2 || gotCounts["cast_agent"] != 1 || gotCounts["export_patchset"] != 1 {
+		t.Fatalf("executed counts = %+v, want spawn=2 cast=1 export=1", gotCounts)
+	}
+	for _, idx := range []int{1, 4, 6} {
+		if !results[idx].IsError || !strings.Contains(results[idx].Output, "duplicate") {
+			t.Fatalf("result[%d] = %#v, want duplicate skip error", idx, results[idx])
+		}
+	}
+	for _, idx := range []int{0, 2, 3, 5} {
+		if results[idx].IsError {
+			t.Fatalf("result[%d] = %#v, want successful execution", idx, results[idx])
+		}
+	}
+}
+
+func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	exports := 0
+	if err := registry.Register(Tool{
+		Name: "export_patchset",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			mu.Lock()
+			exports++
+			mu.Unlock()
+			return "export ok", nil
+		},
+	}); err != nil {
+		t.Fatalf("register export_patchset: %v", err)
+	}
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "cosuper-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileCoSuper,
+	})
+	calls := []types.ToolCall{
+		{ID: "export-1", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-2", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	mu.Lock()
+	gotExports := exports
+	mu.Unlock()
+	if gotExports != 1 {
+		t.Fatalf("exports executed = %d, want one", gotExports)
+	}
+	if results[0].IsError {
+		t.Fatalf("first export = %#v, want success", results[0])
+	}
+	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate export_patchset") {
+		t.Fatalf("second export = %#v, want duplicate skip", results[1])
 	}
 }
 
