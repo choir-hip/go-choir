@@ -3706,6 +3706,8 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 		"git config user.email \"worker@choir.local\"",
 		"git checkout " + base,
 		"Use set -euo pipefail for multi-step bash commands",
+		"Run gofmt, go test, node, and scripts directly from the checkout",
+		"Do not run nix develop, nix build, or nix-store inside the worker VM",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
 	} {
 		if !strings.Contains(bootstrap.WorkerPrompt, want) {
@@ -3754,6 +3756,8 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"exclusive writer for go-choir-candidate",
 		"do not run reset, clean, edit, or commit commands",
 		"verifier should inspect only after the implementation child has reported",
+		"missing tools, failed tests, or export failure must end in submit_worker_update",
+		"both child runs finish without export_patchset or submit_worker_update",
 		"export_patchset",
 	} {
 		if !strings.Contains(contract, want) {

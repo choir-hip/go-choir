@@ -185,13 +185,20 @@ EOF
         coreutils
         findutils
         curl
+        gcc
         git
+        go
+        gnumake
         gnugrep
         gnused
+        icu
         nodejs
+        perl
+        pkg-config
         systemd
         procps
         iproute2
+        python3
       ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
@@ -215,6 +222,12 @@ EOF
       GIT_AUTHOR_EMAIL = "worker@choir.local";
       GIT_COMMITTER_NAME = "Choir Worker";
       GIT_COMMITTER_EMAIL = "worker@choir.local";
+      # Keep Go build/module caches on the writable data volume. The shared
+      # Nix store is intentionally read-only inside guest worker VMs.
+      GOPATH = "/mnt/persistent/go";
+      GOMODCACHE = "/mnt/persistent/go/pkg/mod";
+      GOCACHE = "/mnt/persistent/go-build-cache";
+      GOTOOLCHAIN = "local";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";
@@ -246,12 +259,19 @@ EOF
   environment.systemPackages = with pkgs; [
     coreutils
     curl
+    gcc
     git
+    go
+    gnumake
     gnugrep
     gnused
+    icu
     nodejs
+    perl
+    pkg-config
     procps
     iproute2
+    python3
     bash
   ];
 

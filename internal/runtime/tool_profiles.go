@@ -470,6 +470,8 @@ func workerRepoContextForRun(rec *types.RunRecord) string {
 	b.WriteString(baseSHA)
 	b.WriteString("\ngit clean -fdx")
 	b.WriteString("\nUse set -euo pipefail for multi-step bash commands.")
+	b.WriteString("\nUse the worker VM's direct PATH tools for repo checks: git, go, gofmt, python3, perl, node, curl, make, gcc, pkg-config, and ICU libraries are expected. Do not use nix develop, nix build, or nix-store inside the worker VM; the guest Nix store is read-only.")
+	b.WriteString("\nIf a required tool, build, verification check, commit, or export fails, call submit_worker_update with exact diagnostics before finishing.")
 	return b.String()
 }
 

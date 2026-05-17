@@ -849,10 +849,12 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"git reset --hard " + baseSHA,
 		"git clean -fdx",
 		"Perform all repository edits inside go-choir-candidate. Do not push from the worker VM.",
+		"The worker VM exposes repo tools directly in PATH, including git, go, gofmt, python3, perl, node, curl, make, gcc, pkg-config, and ICU libraries.",
+		"Run gofmt, go test, node, and scripts directly from the checkout. Do not run nix develop, nix build, or nix-store inside the worker VM; the guest Nix store is read-only and those commands are not verifier evidence.",
 		"Use set -euo pipefail for multi-step bash commands so a failed commit, test, or export cannot be hidden by a later successful command.",
 		"Commit candidate changes before calling export_patchset.",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
-		"If clone, checkout, build, or export fails, report diagnostics with submit_worker_update instead of claiming repository work.",
+		"If clone, checkout, build, verification, or export fails, report diagnostics with submit_worker_update instead of claiming repository work or ending with a plain narrative.",
 	}, "\n")
 }
 
@@ -869,9 +871,11 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 		"- Do not cancel a child that has produced export_patchset evidence. Incorporate the child export instead.",
 		"- The verifier should inspect only after the implementation child has reported a commit, export, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to export, do not override that with \"do not export\"; let the helper export, then report that child export.",
+		"- Tell the implementation child that missing tools, failed tests, or export failure must end in submit_worker_update with exact command output refs, not a plain final answer.",
 		"- Once a committed repo diff and focused verification evidence exist, make exactly one export_patchset call for the candidate. If a child already exported, do not parent-export again.",
 		"- After export evidence exists, immediately produce the terminal summary or submit_worker_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the export is invalid and you are doing one focused repair.",
 		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/export/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
+		"- If both child runs finish without export_patchset or submit_worker_update evidence, inspect their final results and tool errors, then submit_worker_update naming the child loop ids and the missing terminal evidence.",
 		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",
 		"- A blocked submit_worker_update is preferred to running until the parent delegate timeout.",
 	}, "\n")
