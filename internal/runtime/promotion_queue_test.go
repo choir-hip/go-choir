@@ -138,6 +138,78 @@ func TestRuntimePromotionQueueDogfoodsLauncherUploadsThemesPatch(t *testing.T) {
 	}
 }
 
+func TestRuntimePromotionWorkspaceVerifiesQueuedExportWithoutCanonicalMutation(t *testing.T) {
+	ctx := context.Background()
+	rt, _ := testRuntime(t)
+
+	source, err := rt.StartRunWithMetadata(ctx, "verify candidate in product workspace", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start source run: %v", err)
+	}
+	sourceDone := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
+
+	baseRepo, _, base, workerHead, exportReport := prepareRuntimeLauncherCandidate(t)
+	rt.cfg.PromotionSourceRepo = baseRepo
+	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
+
+	candidateID := "candidate-runtime-product-workspace"
+	manifestPath, patchsetPath := runtimeCopyPromotionArtifacts(t, rt, candidateID, exportReport.ManifestPath, exportReport.PatchsetPath)
+	queued, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:       candidateID,
+		OwnerID:           "user-alice",
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       sourceDone.RunID,
+		TraceID:           "trace-runtime-product-workspace",
+		VMID:              "vm-runtime-product-workspace",
+		BaseSHA:           base,
+		WorkerHeadSHA:     workerHead,
+		ManifestPath:      manifestPath,
+		PatchsetPath:      patchsetPath,
+		IntegrationBranch: "agent/run-vsuper-runtime-product-workspace/candidate",
+		DestinationBranch: "main",
+		Summary:           "product-safe promotion workspace proof",
+		ContractsJSON:     json.RawMessage(`[]`),
+	})
+	if err != nil {
+		t.Fatalf("queue promotion candidate: %v", err)
+	}
+
+	verified, err := rt.VerifyPromotionCandidateInWorkspace(ctx, "user-alice", queued.CandidateID)
+	if err != nil {
+		t.Fatalf("verify candidate in workspace: %v", err)
+	}
+	if verified.Status != types.PromotionCandidateVerified {
+		t.Fatalf("verified status = %s", verified.Status)
+	}
+
+	var report promotion.Report
+	if err := json.Unmarshal(verified.ReportJSON, &report); err != nil {
+		t.Fatalf("decode promotion report: %v", err)
+	}
+	if report.Status != "verified" || report.CanonicalMutated {
+		t.Fatalf("report status/canonical mutation = %q/%v", report.Status, report.CanonicalMutated)
+	}
+	if len(report.VerifierContracts) != 1 || report.VerifierContracts[0].ContractID != "product-safe-patch-import" {
+		t.Fatalf("verifier contracts = %+v", report.VerifierContracts)
+	}
+	if len(report.VerifierResults) != 1 || report.VerifierResults[0].Status != "passed" {
+		t.Fatalf("verifier results = %+v", report.VerifierResults)
+	}
+	if !strings.HasPrefix(report.ReportPath, rt.cfg.PromotionWorkspaceRoot) {
+		t.Fatalf("report path %q is outside workspace root %q", report.ReportPath, rt.cfg.PromotionWorkspaceRoot)
+	}
+	workspaceRepo := filepath.Join(rt.cfg.PromotionWorkspaceRoot, sanitizeExportPart(candidateID), "repo")
+	if mainHead := strings.TrimSpace(runGit(t, workspaceRepo, "rev-parse", "main")); mainHead != base {
+		t.Fatalf("workspace main mutated before promotion: got %s want %s", mainHead, base)
+	}
+	if sourceHead := strings.TrimSpace(runGit(t, baseRepo, "rev-parse", "main")); sourceHead != base {
+		t.Fatalf("source repo mutated by verification: got %s want %s", sourceHead, base)
+	}
+}
+
 func prepareRuntimeLauncherCandidate(t *testing.T) (baseRepo, workerRepo, base, workerHead string, exportReport *shipper.ExportReport) {
 	t.Helper()
 	ctx := context.Background()
@@ -227,4 +299,28 @@ func runtimeReadFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+func runtimeCopyPromotionArtifacts(t *testing.T, rt *Runtime, candidateID, manifestPath, patchsetPath string) (string, string) {
+	t.Helper()
+	dir := filepath.Join(promotionArtifactRoot(rt), sanitizeExportPart(candidateID))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create promotion artifact dir: %v", err)
+	}
+	manifestOut := filepath.Join(dir, "manifest.json")
+	patchsetOut := filepath.Join(dir, "changes.patch")
+	runtimeCopyFile(t, manifestPath, manifestOut)
+	runtimeCopyFile(t, patchsetPath, patchsetOut)
+	return manifestOut, patchsetOut
+}
+
+func runtimeCopyFile(t *testing.T, src, dst string) {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", dst, err)
+	}
 }

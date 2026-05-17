@@ -114,6 +114,14 @@ type Config struct {
 	// RunMemoryKeepRecentTokens controls how much recent raw context is kept
 	// alongside each run-memory compaction checkpoint.
 	RunMemoryKeepRecentTokens int
+
+	// PromotionSourceRepo is the server-owned canonical go-choir source used
+	// to create product-safe promotion integration workspaces.
+	PromotionSourceRepo string
+
+	// PromotionWorkspaceRoot is the server-owned root for per-candidate
+	// integration workspaces. Browser callers never provide this path.
+	PromotionWorkspaceRoot string
 }
 
 // LoadConfig resolves runtime configuration from environment variables.
@@ -146,6 +154,11 @@ func LoadConfig() Config {
 			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
 			DefaultRunMemoryKeepRecentTokens,
 		),
+		PromotionSourceRepo: envOr(
+			"RUNTIME_PROMOTION_SOURCE_REPO",
+			os.Getenv("RUNTIME_WORKER_REPO_REMOTE"),
+		),
+		PromotionWorkspaceRoot: os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
 	}
 }
 
@@ -164,6 +177,16 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.RunMemoryKeepRecentTokens <= 0 {
 		cfg.RunMemoryKeepRecentTokens = DefaultRunMemoryKeepRecentTokens
+	}
+	if strings.TrimSpace(cfg.PromotionWorkspaceRoot) == "" {
+		cfg.PromotionWorkspaceRoot = filepath.Join(filepath.Dir(cfg.StorePath), "promotion-workspaces")
+	}
+	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
+		if wd, err := os.Getwd(); err == nil {
+			if _, statErr := os.Stat(filepath.Join(wd, ".git")); statErr == nil {
+				cfg.PromotionSourceRepo = wd
+			}
+		}
 	}
 	return cfg
 }

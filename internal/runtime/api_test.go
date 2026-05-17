@@ -1570,6 +1570,80 @@ func TestPromotionCandidatePublicReviewIsOwnerScopedAndNonPromoting(t *testing.T
 	}
 }
 
+func TestPromotionCandidatePublicVerifyUsesServerOwnedWorkspace(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ctx := context.Background()
+
+	source, err := rt.StartRunWithMetadata(ctx, "public promotion verify source", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start source run: %v", err)
+	}
+	sourceDone := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
+
+	baseRepo, _, base, workerHead, exportReport := prepareRuntimeLauncherCandidate(t)
+	rt.cfg.PromotionSourceRepo = baseRepo
+	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
+
+	candidateID := "candidate-api-public-verify"
+	manifestPath, patchsetPath := runtimeCopyPromotionArtifacts(t, rt, candidateID, exportReport.ManifestPath, exportReport.PatchsetPath)
+	queued, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:       candidateID,
+		OwnerID:           "user-alice",
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       sourceDone.RunID,
+		TraceID:           "trace-api-public-verify",
+		VMID:              "vm-api-public-verify",
+		BaseSHA:           base,
+		WorkerHeadSHA:     workerHead,
+		ManifestPath:      manifestPath,
+		PatchsetPath:      patchsetPath,
+		IntegrationBranch: "agent/run-api-public-verify/candidate",
+		DestinationBranch: "main",
+		Summary:           "public promotion verifier proof",
+		ContractsJSON:     json.RawMessage(`[]`),
+	})
+	if err != nil {
+		t.Fatalf("queue candidate: %v", err)
+	}
+
+	repoPathReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{"repo_path":"/tmp/evil"}`, "user-alice")
+	repoPathW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(repoPathW, repoPathReq)
+	if repoPathW.Code != http.StatusBadRequest {
+		t.Fatalf("repo_path verify status = %d, want 400; body=%s", repoPathW.Code, repoPathW.Body.String())
+	}
+
+	otherUserReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{}`, "user-bob")
+	otherUserW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
+	if otherUserW.Code != http.StatusBadRequest && otherUserW.Code != http.StatusNotFound {
+		t.Fatalf("other user verify status = %d, want 400/404; body=%s", otherUserW.Code, otherUserW.Body.String())
+	}
+
+	verifyReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{}`, "user-alice")
+	verifyW := httptest.NewRecorder()
+	handler.HandlePromotionCandidateDetail(verifyW, verifyReq)
+	if verifyW.Code != http.StatusOK {
+		t.Fatalf("verify status = %d; body=%s", verifyW.Code, verifyW.Body.String())
+	}
+	var verified types.PromotionCandidateRecord
+	if err := json.NewDecoder(verifyW.Body).Decode(&verified); err != nil {
+		t.Fatalf("decode verified: %v", err)
+	}
+	if verified.Status != types.PromotionCandidateVerified {
+		t.Fatalf("verified status = %s, want verified", verified.Status)
+	}
+	if strings.Contains(string(verified.ReportJSON), "/tmp/evil") {
+		t.Fatalf("public verify report used caller repo_path: %s", verified.ReportJSON)
+	}
+	if !strings.Contains(string(verified.ReportJSON), "product-safe-patch-import") {
+		t.Fatalf("public verify report missing safe verifier contract: %s", verified.ReportJSON)
+	}
+}
+
 func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	source, err := rt.StartRunWithMetadata(context.Background(), "finish controller API source", "user-alice", map[string]any{

@@ -208,6 +208,8 @@ EOF
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
       RUNTIME_WORKER_REPO_REMOTE = sourceRepoRemote;
       RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
+      RUNTIME_PROMOTION_SOURCE_REPO = sourceRepoRemote;
+      RUNTIME_PROMOTION_WORKSPACE_ROOT = "/mnt/persistent/promotion-workspaces";
       # Worker candidate repos need non-interactive commits for export proof.
       GIT_AUTHOR_NAME = "Choir Worker";
       GIT_AUTHOR_EMAIL = "worker@choir.local";

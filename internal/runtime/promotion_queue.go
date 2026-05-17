@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,11 +71,37 @@ func (rt *Runtime) VerifyPromotionCandidate(ctx context.Context, ownerID, candid
 	if err != nil {
 		return types.PromotionCandidateRecord{}, err
 	}
-	candidate, err := candidateWorldFromRecord(rec)
+	contracts, err := verifierContractsFromRecord(rec)
 	if err != nil {
 		return rec, err
 	}
-	contracts, err := verifierContractsFromRecord(rec)
+	return rt.verifyPromotionCandidateInRepo(ctx, rec, repoPath, "", contracts)
+}
+
+// VerifyPromotionCandidateInWorkspace imports a queued worker patchset into a
+// server-owned integration workspace derived from the canonical source repo.
+// This is the product-safe verifier path: callers provide only the candidate
+// id, never a repo path or arbitrary verifier commands.
+func (rt *Runtime) VerifyPromotionCandidateInWorkspace(ctx context.Context, ownerID, candidateID string) (types.PromotionCandidateRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.PromotionCandidateRecord{}, fmt.Errorf("verify promotion candidate in workspace: runtime store is unavailable")
+	}
+	rec, err := rt.store.GetPromotionCandidate(ctx, ownerID, candidateID)
+	if err != nil {
+		return types.PromotionCandidateRecord{}, err
+	}
+	if rec.Status == types.PromotionCandidatePromoted || rec.Status == types.PromotionCandidateRejected {
+		return rec, fmt.Errorf("verify promotion candidate in workspace: candidate status %q cannot be verified", rec.Status)
+	}
+	repoPath, reportPath, err := rt.preparePromotionWorkspace(ctx, rec)
+	if err != nil {
+		return rt.failPromotionCandidate(ctx, rec, err)
+	}
+	return rt.verifyPromotionCandidateInRepo(ctx, rec, repoPath, reportPath, productPromotionVerifierContracts(rec))
+}
+
+func (rt *Runtime) verifyPromotionCandidateInRepo(ctx context.Context, rec types.PromotionCandidateRecord, repoPath, reportPath string, contracts []promotion.VerifierContract) (types.PromotionCandidateRecord, error) {
+	candidate, err := candidateWorldFromRecord(rec)
 	if err != nil {
 		return rec, err
 	}
@@ -86,6 +115,7 @@ func (rt *Runtime) VerifyPromotionCandidate(ctx context.Context, ownerID, candid
 		PatchsetPath:      rec.PatchsetPath,
 		IntegrationBranch: rec.IntegrationBranch,
 		DestinationBranch: rec.DestinationBranch,
+		ReportPath:        reportPath,
 		CommitMessage:     commitMessageForCandidate(rec),
 		Candidate:         candidate,
 		Contracts:         contracts,
@@ -112,6 +142,145 @@ func (rt *Runtime) VerifyPromotionCandidate(ctx context.Context, ownerID, candid
 	}
 	rt.emitPromotionQueueEvent(ctx, rec, types.EventPromotionCandidateVerified, nil)
 	return rec, nil
+}
+
+func (rt *Runtime) failPromotionCandidate(ctx context.Context, rec types.PromotionCandidateRecord, cause error) (types.PromotionCandidateRecord, error) {
+	if cause == nil {
+		cause = fmt.Errorf("promotion candidate failed")
+	}
+	rec.Status = types.PromotionCandidateVerificationFailed
+	rec.Error = cause.Error()
+	if rt != nil && rt.store != nil {
+		if updated, updateErr := rt.store.UpdatePromotionCandidate(ctx, rec); updateErr == nil {
+			rec = updated
+		}
+		rt.emitPromotionQueueEvent(ctx, rec, types.EventPromotionCandidateFailed, cause)
+	}
+	return rec, cause
+}
+
+func (rt *Runtime) preparePromotionWorkspace(ctx context.Context, rec types.PromotionCandidateRecord) (repoPath, reportPath string, err error) {
+	if strings.TrimSpace(rec.BaseSHA) == "" {
+		return "", "", fmt.Errorf("promotion workspace: base_sha is required")
+	}
+	if !promotionArtifactPathAllowed(rt, rec.ManifestPath) {
+		return "", "", fmt.Errorf("promotion workspace: manifest_path must point to a server-owned promotion artifact")
+	}
+	if !promotionArtifactPathAllowed(rt, rec.PatchsetPath) {
+		return "", "", fmt.Errorf("promotion workspace: patchset_path must point to a server-owned promotion artifact")
+	}
+	sourceRepo := strings.TrimSpace(rt.cfg.PromotionSourceRepo)
+	if sourceRepo == "" {
+		return "", "", fmt.Errorf("promotion workspace: RUNTIME_PROMOTION_SOURCE_REPO is not configured")
+	}
+	root := strings.TrimSpace(rt.cfg.PromotionWorkspaceRoot)
+	if root == "" {
+		return "", "", fmt.Errorf("promotion workspace: RUNTIME_PROMOTION_WORKSPACE_ROOT is not configured")
+	}
+	candidateDir, err := safePromotionChildPath(root, rec.CandidateID)
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.RemoveAll(candidateDir); err != nil {
+		return "", "", fmt.Errorf("promotion workspace: clear candidate workspace: %w", err)
+	}
+	if err := os.MkdirAll(candidateDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("promotion workspace: create candidate workspace: %w", err)
+	}
+	repoPath = filepath.Join(candidateDir, "repo")
+	if _, err := runPromotionGit(ctx, "", "clone", "--no-checkout", sourceRepo, repoPath); err != nil {
+		return "", "", fmt.Errorf("promotion workspace: clone canonical source: %w", err)
+	}
+	if _, err := runPromotionGit(ctx, repoPath, "config", "user.name", "Choir Promotion Verifier"); err != nil {
+		return "", "", err
+	}
+	if _, err := runPromotionGit(ctx, repoPath, "config", "user.email", "promotion-verifier@choir.local"); err != nil {
+		return "", "", err
+	}
+	destination := strings.TrimSpace(rec.DestinationBranch)
+	if destination == "" {
+		destination = "main"
+	}
+	if _, err := runPromotionGit(ctx, repoPath, "switch", "-C", destination, rec.BaseSHA); err != nil {
+		return "", "", fmt.Errorf("promotion workspace: checkout base %s: %w", rec.BaseSHA, err)
+	}
+	return repoPath, filepath.Join(candidateDir, "promotion-report.json"), nil
+}
+
+func productPromotionVerifierContracts(rec types.PromotionCandidateRecord) []promotion.VerifierContract {
+	target := "go-choir"
+	if strings.TrimSpace(rec.Summary) != "" {
+		target = rec.Summary
+	}
+	return []promotion.VerifierContract{{
+		ContractID:        "product-safe-patch-import",
+		Target:            target,
+		Purpose:           "Verify the worker export imports cleanly against canonical go-choir base without mutating canonical state.",
+		Invariants:        []string{"browser callers do not provide repo paths", "canonical branch remains unchanged during verification"},
+		RequiredChecks:    []string{"git diff --check HEAD~1..HEAD"},
+		CapabilityProfile: "server-owned-promotion-workspace",
+		EvidencePaths:     []string{rec.ManifestPath, rec.PatchsetPath},
+	}}
+}
+
+func promotionArtifactPathAllowed(rt *Runtime, path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	root := promotionArtifactRoot(rt)
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func safePromotionChildPath(root, child string) (string, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "", fmt.Errorf("promotion workspace: root is required")
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("promotion workspace: resolve root: %w", err)
+	}
+	child = sanitizeExportPart(child)
+	if child == "" {
+		child = "candidate"
+	}
+	path := filepath.Join(absRoot, child)
+	rel, err := filepath.Rel(absRoot, path)
+	if err != nil {
+		return "", fmt.Errorf("promotion workspace: resolve candidate path: %w", err)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("promotion workspace: candidate path escapes root")
+	}
+	return path, nil
+}
+
+func runPromotionGit(ctx context.Context, repo string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if strings.TrimSpace(repo) != "" {
+		cmd.Dir = repo
+	}
+	var out strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	if err != nil {
+		return out.String(), fmt.Errorf("git %s: %s: %w", strings.Join(args, " "), strings.TrimSpace(out.String()), err)
+	}
+	return out.String(), nil
 }
 
 // PromotePromotionCandidate applies an already verified candidate to the

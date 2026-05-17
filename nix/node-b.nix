@@ -408,6 +408,7 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-gateway.service" ];
     wants = [ "network-online.target" "go-choir-gateway.service" ];
+    path = with pkgs; [ bash coreutils git gnugrep gnused ];
     serviceConfig = commonServiceHardening // {
       # Obtain a gateway credential token before starting the sandbox.
       # The gateway's credential issuance endpoint is localhost-only
@@ -450,6 +451,8 @@ in
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"
+        "RUNTIME_PROMOTION_SOURCE_REPO=${sourceRepoRemote}"
+        "RUNTIME_PROMOTION_WORKSPACE_ROOT=/var/lib/go-choir/promotion-workspaces"
         # Route LLM calls through the host-side gateway instead of
         # resolving providers directly (VAL-GATEWAY-001).
         "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"

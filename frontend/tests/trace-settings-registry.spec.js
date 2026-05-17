@@ -206,6 +206,7 @@ test('Settings renders queued promotion candidates without browser-internal rout
   await expect(candidate).toContainText('Seeded promotion queue candidate');
   await expect(candidate).toContainText('vm-product-test');
   await expect(candidate.locator('[data-settings-promotion-status]')).toContainText('queued');
+  await expect(candidate.locator('[data-settings-promotion-verify]')).toBeVisible();
   expect(forbiddenRequests).toHaveLength(0);
 });
 

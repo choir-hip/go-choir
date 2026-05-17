@@ -496,6 +496,22 @@ func (h *APIHandler) HandlePromotionCandidateDetail(w http.ResponseWriter, r *ht
 	}
 	action := strings.TrimSpace(parts[1])
 	switch action {
+	case "verify":
+		var req struct{}
+		if r.Body != nil && r.ContentLength != 0 {
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion verify request"})
+				return
+			}
+		}
+		rec, err := h.rt.VerifyPromotionCandidateInWorkspace(r.Context(), ownerID, candidateID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
 	case "approve":
 		rec, err := h.rt.ReviewPromotionCandidate(r.Context(), ownerID, candidateID, "approve")
 		if err != nil {

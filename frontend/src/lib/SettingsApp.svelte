@@ -85,6 +85,10 @@
     return candidate?.status === 'verified' && !promotionApproved(candidate);
   }
 
+  function canVerifyPromotion(candidate) {
+    return candidate && ['queued', 'integrated', 'verification_failed'].includes(candidate.status);
+  }
+
   function canRejectPromotion(candidate) {
     return candidate && !['promoted', 'rejected'].includes(candidate.status);
   }
@@ -96,10 +100,11 @@
     try {
       const res = await fetchWithRenewal(`/api/promotions/${encodeURIComponent(candidate.candidate_id)}/${action}`, {
         method: 'POST',
+        body: action === 'verify' ? '{}' : undefined,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Promotion review failed (${res.status})`);
+        throw new Error(body?.error || `Promotion action failed (${res.status})`);
       }
       await refreshPromotions();
     } catch (err) {
@@ -107,7 +112,7 @@
         dispatch('authexpired');
         return;
       }
-      promotionActionError = err.message || 'Promotion review failed';
+      promotionActionError = err.message || 'Promotion action failed';
     } finally {
       promotionActingId = '';
     }
@@ -276,8 +281,18 @@
                 {#if promotionApproved(candidate)}
                   <p class="promotion-approved" data-settings-promotion-approved>Owner approved</p>
                 {/if}
-                {#if canApprovePromotion(candidate) || canRejectPromotion(candidate)}
+                {#if canVerifyPromotion(candidate) || canApprovePromotion(candidate) || canRejectPromotion(candidate)}
                   <div class="promotion-actions" data-settings-promotion-actions>
+                    {#if canVerifyPromotion(candidate)}
+                      <button
+                        class="promotion-action verify"
+                        data-settings-promotion-verify
+                        on:click={() => reviewPromotion(candidate, 'verify')}
+                        disabled={promotionActingId === `${candidate.candidate_id}:verify`}
+                      >
+                        {promotionActingId === `${candidate.candidate_id}:verify` ? 'Verifying…' : 'Verify'}
+                      </button>
+                    {/if}
                     {#if canApprovePromotion(candidate)}
                       <button
                         class="promotion-action approve"
@@ -666,6 +681,11 @@
     padding: 0.42rem 0.7rem;
     font-size: 0.76rem;
     font-weight: 820;
+  }
+
+  .promotion-action.verify {
+    border-color: rgba(96, 165, 250, 0.42);
+    background: rgba(30, 64, 175, 0.34);
   }
 
   .promotion-action.approve {
