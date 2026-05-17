@@ -1147,9 +1147,12 @@ func TestProviderStubDeltaEvent(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	done := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
+	if done.State != types.RunCompleted {
+		t.Fatalf("state: got %s, want completed", done.State)
+	}
 
-	evts, err := s.ListEvents(ctx, rec.RunID, 20)
+	evts, err := s.ListEvents(ctx, rec.RunID, 50)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
