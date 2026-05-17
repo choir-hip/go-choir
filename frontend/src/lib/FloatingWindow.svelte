@@ -50,6 +50,16 @@
   // ---- Constants ----
   const MIN_WIDTH = 200;
   const MIN_HEIGHT = 120;
+  const DEFAULT_VIEWPORT_WIDTH = 1280;
+  const DEFAULT_VIEWPORT_HEIGHT = 800;
+  const DEFAULT_BOTTOM_BAR_HEIGHT = 56;
+  const MOBILE_BREAKPOINT = 768;
+  const TABLET_BREAKPOINT = 1024;
+
+  let viewportWidth = DEFAULT_VIEWPORT_WIDTH;
+  let viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
+  let bottomBarHeight = DEFAULT_BOTTOM_BAR_HEIGHT;
+  let bottomBarObserver = null;
 
   // ---- Drag state ----
   let dragging = false;
@@ -66,6 +76,35 @@
   let resizeStartHeight = 0;
   let resizePointerId = null;
   let resizePointerTarget = null;
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), Math.max(min, max));
+  }
+
+  function parsePixelValue(value, fallback) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function readBottomBarHeight() {
+    if (typeof document === 'undefined') return DEFAULT_BOTTOM_BAR_HEIGHT;
+
+    const bottomBar = document.querySelector('[data-bottom-bar]');
+    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+
+    const fromTheme = window
+      .getComputedStyle(document.documentElement)
+      .getPropertyValue('--choir-bottom-bar-height');
+    return parsePixelValue(fromTheme, DEFAULT_BOTTOM_BAR_HEIGHT);
+  }
+
+  function refreshViewportBounds() {
+    if (typeof window === 'undefined') return;
+
+    viewportWidth = window.innerWidth || DEFAULT_VIEWPORT_WIDTH;
+    viewportHeight = window.innerHeight || DEFAULT_VIEWPORT_HEIGHT;
+    bottomBarHeight = readBottomBarHeight();
+  }
 
   function trySetPointerCapture(target, pointerId) {
     if (!target?.setPointerCapture || pointerId == null) return;
@@ -121,8 +160,8 @@
     if (mode === 'maximized') return;
 
     dragging = true;
-    dragOffsetX = event.clientX - x;
-    dragOffsetY = event.clientY - y;
+    dragOffsetX = event.clientX - renderedX;
+    dragOffsetY = event.clientY - renderedY;
     dragPointerId = event.pointerId;
     dragPointerTarget = event.currentTarget;
     trySetPointerCapture(dragPointerTarget, dragPointerId);
@@ -157,8 +196,8 @@
     resizing = true;
     resizeStartX = event.clientX;
     resizeStartY = event.clientY;
-    resizeStartWidth = width;
-    resizeStartHeight = height;
+    resizeStartWidth = renderedWidth;
+    resizeStartHeight = renderedHeight;
     resizePointerId = event.pointerId;
     resizePointerTarget = event.currentTarget;
     trySetPointerCapture(resizePointerTarget, resizePointerId);
@@ -178,7 +217,7 @@
     const newWidth = Math.max(MIN_WIDTH, resizeStartWidth + dx);
     const newHeight = Math.max(MIN_HEIGHT, resizeStartHeight + dy);
 
-    dispatch('resize', { windowId, x, y, width: newWidth, height: newHeight });
+    dispatch('resize', { windowId, x: renderedX, y: renderedY, width: newWidth, height: newHeight });
   }
 
   function handleResizeEnd(event) {
@@ -193,12 +232,20 @@
   // ---- Global pointer event wiring ----
 
   onMount(() => {
+    refreshViewportBounds();
     window.addEventListener('pointermove', handleDragMove);
     window.addEventListener('pointerup', handleDragEnd);
     window.addEventListener('pointermove', handleResizeMove);
     window.addEventListener('pointerup', handleResizeEnd);
     window.addEventListener('pointercancel', handleDragEnd);
     window.addEventListener('pointercancel', handleResizeEnd);
+    window.addEventListener('resize', refreshViewportBounds);
+
+    const bottomBar = document.querySelector('[data-bottom-bar]');
+    if (typeof ResizeObserver !== 'undefined' && bottomBar) {
+      bottomBarObserver = new ResizeObserver(refreshViewportBounds);
+      bottomBarObserver.observe(bottomBar);
+    }
   });
 
   onDestroy(() => {
@@ -208,15 +255,37 @@
     window.removeEventListener('pointerup', handleResizeEnd);
     window.removeEventListener('pointercancel', handleDragEnd);
     window.removeEventListener('pointercancel', handleResizeEnd);
+    window.removeEventListener('resize', refreshViewportBounds);
+    bottomBarObserver?.disconnect();
   });
 
   // ---- Computed styles ----
+
+  $: viewportMargin = viewportWidth <= MOBILE_BREAKPOINT
+    ? 8
+    : viewportWidth <= TABLET_BREAKPOINT
+    ? 16
+    : 12;
+  $: maxNormalWidth = Math.max(MIN_WIDTH, viewportWidth - viewportMargin * 2);
+  $: maxNormalHeight = Math.max(
+    MIN_HEIGHT,
+    viewportHeight - bottomBarHeight - viewportMargin * 2
+  );
+  $: renderedWidth = Math.min(Math.max(width, MIN_WIDTH), maxNormalWidth);
+  $: renderedHeight = Math.min(Math.max(height, MIN_HEIGHT), maxNormalHeight);
+  $: maxRenderedX = Math.max(viewportMargin, viewportWidth - renderedWidth - viewportMargin);
+  $: maxRenderedY = Math.max(
+    viewportMargin,
+    viewportHeight - bottomBarHeight - renderedHeight - viewportMargin
+  );
+  $: renderedX = clamp(x, viewportMargin, maxRenderedX);
+  $: renderedY = clamp(y, viewportMargin, maxRenderedY);
 
   $: windowStyle = mode === 'maximized'
     ? 'left:0; top:0; width:100%; height:calc(100%);'
     : mode === 'minimized'
     ? 'display:none;'
-    : `left:${x}px; top:${y}px; width:${width}px; height:${height}px;`;
+    : `left:${renderedX}px; top:${renderedY}px; width:${renderedWidth}px; height:${renderedHeight}px;`;
 
   $: maxRestoreIcon = mode === 'maximized' ? '❐' : '☐';
   $: maxRestoreTitle = mode === 'maximized' ? 'Restore' : 'Maximize';

@@ -329,6 +329,22 @@ test.describe('Cross-breakpoint checks', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
   });
 
+  test('open window stays inside mobile viewport after desktop resize', async ({ page, authenticator }) => {
+    const email = uniqueEmail();
+    await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
+
+    await openAppViaIcon(page, 'trace');
+    const windowEl = page.locator('[data-window]').first();
+    await expect(windowEl).toBeVisible({ timeout: 5000 });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+
+    const box = await windowEl.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(7);
+    expect(box.x + box.width).toBeLessThanOrEqual(383);
+  });
+
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)
   test('breakpoint transition from desktop to tablet is clean', async ({ page, authenticator }) => {
     const email = uniqueEmail();
