@@ -3693,6 +3693,40 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 	}
 }
 
+func TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead(t *testing.T) {
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Choir Test")
+	runGit(t, repo, "config", "user.email", "choir-test@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("git head base\n"), 0o644); err != nil {
+		t.Fatalf("write readme: %v", err)
+	}
+	runGit(t, repo, "add", "README.md")
+	runGit(t, repo, "commit", "-m", "seed")
+	runGit(t, repo, "remote", "add", "origin", "git@github.com:yusefmosiah/go-choir.git")
+
+	envBase := "0d1527088c5774e74f5e4a796082652c5062eaa0"
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", envBase)
+
+	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), repo, "http://172.27.0.2:8085", AgentProfileVSuper)
+	if err != nil {
+		t.Fatalf("prepare bootstrap: %v", err)
+	}
+	if !bootstrap.Enabled {
+		t.Fatalf("bootstrap disabled: %+v", bootstrap)
+	}
+	if bootstrap.RemoteURL != "https://github.com/yusefmosiah/go-choir.git" {
+		t.Fatalf("expected git remote to be retained, got %+v", bootstrap)
+	}
+	if bootstrap.BaseSHA != envBase {
+		t.Fatalf("expected configured deployed base %s over git HEAD, got %+v", envBase, bootstrap)
+	}
+	if !strings.Contains(bootstrap.WorkerPrompt, "git checkout "+envBase) ||
+		!strings.Contains(bootstrap.WorkerPrompt, "Use repo_path \"go-choir-candidate\" and base_sha "+envBase) {
+		t.Fatalf("worker prompt did not use configured base: %q", bootstrap.WorkerPrompt)
+	}
+}
+
 func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 	contract := workerVSuperDelegateContract(15 * time.Minute)
 	for _, want := range []string{

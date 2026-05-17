@@ -735,10 +735,10 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
-	remoteURL, baseSHA := remoteWorkerRepoBootstrapSourceFromGit(ctx, cwd)
-	if remoteURL == "" || baseSHA == "" {
-		remoteURL, baseSHA = remoteWorkerRepoBootstrapSourceFromEnv()
-	}
+	gitRemoteURL, gitBaseSHA := remoteWorkerRepoBootstrapSourceFromGit(ctx, cwd)
+	envRemoteURL, envBaseSHA := remoteWorkerRepoBootstrapSourceFromEnv()
+	remoteURL := firstNonEmptyString(gitRemoteURL, envRemoteURL)
+	baseSHA := firstNonEmptyString(envBaseSHA, gitBaseSHA)
 	if remoteURL == "" {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
@@ -753,6 +753,15 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 		BaseSHA:      baseSHA,
 		WorkerPrompt: prompt,
 	}, nil
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func remoteWorkerRepoBootstrapSourceFromGit(ctx context.Context, cwd string) (string, string) {

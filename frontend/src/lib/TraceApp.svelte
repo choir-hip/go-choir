@@ -797,7 +797,7 @@
                     class:selected={selectedAgentId === agent.agent_id}
                     class:dimmed={selectedAgentId && selectedAgentId !== agent.agent_id}
                     class={`agent-node ${stateTone(agent.state)}`}
-                    style={`left: calc(${agent.x}% - 84px); top: calc(${agent.y}% - 34px);`}
+                    style={`left: clamp(0px, calc(${agent.x}% - 84px), calc(100% - 168px)); top: clamp(0px, calc(${agent.y}% - 34px), calc(100% - 68px));`}
                     data-trace-agent-node
                     data-trace-agent-id={agent.agent_id}
                     on:click={() => toggleAgent(agent.agent_id)}
@@ -1077,6 +1077,16 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+  }
+
+  .detail-card-top {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .detail-card-top > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .sidebar-header h2,
@@ -1668,6 +1678,8 @@
     overflow: auto;
     display: grid;
     gap: 0.9rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .detail-section {
@@ -1686,6 +1698,7 @@
     padding: 0.75rem;
     display: grid;
     gap: 0.45rem;
+    min-width: 0;
   }
 
   .payload-block {
