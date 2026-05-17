@@ -1362,7 +1362,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
 	_, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
 		"objective":"start duplicate verifier",
-		"role":"co-super"
+		"role":"co-super",
+		"slot":"verifier"
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "vsuper active child-run limit reached") {
 		t.Fatalf("spawn error = %v, want active child budget refusal", err)
@@ -1377,7 +1378,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 	}
 	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
 		"objective":"start replacement verifier",
-		"role":"co-super"
+		"role":"co-super",
+		"slot":"verifier"
 	}`))
 	if err != nil {
 		t.Fatalf("spawn replacement co-super: %v", err)
@@ -1390,6 +1392,86 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 	}
 	if resp.Profile != AgentProfileCoSuper {
 		t.Fatalf("replacement profile = %q, want %q", resp.Profile, AgentProfileCoSuper)
+	}
+}
+
+func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-slot-parent",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate worker and verifier co-super agents.",
+		ChannelID:    "worker-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create vsuper parent: %v", err)
+	}
+
+	existing := types.RunRecord{
+		RunID:        "vsuper-slot-child-worker",
+		AgentID:      "agent-worker-child",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Implement candidate change.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.CreateRun(ctx, existing); err != nil {
+		t.Fatalf("create active implementation child: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"start another implementation co-super for the same candidate checkout",
+		"role":"co-super",
+		"slot":"implementation"
+	}`))
+	if err != nil {
+		t.Fatalf("reuse implementation co-super: %v", err)
+	}
+	var resp struct {
+		LoopID              string `json:"loop_id"`
+		Slot                string `json:"slot"`
+		ReusedExistingChild bool   `json:"reused_existing_child"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode reused child: %v", err)
+	}
+	if resp.LoopID != existing.RunID || resp.Slot != "implementation" || !resp.ReusedExistingChild {
+		t.Fatalf("reused child response = %+v, want existing loop %q with implementation slot", resp, existing.RunID)
+	}
+	active, err := s.CountActiveChildRuns(ctx, parent.RunID)
+	if err != nil {
+		t.Fatalf("count active children: %v", err)
+	}
+	if active != 1 {
+		t.Fatalf("active children = %d, want no duplicate child launch", active)
 	}
 }
 

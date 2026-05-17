@@ -467,16 +467,6 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		return nil, fmt.Errorf("lookup parent run: %w", err)
 	}
 
-	if rt.childSpawnBudgetApplies(&parentRec) {
-		rt.childSpawnMu.Lock()
-		defer rt.childSpawnMu.Unlock()
-		if err := rt.enforceChildSpawnBudget(ctx, &parentRec); err != nil {
-			return nil, err
-		}
-	}
-
-	now := time.Now().UTC()
-
 	// Build metadata from constraints and parent reference.
 	metadata := map[string]any{
 		"spawned_by": ownerID,
@@ -486,6 +476,31 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		metadata[k] = v
 	}
 	inheritWorkerRepoMetadata(metadata, &parentRec)
+	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
+		metadata[runMetadataCoSuperSlot] = slot
+	}
+
+	if rt.childSpawnBudgetApplies(&parentRec) {
+		rt.childSpawnMu.Lock()
+		defer rt.childSpawnMu.Unlock()
+		if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
+			canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper {
+			existing, found, err := rt.activeChildRunForCoSuperSlot(ctx, parentRec.RunID, slot)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				existing.Metadata = cloneMetadata(existing.Metadata)
+				existing.Metadata[runMetadataSpawnReused] = true
+				return &existing, nil
+			}
+		}
+		if err := rt.enforceChildSpawnBudget(ctx, &parentRec); err != nil {
+			return nil, err
+		}
+	}
+
+	now := time.Now().UTC()
 	runID := uuid.New().String()
 	if err := rt.channelMgr.ensureParentChildChannels(parentID, runID); err != nil {
 		return nil, err
@@ -578,6 +593,29 @@ func (rt *Runtime) enforceChildSpawnBudget(ctx context.Context, parentRec *types
 		return fmt.Errorf("vsuper active child-run limit reached (%d/%d); coordinate existing worker/verifier agents over channels, cancel or wait for a child run, or submit a precise blocker instead of spawning more", active, maxVSuperActiveChildRuns)
 	}
 	return nil
+}
+
+func (rt *Runtime) activeChildRunForCoSuperSlot(ctx context.Context, parentRunID, slot string) (types.RunRecord, bool, error) {
+	if rt == nil || rt.store == nil {
+		return types.RunRecord{}, false, nil
+	}
+	children, err := rt.store.ListActiveChildRuns(ctx, parentRunID)
+	if err != nil {
+		return types.RunRecord{}, false, fmt.Errorf("list active child runs for co-super slot: %w", err)
+	}
+	slot = normalizeVSuperCoSuperSlot(slot)
+	if slot == "" {
+		return types.RunRecord{}, false, nil
+	}
+	for _, child := range children {
+		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
+			continue
+		}
+		if normalizeVSuperCoSuperSlot(metadataStringValue(child.Metadata, runMetadataCoSuperSlot)) == slot {
+			return child, true, nil
+		}
+	}
+	return types.RunRecord{}, false, nil
 }
 
 func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {

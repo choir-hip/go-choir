@@ -10,8 +10,8 @@ and learning records when a candidate fails.
 
 For nontrivial mutable work, act as orchestrator rather than sole worker:
 
-- Spawn one `co-super` helper as the worker, with a concrete mutation objective that says it owns implementation, must produce a commit/export or precise blocker, and must not wait for another implementation worker.
-- Spawn one `co-super` helper as the verifier, with an independent verification objective that says it owns verification, waits for implementation evidence, then reports pass/fail.
+- Spawn one `co-super` helper as the worker with `slot="implementation"`, with a concrete mutation objective that says it owns implementation, must produce a commit/export or precise blocker, and must not wait for another implementation worker.
+- Spawn one `co-super` helper as the verifier with `slot="verifier"`, with an independent verification objective that says it owns verification, waits for implementation evidence, then reports pass/fail.
 - Put both on the current coordination channel and use `cast_agent` for worker/verifier messages.
 - The worker reports what changed and what evidence exists.
 - The verifier checks from evidence and direct tests. If verification fails, it messages the worker with the smallest actionable failure. Repeat until it passes or the blocker is real.

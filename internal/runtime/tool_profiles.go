@@ -41,6 +41,8 @@ const (
 	runMetadataWorkerRepoRemote    = "worker_repo_remote_url"
 	runMetadataWorkerRepoBaseSHA   = "worker_repo_base_sha"
 	runMetadataWorkerRepoBootstrap = "worker_repo_bootstrap"
+	runMetadataCoSuperSlot         = "co_super_slot"
+	runMetadataSpawnReused         = "spawn_reused_existing_child"
 )
 
 type toolContextKey string
@@ -363,7 +365,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == AgentProfileVSuper {
 		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent and channel messages to coordinate existing children; if the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
-		b.WriteString("\nWhen you spawn child co-supers, put the implementation/verifier role and terminal obligation directly in each spawn_agent objective. A later cast_agent correction may arrive after the child already acted, so do not rely on role correction as the only source of truth.")
+		b.WriteString("\nWhen you spawn child co-supers, set spawn_agent slot=\"implementation\" for the implementation worker and slot=\"verifier\" for the verifier. Put the same implementation/verifier role and terminal obligation directly in each spawn_agent objective. A later cast_agent correction may arrive after the child already acted, so do not rely on role correction as the only source of truth.")
 		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/blocker or you explicitly cancel/take over; otherwise you can erase the worker's evidence.")
 		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
 			b.WriteString(repoContext)

@@ -751,6 +751,17 @@ func (s *Store) CountActiveChildRuns(ctx context.Context, parentRunID string) (i
 	return count, nil
 }
 
+// ListActiveChildRuns returns non-terminal direct child runs for the given
+// parent. Runtime tool guards use it to make constrained delegation idempotent
+// before launching another child goroutine.
+func (s *Store) ListActiveChildRuns(ctx context.Context, parentRunID string) ([]types.RunRecord, error) {
+	return s.listRunsWhere(ctx,
+		"parent_loop_id = ? AND state IN ('pending', 'running', 'blocked')",
+		[]any{parentRunID},
+		100,
+	)
+}
+
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	row := s.db.QueryRowContext(ctx,

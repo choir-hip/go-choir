@@ -31,6 +31,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 		Role           string `json:"role"`
 		Profile        string `json:"profile,omitempty"`
 		ChannelID      string `json:"channel_id,omitempty"`
+		Slot           string `json:"slot,omitempty"`
 		Model          string `json:"model,omitempty"`
 		InitialContent string `json:"initial_content,omitempty"`
 	}
@@ -48,6 +49,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			"role":       map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
 			"profile":    map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id": map[string]any{"type": "string"},
+			"slot":       map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer and verifier for the independent checker. Reusing a live slot returns the existing child instead of launching a duplicate."},
 			"model":      map[string]any{"type": "string"},
 			"initial_content": map[string]any{
 				"type":        "string",
@@ -76,9 +78,19 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if !canDelegateTo(callerProfile, profile) {
 				return "", fmt.Errorf("%s cannot delegate to %s", callerProfile, profile)
 			}
+			slot := normalizeVSuperCoSuperSlot(in.Slot)
+			if strings.TrimSpace(in.Slot) != "" && slot == "" {
+				return "", fmt.Errorf("spawn_agent slot must be implementation or verifier")
+			}
+			if callerProfile == AgentProfileVSuper && profile == AgentProfileCoSuper && slot == "" {
+				return "", fmt.Errorf("vsuper spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\" to avoid duplicate child runs")
+			}
 			constraints := map[string]any{
 				runMetadataAgentRole:    role,
 				runMetadataAgentProfile: profile,
+			}
+			if slot != "" {
+				constraints[runMetadataCoSuperSlot] = slot
 			}
 			if channelID := strings.TrimSpace(in.ChannelID); channelID != "" {
 				constraints[runMetadataChannelID] = channelID
@@ -126,15 +138,33 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"agent_id":   child.AgentID,
 				"loop_id":    child.RunID,
 				"channel_id": child.ChannelID,
 				"role":       role,
 				"profile":    profile,
 				"state":      child.State,
-			})
+			}
+			if slot := metadataStringValue(child.Metadata, runMetadataCoSuperSlot); slot != "" {
+				result["slot"] = slot
+			}
+			if metadataBoolValue(child.Metadata, runMetadataSpawnReused) {
+				result["reused_existing_child"] = true
+			}
+			return toolResultJSON(result)
 		},
+	}
+}
+
+func normalizeVSuperCoSuperSlot(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "implementation", "implementer", "worker", "writer", "builder":
+		return "implementation"
+	case "verifier", "verification", "reviewer", "review", "checker", "tester":
+		return "verifier"
+	default:
+		return ""
 	}
 }
 
