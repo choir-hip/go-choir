@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -663,6 +665,78 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate export_patchset") {
 		t.Fatalf("second export = %#v, want duplicate skip", results[1])
 	}
+}
+
+func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	executions := 0
+	if err := registry.Register(Tool{
+		Name: "bash",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			mu.Lock()
+			executions++
+			mu.Unlock()
+			return "bash ok", nil
+		},
+	}); err != nil {
+		t.Fatalf("register bash: %v", err)
+	}
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "cosuper-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileCoSuper,
+	})
+	calls := []types.ToolCall{
+		{ID: "bash-1", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
+		{ID: "bash-2", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
+	}
+
+	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	mu.Lock()
+	gotExecutions := executions
+	mu.Unlock()
+	if gotExecutions != 1 {
+		t.Fatalf("bash executions = %d, want one", gotExecutions)
+	}
+	if results[0].IsError {
+		t.Fatalf("first bash = %#v, want success", results[0])
+	}
+	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate bash command") {
+		t.Fatalf("second bash = %#v, want duplicate skip", results[1])
+	}
+}
+
+func TestToolCommandEnvUsesPersistentScratchRoot(t *testing.T) {
+	filesRoot := t.TempDir()
+	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+
+	env, err := toolCommandEnv("/tmp/ignored")
+	if err != nil {
+		t.Fatalf("toolCommandEnv: %v", err)
+	}
+
+	wantRoot := filepath.Join(filesRoot, ".choir-tool-cache")
+	for _, key := range []string{"TMPDIR", "GOTMPDIR", "GOCACHE", "GOMODCACHE"} {
+		value := envValue(env, key)
+		if !strings.HasPrefix(value, wantRoot+string(os.PathSeparator)) {
+			t.Fatalf("%s = %q, want under %q", key, value, wantRoot)
+		}
+		if _, err := os.Stat(value); err != nil {
+			t.Fatalf("%s dir %q not prepared: %v", key, value, err)
+		}
+	}
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix)
+		}
+	}
+	return ""
 }
 
 func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {

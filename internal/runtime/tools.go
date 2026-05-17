@@ -525,9 +525,23 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenVSuperSpawn := map[string]int{}
 	seenCast := map[string]int{}
 	seenExport := map[string]int{}
+	seenBash := map[string]int{}
 
 	for i, call := range calls {
 		switch call.Name {
+		case "bash":
+			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenBash[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate bash command already planned in this turn at call %s; wait for the first result instead of running it twice", calls[previous].ID))
+				continue
+			}
+			seenBash[key] = i
 		case "spawn_agent":
 			if profile != AgentProfileVSuper {
 				continue

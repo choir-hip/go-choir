@@ -368,10 +368,15 @@ func newBashTool(cwd string) Tool {
 
 			cmd := exec.CommandContext(runCtx, "/bin/sh", "-lc", command)
 			cmd.Dir = effectiveToolCWD(ctx, cwd)
+			env, err := toolCommandEnv(cmd.Dir)
+			if err != nil {
+				return "", err
+			}
+			cmd.Env = env
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
-			err := cmd.Run()
+			err = cmd.Run()
 			exitCode := 0
 			if cmd.ProcessState != nil {
 				exitCode = cmd.ProcessState.ExitCode()
@@ -464,6 +469,52 @@ func effectiveToolCWD(ctx context.Context, defaultCWD string) string {
 		}
 	}
 	return filepath.Clean(defaultCWD)
+}
+
+func toolCommandEnv(cwd string) ([]string, error) {
+	scratchRoot := toolScratchRoot(cwd)
+	dirs := map[string]string{
+		"TMPDIR":     filepath.Join(scratchRoot, "tmp"),
+		"GOTMPDIR":   filepath.Join(scratchRoot, "go-tmp"),
+		"GOCACHE":    filepath.Join(scratchRoot, "go-build-cache"),
+		"GOMODCACHE": filepath.Join(scratchRoot, "go-mod-cache"),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("prepare tool scratch dir %q: %w", dir, err)
+		}
+	}
+	env := os.Environ()
+	for key, value := range dirs {
+		env = setEnvValue(env, key, value)
+	}
+	return env, nil
+}
+
+func toolScratchRoot(cwd string) string {
+	if root := strings.TrimSpace(os.Getenv("SANDBOX_FILES_ROOT")); root != "" {
+		return filepath.Join(filepath.Clean(root), ".choir-tool-cache")
+	}
+	const persistentFilesRoot = "/mnt/persistent/files"
+	clean := filepath.Clean(cwd)
+	if clean == persistentFilesRoot || strings.HasPrefix(clean, persistentFilesRoot+string(os.PathSeparator)) {
+		return filepath.Join(persistentFilesRoot, ".choir-tool-cache")
+	}
+	if cacheDir, err := os.UserCacheDir(); err == nil && strings.TrimSpace(cacheDir) != "" {
+		return filepath.Join(cacheDir, "go-choir", "tool-cache")
+	}
+	return filepath.Join(os.TempDir(), "go-choir-tool-cache")
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
 
 func guardForegroundSuperMutation(ctx context.Context, tool string) error {
