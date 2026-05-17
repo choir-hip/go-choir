@@ -452,12 +452,12 @@ func TestNormalizeWorkerMachineClassResourceEnvelope(t *testing.T) {
 		wantCPU   int
 		wantMem   int
 	}{
-		{name: "default", raw: "", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
-		{name: "standard alias", raw: "standard", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
-		{name: "small", raw: "worker-small", wantClass: "worker-small", wantCPU: 1, wantMem: 512},
-		{name: "medium", raw: "worker-medium", wantClass: "worker-medium", wantCPU: 2, wantMem: 2048},
-		{name: "medium alias", raw: " medium ", wantClass: "worker-medium", wantCPU: 2, wantMem: 2048},
-		{name: "large", raw: "worker-large", wantClass: "worker-large", wantCPU: 4, wantMem: 4096},
+		{name: "default", raw: "", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
+		{name: "standard alias", raw: "standard", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
+		{name: "small", raw: "worker-small", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
+		{name: "medium", raw: "worker-medium", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
+		{name: "medium alias", raw: " medium ", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
+		{name: "large", raw: "worker-large", wantClass: "worker-large", wantCPU: 4, wantMem: 8192},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -500,8 +500,8 @@ func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testi
 		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
 	}
 	got := mock.boots[0]
-	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 2048 {
-		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 2048 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
+	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 4096 {
+		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 4096 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
 	}
 }
 

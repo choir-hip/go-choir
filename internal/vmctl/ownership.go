@@ -699,11 +699,11 @@ func normalizeObjectiveText(raw string) string {
 func normalizeWorkerMachineClass(raw string) (string, int, int, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "default", "standard", "worker", "worker-standard", "worker-default", "worker-small", "small":
-		return "worker-small", 1, 512, nil
+		return "worker-small", 1, 1024, nil
 	case "worker-medium", "medium":
-		return "worker-medium", 2, 2048, nil
+		return "worker-medium", 2, 4096, nil
 	case "worker-large", "large":
-		return "worker-large", 4, 4096, nil
+		return "worker-large", 4, 8192, nil
 	default:
 		return "", 0, 0, fmt.Errorf("unsupported machine_class %q", strings.TrimSpace(raw))
 	}
