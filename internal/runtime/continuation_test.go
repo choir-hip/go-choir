@@ -2,10 +2,12 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -174,6 +176,99 @@ func TestRunControlSynthesizesContinuationFromQueuedPromotionCandidate(t *testin
 	}
 	if len(continuations) != 1 {
 		t.Fatalf("continuations = %d, want one synthesized continuation", len(continuations))
+	}
+}
+
+func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	source := types.RunRecord{
+		RunID:        "source-no-provider-memory",
+		AgentID:      "agent-no-provider-memory",
+		ChannelID:    "channel-no-provider-memory",
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunCompleted,
+		Prompt:       "finish candidate-producing control-plane work",
+		Result:       "queued a reviewable candidate without a provider transcript",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataTrajectoryID: "trace-no-provider-memory",
+		},
+	}
+	if err := s.CreateRun(ctx, source); err != nil {
+		t.Fatalf("create source run: %v", err)
+	}
+	rt.emitEvent(ctx, &source, types.EventRunSubmitted, events.CauseTaskLifecycle, json.RawMessage(`{"prompt_length":46}`))
+	rt.emitEvent(ctx, &source, types.EventRunCompleted, events.CauseTaskLifecycle, json.RawMessage(`{"result_length":57}`))
+
+	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
+		CandidateID:       "candidate-no-provider-memory",
+		OwnerID:           "user-alice",
+		Status:            types.PromotionCandidateQueued,
+		SourceRunID:       source.RunID,
+		TraceID:           "trace-no-provider-memory",
+		VMID:              "vm-no-provider-memory",
+		BaseSHA:           "base-no-provider-memory",
+		WorkerHeadSHA:     "worker-no-provider-memory",
+		ManifestPath:      "/tmp/no-provider-memory-manifest.json",
+		PatchsetPath:      "/tmp/no-provider-memory.patch",
+		IntegrationBranch: "agent/no-provider-memory/candidate",
+		DestinationBranch: "main",
+		Summary:           "Control-plane candidate selected for continuation",
+	}); err != nil {
+		t.Fatalf("queue promotion candidate: %v", err)
+	}
+
+	selected, err := rt.SelectSynthesizedRunContinuation(ctx, source.RunID, "user-alice")
+	if err != nil {
+		t.Fatalf("select synthesized continuation: %v", err)
+	}
+	if selected.Details["compaction_status"] != "completed" {
+		t.Fatalf("synthesized continuation did not record event-ledger compaction: %+v", selected.Details)
+	}
+
+	entries, err := s.ListRunMemoryEntries(ctx, "user-alice", source.RunID)
+	if err != nil {
+		t.Fatalf("list run memory entries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("run memory entries = %d, want event-ledger checkpoint only: %+v", len(entries), entries)
+	}
+	checkpoint := entries[0]
+	if checkpoint.Kind != types.RunMemoryEntryCompaction || checkpoint.Reason != "continuation_selection" {
+		t.Fatalf("checkpoint = %+v, want continuation compaction entry", checkpoint)
+	}
+	if checkpoint.Details["source"] != "run_event_ledger" {
+		t.Fatalf("checkpoint source = %v, want run_event_ledger: %+v", checkpoint.Details["source"], checkpoint.Details)
+	}
+	if checkpoint.TokensBefore <= 0 || !strings.Contains(checkpoint.Summary, "durable run record and event ledger") {
+		t.Fatalf("checkpoint summary/tokens did not preserve event ledger: tokens=%d summary=%q", checkpoint.TokensBefore, checkpoint.Summary)
+	}
+
+	eventsForRun, err := s.ListEvents(ctx, source.RunID, 100)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	var completedPayload map[string]any
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventRunCompactionCompleted {
+			continue
+		}
+		if err := json.Unmarshal(ev.Payload, &completedPayload); err != nil {
+			t.Fatalf("decode compaction payload: %v", err)
+		}
+		break
+	}
+	if completedPayload["source"] != "run_event_ledger" || completedPayload["entry_id"] != checkpoint.EntryID {
+		t.Fatalf("compaction event payload = %+v, want event-ledger checkpoint ref %s", completedPayload, checkpoint.EntryID)
 	}
 }
 

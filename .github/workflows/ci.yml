@@ -137,11 +137,67 @@ jobs:
       - name: Build frontend
         run: cd frontend && pnpm build
 
+  deploy-impact:
+    name: Detect Staging Deploy Impact
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      deploy_needed: ${{ steps.detect.outputs.deploy_needed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect deployed artifact changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          after="${{ github.sha }}"
+
+          if [[ -n "$before" && ! "$before" =~ ^0+$ ]]; then
+            git fetch --no-tags --depth=1 origin "$before" || true
+          fi
+
+          if [[ -z "$before" || "$before" =~ ^0+$ ]] || ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$after")
+          else
+            mapfile -t changed < <(git diff --name-only "$before" "$after")
+          fi
+
+          deploy_needed=false
+          for path in "${changed[@]}"; do
+            case "$path" in
+              docs/*|.github/*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*)
+                continue
+                ;;
+            esac
+            if [[ "$path" != */* && "$path" == *.md ]]; then
+              continue
+            fi
+            deploy_needed=true
+            break
+          done
+
+          {
+            echo "deploy_needed=${deploy_needed}"
+            echo "changed_paths<<EOF"
+            printf '%s\n' "${changed[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [[ "$deploy_needed" == "true" ]]; then
+            echo "Staging deploy required: at least one deployed artifact path changed."
+          else
+            echo "Skipping staging deploy: only docs, workflow, or Playwright test artifacts changed."
+          fi
+
   deploy-staging:
     name: Deploy to Staging (Node B)
     runs-on: ubuntu-latest
-    needs: [check, build-frontend]
-    if: github.ref == 'refs/heads/main'
+    needs: [check, build-frontend, deploy-impact]
+    if: github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true'
     timeout-minutes: 60
     steps:
       - name: Setup SSH
@@ -212,8 +268,14 @@ jobs:
             note_phase "nix build"
 
             echo "==> Activating NixOS config"
-            /run/current-system/sw/bin/nixos-rebuild switch --flake .#go-choir-b
-            echo "    Switch complete"
+            current_system=$(readlink -f /run/current-system)
+            next_system=$(readlink -f /tmp/go-choir-nixos-result)
+            if [ "$current_system" = "$next_system" ]; then
+              echo "    Host closure unchanged; skipping NixOS switch"
+            else
+              /run/current-system/sw/bin/nixos-rebuild switch --flake .#go-choir-b
+              echo "    Switch complete"
+            fi
             note_phase "nixos switch"
 
             echo "==> Waiting for services to start"

@@ -130,6 +130,9 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		return false, err
 	}
 	if len(entries) == 0 {
+		if force && canCheckpointRunEventLedger(reason) {
+			return m.compactRunEventLedger(ctx, entries, reason)
+		}
 		return false, nil
 	}
 	if !force {
@@ -148,6 +151,9 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 	}
 	plan, ok := planRunMemoryCompaction(entries, keepRecentTokens, reason)
 	if !ok {
+		if force && canCheckpointRunEventLedger(reason) {
+			return m.compactRunEventLedger(ctx, entries, reason)
+		}
 		return false, nil
 	}
 
@@ -185,6 +191,75 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		"first_kept_entry_id": plan.FirstKeptEntryID,
 		"compacted_messages":  plan.CompactedMessages,
 		"kept_messages":       plan.KeptMessages,
+	})
+	m.emit(types.EventRunCompactionCompleted, "run_memory", donePayload)
+	return true, nil
+}
+
+func canCheckpointRunEventLedger(reason string) bool {
+	return strings.TrimSpace(reason) == "continuation_selection"
+}
+
+func (m *runMemoryManager) compactRunEventLedger(ctx context.Context, entries []types.RunMemoryEntry, reason string) (bool, error) {
+	eventsForRun, err := m.store.ListEvents(ctx, m.rec.RunID, 500)
+	if err != nil {
+		return false, err
+	}
+	sourceText, summarizedEvents, omittedDeltaEvents := serializeRunEventLedgerForCheckpoint(m.rec, eventsForRun)
+	if strings.TrimSpace(sourceText) == "" {
+		return false, nil
+	}
+	tokensBefore := estimateTextTokens(sourceText)
+	summary := summarizeRunEventLedgerCheckpoint(reason, sourceText)
+	tokensAfter := estimateRawMessageTokens(compactionSummaryMessage(summary, tokensBefore))
+
+	startPayload, _ := json.Marshal(map[string]any{
+		"reason":               reason,
+		"source":               "run_event_ledger",
+		"tokens_before":        tokensBefore,
+		"message_count":        len(eventsForRun),
+		"event_count":          len(eventsForRun),
+		"summarized_events":    summarizedEvents,
+		"omitted_delta_events": omittedDeltaEvents,
+	})
+	m.emit(types.EventRunCompactionStarted, "run_memory", startPayload)
+
+	entry, err := m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:        m.rec.RunID,
+		OwnerID:      m.rec.OwnerID,
+		AgentID:      m.rec.AgentID,
+		Kind:         types.RunMemoryEntryCompaction,
+		Summary:      summary,
+		TokensBefore: tokensBefore,
+		Reason:       reason,
+		Details: map[string]any{
+			"source":               "run_event_ledger",
+			"source_state":         string(m.rec.State),
+			"compacted_messages":   0,
+			"kept_messages":        0,
+			"tokens_after":         tokensAfter,
+			"event_count":          len(eventsForRun),
+			"summarized_events":    summarizedEvents,
+			"omitted_delta_events": omittedDeltaEvents,
+			"prior_memory_entries": len(entries),
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	donePayload, _ := json.Marshal(map[string]any{
+		"entry_id":             entry.EntryID,
+		"reason":               reason,
+		"source":               "run_event_ledger",
+		"source_state":         string(m.rec.State),
+		"tokens_before":        tokensBefore,
+		"tokens_after":         tokensAfter,
+		"compacted_messages":   0,
+		"kept_messages":        0,
+		"event_count":          len(eventsForRun),
+		"summarized_events":    summarizedEvents,
+		"omitted_delta_events": omittedDeltaEvents,
 	})
 	m.emit(types.EventRunCompactionCompleted, "run_memory", donePayload)
 	return true, nil
@@ -384,6 +459,90 @@ func summarizeRunMemoryMessages(previousSummary string, entries []types.RunMemor
 	return b.String()
 }
 
+func summarizeRunEventLedgerCheckpoint(reason, sourceText string) string {
+	var b strings.Builder
+	b.WriteString("Run memory checkpoint\n")
+	b.WriteString("Reason: ")
+	b.WriteString(reason)
+	b.WriteString("\n\n")
+	b.WriteString("Operational invariant: continue the same run from this checkpoint, preserving user intent, evidence-bearing events, open obligations, and safety constraints.\n\n")
+	b.WriteString("Source: durable run record and event ledger. The provider-message log had no compactable messages for this control-plane run, so this checkpoint preserves the durable evidence the continuation will actually depend on.\n\n")
+	b.WriteString("Run event ledger:\n")
+	b.WriteString(sourceText)
+	return b.String()
+}
+
+func serializeRunEventLedgerForCheckpoint(rec *types.RunRecord, eventsForRun []types.EventRecord) (string, int, int) {
+	if rec == nil {
+		return "", 0, 0
+	}
+	var b strings.Builder
+	b.WriteString("Run record:\n")
+	fmt.Fprintf(&b, "- loop_id=%s state=%s agent_id=%s agent_profile=%s agent_role=%s channel_id=%s trajectory_id=%s\n",
+		rec.RunID,
+		rec.State,
+		rec.AgentID,
+		rec.AgentProfile,
+		rec.AgentRole,
+		rec.ChannelID,
+		metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
+	)
+	if strings.TrimSpace(rec.Prompt) != "" {
+		fmt.Fprintf(&b, "- prompt=%s\n", truncateForRunMemory(rec.Prompt, 700))
+	}
+	if strings.TrimSpace(rec.Result) != "" {
+		fmt.Fprintf(&b, "- result=%s\n", truncateForRunMemory(rec.Result, 900))
+	}
+	if strings.TrimSpace(rec.Error) != "" {
+		fmt.Fprintf(&b, "- error=%s\n", truncateForRunMemory(rec.Error, 700))
+	}
+	if len(rec.Metadata) > 0 {
+		if metadataJSON, err := json.Marshal(rec.Metadata); err == nil {
+			fmt.Fprintf(&b, "- metadata=%s\n", truncateForRunMemory(string(metadataJSON), 900))
+		}
+	}
+
+	interesting := make([]types.EventRecord, 0, len(eventsForRun))
+	omittedDeltaEvents := 0
+	for _, ev := range eventsForRun {
+		if ev.Kind == types.EventRunDelta {
+			omittedDeltaEvents++
+			continue
+		}
+		interesting = append(interesting, ev)
+	}
+	const maxEvents = 40
+	omittedInteresting := 0
+	if len(interesting) > maxEvents {
+		omittedInteresting = len(interesting) - maxEvents
+		interesting = interesting[omittedInteresting:]
+	}
+
+	b.WriteString("\nEvents:\n")
+	if len(eventsForRun) == 0 {
+		b.WriteString("- no persisted events found for this run\n")
+	}
+	if omittedInteresting > 0 {
+		fmt.Fprintf(&b, "- omitted_earlier_events=%d\n", omittedInteresting)
+	}
+	if omittedDeltaEvents > 0 {
+		fmt.Fprintf(&b, "- omitted_stream_delta_events=%d\n", omittedDeltaEvents)
+	}
+	for _, ev := range interesting {
+		payload := truncateForRunMemory(string(ev.Payload), 450)
+		fmt.Fprintf(&b, "- seq=%d stream_seq=%d kind=%s phase=%s agent_id=%s channel_id=%s payload=%s\n",
+			ev.Seq,
+			ev.StreamSeq,
+			ev.Kind,
+			ev.Phase,
+			ev.AgentID,
+			ev.ChannelID,
+			payload,
+		)
+	}
+	return b.String(), len(interesting), omittedDeltaEvents
+}
+
 func compactionSummaryMessage(summary string, tokensBefore int) json.RawMessage {
 	if strings.TrimSpace(summary) == "" {
 		summary = "Run memory checkpoint with no additional summary."
@@ -521,6 +680,13 @@ func estimateRawMessageTokens(msg json.RawMessage) int {
 		return 0
 	}
 	return len(msg)/4 + 1
+}
+
+func estimateTextTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+	return len(text)/4 + 1
 }
 
 func cloneRawMessage(msg json.RawMessage) json.RawMessage {

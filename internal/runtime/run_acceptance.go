@@ -969,11 +969,16 @@ func acceptanceCompactionEventDetails(ev types.EventRecord) map[string]any {
 	for _, key := range []string{
 		"entry_id",
 		"reason",
+		"source",
+		"source_state",
 		"tokens_before",
 		"tokens_after",
 		"first_kept_entry_id",
 		"compacted_messages",
 		"kept_messages",
+		"event_count",
+		"summarized_events",
+		"omitted_delta_events",
 	} {
 		if value, ok := payload[key]; ok && value != nil {
 			details[key] = value
