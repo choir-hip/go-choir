@@ -104,8 +104,90 @@ test('bare content references open the dedicated content apps from the prompt ba
     } else {
       const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
       await expect(viewer).toBeVisible({ timeout: 30_000 });
+      await expect(viewer.locator('[data-media-title]')).toBeVisible();
+
+      if (reference.app === 'image') {
+        await expect(viewer.locator('[data-image-toolbar]')).toBeVisible();
+        await expect(viewer.locator('[data-image-fit]')).toBeVisible();
+        await expect(viewer.locator('[data-image-zoom-in]')).toBeVisible();
+        await expect(viewer.locator('[data-image-viewer]')).toHaveAttribute('src', reference.url);
+      } else if (reference.app === 'audio') {
+        await expect(viewer.locator('[data-media-player]')).toBeVisible();
+        await expect(viewer.locator('[data-media-play]')).toBeVisible();
+        await expect(viewer.locator('[data-media-seek]')).toBeVisible();
+        await expect(viewer.locator('[data-media-speed]')).toBeVisible();
+        await expect(viewer.locator('[data-audio-element]')).toHaveAttribute('src', reference.url);
+      } else if (reference.app === 'video') {
+        await expect(viewer.locator('[data-video-toolbar]')).toBeVisible();
+        await expect(viewer.locator('[data-video-embedded-controls]')).toBeVisible();
+        await expect(viewer.locator('[data-video-frame]')).toHaveAttribute('src', /youtube\.com\/embed/);
+      } else if (reference.app === 'pdf') {
+        await expect(viewer.locator('[data-pdf-toolbar]')).toBeVisible();
+        await expect(viewer.locator('[data-pdf-page]')).toBeVisible();
+        await expect(viewer.locator('[data-pdf-zoom]')).toBeVisible();
+        await expect(viewer.locator('[data-pdf-reader]')).toHaveAttribute('src', /zoom=page-width/);
+      } else if (reference.app === 'epub') {
+        await expect(viewer.locator('[data-epub-blocker]')).toBeVisible();
+        await expect(viewer.locator('[data-epub-blocker]')).toContainText('no fake reader');
+      }
     }
   }
 
   expect(forbiddenRequests).toHaveLength(0);
+});
+
+test('media controls stay reachable in the mobile desktop window geometry', async ({ page, authenticator }) => {
+  expect(authenticator.authenticatorId).toBeTruthy();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerAndLoadDesktop(page, uniqueEmail());
+
+  const references = [
+    {
+      app: 'image',
+      mediaType: 'image/png',
+      url: 'https://example.com/choir-mobile-image.png',
+      required: ['[data-image-toolbar]', '[data-image-fit]', '[data-image-zoom-in]'],
+    },
+    {
+      app: 'audio',
+      mediaType: 'audio/mpeg',
+      url: 'https://example.com/choir-mobile-audio.mp3',
+      required: ['[data-media-player]', '[data-media-play]', '[data-media-seek]', '[data-media-speed]'],
+    },
+    {
+      app: 'pdf',
+      mediaType: 'application/pdf',
+      url: 'https://example.com/choir-mobile-doc.pdf',
+      required: ['[data-pdf-toolbar]', '[data-pdf-page]', '[data-pdf-zoom]', '[data-pdf-reader]'],
+    },
+  ];
+
+  for (const reference of references) {
+    const decision = await submitBareReference(page, reference.url);
+    expect(decision.action).toBe('open_app');
+    expect(decision.app).toBe(reference.app);
+    expect(decision.media_type).toBe(reference.mediaType);
+
+    const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
+    await expect(viewer).toBeVisible({ timeout: 30_000 });
+    for (const selector of reference.required) {
+      await expect(viewer.locator(selector)).toBeVisible();
+    }
+
+    const windowEl = page.locator('[data-window]').filter({ has: viewer }).last();
+    const [windowBox, stageBox] = await Promise.all([
+      windowEl.boundingBox(),
+      viewer.locator('[data-media-stage]').boundingBox(),
+    ]);
+    expect(windowBox.width).toBeGreaterThanOrEqual(260);
+    expect(windowBox.height).toBeGreaterThanOrEqual(320);
+    expect(windowBox.x).toBeGreaterThanOrEqual(0);
+    expect(windowBox.y).toBeGreaterThanOrEqual(0);
+    expect(windowBox.x + windowBox.width).toBeLessThanOrEqual(390 + 2);
+    expect(stageBox.width).toBeGreaterThanOrEqual(220);
+    expect(stageBox.height).toBeGreaterThanOrEqual(160);
+  }
+
+  const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflowX).toBeLessThanOrEqual(2);
 });
