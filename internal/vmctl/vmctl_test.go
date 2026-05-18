@@ -794,6 +794,58 @@ func TestOwnershipRegistry_PressureReclaimProtectsCriticalWorkerPurpose(t *testi
 	}
 }
 
+func TestOwnershipRegistry_PressureReclaimExpiresStaleCriticalWorkerProtection(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeActive,
+		MinIdle:                   10 * time.Minute,
+		MinMemoryAvailablePercent: 15,
+		MaxCandidates:             1,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-05-18T18:30:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   512 * 1024 * 1024,
+			MemoryAvailablePercent: 6.25,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("user-stale-promote"); err != nil {
+		t.Fatalf("resolve user-stale-promote: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-stale-promote",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-promote",
+		Purpose:       "promotion verifier with rollback evidence",
+		MachineClass:  "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request worker: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("user-stale-promote", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Minute)
+	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-(criticalWorkerProtectionMaxIdle + time.Hour))
+	reg.mu.Unlock()
+
+	plan := reg.PressureReclaimPlan()
+	if plan.Inventory.Eligible != 1 {
+		t.Fatalf("eligible = %d, want stale critical worker reclaimable (plan=%+v)", plan.Inventory.Eligible, plan)
+	}
+	if len(plan.Candidates) == 0 || plan.Candidates[0].Kind != VMKindWorker || plan.Candidates[0].Protected {
+		t.Fatalf("first candidate = %+v, want unprotected stale critical worker", plan.Candidates)
+	}
+	if containsString(plan.Candidates[0].ProtectedReasons, "critical_worker_purpose") {
+		t.Fatalf("stale critical worker should not keep critical protection: %+v", plan.Candidates[0])
+	}
+	if got := reg.ReclaimPressureVMs(); got != 1 {
+		t.Fatalf("reclaimed = %d, want 1", got)
+	}
+	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated || workerOwn.StoppedBy != "pressure" {
+		t.Fatalf("worker ownership after pressure reclaim = %+v, want hibernated by pressure", workerOwn)
+	}
+}
+
 func TestOwnershipRegistry_ActivePressureReclaimHibernatesBoundedEligibleCandidates(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{

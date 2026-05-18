@@ -240,3 +240,16 @@ go test -count=1 ./internal/runtime ./internal/vmctl -run 'TestSuperRequestWorke
 ```
 
 Next step after deploy: rerun the export-identity repair dispatch on staging. If a fresh reachable worker is allocated, continue to repair the stale export/current-HEAD mismatch before proceeding to Podcast/Trace UX queue items.
+
+### 2026-05-18: Podcast UX Dispatch Exposed Host Pressure Reclaim Blocker
+
+Outer Codex dispatched a fresh product-path goal for Podcast logged-out explore plus mobile usability through the staging prompt bar.
+
+- Trajectory: `c5907854-221d-4462-8199-d849d3bc74fd`
+- VText doc: `e3fb7fdd-c013-42b1-964d-1a753ce4aa3a`
+- Worker VM: `vm-033c5402ce46776bb601624a36ee740b`
+- Worker id: `worker-db1ac9cc8eef386a`
+
+Result: the run reached worker delegation, then staging ingress became intermittently unavailable. Public `/health`, `/api/trace`, and `/api/prompt-bar/submissions` timed out during TLS/HTTP access, while direct Node B checks showed local services healthy. Caddy then core-dumped and restarted. Node B health showed sustained memory pressure with 41 active Firecracker VMs and zero reclaim-eligible VMs because stale worker VMs whose old purposes mentioned `verifier`, `promotion`, or `rollback` were classified as `critical_protected` forever.
+
+Disposition: this is a substrate blocker for completing any multiagent UX sweep reliably. The repair changes critical worker protection from permanent to time-bounded: critical-purpose workers remain protected during recent activity, but stale critical workers become pressure-reclaim eligible after the protection window. Focused vmctl tests cover both recent critical-worker protection and stale critical-worker reclaim.

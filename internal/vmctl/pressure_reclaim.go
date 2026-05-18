@@ -561,6 +561,9 @@ func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, 
 	warmnessClass := warmnessClassForOwnership(own, warmnessPolicy)
 	reasons := protectedReclaimReasons(own, cfg, warmnessPolicy, idle)
 	priority := warmnessPriority(warmnessClass)
+	if warmnessClass == WarmnessClassCriticalProtected && staleCriticalWorkerIdle(idle) {
+		priority = warmnessPriority(WarmnessClassWorker)
+	}
 	desktop := "primary"
 	if own.Kind == VMKindInteractive && own.DesktopID != PrimaryDesktopID {
 		desktop = "published"
@@ -591,7 +594,9 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	case WarmnessClassPremiumAlwaysOn:
 		reasons = append(reasons, "premium_always_on")
 	case WarmnessClassCriticalProtected:
-		reasons = append(reasons, "critical_protected")
+		if !staleCriticalWorkerIdle(idle) {
+			reasons = append(reasons, "critical_protected")
+		}
 	}
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "unknown_last_active")
@@ -599,10 +604,14 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	if cfg.MinIdle > 0 && idle < cfg.MinIdle {
 		reasons = append(reasons, "recent_activity")
 	}
-	if own.Kind == VMKindWorker && criticalWorkerPurpose(own) {
+	if own.Kind == VMKindWorker && criticalWorkerPurpose(own) && !staleCriticalWorkerIdle(idle) {
 		reasons = append(reasons, "critical_worker_purpose")
 	}
 	return reasons
+}
+
+func staleCriticalWorkerIdle(idle time.Duration) bool {
+	return idle >= criticalWorkerProtectionMaxIdle
 }
 
 func criticalWorkerPurpose(own *VMOwnership) bool {

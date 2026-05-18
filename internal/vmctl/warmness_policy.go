@@ -22,6 +22,8 @@ const (
 	PrimaryKeepaliveModeUnderCapacity = "under-capacity"
 )
 
+const criticalWorkerProtectionMaxIdle = 12 * time.Hour
+
 type WarmnessPolicyConfig struct {
 	PrimaryKeepaliveMode string
 	AlwaysOnUserIDs      map[string]bool
@@ -183,6 +185,9 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 			continue
 		}
 		class := warmnessClassForOwnership(own, cfg)
+		if class == WarmnessClassCriticalProtected && staleCriticalWorkerIdle(idle) {
+			class = WarmnessClassWorker
+		}
 		if warmnessClassProtected(class) {
 			continue
 		}
