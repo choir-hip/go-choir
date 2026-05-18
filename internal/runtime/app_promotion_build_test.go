@@ -83,6 +83,20 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	}
 }
 
+func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
+	pkg := types.AppChangePackageRecord{
+		ManifestJSON: json.RawMessage(`{"source_ledger_base_ref":"package-base-sha"}`),
+		SourceActiveRef: "source-active",
+	}
+	rec := types.AppAdoptionRecord{
+		TargetActiveSourceRefAtCandidateStart: "target-start",
+	}
+	if got := appPromotionBaseRef(pkg, rec, "target-cutover"); got != "package-base-sha" {
+		t.Fatalf("base ref = %q, want package ledger base", got)
+	}
+}
+
 func testAppPromotionSourceRepo(t *testing.T) string {
 	t.Helper()
 	repo := filepath.Join(t.TempDir(), "source")

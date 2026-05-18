@@ -168,11 +168,11 @@ func looksLikeGitPatch(value string) bool {
 
 func appPromotionBaseRef(pkg types.AppChangePackageRecord, rec types.AppAdoptionRecord, cutoverRef string) string {
 	for _, candidate := range []string{
-		os.Getenv("RUNTIME_WORKER_REPO_BASE_SHA"),
 		stringFromMap(appChangePackageManifest(pkg), "source_ledger_base_ref"),
 		rec.TargetActiveSourceRefAtCandidateStart,
 		cutoverRef,
 		pkg.SourceActiveRef,
+		os.Getenv("RUNTIME_WORKER_REPO_BASE_SHA"),
 		"origin/main",
 		"HEAD",
 	} {
