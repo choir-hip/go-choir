@@ -25,6 +25,9 @@
   let playbackSpeed = 1;
   let playbackPosition = 0;
   let playbackDuration = 0;
+  let playbackError = '';
+  let isPlaying = false;
+  let podcastLibraryRequestSeq = 0;
 
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: filePath = item?.file_path || appContext?.filePath || '';
@@ -70,8 +73,9 @@
     }
   }
 
-  async function loadPodcastLibrary() {
-    if (podcastLibraryLoading) return;
+  async function loadPodcastLibrary({ force = false } = {}) {
+    if (podcastLibraryLoading && !force) return;
+    const requestSeq = ++podcastLibraryRequestSeq;
     podcastLibraryLoading = true;
     podcastLibraryError = '';
     try {
@@ -86,6 +90,7 @@
         return;
       }
       const body = await res.json();
+      if (requestSeq !== podcastLibraryRequestSeq) return;
       podcastLibrary = (body.items || []).filter((content) =>
         content.app_hint === 'podcast' ||
         content.media_type === 'application/rss+xml' ||
@@ -98,7 +103,9 @@
       }
       podcastLibraryError = 'Podcast library failed';
     } finally {
-      podcastLibraryLoading = false;
+      if (requestSeq === podcastLibraryRequestSeq) {
+        podcastLibraryLoading = false;
+      }
     }
   }
 
@@ -124,7 +131,7 @@
       }
       item = await res.json();
       podcastImportUrl = '';
-      podcastLibrary = [item, ...podcastLibrary.filter((content) => content.content_id !== item.content_id)];
+      upsertPodcastLibraryItem(item);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -176,20 +183,35 @@
     await importPodcastFeed();
   }
 
+  function upsertPodcastLibraryItem(content) {
+    if (!content) return;
+    podcastLibrary = [
+      content,
+      ...podcastLibrary.filter((existing) => existing.content_id !== content.content_id),
+    ];
+  }
+
   function openPodcastItem(content) {
+    upsertPodcastLibraryItem(content);
     item = content;
     error = '';
     radioStatus = '';
     activeEpisodeId = '';
     playbackPosition = 0;
     playbackDuration = 0;
+    playbackError = '';
+    isPlaying = false;
   }
 
   function backToPodcastLibrary() {
+    upsertPodcastLibraryItem(item);
     item = null;
     activeEpisodeId = '';
     radioStatus = '';
-    loadPodcastLibrary();
+    activeAudioEl = null;
+    playbackError = '';
+    isPlaying = false;
+    loadPodcastLibrary({ force: true });
   }
 
   function apiFileURL(path) {
@@ -221,6 +243,8 @@
   $: podcastEpisodes = podcastFeed?.episodes || [];
   $: listenPath = podcastFeed ? buildListenPath(podcastFeed, item) : null;
   $: activeEpisode = podcastEpisodes.find((episode) => episode.id === activeEpisodeId) || podcastEpisodes.find((episode) => episode.audioUrl) || podcastEpisodes[0] || null;
+  $: displayTitle = appHint === 'podcast' && podcastFeed?.title ? podcastFeed.title : title;
+  $: showPodcastLibraryLoading = podcastLibraryLoading && podcastLibrary.length === 0;
 
   function textFromFirst(parent, tagName) {
     return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
@@ -368,6 +392,9 @@
   function selectEpisode(episode) {
     activeEpisodeId = episode.id;
     playbackPosition = Number(localStorage.getItem(storageKeyForEpisode(episode)) || 0);
+    playbackDuration = 0;
+    playbackError = '';
+    isPlaying = false;
     tickAudioToState();
   }
 
@@ -379,31 +406,63 @@
       if (saved && Number.isFinite(saved) && Math.abs(activeAudioEl.currentTime - saved) > 3) {
         activeAudioEl.currentTime = saved;
       }
+      savePlaybackProgress();
     }, 0);
   }
 
   function savePlaybackProgress() {
     if (!activeAudioEl || !activeEpisode) return;
     playbackPosition = activeAudioEl.currentTime || 0;
-    playbackDuration = activeAudioEl.duration || 0;
+    playbackDuration = Number.isFinite(activeAudioEl.duration) ? activeAudioEl.duration : 0;
     localStorage.setItem(storageKeyForEpisode(), String(Math.floor(playbackPosition)));
   }
 
-  function togglePlayback() {
+  async function togglePlayback() {
     if (!activeAudioEl) return;
-    if (activeAudioEl.paused) activeAudioEl.play();
-    else activeAudioEl.pause();
+    playbackError = '';
+    try {
+      if (activeAudioEl.paused) {
+        await activeAudioEl.play();
+        isPlaying = true;
+      } else {
+        activeAudioEl.pause();
+        isPlaying = false;
+      }
+    } catch (err) {
+      playbackError = 'Playback could not start. Try opening the episode source or check browser audio permissions.';
+    }
   }
 
   function seekBy(seconds) {
     if (!activeAudioEl) return;
-    activeAudioEl.currentTime = Math.max(0, Math.min(activeAudioEl.duration || Infinity, activeAudioEl.currentTime + seconds));
+    const duration = Number.isFinite(activeAudioEl.duration) ? activeAudioEl.duration : Infinity;
+    activeAudioEl.currentTime = Math.max(0, Math.min(duration, activeAudioEl.currentTime + seconds));
+    savePlaybackProgress();
+  }
+
+  function seekTo(value) {
+    if (!activeAudioEl) return;
+    const next = Number(value);
+    if (!Number.isFinite(next)) return;
+    const duration = Number.isFinite(activeAudioEl.duration) ? activeAudioEl.duration : Math.max(next, playbackDuration || 0);
+    activeAudioEl.currentTime = Math.max(0, Math.min(duration || next, next));
     savePlaybackProgress();
   }
 
   function setSpeed(speed) {
-    playbackSpeed = speed;
-    if (activeAudioEl) activeAudioEl.playbackRate = speed;
+    playbackSpeed = Number(speed) || 1;
+    if (activeAudioEl) activeAudioEl.playbackRate = playbackSpeed;
+  }
+
+  function formatTime(value) {
+    const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
   }
 
   function markdownLink(label, url) {
@@ -469,14 +528,14 @@
   onMount(loadContentItem);
 </script>
 
-<section class="content-viewer" data-content-viewer data-content-app={appHint}>
+<section class="content-viewer" class:podcast-viewer={appHint === 'podcast'} data-content-viewer data-content-app={appHint}>
   <header class="content-header">
     <div>
       <p class="eyebrow">{appHint} content</p>
-      <h2>{title}</h2>
+      <h2>{displayTitle}</h2>
     </div>
     {#if appHint === 'podcast' && item}
-      <button class="source-link" type="button" on:click={backToPodcastLibrary} data-podcast-back>Back</button>
+      <button class="source-link back-link" type="button" on:click={backToPodcastLibrary} data-podcast-back>Back</button>
     {:else if sourceUrl && appHint !== 'podcast'}
       <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>
     {/if}
@@ -493,24 +552,9 @@
           <div class="library-header">
             <div>
               <h3>Podcast Library</h3>
-              <p>Durable RSS feed artifacts that can become VText radio briefs.</p>
+              <p>Subscribed and imported shows, ready to play or turn into VText radio briefs.</p>
             </div>
-            <button type="button" on:click={loadPodcastLibrary} disabled={podcastLibraryLoading} data-podcast-refresh>
-              {podcastLibraryLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
           </div>
-          <form class="podcast-import" on:submit|preventDefault={importPodcastFeed} data-podcast-import>
-            <input
-              bind:value={podcastImportUrl}
-              type="url"
-              placeholder="https://example.com/feed.rss"
-              aria-label="Podcast RSS feed URL"
-              data-podcast-import-url
-            />
-            <button type="submit" disabled={podcastImporting || !podcastImportUrl.trim()} data-podcast-import-submit>
-              {podcastImporting ? 'Importing...' : 'Import'}
-            </button>
-          </form>
           <form class="podcast-search" on:submit|preventDefault={searchPodcasts} data-podcast-search>
             <input
               bind:value={podcastSearchQuery}
@@ -523,6 +567,21 @@
               {podcastSearchLoading ? 'Searching...' : 'Search'}
             </button>
           </form>
+          <details class="podcast-advanced">
+            <summary>Import RSS feed</summary>
+            <form class="podcast-import" on:submit|preventDefault={importPodcastFeed} data-podcast-import>
+              <input
+                bind:value={podcastImportUrl}
+                type="url"
+                placeholder="https://example.com/feed.rss"
+                aria-label="Podcast RSS feed URL"
+                data-podcast-import-url
+              />
+              <button type="submit" disabled={podcastImporting || !podcastImportUrl.trim()} data-podcast-import-submit>
+                {podcastImporting ? 'Importing...' : 'Import'}
+              </button>
+            </form>
+          </details>
           {#if podcastSearchStatus}<p class="status" data-podcast-search-status>{podcastSearchStatus}</p>{/if}
           {#if podcastSearchResults.length > 0}
             <div class="podcast-search-results" data-podcast-search-results>
@@ -542,11 +601,12 @@
           {/if}
           {#if podcastLibraryError}
             <p class="error" role="alert">{podcastLibraryError}</p>
-          {:else if podcastLibraryLoading}
+          {:else if showPodcastLibraryLoading}
             <p class="status">Loading podcast artifacts...</p>
           {:else if podcastLibrary.length === 0}
             <p class="status">No podcast feed artifacts yet.</p>
           {:else}
+            {#if podcastLibraryLoading}<p class="status subtle">Updating library...</p>{/if}
             <div class="library-list">
               {#each podcastLibrary as content}
                 <button
@@ -583,15 +643,20 @@
               <strong>{activeEpisode.title}</strong>
               <audio
                 src={activeEpisode.audioUrl}
+                preload="metadata"
                 bind:this={activeAudioEl}
                 on:loadedmetadata={tickAudioToState}
+                on:durationchange={savePlaybackProgress}
                 on:timeupdate={savePlaybackProgress}
-                on:pause={savePlaybackProgress}
+                on:play={() => isPlaying = true}
+                on:pause={() => { isPlaying = false; savePlaybackProgress(); }}
+                on:ended={() => { isPlaying = false; savePlaybackProgress(); }}
+                on:error={() => playbackError = 'Episode audio could not be loaded by the browser.'}
                 data-podcast-audio
               />
               <div class="podcast-controls" data-podcast-controls>
                 <button type="button" on:click={() => seekBy(-15)} data-podcast-seek-back>15s back</button>
-                <button type="button" on:click={togglePlayback} data-podcast-play-pause>Play/Pause</button>
+                <button type="button" on:click={togglePlayback} data-podcast-play-pause>{isPlaying ? 'Pause' : 'Play'}</button>
                 <button type="button" on:click={() => seekBy(30)} data-podcast-seek-forward>30s forward</button>
                 <select bind:value={playbackSpeed} on:change={() => setSpeed(playbackSpeed)} data-podcast-speed aria-label="Playback speed">
                   <option value={0.75}>0.75x</option>
@@ -601,7 +666,22 @@
                   <option value={2}>2x</option>
                 </select>
               </div>
-              <progress value={playbackPosition} max={playbackDuration || 1} data-podcast-progress></progress>
+              <div class="podcast-timeline">
+                <span class="podcast-time">{formatTime(playbackPosition)}</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(playbackDuration || playbackPosition || 1, 1)}
+                  step="1"
+                  value={playbackPosition}
+                  on:input={(event) => seekTo(event.currentTarget.value)}
+                  aria-label="Seek episode"
+                  data-podcast-progress
+                  data-podcast-seek
+                />
+                <span class="podcast-time">{playbackDuration ? formatTime(playbackDuration) : '--:--'}</span>
+              </div>
+              {#if playbackError}<p class="error compact" role="alert" data-podcast-playback-error>{playbackError}</p>{/if}
               <small>Progress is saved on this device for the selected episode.</small>
             </section>
           {/if}
@@ -647,7 +727,7 @@
       {/if}
     </div>
 
-    {#if item?.provenance}
+    {#if item?.provenance && appHint !== 'podcast'}
       <details class="provenance" data-content-provenance>
         <summary>Provenance</summary>
         <pre>{JSON.stringify(item.provenance, null, 2)}</pre>
@@ -689,6 +769,7 @@
   h2 {
     margin: 0;
     font-size: clamp(1.4rem, 3vw, 2.2rem);
+    overflow-wrap: anywhere;
   }
 
   .source-link {
@@ -700,12 +781,36 @@
     background: rgba(19, 33, 58, 0.78);
   }
 
+  .back-link {
+    justify-self: end;
+    width: auto;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 0.78rem;
+  }
+
   .preview-shell {
     min-height: 320px;
     border: 1px solid var(--choir-border, rgba(120, 135, 170, 0.28));
     border-radius: 22px;
     background: rgba(6, 8, 16, 0.72);
     overflow: hidden;
+  }
+
+  .podcast-viewer {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .podcast-viewer .content-header {
+    flex: 0 0 auto;
+  }
+
+  .podcast-viewer .preview-shell {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   img,
@@ -730,8 +835,16 @@
     width: calc(100% - 48px);
   }
 
+  .podcast-player audio {
+    display: none;
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
+
   .podcast-list {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 14px;
     padding: 18px;
   }
@@ -740,6 +853,18 @@
     display: grid;
     gap: 16px;
     padding: 20px;
+  }
+
+  .podcast-viewer .podcast-list,
+  .podcast-viewer .podcast-library {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .podcast-viewer .podcast-list {
+    overflow: hidden;
   }
 
   .library-header,
@@ -780,6 +905,23 @@
     padding: 10px 12px;
     color: var(--choir-fg, #f5f7ff);
     background: rgba(255, 255, 255, 0.07);
+  }
+
+  .podcast-advanced {
+    border: 1px solid rgba(120, 135, 170, 0.26);
+    border-radius: 14px;
+    padding: 10px 12px;
+    background: rgba(12, 17, 30, 0.58);
+  }
+
+  .podcast-advanced summary {
+    cursor: pointer;
+    color: var(--choir-muted, #a8adbd);
+    font-weight: 750;
+  }
+
+  .podcast-advanced .podcast-import {
+    margin-top: 10px;
   }
 
   button {
@@ -882,16 +1024,41 @@
     background: rgba(19, 33, 58, 0.95);
   }
 
-  .podcast-player progress {
+  .podcast-timeline {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .podcast-timeline input[type='range'] {
     width: 100%;
+    min-width: 0;
+    accent-color: #7aa2ff;
+  }
+
+  .podcast-time {
+    color: var(--choir-muted, #a8adbd);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .error.compact {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
   }
 
   .podcast-episodes-scroll {
     display: grid;
     gap: 12px;
-    max-height: min(58vh, 620px);
-    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
 
   .podcast-episode.selected {

@@ -90,6 +90,9 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
 
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toBeVisible();
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toContainText('Mission Gradient Radio');
+  await expect(podcastWindow.locator('header h2')).toContainText('Mission Gradient Radio');
+  await expect(podcastWindow.locator('header h2')).not.toContainText(/\.xml|[0-9a-f]{8}-[0-9a-f]{4}/i);
+  await expect(podcastWindow.locator('[data-content-provenance]')).toHaveCount(0);
   await expect(podcastWindow.locator('[data-podcast-episode]')).toHaveCount(2);
   await expect(podcastWindow.locator('[data-podcast-player]')).toBeVisible();
   await expect(podcastWindow.locator('[data-podcast-player]')).toContainText('Candidate Worlds First');
@@ -97,6 +100,7 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
   await expect(podcastWindow.locator('[data-podcast-seek-back]')).toBeVisible();
   await expect(podcastWindow.locator('[data-podcast-play-pause]')).toBeVisible();
   await expect(podcastWindow.locator('[data-podcast-seek-forward]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-seek]')).toBeVisible();
   await expect(podcastWindow.locator('[data-podcast-speed]')).toBeVisible();
   await expect(podcastWindow.locator('[data-podcast-audio]')).toHaveAttribute('src', /candidate-worlds\.mp3$/);
 
@@ -105,6 +109,9 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
   await expect(podcastWindow.locator('[data-podcast-audio]')).toHaveAttribute('src', /verifier-contracts\.mp3$/);
   await podcastWindow.locator('[data-podcast-back]').click();
   await expect(podcastWindow.locator('[data-podcast-library]')).toBeVisible();
+  await expect(podcastWindow.locator('text=Loading podcast artifacts...')).toHaveCount(0);
+  await expect(podcastWindow.locator('[data-podcast-import]')).not.toBeVisible();
+  await expect(seededFeed).toBeVisible();
   await seededFeed.click();
 
   await podcastWindow.locator('[data-podcast-open-vtext]').click();
