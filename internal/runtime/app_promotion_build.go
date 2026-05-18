@@ -22,6 +22,7 @@ type appAdoptionBuildReport struct {
 	Required              bool                        `json:"required"`
 	Status                string                      `json:"status"`
 	WorkspacePath         string                      `json:"workspace_path,omitempty"`
+	BuildScratchPath      string                      `json:"build_scratch_path,omitempty"`
 	BaseSHA               string                      `json:"base_sha,omitempty"`
 	HeadSHA               string                      `json:"head_sha,omitempty"`
 	RuntimeArtifactPath   string                      `json:"runtime_artifact_path,omitempty"`
@@ -65,6 +66,11 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 	}
 	repoPath := filepath.Join(candidateDir, "repo")
 	report.WorkspacePath = repoPath
+	buildEnv, buildScratchPath, err := appPromotionBuildEnv(candidateDir)
+	if err != nil {
+		return report, err
+	}
+	report.BuildScratchPath = buildScratchPath
 
 	buildCtx := ctx
 	cancel := func() {}
@@ -74,7 +80,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 	defer cancel()
 
 	var cmdReport appPromotionCommandReport
-	cmdReport, err = runAppPromotionCommand(buildCtx, "", "clone", "git", "clone", "--no-checkout", sourceRepo, repoPath)
+	cmdReport, err = runAppPromotionCommand(buildCtx, "", buildEnv, "clone", "git", "clone", "--no-checkout", sourceRepo, repoPath)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: clone source repo: %w", err)
@@ -84,7 +90,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 		{"git-config-email", "git", "config", "user.email", "app-adoption@choir.local"},
 		{"git-fetch", "git", "fetch", "--all", "--prune"},
 	} {
-		cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, cfg[0], cfg[1], cfg[2:]...)
+		cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, buildEnv, cfg[0], cfg[1], cfg[2:]...)
 		report.Commands = append(report.Commands, cmdReport)
 		if err != nil {
 			return report, fmt.Errorf("recipient build: %s: %w", cfg[0], err)
@@ -93,7 +99,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 
 	baseRef := appPromotionBaseRef(pkg, rec, cutoverRef)
 	branch := "app-adoptions/" + safeRefPart(rec.AdoptionID)
-	cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, "checkout-base", "git", "switch", "-C", branch, baseRef)
+	cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, buildEnv, "checkout-base", "git", "switch", "-C", branch, baseRef)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: checkout base %s: %w", baseRef, err)
@@ -103,13 +109,13 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 		return report, fmt.Errorf("recipient build: resolve base sha: %w", err)
 	}
 
-	if err := writeAndApplyAppPromotionPatch(buildCtx, repoPath, candidateDir, pkg.RuntimeSourceDelta, "runtime.patch"); err != nil {
+	if err := writeAndApplyAppPromotionPatch(buildCtx, repoPath, candidateDir, buildEnv, pkg.RuntimeSourceDelta, "runtime.patch"); err != nil {
 		return report, err
 	}
-	if err := writeAndApplyAppPromotionPatch(buildCtx, repoPath, candidateDir, pkg.UISourceDelta, "ui.patch"); err != nil {
+	if err := writeAndApplyAppPromotionPatch(buildCtx, repoPath, candidateDir, buildEnv, pkg.UISourceDelta, "ui.patch"); err != nil {
 		return report, err
 	}
-	cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, "commit-candidate", "git", "commit", "-m", "Apply app change package "+pkg.PackageID)
+	cmdReport, err = runAppPromotionCommand(buildCtx, repoPath, buildEnv, "commit-candidate", "git", "commit", "-m", "Apply app change package "+pkg.PackageID)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: commit candidate changes: %w", err)
@@ -119,7 +125,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 		return report, fmt.Errorf("recipient build: resolve candidate sha: %w", err)
 	}
 
-	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, "runtime-build", rt.cfg.AppPromotionRuntimeBuildCommand)
+	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "runtime-build", rt.cfg.AppPromotionRuntimeBuildCommand)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: runtime build: %w", err)
@@ -131,7 +137,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 		return report, fmt.Errorf("recipient build: hash runtime artifact: %w", err)
 	}
 
-	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, "ui-build", rt.cfg.AppPromotionUIBuildCommand)
+	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "ui-build", rt.cfg.AppPromotionUIBuildCommand)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: UI build: %w", err)
@@ -147,7 +153,7 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 	return report, nil
 }
 
-func writeAndApplyAppPromotionPatch(ctx context.Context, repoPath, candidateDir, patchText, name string) error {
+func writeAndApplyAppPromotionPatch(ctx context.Context, repoPath, candidateDir string, env []string, patchText, name string) error {
 	if !looksLikeGitPatch(patchText) {
 		return fmt.Errorf("recipient build: %s is not a git patch", name)
 	}
@@ -155,7 +161,7 @@ func writeAndApplyAppPromotionPatch(ctx context.Context, repoPath, candidateDir,
 	if err := os.WriteFile(patchPath, []byte(patchText), 0o644); err != nil {
 		return fmt.Errorf("recipient build: write %s: %w", name, err)
 	}
-	if _, err := runAppPromotionCommand(ctx, repoPath, "apply-"+name, "git", "apply", "--index", patchPath); err != nil {
+	if _, err := runAppPromotionCommand(ctx, repoPath, env, "apply-"+name, "git", "apply", "--index", patchPath); err != nil {
 		return fmt.Errorf("recipient build: apply %s: %w", name, err)
 	}
 	return nil
@@ -191,14 +197,44 @@ func appPromotionBaseRef(pkg types.AppChangePackageRecord, rec types.AppAdoption
 	return "origin/main"
 }
 
-func runAppPromotionShellCommand(ctx context.Context, dir, name, command string) (appPromotionCommandReport, error) {
-	return runAppPromotionCommand(ctx, dir, name, "/bin/sh", "-c", command)
+func appPromotionBuildEnv(candidateDir string) ([]string, string, error) {
+	candidateDir = filepath.Clean(candidateDir)
+	if strings.TrimSpace(candidateDir) == "" || candidateDir == "." {
+		return nil, "", fmt.Errorf("recipient build: candidate workspace is required")
+	}
+	scratchRoot := filepath.Join(candidateDir, ".choir-promotion-scratch")
+	cacheRoot := filepath.Join(filepath.Dir(candidateDir), ".choir-promotion-cache")
+	dirs := map[string]string{
+		"TMPDIR":           filepath.Join(scratchRoot, "tmp"),
+		"GOTMPDIR":         filepath.Join(scratchRoot, "go-tmp"),
+		"GOCACHE":          filepath.Join(scratchRoot, "go-build-cache"),
+		"GOMODCACHE":       filepath.Join(cacheRoot, "go-mod-cache"),
+		"NPM_CONFIG_CACHE": filepath.Join(cacheRoot, "npm-cache"),
+		"XDG_CACHE_HOME":   filepath.Join(scratchRoot, "xdg-cache"),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, "", fmt.Errorf("recipient build: prepare scratch dir %q: %w", dir, err)
+		}
+	}
+	env := os.Environ()
+	for key, value := range dirs {
+		env = setEnvValue(env, key, value)
+	}
+	return env, scratchRoot, nil
 }
 
-func runAppPromotionCommand(ctx context.Context, dir, name, command string, args ...string) (appPromotionCommandReport, error) {
+func runAppPromotionShellCommand(ctx context.Context, dir string, env []string, name, command string) (appPromotionCommandReport, error) {
+	return runAppPromotionCommand(ctx, dir, env, name, "/bin/sh", "-c", command)
+}
+
+func runAppPromotionCommand(ctx context.Context, dir string, env []string, name, command string, args ...string) (appPromotionCommandReport, error) {
 	started := time.Now()
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = env
+	}
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

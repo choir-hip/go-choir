@@ -19,9 +19,9 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	sourceRepo := testAppPromotionSourceRepo(t)
 	rt.cfg.PromotionSourceRepo = sourceRepo
 	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
-	rt.cfg.AppPromotionRuntimeBuildCommand = "mkdir -p .choir-promotion-artifacts/runtime && cp runtime.txt .choir-promotion-artifacts/runtime/runtime.txt"
+	rt.cfg.AppPromotionRuntimeBuildCommand = `test -d "$GOTMPDIR" && case "$GOTMPDIR" in *'.choir-promotion-scratch'*) ;; *) echo "GOTMPDIR=$GOTMPDIR"; exit 19;; esac && mkdir -p .choir-promotion-artifacts/runtime && cp runtime.txt .choir-promotion-artifacts/runtime/runtime.txt`
 	rt.cfg.AppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/runtime.txt"
-	rt.cfg.AppPromotionUIBuildCommand = "mkdir -p frontend/dist && cp frontend/ui.txt frontend/dist/ui.txt"
+	rt.cfg.AppPromotionUIBuildCommand = `test -d "$NPM_CONFIG_CACHE" && mkdir -p frontend/dist && cp frontend/ui.txt frontend/dist/ui.txt`
 	rt.cfg.AppPromotionUIArtifactPath = "frontend/dist"
 
 	runtimePatch := testGitDiffForPath(t, sourceRepo, "runtime.txt", "runtime v1\n")
@@ -176,6 +176,45 @@ func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
 	}
 	if got := appPromotionBaseRef(pkg, rec, "target-cutover"); got != "package-base-sha" {
 		t.Fatalf("base ref = %q, want package ledger base", got)
+	}
+}
+
+func TestAppPromotionBuildEnvUsesWorkspaceScratchPaths(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "promotion-workspaces")
+	candidateDir := filepath.Join(root, "adoption-1")
+	env, scratchRoot, err := appPromotionBuildEnv(candidateDir)
+	if err != nil {
+		t.Fatalf("appPromotionBuildEnv: %v", err)
+	}
+	if want := filepath.Join(candidateDir, ".choir-promotion-scratch"); scratchRoot != want {
+		t.Fatalf("scratch root = %q, want %q", scratchRoot, want)
+	}
+
+	scratchKeys := []string{"TMPDIR", "GOTMPDIR", "GOCACHE", "XDG_CACHE_HOME"}
+	for _, key := range scratchKeys {
+		value := envValue(env, key)
+		if !strings.HasPrefix(value, scratchRoot+string(os.PathSeparator)) {
+			t.Fatalf("%s = %q, want under scratch root %q", key, value, scratchRoot)
+		}
+		if _, err := os.Stat(value); err != nil {
+			t.Fatalf("%s dir %q not prepared: %v", key, value, err)
+		}
+	}
+
+	cacheRoot := filepath.Join(root, ".choir-promotion-cache")
+	for _, key := range []string{"GOMODCACHE", "NPM_CONFIG_CACHE"} {
+		value := envValue(env, key)
+		if !strings.HasPrefix(value, cacheRoot+string(os.PathSeparator)) {
+			t.Fatalf("%s = %q, want under cache root %q", key, value, cacheRoot)
+		}
+		if _, err := os.Stat(value); err != nil {
+			t.Fatalf("%s dir %q not prepared: %v", key, value, err)
+		}
+	}
+
+	report, err := runAppPromotionShellCommand(context.Background(), t.TempDir(), env, "env-check", `test -d "$GOTMPDIR" && test -d "$GOCACHE" && test -d "$GOMODCACHE" && test -d "$NPM_CONFIG_CACHE"`)
+	if err != nil {
+		t.Fatalf("promotion command with build env failed: %+v err=%v", report, err)
 	}
 }
 

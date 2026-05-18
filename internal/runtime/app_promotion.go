@@ -553,6 +553,7 @@ func verifierResultsForAppAdoption(pkg types.AppChangePackageRecord, rec types.A
 		details := map[string]any{
 			"status":                  buildReport.Status,
 			"workspace_path":          buildReport.WorkspacePath,
+			"build_scratch_path":      buildReport.BuildScratchPath,
 			"base_sha":                buildReport.BaseSHA,
 			"head_sha":                buildReport.HeadSHA,
 			"runtime_artifact_digest": buildReport.RuntimeArtifactDigest,
