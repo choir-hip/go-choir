@@ -455,7 +455,9 @@ in
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"
         "RUNTIME_PROMOTION_SOURCE_REPO=${sourceRepoRemote}"
+        "RUNTIME_SOURCE_LEDGER_REPO=https://github.com/yusefmosiah/choir-source-ledger.git"
         "RUNTIME_PROMOTION_WORKSPACE_ROOT=/var/lib/go-choir/promotion-workspaces"
+        "PKG_CONFIG_PATH=${pkgs.icu.dev}/lib/pkgconfig"
         # Route LLM calls through the host-side gateway instead of
         # resolving providers directly (VAL-GATEWAY-001).
         "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"
@@ -504,12 +506,18 @@ in
     coreutils
     curl
     firecracker
+    gcc
     git
+    go
+    gnumake
     gnugrep
     gnused
     dolt
     htop
     jq
+    nodejs
+    pkg-config
+    icu
     procps
     ripgrep
     vim

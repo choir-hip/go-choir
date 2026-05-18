@@ -52,6 +52,18 @@ const (
 	// DefaultPromotionSourceRepo is the canonical platform source repository
 	// used when an existing user computer predates promotion env wiring.
 	DefaultPromotionSourceRepo = "https://github.com/yusefmosiah/go-choir.git"
+
+	// DefaultSourceLedgerRepo is the private source-lineage remote used for
+	// product-visible computer/package source refs. Runtime clones for
+	// integration builds still use PromotionSourceRepo unless explicitly
+	// configured otherwise.
+	DefaultSourceLedgerRepo = "https://github.com/yusefmosiah/choir-source-ledger.git"
+
+	DefaultAppPromotionRuntimeBuildCommand = "mkdir -p .choir-promotion-artifacts/runtime && go build -o .choir-promotion-artifacts/runtime/sandbox ./cmd/sandbox"
+	DefaultAppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/sandbox"
+	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && npm --prefix frontend run build"
+	DefaultAppPromotionUIArtifactPath      = "frontend/dist"
+	DefaultAppPromotionBuildTimeout        = 15 * time.Minute
 )
 
 // Config holds runtime configuration resolved from environment variables.
@@ -123,9 +135,19 @@ type Config struct {
 	// to create product-safe promotion integration workspaces.
 	PromotionSourceRepo string
 
+	// SourceLedgerRepo is the product-visible source lineage remote. It may be
+	// private; package/adoption records name refs in this ledger.
+	SourceLedgerRepo string
+
 	// PromotionWorkspaceRoot is the server-owned root for per-candidate
 	// integration workspaces. Browser callers never provide this path.
 	PromotionWorkspaceRoot string
+
+	AppPromotionRuntimeBuildCommand string
+	AppPromotionRuntimeArtifactPath string
+	AppPromotionUIBuildCommand      string
+	AppPromotionUIArtifactPath      string
+	AppPromotionBuildTimeout        time.Duration
 }
 
 // LoadConfig resolves runtime configuration from environment variables.
@@ -162,7 +184,28 @@ func LoadConfig() Config {
 			"RUNTIME_PROMOTION_SOURCE_REPO",
 			os.Getenv("RUNTIME_WORKER_REPO_REMOTE"),
 		),
+		SourceLedgerRepo:       envOr("RUNTIME_SOURCE_LEDGER_REPO", DefaultSourceLedgerRepo),
 		PromotionWorkspaceRoot: os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
+		AppPromotionRuntimeBuildCommand: envOr(
+			"RUNTIME_APP_PROMOTION_RUNTIME_BUILD_COMMAND",
+			DefaultAppPromotionRuntimeBuildCommand,
+		),
+		AppPromotionRuntimeArtifactPath: envOr(
+			"RUNTIME_APP_PROMOTION_RUNTIME_ARTIFACT_PATH",
+			DefaultAppPromotionRuntimeArtifactPath,
+		),
+		AppPromotionUIBuildCommand: envOr(
+			"RUNTIME_APP_PROMOTION_UI_BUILD_COMMAND",
+			DefaultAppPromotionUIBuildCommand,
+		),
+		AppPromotionUIArtifactPath: envOr(
+			"RUNTIME_APP_PROMOTION_UI_ARTIFACT_PATH",
+			DefaultAppPromotionUIArtifactPath,
+		),
+		AppPromotionBuildTimeout: durationOr(
+			"RUNTIME_APP_PROMOTION_BUILD_TIMEOUT",
+			DefaultAppPromotionBuildTimeout,
+		),
 	})
 }
 
@@ -185,6 +228,9 @@ func normalizeConfig(cfg Config) Config {
 	if strings.TrimSpace(cfg.PromotionWorkspaceRoot) == "" {
 		cfg.PromotionWorkspaceRoot = filepath.Join(filepath.Dir(cfg.StorePath), "promotion-workspaces")
 	}
+	if strings.TrimSpace(cfg.SourceLedgerRepo) == "" {
+		cfg.SourceLedgerRepo = DefaultSourceLedgerRepo
+	}
 	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
 		if wd, err := os.Getwd(); err == nil {
 			if _, statErr := os.Stat(filepath.Join(wd, ".git")); statErr == nil {
@@ -194,6 +240,21 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
 		cfg.PromotionSourceRepo = DefaultPromotionSourceRepo
+	}
+	if strings.TrimSpace(cfg.AppPromotionRuntimeBuildCommand) == "" {
+		cfg.AppPromotionRuntimeBuildCommand = DefaultAppPromotionRuntimeBuildCommand
+	}
+	if strings.TrimSpace(cfg.AppPromotionRuntimeArtifactPath) == "" {
+		cfg.AppPromotionRuntimeArtifactPath = DefaultAppPromotionRuntimeArtifactPath
+	}
+	if strings.TrimSpace(cfg.AppPromotionUIBuildCommand) == "" {
+		cfg.AppPromotionUIBuildCommand = DefaultAppPromotionUIBuildCommand
+	}
+	if strings.TrimSpace(cfg.AppPromotionUIArtifactPath) == "" {
+		cfg.AppPromotionUIArtifactPath = DefaultAppPromotionUIArtifactPath
+	}
+	if cfg.AppPromotionBuildTimeout <= 0 {
+		cfg.AppPromotionBuildTimeout = DefaultAppPromotionBuildTimeout
 	}
 	return cfg
 }

@@ -15,6 +15,10 @@
   let podcastLibraryError = '';
   let podcastImportUrl = '';
   let podcastImporting = false;
+  let podcastSearchQuery = '';
+  let podcastSearchResults = [];
+  let podcastSearchLoading = false;
+  let podcastSearchStatus = '';
   let radioStatus = '';
 
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
@@ -125,6 +129,46 @@
     } finally {
       podcastImporting = false;
     }
+  }
+
+  async function searchPodcasts() {
+    const query = podcastSearchQuery.trim();
+    if (!query || podcastSearchLoading) return;
+    podcastSearchLoading = true;
+    podcastLibraryError = '';
+    podcastSearchStatus = '';
+    try {
+      const res = await fetchWithRenewal(`/api/podcast/search?q=${encodeURIComponent(query)}&limit=12`);
+      if (!res.ok) {
+        if (res.status === 401) {
+          dispatch('authexpired');
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        podcastLibraryError = body.error || `Podcast search failed (${res.status})`;
+        return;
+      }
+      const body = await res.json();
+      podcastSearchResults = body.results || [];
+      podcastSearchStatus = `${podcastSearchResults.length} result${podcastSearchResults.length === 1 ? '' : 's'} from ${body.provider_status || body.provider || 'provider'}`;
+      if ((body.warnings || []).length > 0) {
+        podcastSearchStatus += `; ${body.warnings[0]}`;
+      }
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      podcastLibraryError = 'Podcast search failed';
+    } finally {
+      podcastSearchLoading = false;
+    }
+  }
+
+  async function importPodcastResult(result) {
+    if (!result?.feed_url || podcastImporting) return;
+    podcastImportUrl = result.feed_url;
+    await importPodcastFeed();
   }
 
   function openPodcastItem(content) {
@@ -403,6 +447,35 @@
               {podcastImporting ? 'Importing...' : 'Import'}
             </button>
           </form>
+          <form class="podcast-search" on:submit|preventDefault={searchPodcasts} data-podcast-search>
+            <input
+              bind:value={podcastSearchQuery}
+              type="search"
+              placeholder="Search podcasts"
+              aria-label="Search podcasts"
+              data-podcast-search-query
+            />
+            <button type="submit" disabled={podcastSearchLoading || !podcastSearchQuery.trim()} data-podcast-search-submit>
+              {podcastSearchLoading ? 'Searching...' : 'Search'}
+            </button>
+          </form>
+          {#if podcastSearchStatus}<p class="status" data-podcast-search-status>{podcastSearchStatus}</p>{/if}
+          {#if podcastSearchResults.length > 0}
+            <div class="podcast-search-results" data-podcast-search-results>
+              {#each podcastSearchResults as result}
+                <article class="podcast-search-result" data-podcast-search-result>
+                  <div>
+                    <strong>{result.title || result.feed_url}</strong>
+                    {#if result.author}<span>{result.author}</span>{/if}
+                    <span>{result.feed_url}</span>
+                  </div>
+                  <button type="button" on:click={() => importPodcastResult(result)} disabled={podcastImporting} data-podcast-result-import>
+                    Import
+                  </button>
+                </article>
+              {/each}
+            </div>
+          {/if}
           {#if podcastLibraryError}
             <p class="error" role="alert">{podcastLibraryError}</p>
           {:else if podcastLibraryLoading}
@@ -599,13 +672,15 @@
     color: var(--choir-muted, #a8adbd);
   }
 
-  .podcast-import {
+  .podcast-import,
+  .podcast-search {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
   }
 
-  .podcast-import input {
+  .podcast-import input,
+  .podcast-search input {
     min-width: 0;
     border: 1px solid var(--choir-border, rgba(120, 135, 170, 0.28));
     border-radius: 12px;
@@ -641,10 +716,33 @@
   }
 
   .library-item span,
+  .podcast-search-result span,
   .path-meta {
     color: var(--choir-muted, #a8adbd);
     font-size: 0.88rem;
     overflow-wrap: anywhere;
+  }
+
+  .podcast-search-results {
+    display: grid;
+    gap: 10px;
+  }
+
+  .podcast-search-result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid rgba(120, 135, 170, 0.26);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(12, 17, 30, 0.72);
+  }
+
+  .podcast-search-result div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
   }
 
   .podcast-episode {
@@ -678,7 +776,9 @@
   @media (max-width: 720px) {
     .library-header,
     .radio-panel,
-    .podcast-import {
+    .podcast-import,
+    .podcast-search,
+    .podcast-search-result {
       grid-template-columns: 1fr;
     }
 
