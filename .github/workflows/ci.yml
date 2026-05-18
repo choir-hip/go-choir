@@ -273,7 +273,21 @@ jobs:
             if [ "$current_system" = "$next_system" ]; then
               echo "    Host closure unchanged; skipping NixOS switch"
             else
-              /run/current-system/sw/bin/nixos-rebuild switch --flake .#go-choir-b
+              run_switch() {
+                /run/current-system/sw/bin/nix-env -p /nix/var/nix/profiles/system --set "$next_system"
+                NIXOS_NO_CHECK=1 "$next_system/bin/switch-to-configuration" switch
+              }
+              switch_status=0
+              run_switch || switch_status=$?
+              if [ "$switch_status" -ne 0 ]; then
+                echo "    Switch failed with status ${switch_status}; checking logind before one retry" >&2
+                if ! timeout 10 loginctl list-users >/dev/null 2>&1; then
+                  echo "    logind did not answer; restarting systemd-logind before retry" >&2
+                  systemctl restart systemd-logind.service || true
+                  sleep 3
+                fi
+                run_switch
+              fi
               echo "    Switch complete"
             fi
             note_phase "nixos switch"
