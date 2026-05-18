@@ -117,7 +117,13 @@ in
           reverse_proxy 127.0.0.1:8082
         }
         handle /api/* {
-          reverse_proxy 127.0.0.1:8082
+          reverse_proxy 127.0.0.1:8082 {
+            transport http {
+              response_header_timeout 15m
+              read_timeout 15m
+              write_timeout 15m
+            }
+          }
         }
         handle /provider/* {
           respond "provider routes are not available from the public edge" 403
