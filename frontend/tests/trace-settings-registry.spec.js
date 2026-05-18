@@ -22,6 +22,11 @@ async function openApp(page, appId) {
   await page.locator(`[data-desktop-icon-id="${appId}"]`).dblclick();
 }
 
+async function openStartApp(page, appId) {
+  await page.locator('[data-start-button]').click();
+  await page.locator(`[data-start-app-id="${appId}"]`).click();
+}
+
 async function attachScreenshot(page, testInfo, name) {
   const path = testInfo.outputPath(`${name}.png`);
   await page.screenshot({ path, fullPage: false });
@@ -207,6 +212,65 @@ test('Settings renders queued promotion candidates without browser-internal rout
   await expect(candidate).toContainText('vm-product-test');
   await expect(candidate.locator('[data-settings-promotion-status]')).toContainText('queued');
   await expect(candidate.locator('[data-settings-promotion-verify]')).toBeVisible();
+  expect(forbiddenRequests).toHaveLength(0);
+});
+
+test('Candidate desktop viewer opens queued promotion candidates without manual IDs', async ({ page, authenticator, request }) => {
+  const forbiddenRequests = [];
+  page.on('request', (browserRequest) => {
+    const url = new URL(browserRequest.url());
+    if (url.pathname.startsWith('/internal')) {
+      forbiddenRequests.push(`${browserRequest.method()} ${url.pathname}`);
+    }
+  });
+
+  const email = uniqueEmail('candidate-viewer');
+  await registerAndLoadDesktop(page, email);
+  const session = await getSession(page, BASE_URL);
+  expect(session.authenticated).toBe(true);
+  expect(session.user?.id).toBeTruthy();
+
+  const candidateID = `candidate-viewer-${Date.now()}`;
+  const seed = await request.post('http://127.0.0.1:8085/internal/promotions', {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Caller': 'true',
+    },
+    data: {
+      candidate_id: candidateID,
+      owner_id: session.user.id,
+      status: 'queued',
+      source_loop_id: 'seeded-candidate-viewer-test',
+      trace_id: 'trace-seeded-candidate-viewer-test',
+      vm_id: 'vm-candidate-viewer-test',
+      snapshot_id: 'snapshot-candidate-viewer-test',
+      base_sha: 'base-candidate-viewer-test',
+      worker_head_sha: 'worker-candidate-viewer-test',
+      manifest_path: '/tmp/candidate-viewer-manifest.json',
+      patchset_path: '/tmp/candidate-viewer.patch',
+      integration_branch: 'agent/seeded-candidate-viewer/candidate',
+      destination_branch: 'main',
+      summary: 'Candidate desktop contextual viewer test',
+    },
+  });
+  expect(seed.status()).toBe(202);
+
+  await openStartApp(page, 'candidate-desktop');
+  const viewer = page.locator('[data-candidate-desktop-viewer]');
+  await expect(viewer).toBeVisible({ timeout: 10_000 });
+  await expect(viewer.locator('[data-candidate-desktop-list]')).toBeVisible({ timeout: 10_000 });
+
+  const candidate = viewer.locator(`[data-candidate-desktop-candidate-id="${candidateID}"]`);
+  await expect(candidate).toContainText('Candidate desktop contextual viewer test');
+  await expect(candidate).toContainText('vm-candidate-viewer-test');
+  await expect(candidate.locator('[data-candidate-desktop-status]')).toContainText('queued');
+  await candidate.locator('[data-candidate-desktop-open-candidate]').click();
+
+  await expect(viewer).toHaveAttribute('data-candidate-desktop-id', 'vm-candidate-viewer-test');
+  const frame = viewer.locator('[data-candidate-desktop-frame]');
+  await expect(frame).toBeVisible({ timeout: 10_000 });
+  await expect(frame).toHaveAttribute('src', /desktop_id=vm-candidate-viewer-test/);
+  await expect(frame).toHaveAttribute('src', /embedded=1/);
   expect(forbiddenRequests).toHaveLength(0);
 });
 

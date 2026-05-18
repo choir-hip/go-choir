@@ -844,7 +844,7 @@
               </div>
             {:else if win.appId === 'candidate-desktop'}
               <div class="app-content candidate-desktop-content" data-candidate-desktop-window>
-                <CandidateDesktopViewer appContext={win.appContext} />
+                <CandidateDesktopViewer appContext={win.appContext} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>

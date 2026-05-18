@@ -18,8 +18,10 @@ test('Candidate Desktop Viewer embeds the same Svelte route with desktop_id', as
   await openStartApp(page, 'candidate-desktop');
   const viewer = page.locator('[data-candidate-desktop-viewer]');
   await expect(viewer).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('[data-candidate-desktop-empty]')).toBeVisible();
+  await expect(page.locator('[data-candidate-desktop-queue]')).toBeVisible();
+  await expect(page.locator('[data-candidate-desktop-preview-empty]')).toBeVisible();
 
+  await page.locator('[data-candidate-desktop-manual] summary').click();
   await page.locator('[data-candidate-desktop-input]').fill('branch-a');
   await page.locator('[data-candidate-desktop-open]').click();
 
