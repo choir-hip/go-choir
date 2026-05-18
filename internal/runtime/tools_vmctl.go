@@ -209,19 +209,31 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			requestedMachineClass := strings.TrimSpace(in.MachineClass)
 			machineClass := normalizeRuntimeWorkerMachineClass(requestedMachineClass)
 			cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID)
+			forceFreshWorker := false
 			if !in.AllowParallel && cacheKey != "" {
 				rt.workerRequestMu.Lock()
 				if cached := strings.TrimSpace(rt.workerRequests[cacheKey]); cached != "" {
-					rt.workerRequestMu.Unlock()
-					return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
+					invalidated, err := rt.workerVMRequestInvalidatedByRunEvents(ctx, parentRunID, cached)
+					if err != nil {
+						rt.workerRequestMu.Unlock()
+						return "", err
+					}
+					if !invalidated {
+						rt.workerRequestMu.Unlock()
+						return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
+					}
+					delete(rt.workerRequests, cacheKey)
+					forceFreshWorker = true
 				}
-				if cached, ok, err := rt.findExistingWorkerVMRequest(ctx, parentRunID); err != nil {
+				if cached, ok, invalidated, err := rt.findExistingWorkerVMRequest(ctx, parentRunID); err != nil {
 					rt.workerRequestMu.Unlock()
 					return "", err
 				} else if ok {
 					rt.workerRequests[cacheKey] = cached
 					rt.workerRequestMu.Unlock()
 					return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
+				} else if invalidated {
+					forceFreshWorker = true
 				}
 				handle, err := client.RequestWorker(vmctl.WorkerRequest{
 					UserID:        ownerID,
@@ -230,13 +242,16 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					TrajectoryID:  trajectoryID,
 					Purpose:       strings.TrimSpace(in.Purpose),
 					MachineClass:  machineClass,
-					AllowParallel: false,
+					AllowParallel: forceFreshWorker,
 				})
 				if err != nil {
 					rt.workerRequestMu.Unlock()
 					return "", err
 				}
 				result := workerVMRequestResult(handle)
+				if forceFreshWorker {
+					result["replaced_unreachable_worker_request"] = true
+				}
 				if requestedMachineClass != "" && requestedMachineClass != machineClass {
 					result["machine_class_normalized_from"] = requestedMachineClass
 					result["machine_class"] = handle.MachineClass
@@ -302,14 +317,18 @@ func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID stri
 	return ownerID + "\x00" + desktopID + "\x00" + parentAgentID + "\x00" + parentRunID
 }
 
-func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string) (string, bool, error) {
+func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string) (string, bool, bool, error) {
 	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
-		return "", false, nil
+		return "", false, false, nil
 	}
 	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
 	if err != nil {
-		return "", false, fmt.Errorf("request_worker_vm dedupe scan: %w", err)
+		return "", false, false, fmt.Errorf("request_worker_vm dedupe scan: %w", err)
 	}
+	var candidate string
+	var candidateKey workerVMLeaseKey
+	var invalidated []workerVMLeaseKey
+	invalidatedAny := false
 	for _, ev := range eventsForRun {
 		if ev.Kind != types.EventToolResult {
 			continue
@@ -320,18 +339,76 @@ func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string
 			Output  string `json:"output"`
 		}
 		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "request_worker_vm" {
+			if err == nil && !payload.IsError && payload.Tool == "delegate_worker_vm" {
+				if output, ok := decodeWorkerToolOutput(payload.Output); ok && shouldInvalidateWorkerVMRequestFromDelegateResult(output) {
+					key := workerVMLeaseKeyFromDelegateOutput(output)
+					if key.Valid() {
+						invalidated = append(invalidated, key)
+						invalidatedAny = true
+						if candidate != "" && key.Matches(candidateKey) {
+							candidate = ""
+							candidateKey = workerVMLeaseKey{}
+						}
+					}
+				}
+			}
 			continue
 		}
-		var output map[string]any
-		if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
+		output, ok := decodeWorkerToolOutput(payload.Output)
+		if !ok {
 			continue
 		}
 		status, _ := output["status"].(string)
 		if strings.TrimSpace(status) == "worker_requested" && output["handle"] != nil {
-			return payload.Output, true, nil
+			key := workerVMLeaseKeyFromRequestOutput(output)
+			if workerVMLeaseKeyInvalidated(key, invalidated) {
+				invalidatedAny = true
+				continue
+			}
+			candidate = payload.Output
+			candidateKey = key
 		}
 	}
-	return "", false, nil
+	if candidate != "" {
+		return candidate, true, invalidatedAny, nil
+	}
+	return "", false, invalidatedAny, nil
+}
+
+func (rt *Runtime) workerVMRequestInvalidatedByRunEvents(ctx context.Context, runID, raw string) (bool, error) {
+	output, ok := decodeWorkerToolOutput(raw)
+	if !ok {
+		return false, nil
+	}
+	key := workerVMLeaseKeyFromRequestOutput(output)
+	if !key.Valid() || rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return false, nil
+	}
+	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	if err != nil {
+		return false, fmt.Errorf("request_worker_vm dedupe invalidation scan: %w", err)
+	}
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload struct {
+			Tool    string `json:"tool"`
+			IsError bool   `json:"is_error"`
+			Output  string `json:"output"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "delegate_worker_vm" {
+			continue
+		}
+		output, ok := decodeWorkerToolOutput(payload.Output)
+		if !ok || !shouldInvalidateWorkerVMRequestFromDelegateResult(output) {
+			continue
+		}
+		if workerVMLeaseKeyFromDelegateOutput(output).Matches(key) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func markToolResultDeduped(raw, reason string) (string, error) {
@@ -342,6 +419,115 @@ func markToolResultDeduped(raw, reason string) (string, error) {
 	output["deduped"] = true
 	output["dedupe_reason"] = reason
 	return toolResultJSON(output)
+}
+
+type workerVMLeaseKey struct {
+	WorkerID   string
+	VMID       string
+	SandboxURL string
+}
+
+func (k workerVMLeaseKey) Valid() bool {
+	return k.WorkerID != "" || k.VMID != "" || k.SandboxURL != ""
+}
+
+func (k workerVMLeaseKey) Matches(other workerVMLeaseKey) bool {
+	if !k.Valid() || !other.Valid() {
+		return false
+	}
+	if k.WorkerID != "" && other.WorkerID != "" {
+		return k.WorkerID == other.WorkerID
+	}
+	if k.VMID != "" && other.VMID != "" {
+		return k.VMID == other.VMID
+	}
+	return k.SandboxURL != "" && other.SandboxURL != "" && k.SandboxURL == other.SandboxURL
+}
+
+func workerVMLeaseKeyInvalidated(key workerVMLeaseKey, invalidated []workerVMLeaseKey) bool {
+	for _, stale := range invalidated {
+		if stale.Matches(key) {
+			return true
+		}
+	}
+	return false
+}
+
+func decodeWorkerToolOutput(raw string) (map[string]any, bool) {
+	var output map[string]any
+	if err := json.Unmarshal([]byte(raw), &output); err != nil {
+		return nil, false
+	}
+	return output, true
+}
+
+func workerVMLeaseKeyFromRequestOutput(output map[string]any) workerVMLeaseKey {
+	handle, _ := output["handle"].(map[string]any)
+	return workerVMLeaseKey{
+		WorkerID:   stringMapValue(handle, "worker_id"),
+		VMID:       stringMapValue(handle, "vm_id"),
+		SandboxURL: stringMapValue(handle, "sandbox_url"),
+	}
+}
+
+func workerVMLeaseKeyFromDelegateOutput(output map[string]any) workerVMLeaseKey {
+	return workerVMLeaseKey{
+		WorkerID:   stringMapValue(output, "worker_id"),
+		VMID:       firstNonEmpty(stringMapValue(output, "worker_vm_id"), stringMapValue(output, "vm_id")),
+		SandboxURL: stringMapValue(output, "worker_sandbox_url"),
+	}
+}
+
+func shouldInvalidateWorkerVMRequestFromDelegateResult(output map[string]any) bool {
+	status := stringMapValue(output, "status")
+	if status != "worker_run_submit_failed" && status != "worker_run_status_failed" {
+		return false
+	}
+	text := strings.ToLower(strings.Join([]string{
+		stringMapValue(output, "error"),
+		stringMapValue(output, "terminal_error"),
+		stringMapValue(output, "worker_event_error"),
+	}, "\n"))
+	for _, marker := range []string{
+		"no route to host",
+		"network is unreachable",
+		"connection refused",
+		"connection reset by peer",
+		"connect: cannot assign requested address",
+		"connect: can't assign requested address",
+		"no such host",
+		"i/o timeout",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rt *Runtime) invalidateWorkerVMRequestCacheForDelegateResult(ctx context.Context, result map[string]any) map[string]any {
+	if rt == nil || !shouldInvalidateWorkerVMRequestFromDelegateResult(result) {
+		return result
+	}
+	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	desktopID := strings.TrimSpace(stringFromToolContext(ctx, toolCtxDesktopID))
+	if desktopID == "" {
+		desktopID = types.PrimaryDesktopID
+	}
+	parentAgentID := stringFromToolContext(ctx, toolCtxAgentID)
+	parentRunID := stringFromToolContext(ctx, toolCtxRunID)
+	cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID)
+	if cacheKey == "" {
+		return result
+	}
+	rt.workerRequestMu.Lock()
+	if _, ok := rt.workerRequests[cacheKey]; ok {
+		delete(rt.workerRequests, cacheKey)
+		result["worker_request_cache_invalidated"] = true
+		result["worker_request_cache_invalidation_reason"] = "worker_runtime_unreachable"
+	}
+	rt.workerRequestMu.Unlock()
+	return result
 }
 
 func normalizeRuntimeWorkerMachineClass(raw string) string {
@@ -562,6 +748,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					result["error"] = err.Error()
 					result["terminal_error"] = err.Error()
 					result["attempt"] = attempt
+					result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
 					result = checkpointDelegateResult(result, "submit_failed")
 					return toolResultJSON(result)
 				}
@@ -612,6 +799,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 								result["worker_channel_message_count"] = count
 							}
 						}
+						result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
 						result = checkpointDelegateResult(result, status)
 						return toolResultJSON(result)
 					}
@@ -621,6 +809,7 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					result["terminal_error"] = err.Error()
 					result["attempt"] = attempt
 					result = resultWithWorkerEvents(result, startResp.RunID)
+					result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
 					result = checkpointDelegateResult(result, "status_failed")
 					return toolResultJSON(result)
 				}

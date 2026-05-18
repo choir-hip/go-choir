@@ -1221,6 +1221,102 @@ func TestSuperRequestWorkerVMDedupesSameRunDifferentPurposes(t *testing.T) {
 	}
 }
 
+func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+
+	workerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unreachable worker server should be closed before delegation")
+	}))
+	workerURL := workerSrv.URL
+	workerSrv.Close()
+
+	reg := vmctl.NewOwnershipRegistry(workerURL)
+	if _, err := reg.ResolveOrAssignDesktop("user-alice", types.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve source desktop: %v", err)
+	}
+	handler := vmctl.NewHandler(reg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	vmctlSrv := httptest.NewServer(mux)
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	rt.cfg.VmctlURL = vmctlSrv.URL
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate worker recovery", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+		runMetadataTrajectoryID: "traj-worker-recovery",
+	})
+	if err != nil {
+		t.Fatalf("submit super task: %v", err)
+	}
+	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	toolCtx := WithToolExecutionContext(context.Background(), superTask)
+
+	requestRaw := json.RawMessage(`{"purpose":"repair mobile UX substrate","machine_class":"worker-small"}`)
+	firstRaw, err := superRegistry.Execute(toolCtx, "request_worker_vm", requestRaw)
+	if err != nil {
+		t.Fatalf("first request_worker_vm: %v", err)
+	}
+	var first map[string]any
+	if err := json.Unmarshal([]byte(firstRaw), &first); err != nil {
+		t.Fatalf("decode first request_worker_vm: %v\n%s", err, firstRaw)
+	}
+	appendRuntimeToolResult(t, s, *superTask, "request_worker_vm", first)
+	firstHandle, _ := first["handle"].(map[string]any)
+	firstWorkerID := stringMapValue(firstHandle, "worker_id")
+	firstVMID := stringMapValue(firstHandle, "vm_id")
+	firstSandboxURL := stringMapValue(firstHandle, "sandbox_url")
+	if firstWorkerID == "" || firstVMID == "" || firstSandboxURL == "" {
+		t.Fatalf("first worker handle incomplete: %s", firstRaw)
+	}
+
+	delegateRaw, err := superRegistry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": %q,
+		"vm_id": %q,
+		"objective": "run a candidate repair",
+		"profile": "vsuper",
+		"timeout_seconds": 1
+	}`, firstSandboxURL, firstWorkerID, firstVMID)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm should return structured unreachable-worker evidence, got error: %v", err)
+	}
+	var delegateResult map[string]any
+	if err := json.Unmarshal([]byte(delegateRaw), &delegateResult); err != nil {
+		t.Fatalf("decode delegate_worker_vm: %v\n%s", err, delegateRaw)
+	}
+	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", delegateResult)
+	if stringMapValue(delegateResult, "status") != "worker_run_submit_failed" {
+		t.Fatalf("delegate status = %q, want worker_run_submit_failed\nraw=%s", stringMapValue(delegateResult, "status"), delegateRaw)
+	}
+	if invalidated, _ := delegateResult["worker_request_cache_invalidated"].(bool); !invalidated {
+		t.Fatalf("delegate result did not invalidate stale worker request cache: %s", delegateRaw)
+	}
+
+	secondRaw, err := superRegistry.Execute(toolCtx, "request_worker_vm", requestRaw)
+	if err != nil {
+		t.Fatalf("second request_worker_vm: %v", err)
+	}
+	var second map[string]any
+	if err := json.Unmarshal([]byte(secondRaw), &second); err != nil {
+		t.Fatalf("decode second request_worker_vm: %v\n%s", err, secondRaw)
+	}
+	secondHandle, _ := second["handle"].(map[string]any)
+	secondWorkerID := stringMapValue(secondHandle, "worker_id")
+	secondVMID := stringMapValue(secondHandle, "vm_id")
+	if secondWorkerID == firstWorkerID || secondVMID == firstVMID {
+		t.Fatalf("second request reused unreachable worker: first=%s/%s second=%s/%s raw=%s", firstWorkerID, firstVMID, secondWorkerID, secondVMID, secondRaw)
+	}
+	if replaced, _ := second["replaced_unreachable_worker_request"].(bool); !replaced {
+		t.Fatalf("second request did not record fresh lease replacement: %s", secondRaw)
+	}
+}
+
 func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
