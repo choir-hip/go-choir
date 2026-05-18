@@ -18,7 +18,11 @@
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey, getSession } from './helpers/auth.js';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL =
+  process.env.GO_CHOIR_UX_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  process.env.BASE_URL ||
+  'http://localhost:4173';
 
 function uniqueEmail() {
   return `shell-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -172,6 +176,51 @@ test('logged-out desktop can open read-only Podcast without the auth wall', asyn
   await expect(podcastWindow).toBeVisible({ timeout: 5000 });
   await expect(podcastWindow.locator('[data-podcast-library-recommended]')).toBeVisible();
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+});
+
+test('logged-out desktop opens Browser and Trace as read shells before auth', async ({ page }) => {
+  const protectedAppRequests = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith('/api/browser') || pathname.startsWith('/api/trace')) {
+      protectedAppRequests.push(pathname);
+    }
+  });
+
+  await page.goto(BASE_URL);
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
+
+  await page.locator('[data-start-button]').click();
+  await page.locator('[data-start-app-id="browser"]').click();
+
+  const browserApp = page.locator('[data-browser-app]').last();
+  await expect(browserApp).toBeVisible({ timeout: 5000 });
+  await expect(browserApp.locator('[data-browser-backend-status]')).toHaveAttribute(
+    'data-browser-backend-mode',
+    'guest_iframe',
+  );
+
+  const artifactUrl = 'data:text/html;charset=utf-8,%3Ch1%3EGuest%20browser%3C%2Fh1%3E';
+  await browserApp.locator('[data-browser-url-input]').fill(artifactUrl);
+  await browserApp.locator('[data-browser-go-btn]').click();
+  await expect(browserApp.locator('[data-browser-iframe]')).toHaveAttribute('src', artifactUrl);
+  expect(protectedAppRequests).toEqual([]);
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+
+  await page.locator('[data-start-button]').click();
+  await page.locator('[data-start-app-id="trace"]').click();
+
+  const traceApp = page.locator('[data-trace-app]').last();
+  await expect(traceApp).toBeVisible({ timeout: 5000 });
+  await expect(traceApp.locator('[data-trace-guest]')).toBeVisible();
+  await expect(traceApp.locator('[data-trace-guest-sidebar]')).toBeVisible();
+  expect(protectedAppRequests).toEqual([]);
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+
+  await traceApp.locator('[data-trace-guest-sign-in]').click();
+  await expect(page.locator('[data-auth-overlay]')).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toBeVisible();
 });
 
 test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {

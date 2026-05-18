@@ -27,11 +27,13 @@
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
 
   export let appContext = {};
+  export let authenticated = false;
   const dispatch = createEventDispatcher();
 
   // ---- State ----
-  let urlInput = appContext?.initialUrl || appContext?.sourceUrl || 'https://en.wikipedia.org';
-  let currentUrl = '';
+  const initialTarget = appContext?.initialUrl || appContext?.sourceUrl || '';
+  let urlInput = initialTarget || 'https://en.wikipedia.org';
+  let currentUrl = initialTarget ? normalizeUrl(initialTarget) : '';
   let loading = false;
   let error = '';
   let iframeEl = null;
@@ -46,6 +48,8 @@
   let controlValue = '';
   let controlStatus = '';
   let backendNavigationSeq = 0;
+  let mounted = false;
+  let capabilityLoadStarted = false;
 
   // Navigation history
   let history = [];
@@ -173,7 +177,24 @@
     return false;
   }
 
+  function enterGuestMode() {
+    browserCapabilities = {
+      available: false,
+      mode: 'guest_iframe',
+      substrate: 'iframe',
+      supports: {},
+    };
+    capabilityError = '';
+    backendSession = null;
+    clearBackendSnapshots();
+  }
+
   async function loadBrowserCapabilities() {
+    if (!authenticated) {
+      enterGuestMode();
+      return;
+    }
+    capabilityLoadStarted = true;
     capabilityError = '';
     try {
       const res = await fetchWithRenewal('/api/browser/capabilities', { method: 'GET' });
@@ -361,8 +382,22 @@
   // ---- Lifecycle ----
 
   onMount(() => {
-    loadBrowserCapabilities();
+    mounted = true;
+    if (authenticated) {
+      loadBrowserCapabilities();
+    } else {
+      enterGuestMode();
+    }
   });
+
+  $: if (mounted && authenticated && !capabilityLoadStarted) {
+    loadBrowserCapabilities();
+  }
+
+  $: if (mounted && !authenticated && browserCapabilities?.mode !== 'guest_iframe') {
+    capabilityLoadStarted = false;
+    enterGuestMode();
+  }
 </script>
 
 <div class="browser-app" data-browser-app>

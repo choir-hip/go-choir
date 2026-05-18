@@ -12,6 +12,8 @@
 
   const dispatch = createEventDispatcher();
 
+  export let authenticated = false;
+
   let loadingIndex = true;
   let snapshotLoading = false;
   let detailLoading = false;
@@ -129,6 +131,44 @@
     return !!runId && (item?.state === 'completed' || item?.state === 'blocked');
   }
 
+  function closeTraceStream() {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+    if (stream) {
+      stream.close();
+      stream = null;
+    }
+  }
+
+  function enterGuestTrace() {
+    closeTraceStream();
+    loadingIndex = false;
+    snapshotLoading = false;
+    detailLoading = false;
+    error = '';
+    trajectories = [];
+    snapshot = null;
+    selectedTrajectoryId = '';
+    selectedAgentId = '';
+    selectedMomentId = '';
+    momentDetails = {};
+    selectedContinuation = null;
+    selectedAcceptanceId = '';
+    continuationError = '';
+    streamStatus = 'guest';
+  }
+
+  function requestTraceAuth() {
+    dispatch('authrequired', {
+      kind: 'app_launch',
+      appId: 'trace',
+      appName: 'Trace',
+      icon: '🔎',
+    });
+  }
+
   function buildGraphLayout(agents, edges) {
     if (!agents || agents.length === 0) {
       return { nodes: [], edges: [] };
@@ -205,6 +245,10 @@
   }
 
   async function loadTrajectoryIndex() {
+    if (!authenticated) {
+      enterGuestTrace();
+      return;
+    }
     loadingIndex = true;
     error = '';
     try {
@@ -228,6 +272,10 @@
   }
 
   async function loadTrajectorySnapshot(trajectoryId, { silent = false } = {}) {
+    if (!authenticated) {
+      enterGuestTrace();
+      return;
+    }
     if (!trajectoryId) {
       snapshot = null;
       return;
@@ -269,6 +317,7 @@
   }
 
   async function ensureMomentDetail(momentId, { force = false } = {}) {
+    if (!authenticated) return;
     if (!selectedTrajectoryId || !momentId) return;
     if (!force && momentDetails[momentId]) return;
     detailLoading = true;
@@ -287,6 +336,7 @@
   }
 
   function scheduleSnapshotRefresh() {
+    if (!authenticated) return;
     if (!selectedTrajectoryId || refreshTimer) return;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
@@ -303,9 +353,10 @@
   }
 
   function connectStream(trajectoryId) {
-    if (stream) {
-      stream.close();
-      stream = null;
+    closeTraceStream();
+    if (!authenticated) {
+      streamStatus = 'guest';
+      return;
     }
     if (!trajectoryId) {
       streamStatus = 'idle';
@@ -326,6 +377,7 @@
   }
 
   async function selectTrajectory(trajectoryId) {
+    if (!authenticated) return;
     if (!trajectoryId || trajectoryId === selectedTrajectoryId) return;
     selectedTrajectoryId = trajectoryId;
     selectedAgentId = '';
@@ -339,6 +391,7 @@
   }
 
   async function selectMoment(momentId) {
+    if (!authenticated) return;
     if (!momentId) return;
     selectedMomentId = momentId;
     mobilePanel = 'inspector';
@@ -350,6 +403,10 @@
   }
 
   async function selectNextContinuation() {
+    if (!authenticated) {
+      requestTraceAuth();
+      return;
+    }
     if (!continuableRunId || continuationBusy) return;
     continuationBusy = true;
     continuationError = '';
@@ -368,6 +425,10 @@
   }
 
   async function startSelectedContinuation() {
+    if (!authenticated) {
+      requestTraceAuth();
+      return;
+    }
     if (!selectedContinuation?.continuation_id || continuationBusy) return;
     continuationBusy = true;
     continuationError = '';
@@ -407,12 +468,23 @@
   $: canContinueTrajectory = canSelectContinuation(trajectory, continuableRunId);
 
   onMount(() => {
-    loadTrajectoryIndex();
+    if (authenticated) {
+      loadTrajectoryIndex();
+    } else {
+      enterGuestTrace();
+    }
   });
 
+  $: if (authenticated && streamStatus === 'guest') {
+    loadTrajectoryIndex();
+  }
+
+  $: if (!authenticated && streamStatus !== 'guest') {
+    enterGuestTrace();
+  }
+
   onDestroy(() => {
-    if (refreshTimer) clearTimeout(refreshTimer);
-    if (stream) stream.close();
+    closeTraceStream();
   });
 </script>
 
@@ -434,7 +506,9 @@
     </div>
 
     <div class="trajectory-list" data-trace-trajectory-list>
-      {#if loadingIndex}
+      {#if !authenticated}
+        <div class="empty-state" data-trace-guest-sidebar>Sign in to inspect private trajectories.</div>
+      {:else if loadingIndex}
         <div class="empty-state">Loading trajectories…</div>
       {:else if trajectories.length === 0}
         <div class="empty-state">No trajectories yet. Start with the prompt bar or open VText.</div>
@@ -464,11 +538,27 @@
     </aside>
 
     <section class="trace-main">
-    {#if error}
-      <div class="error-banner">{error}</div>
-    {/if}
+    {#if !authenticated}
+      <section class="panel guest-trace-panel" data-trace-guest>
+        <div class="panel-header">
+          <div>
+            <h4>Trace evidence is private</h4>
+            <p>Use the public desktop without loading run evidence. Sign in when you need trajectories, moments, worker provenance, or continuation controls.</p>
+          </div>
+          <span class="status-pill neutral">read shell</span>
+        </div>
+        <div class="guest-trace-actions">
+          <button class="ghost-btn" data-trace-guest-sign-in on:click={requestTraceAuth}>
+            Sign in for Trace
+          </button>
+        </div>
+      </section>
+    {:else}
+      {#if error}
+        <div class="error-banner">{error}</div>
+      {/if}
 
-    {#if trajectory}
+      {#if trajectory}
       <header class="trace-header" data-trace-summary>
         <div>
           <h3>{trajectory.title}</h3>
@@ -1030,8 +1120,9 @@
           {/if}
         </aside>
       </div>
-    {:else if !loadingIndex}
-      <div class="empty-state">Select a trajectory to inspect its graph, moments, and message flow.</div>
+      {:else if !loadingIndex}
+        <div class="empty-state">Select a trajectory to inspect its graph, moments, and message flow.</div>
+      {/if}
     {/if}
     </section>
   </div>
@@ -1622,6 +1713,18 @@
     gap: 0.75rem;
     color: #94a3b8;
     font-size: 0.78rem;
+  }
+
+  .guest-trace-panel {
+    align-self: start;
+    display: grid;
+    gap: 0.9rem;
+    max-width: 720px;
+  }
+
+  .guest-trace-actions {
+    display: flex;
+    justify-content: flex-start;
   }
 
   .moment-strip {

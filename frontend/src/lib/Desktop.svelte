@@ -838,6 +838,7 @@
               <div class="app-content browser-content" data-browser-app-container>
                 <BrowserApp
                   appContext={win.appContext}
+                  {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
                   on:openvtext={handleOpenVTextFromContent}
                 />
@@ -872,7 +873,11 @@
               </div>
             {:else if win.appId === 'trace'}
               <div class="app-content trace-content" data-trace-window>
-                <TraceApp on:authexpired={() => dispatch('authexpired')} />
+                <TraceApp
+                  {authenticated}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:authrequired={(event) => requestAuth(event.detail || {})}
+                />
               </div>
             {:else if win.appId === 'podcast'}
               <div class="app-content podcast-content" data-podcast-window>
