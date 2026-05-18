@@ -223,6 +223,35 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   await expect(page.locator('[data-auth-entry]')).toBeVisible();
 });
 
+test('mobile bottom-bar restore raises the selected app above the current window', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await openAppViaIcon(page, 'files');
+  const filesWindow = page.locator('[data-window]').filter({ has: page.locator('[data-files-app]') }).last();
+  await expect(filesWindow).toBeVisible({ timeout: 5000 });
+  await filesWindow.locator('[data-window-minimize]').click();
+  await expect(filesWindow).not.toBeVisible();
+
+  await openAppViaIcon(page, 'browser');
+  const browserWindow = page.locator('[data-window]').filter({ has: page.locator('[data-browser-app]') }).last();
+  await expect(browserWindow).toBeVisible({ timeout: 5000 });
+
+  const filesIndicator = page.locator('[data-window-indicator]').filter({ hasText: 'Files' }).last();
+  await expect(filesIndicator).toBeVisible();
+  await filesIndicator.click();
+
+  await expect(filesWindow).toBeVisible();
+  await expect(filesIndicator).toHaveAttribute('data-window-indicator-active', 'true');
+
+  const z = await Promise.all([
+    filesWindow.evaluate((el) => Number(getComputedStyle(el).zIndex) || 0),
+    browserWindow.evaluate((el) => Number(getComputedStyle(el).zIndex) || 0),
+  ]);
+  expect(z[0]).toBeGreaterThan(z[1]);
+});
+
 test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);

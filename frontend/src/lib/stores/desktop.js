@@ -391,6 +391,7 @@ export function maximizeWindow(windowId) {
 
 /** Restore a window from minimized or maximized */
 export function restoreWindow(windowId) {
+  const raisedZIndex = getNextZIndex();
   windows.update(($windows) => {
     const target = $windows.find((w) => w.windowId === windowId);
     const restored = $windows.map((w) => {
@@ -404,6 +405,7 @@ export function restoreWindow(windowId) {
             y: geo.y,
             width: geo.width,
             height: geo.height,
+            zIndex: raisedZIndex,
             restoredGeometry: null,
           };
         }
@@ -416,10 +418,16 @@ export function restoreWindow(windowId) {
             y: geo.y,
             width: geo.width,
             height: geo.height,
+            zIndex: raisedZIndex,
             restoredGeometry: null,
           };
         }
-        return { ...withoutShowDesktopMarkers(w), mode: w._showDesktopPrevMode || 'normal', restoredGeometry: null };
+        return {
+          ...withoutShowDesktopMarkers(w),
+          mode: w._showDesktopPrevMode || 'normal',
+          zIndex: raisedZIndex,
+          restoredGeometry: null,
+        };
       }
       return w;
     });
