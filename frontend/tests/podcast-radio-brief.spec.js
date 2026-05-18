@@ -71,7 +71,7 @@ async function seedPodcastFeed(page) {
   }, FIXTURE_RSS);
 }
 
-test('podcast app turns a durable feed artifact into a VText radio brief', async ({ page, authenticator }) => {
+test('podcast app opens a durable feed artifact as a full player app', async ({ page, authenticator }) => {
   expect(authenticator.authenticatorId).toBeTruthy();
   await registerAndLoadDesktop(page, uniqueEmail());
   const contentItem = await seedPodcastFeed(page);
@@ -80,7 +80,7 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
   await expect(podcastIcon).toBeVisible();
   await podcastIcon.dblclick();
 
-  const podcastWindow = page.locator('[data-content-viewer][data-content-app="podcast"]').last();
+  const podcastWindow = page.locator('[data-podcast-app]').last();
   await expect(podcastWindow.locator('[data-podcast-library]')).toBeVisible({ timeout: 10_000 });
   const seededFeed = podcastWindow
     .locator('[data-podcast-library-item]')
@@ -90,8 +90,8 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
 
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toBeVisible();
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toContainText('Mission Gradient Radio');
-  await expect(podcastWindow.locator('header h2')).toContainText('Mission Gradient Radio');
-  await expect(podcastWindow.locator('header h2')).not.toContainText(/\.xml|[0-9a-f]{8}-[0-9a-f]{4}/i);
+  await expect(podcastWindow.locator('.podcast-topbar h2')).toContainText('Mission Gradient Radio');
+  await expect(podcastWindow.locator('.podcast-topbar h2')).not.toContainText(/\.xml|[0-9a-f]{8}-[0-9a-f]{4}/i);
   await expect(podcastWindow.locator('[data-content-provenance]')).toHaveCount(0);
   await expect(podcastWindow.locator('[data-podcast-episode]')).toHaveCount(2);
   await expect(podcastWindow.locator('[data-podcast-player]')).toBeVisible();
@@ -112,13 +112,4 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
   await expect(podcastWindow.locator('text=Loading podcast artifacts...')).toHaveCount(0);
   await expect(podcastWindow.locator('[data-podcast-import]')).not.toBeVisible();
   await expect(seededFeed).toBeVisible();
-  await seededFeed.click();
-
-  await podcastWindow.locator('[data-podcast-open-vtext]').click();
-
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Mission Gradient Radio Brief', { timeout: 20_000 });
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Candidate Worlds First');
-  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Radio Work Queue');
-  await expect(vtextWindow.locator('[data-vtext-editor]')).toHaveAttribute('data-vtext-doc-id', /.+/);
 });

@@ -94,11 +94,16 @@ test('bare content references open the dedicated content apps from the prompt ba
     expect(decision.media_type).toBe(reference.mediaType);
     expect(decision.source_url).toBe(reference.url);
 
-    const viewer = page.locator(`[data-content-viewer][data-content-app="${reference.app}"]`).last();
-    await expect(viewer).toBeVisible({ timeout: 30_000 });
     if (reference.app === 'podcast') {
+      const viewer = page.locator('[data-podcast-app]').last();
+      await expect(viewer).toBeVisible({ timeout: 30_000 });
       await expect(viewer.locator('[data-podcast-episode]').first()).toBeVisible({ timeout: 45_000 });
-      await expect(viewer.locator('[data-podcast-audio]').first()).toBeVisible();
+      await expect(viewer.locator('[data-podcast-controls]').first()).toBeVisible();
+      await expect(viewer.locator('[data-podcast-seek]').first()).toBeVisible();
+      await expect(viewer.locator('[data-podcast-audio]').first()).toHaveAttribute('src', /.+/);
+    } else {
+      const viewer = page.locator(`[data-content-viewer][data-content-app="${reference.app}"]`).last();
+      await expect(viewer).toBeVisible({ timeout: 30_000 });
     }
   }
 

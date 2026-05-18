@@ -37,6 +37,7 @@
   import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
   import TerminalApp from './TerminalApp.svelte';
   import ContentViewer from './ContentViewer.svelte';
+  import PodcastApp from './PodcastApp.svelte';
   import {
     windows,
     activeWindowId,
@@ -848,7 +849,15 @@
               <div class="app-content trace-content" data-trace-window>
                 <TraceApp on:authexpired={() => dispatch('authexpired')} />
               </div>
-            {:else if ['pdf', 'epub', 'image', 'video', 'audio', 'podcast'].includes(win.appId)}
+            {:else if win.appId === 'podcast'}
+              <div class="app-content podcast-content" data-podcast-window>
+                <PodcastApp
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:openvtext={handleOpenVTextFromContent}
+                />
+              </div>
+            {:else if ['pdf', 'epub', 'image', 'video', 'audio'].includes(win.appId)}
               <div class="app-content content-viewer-content" data-content-window>
                 <ContentViewer
                   appContext={{ ...win.appContext, appId: win.appId }}
@@ -1046,6 +1055,11 @@
   .trace-content {
     padding: 0;
     background: #0a0d14;
+  }
+
+  .podcast-content {
+    padding: 0;
+    background: #080d18;
   }
 
   .settings-content {
