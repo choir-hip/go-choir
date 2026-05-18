@@ -57,6 +57,7 @@
     restoreWindow,
     moveWindow,
     resizeWindow,
+    updateWindowAppContext,
     setWindows,
     setIconPositions,
     getDefaultIconPositions,
@@ -581,6 +582,15 @@
     scheduleSave();
   }
 
+  function handleWindowAppContextChange(event) {
+    updateWindowAppContext(
+      event.detail?.windowId || '',
+      event.detail?.appContext || {},
+      event.detail?.title || ''
+    );
+    scheduleSave();
+  }
+
   function handleLogout() {
     closeLiveChannel();
     dispatch('logout');
@@ -851,11 +861,13 @@
             {:else if win.appId === 'vtext'}
               <div class="app-content vtext-content" data-vtext-app>
                 <VTextEditor
+                  windowId={win.windowId}
                   {currentUser}
                   {authenticated}
                   appContext={win.appContext}
                   on:authexpired={() => dispatch('authexpired')}
                   on:authrequired={(event) => requestAuth(event.detail || {})}
+                  on:contextchange={handleWindowAppContextChange}
                 />
               </div>
             {:else if win.appId === 'trace'}

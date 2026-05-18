@@ -26,6 +26,7 @@
 
   export let currentUser = null;
   export let appContext = {};
+  export let windowId = '';
 
   const dispatch = createEventDispatcher();
 
@@ -234,6 +235,31 @@
       return bits[bits.length - 1] || 'VText';
     }
     return 'VText';
+  }
+
+  function publishWindowContext(nextContext = {}, title = '') {
+    const merged = {
+      ...(appContext || {}),
+      ...(nextContext || {}),
+    };
+    appContext = merged;
+    initializedKey = getContextKey(merged);
+    dispatch('contextchange', {
+      windowId,
+      appContext: merged,
+      title: title || merged.windowTitle || normalizeTitle(merged),
+    });
+  }
+
+  function publishCurrentDocumentContext(title = '') {
+    if (!currentDoc?.doc_id) return;
+    publishWindowContext({
+      docId: currentDoc.doc_id,
+      windowTitle: title || currentDoc.title || appContext.windowTitle || 'VText',
+      createInitialVersion: false,
+      initialContent: '',
+      seedPrompt: '',
+    }, title || currentDoc.title || appContext.windowTitle || 'VText');
   }
 
   function getAuthorLabel() {
@@ -534,6 +560,11 @@
       fileName: appContext.fileName || bits[bits.length - 1] || '',
     };
     initializedKey = getContextKey(appContext);
+    dispatch('contextchange', {
+      windowId,
+      appContext,
+      title: appContext.windowTitle || appContext.fileName || 'VText',
+    });
   }
 
   async function reloadDocument(preferredRevisionId = '') {
@@ -800,6 +831,7 @@
 
       if (currentDoc?.doc_id) {
         await ensureFileManifest();
+        publishCurrentDocumentContext(normalizeTitle(appContext));
         connectDocumentStream(currentDoc.doc_id);
       }
     } catch (err) {
@@ -876,6 +908,7 @@
       publishedDerivativeActive = true;
       await reloadDocument(revision.revision_id);
       await ensureFileManifest();
+      publishCurrentDocumentContext(title);
       connectDocumentStream(currentDoc.doc_id);
       saveStatus = auto ? 'Private version ready' : 'Private version created';
     } catch (err) {
@@ -890,14 +923,14 @@
     }
   }
 
-  function handleOpenRecent(doc) {
+  async function handleOpenRecent(doc) {
     if (!doc?.doc_id) return;
-    appContext = {
-      ...appContext,
+    publishWindowContext({
       docId: doc.doc_id,
       windowTitle: doc.title || 'VText',
       createInitialVersion: false,
-    };
+    }, doc.title || 'VText');
+    await loadContext();
   }
 
   async function handleNewDocument() {
@@ -917,6 +950,7 @@
       lastAutosavedContent = '';
       saveStatus = 'Blank document ready';
       await ensureFileManifest();
+      publishCurrentDocumentContext('Untitled VText');
       connectDocumentStream(currentDoc.doc_id);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -1146,7 +1180,7 @@
       </div>
     </section>
   {:else}
-    <div class="doc-toolbar" class:toolbar-faded={toolbarFaded} data-vtext-toolbar>
+    <div class="doc-toolbar" class:toolbar-faded={toolbarFaded && !surfaceFocused} data-vtext-toolbar>
       <div class="version-controls">
         <span class="nav-version" data-vtext-version>{versionLabel}</span>
         <button

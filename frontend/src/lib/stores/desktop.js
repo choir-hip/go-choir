@@ -454,6 +454,24 @@ export function resizeWindow(windowId, x, y, width, height) {
   );
 }
 
+/** Update durable per-window app context after an app creates or opens state. */
+export function updateWindowAppContext(windowId, appContext = {}, title = '') {
+  windows.update(($windows) =>
+    $windows.map((w) => {
+      if (w.windowId !== windowId) return w;
+      const nextContext = {
+        ...(w.appContext || {}),
+        ...(appContext || {}),
+      };
+      return {
+        ...w,
+        title: title || nextContext.windowTitle || w.title,
+        appContext: nextContext,
+      };
+    })
+  );
+}
+
 /** Set windows state (used for loading from server) */
 export function setWindows(newWindows, newActiveId) {
   windows.set(newWindows.map((windowState) => normalizeWindowGeometry(windowState)));
