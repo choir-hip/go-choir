@@ -2600,7 +2600,7 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	healthy := false
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
-	now := time.Now().Add(-time.Minute)
+	now := time.Now().Add(-time.Hour)
 	own := &VMOwnership{
 		VMID:         "vm-stale-active",
 		UserID:       "user-old-account",
@@ -2621,10 +2621,12 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	mock := &mockVMManager{
 		getVMs: map[string]*VMInstanceInfo{
 			own.VMID: {
-				HostURL: own.SandboxURL,
-				Epoch:   own.Epoch,
-				Healthy: false,
-				State:   "running",
+				HostURL:       own.SandboxURL,
+				Epoch:         own.Epoch,
+				Healthy:       false,
+				State:         "running",
+				StartedAt:     now,
+				LastHealthyAt: now,
 			},
 		},
 		checkHealthOK: &healthy,
@@ -2658,6 +2660,110 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	}
 	if resolved.State != VMStateActive {
 		t.Fatalf("State = %s, want %s", resolved.State, VMStateActive)
+	}
+}
+
+func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T) {
+	healthy := false
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	now := time.Now()
+	own := &VMOwnership{
+		VMID:         "vm-busy-active",
+		UserID:       "user-busy",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateActive,
+		CreatedAt:    now.Add(-time.Hour),
+		LastActiveAt: now.Add(-time.Minute),
+		Epoch:        3,
+		Published:    true,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	mock := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL:       "http://127.0.0.1:9009",
+				Epoch:         own.Epoch,
+				Healthy:       false,
+				State:         "running",
+				StartedAt:     now.Add(-time.Hour),
+				LastHealthyAt: now.Add(-2 * time.Minute),
+			},
+		},
+		checkHealthOK: &healthy,
+	}
+	reg.SetVMManager(mock)
+
+	resolved, err := reg.ResolveOrAssignDesktop("user-busy", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if len(mock.checkHealthCalls) != 1 || mock.checkHealthCalls[0] != own.VMID {
+		t.Fatalf("health checks = %+v, want [%s]", mock.checkHealthCalls, own.VMID)
+	}
+	if len(mock.recovers) != 0 {
+		t.Fatalf("recovers = %+v, want none for transient health failure", mock.recovers)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9009" {
+		t.Fatalf("SandboxURL = %q, want current manager host URL", resolved.SandboxURL)
+	}
+	if resolved.Epoch != own.Epoch {
+		t.Fatalf("Epoch = %d, want %d", resolved.Epoch, own.Epoch)
+	}
+}
+
+func TestOwnershipRegistry_ResolvePreservesPendingActiveBoot(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	now := time.Now()
+	own := &VMOwnership{
+		VMID:         "vm-pending-active",
+		UserID:       "user-pending",
+		DesktopID:    PrimaryDesktopID,
+		Kind:         VMKindInteractive,
+		SandboxURL:   "http://127.0.0.1:9001",
+		State:        VMStateActive,
+		CreatedAt:    now.Add(-time.Hour),
+		LastActiveAt: now.Add(-time.Minute),
+		Epoch:        3,
+		Published:    true,
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	reg.vmByID[own.VMID] = own
+	reg.mu.Unlock()
+
+	mock := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL:   "http://127.0.0.1:9010",
+				Epoch:     own.Epoch,
+				Healthy:   false,
+				State:     "pending",
+				StartedAt: now.Add(-30 * time.Second),
+			},
+		},
+	}
+	reg.SetVMManager(mock)
+
+	resolved, err := reg.ResolveOrAssignDesktop("user-pending", PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if len(mock.recovers) != 0 {
+		t.Fatalf("recovers = %+v, want none for in-flight boot", mock.recovers)
+	}
+	if resolved.SandboxURL != "http://127.0.0.1:9010" {
+		t.Fatalf("SandboxURL = %q, want current pending host URL", resolved.SandboxURL)
+	}
+	if resolved.Epoch != own.Epoch {
+		t.Fatalf("Epoch = %d, want %d", resolved.Epoch, own.Epoch)
 	}
 }
 

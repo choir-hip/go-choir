@@ -138,10 +138,13 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		return nil, err
 	}
 	return &vmctl.VMInstanceInfo{
-		HostURL: inst.HostURL,
-		Epoch:   inst.Config.Epoch,
-		Healthy: inst.Healthy,
-		State:   string(inst.State),
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
 	}, nil
 }
 
@@ -159,10 +162,13 @@ func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) 
 		return nil, err
 	}
 	return &vmctl.VMInstanceInfo{
-		HostURL: inst.HostURL,
-		Epoch:   inst.Config.Epoch,
-		Healthy: inst.Healthy,
-		State:   string(inst.State),
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
 	}, nil
 }
 
@@ -172,10 +178,13 @@ func (a *vmManagerAdapter) ReattachVM(vmID, hostURL string, epoch int64) (*vmctl
 		return nil, err
 	}
 	return &vmctl.VMInstanceInfo{
-		HostURL: inst.HostURL,
-		Epoch:   inst.Config.Epoch,
-		Healthy: inst.Healthy,
-		State:   string(inst.State),
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
 	}, nil
 }
 
@@ -185,10 +194,13 @@ func (a *vmManagerAdapter) RecoverVM(vmID string) (*vmctl.VMInstanceInfo, error)
 		return nil, err
 	}
 	return &vmctl.VMInstanceInfo{
-		HostURL: inst.HostURL,
-		Epoch:   inst.Config.Epoch,
-		Healthy: inst.Healthy,
-		State:   string(inst.State),
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
 	}, nil
 }
 
@@ -198,10 +210,13 @@ func (a *vmManagerAdapter) GetVM(vmID string) *vmctl.VMInstanceInfo {
 		return nil
 	}
 	return &vmctl.VMInstanceInfo{
-		HostURL: inst.HostURL,
-		Epoch:   inst.Config.Epoch,
-		Healthy: inst.Healthy,
-		State:   string(inst.State),
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
 	}
 }
 

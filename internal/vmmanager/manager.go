@@ -153,6 +153,9 @@ type VMInstance struct {
 	// LastHealthCheck is when the VM was last health-checked.
 	LastHealthCheck time.Time
 
+	// LastHealthyAt is the last time the guest responded healthy.
+	LastHealthyAt time.Time
+
 	// Healthy is the result of the last health check.
 	Healthy bool
 
@@ -637,6 +640,7 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 	inst.State = StateRunning
 	inst.Healthy = true
 	inst.LastHealthCheck = time.Now()
+	inst.LastHealthyAt = inst.LastHealthCheck
 
 	log.Printf("vmmanager: booted VM %s (host=%s epoch=%d)", cfg.VMID, hostURL, epoch)
 
@@ -762,6 +766,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	inst.Healthy = true
 	inst.StartedAt = time.Now()
 	inst.LastHealthCheck = time.Now()
+	inst.LastHealthyAt = inst.LastHealthCheck
 
 	log.Printf("vmmanager: resumed VM %s (host=%s epoch=%d)", vmID, hostURL, epoch)
 	return inst, nil
@@ -818,6 +823,7 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 		PID:             pid,
 		StartedAt:       time.Now(),
 		LastHealthCheck: time.Now(),
+		LastHealthyAt:   time.Now(),
 		Healthy:         true,
 	}
 	m.vms[vmID] = inst
@@ -905,6 +911,9 @@ func (m *Manager) CheckHealth(vmID string) (bool, error) {
 	m.mu.Lock()
 	inst.Healthy = healthy
 	inst.LastHealthCheck = time.Now()
+	if healthy {
+		inst.LastHealthyAt = inst.LastHealthCheck
+	}
 	if !healthy {
 		log.Printf("vmmanager: health check failed for VM %s at %s", vmID, inst.HostURL)
 	}

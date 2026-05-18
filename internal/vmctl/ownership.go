@@ -252,10 +252,13 @@ type VMManagerConfig struct {
 // VMInstanceInfo holds the information returned by the VM manager
 // after a VM lifecycle operation.
 type VMInstanceInfo struct {
-	HostURL string
-	Epoch   int64
-	Healthy bool
-	State   string
+	HostURL         string
+	Epoch           int64
+	Healthy         bool
+	State           string
+	StartedAt       time.Time
+	LastHealthCheck time.Time
+	LastHealthyAt   time.Time
 }
 
 // OwnershipRegistry manages the mapping of users to VMs. It provides
@@ -746,6 +749,26 @@ func vmInstanceInfoReady(info *VMInstanceInfo) bool {
 	return state == "" || state == "running"
 }
 
+func activeVMCanRouteDuringHealthGrace(info *VMInstanceInfo, now time.Time) bool {
+	if info == nil || strings.TrimSpace(info.HostURL) == "" {
+		return false
+	}
+	state := strings.ToLower(strings.TrimSpace(info.State))
+	switch state {
+	case "pending":
+		started := info.StartedAt
+		return !started.IsZero() && now.Sub(started) <= activeResolvePendingRouteGrace
+	case "", "running":
+		healthyAt := info.LastHealthyAt
+		if healthyAt.IsZero() {
+			healthyAt = info.StartedAt
+		}
+		return !healthyAt.IsZero() && now.Sub(healthyAt) <= activeResolveUnhealthyRouteGrace
+	default:
+		return false
+	}
+}
+
 func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil {
 		return nil, fmt.Errorf("ownership is required")
@@ -770,6 +793,13 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 	case "stopped", "hibernated":
 		log.Printf("vmctl: active ownership for VM %s found manager state=%s; resuming", own.VMID, state)
 		return r.startExistingVM(own, mgr)
+	case "pending":
+		if activeVMCanRouteDuringHealthGrace(info, time.Now()) {
+			log.Printf("vmctl: active ownership for VM %s found manager state=pending; preserving in-flight boot", own.VMID)
+			return info, nil
+		}
+		log.Printf("vmctl: active ownership for VM %s found stale manager state=pending; recovering before routing", own.VMID)
+		return r.recoverOrRestartActiveVM(own, mgr)
 	case "", "running":
 		healthy, err := mgr.CheckHealth(own.VMID)
 		if err != nil {
@@ -781,6 +811,11 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 				return refreshed, nil
 			}
 			return info, nil
+		}
+		refreshed := mgr.GetVM(own.VMID)
+		if activeVMCanRouteDuringHealthGrace(refreshed, time.Now()) {
+			log.Printf("vmctl: active VM %s health check failed; preserving route within transient health grace", own.VMID)
+			return refreshed, nil
 		}
 		log.Printf("vmctl: active VM %s is unhealthy on resolve; recovering before routing", own.VMID)
 		return r.recoverOrRestartActiveVM(own, mgr)
@@ -899,6 +934,8 @@ const (
 	gatewayCredentialEnsureSuccessInterval = 10 * time.Minute
 	gatewayCredentialEnsureFailureInterval = 30 * time.Second
 	activeResolveReadinessCheckInterval    = 10 * time.Second
+	activeResolveUnhealthyRouteGrace       = 20 * time.Minute
+	activeResolvePendingRouteGrace         = 3 * time.Minute
 )
 
 func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
