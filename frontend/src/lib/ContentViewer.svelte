@@ -535,7 +535,7 @@
       <h2>{displayTitle}</h2>
     </div>
     {#if appHint === 'podcast' && item}
-      <button class="source-link back-link" type="button" aria-label="Back to podcast library" on:click={backToPodcastLibrary} data-podcast-back>Back</button>
+      <button class="source-link back-link" type="button" aria-label="Back to podcast library" title="Back to podcast library" on:click={backToPodcastLibrary} data-podcast-back>Back</button>
     {:else if sourceUrl && appHint !== 'podcast'}
       <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>
     {/if}
