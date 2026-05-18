@@ -722,7 +722,7 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 			return cpu, mem
 		}
 	}
-	return 2, 512
+	return 2, 1024
 }
 
 func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
@@ -1183,7 +1183,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 			VMID:              vmID,
 			GuestPort:         8085,
 			MachineCPUCount:   2,
-			MachineMemSizeMib: 512,
+			MachineMemSizeMib: 1024,
 			GatewayToken:      gwToken,
 		})
 		if err != nil {
@@ -1316,7 +1316,7 @@ func (r *OwnershipRegistry) ForkDesktop(userID, sourceDesktopID, targetDesktopID
 			VMID:              vmID,
 			GuestPort:         8085,
 			MachineCPUCount:   2,
-			MachineMemSizeMib: 512,
+			MachineMemSizeMib: 1024,
 			SourceVMID:        sourceVMID,
 			GatewayToken:      r.issueGatewayToken(vmID),
 		})

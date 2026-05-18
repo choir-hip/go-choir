@@ -937,11 +937,13 @@ func acceptanceRollbackRefs(candidates []types.PromotionCandidateRecord) []types
 
 func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
 	var packageRefs []string
+	var verifyingRefs []string
 	var verifiedRefs []string
 	var promotedRefs []string
 	var rollbackRefs []string
 	var blockedRefs []string
 	var lastPackage types.EventRecord
+	var lastVerifying types.EventRecord
 	var lastVerified types.EventRecord
 	var lastPromoted types.EventRecord
 	var lastRollback types.EventRecord
@@ -960,6 +962,18 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 			})
 			packageRefs = append(packageRefs, ref)
 			lastPackage = ev
+		case types.EventAppAdoptionVerificationStarted:
+			ref := builder.addEventEvidence(ev, "recipient candidate app adoption verification started", map[string]any{
+				"adoption_id":              payloadString(payload, "adoption_id"),
+				"package_id":               payloadString(payload, "package_id"),
+				"target_computer_id":       payloadString(payload, "target_computer_id"),
+				"target_candidate_id":      payloadString(payload, "target_candidate_id"),
+				"candidate_source_ref":     payloadString(payload, "candidate_source_ref"),
+				"recipient_build_required": payloadBool(payload, "recipient_build_required"),
+				"recipient_build_status":   payloadString(payload, "recipient_build_status"),
+			})
+			verifyingRefs = append(verifyingRefs, ref)
+			lastVerifying = ev
 		case types.EventAppAdoptionVerified:
 			ref := builder.addEventEvidence(ev, "recipient candidate rebuilt and verified AppChangePackage", map[string]any{
 				"adoption_id":                  payloadString(payload, "adoption_id"),
@@ -1011,6 +1025,9 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 	}
 	if len(packageRefs) > 0 {
 		builder.addCheckpoint("app_package_published", "passed", lastPackage.Timestamp, lastPackage.StreamSeq, packageRefs, map[string]any{"package_event_count": len(packageRefs)})
+	}
+	if len(verifyingRefs) > 0 {
+		builder.addCheckpoint("app_adoption_verifying", "pending", lastVerifying.Timestamp, lastVerifying.StreamSeq, verifyingRefs, map[string]any{"verifying_event_count": len(verifyingRefs)})
 	}
 	if len(verifiedRefs) > 0 {
 		builder.addCheckpoint("app_adoption_verified", "passed", lastVerified.Timestamp, lastVerified.StreamSeq, verifiedRefs, map[string]any{"verified_event_count": len(verifiedRefs)})

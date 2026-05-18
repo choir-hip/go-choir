@@ -299,7 +299,28 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 	rec.ForegroundTailMergeResult = firstNonEmptyPromotion(strings.TrimSpace(in.ForegroundTailMergeResult), rec.ForegroundTailMergeResult, "no-conflict")
 	rec.MergeStrategy = firstNonEmptyPromotion(strings.TrimSpace(in.MergeStrategy), rec.MergeStrategy, "rebase")
 	rec.MergeConflictsJSON = rawJSONOrFallback(in.MergeConflicts, "[]")
+	rec.RollbackProfileJSON = appAdoptionRollbackProfileJSON(rec, lineage)
 	buildReport := appAdoptionBuildReport{Required: appChangePackageRequiresRecipientBuild(pkg)}
+	rec.Status = types.AppAdoptionVerifying
+	rec.Error = ""
+	startedResults := appAdoptionVerificationStartedResults(pkg, rec, buildReport)
+	startedResultsJSON, _ := json.Marshal(startedResults)
+	rec.VerifierResultsJSON = startedResultsJSON
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionVerificationStarted, "adoption", map[string]any{
+		"adoption_id":                  rec.AdoptionID,
+		"package_id":                   rec.PackageID,
+		"target_computer_id":           rec.TargetComputerID,
+		"target_candidate_id":          rec.TargetCandidateID,
+		"candidate_source_ref":         rec.CandidateSourceRef,
+		"target_active_ref_at_cutover": rec.TargetActiveSourceRefAtCutover,
+		"recipient_build_required":     buildReport.Required,
+		"recipient_build_status":       "started",
+		"continuous_app_change":        true,
+	})
 	if buildReport.Required {
 		var buildErr error
 		buildReport, buildErr = rt.materializeAppAdoptionCandidate(ctx, pkg, rec, cutoverRef)
@@ -325,17 +346,6 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 		rec.Status = types.AppAdoptionVerified
 		rec.Error = ""
 	}
-	rollback := map[string]any{
-		"previous_active_source_ref": rec.TargetActiveSourceRefAtCutover,
-		"previous_runtime_digest":    lineage.RuntimeDigest,
-		"previous_ui_digest":         lineage.UIDigest,
-		"previous_route_profile":     lineage.RouteProfile,
-		"candidate_source_ref":       rec.CandidateSourceRef,
-		"package_id":                 rec.PackageID,
-		"adoption_id":                rec.AdoptionID,
-	}
-	rollbackJSON, _ := json.Marshal(rollback)
-	rec.RollbackProfileJSON = rollbackJSON
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -564,6 +574,60 @@ func verifierResultsForAppAdoption(pkg types.AppChangePackageRecord, rec types.A
 		})
 	}
 	return results, status, errText
+}
+
+func appAdoptionVerificationStartedResults(pkg types.AppChangePackageRecord, rec types.AppAdoptionRecord, buildReport appAdoptionBuildReport) []map[string]any {
+	now := time.Now().UTC().Format(time.RFC3339)
+	manifest := appChangePackageManifest(pkg)
+	return []map[string]any{
+		{
+			"contract_id": "source-refs-resolve",
+			"status":      "passed",
+			"summary":     "package and target candidate source refs are recorded before recipient verification",
+			"details": map[string]any{
+				"package_candidate_source_ref": pkg.CandidateSourceRef,
+				"target_candidate_source_ref":  rec.CandidateSourceRef,
+			},
+			"verified_at": now,
+		},
+		{
+			"contract_id": "source-ledger-reference",
+			"status":      "passed",
+			"summary":     "package records source-ledger provenance before recipient verification",
+			"details": map[string]any{
+				"source_ledger_repo":          stringFromMap(manifest, "source_ledger_repo"),
+				"source_ledger_candidate_ref": stringFromMap(manifest, "source_ledger_candidate_ref"),
+				"source_ledger_commit_sha":    stringFromMap(manifest, "source_ledger_commit_sha"),
+			},
+			"verified_at": now,
+		},
+		{
+			"contract_id": "actual-recipient-runtime-ui-build",
+			"status":      "running",
+			"summary":     "recipient runtime/UI build started; terminal verifier result has not been recorded yet",
+			"details": map[string]any{
+				"required":           buildReport.Required,
+				"adoption_id":        rec.AdoptionID,
+				"target_computer_id": rec.TargetComputerID,
+				"candidate_ref":      rec.CandidateSourceRef,
+			},
+			"verified_at": now,
+		},
+	}
+}
+
+func appAdoptionRollbackProfileJSON(rec types.AppAdoptionRecord, lineage types.ComputerSourceLineageRecord) json.RawMessage {
+	rollback := map[string]any{
+		"previous_active_source_ref": rec.TargetActiveSourceRefAtCutover,
+		"previous_runtime_digest":    lineage.RuntimeDigest,
+		"previous_ui_digest":         lineage.UIDigest,
+		"previous_route_profile":     lineage.RouteProfile,
+		"candidate_source_ref":       rec.CandidateSourceRef,
+		"package_id":                 rec.PackageID,
+		"adoption_id":                rec.AdoptionID,
+	}
+	rollbackJSON, _ := json.Marshal(rollback)
+	return rollbackJSON
 }
 
 func appChangePackageRequiresRecipientBuild(pkg types.AppChangePackageRecord) bool {

@@ -70,6 +70,7 @@ type AppAdoptionStatus string
 const (
 	AppAdoptionProposed         AppAdoptionStatus = "adoption_proposed"
 	AppAdoptionCandidateApplied AppAdoptionStatus = "candidate_applied"
+	AppAdoptionVerifying        AppAdoptionStatus = "verifying"
 	AppAdoptionBuilt            AppAdoptionStatus = "built"
 	AppAdoptionVerified         AppAdoptionStatus = "verified"
 	AppAdoptionOwnerApproved    AppAdoptionStatus = "owner_approved"

@@ -249,6 +249,10 @@ const (
 	// starts applying an AppChangePackage.
 	EventAppAdoptionProposed EventKind = "app_adoption.proposed"
 
+	// EventAppAdoptionVerificationStarted is emitted before recipient-side
+	// verifier contracts run resource-heavy build work.
+	EventAppAdoptionVerificationStarted EventKind = "app_adoption.verification_started"
+
 	// EventAppAdoptionVerified is emitted when recipient-side verifier
 	// contracts accept the rebuilt app artifacts.
 	EventAppAdoptionVerified EventKind = "app_adoption.verified"

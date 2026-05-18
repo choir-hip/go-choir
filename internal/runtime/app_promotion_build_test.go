@@ -81,12 +81,94 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	if !strings.Contains(string(adoption.VerifierResultsJSON), "actual-recipient-runtime-ui-build") {
 		t.Fatalf("verifier results missing actual build contract: %s", string(adoption.VerifierResultsJSON))
 	}
+	events, err := rt.store.ListEventsByTrajectory(context.Background(), "user-build", "traj-app-build", 20)
+	if err != nil {
+		t.Fatalf("list adoption trace events: %v", err)
+	}
+	if !testEventsContainKind(events, types.EventAppAdoptionVerificationStarted) {
+		t.Fatalf("trace events missing verification-started checkpoint: %+v", events)
+	}
+}
+
+func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	sourceRepo := testAppPromotionSourceRepo(t)
+	rt.cfg.PromotionSourceRepo = sourceRepo
+	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
+	rt.cfg.AppPromotionRuntimeBuildCommand = "echo runtime build started && exit 42"
+	rt.cfg.AppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/runtime.txt"
+
+	runtimePatch := testGitDiffForPath(t, sourceRepo, "runtime.txt", "runtime v1\n")
+	uiPatch := testGitDiffForPath(t, sourceRepo, "frontend/ui.txt", "ui v1\n")
+	bodyBytes, err := json.Marshal(map[string]any{
+		"app_id":                      "podcast",
+		"visibility":                  "unlisted",
+		"require_recipient_build":     true,
+		"source_computer_id":          "user-a-computer",
+		"source_candidate_id":         "candidate-user-a-podcast-build-failure",
+		"candidate_source_ref":        "refs/heads/computers/user-a-computer/candidates/candidate-user-a-podcast-build-failure",
+		"source_ledger_repo":          "https://github.com/yusefmosiah/choir-source-ledger.git",
+		"source_ledger_candidate_ref": "refs/heads/computers/user-a-computer/candidates/candidate-user-a-podcast-build-failure",
+		"source_ledger_commit_sha":    "abc123",
+		"runtime_source_delta":        runtimePatch,
+		"ui_source_delta":             uiPatch,
+		"app_protocol_contract":       "recipient_build_required: podcast API/UI contract",
+		"trace_id":                    "traj-app-build-failure",
+	})
+	if err != nil {
+		t.Fatalf("marshal package body: %v", err)
+	}
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", string(bodyBytes), "user-build-failure")
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+
+	adoptBody := `{"package_id":"` + pkg.PackageID + `","target_candidate_id":"candidate-user-b-podcast-build-failure","trace_id":"traj-app-build-failure"}`
+	adoptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, "user-build-failure")
+	if adoptW.Code != http.StatusCreated {
+		t.Fatalf("adoption status = %d body=%s", adoptW.Code, adoptW.Body.String())
+	}
+	var adoption types.AppAdoptionRecord
+	if err := json.Unmarshal(adoptW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode adoption: %v", err)
+	}
+	verifyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, "user-build-failure")
+	if verifyW.Code != http.StatusBadRequest {
+		t.Fatalf("verify status = %d body=%s", verifyW.Code, verifyW.Body.String())
+	}
+	detailW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID, "", "user-build-failure")
+	if detailW.Code != http.StatusOK {
+		t.Fatalf("adoption detail status = %d body=%s", detailW.Code, detailW.Body.String())
+	}
+	if err := json.Unmarshal(detailW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode failed adoption detail: %v", err)
+	}
+	if adoption.Status != types.AppAdoptionBlocked {
+		t.Fatalf("adoption status = %q, want blocked; body=%s", adoption.Status, detailW.Body.String())
+	}
+	if !strings.Contains(string(adoption.VerifierResultsJSON), "runtime build started") {
+		t.Fatalf("blocked adoption did not preserve build output: %s", string(adoption.VerifierResultsJSON))
+	}
+	if !strings.Contains(string(adoption.RollbackProfileJSON), "previous_active_source_ref") {
+		t.Fatalf("blocked adoption missing rollback profile: %s", string(adoption.RollbackProfileJSON))
+	}
+	events, err := rt.store.ListEventsByTrajectory(context.Background(), "user-build-failure", "traj-app-build-failure", 20)
+	if err != nil {
+		t.Fatalf("list failed adoption trace events: %v", err)
+	}
+	if !testEventsContainKind(events, types.EventAppAdoptionVerificationStarted) || !testEventsContainKind(events, types.EventAppAdoptionBlocked) {
+		t.Fatalf("trace events missing started/blocked evidence: %+v", events)
+	}
 }
 
 func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
 	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
 	pkg := types.AppChangePackageRecord{
-		ManifestJSON: json.RawMessage(`{"source_ledger_base_ref":"package-base-sha"}`),
+		ManifestJSON:    json.RawMessage(`{"source_ledger_base_ref":"package-base-sha"}`),
 		SourceActiveRef: "source-active",
 	}
 	rec := types.AppAdoptionRecord{
@@ -95,6 +177,15 @@ func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
 	if got := appPromotionBaseRef(pkg, rec, "target-cutover"); got != "package-base-sha" {
 		t.Fatalf("base ref = %q, want package ledger base", got)
 	}
+}
+
+func testEventsContainKind(events []types.EventRecord, kind types.EventKind) bool {
+	for _, ev := range events {
+		if ev.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func testAppPromotionSourceRepo(t *testing.T) string {

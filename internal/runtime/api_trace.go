@@ -1078,6 +1078,11 @@ func payloadString(payload map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+func payloadBool(payload map[string]any, key string) bool {
+	value, _ := payload[key].(bool)
+	return value
+}
+
 func payloadStringSlice(payload map[string]any, key string) []string {
 	raw, ok := payload[key].([]any)
 	if !ok {
@@ -1255,6 +1260,11 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return fmt.Sprintf("started app adoption %s", shortTraceID(adoptionID))
 		}
 		return "started app adoption"
+	case types.EventAppAdoptionVerificationStarted:
+		if adoptionID := payloadString(payload, "adoption_id"); adoptionID != "" {
+			return fmt.Sprintf("verifying app adoption %s", shortTraceID(adoptionID))
+		}
+		return "verifying app adoption"
 	case types.EventAppAdoptionVerified:
 		return "app adoption verified"
 	case types.EventAppAdoptionBlocked:
@@ -1304,7 +1314,7 @@ func traceEventTone(ev types.EventRecord) string {
 		return "error"
 	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventPromotionCandidateVerified, types.EventPromotionCandidatePromoted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
-	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventBrowserSessionCreated:
+	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
 		return "active"
 	case types.EventPromotionCandidateFailed, types.EventAppAdoptionBlocked, types.EventAppAdoptionRolledBack, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
 		return "error"

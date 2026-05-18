@@ -320,7 +320,7 @@ in
         "VM_STATE_DIR=/var/lib/go-choir/vm-state"
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
-        "VM_MEM_MIB=512"
+        "VM_MEM_MIB=1024"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=3s"
         "VM_BOOT_READY_TIMEOUT=150s"
