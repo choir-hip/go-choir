@@ -54,7 +54,13 @@ func main() {
 		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
 		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
 		PromotionSourceRepo:             rtRuntimeCfg.PromotionSourceRepo,
+		SourceLedgerRepo:                rtRuntimeCfg.SourceLedgerRepo,
 		PromotionWorkspaceRoot:          rtRuntimeCfg.PromotionWorkspaceRoot,
+		AppPromotionRuntimeBuildCommand: rtRuntimeCfg.AppPromotionRuntimeBuildCommand,
+		AppPromotionRuntimeArtifactPath: rtRuntimeCfg.AppPromotionRuntimeArtifactPath,
+		AppPromotionUIBuildCommand:      rtRuntimeCfg.AppPromotionUIBuildCommand,
+		AppPromotionUIArtifactPath:      rtRuntimeCfg.AppPromotionUIArtifactPath,
+		AppPromotionBuildTimeout:        rtRuntimeCfg.AppPromotionBuildTimeout,
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = runtime.DefaultStorePath

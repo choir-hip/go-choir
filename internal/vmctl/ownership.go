@@ -725,7 +725,7 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 			return cpu, mem
 		}
 	}
-	return 2, 1024
+	return interactiveVMCPUCount, interactiveVMMemSizeMib
 }
 
 func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
@@ -936,6 +936,8 @@ const (
 	activeResolveReadinessCheckInterval    = 10 * time.Second
 	activeResolveUnhealthyRouteGrace       = 20 * time.Minute
 	activeResolvePendingRouteGrace         = 3 * time.Minute
+	interactiveVMCPUCount                  = 2
+	interactiveVMMemSizeMib                = 2048
 )
 
 func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
@@ -1219,8 +1221,8 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 		info, err := mgr.BootVM(VMManagerConfig{
 			VMID:              vmID,
 			GuestPort:         8085,
-			MachineCPUCount:   2,
-			MachineMemSizeMib: 1024,
+			MachineCPUCount:   interactiveVMCPUCount,
+			MachineMemSizeMib: interactiveVMMemSizeMib,
 			GatewayToken:      gwToken,
 		})
 		if err != nil {
@@ -1352,8 +1354,8 @@ func (r *OwnershipRegistry) ForkDesktop(userID, sourceDesktopID, targetDesktopID
 		info, err := mgr.BootVM(VMManagerConfig{
 			VMID:              vmID,
 			GuestPort:         8085,
-			MachineCPUCount:   2,
-			MachineMemSizeMib: 1024,
+			MachineCPUCount:   interactiveVMCPUCount,
+			MachineMemSizeMib: interactiveVMMemSizeMib,
 			SourceVMID:        sourceVMID,
 			GatewayToken:      r.issueGatewayToken(vmID),
 		})

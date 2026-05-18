@@ -245,6 +245,10 @@ EOF
       ExecStart = "${goChoirPackages.sandbox}/bin/sandbox";
       Restart = "on-failure";
       RestartSec = 1;
+      # App adoption builds run as sandbox child processes. If a child build
+      # exceeds the guest memory envelope, keep the runtime alive so it can
+      # persist a blocked verifier result instead of losing terminal evidence.
+      OOMPolicy = "continue";
       StandardOutput = "journal+console";
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];

@@ -505,6 +505,24 @@ func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testi
 	}
 }
 
+func TestOwnershipRegistry_InteractiveVMUsesBuildCapableMemoryEnvelope(t *testing.T) {
+	mock := &mockVMManager{}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mock)
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
+	}
+	got := mock.boots[0]
+	if got.MachineCPUCount != interactiveVMCPUCount || got.MachineMemSizeMib != interactiveVMMemSizeMib {
+		t.Fatalf("interactive BootVM shape = %d cpu / %d MiB, want %d cpu / %d MiB",
+			got.MachineCPUCount, got.MachineMemSizeMib, interactiveVMCPUCount, interactiveVMMemSizeMib)
+	}
+}
+
 func TestOwnershipRegistry_SetSandboxCredential(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
