@@ -278,6 +278,22 @@ jobs:
             fi
             note_phase "nixos switch"
 
+            echo "==> Ensuring edge config and host services are live"
+            systemctl daemon-reload || true
+            systemctl start \
+              go-choir-auth \
+              go-choir-platformd \
+              go-choir-sandbox \
+              go-choir-gateway \
+              go-choir-proxy \
+              caddy
+            if systemctl is-active --quiet caddy; then
+              systemctl reload caddy || systemctl restart caddy
+            else
+              systemctl start caddy
+            fi
+            note_phase "service activation"
+
             echo "==> Waiting for services to start"
             sleep 5
             note_phase "service settle"
@@ -317,6 +333,26 @@ jobs:
               echo "    Port $port: OK"
             done
             note_phase "health checks"
+
+            echo "==> Smoke test: public frontend asset graph"
+            configured_frontend_root=$(awk "/root \\* \\/nix\\/store\\/.*go-choir-frontend/ { print \\$3; exit }" /etc/caddy/caddy_config)
+            if [ -z "$configured_frontend_root" ]; then
+              echo "Could not find configured frontend root in Caddy config" >&2
+              exit 1
+            fi
+            served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors https://draft.choir-ip.com/ |
+              sed -n "s/.*src=\"\\/assets\\/\\([^\"]*\\.js\\)\".*/\\1/p" |
+              head -n 1)
+            if [ -z "$served_asset" ]; then
+              echo "Could not find served frontend JS asset in public index" >&2
+              exit 1
+            fi
+            if [ ! -f "$configured_frontend_root/assets/$served_asset" ]; then
+              echo "Served asset $served_asset is not in configured frontend root $configured_frontend_root" >&2
+              exit 1
+            fi
+            echo "    Public frontend asset $served_asset belongs to $configured_frontend_root"
+            note_phase "frontend asset graph"
 
             echo "==> Staging deploy complete"
           '
