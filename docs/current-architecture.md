@@ -38,9 +38,25 @@ and focused unit shaping, but local proof does not establish product readiness.
 
 This staging-first rule applies to platform behavior and shared runtime claims.
 It does not mean every user-local computer change must wait for global CI/deploy.
-Users should eventually be able to fork their own computer, change apps, build a
-new Go/Svelte runtime, install packages, and promote that candidate back into
-their own active computer with local verifier and rollback evidence.
+Users should eventually be able to fork a candidate from their own active
+computer, change apps inside that candidate, build a new Go/Svelte runtime,
+install packages, and promote the verified candidate back into their own active
+computer with local verifier and rollback evidence.
+
+The current promotion architecture is stable platform, divergent computers.
+Read
+[stable-platform-divergent-computers-architecture-2026-05-17.md](stable-platform-divergent-computers-architecture-2026-05-17.md)
+before changing source-lineage, app-package, runtime/UI promotion, platform
+computer, or deployment behavior. The short version is:
+
+```text
+platform substrate changes -> GitHub main -> CI -> NixOS deploy
+user computer changes      -> active source ref -> candidate -> verify -> promote
+source/app sharing         -> app change package -> recipient candidate rebuild
+new-user default image     -> official platform computer fork
+public surface changes     -> platform computer candidate unless substrate changes
+private public surface     -> selected route projection, not whole-computer exposure
+```
 
 Run acceptance is a first-class artifact. A `RunAcceptanceRecord` should be
 synthesized from existing product/control evidence: runs, Trace moments, worker
@@ -300,14 +316,48 @@ Read [public-identity-and-custom-domains.md](public-identity-and-custom-domains.
 Personal promotion changes one user's computer. It may promote a new local Go
 binary, Svelte build, app bundle, theme, prompt, package install, Dolt branch,
 file/blob, or generated artifact into that user's active computer without a
-global platform deploy. It still needs lineage, typed deltas, verifier evidence,
-foreground-tail reconciliation, and rollback.
+global platform deploy. It still needs source lineage, typed deltas, verifier
+evidence, foreground-tail reconciliation, route/adoption records, and rollback.
+Runtime Go and Svelte UI changes should be treated as a matched pair when app
+behavior crosses that boundary.
 
 Platform/public promotion changes shared state: the official Choir baseline,
 public packages, publication artifacts, shared app/agent packages, or public
 artifact graph state. It requires higher ceremony: verifier contracts,
 provenance, compatibility with divergent user computers, rollback, and often
 staging/deploy proof.
+
+Source/package publication is not automatically platform deployment. A user may
+publish app/runtime/UI deltas from an approved candidate as an
+`AppChangePackage`; another user imports that package into their own candidate
+computer, rebases it onto their own source ref, builds their own matched
+runtime/UI artifacts, verifies, and promotes into their own active computer.
+Promotion records must account for foreground-tail changes by naming the target
+active source ref at candidate start and cutover, plus merge/rebase evidence
+and conflicts.
+
+This migration should be treated as one continuous app-change trajectory, not a
+checklist ladder. "Package exists", "candidate built", "record exists", and
+"route changed" are observations, not success states, unless the same
+AppChangePackage identity is carried through source refs, rebuilt artifacts,
+verifier results, authority decisions, rollback, Trace, and run acceptance.
+
+The public/logged-out product surface and new-user default base image should be
+modeled as the official platform computer. It can receive admin-controlled,
+later governance-controlled, candidate promotions without host redeploy when the
+substrate is unchanged. Host NixOS deploy remains for shared substrate behavior.
+Later, organizations, schools, communities, and hobbyist groups can publish
+their own promoted computer distributions as alternative base images for new
+users.
+
+Private user computers may later expose selected public routes, like personal
+websites or personal newspapers, but that must be explicit projection with
+visibility, provenance, and rollback. It must not expose the whole computer.
+Near term, automatic newspaper work should be built in user/candidate computers
+and promoted to the platform computer or published through platformd where
+possible. Platform host deploys remain necessary for shared substrate changes
+such as gateway APIs, vmctl/runtime protocol, auth/routing/security, and
+platformd service behavior.
 
 The algebraic question for either path is whether active and candidate deltas
 from the same base have a valid join. The VM/runtime ledger is usually not
