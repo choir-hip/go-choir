@@ -30,6 +30,7 @@
   let continuationError = '';
   let selectedContinuation = null;
   let selectedAcceptanceId = '';
+  let mobilePanel = 'summary';
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -333,12 +334,14 @@
     selectedContinuation = null;
     selectedAcceptanceId = '';
     continuationError = '';
+    mobilePanel = 'summary';
     await loadTrajectorySnapshot(trajectoryId);
   }
 
   async function selectMoment(momentId) {
     if (!momentId) return;
     selectedMomentId = momentId;
+    mobilePanel = 'inspector';
     await ensureMomentDetail(momentId);
   }
 
@@ -414,7 +417,13 @@
 </script>
 
 <div class="trace-frame" data-trace-app>
-  <div class="trace-app">
+  <div class="trace-app" data-mobile-panel={mobilePanel}>
+    <nav class="mobile-trace-tabs" aria-label="Trace sections" data-trace-mobile-tabs>
+      <button type="button" class:selected={mobilePanel === 'runs'} on:click={() => (mobilePanel = 'runs')}>Runs</button>
+      <button type="button" class:selected={mobilePanel === 'summary'} on:click={() => (mobilePanel = 'summary')}>Summary</button>
+      <button type="button" class:selected={mobilePanel === 'timeline'} on:click={() => (mobilePanel = 'timeline')}>Timeline</button>
+      <button type="button" class:selected={mobilePanel === 'inspector'} on:click={() => (mobilePanel = 'inspector')}>Inspector</button>
+    </nav>
     <aside class="trace-sidebar">
     <div class="sidebar-header">
       <div>
@@ -485,6 +494,7 @@
         <div class="error-banner" data-trace-continuation-error>{continuationError}</div>
       {/if}
 
+      <div class="trace-summary-stack" data-trace-summary-panel>
       {#if selectedContinuation}
         <section class="panel continuation-panel" data-trace-continuation-proposal>
           <div class="panel-header">
@@ -759,6 +769,7 @@
           </div>
         </section>
       {/if}
+      </div>
 
       <div class="main-grid">
         <div class="main-left">
@@ -1042,6 +1053,15 @@
     grid-template-columns: 292px minmax(0, 1fr);
     background: #0a0d14;
     color: #e2e8f0;
+  }
+
+  .mobile-trace-tabs {
+    display: none;
+  }
+
+  .trace-summary-stack {
+    display: grid;
+    gap: 0.9rem;
   }
 
   .trace-sidebar,
@@ -1872,10 +1892,54 @@
       grid-template-rows: auto minmax(0, 1fr);
     }
 
+    .mobile-trace-tabs {
+      display: flex;
+      gap: 0.4rem;
+      overflow-x: auto;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(9, 12, 19, 0.96);
+      scrollbar-width: none;
+    }
+
+    .mobile-trace-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .mobile-trace-tabs button {
+      flex: 1 0 auto;
+      min-height: 34px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.74);
+      color: #cbd5e1;
+      cursor: pointer;
+      font-weight: 820;
+    }
+
+    .mobile-trace-tabs button.selected {
+      border-color: rgba(96, 165, 250, 0.52);
+      background: rgba(37, 99, 235, 0.26);
+      color: #eff6ff;
+    }
+
+    .trace-app:not([data-mobile-panel='runs']) .trace-sidebar,
+    .trace-app[data-mobile-panel='runs'] .trace-main {
+      display: none;
+    }
+
+    .trace-app[data-mobile-panel='summary'] .main-grid,
+    .trace-app[data-mobile-panel='timeline'] .trace-summary-stack,
+    .trace-app[data-mobile-panel='timeline'] [data-trace-inspector],
+    .trace-app[data-mobile-panel='inspector'] .trace-summary-stack,
+    .trace-app[data-mobile-panel='inspector'] .main-left {
+      display: none;
+    }
+
     .trace-sidebar {
       border-right: none;
       border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      max-height: min(44vh, 18rem);
+      max-height: none;
     }
 
     .sidebar-header,

@@ -36,8 +36,12 @@
   import BrowserApp from './BrowserApp.svelte';
   import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
   import TerminalApp from './TerminalApp.svelte';
-  import ContentViewer from './ContentViewer.svelte';
   import PodcastApp from './PodcastApp.svelte';
+  import ImageApp from './ImageApp.svelte';
+  import AudioApp from './AudioApp.svelte';
+  import VideoApp from './VideoApp.svelte';
+  import PdfApp from './PdfApp.svelte';
+  import EpubApp from './EpubApp.svelte';
   import {
     windows,
     activeWindowId,
@@ -509,9 +513,18 @@
 
   function handleLaunchApp(event) {
     if (!authenticated) {
+      const publicApps = new Set(['podcast', 'image', 'audio', 'video', 'pdf', 'epub', 'trace', 'vtext', 'browser']);
+      const appId = event.detail?.appId || '';
+      if (publicApps.has(appId)) {
+        openApp(appId, event.detail?.appName || appId, event.detail?.icon || '', {
+          ...(event.detail?.appContext || {}),
+          guestMode: true,
+        });
+        return;
+      }
       requestAuth({
         kind: 'app_launch',
-        appId: event.detail?.appId || '',
+        appId,
         appName: event.detail?.appName || 'app',
         icon: event.detail?.icon || '',
         appContext: event.detail?.appContext || {},
@@ -853,17 +866,31 @@
               <div class="app-content podcast-content" data-podcast-window>
                 <PodcastApp
                   appContext={{ ...win.appContext, appId: win.appId }}
+                  {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
+                  on:authrequired={(event) => requestAuth(event.detail || {})}
                   on:openvtext={handleOpenVTextFromContent}
                 />
               </div>
-            {:else if ['pdf', 'epub', 'image', 'video', 'audio'].includes(win.appId)}
-              <div class="app-content content-viewer-content" data-content-window>
-                <ContentViewer
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:openvtext={handleOpenVTextFromContent}
-                />
+            {:else if win.appId === 'image'}
+              <div class="app-content media-content" data-image-window>
+                <ImageApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+              </div>
+            {:else if win.appId === 'audio'}
+              <div class="app-content media-content" data-audio-window>
+                <AudioApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+              </div>
+            {:else if win.appId === 'video'}
+              <div class="app-content media-content" data-video-window>
+                <VideoApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+              </div>
+            {:else if win.appId === 'pdf'}
+              <div class="app-content media-content" data-pdf-window>
+                <PdfApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+              </div>
+            {:else if win.appId === 'epub'}
+              <div class="app-content media-content" data-epub-window>
+                <EpubApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else}
               <div class="app-content">

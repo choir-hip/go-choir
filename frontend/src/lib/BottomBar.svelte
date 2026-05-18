@@ -18,7 +18,8 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import {
-    minimizedWindows,
+    activeWindowId,
+    openWindows,
     restoreWindow,
     focusWindow,
     toggleShowDesktop,
@@ -44,8 +45,13 @@
     ['files', 'browser', 'candidate-desktop', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
   );
 
-  function handleRestore(windowId) {
-    restoreWindow(windowId);
+  function handleWindowSwitch(win) {
+    if (win.mode === 'minimized') {
+      restoreWindow(win.windowId);
+    } else {
+      focusWindow(win.windowId);
+    }
+    menuOpen = false;
   }
 
   function handleStartButton() {
@@ -88,7 +94,7 @@
     if (!promptInputEl) return;
     const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
     const verticalPadding = 18;
-    const collapsedHeight = Math.ceil(lineHeight + verticalPadding);
+    const collapsedHeight = Math.max(44, Math.ceil(lineHeight + verticalPadding));
     const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
     promptInputEl.style.height = `${collapsedHeight}px`;
     const desiredHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
@@ -216,15 +222,20 @@
       </div>
     {/if}
 
-    <!-- Minimized window indicators -->
-    <div class="minimized-indicators">
-      {#each $minimizedWindows as win (win.windowId)}
+    <!-- Window switcher -->
+    <div class="window-switcher" data-window-switcher>
+      {#each $openWindows as win (win.windowId)}
         <button
-          class="minimized-indicator"
-          data-minimized-indicator
-          on:click={() => handleRestore(win.windowId)}
+          class:active={win.windowId === $activeWindowId}
+          class:minimized={win.mode === 'minimized'}
+          class="window-indicator"
+          data-window-indicator
+          data-minimized-indicator={win.mode === 'minimized' ? 'true' : undefined}
+          data-window-indicator-active={win.windowId === $activeWindowId ? 'true' : 'false'}
+          data-window-id={win.windowId}
+          on:click={() => handleWindowSwitch(win)}
           title={win.title}
-          aria-label="Restore {win.title}"
+          aria-label="{win.mode === 'minimized' ? 'Restore' : 'Focus'} {win.title}"
         >
           <span class="indicator-icon">{win.icon || '📱'}</span>
           <span class="indicator-name">{win.title}</span>
@@ -467,15 +478,21 @@
     background: rgba(37, 99, 235, 0.32);
   }
 
-  .minimized-indicators {
+  .window-switcher {
     display: flex;
     align-items: center;
     gap: 4px;
     overflow-x: auto;
     flex-shrink: 0;
+    max-width: min(38vw, 460px);
+    scrollbar-width: none;
   }
 
-  .minimized-indicator {
+  .window-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .window-indicator {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -490,12 +507,17 @@
     flex-shrink: 0;
   }
 
-  .minimized-indicator:hover {
+  .window-indicator:hover,
+  .window-indicator.active {
     background: rgba(59, 130, 246, 0.15);
     border-color: rgba(59, 130, 246, 0.3);
   }
 
-  .minimized-indicator:focus-visible {
+  .window-indicator.minimized {
+    opacity: 0.72;
+  }
+
+  .window-indicator:focus-visible {
     outline: 2px solid #3b82f6;
     outline-offset: 2px;
   }
@@ -537,8 +559,8 @@
 
   .prompt-input {
     width: 100%;
-    height: 40px;
-    min-height: 40px;
+    height: 44px;
+    min-height: 44px;
     max-height: min(8rem, 22dvh);
     padding: 9px 12px;
     background: rgba(255, 255, 255, 0.05);
@@ -622,8 +644,8 @@
     }
 
     .prompt-input {
-      height: 38px;
-      min-height: 38px;
+      height: 44px;
+      min-height: 44px;
       padding: 8px 11px;
     }
 
@@ -637,6 +659,14 @@
 
     .bar-right {
       gap: 4px;
+    }
+
+    .window-switcher {
+      max-width: 29vw;
+    }
+
+    .indicator-name {
+      max-width: 54px;
     }
   }
 </style>

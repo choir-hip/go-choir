@@ -160,6 +160,20 @@ test('bottom-left Start menu launches registered apps', async ({ page, authentic
   await expect(page.locator('[data-files-app]').last()).toBeVisible({ timeout: 10000 });
 });
 
+test('logged-out desktop can open read-only Podcast without the auth wall', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
+
+  await page.locator('[data-start-button]').click();
+  await page.locator('[data-start-app-id="podcast"]').click();
+
+  const podcastWindow = page.locator('[data-podcast-app]').last();
+  await expect(podcastWindow).toBeVisible({ timeout: 5000 });
+  await expect(podcastWindow.locator('[data-podcast-library-recommended]')).toBeVisible();
+  await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
+});
+
 test('VText recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
@@ -359,6 +373,8 @@ test('bottom bar prompt input with placeholder', async ({ page, authenticator })
   const initialBox = await promptInput.boundingBox();
   await promptInput.fill('This prompt is intentionally long enough to wrap across more than one visual line on the desktop prompt bar. '.repeat(6));
   await expect.poll(async () => (await promptInput.boundingBox())?.height || 0).toBeGreaterThan((initialBox?.height || 0) + 8);
+  await promptInput.fill('');
+  await expect.poll(async () => (await promptInput.boundingBox())?.height || 0).toBeLessThanOrEqual((initialBox?.height || 0) + 2);
 
   // Type text and submit with Enter
   await promptInput.fill('Hello world');
@@ -580,6 +596,44 @@ test('minimized window indicators in bottom bar', async ({ page, authenticator }
   await expect(windowEl).toBeVisible();
   // Indicator should be gone
   await expect(page.locator('[data-minimized-indicator]')).toHaveCount(0);
+});
+
+test('bottom bar switches all open windows and exits show-desktop state', async ({ page, authenticator }) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await openAppViaIcon(page, 'files');
+  await openAppViaIcon(page, 'settings');
+
+  const windows = page.locator('[data-window]');
+  await expect(windows).toHaveCount(2);
+  await expect(page.locator('[data-window-switcher] [data-window-indicator]')).toHaveCount(2);
+
+  const filesWindow = windows.filter({ has: page.locator('[data-files-app]') }).first();
+  const settingsWindow = windows.filter({ has: page.locator('[data-settings-window]') }).first();
+
+  await settingsWindow.locator('[data-window-minimize]').click();
+  await expect(settingsWindow).not.toBeVisible();
+  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(1);
+
+  const settingsSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Settings' }).first();
+  await settingsSwitch.click();
+  await expect(settingsWindow).toBeVisible();
+  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(0);
+
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-start-show-desktop]').click();
+  await expect(filesWindow).not.toBeVisible();
+  await expect(settingsWindow).not.toBeVisible();
+  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(2);
+
+  const filesSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Files' }).first();
+  await filesSwitch.click();
+  await expect(filesWindow).toBeVisible();
+
+  await page.locator('[data-show-desktop-btn]').click();
+  await page.locator('[data-start-show-desktop]').click();
+  await expect(filesWindow).not.toBeVisible();
 });
 
 // ---------------------------------------------------------------

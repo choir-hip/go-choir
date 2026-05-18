@@ -191,6 +191,11 @@ function normalizeWindowGeometry(windowState) {
   };
 }
 
+function withoutShowDesktopMarkers(windowState) {
+  const { _showDesktopMinimized, _showDesktopPrevMode, ...rest } = windowState;
+  return rest;
+}
+
 // ---- Default icon grid positions ----
 
 /** Default grid positions for floating desktop icons (column layout, left side) */
@@ -236,6 +241,11 @@ export const minimizedWindows = derived(windows, ($windows) =>
   $windows.filter((w) => w.mode === 'minimized')
 );
 
+/** Open windows (shown in the bottom-bar switcher) */
+export const openWindows = derived(windows, ($windows) =>
+  $windows.filter((w) => w.mode !== 'closed' && w.mode !== 'hidden')
+);
+
 /** Visible (non-closed, non-minimized, non-hidden) windows */
 export const visibleWindows = derived(windows, ($windows) =>
   $windows.filter((w) => w.mode !== 'closed' && w.mode !== 'minimized' && w.mode !== 'hidden')
@@ -258,7 +268,11 @@ export function openApp(appId, appName, icon, appContext = {}) {
       activeWindowId.set(existing.windowId);
       let updated = $windows.map((w) =>
         w.windowId === existing.windowId
-          ? { ...w, zIndex: getNextZIndex(), mode: w.mode === 'minimized' ? 'normal' : w.mode }
+          ? {
+              ...withoutShowDesktopMarkers(w),
+              zIndex: getNextZIndex(),
+              mode: w.mode === 'minimized' ? (w._showDesktopPrevMode || 'normal') : w.mode,
+            }
           : w
       );
       // If it was minimized, restore its geometry
@@ -270,7 +284,8 @@ export function openApp(appId, appName, icon, appContext = {}) {
             : w
         );
       }
-      return updated;
+      showDesktopMode.set(false);
+      return updated.map(withoutShowDesktopMarkers);
     }
 
     const windowId = generateWindowId();
@@ -318,11 +333,22 @@ export function closeWindow(windowId) {
 /** Focus a window (bring to top z-index) */
 export function focusWindow(windowId) {
   activeWindowId.set(windowId);
-  windows.update(($windows) =>
-    $windows.map((w) =>
-      w.windowId === windowId ? { ...w, zIndex: getNextZIndex() } : w
-    )
-  );
+  windows.update(($windows) => {
+    const target = $windows.find((w) => w.windowId === windowId);
+    const updated = $windows.map((w) => {
+      if (w.windowId !== windowId) return w;
+      return {
+        ...withoutShowDesktopMarkers(w),
+        mode: w.mode === 'minimized' ? (w._showDesktopPrevMode || 'normal') : w.mode,
+        zIndex: getNextZIndex(),
+      };
+    });
+    if (target?._showDesktopMinimized) {
+      showDesktopMode.set(false);
+      return updated.map(withoutShowDesktopMarkers);
+    }
+    return updated;
+  });
 }
 
 /** Minimize a window */
@@ -365,14 +391,15 @@ export function maximizeWindow(windowId) {
 
 /** Restore a window from minimized or maximized */
 export function restoreWindow(windowId) {
-  windows.update(($windows) =>
-    $windows.map((w) => {
+  windows.update(($windows) => {
+    const target = $windows.find((w) => w.windowId === windowId);
+    const restored = $windows.map((w) => {
       if (w.windowId === windowId) {
         if (w.mode === 'minimized' && w.restoredGeometry) {
           const geo = constrainWindowGeometry({ ...w.restoredGeometry, appId: w.appId });
           return {
-            ...w,
-            mode: 'normal',
+            ...withoutShowDesktopMarkers(w),
+            mode: w._showDesktopPrevMode || 'normal',
             x: geo.x,
             y: geo.y,
             width: geo.width,
@@ -383,7 +410,7 @@ export function restoreWindow(windowId) {
         if (w.mode === 'maximized' && w.restoredGeometry) {
           const geo = constrainWindowGeometry({ ...w.restoredGeometry, appId: w.appId });
           return {
-            ...w,
+            ...withoutShowDesktopMarkers(w),
             mode: 'normal',
             x: geo.x,
             y: geo.y,
@@ -392,11 +419,16 @@ export function restoreWindow(windowId) {
             restoredGeometry: null,
           };
         }
-        return { ...w, mode: 'normal', restoredGeometry: null };
+        return { ...withoutShowDesktopMarkers(w), mode: w._showDesktopPrevMode || 'normal', restoredGeometry: null };
       }
       return w;
-    })
-  );
+    });
+    if (target?._showDesktopMinimized) {
+      showDesktopMode.set(false);
+      return restored.map(withoutShowDesktopMarkers);
+    }
+    return restored;
+  });
   activeWindowId.set(windowId);
 }
 

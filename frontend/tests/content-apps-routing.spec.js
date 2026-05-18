@@ -102,7 +102,7 @@ test('bare content references open the dedicated content apps from the prompt ba
       await expect(viewer.locator('[data-podcast-seek]').first()).toBeVisible();
       await expect(viewer.locator('[data-podcast-audio]').first()).toHaveAttribute('src', /.+/);
     } else {
-      const viewer = page.locator(`[data-content-viewer][data-content-app="${reference.app}"]`).last();
+      const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
       await expect(viewer).toBeVisible({ timeout: 30_000 });
     }
   }

@@ -5,6 +5,7 @@
   import { buildListenPath, formatTime, parsePodcastFeed } from './podcast.js';
 
   export let appContext = {};
+  export let authenticated = false;
 
   const dispatch = createEventDispatcher();
 
@@ -29,6 +30,24 @@
   let playbackError = '';
   let isPlaying = false;
 
+  const recommendedPodcasts = [
+    {
+      title: 'Lenny’s Podcast',
+      description: 'Product, growth, and startup conversations.',
+      feedUrl: 'https://api.substack.com/feed/podcast/10845.rss',
+    },
+    {
+      title: 'Acquired',
+      description: 'Company histories and technology strategy.',
+      feedUrl: 'https://feeds.transistor.fm/acquired',
+    },
+    {
+      title: 'The Vergecast',
+      description: 'Weekly technology news and product analysis.',
+      feedUrl: 'https://feeds.megaphone.fm/vergecast',
+    },
+  ];
+
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: contentId = appContext?.contentId || appContext?.content_id || '';
   $: feed = item?.text_content ? parsePodcastFeed(item.text_content, item) : null;
@@ -50,6 +69,11 @@
       upsertLibraryItem(item);
       return;
     }
+    if (!authenticated) {
+      libraryLoading = false;
+      libraryError = '';
+      return;
+    }
     if (contentId || sourceUrl) {
       await loadContentItem();
       return;
@@ -58,6 +82,10 @@
   }
 
   async function loadContentItem() {
+    if (!authenticated) {
+      error = 'Sign in to load this podcast feed into your computer.';
+      return;
+    }
     loading = true;
     error = '';
     try {
@@ -91,6 +119,11 @@
   }
 
   async function loadLibrary({ force = false } = {}) {
+    if (!authenticated) {
+      libraryLoading = false;
+      libraryError = '';
+      return;
+    }
     if (libraryLoading && !force) return;
     const requestSeq = ++libraryRequestSeq;
     libraryLoading = true;
@@ -179,6 +212,10 @@
   async function searchPodcasts() {
     const query = searchQuery.trim();
     if (!query || searchLoading) return;
+    if (!authenticated) {
+      requestAuth('podcast_search');
+      return;
+    }
     searchLoading = true;
     searchStatus = '';
     libraryError = '';
@@ -213,6 +250,10 @@
   async function importPodcastFeed() {
     const url = importUrl.trim();
     if (!url || importing) return;
+    if (!authenticated) {
+      requestAuth('podcast_import');
+      return;
+    }
     importing = true;
     libraryError = '';
     try {
@@ -248,6 +289,10 @@
     if (!result?.feed_url || importing) return;
     importUrl = result.feed_url;
     await importPodcastFeed();
+  }
+
+  function requestAuth(kind = 'podcast') {
+    dispatch('authrequired', { kind, appId: 'podcast', appName: 'Podcast' });
   }
 
   function storageKeyForEpisode(episode = activeEpisode) {
@@ -377,6 +422,25 @@
       {#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}
 
       <div class="library-scroll">
+        {#if !authenticated}
+          <section class="library-section" data-podcast-library-recommended>
+            <h3>Recommended Podcasts</h3>
+            <div class="library-list">
+              {#each recommendedPodcasts as podcast}
+                <article class="result-row">
+                  <div>
+                    <strong>{podcast.title}</strong>
+                    <span>{podcast.description}</span>
+                    <span>{podcast.feedUrl}</span>
+                  </div>
+                  <button type="button" on:click={() => requestAuth('podcast_add_recommended')}>Add</button>
+                </article>
+              {/each}
+            </div>
+            <p class="status subtle">Sign in to search providers, subscribe, and keep playback positions across sessions.</p>
+          </section>
+        {/if}
+
         {#if searchResults.length > 0}
           <section class="library-section" data-podcast-search-results>
             <h3>Search Results</h3>
@@ -692,8 +756,9 @@
 
   .podcast-detail {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(220px, 1fr) auto;
     gap: 12px;
+    overflow: hidden;
   }
 
   .show-strip {
@@ -710,7 +775,7 @@
 
   .show-strip p {
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     margin: 0;
     overflow: hidden;
@@ -722,6 +787,7 @@
     align-content: start;
     gap: 10px;
     padding-right: 4px;
+    min-height: 220px;
   }
 
   .episode-row {
@@ -762,10 +828,10 @@
 
   .podcast-player {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     border: 1px solid rgba(99, 153, 255, 0.42);
     border-radius: 16px;
-    padding: 12px;
+    padding: 10px;
     background: rgba(7, 12, 23, 0.96);
     box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.22);
   }
@@ -796,7 +862,11 @@
   .controls {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .controls button {
+    padding: 8px 10px;
   }
 
   .play-button {
@@ -869,6 +939,14 @@
 
     .title-group h2 {
       font-size: 1.22rem;
+    }
+
+    .podcast-detail {
+      grid-template-rows: auto minmax(240px, 1fr) auto;
+    }
+
+    .episode-list {
+      min-height: 240px;
     }
   }
 </style>

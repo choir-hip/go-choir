@@ -146,9 +146,9 @@ test.describe('Desktop breakpoint (>1024px)', () => {
     const surface = page.locator('[data-desktop-surface]');
     await expect(surface).toBeVisible();
 
-    // 5 icons should be visible
+    // Core desktop icons should be visible.
     const icons = surface.locator('[data-desktop-icon]');
-    await expect(icons).toHaveCount(6);
+    await expect(icons).toHaveCount(7);
 
     // Labels should be visible
     const filesLabel = surface.locator('[data-desktop-icon-label]').first();
@@ -229,7 +229,7 @@ test.describe('Tablet breakpoint (768-1024px)', () => {
 
     // Floating icons should still be visible with labels
     const icons = page.locator('[data-desktop-icon]');
-    await expect(icons).toHaveCount(6);
+    await expect(icons).toHaveCount(7);
   });
 
   // Bottom bar remains full height
@@ -282,7 +282,7 @@ test.describe('Mobile breakpoint (<768px)', () => {
 
     // Floating desktop icons should be visible
     const icons = page.locator('[data-desktop-icon]');
-    await expect(icons).toHaveCount(6);
+    await expect(icons).toHaveCount(7);
     await expect(icons.first()).toBeVisible();
 
     // Desktop surface spans full viewport width
@@ -370,7 +370,7 @@ test.describe('Mobile breakpoint (<768px)', () => {
 
     // Floating icons visible
     const icons = page.locator('[data-desktop-icon]');
-    await expect(icons).toHaveCount(6);
+    await expect(icons).toHaveCount(7);
 
     // No hamburger, no rail, no overlay
     await expect(page.locator('[data-hamburger-btn]')).toHaveCount(0);
@@ -449,6 +449,8 @@ test.describe('Cross-breakpoint checks', () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
+    await trace.locator('[data-trace-mobile-tabs] button').filter({ hasText: 'Runs' }).click();
+    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
 
     const metrics = await trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`).evaluate((item) => {
       const sidebar = item.closest('.trace-sidebar');
@@ -469,6 +471,31 @@ test.describe('Cross-breakpoint checks', () => {
 
     expect(metrics.itemBottom).toBeLessThanOrEqual(metrics.sidebarBottom + 1);
     expect(metrics.hitInsideItem).toBe(true);
+  });
+
+  test('Trace mobile exposes Runs, Summary, Timeline, and Inspector drill-in panels', async ({ page, authenticator }) => {
+    const email = uniqueEmail();
+    await registerAndLoadDesktop(page, authenticator, email, { width: 390, height: 844 });
+    await mockTraceTrajectory(page);
+
+    await openAppViaIcon(page, 'trace');
+    const trace = page.locator('[data-trace-app]').last();
+    await expect(trace).toBeVisible({ timeout: 5000 });
+
+    const tabs = trace.locator('[data-trace-mobile-tabs]');
+    await expect(tabs).toBeVisible();
+    await expect(trace.locator('[data-trace-summary-panel]')).toBeVisible();
+
+    await tabs.locator('button').filter({ hasText: 'Timeline' }).click();
+    await expect(trace.locator('[data-trace-summary-panel]')).not.toBeVisible();
+    await expect(trace.locator('[data-trace-moment-strip]')).toBeVisible();
+
+    await trace.locator('[data-trace-moment]').first().click();
+    await expect(trace.locator('[data-trace-inspector]')).toBeVisible();
+    await expect(trace.locator('[data-trace-summary-panel]')).not.toBeVisible();
+
+    await tabs.locator('button').filter({ hasText: 'Runs' }).click();
+    await expect(trace.locator('[data-trace-trajectory-list]')).toBeVisible();
   });
 
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)
