@@ -370,6 +370,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	if candidate := firstPromotionWithStatus(promotionCandidates, types.PromotionCandidatePromoted); candidate != nil {
 		builder.addCheckpoint("promoted", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{"candidate_id": candidate.CandidateID})
 	}
+	addAcceptanceAppPromotionCheckpoints(&builder, events)
 
 	addAcceptanceContinuationAndCompactionCheckpoints(&builder, events)
 
@@ -934,6 +935,103 @@ func acceptanceRollbackRefs(candidates []types.PromotionCandidateRecord) []types
 	return refs
 }
 
+func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
+	var packageRefs []string
+	var verifiedRefs []string
+	var promotedRefs []string
+	var rollbackRefs []string
+	var blockedRefs []string
+	var lastPackage types.EventRecord
+	var lastVerified types.EventRecord
+	var lastPromoted types.EventRecord
+	var lastRollback types.EventRecord
+	var lastBlocked types.EventRecord
+	for _, ev := range events {
+		payload := parseTracePayload(ev.Payload)
+		switch ev.Kind {
+		case types.EventAppChangePackagePublished:
+			ref := builder.addEventEvidence(ev, "AppChangePackage published from candidate source lineage", map[string]any{
+				"package_id":              payloadString(payload, "package_id"),
+				"app_id":                  payloadString(payload, "app_id"),
+				"source_computer_id":      payloadString(payload, "source_computer_id"),
+				"source_candidate_id":     payloadString(payload, "source_candidate_id"),
+				"candidate_source_ref":    payloadString(payload, "candidate_source_ref"),
+				"package_manifest_sha256": payloadString(payload, "package_manifest_sha"),
+			})
+			packageRefs = append(packageRefs, ref)
+			lastPackage = ev
+		case types.EventAppAdoptionVerified:
+			ref := builder.addEventEvidence(ev, "recipient candidate rebuilt and verified AppChangePackage", map[string]any{
+				"adoption_id":                  payloadString(payload, "adoption_id"),
+				"package_id":                   payloadString(payload, "package_id"),
+				"target_computer_id":           payloadString(payload, "target_computer_id"),
+				"runtime_artifact_digest":      payloadString(payload, "runtime_artifact_digest"),
+				"ui_artifact_digest":           payloadString(payload, "ui_artifact_digest"),
+				"foreground_tail_merge_result": payloadString(payload, "foreground_tail_merge_result"),
+			})
+			verifiedRefs = append(verifiedRefs, ref)
+			lastVerified = ev
+		case types.EventAppAdoptionBlocked:
+			ref := builder.addEventEvidence(ev, "recipient candidate app adoption blocked", map[string]any{
+				"adoption_id":                  payloadString(payload, "adoption_id"),
+				"package_id":                   payloadString(payload, "package_id"),
+				"target_computer_id":           payloadString(payload, "target_computer_id"),
+				"runtime_artifact_digest":      payloadString(payload, "runtime_artifact_digest"),
+				"ui_artifact_digest":           payloadString(payload, "ui_artifact_digest"),
+				"foreground_tail_merge_result": payloadString(payload, "foreground_tail_merge_result"),
+				"error":                        payloadString(payload, "error"),
+			})
+			blockedRefs = append(blockedRefs, ref)
+			lastBlocked = ev
+		case types.EventAppAdoptionPromoted:
+			ref := builder.addEventEvidence(ev, "target computer source lineage advanced to adopted app candidate", map[string]any{
+				"adoption_id":             payloadString(payload, "adoption_id"),
+				"package_id":              payloadString(payload, "package_id"),
+				"target_computer_id":      payloadString(payload, "target_computer_id"),
+				"candidate_source_ref":    payloadString(payload, "candidate_source_ref"),
+				"runtime_artifact_digest": payloadString(payload, "runtime_artifact_digest"),
+				"ui_artifact_digest":      payloadString(payload, "ui_artifact_digest"),
+				"route_profile":           payloadString(payload, "route_profile"),
+				"default_base_profile":    payloadString(payload, "default_base_profile"),
+				"rollback_source_ref":     payloadString(payload, "rollback_source_ref"),
+			})
+			promotedRefs = append(promotedRefs, ref)
+			lastPromoted = ev
+			rollbackRefs = append(rollbackRefs, ref)
+		case types.EventAppAdoptionRolledBack:
+			ref := builder.addEventEvidence(ev, "app adoption rollback recorded", map[string]any{
+				"adoption_id":         payloadString(payload, "adoption_id"),
+				"package_id":          payloadString(payload, "package_id"),
+				"target_computer_id":  payloadString(payload, "target_computer_id"),
+				"rollback_source_ref": payloadString(payload, "rollback_source_ref"),
+			})
+			rollbackRefs = append(rollbackRefs, ref)
+			lastRollback = ev
+		}
+	}
+	if len(packageRefs) > 0 {
+		builder.addCheckpoint("app_package_published", "passed", lastPackage.Timestamp, lastPackage.StreamSeq, packageRefs, map[string]any{"package_event_count": len(packageRefs)})
+	}
+	if len(verifiedRefs) > 0 {
+		builder.addCheckpoint("app_adoption_verified", "passed", lastVerified.Timestamp, lastVerified.StreamSeq, verifiedRefs, map[string]any{"verified_event_count": len(verifiedRefs)})
+	}
+	if len(blockedRefs) > 0 {
+		builder.addCheckpoint("app_adoption_blocked", "failed", lastBlocked.Timestamp, lastBlocked.StreamSeq, blockedRefs, map[string]any{"blocked_event_count": len(blockedRefs)})
+	}
+	if len(promotedRefs) > 0 {
+		builder.addCheckpoint("app_adoption_promoted", "passed", lastPromoted.Timestamp, lastPromoted.StreamSeq, promotedRefs, map[string]any{"promoted_event_count": len(promotedRefs)})
+	}
+	if len(rollbackRefs) > 0 {
+		at := lastPromoted.Timestamp
+		seq := lastPromoted.StreamSeq
+		if !lastRollback.Timestamp.IsZero() {
+			at = lastRollback.Timestamp
+			seq = lastRollback.StreamSeq
+		}
+		builder.addCheckpoint("rollback_available", "passed", at, seq, rollbackRefs, map[string]any{"app_rollback_ref_count": len(rollbackRefs)})
+	}
+}
+
 func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
 	compacted := false
 	for _, ev := range events {
@@ -1031,7 +1129,15 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 		level = types.RunAcceptanceExportLevel
 		state = types.RunAcceptanceAccepted
 	}
+	if has["app_package_published"] && has["app_adoption_verified"] {
+		level = types.RunAcceptanceExportLevel
+		state = types.RunAcceptanceAccepted
+	}
 	if has["verification_passed"] && has["owner_reviewed"] && (has["promoted"] || has["rollback_available"]) {
+		level = types.RunAcceptancePromotionLevel
+		state = types.RunAcceptanceAccepted
+	}
+	if has["app_adoption_verified"] && has["app_adoption_promoted"] && has["rollback_available"] {
 		level = types.RunAcceptancePromotionLevel
 		state = types.RunAcceptanceAccepted
 	}

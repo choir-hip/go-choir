@@ -1,0 +1,641 @@
+package runtime
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+type publishAppChangePackageInput struct {
+	PackageID                   string          `json:"package_id,omitempty"`
+	AppID                       string          `json:"app_id,omitempty"`
+	Visibility                  string          `json:"visibility,omitempty"`
+	SourceComputerID            string          `json:"source_computer_id"`
+	SourceCandidateID           string          `json:"source_candidate_id"`
+	SourceActiveRef             string          `json:"source_active_ref,omitempty"`
+	CandidateSourceRef          string          `json:"candidate_source_ref,omitempty"`
+	RuntimeSourceDelta          string          `json:"runtime_source_delta"`
+	UISourceDelta               string          `json:"ui_source_delta"`
+	AppProtocolContract         string          `json:"app_protocol_contract"`
+	SourceRuntimeArtifactDigest string          `json:"source_runtime_artifact_digest,omitempty"`
+	SourceUIArtifactDigest      string          `json:"source_ui_artifact_digest,omitempty"`
+	VerifierContracts           json.RawMessage `json:"verifier_contracts,omitempty"`
+	ProvenanceRefs              json.RawMessage `json:"provenance_refs,omitempty"`
+	TraceID                     string          `json:"trace_id,omitempty"`
+}
+
+type createAppAdoptionInput struct {
+	AdoptionID                string `json:"adoption_id,omitempty"`
+	PackageID                 string `json:"package_id"`
+	TargetComputerKind        string `json:"target_computer_kind,omitempty"`
+	TargetCandidateID         string `json:"target_candidate_id,omitempty"`
+	CandidateSourceRef        string `json:"candidate_source_ref,omitempty"`
+	RouteProfile              string `json:"route_profile,omitempty"`
+	DefaultBaseProfile        string `json:"default_base_profile,omitempty"`
+	TraceID                   string `json:"trace_id,omitempty"`
+	ForegroundTailMergeResult string `json:"foreground_tail_merge_result,omitempty"`
+	MergeStrategy             string `json:"merge_strategy,omitempty"`
+}
+
+type verifyAppAdoptionInput struct {
+	TargetActiveSourceRefAtCutover string          `json:"target_active_source_ref_at_cutover,omitempty"`
+	ForegroundTailMergeResult      string          `json:"foreground_tail_merge_result,omitempty"`
+	MergeStrategy                  string          `json:"merge_strategy,omitempty"`
+	MergeConflicts                 json.RawMessage `json:"merge_conflicts,omitempty"`
+}
+
+func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, computerID, kind, activeRef string) (types.ComputerSourceLineageRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.ComputerSourceLineageRecord{}, fmt.Errorf("source lineage: runtime store is unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	computerID = strings.TrimSpace(computerID)
+	if ownerID == "" {
+		return types.ComputerSourceLineageRecord{}, fmt.Errorf("source lineage: owner_id is required")
+	}
+	if computerID == "" {
+		return types.ComputerSourceLineageRecord{}, fmt.Errorf("source lineage: computer_id is required")
+	}
+	if rec, err := rt.store.GetComputerSourceLineage(ctx, ownerID, computerID); err == nil {
+		return rec, nil
+	} else if err != store.ErrNotFound {
+		return types.ComputerSourceLineageRecord{}, err
+	}
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		kind = computerKindForID(computerID)
+	}
+	activeRef = strings.TrimSpace(activeRef)
+	if activeRef == "" {
+		activeRef = activeSourceRefForComputer(computerID, kind)
+	}
+	return rt.store.UpsertComputerSourceLineage(ctx, types.ComputerSourceLineageRecord{
+		OwnerID:         ownerID,
+		ComputerID:      computerID,
+		ComputerKind:    kind,
+		ActiveSourceRef: activeRef,
+		RouteProfile:    "route:" + safeRefPart(computerID),
+	})
+}
+
+func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, in publishAppChangePackageInput) (types.AppChangePackageRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: runtime store is unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: owner_id is required")
+	}
+	in.SourceComputerID = strings.TrimSpace(in.SourceComputerID)
+	in.SourceCandidateID = strings.TrimSpace(in.SourceCandidateID)
+	if in.SourceComputerID == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: source_computer_id is required")
+	}
+	if in.SourceCandidateID == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: source_candidate_id is required")
+	}
+	if strings.TrimSpace(in.RuntimeSourceDelta) == "" || strings.TrimSpace(in.UISourceDelta) == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: runtime_source_delta and ui_source_delta are required")
+	}
+	if err := rejectPrivateSourcePayload(in.RuntimeSourceDelta + "\n" + in.UISourceDelta + "\n" + in.AppProtocolContract); err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	appID := strings.TrimSpace(in.AppID)
+	if appID == "" {
+		appID = "podcast"
+	}
+	visibility := normalizePackageVisibility(in.Visibility)
+	sourceLineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, in.SourceComputerID, "", in.SourceActiveRef)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	candidateRef := strings.TrimSpace(in.CandidateSourceRef)
+	if candidateRef == "" {
+		candidateRef = candidateSourceRefForComputer(in.SourceComputerID, sourceLineage.ComputerKind, in.SourceCandidateID)
+	}
+	if !strings.Contains(candidateRef, "/candidates/") {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: candidate_source_ref must be a candidate ref")
+	}
+	packageID := strings.TrimSpace(in.PackageID)
+	if packageID == "" {
+		packageID = uuid.NewString()
+	}
+	runtimeDeltaHash := sha256Hex(in.RuntimeSourceDelta)
+	uiDeltaHash := sha256Hex(in.UISourceDelta)
+	contractHash := sha256Hex(in.AppProtocolContract)
+	sourceRuntimeDigest := strings.TrimSpace(in.SourceRuntimeArtifactDigest)
+	if sourceRuntimeDigest == "" {
+		sourceRuntimeDigest = "sha256:" + digestParts("source-runtime", ownerID, in.SourceComputerID, in.SourceCandidateID, runtimeDeltaHash)
+	}
+	sourceUIDigest := strings.TrimSpace(in.SourceUIArtifactDigest)
+	if sourceUIDigest == "" {
+		sourceUIDigest = "sha256:" + digestParts("source-ui", ownerID, in.SourceComputerID, in.SourceCandidateID, uiDeltaHash)
+	}
+	manifest := map[string]any{
+		"package_id":                     packageID,
+		"app_id":                         appID,
+		"owner_id":                       ownerID,
+		"source_computer_id":             in.SourceComputerID,
+		"source_candidate_id":            in.SourceCandidateID,
+		"source_active_ref":              sourceLineage.ActiveSourceRef,
+		"candidate_source_ref":           candidateRef,
+		"runtime_source_delta_sha256":    runtimeDeltaHash,
+		"ui_source_delta_sha256":         uiDeltaHash,
+		"app_protocol_contract_sha256":   contractHash,
+		"source_runtime_artifact_digest": sourceRuntimeDigest,
+		"source_ui_artifact_digest":      sourceUIDigest,
+		"visibility":                     visibility,
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	rec := types.AppChangePackageRecord{
+		PackageID:                   packageID,
+		OwnerID:                     ownerID,
+		AppID:                       appID,
+		Status:                      packageStatusForVisibility(visibility),
+		Visibility:                  visibility,
+		SourceComputerID:            in.SourceComputerID,
+		SourceCandidateID:           in.SourceCandidateID,
+		SourceActiveRef:             sourceLineage.ActiveSourceRef,
+		CandidateSourceRef:          candidateRef,
+		RuntimeSourceDelta:          in.RuntimeSourceDelta,
+		UISourceDelta:               in.UISourceDelta,
+		RuntimeSourceDeltaSHA256:    runtimeDeltaHash,
+		UISourceDeltaSHA256:         uiDeltaHash,
+		PackageManifestSHA256:       sha256Hex(string(manifestJSON)),
+		AppProtocolContract:         in.AppProtocolContract,
+		AppProtocolContractSHA256:   contractHash,
+		SourceRuntimeArtifactDigest: sourceRuntimeDigest,
+		SourceUIArtifactDigest:      sourceUIDigest,
+		ManifestJSON:                manifestJSON,
+		VerifierContractsJSON:       rawJSONOrFallback(in.VerifierContracts, "[]"),
+		ProvenanceRefsJSON:          rawJSONOrFallback(in.ProvenanceRefs, "[]"),
+		TraceID:                     strings.TrimSpace(in.TraceID),
+	}
+	rec, err = rt.store.UpsertAppChangePackage(ctx, rec)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppChangePackagePublished, "package", map[string]any{
+		"package_id":            rec.PackageID,
+		"app_id":                rec.AppID,
+		"status":                rec.Status,
+		"source_computer_id":    rec.SourceComputerID,
+		"source_candidate_id":   rec.SourceCandidateID,
+		"candidate_source_ref":  rec.CandidateSourceRef,
+		"package_manifest_sha":  rec.PackageManifestSHA256,
+		"continuous_app_change": true,
+	})
+	return rec, nil
+}
+
+func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetComputerID string, in createAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: runtime store is unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	targetComputerID = strings.TrimSpace(targetComputerID)
+	if ownerID == "" {
+		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: owner_id is required")
+	}
+	if targetComputerID == "" {
+		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: target_computer_id is required")
+	}
+	pkg, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, strings.TrimSpace(in.PackageID))
+	if err != nil {
+		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: package not found or not visible")
+	}
+	targetKind := strings.TrimSpace(in.TargetComputerKind)
+	if targetKind == "" {
+		targetKind = computerKindForID(targetComputerID)
+	}
+	lineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	targetCandidateID := strings.TrimSpace(in.TargetCandidateID)
+	if targetCandidateID == "" {
+		targetCandidateID = uuid.NewString()
+	}
+	candidateRef := strings.TrimSpace(in.CandidateSourceRef)
+	if candidateRef == "" {
+		candidateRef = candidateSourceRefForComputer(targetComputerID, targetKind, targetCandidateID)
+	}
+	rec := types.AppAdoptionRecord{
+		AdoptionID:                            strings.TrimSpace(in.AdoptionID),
+		OwnerID:                               ownerID,
+		PackageID:                             pkg.PackageID,
+		AppID:                                 pkg.AppID,
+		TargetComputerID:                      targetComputerID,
+		TargetComputerKind:                    targetKind,
+		TargetCandidateID:                     targetCandidateID,
+		Status:                                types.AppAdoptionCandidateApplied,
+		TargetActiveSourceRefAtCandidateStart: lineage.ActiveSourceRef,
+		CandidateSourceRef:                    candidateRef,
+		ForegroundTailMergeResult:             strings.TrimSpace(in.ForegroundTailMergeResult),
+		MergeStrategy:                         strings.TrimSpace(in.MergeStrategy),
+		MergeConflictsJSON:                    json.RawMessage(`[]`),
+		VerifierResultsJSON:                   json.RawMessage(`[]`),
+		RollbackProfileJSON:                   json.RawMessage(`{}`),
+		RouteProfile:                          firstNonEmptyPromotion(strings.TrimSpace(in.RouteProfile), lineage.RouteProfile, "route:"+safeRefPart(targetComputerID)),
+		DefaultBaseProfile:                    strings.TrimSpace(in.DefaultBaseProfile),
+		TraceID:                               firstNonEmptyPromotion(strings.TrimSpace(in.TraceID), pkg.TraceID),
+	}
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
+		"adoption_id":              rec.AdoptionID,
+		"package_id":               rec.PackageID,
+		"target_computer_id":       rec.TargetComputerID,
+		"target_candidate_id":      rec.TargetCandidateID,
+		"candidate_source_ref":     rec.CandidateSourceRef,
+		"target_active_source_ref": rec.TargetActiveSourceRefAtCandidateStart,
+		"continuous_app_change":    true,
+	})
+	return rec, nil
+}
+
+func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	cutoverRef := strings.TrimSpace(in.TargetActiveSourceRefAtCutover)
+	if cutoverRef == "" {
+		cutoverRef = lineage.ActiveSourceRef
+	}
+	if strings.TrimSpace(rec.TargetActiveSourceRefAtCandidateStart) == "" {
+		rec.TargetActiveSourceRefAtCandidateStart = lineage.ActiveSourceRef
+	}
+	rec.TargetActiveSourceRefAtCutover = cutoverRef
+	rec.ForegroundTailMergeResult = firstNonEmptyPromotion(strings.TrimSpace(in.ForegroundTailMergeResult), rec.ForegroundTailMergeResult, "no-conflict")
+	rec.MergeStrategy = firstNonEmptyPromotion(strings.TrimSpace(in.MergeStrategy), rec.MergeStrategy, "rebase")
+	rec.MergeConflictsJSON = rawJSONOrFallback(in.MergeConflicts, "[]")
+	rec.RuntimeArtifactDigest = "sha256:" + digestParts("target-runtime", rec.OwnerID, rec.TargetComputerID, rec.TargetCandidateID, pkg.PackageManifestSHA256, rec.CandidateSourceRef, cutoverRef)
+	rec.UIArtifactDigest = "sha256:" + digestParts("target-ui", rec.OwnerID, rec.TargetComputerID, rec.TargetCandidateID, pkg.PackageManifestSHA256, rec.CandidateSourceRef, cutoverRef)
+	results, status, errText := verifierResultsForAppAdoption(pkg, rec)
+	resultsJSON, _ := json.Marshal(results)
+	rec.VerifierResultsJSON = resultsJSON
+	if status == "failed" {
+		rec.Status = types.AppAdoptionBlocked
+		rec.Error = errText
+	} else {
+		rec.Status = types.AppAdoptionVerified
+		rec.Error = ""
+	}
+	rollback := map[string]any{
+		"previous_active_source_ref": rec.TargetActiveSourceRefAtCutover,
+		"previous_runtime_digest":    lineage.RuntimeDigest,
+		"previous_ui_digest":         lineage.UIDigest,
+		"previous_route_profile":     lineage.RouteProfile,
+		"candidate_source_ref":       rec.CandidateSourceRef,
+		"package_id":                 rec.PackageID,
+		"adoption_id":                rec.AdoptionID,
+	}
+	rollbackJSON, _ := json.Marshal(rollback)
+	rec.RollbackProfileJSON = rollbackJSON
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	kind := types.EventAppAdoptionVerified
+	if rec.Status == types.AppAdoptionBlocked {
+		kind = types.EventAppAdoptionBlocked
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, kind, "adoption", map[string]any{
+		"adoption_id":                    rec.AdoptionID,
+		"package_id":                     rec.PackageID,
+		"target_computer_id":             rec.TargetComputerID,
+		"runtime_artifact_digest":        rec.RuntimeArtifactDigest,
+		"ui_artifact_digest":             rec.UIArtifactDigest,
+		"foreground_tail_merge_result":   rec.ForegroundTailMergeResult,
+		"target_active_ref_at_cutover":   rec.TargetActiveSourceRefAtCutover,
+		"source_runtime_artifact_digest": pkg.SourceRuntimeArtifactDigest,
+		"source_ui_artifact_digest":      pkg.SourceUIArtifactDigest,
+		"error":                          rec.Error,
+		"continuous_app_change":          true,
+	})
+	if rec.Status == types.AppAdoptionBlocked {
+		return rec, fmt.Errorf("verify app adoption: %s", rec.Error)
+	}
+	return rec, nil
+}
+
+func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	if rec.Status != types.AppAdoptionVerified && rec.Status != types.AppAdoptionOwnerApproved {
+		return rec, fmt.Errorf("promote app adoption: adoption status %q is not verified", rec.Status)
+	}
+	if rec.RuntimeArtifactDigest == "" || rec.UIArtifactDigest == "" {
+		return rec, fmt.Errorf("promote app adoption: runtime/ui artifact digests are required")
+	}
+	rollbackSourceRef := rollbackSourceRefFromProfile(rec.RollbackProfileJSON)
+	if rollbackSourceRef == "" {
+		return rec, fmt.Errorf("promote app adoption: rollback source ref is required")
+	}
+	rec.Status = types.AppAdoptionAdopted
+	rec.Error = ""
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	lineage.ActiveSourceRef = rec.CandidateSourceRef
+	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
+	lineage.UIDigest = rec.UIArtifactDigest
+	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
+	lineage.LastAdoptionID = rec.AdoptionID
+	lineage.LastPackageID = pkg.PackageID
+	lineage.LastCandidateRef = rec.CandidateSourceRef
+	lineage.UpdatedAt = time.Now().UTC()
+	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
+		"adoption_id":             rec.AdoptionID,
+		"package_id":              rec.PackageID,
+		"target_computer_id":      rec.TargetComputerID,
+		"candidate_source_ref":    rec.CandidateSourceRef,
+		"runtime_artifact_digest": rec.RuntimeArtifactDigest,
+		"ui_artifact_digest":      rec.UIArtifactDigest,
+		"route_profile":           lineage.RouteProfile,
+		"default_base_profile":    lineage.DefaultBaseProfile,
+		"rollback_source_ref":     rollbackSourceRef,
+		"continuous_app_change":   true,
+	})
+	return rec, nil
+}
+
+func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, _, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	var rollback map[string]any
+	if err := json.Unmarshal(rec.RollbackProfileJSON, &rollback); err != nil {
+		return rec, fmt.Errorf("rollback app adoption: rollback profile is invalid")
+	}
+	if stringFromMap(rollback, "previous_active_source_ref") == "" {
+		return rec, fmt.Errorf("rollback app adoption: rollback source ref is missing")
+	}
+	lineage.ActiveSourceRef = stringFromMap(rollback, "previous_active_source_ref")
+	lineage.RuntimeDigest = stringFromMap(rollback, "previous_runtime_digest")
+	lineage.UIDigest = stringFromMap(rollback, "previous_ui_digest")
+	lineage.RouteProfile = stringFromMap(rollback, "previous_route_profile")
+	lineage.LastAdoptionID = rec.AdoptionID
+	lineage.LastPackageID = rec.PackageID
+	lineage.UpdatedAt = time.Now().UTC()
+	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+		return rec, err
+	}
+	rec.Status = types.AppAdoptionRolledBack
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
+		"adoption_id":           rec.AdoptionID,
+		"package_id":            rec.PackageID,
+		"target_computer_id":    rec.TargetComputerID,
+		"rollback_source_ref":   lineage.ActiveSourceRef,
+		"continuous_app_change": true,
+	})
+	return rec, nil
+}
+
+func (rt *Runtime) loadAdoptionPackageLineage(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, types.AppChangePackageRecord, types.ComputerSourceLineageRecord, error) {
+	if rt == nil || rt.store == nil {
+		return types.AppAdoptionRecord{}, types.AppChangePackageRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("app adoption: runtime store is unavailable")
+	}
+	rec, err := rt.store.GetAppAdoption(ctx, ownerID, strings.TrimSpace(adoptionID))
+	if err != nil {
+		return rec, types.AppChangePackageRecord{}, types.ComputerSourceLineageRecord{}, err
+	}
+	pkg, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, rec.PackageID)
+	if err != nil {
+		return rec, pkg, types.ComputerSourceLineageRecord{}, err
+	}
+	lineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, rec.TargetComputerID, rec.TargetComputerKind, rec.TargetActiveSourceRefAtCandidateStart)
+	return rec, pkg, lineage, err
+}
+
+func verifierResultsForAppAdoption(pkg types.AppChangePackageRecord, rec types.AppAdoptionRecord) ([]map[string]any, string, string) {
+	results := []map[string]any{}
+	add := func(id, status, summary string, details map[string]any) {
+		if details == nil {
+			details = map[string]any{}
+		}
+		results = append(results, map[string]any{
+			"contract_id": id,
+			"status":      status,
+			"summary":     summary,
+			"details":     details,
+			"verified_at": time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+	status := "passed"
+	errText := ""
+	add("source-refs-resolve", "passed", "package and target candidate source refs are recorded", map[string]any{
+		"package_candidate_source_ref": pkg.CandidateSourceRef,
+		"target_candidate_source_ref":  rec.CandidateSourceRef,
+	})
+	if strings.TrimSpace(pkg.RuntimeSourceDelta) == "" || strings.TrimSpace(pkg.UISourceDelta) == "" {
+		status = "failed"
+		errText = "runtime_source_delta and ui_source_delta are required"
+		add("source-deltas-present", "failed", errText, nil)
+	} else {
+		add("source-deltas-present", "passed", "runtime_source_delta and ui_source_delta are present", nil)
+	}
+	if strings.TrimSpace(pkg.PackageManifestSHA256) == "" {
+		status = "failed"
+		errText = "package manifest hash is missing"
+		add("manifest-hash", "failed", errText, nil)
+	} else {
+		add("manifest-hash", "passed", "package manifest hash is present", map[string]any{"package_manifest_sha256": pkg.PackageManifestSHA256})
+	}
+	if rec.RuntimeArtifactDigest == pkg.SourceRuntimeArtifactDigest || rec.UIArtifactDigest == pkg.SourceUIArtifactDigest {
+		status = "failed"
+		errText = "target runtime/UI digests must be rebuilt for the recipient"
+		add("no-cross-computer-binary-copying", "failed", errText, map[string]any{
+			"source_runtime_artifact_digest": pkg.SourceRuntimeArtifactDigest,
+			"target_runtime_artifact_digest": rec.RuntimeArtifactDigest,
+			"source_ui_artifact_digest":      pkg.SourceUIArtifactDigest,
+			"target_ui_artifact_digest":      rec.UIArtifactDigest,
+		})
+	} else {
+		add("no-cross-computer-binary-copying", "passed", "target artifact digests are recipient-specific", map[string]any{
+			"source_runtime_artifact_digest": pkg.SourceRuntimeArtifactDigest,
+			"target_runtime_artifact_digest": rec.RuntimeArtifactDigest,
+			"source_ui_artifact_digest":      pkg.SourceUIArtifactDigest,
+			"target_ui_artifact_digest":      rec.UIArtifactDigest,
+		})
+	}
+	add("foreground-tail-accounted", "passed", "candidate cutover records foreground-tail merge result", map[string]any{
+		"target_active_source_ref_at_candidate_start": rec.TargetActiveSourceRefAtCandidateStart,
+		"target_active_source_ref_at_cutover":         rec.TargetActiveSourceRefAtCutover,
+		"foreground_tail_merge_result":                rec.ForegroundTailMergeResult,
+		"merge_strategy":                              rec.MergeStrategy,
+	})
+	add("matched-runtime-ui-rebuild", "passed", "runtime/UI digests are computed from package and target candidate inputs", map[string]any{
+		"runtime_artifact_digest": rec.RuntimeArtifactDigest,
+		"ui_artifact_digest":      rec.UIArtifactDigest,
+	})
+	return results, status, errText
+}
+
+func (rt *Runtime) emitAppPromotionEvent(ctx context.Context, ownerID, traceID string, kind types.EventKind, phase string, payload map[string]any) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("runtime: marshal app promotion event: %v", err)
+		return
+	}
+	evRec := &types.EventRecord{
+		EventID:      uuid.NewString(),
+		OwnerID:      ownerID,
+		TrajectoryID: traceID,
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Phase:        phase,
+		Payload:      data,
+	}
+	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist app promotion event %s: %v", evRec.EventID, err)
+	}
+}
+
+func packageStatusForVisibility(visibility string) types.AppChangePackageStatus {
+	switch normalizePackageVisibility(visibility) {
+	case "public":
+		return types.AppChangePackagePublishedPublic
+	case "unlisted":
+		return types.AppChangePackagePublishedUnlisted
+	default:
+		return types.AppChangePackagePublishedPrivate
+	}
+}
+
+func normalizePackageVisibility(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "public":
+		return "public"
+	case "unlisted":
+		return "unlisted"
+	default:
+		return "private"
+	}
+}
+
+func computerKindForID(computerID string) string {
+	if strings.Contains(strings.ToLower(computerID), "platform") {
+		return "platform"
+	}
+	return "user"
+}
+
+func activeSourceRefForComputer(computerID, kind string) string {
+	part := safeRefPart(computerID)
+	if kind == "platform" {
+		return "refs/platform-computers/" + part + "/active"
+	}
+	return "refs/computers/" + part + "/active"
+}
+
+func candidateSourceRefForComputer(computerID, kind, candidateID string) string {
+	part := safeRefPart(computerID)
+	candidatePart := safeRefPart(candidateID)
+	if kind == "platform" {
+		return "refs/platform-computers/" + part + "/candidates/" + candidatePart
+	}
+	return "refs/computers/" + part + "/candidates/" + candidatePart
+}
+
+func safeRefPart(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "default"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('-')
+	}
+	return strings.Trim(b.String(), "-.")
+}
+
+func rejectPrivateSourcePayload(payload string) error {
+	lower := strings.ToLower(payload)
+	for _, needle := range []string{"api_key=", "secret=", "password=", "private_key", "provider_credentials", "uploaded_file:"} {
+		if strings.Contains(lower, needle) {
+			return fmt.Errorf("app change package source payload contains forbidden private material marker %q", needle)
+		}
+	}
+	return nil
+}
+
+func rawJSONOrFallback(raw json.RawMessage, fallback string) json.RawMessage {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return json.RawMessage(fallback)
+	}
+	return raw
+}
+
+func sha256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func digestParts(parts ...string) string {
+	return sha256Hex(strings.Join(parts, "\x00"))
+}
+
+func rollbackSourceRefFromProfile(raw json.RawMessage) string {
+	var rollback map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &rollback) != nil {
+		return ""
+	}
+	return stringFromMap(rollback, "previous_active_source_ref")
+}
+
+func firstNonEmptyPromotion(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func stringFromMap(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	value, _ := m[key].(string)
+	return strings.TrimSpace(value)
+}

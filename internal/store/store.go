@@ -177,6 +177,77 @@ CREATE TABLE IF NOT EXISTS promotion_candidates (
 	updated_at          DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS computer_source_lineages (
+	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
+	computer_id          VARCHAR(255) NOT NULL DEFAULT '',
+	computer_kind        VARCHAR(64) NOT NULL DEFAULT '',
+	active_source_ref    LONGTEXT NOT NULL DEFAULT '',
+	runtime_digest       VARCHAR(255) NOT NULL DEFAULT '',
+	ui_digest            VARCHAR(255) NOT NULL DEFAULT '',
+	route_profile        LONGTEXT NOT NULL DEFAULT '',
+	default_base_profile LONGTEXT NOT NULL DEFAULT '',
+	last_adoption_id     VARCHAR(255) NOT NULL DEFAULT '',
+	last_package_id      VARCHAR(255) NOT NULL DEFAULT '',
+	last_candidate_ref   LONGTEXT NOT NULL DEFAULT '',
+	created_at           DATETIME NOT NULL,
+	updated_at           DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, computer_id)
+);
+
+CREATE TABLE IF NOT EXISTS app_change_packages (
+	package_id                    VARCHAR(255) PRIMARY KEY,
+	owner_id                      VARCHAR(255) NOT NULL DEFAULT '',
+	app_id                        VARCHAR(255) NOT NULL DEFAULT '',
+	status                        VARCHAR(64) NOT NULL DEFAULT '',
+	visibility                    VARCHAR(64) NOT NULL DEFAULT '',
+	source_computer_id            VARCHAR(255) NOT NULL DEFAULT '',
+	source_candidate_id           VARCHAR(255) NOT NULL DEFAULT '',
+	source_active_ref             LONGTEXT NOT NULL DEFAULT '',
+	candidate_source_ref          LONGTEXT NOT NULL DEFAULT '',
+	runtime_source_delta          LONGTEXT NOT NULL DEFAULT '',
+	ui_source_delta               LONGTEXT NOT NULL DEFAULT '',
+	runtime_source_delta_sha256   VARCHAR(128) NOT NULL DEFAULT '',
+	ui_source_delta_sha256        VARCHAR(128) NOT NULL DEFAULT '',
+	package_manifest_sha256      VARCHAR(128) NOT NULL DEFAULT '',
+	app_protocol_contract         LONGTEXT NOT NULL DEFAULT '',
+	app_protocol_contract_sha256  VARCHAR(128) NOT NULL DEFAULT '',
+	source_runtime_artifact_digest VARCHAR(255) NOT NULL DEFAULT '',
+	source_ui_artifact_digest     VARCHAR(255) NOT NULL DEFAULT '',
+	manifest_json                 LONGTEXT NOT NULL DEFAULT '{}',
+	verifier_contracts_json       LONGTEXT NOT NULL DEFAULT '[]',
+	provenance_refs_json          LONGTEXT NOT NULL DEFAULT '[]',
+	trace_id                      VARCHAR(255) NOT NULL DEFAULT '',
+	created_at                    DATETIME NOT NULL,
+	updated_at                    DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_adoptions (
+	adoption_id                              VARCHAR(255) PRIMARY KEY,
+	owner_id                                 VARCHAR(255) NOT NULL DEFAULT '',
+	package_id                               VARCHAR(255) NOT NULL DEFAULT '',
+	app_id                                   VARCHAR(255) NOT NULL DEFAULT '',
+	target_computer_id                       VARCHAR(255) NOT NULL DEFAULT '',
+	target_computer_kind                     VARCHAR(64) NOT NULL DEFAULT '',
+	target_candidate_id                      VARCHAR(255) NOT NULL DEFAULT '',
+	status                                   VARCHAR(64) NOT NULL DEFAULT '',
+	target_active_source_ref_at_candidate_start LONGTEXT NOT NULL DEFAULT '',
+	target_active_source_ref_at_cutover      LONGTEXT NOT NULL DEFAULT '',
+	candidate_source_ref                     LONGTEXT NOT NULL DEFAULT '',
+	foreground_tail_merge_result            LONGTEXT NOT NULL DEFAULT '',
+	merge_strategy                           VARCHAR(255) NOT NULL DEFAULT '',
+	merge_conflicts_json                     LONGTEXT NOT NULL DEFAULT '[]',
+	runtime_artifact_digest                  VARCHAR(255) NOT NULL DEFAULT '',
+	ui_artifact_digest                       VARCHAR(255) NOT NULL DEFAULT '',
+	verifier_results_json                    LONGTEXT NOT NULL DEFAULT '[]',
+	rollback_profile_json                    LONGTEXT NOT NULL DEFAULT '{}',
+	route_profile                            LONGTEXT NOT NULL DEFAULT '',
+	default_base_profile                     LONGTEXT NOT NULL DEFAULT '',
+	trace_id                                 VARCHAR(255) NOT NULL DEFAULT '',
+	error                                    LONGTEXT NOT NULL DEFAULT '',
+	created_at                              DATETIME NOT NULL,
+	updated_at                              DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS run_acceptances (
 	acceptance_id        VARCHAR(255) PRIMARY KEY,
 	target_mission_id    VARCHAR(255) NOT NULL DEFAULT '',
@@ -310,6 +381,14 @@ CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(p
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_owner_status ON promotion_candidates(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_source_loop ON promotion_candidates(source_loop_id);
 CREATE INDEX IF NOT EXISTS idx_promotion_candidates_trace_id ON promotion_candidates(trace_id);
+CREATE INDEX IF NOT EXISTS idx_computer_source_lineages_owner_kind ON computer_source_lineages(owner_id, computer_kind, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_change_packages_owner_status ON app_change_packages(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_change_packages_visibility ON app_change_packages(visibility, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_change_packages_trace_id ON app_change_packages(trace_id);
+CREATE INDEX IF NOT EXISTS idx_app_adoptions_owner_status ON app_adoptions(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_adoptions_package ON app_adoptions(package_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_adoptions_target ON app_adoptions(owner_id, target_computer_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_app_adoptions_trace_id ON app_adoptions(trace_id);
 CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_updated ON run_acceptances(owner_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_trajectory ON run_acceptances(owner_id, trajectory_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_loop ON run_acceptances(owner_id, loop_id, updated_at);

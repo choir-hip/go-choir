@@ -1,0 +1,224 @@
+package runtime
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	ownerID := "mission-owner"
+	traceID := "traj-app-change-migration"
+
+	packageBody := `{
+		"app_id":"podcast",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-podcast",
+		"runtime_source_delta":"runtime: add GET /api/podcast/library fixture endpoint for candidate podcast app",
+		"ui_source_delta":"ui: add Podcast panel route with fixture-backed subscription and episode row",
+		"app_protocol_contract":"GET /api/podcast/library returns {items:[{podcast_id,title,episodes:[{episode_id,title,audio_url}]}]} for the Svelte podcast panel",
+		"trace_id":"` + traceID + `"
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", packageBody, ownerID)
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+	if pkg.PackageID == "" || pkg.AppID != "podcast" {
+		t.Fatalf("package identity = %+v", pkg)
+	}
+	if pkg.SourceCandidateID == "" || !strings.Contains(pkg.CandidateSourceRef, "/candidates/") {
+		t.Fatalf("package did not preserve candidate source ref: %+v", pkg)
+	}
+	if pkg.SourceRuntimeArtifactDigest == "" || pkg.SourceUIArtifactDigest == "" {
+		t.Fatalf("package missing source artifact digests: %+v", pkg)
+	}
+
+	adoptBody := `{
+		"package_id":"` + pkg.PackageID + `",
+		"target_candidate_id":"candidate-user-b-podcast",
+		"trace_id":"` + traceID + `"
+	}`
+	adoptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, ownerID)
+	if adoptW.Code != http.StatusCreated {
+		t.Fatalf("adoption status = %d body=%s", adoptW.Code, adoptW.Body.String())
+	}
+	var adoption types.AppAdoptionRecord
+	if err := json.Unmarshal(adoptW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode adoption: %v", err)
+	}
+	if adoption.Status != types.AppAdoptionCandidateApplied {
+		t.Fatalf("initial adoption status = %q", adoption.Status)
+	}
+	if !strings.Contains(adoption.CandidateSourceRef, "/candidates/") {
+		t.Fatalf("adoption must target candidate source ref: %+v", adoption)
+	}
+
+	verifyBody := `{
+		"target_active_source_ref_at_cutover":"refs/computers/user-b-computer/active-foreground-tail",
+		"foreground_tail_merge_result":"no-conflict",
+		"merge_strategy":"rebase",
+		"merge_conflicts":[]
+	}`
+	verifyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", verifyBody, ownerID)
+	if verifyW.Code != http.StatusOK {
+		t.Fatalf("verify status = %d body=%s", verifyW.Code, verifyW.Body.String())
+	}
+	if err := json.Unmarshal(verifyW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode verified adoption: %v", err)
+	}
+	if adoption.Status != types.AppAdoptionVerified {
+		t.Fatalf("verified status = %q", adoption.Status)
+	}
+	if adoption.RuntimeArtifactDigest == "" || adoption.UIArtifactDigest == "" {
+		t.Fatalf("verified adoption missing target artifact digests: %+v", adoption)
+	}
+	if adoption.RuntimeArtifactDigest == pkg.SourceRuntimeArtifactDigest || adoption.UIArtifactDigest == pkg.SourceUIArtifactDigest {
+		t.Fatalf("target artifacts copied source digests: source=(%s,%s) target=(%s,%s)",
+			pkg.SourceRuntimeArtifactDigest, pkg.SourceUIArtifactDigest, adoption.RuntimeArtifactDigest, adoption.UIArtifactDigest)
+	}
+	if adoption.ForegroundTailMergeResult != "no-conflict" || adoption.TargetActiveSourceRefAtCutover == adoption.TargetActiveSourceRefAtCandidateStart {
+		t.Fatalf("foreground-tail accounting missing: %+v", adoption)
+	}
+
+	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
+	if promoteW.Code != http.StatusOK {
+		t.Fatalf("promote status = %d body=%s", promoteW.Code, promoteW.Body.String())
+	}
+	if err := json.Unmarshal(promoteW.Body.Bytes(), &adoption); err != nil {
+		t.Fatalf("decode promoted adoption: %v", err)
+	}
+	if adoption.Status != types.AppAdoptionAdopted {
+		t.Fatalf("promoted adoption status = %q", adoption.Status)
+	}
+	if !strings.Contains(string(adoption.RollbackProfileJSON), "refs/computers/user-b-computer/active-foreground-tail") {
+		t.Fatalf("promoted adoption missing rollback source ref: %s", string(adoption.RollbackProfileJSON))
+	}
+	lineageW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/computers/user-b-computer/source-lineage", "", ownerID)
+	if lineageW.Code != http.StatusOK {
+		t.Fatalf("lineage status = %d body=%s", lineageW.Code, lineageW.Body.String())
+	}
+	var lineage types.ComputerSourceLineageRecord
+	if err := json.Unmarshal(lineageW.Body.Bytes(), &lineage); err != nil {
+		t.Fatalf("decode lineage: %v", err)
+	}
+	if lineage.ActiveSourceRef != adoption.CandidateSourceRef || lineage.RuntimeDigest != adoption.RuntimeArtifactDigest || lineage.UIDigest != adoption.UIArtifactDigest {
+		t.Fatalf("lineage did not advance to adopted candidate: lineage=%+v adoption=%+v", lineage, adoption)
+	}
+
+	platformBody := `{
+		"package_id":"` + pkg.PackageID + `",
+		"target_computer_kind":"platform",
+		"target_candidate_id":"candidate-platform-podcast",
+		"default_base_profile":"platform-default-with-podcast-v0",
+		"trace_id":"` + traceID + `"
+	}`
+	platformW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/platform-default/adoptions", platformBody, ownerID)
+	if platformW.Code != http.StatusCreated {
+		t.Fatalf("platform adoption status = %d body=%s", platformW.Code, platformW.Body.String())
+	}
+	var platformAdoption types.AppAdoptionRecord
+	if err := json.Unmarshal(platformW.Body.Bytes(), &platformAdoption); err != nil {
+		t.Fatalf("decode platform adoption: %v", err)
+	}
+	verifyPlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, ownerID)
+	if verifyPlatform.Code != http.StatusOK {
+		t.Fatalf("verify platform status = %d body=%s", verifyPlatform.Code, verifyPlatform.Body.String())
+	}
+	promotePlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/promote", `{}`, ownerID)
+	if promotePlatform.Code != http.StatusOK {
+		t.Fatalf("promote platform status = %d body=%s", promotePlatform.Code, promotePlatform.Body.String())
+	}
+	platformLineageW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/computers/platform-default/source-lineage?kind=platform", "", ownerID)
+	if platformLineageW.Code != http.StatusOK {
+		t.Fatalf("platform lineage status = %d body=%s", platformLineageW.Code, platformLineageW.Body.String())
+	}
+	var platformLineage types.ComputerSourceLineageRecord
+	if err := json.Unmarshal(platformLineageW.Body.Bytes(), &platformLineage); err != nil {
+		t.Fatalf("decode platform lineage: %v", err)
+	}
+	if platformLineage.DefaultBaseProfile != "platform-default-with-podcast-v0" {
+		t.Fatalf("platform default base not updated: %+v", platformLineage)
+	}
+
+	traceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/trace/trajectories/"+traceID, "", ownerID)
+	if traceW.Code != http.StatusOK {
+		t.Fatalf("trace status = %d body=%s", traceW.Code, traceW.Body.String())
+	}
+	traceBody := traceW.Body.String()
+	for _, want := range []string{"published app package", "app adoption verified", "app adoption promoted"} {
+		if !strings.Contains(traceBody, want) {
+			t.Fatalf("trace missing %q: %s", want, traceBody)
+		}
+	}
+
+	acceptanceBody := `{"target_mission_id":"mission-source-lineage-promotion-control-plane-v0","trajectory_id":"` + traceID + `","source_prompt_or_objective":"make the first podcast app migrate"}`
+	acceptanceW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", acceptanceBody, ownerID)
+	if acceptanceW.Code != http.StatusAccepted {
+		t.Fatalf("acceptance status = %d body=%s", acceptanceW.Code, acceptanceW.Body.String())
+	}
+	var acceptance types.RunAcceptanceRecord
+	if err := json.Unmarshal(acceptanceW.Body.Bytes(), &acceptance); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if acceptance.AcceptanceLevel != types.RunAcceptancePromotionLevel || acceptance.State != types.RunAcceptanceAccepted {
+		t.Fatalf("acceptance = %s/%s checkpoints=%+v", acceptance.AcceptanceLevel, acceptance.State, acceptance.Checkpoints)
+	}
+	for _, want := range []string{"app_package_published", "app_adoption_verified", "app_adoption_promoted", "rollback_available"} {
+		if !acceptanceHasCheckpoint(acceptance, want) {
+			t.Fatalf("acceptance missing checkpoint %q: %+v", want, acceptance.Checkpoints)
+		}
+	}
+
+	_ = rt
+}
+
+func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body := `{
+		"app_id":"podcast",
+		"visibility":"private",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-private",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract"
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID, "", "user-bob")
+	if otherW.Code != http.StatusNotFound {
+		t.Fatalf("private package visible to other owner: status=%d body=%s", otherW.Code, otherW.Body.String())
+	}
+}
+
+func TestAppChangePackageRejectsPrivateSourceMarkers(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body := `{
+		"app_id":"podcast",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-secret",
+		"runtime_source_delta":"runtime delta with api_key=leak",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract"
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	if pkgW.Code != http.StatusBadRequest {
+		t.Fatalf("private source marker accepted: status=%d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+}

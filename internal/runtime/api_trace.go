@@ -147,6 +147,8 @@ type traceMomentReferences struct {
 	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
 	ContinuationID       string   `json:"continuation_id,omitempty"`
 	PromotionCandidateID string   `json:"promotion_candidate_id,omitempty"`
+	AppChangePackageID   string   `json:"app_change_package_id,omitempty"`
+	AppAdoptionID        string   `json:"app_adoption_id,omitempty"`
 	ObjectiveFingerprint string   `json:"objective_fingerprint,omitempty"`
 }
 
@@ -154,6 +156,8 @@ type traceMomentArtifacts struct {
 	RunMemory          *types.RunMemoryEntry           `json:"run_memory,omitempty"`
 	Continuation       *types.RunContinuationRecord    `json:"continuation,omitempty"`
 	PromotionCandidate *types.PromotionCandidateRecord `json:"promotion_candidate,omitempty"`
+	AppChangePackage   *types.AppChangePackageRecord   `json:"app_change_package,omitempty"`
+	AppAdoption        *types.AppAdoptionRecord        `json:"app_adoption,omitempty"`
 }
 
 type traceTrajectoryBundle struct {
@@ -970,6 +974,8 @@ func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 		RunMemoryEntryID:     payloadString(payload, "entry_id"),
 		ContinuationID:       payloadString(payload, "continuation_id"),
 		PromotionCandidateID: payloadString(payload, "candidate_id"),
+		AppChangePackageID:   payloadString(payload, "package_id"),
+		AppAdoptionID:        payloadString(payload, "adoption_id"),
 		ObjectiveFingerprint: payloadString(payload, "objective_fingerprint"),
 	}
 }
@@ -992,6 +998,16 @@ func (h *APIHandler) buildTraceMomentArtifacts(ctx context.Context, ownerID stri
 	if refs.PromotionCandidateID != "" {
 		if rec, err := h.rt.Store().GetPromotionCandidate(ctx, ownerID, refs.PromotionCandidateID); err == nil {
 			artifacts.PromotionCandidate = &rec
+		}
+	}
+	if refs.AppChangePackageID != "" {
+		if rec, err := h.rt.Store().GetAppChangePackageForViewer(ctx, ownerID, refs.AppChangePackageID); err == nil {
+			artifacts.AppChangePackage = &rec
+		}
+	}
+	if refs.AppAdoptionID != "" {
+		if rec, err := h.rt.Store().GetAppAdoption(ctx, ownerID, refs.AppAdoptionID); err == nil {
+			artifacts.AppAdoption = &rec
 		}
 	}
 	return artifacts
@@ -1229,6 +1245,27 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return fmt.Sprintf("promotion %s", decision)
 		}
 		return "promotion reviewed"
+	case types.EventAppChangePackagePublished:
+		if packageID := payloadString(payload, "package_id"); packageID != "" {
+			return fmt.Sprintf("published app package %s", shortTraceID(packageID))
+		}
+		return "published app change package"
+	case types.EventAppAdoptionProposed:
+		if adoptionID := payloadString(payload, "adoption_id"); adoptionID != "" {
+			return fmt.Sprintf("started app adoption %s", shortTraceID(adoptionID))
+		}
+		return "started app adoption"
+	case types.EventAppAdoptionVerified:
+		return "app adoption verified"
+	case types.EventAppAdoptionBlocked:
+		if errText := payloadString(payload, "error"); errText != "" {
+			return fmt.Sprintf("app adoption blocked: %s", errText)
+		}
+		return "app adoption blocked"
+	case types.EventAppAdoptionPromoted:
+		return "app adoption promoted"
+	case types.EventAppAdoptionRolledBack:
+		return "app adoption rolled back"
 	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled:
 		if errText := payloadString(payload, "error"); errText != "" {
 			return errText
@@ -1265,11 +1302,11 @@ func traceEventTone(ev types.EventRecord) string {
 	switch ev.Kind {
 	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventVTextAgentRevisionFailed:
 		return "error"
-	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventPromotionCandidateVerified, types.EventPromotionCandidatePromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
+	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventPromotionCandidateVerified, types.EventPromotionCandidatePromoted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
-	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventBrowserSessionCreated:
+	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventBrowserSessionCreated:
 		return "active"
-	case types.EventPromotionCandidateFailed, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
+	case types.EventPromotionCandidateFailed, types.EventAppAdoptionBlocked, types.EventAppAdoptionRolledBack, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
 		return "error"
 	case types.EventChannelMessage:
 		return "message"

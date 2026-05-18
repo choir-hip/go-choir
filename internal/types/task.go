@@ -241,6 +241,30 @@ const (
 	// an explicit approve/reject decision for a candidate.
 	EventPromotionCandidateReviewed EventKind = "promotion.candidate.reviewed"
 
+	// EventAppChangePackagePublished is emitted when a candidate app change is
+	// exported as a product-visible AppChangePackage.
+	EventAppChangePackagePublished EventKind = "app_change_package.published"
+
+	// EventAppAdoptionProposed is emitted when a recipient candidate computer
+	// starts applying an AppChangePackage.
+	EventAppAdoptionProposed EventKind = "app_adoption.proposed"
+
+	// EventAppAdoptionVerified is emitted when recipient-side verifier
+	// contracts accept the rebuilt app artifacts.
+	EventAppAdoptionVerified EventKind = "app_adoption.verified"
+
+	// EventAppAdoptionBlocked is emitted when recipient-side verifier contracts
+	// reject or cannot complete an adoption.
+	EventAppAdoptionBlocked EventKind = "app_adoption.blocked"
+
+	// EventAppAdoptionPromoted is emitted when an approved adoption advances a
+	// target computer source lineage.
+	EventAppAdoptionPromoted EventKind = "app_adoption.promoted"
+
+	// EventAppAdoptionRolledBack is emitted when an adoption restores the prior
+	// source lineage and route/artifact profile.
+	EventAppAdoptionRolledBack EventKind = "app_adoption.rolled_back"
+
 	// EventVTextAgentRevisionStarted is emitted when an appagent-driven
 	// document revision starts executing. The payload includes the doc_id
 	// so the frontend can correlate the revision to the open document
