@@ -179,6 +179,29 @@ func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
 	}
 }
 
+func TestDefaultAppPromotionBuildCommandsUseBuildCapableMemoryCaps(t *testing.T) {
+	if !strings.Contains(DefaultAppPromotionRuntimeBuildCommand, "GOMEMLIMIT=1024MiB") {
+		t.Fatalf("runtime promotion build command should use the build-capable memory cap: %s", DefaultAppPromotionRuntimeBuildCommand)
+	}
+	if !strings.Contains(DefaultAppPromotionUIBuildCommand, "--max-old-space-size=768") {
+		t.Fatalf("UI promotion build command should use the build-capable memory cap: %s", DefaultAppPromotionUIBuildCommand)
+	}
+}
+
+func TestTruncateAppPromotionOutputPreservesHeadAndTail(t *testing.T) {
+	long := strings.Repeat("a", 13000) + "compiler-tail-error"
+	got := truncateAppPromotionOutput(long)
+	if len(got) > 12050 {
+		t.Fatalf("truncated output too long: %d", len(got))
+	}
+	if !strings.Contains(got, "compiler-tail-error") {
+		t.Fatalf("truncated output lost compiler tail: %q", got[len(got)-200:])
+	}
+	if !strings.Contains(got, "truncated middle") {
+		t.Fatalf("truncated output missing marker: %q", got)
+	}
+}
+
 func testEventsContainKind(events []types.EventRecord, kind types.EventKind) bool {
 	for _, ev := range events {
 		if ev.Kind == kind {

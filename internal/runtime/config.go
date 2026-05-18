@@ -59,9 +59,9 @@ const (
 	// configured otherwise.
 	DefaultSourceLedgerRepo = "https://github.com/yusefmosiah/choir-source-ledger.git"
 
-	DefaultAppPromotionRuntimeBuildCommand = "mkdir -p .choir-promotion-artifacts/runtime && GOMAXPROCS=1 GOMEMLIMIT=384MiB GOFLAGS=-p=1 go build -p 1 -o .choir-promotion-artifacts/runtime/sandbox ./cmd/sandbox"
+	DefaultAppPromotionRuntimeBuildCommand = "mkdir -p .choir-promotion-artifacts/runtime && GOMAXPROCS=1 GOMEMLIMIT=1024MiB GOFLAGS=-p=1 go build -p 1 -o .choir-promotion-artifacts/runtime/sandbox ./cmd/sandbox"
 	DefaultAppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/sandbox"
-	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && NODE_OPTIONS=--max-old-space-size=384 npm --prefix frontend run build"
+	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && NODE_OPTIONS=--max-old-space-size=768 npm --prefix frontend run build"
 	DefaultAppPromotionUIArtifactPath      = "frontend/dist"
 	DefaultAppPromotionBuildTimeout        = 15 * time.Minute
 )

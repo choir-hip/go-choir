@@ -285,11 +285,12 @@ func hashAppPromotionFile(h io.Writer, path, label string) error {
 }
 
 func truncateAppPromotionOutput(value string) string {
-	const limit = 4000
+	const limit = 12000
 	if len(value) <= limit {
 		return value
 	}
-	return value[:limit] + "\n...[truncated]"
+	const edge = (limit - len("\n...[truncated middle]...\n")) / 2
+	return value[:edge] + "\n...[truncated middle]...\n" + value[len(value)-edge:]
 }
 
 func safeAppPromotionChildPath(root, child string) (string, error) {
