@@ -1925,4 +1925,41 @@
       grid-column: 2 / -1;
     }
   }
+
+  @media (max-width: 720px) {
+    .trace-frame,
+    .trace-main,
+    .trace-body,
+    .acceptance-grid,
+    .acceptance-detail-grid {
+      grid-template-columns: minmax(0, 1fr) !important;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    .trace-frame {
+      padding: 10px !important;
+    }
+
+    .panel,
+    .acceptance-card,
+    .acceptance-row,
+    .detail-card,
+    .inspector-panel {
+      min-width: 0 !important;
+      overflow-wrap: anywhere;
+    }
+
+    .acceptance-tabs,
+    .trajectory-list {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
+    [data-trace-inspector],
+    [data-trace-run-acceptance] {
+      max-height: none;
+    }
+  }
+
 </style>

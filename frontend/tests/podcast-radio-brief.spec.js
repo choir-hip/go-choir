@@ -91,7 +91,21 @@ test('podcast app turns a durable feed artifact into a VText radio brief', async
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toBeVisible();
   await expect(podcastWindow.locator('[data-radio-listen-path]')).toContainText('Mission Gradient Radio');
   await expect(podcastWindow.locator('[data-podcast-episode]')).toHaveCount(2);
-  await expect(podcastWindow.locator('[data-podcast-audio]').first()).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-player]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-player]')).toContainText('Candidate Worlds First');
+  await expect(podcastWindow.locator('[data-podcast-controls]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-seek-back]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-play-pause]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-seek-forward]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-speed]')).toBeVisible();
+  await expect(podcastWindow.locator('[data-podcast-audio]')).toHaveAttribute('src', /candidate-worlds\.mp3$/);
+
+  await podcastWindow.locator('[data-podcast-select-episode]').last().click();
+  await expect(podcastWindow.locator('[data-podcast-player]')).toContainText('Verifier Contracts');
+  await expect(podcastWindow.locator('[data-podcast-audio]')).toHaveAttribute('src', /verifier-contracts\.mp3$/);
+  await podcastWindow.locator('[data-podcast-back]').click();
+  await expect(podcastWindow.locator('[data-podcast-library]')).toBeVisible();
+  await seededFeed.click();
 
   await podcastWindow.locator('[data-podcast-open-vtext]').click();
 

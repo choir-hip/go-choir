@@ -20,6 +20,11 @@
   let podcastSearchLoading = false;
   let podcastSearchStatus = '';
   let radioStatus = '';
+  let activeEpisodeId = '';
+  let activeAudioEl = null;
+  let playbackSpeed = 1;
+  let playbackPosition = 0;
+  let playbackDuration = 0;
 
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: filePath = item?.file_path || appContext?.filePath || '';
@@ -175,6 +180,16 @@
     item = content;
     error = '';
     radioStatus = '';
+    activeEpisodeId = '';
+    playbackPosition = 0;
+    playbackDuration = 0;
+  }
+
+  function backToPodcastLibrary() {
+    item = null;
+    activeEpisodeId = '';
+    radioStatus = '';
+    loadPodcastLibrary();
   }
 
   function apiFileURL(path) {
@@ -205,6 +220,7 @@
     : null;
   $: podcastEpisodes = podcastFeed?.episodes || [];
   $: listenPath = podcastFeed ? buildListenPath(podcastFeed, item) : null;
+  $: activeEpisode = podcastEpisodes.find((episode) => episode.id === activeEpisodeId) || podcastEpisodes.find((episode) => episode.audioUrl) || podcastEpisodes[0] || null;
 
   function textFromFirst(parent, tagName) {
     return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() || '';
@@ -344,6 +360,52 @@
     };
   }
 
+
+  function storageKeyForEpisode(episode = activeEpisode) {
+    return episode ? `choir-podcast-position:${episode.id}` : '';
+  }
+
+  function selectEpisode(episode) {
+    activeEpisodeId = episode.id;
+    playbackPosition = Number(localStorage.getItem(storageKeyForEpisode(episode)) || 0);
+    tickAudioToState();
+  }
+
+  function tickAudioToState() {
+    setTimeout(() => {
+      if (!activeAudioEl || !activeEpisode) return;
+      activeAudioEl.playbackRate = playbackSpeed;
+      const saved = Number(localStorage.getItem(storageKeyForEpisode()) || 0);
+      if (saved && Number.isFinite(saved) && Math.abs(activeAudioEl.currentTime - saved) > 3) {
+        activeAudioEl.currentTime = saved;
+      }
+    }, 0);
+  }
+
+  function savePlaybackProgress() {
+    if (!activeAudioEl || !activeEpisode) return;
+    playbackPosition = activeAudioEl.currentTime || 0;
+    playbackDuration = activeAudioEl.duration || 0;
+    localStorage.setItem(storageKeyForEpisode(), String(Math.floor(playbackPosition)));
+  }
+
+  function togglePlayback() {
+    if (!activeAudioEl) return;
+    if (activeAudioEl.paused) activeAudioEl.play();
+    else activeAudioEl.pause();
+  }
+
+  function seekBy(seconds) {
+    if (!activeAudioEl) return;
+    activeAudioEl.currentTime = Math.max(0, Math.min(activeAudioEl.duration || Infinity, activeAudioEl.currentTime + seconds));
+    savePlaybackProgress();
+  }
+
+  function setSpeed(speed) {
+    playbackSpeed = speed;
+    if (activeAudioEl) activeAudioEl.playbackRate = speed;
+  }
+
   function markdownLink(label, url) {
     const cleanLabel = String(label || '').replace(/\]/g, '\\]');
     const cleanUrl = String(url || '').trim();
@@ -413,7 +475,9 @@
       <p class="eyebrow">{appHint} content</p>
       <h2>{title}</h2>
     </div>
-    {#if sourceUrl}
+    {#if appHint === 'podcast' && item}
+      <button class="source-link" type="button" on:click={backToPodcastLibrary} data-podcast-back>Back</button>
+    {:else if sourceUrl && appHint !== 'podcast'}
       <a class="source-link" href={sourceUrl} target="_blank" rel="noreferrer">Open source</a>
     {/if}
   </header>
@@ -506,7 +570,7 @@
               <h3>{podcastFeed.title}</h3>
               {#if podcastFeed.description}<p>{podcastFeed.description}</p>{/if}
               <p class="path-meta">
-                {listenPath.episodeCount} episodes - {listenPath.playableCount} playable - {listenPath.id}
+                {listenPath.episodeCount} episodes - {listenPath.playableCount} playable
               </p>
             </div>
             <button type="button" on:click={openRadioBrief} data-podcast-open-vtext>
@@ -514,19 +578,48 @@
             </button>
           </div>
           {#if radioStatus}<p class="status" data-radio-status>{radioStatus}</p>{/if}
-          {#each podcastEpisodes as episode}
-            <article class="podcast-episode" data-podcast-episode data-episode-id={episode.id}>
-              <div>
-                <h3>{episode.title}</h3>
-                {#if episode.publishedAt}<p class="episode-date">{episode.publishedAt}</p>{/if}
-                {#if episode.duration}<p class="episode-date">{episode.duration}</p>{/if}
-                {#if episode.description}<p>{episode.description}</p>{/if}
+          {#if activeEpisode?.audioUrl}
+            <section class="podcast-player" data-podcast-player>
+              <strong>{activeEpisode.title}</strong>
+              <audio
+                src={activeEpisode.audioUrl}
+                bind:this={activeAudioEl}
+                on:loadedmetadata={tickAudioToState}
+                on:timeupdate={savePlaybackProgress}
+                on:pause={savePlaybackProgress}
+                data-podcast-audio
+              />
+              <div class="podcast-controls" data-podcast-controls>
+                <button type="button" on:click={() => seekBy(-15)} data-podcast-seek-back>15s back</button>
+                <button type="button" on:click={togglePlayback} data-podcast-play-pause>Play/Pause</button>
+                <button type="button" on:click={() => seekBy(30)} data-podcast-seek-forward>30s forward</button>
+                <select bind:value={playbackSpeed} on:change={() => setSpeed(playbackSpeed)} data-podcast-speed aria-label="Playback speed">
+                  <option value={0.75}>0.75x</option>
+                  <option value={1}>1x</option>
+                  <option value={1.25}>1.25x</option>
+                  <option value={1.5}>1.5x</option>
+                  <option value={2}>2x</option>
+                </select>
               </div>
-              {#if episode.audioUrl}
-                <audio src={episode.audioUrl} controls data-podcast-audio />
-              {/if}
-            </article>
-          {/each}
+              <progress value={playbackPosition} max={playbackDuration || 1} data-podcast-progress></progress>
+              <small>Progress is saved on this device for the selected episode.</small>
+            </section>
+          {/if}
+          <div class="podcast-episodes-scroll" data-podcast-episodes-scroll>
+            {#each podcastEpisodes as episode}
+              <article class:selected={activeEpisode?.id === episode.id} class="podcast-episode" data-podcast-episode data-episode-id={episode.id}>
+                <div>
+                  <h3>{episode.title}</h3>
+                  {#if episode.publishedAt}<p class="episode-date">{episode.publishedAt}</p>{/if}
+                  {#if episode.duration}<p class="episode-date">{episode.duration}</p>{/if}
+                  {#if episode.description}<p>{episode.description}</p>{/if}
+                </div>
+                {#if episode.audioUrl}
+                  <button type="button" on:click={() => selectEpisode(episode)} data-podcast-select-episode>Listen</button>
+                {/if}
+              </article>
+            {/each}
+          </div>
         </div>
       {:else if appHint === 'image' && displayUrl}
         <img src={displayUrl} alt={title} />
@@ -745,6 +838,7 @@
     min-width: 0;
   }
 
+  .podcast-player,
   .podcast-episode {
     display: grid;
     gap: 12px;
@@ -768,18 +862,63 @@
     font-size: 0.85rem;
   }
 
-  .podcast-episode audio {
-    margin: 0;
+  .podcast-player {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .podcast-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .podcast-controls select {
+    border: 1px solid rgba(99, 153, 255, 0.45);
+    border-radius: 12px;
+    padding: 8px;
+    color: #e7efff;
+    background: rgba(19, 33, 58, 0.95);
+  }
+
+  .podcast-player progress {
     width: 100%;
   }
 
+  .podcast-episodes-scroll {
+    display: grid;
+    gap: 12px;
+    max-height: min(58vh, 620px);
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .podcast-episode.selected {
+    border-color: rgba(99, 153, 255, 0.68);
+    background: rgba(30, 64, 175, 0.24);
+  }
+
   @media (max-width: 720px) {
+    .content-viewer {
+      padding: 12px;
+    }
+
+    .content-header {
+      display: grid;
+    }
+
     .library-header,
     .radio-panel,
     .podcast-import,
     .podcast-search,
     .podcast-search-result {
       grid-template-columns: 1fr;
+    }
+
+    .podcast-library,
+    .podcast-list {
+      padding: 12px;
     }
 
     .library-header,

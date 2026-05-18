@@ -86,9 +86,13 @@
 
   function resizePromptInput() {
     if (!promptInputEl) return;
-    promptInputEl.style.height = 'auto';
+    const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
+    const verticalPadding = 18;
+    const collapsedHeight = Math.ceil(lineHeight + verticalPadding);
     const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
-    promptInputEl.style.height = `${Math.min(promptInputEl.scrollHeight, maxHeight)}px`;
+    promptInputEl.style.height = `${collapsedHeight}px`;
+    const desiredHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
+    promptInputEl.style.height = `${Math.max(collapsedHeight, desiredHeight)}px`;
     promptInputEl.style.overflowY = promptInputEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
     tick().then(publishBottomBarHeight);
   }
@@ -533,6 +537,7 @@
 
   .prompt-input {
     width: 100%;
+    height: 40px;
     min-height: 40px;
     max-height: min(8rem, 22dvh);
     padding: 9px 12px;
@@ -611,8 +616,15 @@
   /* Responsive: Mobile */
   @media (max-width: 768px) {
     .bottom-bar {
-      padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-      gap: 8px;
+      min-height: 52px;
+      padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px));
+      gap: 7px;
+    }
+
+    .prompt-input {
+      height: 38px;
+      min-height: 38px;
+      padding: 8px 11px;
     }
 
     .bar-center {
