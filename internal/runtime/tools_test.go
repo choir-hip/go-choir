@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -741,11 +742,11 @@ func envValue(env []string, key string) string {
 
 func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	registry := NewToolRegistry()
-	searches := 0
+	var searches int32
 	if err := registry.Register(Tool{
 		Name: "web_search",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			searches++
+			atomic.AddInt32(&searches, 1)
 			return "search result", nil
 		},
 	}); err != nil {
@@ -773,8 +774,8 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 
 	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
-	if searches != 3 {
-		t.Fatalf("searches = %d, want 3", searches)
+	if got := atomic.LoadInt32(&searches); got != 3 {
+		t.Fatalf("searches = %d, want 3", got)
 	}
 	for idx, result := range results {
 		if result.IsError {
