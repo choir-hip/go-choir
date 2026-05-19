@@ -92,9 +92,9 @@ test('prompt bar routes bare content references and product APIs record extracti
   expect(decision.app).toBe('pdf');
   expect(decision.source_url).toBe(barePDF);
 
-  const contentWindow = page.locator('[data-content-window]').last();
+  const contentWindow = page.locator('[data-pdf-window]').last();
   await expect(contentWindow).toBeVisible({ timeout: 30_000 });
-  await expect(contentWindow.locator('[data-content-viewer][data-content-app="pdf"]')).toBeVisible();
+  await expect(contentWindow.locator('[data-media-app][data-media-kind="pdf"]')).toBeVisible();
 
   const imported = await fetchJSON(page, '/api/content/import-url', {
     method: 'POST',

@@ -41,9 +41,24 @@
   let bottomBarResizeObserver = null;
   let menuOpen = false;
 
-  const startApps = APP_REGISTRY.filter((app) =>
-    ['files', 'browser', 'candidate-desktop', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
-  );
+  const launcherAppIds = [
+    'files',
+    'browser',
+    'vtext',
+    'trace',
+    'podcast',
+    'image',
+    'audio',
+    'video',
+    'pdf',
+    'epub',
+    'candidate-desktop',
+    'terminal',
+    'settings',
+  ];
+  const startApps = launcherAppIds
+    .map((appId) => APP_REGISTRY.find((app) => app.id === appId))
+    .filter(Boolean);
 
   function handleWindowSwitch(win) {
     if (win.mode === 'minimized') {
@@ -350,6 +365,8 @@
     box-shadow: var(--choir-shadow-soft, 0 18px 48px rgba(0, 0, 0, 0.4));
     padding: 0.8rem;
     z-index: 300;
+    max-height: min(76dvh, 40rem);
+    overflow-y: auto;
     backdrop-filter: blur(18px);
   }
 

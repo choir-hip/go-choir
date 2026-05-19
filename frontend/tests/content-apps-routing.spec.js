@@ -125,10 +125,10 @@ test('bare content references open the dedicated content apps from the prompt ba
         await expect(viewer.locator('[data-pdf-toolbar]')).toBeVisible();
         await expect(viewer.locator('[data-pdf-page]')).toBeVisible();
         await expect(viewer.locator('[data-pdf-zoom]')).toBeVisible();
-        await expect(viewer.locator('[data-pdf-reader]')).toHaveAttribute('src', /zoom=page-width/);
+        await expect(viewer.locator('[data-pdf-reader]')).toHaveAttribute('data', /zoom=page-width/);
       } else if (reference.app === 'epub') {
         await expect(viewer.locator('[data-epub-blocker]')).toBeVisible();
-        await expect(viewer.locator('[data-epub-blocker]')).toContainText('no fake reader');
+        await expect(viewer.locator('[data-epub-blocker]')).toContainText('does not fake a reader');
       }
     }
   }

@@ -159,6 +159,11 @@ test('bottom-left Start menu launches registered apps', async ({ page, authentic
   await expect(startMenu.locator('[data-start-app-id="files"]')).toBeVisible();
   await expect(startMenu.locator('[data-start-app-id="settings"]')).toBeVisible();
   await expect(startMenu.locator('[data-start-app-id="podcast"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="image"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="audio"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="video"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="pdf"]')).toBeVisible();
+  await expect(startMenu.locator('[data-start-app-id="epub"]')).toBeVisible();
 
   await startMenu.locator('[data-start-app-id="files"]').click();
   await expect(page.locator('[data-files-app]').last()).toBeVisible({ timeout: 10000 });

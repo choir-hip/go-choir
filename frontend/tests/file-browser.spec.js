@@ -306,6 +306,49 @@ test('clicking text file opens in VText', async ({ desktopSession }) => {
   await expect(editorArea).toContainText(fileContent);
 });
 
+test('clicking PDF and EPUB opens dedicated reader apps instead of downloading', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+
+  await page.evaluate(async () => {
+    const files = [
+      { name: 'mission-report.pdf', type: 'application/pdf', body: '%PDF-1.7\n' },
+      { name: 'field-guide.epub', type: 'application/epub+zip', body: 'EPUB fixture' },
+    ];
+    for (const file of files) {
+      const res = await fetch('/api/files/' + encodeURIComponent(file.name), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': file.type },
+        body: file.body,
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`failed to seed ${file.name}: ${res.status} ${body}`);
+      }
+    }
+  });
+
+  await openFilesApp(page);
+
+  await page.locator('[data-file-item]').filter({ hasText: 'mission-report.pdf' }).click();
+  const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
+  await expect(pdfViewer).toBeVisible({ timeout: 5000 });
+  await expect(pdfViewer.locator('[data-pdf-toolbar]')).toBeVisible();
+  await expect(pdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data', /mission-report\.pdf.*disposition=inline/);
+
+  await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
+
+  await page.locator('[data-file-item]').filter({ hasText: 'field-guide.epub' }).click();
+  const epubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
+  await expect(epubViewer).toBeVisible({ timeout: 5000 });
+  await expect(epubViewer.locator('[data-epub-blocker]')).toBeVisible();
+  await expect(epubViewer.locator('[data-epub-blocker]')).toContainText('does not fake a reader');
+
+  expect(downloads).toEqual([]);
+});
+
 // ---------------------------------------------------------------
 // Test: empty directory shows empty state (VAL-FILES-013)
 // ---------------------------------------------------------------

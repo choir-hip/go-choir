@@ -239,6 +239,35 @@ func TestGetFileDownload(t *testing.T) {
 	}
 }
 
+func TestGetFileInlineForMediaApps(t *testing.T) {
+	fh, root := setupFileTest(t)
+
+	content := []byte("%PDF-1.7\n")
+	os.WriteFile(filepath.Join(root, "mission-report.pdf"), content, 0o644)
+
+	req := authRequest(http.MethodGet, "/api/files/mission-report.pdf?disposition=inline")
+	w := httptest.NewRecorder()
+	fh.HandleFileByPath(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	cd := w.Header().Get("Content-Disposition")
+	if cd != `inline; filename="mission-report.pdf"` {
+		t.Errorf("expected inline Content-Disposition, got %q", cd)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/pdf") {
+		t.Errorf("expected application/pdf Content-Type, got %q", ct)
+	}
+
+	if w.Body.String() != string(content) {
+		t.Errorf("expected body %q, got %q", string(content), w.Body.String())
+	}
+}
+
 func TestGetNestedSubdirectory(t *testing.T) {
 	fh, root := setupFileTest(t)
 

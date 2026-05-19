@@ -731,6 +731,34 @@
     }
   }
 
+  function handleOpenMediaFile(event) {
+    if (!authenticated) {
+      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'media file' });
+      return;
+    }
+    if (!desktopReady) {
+      showToast('Desktop is still connecting');
+      return;
+    }
+
+    const detail = event.detail || {};
+    const appId = detail.appId || '';
+    if (!['image', 'audio', 'video', 'pdf', 'epub'].includes(appId)) {
+      showToast(`Could not open ${detail.fileName || 'media file'}`);
+      return;
+    }
+
+    openApp(appId, detail.fileName || appId, getAppIcon(appId), {
+      windowTitle: detail.fileName || appId,
+      fileName: detail.fileName || '',
+      filePath: detail.filePath || (detail.pathSegments || []).join('/'),
+      mediaType: detail.mediaType || '',
+      appHint: appId,
+      allowMultiple: true,
+    });
+    showToast(`Opened ${detail.fileName || appId}`);
+  }
+
   function handleOpenVTextFromContent(event) {
     if (!authenticated) {
       requestAuth({ kind: 'open_vtext', title: event.detail?.title || 'document' });
@@ -851,7 +879,11 @@
           >
             {#if win.appId === 'files'}
               <div class="app-content files-content" data-files-app>
-                <FileBrowser on:authexpired={() => dispatch('authexpired')} on:opentextfile={handleOpenTextFile} />
+                <FileBrowser
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:opentextfile={handleOpenTextFile}
+                  on:openmediafile={handleOpenMediaFile}
+                />
               </div>
             {:else if win.appId === 'browser'}
               <div class="app-content browser-content" data-browser-app-container>

@@ -3,9 +3,10 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"io"
+	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -221,7 +222,8 @@ func (fh *FilesHandler) listDirectory(w http.ResponseWriter, dirPath string) {
 	_ = json.NewEncoder(w).Encode(fileEntries)
 }
 
-// serveFile streams a file for download with appropriate headers.
+// serveFile streams a file with appropriate headers. Downloads remain the
+// default, while first-class media apps can request inline rendering.
 func (fh *FilesHandler) serveFile(w http.ResponseWriter, r *http.Request, absPath string, info fs.FileInfo) {
 	file, err := os.Open(absPath)
 	if err != nil {
@@ -234,8 +236,17 @@ func (fh *FilesHandler) serveFile(w http.ResponseWriter, r *http.Request, absPat
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, info.Name()))
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(info.Name())))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	disposition := "attachment"
+	if r.URL.Query().Get("disposition") == "inline" || r.URL.Query().Get("inline") == "1" {
+		disposition = "inline"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, info.Name()))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
@@ -378,7 +389,9 @@ func (fh *FilesHandler) handleDelete(w http.ResponseWriter, r *http.Request, abs
 }
 
 // RegisterFileRoutes registers all file browser routes on the given server.
-func RegisterFileRoutes(s interface{ HandleFunc(string, http.HandlerFunc) }, fh *FilesHandler) {
+func RegisterFileRoutes(s interface {
+	HandleFunc(string, http.HandlerFunc)
+}, fh *FilesHandler) {
 	s.HandleFunc("/api/files", fh.HandleListRoot)
 	s.HandleFunc("/api/files/", fh.HandleFileByPath)
 }

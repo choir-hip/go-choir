@@ -5,7 +5,9 @@
     - File/directory listing with folder/file icons
     - Breadcrumb navigation with clickable segments
     - Click directory to navigate into it
-    - Click text files to open them in VText; other files still download
+    - Click text files to open them in VText
+    - Click PDF/EPUB/image/audio/video files to open dedicated media apps
+    - Unknown binary files still download
     - New Folder button with inline input (no alert/prompt)
     - Delete with inline confirmation (no confirm())
     - Empty state message
@@ -36,6 +38,7 @@
   import { onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { createEventDispatcher } from 'svelte';
+  import { mediaRouteForFileName } from './media-utils.js';
 
   const dispatch = createEventDispatcher();
 
@@ -300,6 +303,18 @@
     if (entry.type === 'directory') {
       navigateIntoDirectory(entry.name);
     } else {
+      const mediaRoute = mediaRouteForFileName(entry.name);
+      if (mediaRoute) {
+        const pathSegments = [...currentPath, entry.name];
+        dispatch('openmediafile', {
+          ...mediaRoute,
+          pathSegments,
+          filePath: pathSegments.join('/'),
+          fileName: entry.name,
+        });
+        return;
+      }
+
       if (isTextFileName(entry.name)) {
         dispatch('opentextfile', {
           pathSegments: [...currentPath, entry.name],
@@ -308,7 +323,7 @@
         return;
       }
 
-      // Trigger download for non-text files.
+      // Trigger download for unknown non-text files.
       const path = currentPath.length > 0
         ? '/api/files/' + [...currentPath, entry.name].map(encodeURIComponent).join('/')
         : '/api/files/' + encodeURIComponent(entry.name);
@@ -347,6 +362,12 @@
   function fileIconFor(entry) {
     if (entry.type === 'directory') return '📁';
     if (isVTextShortcutName(entry.name)) return '📝';
+    const mediaRoute = mediaRouteForFileName(entry.name);
+    if (mediaRoute?.appId === 'image') return '🖼️';
+    if (mediaRoute?.appId === 'audio') return '🎧';
+    if (mediaRoute?.appId === 'video') return '🎬';
+    if (mediaRoute?.appId === 'pdf') return '📄';
+    if (mediaRoute?.appId === 'epub') return '📚';
     return '📄';
   }
 
