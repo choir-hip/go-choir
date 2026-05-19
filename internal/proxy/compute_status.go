@@ -1,50 +1,33 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-type systemStatusResponse struct {
-	Status          string                    `json:"status"`
-	Service         string                    `json:"service"`
-	GeneratedAt     string                    `json:"generated_at"`
-	Build           buildinfo.Info            `json:"build"`
-	Lifecycle       lifecycleHealthSummary    `json:"lifecycle"`
-	CurrentComputer systemCurrentComputer     `json:"current_computer"`
-	Runtime         *systemRuntimeStatus      `json:"runtime,omitempty"`
-	VMctl           *systemVMctlStatus        `json:"vmctl,omitempty"`
-	Capabilities    systemMonitorCapabilities `json:"capabilities"`
-	Warnings        []string                  `json:"warnings,omitempty"`
+type computeStatusResponse struct {
+	Status          string                     `json:"status"`
+	Service         string                     `json:"service"`
+	GeneratedAt     string                     `json:"generated_at"`
+	CurrentComputer computeComputer            `json:"current_computer"`
+	Computers       []computeComputer          `json:"computers"`
+	Runtime         *computeRuntimeStatus      `json:"runtime,omitempty"`
+	Capabilities    computeMonitorCapabilities `json:"capabilities"`
+	Warnings        []string                   `json:"warnings,omitempty"`
 }
 
-type systemVMctlStatus struct {
-	RoutingEnabled  bool                        `json:"routing_enabled"`
-	Status          string                      `json:"status,omitempty"`
-	ActiveVMs       int                         `json:"active_vms"`
-	TotalOwnerships int                         `json:"total_ownerships"`
-	IdleEligible    int                         `json:"idle_eligible"`
-	Reclaim         systemPressureReclaimPlan   `json:"reclaim"`
-	Warmness        vmctl.WarmnessHealthSummary `json:"warmness"`
-}
-
-type systemPressureReclaimPlan struct {
-	Mode      string                         `json:"mode"`
-	Decision  string                         `json:"decision"`
-	Reason    string                         `json:"reason"`
-	Pressure  vmctl.HostPressureSample       `json:"pressure"`
-	Inventory vmctl.PressureReclaimInventory `json:"inventory"`
-}
-
-type systemCurrentComputer struct {
+type computeComputer struct {
 	DesktopID        string `json:"desktop_id"`
+	Role             string `json:"role,omitempty"`
+	Current          bool   `json:"current,omitempty"`
 	Kind             string `json:"kind"`
 	State            string `json:"state"`
 	WarmnessClass    string `json:"warmness_class"`
@@ -58,19 +41,17 @@ type systemCurrentComputer struct {
 	LookupStatus     string `json:"lookup_status"`
 }
 
-type systemRuntimeStatus struct {
-	Reachable        bool           `json:"reachable"`
-	Status           string         `json:"status,omitempty"`
-	Service          string         `json:"service,omitempty"`
-	RuntimeHealth    string         `json:"runtime_health,omitempty"`
-	RunningRuns      int            `json:"running_runs,omitempty"`
-	ResearcherCount  int            `json:"researcher_count,omitempty"`
-	ActiveProvider   string         `json:"active_provider,omitempty"`
-	Build            buildinfo.Info `json:"build,omitempty"`
-	ObservationError string         `json:"observation_error,omitempty"`
+type computeRuntimeStatus struct {
+	Reachable        bool   `json:"reachable"`
+	Status           string `json:"status,omitempty"`
+	Service          string `json:"service,omitempty"`
+	RuntimeHealth    string `json:"runtime_health,omitempty"`
+	RunningRuns      int    `json:"running_runs,omitempty"`
+	ResearcherCount  int    `json:"researcher_count,omitempty"`
+	ObservationError string `json:"observation_error,omitempty"`
 }
 
-type systemMonitorCapabilities struct {
+type computeMonitorCapabilities struct {
 	StatusAPI                bool     `json:"status_api"`
 	WakeCurrentComputer      bool     `json:"wake_current_computer"`
 	DesktopStateRecovery     bool     `json:"desktop_state_recovery"`
@@ -79,19 +60,19 @@ type systemMonitorCapabilities struct {
 	UnsupportedRecoveryModes []string `json:"unsupported_recovery_modes,omitempty"`
 }
 
-type systemRecoveryRequest struct {
+type computeRecoveryRequest struct {
 	Action    string `json:"action"`
 	DesktopID string `json:"desktop_id,omitempty"`
 }
 
-type systemRecoveryResponse struct {
+type computeRecoveryResponse struct {
 	OK              bool                  `json:"ok"`
 	Action          string                `json:"action"`
-	CurrentComputer systemCurrentComputer `json:"current_computer"`
-	Runtime         *systemRuntimeStatus  `json:"runtime,omitempty"`
+	CurrentComputer computeComputer       `json:"current_computer"`
+	Runtime         *computeRuntimeStatus `json:"runtime,omitempty"`
 }
 
-func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -104,14 +85,14 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopID := requestDesktopID(r)
-	resp := systemStatusResponse{
+	resp := computeStatusResponse{
 		Status:      "ok",
-		Service:     "system-monitor",
+		Service:     "compute-monitor",
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Build:       buildinfo.Snapshot("proxy"),
-		Lifecycle:   h.lifecycle.summary(),
-		CurrentComputer: systemCurrentComputer{
+		CurrentComputer: computeComputer{
 			DesktopID:        desktopID,
+			Role:             computerRole(desktopID),
+			Current:          true,
 			Kind:             "interactive",
 			State:            "unknown",
 			WarmnessClass:    "unknown",
@@ -119,7 +100,7 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 			LookupStatus:     "unavailable",
 			RecoveryEligible: h.vmctlClient != nil,
 		},
-		Capabilities: systemMonitorCapabilities{
+		Capabilities: computeMonitorCapabilities{
 			StatusAPI:            true,
 			WakeCurrentComputer:  h.vmctlClient != nil,
 			DesktopStateRecovery: true,
@@ -132,31 +113,12 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if h.cfg != nil && h.cfg.VmctlRoutingEnabled() {
-		if vmctlHealth, ok := h.probeVMctlHealth(); ok {
-			resp.VMctl = &systemVMctlStatus{
-				RoutingEnabled:  true,
-				Status:          vmctlHealth.Status,
-				ActiveVMs:       vmctlHealth.ActiveVMs,
-				TotalOwnerships: vmctlHealth.TotalOwnerships,
-				IdleEligible:    vmctlHealth.IdleEligible,
-				Reclaim:         redactedPressureReclaimPlan(vmctlHealth.Reclaim),
-				Warmness:        vmctlHealth.Warmness,
-			}
-		} else {
-			resp.Status = "degraded"
-			resp.Warnings = append(resp.Warnings, "vmctl health is unavailable")
-			resp.VMctl = &systemVMctlStatus{RoutingEnabled: true, Status: "unavailable"}
-		}
-	} else {
-		resp.VMctl = &systemVMctlStatus{RoutingEnabled: false, Status: "static"}
-	}
-
 	if h.vmctlClient == nil {
 		resp.CurrentComputer.State = "static"
 		resp.CurrentComputer.WarmnessClass = "static"
 		resp.CurrentComputer.LookupStatus = "static"
 		resp.CurrentComputer.Protection = "static sandbox routing"
+		resp.Computers = []computeComputer{resp.CurrentComputer}
 		if h.cfg != nil && strings.TrimSpace(h.cfg.SandboxURL) != "" {
 			resp.Runtime = h.probeRuntimeHealthForTarget(h.cfg.SandboxURL)
 		}
@@ -170,6 +132,8 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.LookupStatus = "error"
 		resp.CurrentComputer.Protection = "computer lookup failed"
 		resp.Warnings = append(resp.Warnings, "current computer lookup failed")
+		listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+		resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -179,12 +143,16 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.LookupStatus = "not_found"
 		resp.CurrentComputer.Protection = protectionText(resp.CurrentComputer.WarmnessClass)
 		resp.CurrentComputer.Reclaimable = reclaimableWarmness(resp.CurrentComputer.WarmnessClass)
+		listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+		resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
-	resp.CurrentComputer = systemCurrentComputer{
+	resp.CurrentComputer = computeComputer{
 		DesktopID:        own.DesktopID,
+		Role:             computerRole(own.DesktopID),
+		Current:          true,
 		Kind:             string(own.Kind),
 		State:            own.State,
 		WarmnessClass:    own.WarmnessClass,
@@ -205,11 +173,79 @@ func (h *Handler) HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	if own.SandboxURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
 		resp.Runtime = h.probeRuntimeHealthForTarget(own.SandboxURL)
 	}
+	listed, listWarnings := h.userComputersForStatus(r.Context(), authResult.UserID, resp.CurrentComputer)
+	resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) HandleSystemRecovery(w http.ResponseWriter, r *http.Request) {
+func appendComputerList(computers []computeComputer, warnings []string, listed []computeComputer, listWarnings []string) ([]computeComputer, []string) {
+	if len(listed) > 0 {
+		computers = listed
+	}
+	if len(listWarnings) > 0 {
+		warnings = append(warnings, listWarnings...)
+	}
+	return computers, warnings
+}
+
+func (h *Handler) userComputersForStatus(ctx context.Context, userID string, current computeComputer) ([]computeComputer, []string) {
+	if h.vmctlClient == nil {
+		return []computeComputer{current}, nil
+	}
+	owns, err := h.vmctlClient.ListOwnershipsContext(ctx)
+	if err != nil {
+		return []computeComputer{current}, []string{"user computer list unavailable"}
+	}
+	seen := map[string]bool{}
+	computers := make([]computeComputer, 0, len(owns)+1)
+	for _, own := range owns {
+		if own.UserID != userID {
+			continue
+		}
+		if own.Kind != "" && own.Kind != vmctl.VMKindInteractive {
+			continue
+		}
+		computer := computeComputer{
+			DesktopID:        own.DesktopID,
+			Role:             computerRole(own.DesktopID),
+			Current:          own.DesktopID == current.DesktopID,
+			Kind:             string(own.Kind),
+			State:            own.State,
+			WarmnessClass:    own.WarmnessClass,
+			Published:        own.Published,
+			Epoch:            own.Epoch,
+			StoppedBy:        own.StoppedBy,
+			LastActiveAt:     own.LastActiveAt,
+			Protection:       protectionText(own.WarmnessClass),
+			Reclaimable:      reclaimableWarmness(own.WarmnessClass),
+			RecoveryEligible: true,
+			LookupStatus:     "ok",
+		}
+		if computer.WarmnessClass == "" {
+			computer.WarmnessClass = currentWarmnessFallback(own.DesktopID)
+			computer.Protection = protectionText(computer.WarmnessClass)
+			computer.Reclaimable = reclaimableWarmness(computer.WarmnessClass)
+		}
+		computers = append(computers, computer)
+		seen[own.DesktopID] = true
+	}
+	if current.DesktopID != "" && !seen[current.DesktopID] {
+		computers = append(computers, current)
+	}
+	sort.SliceStable(computers, func(i, j int) bool {
+		if computers[i].Current != computers[j].Current {
+			return computers[i].Current
+		}
+		if computers[i].Role != computers[j].Role {
+			return computers[i].Role == "primary"
+		}
+		return computers[i].DesktopID < computers[j].DesktopID
+	})
+	return computers, nil
+}
+
+func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -225,7 +261,7 @@ func (h *Handler) HandleSystemRecovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req systemRecoveryRequest
+	var req computeRecoveryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body"})
 		return
@@ -240,12 +276,14 @@ func (h *Handler) HandleSystemRecovery(w http.ResponseWriter, r *http.Request) {
 	case "wake_current_computer", "resume_current_computer":
 		own, err := h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, desktopID)
 		if err != nil {
-			log.Printf("proxy system recovery: wake current computer desktop=%s: %v", desktopID, err)
+			log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to wake current computer"})
 			return
 		}
-		current := systemCurrentComputer{
+		current := computeComputer{
 			DesktopID:        own.DesktopID,
+			Role:             computerRole(own.DesktopID),
+			Current:          true,
 			Kind:             string(own.Kind),
 			State:            own.State,
 			WarmnessClass:    own.WarmnessClass,
@@ -260,11 +298,11 @@ func (h *Handler) HandleSystemRecovery(w http.ResponseWriter, r *http.Request) {
 			current.Protection = protectionText(current.WarmnessClass)
 			current.Reclaimable = reclaimableWarmness(current.WarmnessClass)
 		}
-		var runtimeStatus *systemRuntimeStatus
+		var runtimeStatus *computeRuntimeStatus
 		if own.SandboxURL != "" {
 			runtimeStatus = h.probeRuntimeHealthForTarget(own.SandboxURL)
 		}
-		writeJSON(w, http.StatusOK, systemRecoveryResponse{
+		writeJSON(w, http.StatusOK, computeRecoveryResponse{
 			OK:              true,
 			Action:          action,
 			CurrentComputer: current,
@@ -275,14 +313,14 @@ func (h *Handler) HandleSystemRecovery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *systemRuntimeStatus {
+func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeStatus {
 	targetURL = strings.TrimSpace(targetURL)
 	if targetURL == "" {
-		return &systemRuntimeStatus{Reachable: false, ObservationError: "missing target"}
+		return &computeRuntimeStatus{Reachable: false, ObservationError: "missing target"}
 	}
 	u, err := url.Parse(targetURL)
 	if err != nil {
-		return &systemRuntimeStatus{Reachable: false, ObservationError: "invalid target"}
+		return &computeRuntimeStatus{Reachable: false, ObservationError: "invalid target"}
 	}
 	u.Path = "/health"
 	u.RawQuery = ""
@@ -290,32 +328,35 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *systemRuntimeSt
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(u.String())
 	if err != nil {
-		return &systemRuntimeStatus{Reachable: false, ObservationError: "runtime health unavailable"}
+		return &computeRuntimeStatus{Reachable: false, ObservationError: "runtime health unavailable"}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	var body struct {
-		Status          string         `json:"status"`
-		Service         string         `json:"service"`
-		RuntimeHealth   string         `json:"runtime_health"`
-		RunningRuns     int            `json:"running_runs"`
-		ResearcherCount int            `json:"researcher_count"`
-		ActiveProvider  string         `json:"active_provider"`
-		Build           buildinfo.Info `json:"build"`
+		Status          string `json:"status"`
+		Service         string `json:"service"`
+		RuntimeHealth   string `json:"runtime_health"`
+		RunningRuns     int    `json:"running_runs"`
+		ResearcherCount int    `json:"researcher_count"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return &systemRuntimeStatus{Reachable: resp.StatusCode >= 200 && resp.StatusCode < 500, ObservationError: "runtime health decode failed"}
+		return &computeRuntimeStatus{Reachable: resp.StatusCode >= 200 && resp.StatusCode < 500, ObservationError: "runtime health decode failed"}
 	}
-	return &systemRuntimeStatus{
+	return &computeRuntimeStatus{
 		Reachable:       resp.StatusCode >= 200 && resp.StatusCode < 500,
 		Status:          body.Status,
 		Service:         body.Service,
 		RuntimeHealth:   body.RuntimeHealth,
 		RunningRuns:     body.RunningRuns,
 		ResearcherCount: body.ResearcherCount,
-		ActiveProvider:  body.ActiveProvider,
-		Build:           body.Build,
 	}
+}
+
+func computerRole(desktopID string) string {
+	if strings.TrimSpace(desktopID) == "" || desktopID == vmctl.PrimaryDesktopID {
+		return "primary"
+	}
+	return "candidate"
 }
 
 func currentWarmnessFallback(desktopID string) string {
@@ -352,15 +393,5 @@ func reclaimableWarmness(class string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func redactedPressureReclaimPlan(plan vmctl.PressureReclaimPlan) systemPressureReclaimPlan {
-	return systemPressureReclaimPlan{
-		Mode:      plan.Mode,
-		Decision:  plan.Decision,
-		Reason:    plan.Reason,
-		Pressure:  plan.Pressure,
-		Inventory: plan.Inventory,
 	}
 }

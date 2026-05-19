@@ -37,7 +37,7 @@
   import BrowserApp from './BrowserApp.svelte';
   import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
   import TerminalApp from './TerminalApp.svelte';
-  import SystemMonitorApp from './SystemMonitorApp.svelte';
+  import ComputeMonitorApp from './ComputeMonitorApp.svelte';
   import PodcastApp from './PodcastApp.svelte';
   import ImageApp from './ImageApp.svelte';
   import AudioApp from './AudioApp.svelte';
@@ -961,9 +961,9 @@
     showToast('Desktop layout reset');
   }
 
-  function handleOpenSystemMonitor() {
-    openApp('system-monitor', 'System Monitor', getAppIcon('system-monitor'), {
-      windowTitle: 'System Monitor',
+  function handleOpenComputeMonitor() {
+    openApp('compute-monitor', 'Compute Monitor', getAppIcon('compute-monitor'), {
+      windowTitle: 'Compute Monitor',
     });
   }
 
@@ -1172,9 +1172,9 @@
               <div class="app-content terminal-content" data-terminal-app>
                 <TerminalApp windowId={win.windowId} />
               </div>
-            {:else if win.appId === 'system-monitor'}
-              <div class="app-content system-monitor-content" data-system-monitor-window>
-                <SystemMonitorApp
+            {:else if win.appId === 'compute-monitor'}
+              <div class="app-content compute-monitor-content" data-compute-monitor-window>
+                <ComputeMonitorApp
                   windowId={win.windowId}
                   {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
@@ -1188,7 +1188,7 @@
                   {currentUser}
                   on:authexpired={() => dispatch('authexpired')}
                   on:resetdesktop={handleResetDesktop}
-                  on:opensystemmonitor={handleOpenSystemMonitor}
+                  on:opencomputemonitor={handleOpenComputeMonitor}
                 />
               </div>
             {:else if win.appId === 'vtext'}
@@ -1528,7 +1528,7 @@
     background: #171827;
   }
 
-  .system-monitor-content {
+  .compute-monitor-content {
     padding: 0;
     background: #080d18;
   }

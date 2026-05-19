@@ -44,7 +44,7 @@
   const launcherAppIds = [
     'files',
     'browser',
-    'system-monitor',
+    'compute-monitor',
     'vtext',
     'trace',
     'podcast',

@@ -285,6 +285,46 @@ func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID str
 	return &result, nil
 }
 
+// ListOwnershipsContext returns current ownership records for internal proxy
+// inspection. Callers must filter the result before exposing it to users.
+func (c *Client) ListOwnershipsContext(ctx context.Context) ([]ownershipResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ListEndpoint(c.baseURL), nil)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create list request: %w", err)
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: list call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: read list response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp vmctlErrorResponse
+		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
+			return nil, fmt.Errorf("vmctl client: list failed: %s", errResp.Error)
+		}
+		return nil, fmt.Errorf("vmctl client: list failed with status %s", resp.Status)
+	}
+
+	var result struct {
+		Ownerships []ownershipResponse `json:"ownerships"`
+		Count      int                 `json:"count"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode list response: %w", err)
+	}
+	return result.Ownerships, nil
+}
+
 // Stop requests vmctl to stop the VM for the given user.
 func (c *Client) Stop(userID string) error {
 	return c.StopDesktop(userID, PrimaryDesktopID)

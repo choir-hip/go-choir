@@ -2718,22 +2718,25 @@ func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
 	}
 }
 
-func TestSystemStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
+func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	client := vmctl.NewClient(vmctlSrv.URL)
-	token := issueTestAccessJWT(priv, "system-status-user")
+	token := issueTestAccessJWT(priv, "compute-status-user")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/system/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("system status = %d, want 200 body=%s", w.Code, w.Body.String())
+		t.Fatalf("compute status = %d, want 200 body=%s", w.Code, w.Body.String())
 	}
 
-	var result systemStatusResponse
+	var result computeStatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode system status: %v", err)
+		t.Fatalf("decode compute status: %v", err)
+	}
+	if result.Service != "compute-monitor" {
+		t.Fatalf("service = %s, want compute-monitor", result.Service)
 	}
 	if result.CurrentComputer.LookupStatus != "not_found" {
 		t.Fatalf("lookup status = %s, want not_found", result.CurrentComputer.LookupStatus)
@@ -2741,37 +2744,120 @@ func TestSystemStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	if result.CurrentComputer.State != "not_started" {
 		t.Fatalf("computer state = %s, want not_started", result.CurrentComputer.State)
 	}
-	own, err := client.LookupDesktop("system-status-user", vmctl.PrimaryDesktopID)
+	own, err := client.LookupDesktop("compute-status-user", vmctl.PrimaryDesktopID)
 	if err != nil {
 		t.Fatalf("lookup after status: %v", err)
 	}
 	if own != nil {
-		t.Fatalf("system status should not create ownership, got %+v", own)
+		t.Fatalf("compute status should not create ownership, got %+v", own)
 	}
 
 	body := w.Body.String()
-	for _, forbidden := range []string{"system-status-user", "vm_id", "sandbox_url", "user_id", "state_dir"} {
+	for _, forbidden := range []string{
+		"compute-status-user",
+		"vm_id",
+		"sandbox_url",
+		"user_id",
+		"state_dir",
+		"vmctl",
+		"active_vms",
+		"total_ownerships",
+		"memory_available_bytes",
+		"lifecycle",
+		"build",
+	} {
 		if strings.Contains(body, forbidden) {
-			t.Fatalf("system status leaked %q in %s", forbidden, body)
+			t.Fatalf("compute status leaked %q in %s", forbidden, body)
 		}
 	}
 }
 
-func TestSystemRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
+func TestSystemMonitorRoutesAreHardCutOver(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	client := vmctl.NewClient(vmctlSrv.URL)
-	token := issueTestAccessJWT(priv, "system-recovery-user")
+	token := issueTestAccessJWT(priv, "legacy-system-user")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/system/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req := httptest.NewRequest(http.MethodGet, "/api/system/status", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("legacy system route = %d, want 404 body=%s", w.Code, w.Body.String())
+	}
+
+	own, err := client.LookupDesktop("legacy-system-user", vmctl.PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("lookup after legacy system route: %v", err)
+	}
+	if own != nil {
+		t.Fatalf("legacy system route should not resolve or create ownership, got %+v", own)
+	}
+}
+
+func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	token := issueTestAccessJWT(priv, "compute-list-user")
+
+	if _, err := client.ResolveDesktop("compute-list-user", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve primary: %v", err)
+	}
+	if _, err := client.ForkDesktop("compute-list-user", vmctl.PrimaryDesktopID, "candidate-one"); err != nil {
+		t.Fatalf("fork candidate: %v", err)
+	}
+	if _, err := client.ResolveDesktop("other-compute-user", vmctl.PrimaryDesktopID); err != nil {
+		t.Fatalf("resolve other user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compute status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	var result computeStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode compute status: %v", err)
+	}
+	if len(result.Computers) != 2 {
+		t.Fatalf("computers len = %d, want 2: %+v", len(result.Computers), result.Computers)
+	}
+	var sawPrimary, sawCandidate bool
+	for _, computer := range result.Computers {
+		if computer.DesktopID == vmctl.PrimaryDesktopID && computer.Role == "primary" {
+			sawPrimary = true
+		}
+		if computer.DesktopID == "candidate-one" && computer.Role == "candidate" {
+			sawCandidate = true
+		}
+	}
+	if !sawPrimary || !sawCandidate {
+		t.Fatalf("missing primary/candidate computers: %+v", result.Computers)
+	}
+	body := w.Body.String()
+	for _, forbidden := range []string{"other-compute-user", "compute-list-user", "vm_id", "sandbox_url", "user_id"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("compute status leaked %q in %s", forbidden, body)
+		}
+	}
+}
+
+func TestComputeRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	token := issueTestAccessJWT(priv, "compute-recovery-user")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("system recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
 	}
 
-	var result systemRecoveryResponse
+	var result computeRecoveryResponse
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("decode recovery response: %v", err)
 	}
@@ -2784,7 +2870,7 @@ func TestSystemRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
 	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
 		t.Fatalf("computer state = %s, want active", result.CurrentComputer.State)
 	}
-	own, err := client.LookupDesktop("system-recovery-user", vmctl.PrimaryDesktopID)
+	own, err := client.LookupDesktop("compute-recovery-user", vmctl.PrimaryDesktopID)
 	if err != nil {
 		t.Fatalf("lookup after recovery: %v", err)
 	}
@@ -2793,9 +2879,9 @@ func TestSystemRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	for _, forbidden := range []string{"system-recovery-user", "vm_id", "sandbox_url", "user_id", "state_dir"} {
+	for _, forbidden := range []string{"compute-recovery-user", "vm_id", "sandbox_url", "user_id", "state_dir", "build", "active_provider"} {
 		if strings.Contains(body, forbidden) {
-			t.Fatalf("system recovery leaked %q in %s", forbidden, body)
+			t.Fatalf("compute recovery leaked %q in %s", forbidden, body)
 		}
 	}
 }

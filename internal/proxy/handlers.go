@@ -387,11 +387,14 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/shell/bootstrap":
 		h.HandleBootstrap(w, r)
 		return
-	case path == "/api/system/status":
-		h.HandleSystemStatus(w, r)
+	case path == "/api/compute/status":
+		h.HandleComputeStatus(w, r)
 		return
-	case path == "/api/system/recovery":
-		h.HandleSystemRecovery(w, r)
+	case path == "/api/compute/recovery":
+		h.HandleComputeRecovery(w, r)
+		return
+	case strings.HasPrefix(path, "/api/system/"):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	case path == "/api/ws":
 		h.HandleWS(w, r)

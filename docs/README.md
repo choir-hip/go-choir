@@ -59,10 +59,10 @@ Use these buckets when reading or editing docs:
 - `docs/mission-real-media-apps-ux-sweep-v0.md` - proposed MissionGradient for
   real PDF/EPUB readers, stronger Image/Audio/Video apps, Podcast regression,
   and shell/Trace/VText/Files/launcher UX proof.
-- `docs/mission-computer-recovery-system-monitor-v0.md` - proposed
+- `docs/mission-computer-recovery-system-monitor-v0.md` - completed/proposed
   MissionGradient for turning desktop restore recovery into product-grade
-  computer observability, safe recovery controls, and a first-class System
-  Monitor app.
+  user-computer observability, safe recovery controls, and a first-class
+  Compute Monitor app.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -83,8 +83,8 @@ Use these buckets when reading or editing docs:
   product-path dynamics.
 - `docs/mission-real-media-apps-ux-sweep-v0.md` - proposed next real readers
   and media-app UX sweep.
-- `docs/mission-computer-recovery-system-monitor-v0.md` - proposed next
-  hardening pass for System Monitor, desktop restore recovery, lazy app
+- `docs/mission-computer-recovery-system-monitor-v0.md` - completed/proposed
+  hardening pass for Compute Monitor, desktop restore recovery, lazy app
   hydration, and safe computer recovery controls.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.

@@ -2,7 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { activeWindowId, focusWindow, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
   import { AuthRequiredError } from './auth.js';
-  import { fetchSystemStatus, wakeCurrentComputer } from './system-monitor.js';
+  import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
 
   export let windowId = '';
   export let authenticated = false;
@@ -17,9 +17,8 @@
   let refreshTimer = null;
 
   $: currentComputer = status?.current_computer || {};
-  $: vmctl = status?.vmctl || {};
-  $: pressure = vmctl?.reclaim?.pressure || {};
-  $: reclaim = vmctl?.reclaim || {};
+  $: computers = status?.computers || [];
+  $: candidateComputers = computers.filter((computer) => computer.role === 'candidate');
   $: runtime = status?.runtime || {};
   $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
   $: visibleWindows = currentWindows.filter((win) => win.mode !== 'minimized');
@@ -34,9 +33,6 @@
         : currentComputer.state === 'not_started'
           ? 'not started'
           : 'healthy';
-  $: memoryPercent = Number(pressure?.memory_available_percent || 0);
-  $: cpuPsi = Number(pressure?.cpu_some_avg10 || 0);
-  $: ioPsi = Number(pressure?.io_some_avg10 || 0);
 
   onMount(() => {
     refresh();
@@ -52,13 +48,13 @@
     loading = true;
     error = '';
     try {
-      status = await fetchSystemStatus();
+      status = await fetchComputeStatus();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      error = err?.message || 'Could not load system status';
+      error = err?.message || 'Could not load compute status';
     } finally {
       loading = false;
     }
@@ -87,7 +83,7 @@
   }
 
   function handleKeepMonitorOnly() {
-    if (typeof window !== 'undefined' && !window.confirm('Keep only System Monitor and close other saved windows?')) return;
+    if (typeof window !== 'undefined' && !window.confirm('Keep only Compute Monitor and close other saved windows?')) return;
     dispatch('keepwindowonly', { windowId });
   }
 
@@ -104,34 +100,8 @@
     }
   }
 
-  function formatBytes(value) {
-    const bytes = Number(value || 0);
-    if (!bytes) return 'n/a';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let scaled = bytes;
-    let unit = 0;
-    while (scaled >= 1024 && unit < units.length - 1) {
-      scaled /= 1024;
-      unit += 1;
-    }
-    return `${scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unit]}`;
-  }
-
-  function pct(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) return 'n/a';
-    return `${num.toFixed(num >= 10 ? 0 : 1)}%`;
-  }
-
-  function psi(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return 'n/a';
-    return `${num.toFixed(num >= 10 ? 0 : 2)}`;
-  }
-
   function levelClass() {
     if (status?.status !== 'ok') return 'warn';
-    if (pressure?.pressure) return 'warn';
     if (runtime?.reachable === false) return 'warn';
     return 'ok';
   }
@@ -141,19 +111,25 @@
     if (!Number.isFinite(num) || num <= 0) return '0%';
     return `${Math.max(2, Math.min(100, (num / max) * 100))}%`;
   }
+
+  function computerLabel(computer) {
+    if (computer.current) return 'Current';
+    if (computer.role === 'candidate') return 'Candidate';
+    return computer.role || 'Computer';
+  }
 </script>
 
-<div class="system-monitor" data-system-monitor-app>
-  <header class="monitor-top" data-system-monitor-summary>
+<div class="compute-monitor" data-compute-monitor-app>
+  <header class="monitor-top" data-compute-monitor-summary>
     <div>
-      <p class="eyebrow">System Monitor</p>
+      <p class="eyebrow">Compute Monitor</p>
       <h1>Computer health and recovery</h1>
       <p class="summary-line">
         {currentComputer.protection || 'Status will appear after the current computer reports in.'}
       </p>
     </div>
     <div class="status-cluster">
-      <span class="health-pill {levelClass()}" data-system-monitor-health>{healthState}</span>
+      <span class="health-pill {levelClass()}" data-compute-monitor-health>{healthState}</span>
       <button type="button" class="icon-button" on:click={refresh} disabled={loading} title="Refresh status" aria-label="Refresh status">
         ↻
       </button>
@@ -164,27 +140,27 @@
     <div class="notice error" role="alert">{error}</div>
   {/if}
   {#if actionStatus}
-    <div class="notice" aria-live="polite" data-system-monitor-action-status>{actionStatus}</div>
+    <div class="notice" aria-live="polite" data-compute-monitor-action-status>{actionStatus}</div>
   {/if}
 
-  <section class="metric-strip" data-system-monitor-metrics>
+  <section class="metric-strip" data-compute-monitor-metrics>
     <article class="metric-card">
-      <span class="metric-label">Memory available</span>
-      <strong>{pct(memoryPercent)}</strong>
-      <div class="meter"><span style="width:{barWidth(memoryPercent)}"></span></div>
-      <small>{formatBytes(pressure?.memory_available_bytes)} free</small>
+      <span class="metric-label">Current computer</span>
+      <strong>{currentComputer.state || 'unknown'}</strong>
+      <div class="meter"><span style="width:{currentComputer.state === 'active' ? '100%' : '35%'}"></span></div>
+      <small>{currentComputer.desktop_id || 'primary'} · {currentComputer.warmness_class || 'unreported'}</small>
     </article>
     <article class="metric-card">
-      <span class="metric-label">CPU pressure</span>
-      <strong>{psi(cpuPsi)}</strong>
-      <div class="meter cpu"><span style="width:{barWidth(cpuPsi, 100)}"></span></div>
-      <small>avg10 PSI</small>
+      <span class="metric-label">User computers</span>
+      <strong>{computers.length || 1}</strong>
+      <div class="meter cpu"><span style="width:{barWidth(computers.length || 1, Math.max(computers.length || 1, 1))}"></span></div>
+      <small>{candidateComputers.length} background candidate{candidateComputers.length === 1 ? '' : 's'}</small>
     </article>
     <article class="metric-card">
-      <span class="metric-label">I/O pressure</span>
-      <strong>{psi(ioPsi)}</strong>
-      <div class="meter io"><span style="width:{barWidth(ioPsi, 20)}"></span></div>
-      <small>avg10 PSI</small>
+      <span class="metric-label">Runtime health</span>
+      <strong>{runtime.runtime_health || runtime.status || (runtime.reachable === false ? 'offline' : 'unknown')}</strong>
+      <div class="meter io"><span style="width:{runtime.reachable === false ? '25%' : '100%'}"></span></div>
+      <small>{runtime.running_runs ?? 0} running run{runtime.running_runs === 1 ? '' : 's'}</small>
     </article>
     <article class="metric-card">
       <span class="metric-label">App restore weight</span>
@@ -195,7 +171,7 @@
   </section>
 
   <div class="monitor-grid">
-    <section class="panel" data-system-monitor-computer>
+    <section class="panel" data-compute-monitor-computer>
       <div class="panel-heading">
         <h2>Current Computer</h2>
         <span class="chip">{currentComputer.warmness_class || 'unknown'}</span>
@@ -212,22 +188,29 @@
       </div>
     </section>
 
-    <section class="panel" data-system-monitor-vmctl>
+    <section class="panel" data-compute-monitor-computers>
       <div class="panel-heading">
-        <h2>Lifecycle Pressure</h2>
-        <span class="chip">{reclaim.mode || 'unknown'}</span>
+        <h2>Your Computers</h2>
+        <span class="chip">{computers.length || 1} visible</span>
       </div>
-      <dl class="facts">
-        <div><dt>Active computers</dt><dd>{vmctl.active_vms ?? 'n/a'}</dd></div>
-        <div><dt>Total records</dt><dd>{vmctl.total_ownerships ?? 'n/a'}</dd></div>
-        <div><dt>Idle eligible</dt><dd>{vmctl.idle_eligible ?? 'n/a'}</dd></div>
-        <div><dt>Decision</dt><dd>{reclaim.decision || 'n/a'}</dd></div>
-      </dl>
-      <p class="compact-copy">{reclaim.reason || 'No lifecycle decision has been reported yet.'}</p>
+      <div class="computer-list">
+        {#each (computers.length ? computers : [currentComputer]) as computer (computer.desktop_id || computer.role || 'current')}
+          <article class:current={computer.current} class="computer-row">
+            <span>
+              <strong>{computerLabel(computer)}</strong>
+              <small>{computer.desktop_id || 'primary'}</small>
+            </span>
+            <span>
+              <strong>{computer.state || 'unknown'}</strong>
+              <small>{computer.protection || 'priority unavailable'}</small>
+            </span>
+          </article>
+        {/each}
+      </div>
     </section>
   </div>
 
-  <section class="panel recovery-panel" data-system-monitor-recovery>
+  <section class="panel recovery-panel" data-compute-monitor-recovery>
     <div class="panel-heading">
       <h2>Safe Recovery</h2>
       <span class="chip">state preserving</span>
@@ -245,7 +228,7 @@
     </p>
   </section>
 
-  <section class="panel windows-panel" data-system-monitor-windows>
+  <section class="panel windows-panel" data-compute-monitor-windows>
     <div class="panel-heading">
       <h2>Apps And Windows</h2>
       <span class="chip">{currentWindows.length} open</span>
@@ -261,7 +244,7 @@
             class:suspended={win.restoreSuspended}
             class="window-row"
             on:click={() => handleFocusWindow(win)}
-            data-system-monitor-window-row
+            data-compute-monitor-window-row
           >
             <span class="window-icon">{win.icon || '□'}</span>
             <span class="window-copy">
@@ -274,22 +257,22 @@
     {/if}
   </section>
 
-  <section class="panel events-panel" data-system-monitor-events>
+  <section class="panel events-panel" data-compute-monitor-events>
     <div class="panel-heading">
-      <h2>Recent Evidence</h2>
+      <h2>Recent Compute Evidence</h2>
       <span class="chip">{status?.generated_at ? 'live' : 'pending'}</span>
     </div>
     <ul class="event-list">
-      <li>status api: {status?.generated_at || 'waiting'}</li>
-      <li>build: {status?.build?.commit ? status.build.commit.slice(0, 12) : 'unknown'}</li>
-      <li>runtime provider: {runtime.active_provider || 'unknown'}</li>
-      <li>pressure sample: {pressure.sampled_at || 'unavailable'}</li>
+      <li>compute status api: {status?.generated_at || 'waiting'}</li>
+      <li>current desktop: {currentComputer.desktop_id || 'primary'}</li>
+      <li>runtime health: {runtime.runtime_health || runtime.status || 'unknown'}</li>
+      <li>warnings: {status?.warnings?.length || 0}</li>
     </ul>
   </section>
 </div>
 
 <style>
-  .system-monitor {
+  .compute-monitor {
     height: 100%;
     min-height: 0;
     overflow: auto;
@@ -589,6 +572,45 @@
     gap: 0.42rem;
   }
 
+  .computer-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .computer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 0.75rem;
+    background: rgba(2, 6, 23, 0.42);
+  }
+
+  .computer-row.current {
+    border-color: rgba(125, 211, 252, 0.32);
+    background: rgba(14, 165, 233, 0.08);
+  }
+
+  .computer-row span {
+    min-width: 0;
+  }
+
+  .computer-row strong,
+  .computer-row small {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .computer-row small {
+    margin-top: 0.18rem;
+    color: #94a3b8;
+    font-size: 0.72rem;
+  }
+
   .window-row {
     display: grid;
     grid-template-columns: 2rem minmax(0, 1fr);
@@ -651,7 +673,7 @@
   }
 
   @media (max-width: 760px) {
-    .system-monitor {
+    .compute-monitor {
       padding: 0.75rem;
     }
 

@@ -131,8 +131,8 @@
     dispatch('resetdesktop');
   }
 
-  function handleOpenSystemMonitor() {
-    dispatch('opensystemmonitor');
+  function handleOpenComputeMonitor() {
+    dispatch('opencomputemonitor');
   }
 
   function loadStoredTheme() {
@@ -249,8 +249,8 @@
         <p class="muted">Reset open windows and icon positions if old persisted geometry gets in the way.</p>
       </div>
       <div class="settings-actions">
-        <button class="secondary-action" data-settings-open-system-monitor on:click={handleOpenSystemMonitor}>
-          Open System Monitor
+        <button class="secondary-action" data-settings-open-compute-monitor on:click={handleOpenComputeMonitor}>
+          Open Compute Monitor
         </button>
         <button class="secondary-action" data-settings-reset-desktop on:click={handleResetDesktop}>
           Reset layout

@@ -23,7 +23,7 @@ import { writable, derived } from 'svelte/store';
 export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
   { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
-  { id: 'system-monitor', name: 'System Monitor', icon: '📊', description: 'Computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
@@ -49,7 +49,7 @@ export const APP_REGISTRY = [
 
 /** The main apps shown as floating desktop icons */
 export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
-  ['files', 'browser', 'system-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
+  ['files', 'browser', 'compute-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
 );
 
 export const HEAVY_APP_IDS = new Set([

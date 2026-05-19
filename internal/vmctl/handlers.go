@@ -682,6 +682,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			Purpose:              own.Purpose,
 			ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
 			MachineClass:         own.MachineClass,
+			WarmnessClass:        string(h.registry.WarmnessClassForOwnership(own)),
 			Published:            own.Published,
 			SandboxURL:           own.SandboxURL,
 			State:                string(own.State),
@@ -771,6 +772,12 @@ func ResolveEndpoint(baseURL string) string {
 // service at the given base URL.
 func LookupEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/lookup"
+}
+
+// ListEndpoint returns the full ownership-list endpoint URL for the vmctl
+// service at the given base URL.
+func ListEndpoint(baseURL string) string {
+	return baseURL + "/internal/vmctl/list"
 }
 
 // ForkDesktopEndpoint returns the full fork-desktop endpoint URL for the vmctl
