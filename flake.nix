@@ -83,7 +83,7 @@
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };
-        npmDepsHash = "sha256-b/PBCabutLr71hiNweUqc6ZZx0d+Eb0tEPbaBFym46o=";
+        npmDepsHash = "sha256-ZfP7bP6pjN7X8mZ6ZVDoYkVUnTHFWqJcASbB4mdg2B0=";
         npmBuildScript = "build";
         VITE_CHOIR_BUILD_VERSION = goModuleVersion;
         VITE_CHOIR_BUILD_SHA = buildCommit;
