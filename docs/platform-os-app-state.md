@@ -2,8 +2,8 @@
 
 **Status:** canonical platform-level state ledger
 **Last updated:** 2026-05-19
-**Baseline checked:** reader/media sweep working state after prior staging
-`c42108fc2b322e60b4d65c815ab3f8e2aee5dfa2`
+**Baseline checked:** desktop restore recovery baseline
+`e61434e88708fdbc6df4c8fbe27e2f64f869d7ca`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -103,11 +103,16 @@ Current capabilities:
 - floating windows support focus, minimize, restore, maximize, move, resize,
   and compact full-bleed geometry for several apps on mobile;
 - bottom/start bar exposes app switching and app launching;
-- desktop state persists windows and icon positions for authenticated sessions.
+- desktop state persists windows and icon positions for authenticated sessions;
+- restore recovery can avoid hydrating every saved heavy app at once, and heavy
+  restored background apps may stay suspended until raised;
+- System Monitor is the product surface for current-computer health, warmness,
+  pressure, app restore weight, and bounded recovery actions.
 
 Known gaps:
 
-- boot/wake can still feel opaque when a user computer is recovering;
+- boot/wake still needs trend history and deeper event trails for long
+  recovery sequences;
 - app switching and window raise/restore need continued mobile proof;
 - the bottom/prompt bar must keep shrinking when input is empty and only grow
   for real prompt content;
@@ -126,6 +131,7 @@ Known gaps:
 | **Web Lens / Browser** | Browser-style URL input with backend Web Lens snapshots when authenticated/configured and iframe fallback for guest/external pages. | Backend control/screenshot support remains a distinct substrate frontier. Browser should remain an app, not a bypass around product APIs. |
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
 | **Settings** | Account, runtime health, theme presets/editing, and promotion queue controls. | Theme system needs taste/design hardening. Promotion/candidate surfaces should become contextual rather than manual/debug-first. |
+| **System Monitor** | First-class app for current-computer health and recovery. It uses authenticated product APIs to show redacted computer identity, warmness/protection, runtime health, vmctl pressure/reclaim aggregates, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. It is available from the launcher and Settings. | Add event-backed trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
 | **Candidate Desktop** | Preview surface for candidate VM desktops. | Candidate/promotion cards should appear from current run/Trace context instead of requiring manual IDs. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and local playback-position persistence. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
@@ -153,6 +159,17 @@ Known gaps:
   cards, or JSON-only success records.
 
 ## Current Proof Anchors
+
+Computer recovery and System Monitor proof is being added after the deployed
+desktop restore recovery baseline:
+
+- baseline commit: `e61434e88708fdbc6df4c8fbe27e2f64f869d7ca`;
+- local pre-landing proof must include `go test ./internal/proxy`, frontend
+  build, and redaction tests for `/api/system/status` and
+  `/api/system/recovery`;
+- platform-level claims require the new commit to pass CI/deploy, staging
+  `/health` to report that SHA, and staging Playwright to capture desktop and
+  `390x844` mobile System Monitor screenshots/DOM metrics.
 
 Recent deployed platform proof for the media split and reader sweep:
 

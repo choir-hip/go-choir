@@ -131,6 +131,10 @@
     dispatch('resetdesktop');
   }
 
+  function handleOpenSystemMonitor() {
+    dispatch('opensystemmonitor');
+  }
+
   function loadStoredTheme() {
     try {
       const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -244,9 +248,14 @@
         <h3>Desktop layout</h3>
         <p class="muted">Reset open windows and icon positions if old persisted geometry gets in the way.</p>
       </div>
-      <button class="secondary-action" data-settings-reset-desktop on:click={handleResetDesktop}>
-        Reset layout
-      </button>
+      <div class="settings-actions">
+        <button class="secondary-action" data-settings-open-system-monitor on:click={handleOpenSystemMonitor}>
+          Open System Monitor
+        </button>
+        <button class="secondary-action" data-settings-reset-desktop on:click={handleResetDesktop}>
+          Reset layout
+        </button>
+      </div>
     </section>
 
     <section class="settings-card promotion-card" data-settings-promotions>
@@ -442,6 +451,13 @@
     display: block;
     margin-top: 0.5rem;
     overflow-wrap: anywhere;
+  }
+
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.8rem;
   }
 
   .theme-swatch {

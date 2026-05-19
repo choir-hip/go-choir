@@ -2718,6 +2718,88 @@ func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
 	}
 }
 
+func TestSystemStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	token := issueTestAccessJWT(priv, "system-status-user")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/system/status", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("system status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+
+	var result systemStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode system status: %v", err)
+	}
+	if result.CurrentComputer.LookupStatus != "not_found" {
+		t.Fatalf("lookup status = %s, want not_found", result.CurrentComputer.LookupStatus)
+	}
+	if result.CurrentComputer.State != "not_started" {
+		t.Fatalf("computer state = %s, want not_started", result.CurrentComputer.State)
+	}
+	own, err := client.LookupDesktop("system-status-user", vmctl.PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("lookup after status: %v", err)
+	}
+	if own != nil {
+		t.Fatalf("system status should not create ownership, got %+v", own)
+	}
+
+	body := w.Body.String()
+	for _, forbidden := range []string{"system-status-user", "vm_id", "sandbox_url", "user_id", "state_dir"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("system status leaked %q in %s", forbidden, body)
+		}
+	}
+}
+
+func TestSystemRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	token := issueTestAccessJWT(priv, "system-recovery-user")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/system/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("system recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+
+	var result systemRecoveryResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if !result.OK {
+		t.Fatal("recovery response ok=false")
+	}
+	if result.CurrentComputer.LookupStatus != "ok" {
+		t.Fatalf("lookup status = %s, want ok", result.CurrentComputer.LookupStatus)
+	}
+	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
+		t.Fatalf("computer state = %s, want active", result.CurrentComputer.State)
+	}
+	own, err := client.LookupDesktop("system-recovery-user", vmctl.PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("lookup after recovery: %v", err)
+	}
+	if own == nil {
+		t.Fatal("wake recovery did not create/resume ownership")
+	}
+
+	body := w.Body.String()
+	for _, forbidden := range []string{"system-recovery-user", "vm_id", "sandbox_url", "user_id", "state_dir"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("system recovery leaked %q in %s", forbidden, body)
+		}
+	}
+}
+
 func TestProxyHealthReportsRedactedLifecycleAggregates(t *testing.T) {
 	handler, priv, _, _ := testVMctlProxyEnv(t)
 	token := issueTestAccessJWT(priv, "lifecycle-user")

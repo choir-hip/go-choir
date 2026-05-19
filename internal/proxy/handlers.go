@@ -387,6 +387,12 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/shell/bootstrap":
 		h.HandleBootstrap(w, r)
 		return
+	case path == "/api/system/status":
+		h.HandleSystemStatus(w, r)
+		return
+	case path == "/api/system/recovery":
+		h.HandleSystemRecovery(w, r)
+		return
 	case path == "/api/ws":
 		h.HandleWS(w, r)
 		return

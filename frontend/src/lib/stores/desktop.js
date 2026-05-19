@@ -23,6 +23,7 @@ import { writable, derived } from 'svelte/store';
 export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
   { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
+  { id: 'system-monitor', name: 'System Monitor', icon: '📊', description: 'Computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
@@ -48,8 +49,26 @@ export const APP_REGISTRY = [
 
 /** The main apps shown as floating desktop icons */
 export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
-  ['files', 'browser', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
+  ['files', 'browser', 'system-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
 );
+
+export const HEAVY_APP_IDS = new Set([
+  'browser',
+  'candidate-desktop',
+  'terminal',
+  'vtext',
+  'trace',
+  'podcast',
+  'image',
+  'audio',
+  'video',
+  'pdf',
+  'epub',
+]);
+
+export function isHeavyAppId(appId) {
+  return HEAVY_APP_IDS.has(appId);
+}
 
 // ---- Window counter ----
 
@@ -340,6 +359,7 @@ export function focusWindow(windowId) {
       return {
         ...withoutShowDesktopMarkers(w),
         mode: w.mode === 'minimized' ? (w._showDesktopPrevMode || 'normal') : w.mode,
+        restoreSuspended: false,
         zIndex: getNextZIndex(),
       };
     });
@@ -407,6 +427,7 @@ export function restoreWindow(windowId) {
             height: geo.height,
             zIndex: raisedZIndex,
             restoredGeometry: null,
+            restoreSuspended: false,
           };
         }
         if (w.mode === 'maximized' && w.restoredGeometry) {
@@ -420,6 +441,7 @@ export function restoreWindow(windowId) {
             height: geo.height,
             zIndex: raisedZIndex,
             restoredGeometry: null,
+            restoreSuspended: false,
           };
         }
         return {
@@ -427,6 +449,7 @@ export function restoreWindow(windowId) {
           mode: w._showDesktopPrevMode || 'normal',
           zIndex: raisedZIndex,
           restoredGeometry: null,
+          restoreSuspended: false,
         };
       }
       return w;
@@ -478,6 +501,38 @@ export function updateWindowAppContext(windowId, appContext = {}, title = '') {
       };
     })
   );
+}
+
+export function clearWindowRestoreSuspension(windowId) {
+  windows.update(($windows) =>
+    $windows.map((w) =>
+      w.windowId === windowId ? { ...w, restoreSuspended: false } : w
+    )
+  );
+}
+
+export function suspendBackgroundHeavyWindows(activeId = '') {
+  let suspended = 0;
+  windows.update(($windows) => {
+    const topActiveId = activeId || $windows
+      .filter((w) => w.mode !== 'closed' && w.mode !== 'hidden' && w.mode !== 'minimized')
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))[0]?.windowId || '';
+    return $windows.map((w) => {
+      if (
+        w.windowId !== topActiveId &&
+        isHeavyAppId(w.appId) &&
+        w.mode !== 'closed' &&
+        w.mode !== 'hidden' &&
+        w.mode !== 'minimized' &&
+        !w.restoreSuspended
+      ) {
+        suspended += 1;
+        return { ...w, restoreSuspended: true };
+      }
+      return w;
+    });
+  });
+  return suspended;
 }
 
 /** Set windows state (used for loading from server) */

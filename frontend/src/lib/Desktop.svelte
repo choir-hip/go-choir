@@ -37,6 +37,7 @@
   import BrowserApp from './BrowserApp.svelte';
   import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
   import TerminalApp from './TerminalApp.svelte';
+  import SystemMonitorApp from './SystemMonitorApp.svelte';
   import PodcastApp from './PodcastApp.svelte';
   import ImageApp from './ImageApp.svelte';
   import AudioApp from './AudioApp.svelte';
@@ -58,11 +59,13 @@
     restoreWindow,
     moveWindow,
     resizeWindow,
+    clearWindowRestoreSuspension,
     updateWindowAppContext,
     setWindows,
     setIconPositions,
     getDefaultIconPositions,
     getAppIcon,
+    isHeavyAppId,
   } from './stores/desktop.js';
 
   export let currentUser = null;
@@ -120,20 +123,6 @@
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
   const RESTORE_RECOVERY_WINDOW_LIMIT = 6;
   const RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT = 3;
-  const HEAVY_RESTORE_APPS = new Set([
-    'browser',
-    'candidate-desktop',
-    'terminal',
-    'vtext',
-    'trace',
-    'podcast',
-    'image',
-    'audio',
-    'video',
-    'pdf',
-    'epub',
-  ]);
-
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
   $: if (mounted && authenticated !== lastAuthenticated) {
@@ -272,7 +261,7 @@
         }
         // Restore windows
         if (state.windows && state.windows.length > 0) {
-          const restoredWindows = state.windows.map((w) => ({
+          const restoredWindowsRaw = state.windows.map((w) => ({
             windowId: w.window_id,
             appId: w.app_id,
             title: w.title,
@@ -287,6 +276,12 @@
               ? { x: w.restored_geometry.x, y: w.restored_geometry.y, width: w.restored_geometry.width, height: w.restored_geometry.height }
               : null,
             appContext: w.app_context ?? {},
+          }));
+          const hydrationActiveId = state.active_window_id || pickTopRestoredWindow(restoredWindowsRaw, '')?.windowId || '';
+          const lazyHydration = shouldLazyHydrateRestoredWindows(restoredWindowsRaw);
+          const restoredWindows = restoredWindowsRaw.map((win) => ({
+            ...win,
+            restoreSuspended: shouldSuspendRestoredWindow(win, hydrationActiveId, lazyHydration),
           }));
           const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '');
           if (recovery) {
@@ -320,6 +315,27 @@
     );
   }
 
+  function shouldLazyHydrateRestoredWindows(restoredWindows) {
+    const visibleWindows = visibleRestoredWindows(restoredWindows);
+    const heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
+    const compactViewport = typeof window !== 'undefined'
+      ? window.innerWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT
+      : false;
+    return compactViewport ||
+      visibleWindows.length > RESTORE_RECOVERY_WINDOW_LIMIT ||
+      heavyWindows.length >= RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT;
+  }
+
+  function shouldSuspendRestoredWindow(win, activeId, lazyHydration) {
+    if (!lazyHydration || !win || !isHeavyAppId(win.appId)) return false;
+    if (win.windowId === activeId) return false;
+    return win.mode !== 'closed' && win.mode !== 'hidden' && win.mode !== 'minimized';
+  }
+
+  function isWindowAppBodySuspended(win) {
+    return Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
+  }
+
   function restoreRecoveryRequestedByURL() {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search || '');
@@ -330,7 +346,7 @@
 
   function shouldEnterRestoreRecovery(restoredWindows, activeId = '') {
     const visibleWindows = visibleRestoredWindows(restoredWindows);
-    const heavyWindows = visibleWindows.filter((win) => HEAVY_RESTORE_APPS.has(win.appId));
+    const heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
     const compactViewport = typeof window !== 'undefined'
       ? window.innerWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT
       : false;
@@ -359,25 +375,33 @@
     return candidates.reduce((best, win) => ((win.zIndex || 0) > (best.zIndex || 0) ? win : best));
   }
 
+  function serializeWindowsForSave(nextWindows) {
+    return nextWindows.map((w) => ({
+      window_id: w.windowId,
+      app_id: w.appId,
+      title: w.title,
+      geometry: { x: w.x, y: w.y, width: w.width, height: w.height },
+      restored_geometry: w.restoredGeometry,
+      mode: w.mode,
+      z_index: w.zIndex,
+      app_context: w.appContext,
+    }));
+  }
+
+  async function persistWindowSet(nextWindows, nextActiveId) {
+    setWindows(nextWindows, nextActiveId || '');
+    await tick();
+    await saveDesktopState({
+      windows: serializeWindowsForSave(nextWindows),
+      active_window_id: nextActiveId || '',
+    });
+  }
+
   async function persistRecoveredWindows(nextWindows, nextActiveId) {
     restoreRecoverySaving = true;
     restoreRecoveryStatus = '';
     try {
-      setWindows(nextWindows, nextActiveId || '');
-      await tick();
-      await saveDesktopState({
-        windows: nextWindows.map((w) => ({
-          window_id: w.windowId,
-          app_id: w.appId,
-          title: w.title,
-          geometry: { x: w.x, y: w.y, width: w.width, height: w.height },
-          restored_geometry: w.restoredGeometry,
-          mode: w.mode,
-          z_index: w.zIndex,
-          app_context: w.appContext,
-        })),
-        active_window_id: nextActiveId || '',
-      });
+      await persistWindowSet(nextWindows, nextActiveId || '');
       restoreRecovery = null;
       restoreRecoveryWindows = [];
       restoreRecoveryActiveId = '';
@@ -451,18 +475,7 @@
       iconPositions.subscribe((p) => { currentIconPositions = p; })();
 
       const state = {
-        windows: currentWindows
-          .filter((w) => w.mode !== 'hidden')
-          .map((w) => ({
-            window_id: w.windowId,
-            app_id: w.appId,
-            title: w.title,
-            geometry: { x: w.x, y: w.y, width: w.width, height: w.height },
-            restored_geometry: w.restoredGeometry,
-            mode: w.mode,
-            z_index: w.zIndex,
-            app_context: w.appContext,
-          })),
+        windows: serializeWindowsForSave(currentWindows.filter((w) => w.mode !== 'hidden')),
         active_window_id: currentActiveId || '',
         icon_positions: currentIconPositions,
       };
@@ -715,6 +728,7 @@
   }
 
   function handleWindowFocus(event) {
+    clearWindowRestoreSuspension(event.detail.windowId);
     focusWindow(event.detail.windowId);
     scheduleSave();
   }
@@ -947,6 +961,57 @@
     showToast('Desktop layout reset');
   }
 
+  function handleOpenSystemMonitor() {
+    openApp('system-monitor', 'System Monitor', getAppIcon('system-monitor'), {
+      windowTitle: 'System Monitor',
+    });
+  }
+
+  async function handleClearDesktopWindows() {
+    if (!authenticated) {
+      requestAuth({ kind: 'reset_desktop' });
+      return;
+    }
+    try {
+      await persistWindowSet([], '');
+      showToast('Saved desktop windows cleared');
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      showToast('Could not clear saved windows', { kind: 'error' });
+    }
+  }
+
+  async function handleKeepWindowOnly(event) {
+    if (!authenticated) {
+      requestAuth({ kind: 'reset_desktop' });
+      return;
+    }
+    const targetWindowId = event.detail?.windowId || '';
+    const targetWindow = windowsSnapshot().find((win) => win.windowId === targetWindowId);
+    if (!targetWindow) {
+      showToast('Could not find the selected window', { kind: 'error' });
+      return;
+    }
+    const keptWindow = {
+      ...targetWindow,
+      mode: targetWindow.mode === 'minimized' ? 'normal' : targetWindow.mode,
+      restoreSuspended: false,
+    };
+    try {
+      await persistWindowSet([keptWindow], keptWindow.windowId);
+      showToast('Saved desktop reduced to one window');
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      showToast('Could not update saved windows', { kind: 'error' });
+    }
+  }
+
   function showToast(message, options = {}) {
     const id = ++toastCounter;
     const kind = options.kind || 'info';
@@ -1073,7 +1138,16 @@
             on:move={handleWindowMove}
             on:resize={handleWindowResize}
           >
-            {#if win.appId === 'files'}
+            {#if isWindowAppBodySuspended(win)}
+              <div class="app-content suspended-app-content" data-suspended-app data-suspended-app-id={win.appId}>
+                <div class="suspended-card">
+                  <p class="suspended-kicker">Paused restore</p>
+                  <h2>{win.title}</h2>
+                  <p>This heavy app window is suspended until it is raised, so the desktop can recover without mounting every saved app at once.</p>
+                  <button type="button" on:click={() => handleWindowFocus({ detail: { windowId: win.windowId } })}>Resume app</button>
+                </div>
+              </div>
+            {:else if win.appId === 'files'}
               <div class="app-content files-content" data-files-app>
                 <FileBrowser
                   on:authexpired={() => dispatch('authexpired')}
@@ -1098,12 +1172,23 @@
               <div class="app-content terminal-content" data-terminal-app>
                 <TerminalApp windowId={win.windowId} />
               </div>
+            {:else if win.appId === 'system-monitor'}
+              <div class="app-content system-monitor-content" data-system-monitor-window>
+                <SystemMonitorApp
+                  windowId={win.windowId}
+                  {authenticated}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:clearsavedwindows={handleClearDesktopWindows}
+                  on:keepwindowonly={handleKeepWindowOnly}
+                />
+              </div>
             {:else if win.appId === 'settings'}
               <div class="app-content settings-content" data-settings-window>
                 <SettingsApp
                   {currentUser}
                   on:authexpired={() => dispatch('authexpired')}
                   on:resetdesktop={handleResetDesktop}
+                  on:opensystemmonitor={handleOpenSystemMonitor}
                 />
               </div>
             {:else if win.appId === 'vtext'}
@@ -1443,9 +1528,69 @@
     background: #171827;
   }
 
+  .system-monitor-content {
+    padding: 0;
+    background: #080d18;
+  }
+
   .candidate-desktop-content {
     padding: 0;
     background: #0d1117;
+  }
+
+  .suspended-app-content {
+    align-items: center;
+    justify-content: center;
+    background:
+      linear-gradient(135deg, rgba(8, 13, 24, 0.96), rgba(15, 23, 42, 0.96));
+  }
+
+  .suspended-card {
+    max-width: 28rem;
+    display: grid;
+    gap: 0.65rem;
+    border: 1px solid rgba(251, 191, 36, 0.28);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.68);
+    padding: 1rem;
+    color: #e5edf9;
+  }
+
+  .suspended-card h2,
+  .suspended-card p {
+    margin: 0;
+  }
+
+  .suspended-card h2 {
+    font-size: 1.1rem;
+    letter-spacing: 0;
+  }
+
+  .suspended-card p {
+    color: #aebbd0;
+    line-height: 1.45;
+  }
+
+  .suspended-kicker {
+    color: #fde68a !important;
+    font-size: 0.7rem;
+    font-weight: 850;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .suspended-card button {
+    justify-self: start;
+    min-height: 2.35rem;
+    border: 1px solid rgba(96, 165, 250, 0.38);
+    border-radius: 7px;
+    background: rgba(30, 64, 175, 0.46);
+    color: #eff6ff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+    padding: 0.5rem 0.72rem;
   }
 
   .toast-stack {
