@@ -21,6 +21,7 @@
   import { createEventDispatcher } from 'svelte';
   import { onMount } from 'svelte';
   import { onDestroy } from 'svelte';
+  import { tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, renewSession } from './auth.js';
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
@@ -110,6 +111,28 @@
   let bootLines = [];
   let bootLineCounter = 0;
   let bootStartedAt = 0;
+  let restoreRecovery = null;
+  let restoreRecoveryWindows = [];
+  let restoreRecoveryActiveId = '';
+  let restoreRecoverySaving = false;
+  let restoreRecoveryStatus = '';
+
+  const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
+  const RESTORE_RECOVERY_WINDOW_LIMIT = 6;
+  const RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT = 3;
+  const HEAVY_RESTORE_APPS = new Set([
+    'browser',
+    'candidate-desktop',
+    'terminal',
+    'vtext',
+    'trace',
+    'podcast',
+    'image',
+    'audio',
+    'video',
+    'pdf',
+    'epub',
+  ]);
 
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
@@ -173,6 +196,10 @@
     promptPlaceholder = 'Ask anything...';
     promptStatus = '';
     authenticatedStartupRunning = false;
+    restoreRecovery = null;
+    restoreRecoveryWindows = [];
+    restoreRecoveryActiveId = '';
+    restoreRecoveryStatus = '';
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -194,6 +221,10 @@
     refreshStatus = '';
     promptStatus = '';
     wsClosedByLogout = false;
+    restoreRecovery = null;
+    restoreRecoveryWindows = [];
+    restoreRecoveryActiveId = '';
+    restoreRecoveryStatus = '';
     liveStatus.set('connecting');
     appendBootLine('Powering user computer');
 
@@ -257,7 +288,20 @@
               : null,
             appContext: w.app_context ?? {},
           }));
-          setWindows(restoredWindows, state.active_window_id || '');
+          const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '');
+          if (recovery) {
+            restoreRecovery = recovery;
+            restoreRecoveryWindows = restoredWindows;
+            restoreRecoveryActiveId = state.active_window_id || '';
+            restoreRecoveryStatus = '';
+            setWindows([], '');
+          } else {
+            restoreRecovery = null;
+            restoreRecoveryWindows = [];
+            restoreRecoveryActiveId = '';
+            restoreRecoveryStatus = '';
+            setWindows(restoredWindows, state.active_window_id || '');
+          }
         }
       }
     } catch (err) {
@@ -268,6 +312,111 @@
     }
     stateLoaded = true;
     desktopReady = bootstrapStable && stateLoaded;
+  }
+
+  function visibleRestoredWindows(restoredWindows) {
+    return (restoredWindows || []).filter((win) =>
+      win.mode !== 'closed' && win.mode !== 'hidden' && win.mode !== 'minimized'
+    );
+  }
+
+  function restoreRecoveryRequestedByURL() {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search || '');
+    const recoveryValue = String(params.get('desktop_recovery') || '').toLowerCase();
+    const safeValue = String(params.get('desktop_safe') || params.get('safe') || '').toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(recoveryValue) || ['1', 'true', 'yes', 'on'].includes(safeValue);
+  }
+
+  function shouldEnterRestoreRecovery(restoredWindows, activeId = '') {
+    const visibleWindows = visibleRestoredWindows(restoredWindows);
+    const heavyWindows = visibleWindows.filter((win) => HEAVY_RESTORE_APPS.has(win.appId));
+    const compactViewport = typeof window !== 'undefined'
+      ? window.innerWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT
+      : false;
+    const urlRequested = restoreRecoveryRequestedByURL();
+
+    if (!urlRequested && (!compactViewport || (visibleWindows.length <= RESTORE_RECOVERY_WINDOW_LIMIT && heavyWindows.length < RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT))) {
+      return null;
+    }
+
+    const topWindow = pickTopRestoredWindow(restoredWindows, activeId);
+    return {
+      reason: urlRequested ? 'url' : 'mobile-heavy-restore',
+      totalCount: restoredWindows.length,
+      visibleCount: visibleWindows.length,
+      heavyCount: heavyWindows.length,
+      topWindowTitle: topWindow?.title || '',
+      topWindowAppId: topWindow?.appId || '',
+    };
+  }
+
+  function pickTopRestoredWindow(restoredWindows, activeId = '') {
+    const candidates = (restoredWindows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
+    const activeWindow = candidates.find((win) => win.windowId === activeId);
+    if (activeWindow) return activeWindow;
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, win) => ((win.zIndex || 0) > (best.zIndex || 0) ? win : best));
+  }
+
+  async function persistRecoveredWindows(nextWindows, nextActiveId) {
+    restoreRecoverySaving = true;
+    restoreRecoveryStatus = '';
+    try {
+      setWindows(nextWindows, nextActiveId || '');
+      await tick();
+      await saveDesktopState({
+        windows: nextWindows.map((w) => ({
+          window_id: w.windowId,
+          app_id: w.appId,
+          title: w.title,
+          geometry: { x: w.x, y: w.y, width: w.width, height: w.height },
+          restored_geometry: w.restoredGeometry,
+          mode: w.mode,
+          z_index: w.zIndex,
+          app_context: w.appContext,
+        })),
+        active_window_id: nextActiveId || '',
+      });
+      restoreRecovery = null;
+      restoreRecoveryWindows = [];
+      restoreRecoveryActiveId = '';
+      restoreRecoveryStatus = '';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      restoreRecoveryStatus = err?.message || 'Could not update saved desktop state';
+      setWindows([], '');
+    } finally {
+      restoreRecoverySaving = false;
+    }
+  }
+
+  async function handleClearRestoredWindows() {
+    await persistRecoveredWindows([], '');
+    showToast('Saved desktop windows cleared');
+  }
+
+  async function handleKeepTopRestoredWindow() {
+    const topWindow = pickTopRestoredWindow(restoreRecoveryWindows, restoreRecoveryActiveId);
+    if (!topWindow) {
+      await handleClearRestoredWindows();
+      return;
+    }
+    await persistRecoveredWindows([{ ...topWindow, mode: topWindow.mode === 'minimized' ? 'normal' : topWindow.mode }], topWindow.windowId);
+    showToast('Saved desktop reduced to one window');
+  }
+
+  function handleRestoreAllWindows() {
+    const restoredWindows = restoreRecoveryWindows;
+    const activeId = restoreRecoveryActiveId;
+    restoreRecovery = null;
+    restoreRecoveryWindows = [];
+    restoreRecoveryActiveId = '';
+    restoreRecoveryStatus = '';
+    setWindows(restoredWindows, activeId);
   }
 
   function delay(ms) {
@@ -855,6 +1004,53 @@
 
     <!-- Floating windows (rendered on top of icons) -->
     {#if desktopReady}
+      {#if restoreRecovery}
+        <section class="desktop-recovery" data-desktop-recovery role="status" aria-live="polite">
+          <div>
+            <p class="recovery-kicker">Desktop recovery</p>
+            <h2>Saved windows are paused</h2>
+            <p>
+              {restoreRecovery.visibleCount} visible windows, including {restoreRecovery.heavyCount} heavy app windows, were saved for this computer.
+              Loading them all at once can crash mobile Safari.
+            </p>
+            {#if restoreRecovery.topWindowTitle}
+              <p class="recovery-top-window">
+                Top saved window: <strong>{restoreRecovery.topWindowTitle}</strong>
+              </p>
+            {/if}
+            {#if restoreRecoveryStatus}
+              <p class="recovery-status" role="alert">{restoreRecoveryStatus}</p>
+            {/if}
+          </div>
+          <div class="recovery-actions">
+            <button
+              type="button"
+              class="recovery-primary"
+              data-desktop-recovery-clear
+              disabled={restoreRecoverySaving}
+              on:click={handleClearRestoredWindows}
+            >
+              Clear saved windows
+            </button>
+            <button
+              type="button"
+              data-desktop-recovery-keep-top
+              disabled={restoreRecoverySaving}
+              on:click={handleKeepTopRestoredWindow}
+            >
+              Keep top window only
+            </button>
+            <button
+              type="button"
+              data-desktop-recovery-restore-all
+              disabled={restoreRecoverySaving}
+              on:click={handleRestoreAllWindows}
+            >
+              Restore all anyway
+            </button>
+          </div>
+        </section>
+      {/if}
       {#each $windows as win (win.windowId)}
         {#if win.mode !== 'closed' && win.mode !== 'hidden'}
           <FloatingWindow
@@ -1127,6 +1323,91 @@
   @keyframes boot-cursor-blink {
     0%, 45% { opacity: 1; }
     46%, 100% { opacity: 0; }
+  }
+
+  .desktop-recovery {
+    position: absolute;
+    left: clamp(14px, 5vw, 56px);
+    top: clamp(14px, 5vw, 56px);
+    width: min(520px, calc(100vw - 28px));
+    display: grid;
+    gap: 1rem;
+    padding: 1.1rem;
+    border: 1px solid rgba(96, 165, 250, 0.34);
+    border-radius: 12px;
+    background: rgba(8, 13, 24, 0.94);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(15, 23, 42, 0.82);
+    color: #e5edf9;
+    z-index: 85;
+  }
+
+  .desktop-recovery h2,
+  .desktop-recovery p {
+    margin: 0;
+  }
+
+  .desktop-recovery h2 {
+    margin-top: 0.2rem;
+    font-size: clamp(1.2rem, 4vw, 1.55rem);
+    letter-spacing: 0;
+  }
+
+  .desktop-recovery p {
+    color: #aebbd0;
+    line-height: 1.45;
+  }
+
+  .recovery-kicker {
+    color: #93c5fd !important;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .recovery-top-window {
+    margin-top: 0.7rem !important;
+    color: #dbeafe !important;
+  }
+
+  .recovery-status {
+    margin-top: 0.7rem !important;
+    color: #fecaca !important;
+  }
+
+  .recovery-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .recovery-actions button {
+    min-height: 40px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.86);
+    color: #dbeafe;
+    padding: 0.55rem 0.78rem;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .recovery-actions button:hover {
+    border-color: rgba(147, 197, 253, 0.62);
+    background: rgba(30, 41, 59, 0.94);
+  }
+
+  .recovery-actions button:disabled {
+    cursor: wait;
+    opacity: 0.58;
+  }
+
+  .recovery-actions .recovery-primary {
+    border-color: rgba(96, 165, 250, 0.62);
+    background: rgba(30, 64, 175, 0.72);
+    color: #f8fbff;
   }
 
   /* App content inside windows */

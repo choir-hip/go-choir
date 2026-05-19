@@ -13,7 +13,7 @@
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey, getSession } from './helpers/auth.js';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 
 function uniqueEmail() {
   return `state-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -149,6 +149,63 @@ test('multiple windows with z-index restored after reload', async ({
   const sortedAfter = [...statesAfter].sort((a, b) => a.zIndex - b.zIndex);
   const topWindowIdAfter = sortedAfter[sortedAfter.length - 1].windowId;
   expect(topWindowIdAfter).toBe(topWindowIdBefore);
+});
+
+// ---------------------------------------------------------------
+// Test: mobile restore recovery blocks heavyweight crash loops
+// ---------------------------------------------------------------
+test('mobile restore recovery pauses too many heavyweight saved windows', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'trace', 'vtext'];
+  const windows = appIds.map((appId, index) => ({
+    window_id: `recovery-window-${index + 1}`,
+    app_id: appId,
+    title: `Recovery ${appId}`,
+    geometry: { x: 12 + index * 2, y: 12 + index * 2, width: 360, height: 700 },
+    mode: 'normal',
+    z_index: index + 1,
+    app_context: { windowTitle: `Recovery ${appId}` },
+  }));
+
+  await page.evaluate(async ({ windows }) => {
+    const res = await fetch('/api/desktop/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        windows,
+        active_window_id: 'recovery-window-7',
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`desktop state save failed: ${res.status}`);
+    }
+  }, { windows });
+
+  await page.reload();
+
+  const recovery = page.locator('[data-desktop-recovery]');
+  await expect(recovery).toBeVisible({ timeout: 10000 });
+  await expect(recovery).toContainText('Saved windows are paused');
+  await expect(recovery).toContainText('7 visible windows');
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  await page.locator('[data-desktop-recovery-clear]').click();
+  await expect(recovery).not.toBeVisible({ timeout: 5000 });
+
+  const saved = await page.evaluate(async () => {
+    const res = await fetch('/api/desktop/state');
+    if (!res.ok) {
+      throw new Error(`desktop state fetch failed: ${res.status}`);
+    }
+    return res.json();
+  });
+  expect(saved.windows).toEqual([]);
 });
 
 // ---------------------------------------------------------------
