@@ -15,7 +15,7 @@ import {
   setupVirtualAuthenticator,
   removeVirtualAuthenticator,
 } from './webauthn.js';
-import { createAuthenticatedState } from './auth-state.js';
+import { createAuthenticatedState, waitForDesktopReady } from './auth-state.js';
 
 /**
  * @typedef {object} AuthenticatorFixture
@@ -51,7 +51,7 @@ export const test = base.extend({
       const page = await context.newPage();
       await page.goto(authenticatedState.baseURL);
       await page.reload();
-      await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
+      await waitForDesktopReady(page);
       await use({
         context,
         page,

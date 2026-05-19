@@ -8,7 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FRONTEND_ROOT = path.resolve(__dirname, '../..');
 
-const DEFAULT_BASE_URL = process.env.BASE_URL || 'http://localhost:4173';
+const DEFAULT_BASE_URL =
+  process.env.BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  process.env.GO_CHOIR_CONTENT_BASE_URL ||
+  'http://localhost:4173';
+const DEFAULT_DESKTOP_READY_TIMEOUT_MS = desktopReadyTimeout();
 
 function defaultStatePath(baseURL) {
   const host = new URL(baseURL).hostname.replaceAll('.', '-');
@@ -34,6 +39,18 @@ function uniqueEmail() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function desktopReadyTimeout() {
+  const value = Number(process.env.CHOIR_DESKTOP_READY_TIMEOUT_MS || process.env.CHOIR_DESKTOP_READY_TIMEOUT);
+  return Number.isFinite(value) && value > 0 ? value : 120_000;
+}
+
+export async function waitForDesktopReady(page, timeout = DEFAULT_DESKTOP_READY_TIMEOUT_MS) {
+  await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
+    state: 'visible',
+    timeout,
+  });
 }
 
 function readStoredState(baseURL) {
@@ -123,7 +140,7 @@ export async function createAuthenticatedState(browser, baseURL = DEFAULT_BASE_U
     await page.goto(baseURL);
     await registerPasskey(page, email, baseURL);
     await page.reload();
-    await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 15000 });
+    await waitForDesktopReady(page);
 
     await context.storageState({ path: storageStatePath });
     fs.writeFileSync(
