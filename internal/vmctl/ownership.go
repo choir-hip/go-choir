@@ -937,7 +937,7 @@ const (
 	gatewayCredentialEnsureSuccessInterval = 10 * time.Minute
 	gatewayCredentialEnsureFailureInterval = 30 * time.Second
 	activeResolveReadinessCheckInterval    = 10 * time.Second
-	activeResolveUnhealthyRouteGrace       = 20 * time.Minute
+	activeResolveUnhealthyRouteGrace       = 45 * time.Second
 	activeResolvePendingRouteGrace         = 3 * time.Minute
 	interactiveVMCPUCount                  = 2
 	interactiveVMMemSizeMib                = 2048

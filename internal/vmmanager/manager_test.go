@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -678,12 +679,40 @@ func TestFirecrackerCmdlineBytesMatchVM(t *testing.T) {
 	nonMatches := [][]byte{
 		[]byte("/bin/sleep\x0060"),
 		[]byte("firecracker --no-api --id vm-other-user --config-file /state/fc-config.json"),
+		[]byte("firecracker --no-api --id vm-existing-user-extra --config-file /state/fc-config.json"),
 		[]byte(""),
 	}
 	for _, cmdline := range nonMatches {
 		if firecrackerCmdlineBytesMatchVM(cmdline, vmID) {
 			t.Fatalf("expected cmdline not to match VM %s: %q", vmID, string(cmdline))
 		}
+	}
+}
+
+func TestFirecrackerPIDsForVMFromEntries(t *testing.T) {
+	entries := []procCmdlineEntry{
+		{
+			pid:  42,
+			data: []byte("/nix/store/firecracker/bin/firecracker\x00--no-api\x00--id\x00vm-existing-user\x00--config-file\x00/state/fc-config.json"),
+		},
+		{
+			pid:  7,
+			data: []byte("firecracker --no-api --id=vm-existing-user --config-file /state/fc-config.json"),
+		},
+		{
+			pid:  99,
+			data: []byte("firecracker --no-api --id vm-other-user --config-file /state/fc-config.json"),
+		},
+		{
+			pid:  100,
+			data: []byte("/bin/sleep\x0060"),
+		},
+	}
+
+	got := firecrackerPIDsForVMFromEntries(entries, "vm-existing-user")
+	want := []int{7, 42}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("firecrackerPIDsForVMFromEntries = %+v, want %+v", got, want)
 	}
 }
 

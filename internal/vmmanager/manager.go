@@ -34,6 +34,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1211,7 +1212,10 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 // killFirecrackerProcess forcefully terminates a Firecracker process
 // and cleans up the associated tap device.
 func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
+	vmID := strings.TrimSpace(inst.Config.VMID)
+	killedPrimaryPID := 0
 	if inst.cmd != nil && inst.cmd.Process != nil {
+		killedPrimaryPID = inst.cmd.Process.Pid
 		_ = inst.cmd.Process.Kill()
 		// Wait for the process to exit.
 		if inst.done != nil {
@@ -1222,19 +1226,29 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 			}
 		}
 	} else if inst.PID > 0 {
+		killedPrimaryPID = inst.PID
 		if proc, err := os.FindProcess(inst.PID); err == nil {
 			_ = proc.Kill()
 		}
 	}
 	inst.PID = 0
 	inst.cmd = nil
-	if inst.Config.VMID != "" {
-		_ = os.Remove(m.pidPath(inst.Config.VMID))
+	if vmID != "" {
+		for _, pid := range firecrackerPIDsForVM(vmID) {
+			if pid == killedPrimaryPID {
+				continue
+			}
+			if proc, err := os.FindProcess(pid); err == nil {
+				log.Printf("vmmanager: killing duplicate Firecracker process for VM %s (pid=%d)", vmID, pid)
+				_ = proc.Kill()
+			}
+		}
+		_ = os.Remove(m.pidPath(vmID))
 	}
 
 	// Clean up the tap device.
-	if inst.Config.VMID != "" && len(inst.Config.VMID) >= 8 {
-		tapName := fmt.Sprintf("vm-%s-tap", inst.Config.VMID[:8])
+	if vmID != "" && len(vmID) >= 8 {
+		tapName := fmt.Sprintf("vm-%s-tap", vmID[:8])
 		m.deleteTapDevice(tapName)
 	}
 }
@@ -1247,6 +1261,18 @@ func (m *Manager) forceCleanup(vmID string) {
 }
 
 func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
+	pids := firecrackerPIDsForVM(vmID)
+	if len(pids) > 0 {
+		for _, pid := range pids {
+			log.Printf("vmmanager: killing orphaned Firecracker process for VM %s (pid=%d) before restart", vmID, pid)
+			if proc, err := os.FindProcess(pid); err == nil {
+				_ = proc.Kill()
+			}
+		}
+		_ = os.Remove(m.pidPath(vmID))
+		return
+	}
+
 	pid, err := m.loadPID(vmID)
 	if err != nil {
 		return
@@ -1317,16 +1343,100 @@ func firecrackerCmdlineMatchesVM(pid int, vmID string) bool {
 	return firecrackerCmdlineBytesMatchVM(data, vmID)
 }
 
+type procCmdlineEntry struct {
+	pid  int
+	data []byte
+}
+
+func firecrackerPIDsForVM(vmID string) []int {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
+		return nil
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+	cmdlines := make([]procCmdlineEntry, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
+		if err != nil {
+			continue
+		}
+		cmdlines = append(cmdlines, procCmdlineEntry{pid: pid, data: data})
+	}
+	return firecrackerPIDsForVMFromEntries(cmdlines, vmID)
+}
+
+func firecrackerPIDsForVMFromEntries(entries []procCmdlineEntry, vmID string) []int {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
+		return nil
+	}
+	pids := make([]int, 0)
+	for _, entry := range entries {
+		if entry.pid <= 0 {
+			continue
+		}
+		if firecrackerCmdlineBytesMatchVM(entry.data, vmID) {
+			pids = append(pids, entry.pid)
+		}
+	}
+	sort.Ints(pids)
+	return pids
+}
+
 func firecrackerCmdlineBytesMatchVM(data []byte, vmID string) bool {
-	cmdline := strings.ReplaceAll(string(data), "\x00", " ")
-	cmdline = strings.TrimSpace(cmdline)
-	if cmdline == "" {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
 		return false
 	}
-	if !strings.Contains(cmdline, "firecracker") {
+	args := processCmdlineArgs(data)
+	if len(args) == 0 {
 		return false
 	}
-	return strings.Contains(cmdline, "--id "+vmID) || strings.Contains(cmdline, "--id="+vmID)
+	hasFirecracker := false
+	for _, arg := range args {
+		if strings.Contains(filepath.Base(arg), "firecracker") {
+			hasFirecracker = true
+			break
+		}
+	}
+	if !hasFirecracker {
+		return false
+	}
+	for i, arg := range args {
+		if arg == "--id" && i+1 < len(args) && args[i+1] == vmID {
+			return true
+		}
+		if strings.TrimPrefix(arg, "--id=") != arg && strings.TrimPrefix(arg, "--id=") == vmID {
+			return true
+		}
+	}
+	return false
+}
+
+func processCmdlineArgs(data []byte) []string {
+	raw := string(data)
+	if strings.Contains(raw, "\x00") {
+		parts := strings.Split(raw, "\x00")
+		args := make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				args = append(args, part)
+			}
+		}
+		return args
+	}
+	return strings.Fields(raw)
 }
 
 // probeGuestHealth attempts to reach the guest's /health endpoint.

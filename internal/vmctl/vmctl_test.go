@@ -2876,7 +2876,7 @@ func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T)
 				Healthy:       false,
 				State:         "running",
 				StartedAt:     now.Add(-time.Hour),
-				LastHealthyAt: now.Add(-2 * time.Minute),
+				LastHealthyAt: now.Add(-10 * time.Second),
 			},
 		},
 		checkHealthOK: &healthy,
