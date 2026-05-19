@@ -2,6 +2,7 @@ package vmmanager
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -689,14 +690,19 @@ func TestFirecrackerCmdlineBytesMatchVM(t *testing.T) {
 func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
 	mgr := NewManager(ManagerConfig{HostBasePort: 9000})
 
-	mgr.reserveHostURLLocked("http://172.9.0.2:8085")
-	if mgr.nextPort != 9009 {
-		t.Fatalf("nextPort=%d, want 9009 after reserving 172.9.0.2", mgr.nextPort)
+	mgr.reserveHostURLLocked("http://10.200.9.2:8085")
+	if mgr.nextPort != 9010 {
+		t.Fatalf("nextPort=%d, want 9010 after reserving 10.200.9.2", mgr.nextPort)
 	}
 
-	mgr.reserveHostURLLocked("http://172.2.0.2:8085")
-	if mgr.nextPort != 9009 {
+	mgr.reserveHostURLLocked("http://10.200.2.2:8085")
+	if mgr.nextPort != 9010 {
 		t.Fatalf("nextPort=%d, lower reservation should not move nextPort backward", mgr.nextPort)
+	}
+
+	mgr.reserveHostURLLocked("http://172.9.0.2:8085")
+	if mgr.nextPort != 9010 {
+		t.Fatalf("nextPort=%d, legacy 172.x reservation should not move nextPort backward", mgr.nextPort)
 	}
 
 	mgr.reserveHostURLLocked("http://127.0.0.1:9017")
@@ -958,9 +964,9 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"guest_port=8085",
 		"vm_id=vm-microvm-test",
 		"epoch=1",
-		"choir.gateway_url=http://172.1.0.1:8084",
-		"choir.vmctl_url=http://172.1.0.1:8083",
-		"ip=172.1.0.2::172.1.0.1:255.255.255.252::eth0:off",
+		"choir.gateway_url=http://10.200.0.1:8084",
+		"choir.vmctl_url=http://10.200.0.1:8083",
+		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {
 			t.Fatalf("expected boot arg %q in %q", arg, bootArgs)
@@ -1147,15 +1153,15 @@ func TestBuildFirecrackerConfig_IPConfigInBootArgs(t *testing.T) {
 		Epoch:             1,
 	}
 
-	// hostPort 9001 → subnetIndex = 9001-9000+1 = 2
-	// guest IP = 172.2.0.2, host IP = 172.2.0.1
+	// hostPort 9001 maps to the second subnet in the bounded private pool.
+	// guest IP = 10.200.1.2, host IP = 10.200.1.1
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9001)
 
 	bootSource := fcConfig["boot-source"].(map[string]interface{})
 	bootArgs := bootSource["boot_args"].(string)
 
 	// Verify the ip= parameter contains the expected guest/host IPs.
-	if !containsStr(bootArgs, "ip=172.2.0.2::172.2.0.1:255.255.255.252::eth0:off") {
+	if !containsStr(bootArgs, "ip=10.200.1.2::10.200.1.1:255.255.255.252::eth0:off") {
 		t.Errorf("expected ip= parameter with correct subnet in boot args: %s", bootArgs)
 	}
 }
@@ -1209,16 +1215,16 @@ func TestBuildFirecrackerConfig_SubnetIsolation(t *testing.T) {
 		Epoch:             1,
 	}
 
-	// VM on port 9000 → subnetIndex=1 → 172.1.0.0/30
+	// VM on port 9000 → 10.200.0.0/30
 	fcConfig1 := mgr.buildFirecrackerConfig(vmCfg, 9000)
-	// VM on port 9001 → subnetIndex=2 → 172.2.0.0/30
+	// VM on port 9001 → 10.200.1.0/30
 	fcConfig2 := mgr.buildFirecrackerConfig(vmCfg, 9001)
 
 	bootArgs1 := fcConfig1["boot-source"].(map[string]interface{})["boot_args"].(string)
 	bootArgs2 := fcConfig2["boot-source"].(map[string]interface{})["boot_args"].(string)
 
 	// Verify different subnets.
-	if containsStr(bootArgs1, "172.1.0.2") && containsStr(bootArgs2, "172.2.0.2") {
+	if containsStr(bootArgs1, "10.200.0.2") && containsStr(bootArgs2, "10.200.1.2") {
 		// Expected: different subnets
 	} else {
 		t.Errorf("expected different subnets for different host ports:\n  port 9000: %s\n  port 9001: %s", bootArgs1, bootArgs2)
@@ -1235,13 +1241,25 @@ func TestGuestAndHostIP_TracksPerVMSubnet(t *testing.T) {
 	mgr := NewManager(cfg)
 
 	guestIP, hostIP := mgr.guestAndHostIP(9000)
-	if guestIP != "172.1.0.2" || hostIP != "172.1.0.1" {
+	if guestIP != "10.200.0.2" || hostIP != "10.200.0.1" {
 		t.Fatalf("port 9000: got guest=%s host=%s", guestIP, hostIP)
 	}
 
 	guestIP, hostIP = mgr.guestAndHostIP(9001)
-	if guestIP != "172.2.0.2" || hostIP != "172.2.0.1" {
+	if guestIP != "10.200.1.2" || hostIP != "10.200.1.1" {
 		t.Fatalf("port 9001: got guest=%s host=%s", guestIP, hostIP)
+	}
+
+	guestIP, hostIP = mgr.guestAndHostIP(9259)
+	if guestIP != "10.201.3.2" || hostIP != "10.201.3.1" {
+		t.Fatalf("port 9259: got guest=%s host=%s", guestIP, hostIP)
+	}
+
+	for _, port := range []int{9000, 9001, 9255, 9256, 9259, 9000 + vmSubnetCapacity} {
+		guestIP, hostIP := mgr.guestAndHostIP(port)
+		if net.ParseIP(guestIP) == nil || net.ParseIP(hostIP) == nil {
+			t.Fatalf("port %d generated invalid addresses guest=%s host=%s", port, guestIP, hostIP)
+		}
 	}
 }
 

@@ -141,7 +141,7 @@ type VMInstance struct {
 
 	// HostURL is the URL where this VM's sandbox runtime is reachable
 	// from the host. On the Firecracker tap path this is the guest IP on the
-	// per-VM /30 subnet (for example "http://172.X.0.2:8085").
+	// per-VM /30 subnet (for example "http://10.200.X.2:8085").
 	HostURL string
 
 	// PID is the Firecracker process ID (0 if not running).
@@ -257,6 +257,12 @@ type Manager struct {
 	healthDone   chan struct{}
 }
 
+const (
+	vmSubnetSecondOctetBase  = 200
+	vmSubnetSecondOctetCount = 16
+	vmSubnetCapacity         = vmSubnetSecondOctetCount * 256
+)
+
 // NewManager creates a new VM manager with the given configuration.
 func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.HostBasePort <= 0 {
@@ -270,8 +276,14 @@ func NewManager(cfg ManagerConfig) *Manager {
 }
 
 func (m *Manager) guestAndHostIP(hostPort int) (guestIP, hostIP string) {
-	subnetIndex := hostPort - m.cfg.HostBasePort + 1
-	return fmt.Sprintf("172.%d.0.2", subnetIndex), fmt.Sprintf("172.%d.0.1", subnetIndex)
+	ordinal := hostPort - m.cfg.HostBasePort
+	if ordinal < 0 {
+		ordinal = 0
+	}
+	ordinal %= vmSubnetCapacity
+	second := vmSubnetSecondOctetBase + ordinal/256
+	third := ordinal % 256
+	return fmt.Sprintf("10.%d.%d.2", second, third), fmt.Sprintf("10.%d.%d.1", second, third)
 }
 
 func (m *Manager) reserveHostURLLocked(hostURL string) {
@@ -291,6 +303,18 @@ func (m *Manager) hostPortFromHostURL(hostURL string) (int, bool) {
 	}
 	host := u.Hostname()
 	parts := strings.Split(host, ".")
+	if len(parts) == 4 && parts[0] == "10" && parts[3] == "2" {
+		second, err := strconv.Atoi(parts[1])
+		if err != nil || second < vmSubnetSecondOctetBase || second >= vmSubnetSecondOctetBase+vmSubnetSecondOctetCount {
+			return 0, false
+		}
+		third, err := strconv.Atoi(parts[2])
+		if err != nil || third < 0 || third > 255 {
+			return 0, false
+		}
+		ordinal := (second-vmSubnetSecondOctetBase)*256 + third
+		return m.cfg.HostBasePort + ordinal, true
+	}
 	if len(parts) == 4 && parts[0] == "172" && parts[2] == "0" && parts[3] == "2" {
 		subnetIndex, err := strconv.Atoi(parts[1])
 		if err != nil || subnetIndex <= 0 {
@@ -306,7 +330,7 @@ func (m *Manager) hostPortFromHostURL(hostURL string) (int, bool) {
 }
 
 func (m *Manager) allocateHostPortLocked(vmID string) (int, error) {
-	const maxAttempts = 1024
+	const maxAttempts = vmSubnetCapacity
 	for i := 0; i < maxAttempts; i++ {
 		hostPort := m.nextPort
 		m.nextPort++
@@ -971,9 +995,9 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 // this configuration. The guest environment, boot_args, and drives
 // contain only the minimum bootstrap material (VAL-VM-011).
 func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]interface{} {
-	// Calculate the /30 subnet for this VM based on host port.
-	// hostPort is 9000+N, so subnetIndex = N.
-	// Host gets 172.(N+1).0.1, guest gets 172.(N+1).0.2.
+	// Calculate the /30 subnet for this VM based on host port. The ordinal
+	// wraps through a bounded private 10.200.0.0-10.215.255.255 pool so
+	// long-lived staging allocators cannot generate invalid IPv4 octets.
 	guestIP, hostIP := m.guestAndHostIP(hostPort)
 
 	// Build drives list.
@@ -1515,8 +1539,8 @@ func (m *Manager) ensureDataImageMinSize(path string, sizeMB int) error {
 // host before the VM can use it. The vmctl service needs CAP_NET_ADMIN
 // to create TAP devices, which is configured in node-b.nix.
 //
-// The tap device is given a host-side IP in the 172.X.0.1/30 range,
-// and the guest is expected to configure 172.X.0.2 as its IP. NAT
+// The tap device is given a host-side IP in the 10.200.X.1/30 range,
+// and the guest is expected to configure 10.200.X.2 as its IP. NAT
 // masquerading is set up so the guest can reach the host's localhost
 // services (gateway, etc.).
 func (m *Manager) createTapDevice(name string) error {
@@ -1608,7 +1632,7 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	// Enable route_localnet on the tap device. This allows the host to
 	// route packets between the guest's subnet and 127.0.0.1 (localhost).
 	// Without this, the DNAT rules that redirect guest→gateway traffic
-	// (172.X.0.1:8084 → 127.0.0.1:8084) would be silently dropped because
+	// (10.200.X.1:8084 → 127.0.0.1:8084) would be silently dropped because
 	// the kernel treats 127.0.0.0/8 as a martian source on non-loopback
 	// interfaces. This is critical for the guest to reach the gateway.
 	routeLocalnet := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/route_localnet", tapName)
