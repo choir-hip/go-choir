@@ -921,7 +921,8 @@
 
   @media (max-width: 720px) {
     .podcast-app {
-      padding: 12px;
+      gap: 10px;
+      padding: 8px;
     }
 
     .podcast-topbar {
