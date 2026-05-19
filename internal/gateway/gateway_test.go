@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -414,6 +415,51 @@ func TestHandleInference_DeniesExternalPeerWithValidToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleInference_AllowsBoundedGuestPeerWithValidToken(t *testing.T) {
+	h, reg, _ := setupHandler(t)
+
+	result, _ := reg.IssueCredential("vm-guest-peer")
+
+	payload := ProviderRequest{
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
+	req.Header.Set("Authorization", "Bearer "+result.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "10.200.209.2:45678"
+
+	w := httptest.NewRecorder()
+	h.HandleInference(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIsChoirGuestPeerMatchesOnlyGuestSideTapAddresses(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+		want bool
+	}{
+		{name: "legacy guest", ip: "172.26.0.2", want: true},
+		{name: "bounded guest", ip: "10.200.209.2", want: true},
+		{name: "bounded host side", ip: "10.200.209.1", want: false},
+		{name: "other private host", ip: "10.0.0.2", want: false},
+		{name: "external", ip: "8.8.8.8", want: false},
+		{name: "ipv6", ip: "fd00::2", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isChoirGuestPeer(net.ParseIP(tt.ip)); got != tt.want {
+				t.Fatalf("isChoirGuestPeer(%q) = %v, want %v", tt.ip, got, tt.want)
+			}
+		})
 	}
 }
 
