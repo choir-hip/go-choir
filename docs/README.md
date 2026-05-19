@@ -27,6 +27,8 @@ Use these buckets when reading or editing docs:
 - `docs/missiongradient-method.md` - run-geometry method entrypoint for long-running agent work; canonical skill lives at `skills/mission-gradient/SKILL.md`.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
+- `docs/vm-priority-policy.md` - current and future VM/computer warmness,
+  reclaim, always-on, and uptime-tier policy.
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
 - `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.

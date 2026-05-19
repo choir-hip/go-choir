@@ -37,6 +37,13 @@ installs, new Go binaries, new Svelte builds, generated media, or semantic data
 changes. A candidate computer can later be discarded, archived, merged into the
 active computer, promoted as the active computer, or packaged for publication.
 
+When the implementation substrate is VM-backed, computer liveness is governed
+by the warmness and reclaim policy in
+[vm-priority-policy.md](vm-priority-policy.md). That policy is part of the
+computer ontology: active primary computers outrank candidate/background work,
+and future always-on computers must be modeled as a first-class lifecycle class
+rather than a cosmetic account flag.
+
 ## Ledger Split
 
 Do not force every change through one storage abstraction.

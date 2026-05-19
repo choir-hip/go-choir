@@ -240,6 +240,12 @@ The implementation may back a computer with a Firecracker VM, NixOS image,
 host-process fallback, worktree, or later substrate. The user-facing object is
 still the computer.
 
+VM-backed computers are retained by a typed warmness policy, not by a single
+idle timeout. Current and future priority semantics are documented in
+[vm-priority-policy.md](vm-priority-policy.md): ordinary primary computers stay
+warm while capacity allows, candidates and workers hibernate first, and
+configured always-on primary computers have an explicit protected/resume lane.
+
 `active_computer`:
 
 - The user-facing desktop computer.

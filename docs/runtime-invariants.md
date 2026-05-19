@@ -38,6 +38,10 @@ auth/session, and Choir-in-Choir claims.
 
 ## Computer Lifecycle And Reclaim
 
+For the concrete current and future policy, read
+[vm-priority-policy.md](vm-priority-policy.md). This section records the
+invariants that policy must preserve.
+
 Active user computers should stay warm when capacity allows. Fixed idle timeout
 is only a coarse safety valve; pressure-aware lifecycle policy must observe host
 memory, CPU, I/O, disk, PID headroom, VM inventory, and protected-work state
