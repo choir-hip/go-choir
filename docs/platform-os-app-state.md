@@ -23,7 +23,7 @@ Update this document when a mission changes any of the following:
 
 - the app catalog, app identity, launcher entries, or Files/prompt routing;
 - app-specific capabilities, controls, persisted state, or proof status;
-- desktop shell behavior: windows, app switching, prompt bar, bottom/start bar,
+- desktop shell behavior: windows, app switching, prompt bar, Shelf/Desk,
   auth-on-mutation, mobile geometry, or logged-out read/explore;
 - VM/computer lifecycle behavior that affects user-visible boot, warmness,
   hibernation, recovery, or priority classes;
@@ -90,8 +90,10 @@ platform docs record the common baseline and the desired divergence semantics.
 ## Desktop Shell State
 
 The shell is a web desktop with floating windows, freely placed desktop icons,
-bottom/start bar, launcher/menu, prompt bar, live status, and persisted desktop
-state for signed-in users.
+Shelf/Desk menu, prompt bar, live status, and persisted desktop state for
+signed-in users. Mobile is intended to use the same overlapping desktop model
+as desktop, with tighter geometry and better overview controls rather than a
+separate phone-mode navigation stack.
 
 Current capabilities:
 
@@ -101,8 +103,10 @@ Current capabilities:
 - signed-in users bootstrap their active computer before private desktop state
   loads;
 - floating windows support focus, minimize, restore, maximize, move, resize,
-  and compact full-bleed geometry for several apps on mobile;
-- bottom/start bar exposes app switching and app launching;
+  compact non-fullscreen default geometry on mobile, and visible stack depth;
+- the Shelf exposes app switching, the Desk menu, and app launching;
+- Desktop Overview is the intended shell mode for seeing and managing all open
+  windows at once;
 - desktop state persists windows and icon positions for authenticated sessions;
 - restore recovery can avoid hydrating every saved heavy app at once, and heavy
   restored background apps may stay suspended until raised;
@@ -115,13 +119,13 @@ Known gaps:
 
 - boot/wake still needs trend history and deeper event trails for long
   recovery sequences;
-- app switching and window raise/restore need continued mobile proof;
-- the bottom/prompt bar must keep shrinking when input is empty and only grow
+- app switching and window raise/restore need continued long-session mobile
+  proof across more real user accounts;
+- the Shelf/prompt bar must keep shrinking when input is empty and only grow
   for real prompt content;
-- launcher and desktop icon surfaces are not yet a unified, tasteful,
-  configurable desktop environment;
-- mobile should remain a powerful floating-window desktop, not collapse into a
-  reduced phone-mode navigation stack.
+- Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
+  tasteful, configurable desktop environment;
+- Desktop Overview v0 is card/spatial-state based, not live thumbnail based.
 
 ## App Catalog
 
@@ -229,5 +233,6 @@ The highest-gradient UX gaps are:
    Files context.
 5. Trace must stay readable as the evidence surface for long runs.
 6. VText must remain stable when Trace/live updates coexist.
-7. Shell/app switching/bottom bar/launcher behavior needs mobile desktop proof.
+7. Shelf/Desk/Desktop Overview behavior needs richer mobile desktop proof,
+   live thumbnails, and configurable Shelf placement.
 8. Candidate/promotion surfaces should become contextual product surfaces.

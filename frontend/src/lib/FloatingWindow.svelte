@@ -144,6 +144,11 @@
     }
   }
 
+  function handleTitlebarDoubleClick(event) {
+    if (event.target.closest('button')) return;
+    handleMaximizeRestore();
+  }
+
   // ---- Focus handler ----
 
   function handleFocusWindow() {
@@ -300,6 +305,8 @@
   data-window
   data-window-id={windowId}
   data-window-app-id={appId}
+  data-window-mode={mode}
+  data-window-active={active ? 'true' : 'false'}
   on:pointerdown={handleFocusWindow}
 >
   <!-- Title bar -->
@@ -307,6 +314,7 @@
     class="titlebar"
     data-window-titlebar
     on:pointerdown={handleDragStart}
+    on:dblclick={handleTitlebarDoubleClick}
   >
     <span class="titlvtext">{title}</span>
     <div class="window-controls">
@@ -498,8 +506,8 @@
     }
 
     .resize-se {
-      width: 20px;
-      height: 20px;
+      width: 28px;
+      height: 28px;
     }
   }
 </style>

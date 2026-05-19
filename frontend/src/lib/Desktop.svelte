@@ -29,6 +29,7 @@
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
   import BottomBar from './BottomBar.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
+  import DesktopOverview from './DesktopOverview.svelte';
   import TraceApp from './TraceApp.svelte';
   import VTextEditor from './VTextEditor.svelte';
   import SettingsApp from './SettingsApp.svelte';
@@ -60,6 +61,8 @@
     moveWindow,
     resizeWindow,
     clearWindowRestoreSuspension,
+    suspendWindowBody,
+    suspendBackgroundHeavyWindows,
     updateWindowAppContext,
     setWindows,
     setIconPositions,
@@ -119,6 +122,7 @@
   let restoreRecoveryActiveId = '';
   let restoreRecoverySaving = false;
   let restoreRecoveryStatus = '';
+  let desktopOverviewOpen = false;
 
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
   const RESTORE_RECOVERY_WINDOW_LIMIT = 6;
@@ -730,6 +734,7 @@
   function handleWindowFocus(event) {
     clearWindowRestoreSuspension(event.detail.windowId);
     focusWindow(event.detail.windowId);
+    desktopOverviewOpen = false;
     scheduleSave();
   }
 
@@ -965,6 +970,63 @@
     openApp('compute-monitor', 'Compute Monitor', getAppIcon('compute-monitor'), {
       windowTitle: 'Compute Monitor',
     });
+  }
+
+  function handleShowDesktopOverview() {
+    desktopOverviewOpen = true;
+  }
+
+  function handleCloseDesktopOverview() {
+    desktopOverviewOpen = false;
+  }
+
+  function handleOverviewFocusWindow(event) {
+    const windowId = event.detail?.windowId || '';
+    if (!windowId) return;
+    clearWindowRestoreSuspension(windowId);
+    focusWindow(windowId);
+    desktopOverviewOpen = false;
+    scheduleSave();
+  }
+
+  function handleOverviewMinimizeWindow(event) {
+    const windowId = event.detail?.windowId || '';
+    if (!windowId) return;
+    minimizeWindow(windowId);
+    scheduleSave();
+  }
+
+  function handleOverviewCloseWindow(event) {
+    const windowId = event.detail?.windowId || '';
+    if (!windowId) return;
+    closeWindow(windowId);
+    scheduleSave();
+  }
+
+  function handleOverviewSuspendWindow(event) {
+    const windowId = event.detail?.windowId || '';
+    if (!windowId) return;
+    const suspended = suspendWindowBody(windowId);
+    if (suspended) {
+      showToast('Window suspended');
+      scheduleSave();
+    }
+  }
+
+  function handleOverviewSuspendBackground() {
+    const count = suspendBackgroundHeavyWindows($activeWindowId);
+    showToast(count > 0 ? `Suspended ${count} background app${count === 1 ? '' : 's'}` : 'No background apps to suspend');
+    if (count > 0) scheduleSave();
+  }
+
+  function handleOverviewOpenComputeMonitor() {
+    handleOpenComputeMonitor();
+    desktopOverviewOpen = false;
+  }
+
+  async function handleOverviewClearSavedWindows() {
+    desktopOverviewOpen = false;
+    await handleClearDesktopWindows();
   }
 
   async function handleClearDesktopWindows() {
@@ -1252,6 +1314,22 @@
         {/if}
       {/each}
     {/if}
+
+    {#if desktopReady && desktopOverviewOpen}
+      <DesktopOverview
+        windows={$windows}
+        activeWindowId={$activeWindowId}
+        {authenticated}
+        on:close={handleCloseDesktopOverview}
+        on:focuswindow={handleOverviewFocusWindow}
+        on:minimizewindow={handleOverviewMinimizeWindow}
+        on:closewindow={handleOverviewCloseWindow}
+        on:suspendwindow={handleOverviewSuspendWindow}
+        on:suspendbackground={handleOverviewSuspendBackground}
+        on:opencomputemonitor={handleOverviewOpenComputeMonitor}
+        on:clearsavedwindows={handleOverviewClearSavedWindows}
+      />
+    {/if}
   </div>
 
   {#if authenticated && !desktopReady}
@@ -1295,6 +1373,7 @@
     on:authrequest={() => requestAuth({ kind: 'sign_in' })}
     on:promptsubmit={handlePromptSubmit}
     on:launchapp={handleLaunchApp}
+    on:showoverview={handleShowDesktopOverview}
   />
 </div>
 

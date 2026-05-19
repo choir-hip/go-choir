@@ -23,16 +23,16 @@ import { writable, derived } from 'svelte/store';
 export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
   { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
-  { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
-  { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
-  { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
-  { id: 'epub', name: 'EPUB', icon: '📚', description: 'EPUB reader', singleton: false, window: { desktop: { width: 900, height: 700 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
-  { id: 'image', name: 'Image', icon: '🖼️', description: 'Image viewer', singleton: false, window: { desktop: { width: 900, height: 680 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
-  { id: 'video', name: 'Video', icon: '🎬', description: 'Video and YouTube player', singleton: false, window: { desktop: { width: 980, height: 720 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
-  { id: 'audio', name: 'Audio', icon: '🎧', description: 'Audio player', singleton: false, window: { desktop: { width: 760, height: 420 }, compact: { fullBleed: true, minWidth: 280, minHeight: 320 } } },
-  { id: 'podcast', name: 'Podcast', icon: '📡', description: 'Podcast feed player', singleton: false, window: { desktop: { width: 900, height: 660 }, compact: { fullBleed: true, minWidth: 280, minHeight: 420 } } },
+  { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'epub', name: 'EPUB', icon: '📚', description: 'EPUB reader', singleton: false, window: { desktop: { width: 900, height: 700 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'image', name: 'Image', icon: '🖼️', description: 'Image viewer', singleton: false, window: { desktop: { width: 900, height: 680 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'video', name: 'Video', icon: '🎬', description: 'Video and YouTube player', singleton: false, window: { desktop: { width: 980, height: 720 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'audio', name: 'Audio', icon: '🎧', description: 'Audio player', singleton: false, window: { desktop: { width: 760, height: 420 }, compact: { minWidth: 280, minHeight: 320 } } },
+  { id: 'podcast', name: 'Podcast', icon: '📡', description: 'Podcast feed player', singleton: false, window: { desktop: { width: 900, height: 660 }, compact: { minWidth: 280, minHeight: 420 } } },
   {
     id: 'vtext',
     name: 'VText',
@@ -41,7 +41,7 @@ export const APP_REGISTRY = [
     singleton: false,
     window: {
       desktop: { width: 960, height: 720, minWidth: 680, minHeight: 520 },
-      compact: { fullBleed: true, minWidth: 280, minHeight: 420 },
+      compact: { minWidth: 280, minHeight: 420 },
     },
   },
   { id: 'trace', name: 'Trace', icon: '🔎', description: 'Multiagent trace viewer', singleton: true, window: { desktop: { width: 1040, height: 680 } } },
@@ -105,8 +105,8 @@ function getViewportMetrics() {
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : DEFAULT_VIEWPORT_WIDTH;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : DEFAULT_VIEWPORT_HEIGHT;
   const compact = viewportWidth < COMPACT_BREAKPOINT;
-  const margin = compact ? 12 : 24;
-  const preferredWorkspaceStartX = margin + (compact ? 96 : 124);
+  const margin = compact ? 10 : 24;
+  const preferredWorkspaceStartX = compact ? margin + 8 : margin + 124;
   const workspaceStartX = Math.min(
     preferredWorkspaceStartX,
     Math.max(margin, viewportWidth - MIN_WINDOW_WIDTH - margin)
@@ -119,10 +119,14 @@ function getViewportMetrics() {
   );
   const compactWindowWidth = Math.max(
     MIN_WINDOW_WIDTH,
-    Math.min(320, workspaceWidth - 36)
+    Math.min(Math.round(viewportWidth * 0.88), workspaceWidth)
+  );
+  const compactWindowHeight = Math.max(
+    MIN_WINDOW_HEIGHT,
+    Math.min(Math.round(maxHeight * 0.78), maxHeight)
   );
   const baseWidth = Math.min(compact ? compactWindowWidth : 650, workspaceWidth);
-  const baseHeight = Math.min(compact ? 420 : 450, maxHeight);
+  const baseHeight = Math.min(compact ? compactWindowHeight : 450, maxHeight);
   return {
     compact,
     margin,
@@ -139,10 +143,10 @@ function getViewportMetrics() {
 
 function appMinimums(appId, metrics) {
   const pref = getAppWindowPreference(appId);
-  if (metrics.compact && pref.compact?.fullBleed) {
+  if (metrics.compact && pref.compact) {
     return {
-      width: Math.min(metrics.maxWidth, Math.max(pref.compact.minWidth || MIN_WINDOW_WIDTH, metrics.viewportWidth - metrics.margin * 2)),
-      height: Math.min(metrics.maxHeight, Math.max(pref.compact.minHeight || MIN_WINDOW_HEIGHT, metrics.maxHeight)),
+      width: pref.compact.minWidth || MIN_WINDOW_WIDTH,
+      height: pref.compact.minHeight || MIN_WINDOW_HEIGHT,
     };
   }
   const desktop = pref.desktop || {};
@@ -173,17 +177,18 @@ function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
 
 function getNewWindowGeometry(openCount, appId = '') {
   const metrics = getViewportMetrics();
-  const offsetStep = metrics.compact ? 18 : 30;
+  const offsetStep = metrics.compact ? 16 : 30;
   const offset = (openCount % 6) * offsetStep;
   const preference = getAppWindowPreference(appId);
   const desktopPref = preference.desktop || {};
 
-  if (metrics.compact && preference.compact?.fullBleed) {
+  if (metrics.compact) {
+    const compactPref = preference.compact || {};
     return constrainWindowGeometry({
-      x: metrics.margin,
-      y: metrics.margin,
-      width: metrics.maxWidth,
-      height: metrics.maxHeight,
+      x: metrics.workspaceStartX + offset,
+      y: metrics.margin + offset,
+      width: Math.min(compactPref.width || metrics.baseWidth, metrics.maxWidth),
+      height: Math.min(compactPref.height || metrics.baseHeight, metrics.maxHeight),
       appId,
     });
   }
@@ -532,6 +537,26 @@ export function suspendBackgroundHeavyWindows(activeId = '') {
       return w;
     });
   });
+  return suspended;
+}
+
+export function suspendWindowBody(windowId) {
+  let suspended = false;
+  windows.update(($windows) =>
+    $windows.map((w) => {
+      if (
+        w.windowId === windowId &&
+        isHeavyAppId(w.appId) &&
+        w.mode !== 'closed' &&
+        w.mode !== 'hidden' &&
+        !w.restoreSuspended
+      ) {
+        suspended = true;
+        return { ...w, restoreSuspended: true };
+      }
+      return w;
+    })
+  );
   return suspended;
 }
 

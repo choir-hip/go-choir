@@ -1,13 +1,14 @@
 <!--
-  BottomBar — fixed bottom bar for the ChoirOS desktop.
+  BottomBar — fixed Shelf for the ChoirOS desktop.
 
   Contains:
-    - Left: Show Desktop button + desktop/account menu + minimized window indicators
+    - Left: Desk button + desktop/account menu + open window indicators
     - Center: prompt bar input with "Ask anything..." placeholder
     - Right: quiet connection status
 
   Data attributes for test targeting:
-    data-bottom-bar         — root bar container
+    data-bottom-bar         — root bar container (legacy selector)
+    data-shelf              — root Shelf container
     data-show-desktop-btn   — Show Desktop toggle button
     data-minimized-indicator — minimized window indicator
     data-prompt-input       — prompt text input
@@ -76,6 +77,11 @@
 
   function handleShowDesktop() {
     toggleShowDesktop();
+    menuOpen = false;
+  }
+
+  function handleShowOverview() {
+    dispatch('showoverview');
     menuOpen = false;
   }
 
@@ -164,28 +170,50 @@
   });
 </script>
 
-<div class="bottom-bar" data-bottom-bar bind:this={bottomBarEl}>
-  <!-- Left section: Start menu + minimized windows -->
+<div class="bottom-bar" data-bottom-bar data-shelf bind:this={bottomBarEl}>
+  <!-- Left section: Desk menu + open windows -->
   <div class="bar-left">
     <button
       class="show-desktop-btn"
       data-show-desktop-btn
       data-start-button
+      data-desk-button
       on:click={handleStartButton}
-      aria-label="Open Start menu"
-      title="Open Start menu"
+      aria-label="Open Desk menu, {$openWindows.length} open windows"
+      title="Open Desk menu"
     >
       <span class="show-desktop-icon">⊞</span>
+      {#if $openWindows.length > 0}
+        <span class="open-window-count" data-shelf-window-count>{$openWindows.length}</span>
+      {/if}
     </button>
 
     {#if menuOpen}
-      <div class="desktop-menu" data-desktop-menu data-start-menu>
+      <div class="desktop-menu" data-desktop-menu data-start-menu data-desk-menu>
+        <div class="menu-heading">
+          <span>Desk</span>
+          <small>{$openWindows.length} open</small>
+        </div>
+        <button
+          class="menu-overview-btn"
+          data-desk-overview
+          on:click={handleShowOverview}
+          aria-label="Open Desktop Overview"
+        >
+          <span class="overview-icon">▦</span>
+          <span>
+            <strong>Desktop Overview</strong>
+            <small>See and manage open windows</small>
+          </span>
+        </button>
+        <div class="menu-label menu-group-label">Apps</div>
         <div class="start-apps" data-start-apps>
           {#each startApps as app}
             <button
               class="start-app"
               data-start-app
               data-start-app-id={app.id}
+              data-desk-app-id={app.id}
               on:click={() => handleLaunchApp(app)}
               aria-label={app.name}
             >
@@ -328,6 +356,7 @@
   }
 
   .show-desktop-btn {
+    position: relative;
     width: 36px;
     height: 36px;
     display: flex;
@@ -353,6 +382,24 @@
     outline-offset: 2px;
   }
 
+  .open-window-count {
+    position: absolute;
+    right: -5px;
+    top: -6px;
+    display: grid;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    align-items: center;
+    border: 1px solid rgba(15, 23, 42, 0.92);
+    border-radius: 999px;
+    background: #3b82f6;
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 850;
+    line-height: 1;
+    padding: 0 0.25rem;
+  }
+
   .desktop-menu {
     position: absolute;
     left: 0;
@@ -369,6 +416,88 @@
     max-height: min(76dvh, 40rem);
     overflow-y: auto;
     backdrop-filter: blur(18px);
+  }
+
+  .menu-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .menu-heading span {
+    color: #f8fafc;
+    font-size: 1rem;
+    font-weight: 850;
+  }
+
+  .menu-heading small {
+    color: #93c5fd;
+    font-size: 0.72rem;
+    font-weight: 750;
+  }
+
+  .menu-overview-btn {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 0.65rem;
+    border: 1px solid rgba(96, 165, 250, 0.34);
+    border-radius: var(--choir-radius-md, 12px);
+    background: rgba(37, 99, 235, 0.2);
+    color: #dbeafe;
+    cursor: pointer;
+    padding: 0.62rem;
+    text-align: left;
+  }
+
+  .menu-overview-btn:hover,
+  .menu-overview-btn:focus-visible {
+    border-color: rgba(125, 211, 252, 0.52);
+    background: rgba(37, 99, 235, 0.32);
+  }
+
+  .overview-icon {
+    display: grid;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 10px;
+    background: rgba(125, 211, 252, 0.12);
+    color: #bfdbfe;
+    font-weight: 850;
+  }
+
+  .menu-overview-btn span:last-child {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+  }
+
+  .menu-overview-btn strong,
+  .menu-overview-btn small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .menu-overview-btn strong {
+    color: #f8fafc;
+    font-size: 0.88rem;
+  }
+
+  .menu-overview-btn small {
+    color: #bfdbfe;
+    font-size: 0.7rem;
+  }
+
+  .menu-group-label {
+    margin: 0 0 0.45rem;
   }
 
   .menu-section {
