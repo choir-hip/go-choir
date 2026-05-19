@@ -178,7 +178,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	own, err := h.registry.ResolveOrAssignDesktop(req.UserID, req.DesktopID)
+	own, err := h.registry.ResolveOrAssignDesktopContext(r.Context(), req.UserID, req.DesktopID)
 	if err != nil {
 		log.Printf("vmctl: resolve failed for user %s desktop %s: %v", req.UserID, req.DesktopID, err)
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve VM"})

@@ -640,7 +640,7 @@ func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID strin
 	start := time.Now()
 	delay := sandboxResolveRetryBaseDelay
 	for attempt := 0; ; attempt++ {
-		sandboxURL, err := h.resolveSandboxURLOnce(userID, desktopID)
+		sandboxURL, err := h.resolveSandboxURLOnce(ctx, userID, desktopID)
 		if err == nil {
 			if attempt > 0 {
 				log.Printf("proxy: resolved sandbox after transient vmctl error attempts=%d elapsed=%s", attempt+1, time.Since(start).Round(time.Millisecond))
@@ -671,14 +671,17 @@ func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID strin
 	}
 }
 
-func (h *Handler) resolveSandboxURLOnce(userID, desktopID string) (string, error) {
+func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	desktopID = strings.TrimSpace(desktopID)
 	if desktopID == "" {
 		desktopID = vmctl.PrimaryDesktopID
 	}
 
 	if desktopID == vmctl.PrimaryDesktopID {
-		resp, err := h.vmctlClient.ResolveDesktop(userID, desktopID)
+		resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
 		if err != nil {
 			return "", err
 		}
@@ -688,7 +691,7 @@ func (h *Handler) resolveSandboxURLOnce(userID, desktopID string) (string, error
 		return resp.SandboxURL, nil
 	}
 
-	resp, err := h.vmctlClient.LookupDesktop(userID, desktopID)
+	resp, err := h.vmctlClient.LookupDesktopContext(ctx, userID, desktopID)
 	if err != nil {
 		return "", err
 	}

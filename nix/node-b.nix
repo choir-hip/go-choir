@@ -325,12 +325,12 @@ in
         "VM_HEALTH_CHECK_TIMEOUT=3s"
         "VM_BOOT_READY_TIMEOUT=150s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
-        # Staging keeps personal computers warm for normal return visits.
-        # Primary computers remain online while the host is under capacity;
-        # pressure policy chooses lower-priority idle resources first.
-        "VMCTL_IDLE_TIMEOUT=6h"
-        "VMCTL_IDLE_SWEEP_INTERVAL=5m"
-        "VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity"
+        # Staging runs many automated first-user/mobile acceptance probes. Keep
+        # personal computers durable, but do not leave every test-created
+        # primary VM resident until the host is already under memory pressure.
+        "VMCTL_IDLE_TIMEOUT=30m"
+        "VMCTL_IDLE_SWEEP_INTERVAL=2m"
+        "VMCTL_PRIMARY_KEEPALIVE_MODE=off"
         # Active reclaim uses the same ranking exposed by dry-run mode, but
         # hibernates a bounded number of lower-priority idle computers when
         # host pressure crosses threshold.

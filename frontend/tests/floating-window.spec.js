@@ -17,7 +17,11 @@
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey, getSession } from './helpers/auth.js';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL =
+  process.env.GO_CHOIR_UX_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  'http://localhost:4173';
+const DESKTOP_BOOT_TIMEOUT_MS = Number(process.env.GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS || 120000);
 
 function uniqueEmail() {
   return `float-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -29,7 +33,7 @@ async function registerAndLoadDesktop(page, authenticator, email, viewportSize =
   await page.goto(BASE_URL);
   await registerPasskey(page, email, BASE_URL);
   await page.reload();
-  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
 }
 
 // Helper: open app via double-click on floating desktop icon

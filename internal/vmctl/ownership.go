@@ -1053,7 +1053,7 @@ func (r *OwnershipRegistry) reconcileGatewayCredentialsForVMs(vmIDs []string) {
 // ResolveOrAssign resolves the VM ownership for the primary desktop of the
 // given user.
 func (r *OwnershipRegistry) ResolveOrAssign(userID string) (*VMOwnership, error) {
-	return r.ResolveOrAssignDesktop(userID, PrimaryDesktopID)
+	return r.ResolveOrAssignDesktopContext(context.Background(), userID, PrimaryDesktopID)
 }
 
 // ResolveOrAssignDesktop resolves the VM ownership for the given user/desktop
@@ -1063,6 +1063,17 @@ func (r *OwnershipRegistry) ResolveOrAssign(userID string) (*VMOwnership, error)
 // assigned. Concurrent first requests for the same
 // user/desktop pair collapse onto one assignment.
 func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*VMOwnership, error) {
+	return r.ResolveOrAssignDesktopContext(context.Background(), userID, desktopID)
+}
+
+// ResolveOrAssignDesktopContext resolves the VM ownership for the given
+// user/desktop pair and lets callers abandon pending boot waits when their
+// request context is canceled. The first boot caller is allowed to keep
+// booting the VM so a later retry can reuse the completed assignment.
+func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, userID, desktopID string) (*VMOwnership, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	desktopID = normalizeDesktopID(desktopID)
 	key := ownershipKey(userID, desktopID)
 	r.mu.Lock()
@@ -1084,7 +1095,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 				current := r.ownerships[key]
 				if current == nil || current.VMID != snapshot.VMID || !current.IsReady() {
 					r.mu.Unlock()
-					return r.ResolveOrAssignDesktop(userID, desktopID)
+					return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
 				}
 				if info != nil {
 					current.SandboxURL = info.HostURL
@@ -1140,15 +1151,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 
 		if own.State == VMStateBooting {
 			if waiters, ok := r.pendingWaiters[key]; ok {
-				ch := make(chan *VMOwnership, 1)
-				r.pendingWaiters[key] = append(waiters, ch)
-				r.mu.Unlock()
-
-				own := <-ch
-				if own == nil {
-					return nil, fmt.Errorf("vm assignment failed for user %s desktop %s", userID, desktopID)
-				}
-				return own, nil
+				return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 			}
 			// No pending waiter means this is a stale booting ownership, for
 			// example after a process restart. Fall through and recover it the
@@ -1165,15 +1168,7 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 	// so later callers must join that in-flight boot rather than minting a second
 	// VM or routing to the placeholder sandbox URL.
 	if waiters, ok := r.pendingWaiters[key]; ok {
-		ch := make(chan *VMOwnership, 1)
-		r.pendingWaiters[key] = append(waiters, ch)
-		r.mu.Unlock()
-
-		own := <-ch
-		if own == nil {
-			return nil, fmt.Errorf("vm assignment failed for user %s desktop %s", userID, desktopID)
-		}
-		return own, nil
+		return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 	}
 
 	// We are the first caller for this user/desktop pair. Create a new VM.
@@ -1261,6 +1256,40 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktop(userID, desktopID string) (*V
 	log.Printf("vmctl: assigned VM %s to user %s desktop %s", vmID, userID, desktopID)
 
 	return own, nil
+}
+
+func (r *OwnershipRegistry) waitForPendingAssignmentLocked(ctx context.Context, key, userID, desktopID string, waiters []chan *VMOwnership) (*VMOwnership, error) {
+	ch := make(chan *VMOwnership, 1)
+	r.pendingWaiters[key] = append(waiters, ch)
+	r.mu.Unlock()
+
+	select {
+	case own := <-ch:
+		if own == nil {
+			return nil, fmt.Errorf("vm assignment failed for user %s desktop %s", userID, desktopID)
+		}
+		return own, nil
+	case <-ctx.Done():
+		r.removePendingWaiter(key, ch)
+		return nil, fmt.Errorf("vm assignment canceled for user %s desktop %s: %w", userID, desktopID, ctx.Err())
+	}
+}
+
+func (r *OwnershipRegistry) removePendingWaiter(key string, target chan *VMOwnership) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	waiters, ok := r.pendingWaiters[key]
+	if !ok {
+		return
+	}
+	for i, ch := range waiters {
+		if ch == target {
+			waiters = append(waiters[:i], waiters[i+1:]...)
+			break
+		}
+	}
+	r.pendingWaiters[key] = waiters
 }
 
 // ForkDesktop creates or resumes a distinct interactive VM for a target desktop

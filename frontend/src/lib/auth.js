@@ -218,16 +218,21 @@ export async function loginPasskey(email) {
  * @returns {Promise<{ok: boolean, status: number, data?: object}>}
  */
 export async function prewarmAuthenticatedComputer() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const res = await fetch(withDesktopSelector('/api/shell/bootstrap'), {
       method: 'GET',
       credentials: 'include',
+      signal: controller.signal,
       headers: { 'X-Choir-Client-Lifecycle-Stage': 'post-auth-prewarm' },
     });
     const data = await res.json().catch(() => null);
     return { ok: res.ok, status: res.status, data };
-  } catch (_err) {
-    return { ok: false, status: 0 };
+  } catch (err) {
+    return { ok: false, status: 0, timedOut: err?.name === 'AbortError' };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

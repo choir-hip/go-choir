@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,15 @@ func (c *Client) Resolve(userID string) (*resolveResponse, error) {
 
 // ResolveDesktop resolves or assigns a VM for the given user/desktop pair.
 func (c *Client) ResolveDesktop(userID, desktopID string) (*resolveResponse, error) {
+	return c.ResolveDesktopContext(context.Background(), userID, desktopID)
+}
+
+// ResolveDesktopContext resolves or assigns a VM for the given user/desktop
+// pair and cancels the vmctl request when ctx is done.
+func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID string) (*resolveResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
@@ -54,7 +64,7 @@ func (c *Client) ResolveDesktop(userID, desktopID string) (*resolveResponse, err
 	}
 
 	endpoint := ResolveEndpoint(c.baseURL)
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create resolve request: %w", err)
 	}
@@ -228,8 +238,17 @@ func (c *Client) Lookup(userID string) (*ownershipResponse, error) {
 // LookupDesktop returns the current ownership for a user/desktop pair without
 // creating a VM. Returns nil if no ownership exists.
 func (c *Client) LookupDesktop(userID, desktopID string) (*ownershipResponse, error) {
+	return c.LookupDesktopContext(context.Background(), userID, desktopID)
+}
+
+// LookupDesktopContext returns the current ownership for a user/desktop pair
+// and cancels the vmctl request when ctx is done.
+func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID string) (*ownershipResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	endpoint := LookupEndpoint(c.baseURL) + "?user_id=" + url.QueryEscape(userID) + "&desktop_id=" + url.QueryEscape(normalizeDesktopID(desktopID))
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create lookup request: %w", err)
 	}

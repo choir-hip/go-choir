@@ -104,6 +104,7 @@
   const SAVE_DEBOUNCE_MS = 500;
   const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
   const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
+  const BOOTSTRAP_PROBE_TIMEOUT_MS = 15_000;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';
   let bootLines = [];
@@ -344,13 +345,18 @@
       attempt++;
       let res;
       try {
-        res = await fetchWithRenewal('/api/shell/bootstrap', { method: 'GET' });
+        res = await fetchBootstrapProbe();
       } catch (err) {
         if (err instanceof AuthRequiredError) {
           throw err;
         }
-        bootstrapError = 'Bootstrap request failed';
-        appendBootLine(`Bootstrap probe ${attempt} lost contact; retrying`, 'warn');
+        bootstrapError = err?.name === 'AbortError' ? 'Computer boot is still pending' : 'Bootstrap request failed';
+        appendBootLine(
+          err?.name === 'AbortError'
+            ? `Bootstrap probe ${attempt} is still waiting; retrying`
+            : `Bootstrap probe ${attempt} lost contact; retrying`,
+          'warn'
+        );
         await delay(BOOTSTRAP_STABILITY_DELAY_MS);
         continue;
       }
@@ -377,6 +383,19 @@
     }
     bootstrapError = 'Desktop routing is still stabilizing';
     return false;
+  }
+
+  async function fetchBootstrapProbe() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), BOOTSTRAP_PROBE_TIMEOUT_MS);
+    try {
+      return await fetchWithRenewal('/api/shell/bootstrap', {
+        method: 'GET',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async function handleRefresh() {

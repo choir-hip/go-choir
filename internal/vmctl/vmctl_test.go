@@ -264,6 +264,59 @@ func TestOwnershipRegistry_BootingRequestsWaitForReadyVM(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_BootingWaitRespectsContextCancellation(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	manager := newBlockingBootVMManager("http://127.0.0.1:9009")
+	reg.SetVMManager(manager)
+
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = reg.ResolveOrAssign("user-cancel-wait")
+		close(firstDone)
+	}()
+
+	select {
+	case <-manager.started:
+	case <-time.After(time.Second):
+		t.Fatal("expected first resolve to start VM boot")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	own, err := reg.ResolveOrAssignDesktopContext(ctx, "user-cancel-wait", PrimaryDesktopID)
+	if err == nil {
+		t.Fatalf("expected canceled waiter error, got ownership %+v", own)
+	}
+	if !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("expected context deadline error, got %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("canceled waiter returned too slowly: %s", elapsed)
+	}
+
+	select {
+	case <-firstDone:
+		t.Fatal("first resolve should keep booting for the next retry")
+	default:
+	}
+
+	close(manager.release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first resolve did not finish after boot release")
+	}
+
+	retryOwn, err := reg.ResolveOrAssign("user-cancel-wait")
+	if err != nil {
+		t.Fatalf("retry resolve: %v", err)
+	}
+	if retryOwn.SandboxURL != "http://127.0.0.1:9009" {
+		t.Fatalf("retry sandbox URL = %q, want VM URL", retryOwn.SandboxURL)
+	}
+}
+
 func TestOwnershipRegistry_ActiveCount(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
@@ -1680,6 +1733,21 @@ func TestClient_ResolveDesktopAndLookupDesktop(t *testing.T) {
 	}
 	if lookup.DesktopID != "branch-a" {
 		t.Errorf("lookup DesktopID = %q, want %q", lookup.DesktopID, "branch-a")
+	}
+}
+
+func TestClient_ResolveDesktopContextCancelsRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	client := NewClientWithTimeout(srv.URL, time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := client.ResolveDesktopContext(ctx, "user-cancel", PrimaryDesktopID); err == nil {
+		t.Fatal("expected canceled resolve request to fail")
 	}
 }
 
