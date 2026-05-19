@@ -1024,6 +1024,11 @@
     desktopOverviewOpen = false;
   }
 
+  async function handleOverviewKeepActiveOnly(event) {
+    desktopOverviewOpen = false;
+    await handleKeepWindowOnly(event);
+  }
+
   async function handleOverviewClearSavedWindows() {
     desktopOverviewOpen = false;
     await handleClearDesktopWindows();
@@ -1327,6 +1332,7 @@
         on:suspendwindow={handleOverviewSuspendWindow}
         on:suspendbackground={handleOverviewSuspendBackground}
         on:opencomputemonitor={handleOverviewOpenComputeMonitor}
+        on:keepactiveonly={handleOverviewKeepActiveOnly}
         on:clearsavedwindows={handleOverviewClearSavedWindows}
       />
     {/if}

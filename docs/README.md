@@ -63,6 +63,13 @@ Use these buckets when reading or editing docs:
   MissionGradient for turning desktop restore recovery into product-grade
   user-computer observability, safe recovery controls, and a first-class
   Compute Monitor app.
+- `docs/mission-mobile-real-desktop-overview-v0.md` - completed
+  MissionGradient for preserving the same overlapping floating-window desktop
+  on mobile and desktop, introducing Shelf/Desk vocabulary and Desktop
+  Overview v0.
+- `docs/mission-desktop-overview-heavy-session-v0.md` - proposed successor
+  MissionGradient for making Desktop Overview spatially useful under heavy
+  restored real-user sessions with bounded suspension/recovery controls.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -86,6 +93,11 @@ Use these buckets when reading or editing docs:
 - `docs/mission-computer-recovery-system-monitor-v0.md` - completed/proposed
   hardening pass for Compute Monitor, desktop restore recovery, lazy app
   hydration, and safe computer recovery controls.
+- `docs/mission-mobile-real-desktop-overview-v0.md` - completed mobile real
+  desktop and Desktop Overview v0 proof.
+- `docs/mission-desktop-overview-heavy-session-v0.md` - proposed next shell
+  mission for heavy-session Desktop Overview, bounded previews, suspension,
+  and recovery.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -

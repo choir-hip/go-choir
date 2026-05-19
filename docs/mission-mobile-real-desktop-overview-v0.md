@@ -1,10 +1,12 @@
 # MissionGradient: Mobile Real Desktop And Overview v0
 
-**Status:** ready for execution
+**Status:** complete
 **Date:** 2026-05-19
 **Operator:** Codex supervising staging, product-path Playwright, git, CI, deploy, and owner review
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 **Starting deployed baseline:** `cdf23b10823007cf54157d42087247ad1c121221`
+**Completed platform behavior commit:** `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`
+**Proof harness follow-up commit:** `5820a88`
 
 ## One-Line Goal String
 
@@ -403,9 +405,122 @@ it, and keep the artifact identity intact.
 
 ## Next Realism Axis
 
-After this mission, the likely next realism axis is either:
+The next realism axis is:
 
-- richer Desktop Overview with live thumbnails, window grouping, and keyboard
-  navigation; or
-- user-configurable Shelf placement and desktop style families, once the core
-  mobile desktop ontology is stable.
+- make Desktop Overview more spatial and useful under heavy real-user sessions,
+  including better app suspension policy, window memory/recovery controls, and
+  optional live preview thumbnails once the memory cost is bounded.
+
+Successor mission: [mission-desktop-overview-heavy-session-v0.md](mission-desktop-overview-heavy-session-v0.md).
+
+## Run Checkpoint & Resumption State
+
+**Status:** `complete`
+
+**Last checkpoint:** mobile is now the same real overlapping web desktop model as
+desktop, with non-fullscreen default compact windows and Desktop Overview
+available from the Desk menu.
+
+**Current artifact state:**
+
+- deployed staging identity for product behavior:
+  `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`;
+- follow-up committed test selector correction: `5820a88`;
+- compact windows open large but visibly windowed, cascade, overlap, move,
+  resize, minimize, restore, and focus;
+- Shelf/Desk product vocabulary is introduced in UI copy while legacy selectors
+  remain for compatibility;
+- Desktop Overview exists as a shell mode with DOM-derived spatial cards and
+  actions to focus, minimize, suspend, close, suspend background apps, open
+  Compute Monitor, and clear saved windows where allowed.
+
+**What shipped:**
+
+- compact `fullBleed` mobile defaults were removed from desktop app registry
+  behavior;
+- compact window geometry and cascade defaults were tuned for visible stack
+  depth on `390x844`;
+- `FloatingWindow.svelte` exposes window mode/active state and has improved
+  compact resize affordance;
+- `BottomBar.svelte` now presents Desk/Shelf vocabulary and a Desktop Overview
+  command;
+- `DesktopOverview.svelte` was added as a shell overlay;
+- deployed Playwright proof was added for mobile and desktop real-desktop
+  behavior.
+
+**What was proven:**
+
+- GitHub Actions run `26125883507` completed successfully and deployed staging.
+- Staging `/health` reported proxy and upstream commit
+  `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`.
+- Deployed Playwright command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line
+```
+
+- Result: `2 passed`.
+- Mobile `390x844` proof opened Files, VText, Trace, and Podcast as four
+  overlapping non-fullscreen windows, verified drag, resize, minimize, restore,
+  Desktop Overview focus, and background suspension controls.
+- Mobile DOM metrics included max window area ratio `0.624`, `6` overlap pairs,
+  and `4` visible windows.
+- Desktop `1280x900` proof included max window area ratio `0.614`, `6` overlap
+  pairs, and `4` visible windows.
+
+**Unproven or partial claims:**
+
+- Desktop Overview is not yet proven under heavy real-user restore sessions
+  with many saved windows, mixed app weights, and long-lived browser memory
+  pressure.
+- Overview uses DOM-derived spatial cards, not live thumbnails.
+- App suspension policy is still coarse: it knows heavy app bodies, but does
+  not yet use richer app-owned process/memory accounting.
+- Shelf placement and desktop style families remain future work.
+
+**Belief-state changes:**
+
+- The mobile/desktop ontology can remain unified on a phone-sized viewport.
+- The immediate risk is no longer "mobile forces phone mode"; the next risk is
+  whether real users with many restored windows can understand, triage, suspend,
+  and recover their desktop without invisible memory pressure or app hoarding.
+
+**Remaining error field:**
+
+- overview spatial fidelity under many windows;
+- bounded preview fidelity without fake thumbnails or unbounded memory cost;
+- richer suspend/unload/recovery policy;
+- long-session mobile restore proof;
+- better integration between Desktop Overview and Compute Monitor.
+
+**Highest-impact remaining uncertainty:**
+
+Whether Desktop Overview can become the user's primary heavy-session recovery
+and multitasking surface without hydrating too many expensive app bodies or
+exposing private content in unsafe previews.
+
+**Next executable probe:**
+
+Run the successor mission against a staged heavy-session desktop: create or
+restore 10-20 mixed windows on desktop and `390x844`, measure DOM/app weight,
+prove overview focus/suspend/close/recover flows, then refine overview layout,
+suspension policy, and recovery controls.
+
+**Suggested resume goal string:**
+
+```text
+/goal Run docs/mission-desktop-overview-heavy-session-v0.md as a Codex-operated MissionGradient mission: make Desktop Overview the heavy-session control surface for Choir's real web desktop. Preserve overlapping movable windows on mobile and desktop, then make Overview spatially useful with many real windows, bounded suspension/recovery actions, user-computer-scoped memory/restore evidence, and optional live previews only when their privacy and memory cost are proven. Do not fake thumbnails, discard active state silently, expose host/global system information, use phone-mode simplification, or claim local-only proof. Land platform changes through git/CI/deploy and prove on staging with desktop and 390x844 Playwright screenshots/DOM metrics under a heavy restored session, rollback refs, residual risks, and the next realism axis. If the stopping condition is not reached, do not call the mission complete; report checkpoint_incomplete or blocked_incomplete with a resumable mission-doc checkpoint and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
+```
+
+**Evidence artifact refs:**
+
+- `/Users/wiz/go-choir/frontend/test-results/mobile-real-desktop-overvi-a8af8-th-Desktop-Overview-actions-chromium/mobile-overlapping-windows.png`
+- `/Users/wiz/go-choir/frontend/test-results/mobile-real-desktop-overvi-a8af8-th-Desktop-Overview-actions-chromium/mobile-desktop-overview.png`
+- `/Users/wiz/go-choir/frontend/test-results/mobile-real-desktop-overvi-7c5c2-l-model-on-desktop-viewport-chromium/desktop-overlapping-windows.png`
+- `/Users/wiz/go-choir/frontend/test-results/mobile-real-desktop-overvi-7c5c2-l-model-on-desktop-viewport-chromium/desktop-overview.png`
+
+**Rollback refs:**
+
+```bash
+git revert 79b14e2 5820a88
+```

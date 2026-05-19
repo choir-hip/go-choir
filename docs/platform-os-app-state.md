@@ -2,8 +2,8 @@
 
 **Status:** canonical platform-level state ledger
 **Last updated:** 2026-05-19
-**Baseline checked:** desktop restore recovery baseline
-`e61434e88708fdbc6df4c8fbe27e2f64f869d7ca`
+**Baseline checked:** mobile real desktop baseline
+`79b14e2cf6057ee33154dd1d2700ae8cf26ce355`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -126,6 +126,8 @@ Known gaps:
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
   tasteful, configurable desktop environment;
 - Desktop Overview v0 is card/spatial-state based, not live thumbnail based.
+  It is proven for four-window mobile/desktop multitasking, but not yet for
+  heavy restored real-user sessions.
 
 ## App Catalog
 
@@ -195,6 +197,23 @@ Proof caveat: before the reader commit is deployed, c42108f remains the last
 fully deployed platform identity. The reader sweep adds tests that prove real
 PDF rendering/search and raw EPUB archive reading, but those claims become
 platform-level only after CI/deploy/staging acceptance for the new commit.
+
+Recent deployed platform proof for mobile real desktop and Desktop Overview:
+
+- behavior commit: `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`;
+- proof-harness follow-up commit: `5820a88`;
+- CI/deploy run for behavior commit:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26125883507`;
+- test-only CI run:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26126390728`;
+- staging health reported proxy and upstream commit
+  `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`;
+- deployed Playwright:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+- result: `2 passed`;
+- proof covered Files, VText, Trace, and Podcast as overlapping non-fullscreen
+  windows on `390x844` and desktop, with drag, resize, minimize, restore,
+  Desktop Overview focus, and background suspension controls.
 
 ## Divergence Plan
 

@@ -1,7 +1,7 @@
 ---
 name: mission-gradient
 description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -59,6 +59,61 @@ When a blocker appears:
 Before stopping on any nontrivial blocker, apply 2-5 route-changing cognitive transforms. Use the cognitive-transform-portfolio skill when available. The transforms must change the next probe, implementation route, verifier, scope, evidence plan, or stopping condition. Decorative reframing does not count.
 
 Default bias: if the final report can name an executable next objective inside the mission's authority boundary, the mission should usually run that objective instead of ending. Stop only when continuing would violate an invariant, cross an authorization boundary, become unsafe/destructive, or repeat already-falsified probes without new evidence.
+
+## Completion, Checkpoints, And Resumption
+
+MissionGradient should encourage full completion without encouraging false completion.
+
+A checkpoint is not completion.
+
+Use explicit mission statuses:
+
+- `complete`: the mission stopping condition is satisfied with named evidence.
+- `checkpoint_incomplete`: useful uphill progress landed, but the stopping condition is not satisfied. This is a resumable handoff state, not success.
+- `blocked_incomplete`: a named blocker prevents progress after root-cause probes and cognitive transforms. This must include the smallest safe next probe or the external authority required to continue.
+- `superseded`: target-level or invariant-level learning changed the mission identity enough that continuing the original mission would optimize the wrong artifact.
+
+Do not phrase `checkpoint_incomplete` as "completed", "done", "passed", "goal achieved", or "mission achieved". Say plainly: "Mission incomplete; checkpoint landed."
+
+Checkpointing exists to preserve learning and enable continuation. It is not a lower bar for success.
+
+The default action when a mission has not satisfied its stopping condition is to continue, redirect, or delegate the next safe executable probe. Stop at an incomplete checkpoint only when continuing would:
+
+- exceed the authorized time, budget, or context boundary;
+- require human or operator authority;
+- violate an invariant;
+- become unsafe or destructive;
+- wait on external systems with no useful parallel work;
+- repeat already-falsified probes without new evidence.
+
+For orchestration, a `checkpoint_incomplete` result from a worker, vsuper, or cosuper is a control signal, not terminal success. The supervising agent should usually:
+
+- redirect the same agent with the next executable probe;
+- spawn a new agent with a narrower continuation objective;
+- reparameterize the mission if target-level learning changed the route;
+- escalate only if the blocker is invariant-level, external, or unsafe.
+
+Before final response after any broad MissionGradient run, update the mission document unless the user explicitly says not to. Keep the update concise and resumable. Do not turn the mission document into a chat log; put bulky logs, screenshots, traces, and transcripts in a dated evidence artifact and link them.
+
+The mission document should contain or update a `Run Checkpoint & Resumption State` section:
+
+```text
+status: complete | checkpoint_incomplete | blocked_incomplete | superseded
+last checkpoint:
+current artifact state:
+what shipped:
+what was proven:
+unproven or partial claims:
+belief-state changes:
+remaining error field:
+highest-impact remaining uncertainty:
+next executable probe:
+suggested resume goal string:
+evidence artifact refs:
+rollback refs:
+```
+
+Update canonical architecture or platform-state docs only when the run changes current operating rules, product ontology, deployed platform behavior, or durable architecture. Tactical run details belong in the mission doc, evidence artifact, tests, or Trace, not in canonical docs by default.
 
 ## Thesis: Homotopy, Not Ladder
 
@@ -335,6 +390,25 @@ uncertainty/caveat
 promotion relevance
 ```
 
+### Run Checkpoint & Resumption State
+
+Define how the mission document should be updated during or after execution.
+
+At minimum, include:
+
+- mission status: `complete`, `checkpoint_incomplete`, `blocked_incomplete`, or `superseded`;
+- last checkpoint and current artifact state;
+- what shipped and what was proven;
+- unproven or partial claims;
+- belief-state changes and remaining error field;
+- highest-impact remaining uncertainty;
+- next executable probe;
+- suggested resume goal string;
+- evidence artifact references;
+- rollback references.
+
+This section must distinguish checkpoint evidence from mission completion. A useful checkpoint is not a pass unless the stopping condition is satisfied.
+
 ### Forbidden Shortcuts
 
 List topology-changing shortcuts that would falsely improve the metric. Be direct.
@@ -381,7 +455,15 @@ Completion requires proof, not effort:
 - rollback target exists when state was mutated;
 - evidence ledger supports the promotion recommendation.
 
-Do not say "goal achieved" as a bare status. Say what was proven, under which invariants, with which residual risks.
+If the stopping condition is satisfied, report `complete`.
+
+If useful progress landed but the stopping condition is not satisfied, report `checkpoint_incomplete`. Do not present this as success. Update the mission document so the next agent can resume from the real frontier.
+
+If a blocker remains after root-cause probes and cognitive transforms, report `blocked_incomplete` with exact evidence, required authority if any, rollback state, and the smallest safe next probe.
+
+If the mission identity changed, report `superseded` and explain the target-level or invariant-level learning that made the original mission the wrong object.
+
+Do not say "goal achieved" as a bare status. Say what was proven, under which invariants, with which residual risks, and whether the mission is complete or only checkpointed.
 
 ## Checklist Policy
 
@@ -407,6 +489,12 @@ Short `/goal` shape:
 Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, belief-state updates, investigation loop, cognitive reframing, quality gradient, and verification criteria. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, execute safe next probes instead of stopping on tactical blockers, and stop/escalate only on success, invariant-level surprises, external authority boundaries, or hard blockers after root-cause probes.
 ```
 
+For long-running work, append:
+
+```text
+If the stopping condition is not reached, do not call the mission complete. Land and report only a checkpoint_incomplete or blocked_incomplete state, update the mission doc with a resumable checkpoint, and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
+```
+
 ## Review Questions
 
 Before handing the mission to `/goal`, answer:
@@ -424,6 +512,8 @@ Before handing the mission to `/goal`, answer:
 - What evidence would convince a skeptical reviewer that the system works?
 - What discoveries require escalation rather than silent adaptation?
 - What is the rollback target if the promoted state is bad?
+- What distinguishes full completion from a checkpoint in this mission?
+- If only a checkpoint lands, what exact section of the mission doc will make resumption cheap and honest?
 
 ## Addendum: Scientific Rationale
 

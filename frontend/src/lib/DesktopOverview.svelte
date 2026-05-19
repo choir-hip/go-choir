@@ -14,9 +14,20 @@
   $: openWindows = (windows || [])
     .filter((win) => win.mode !== 'closed' && win.mode !== 'hidden')
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  $: layeredWindows = [...openWindows].reverse();
   $: visibleCount = openWindows.filter((win) => win.mode !== 'minimized').length;
   $: suspendedCount = openWindows.filter((win) => win.restoreSuspended).length;
   $: heavyCount = openWindows.filter((win) => isHeavyAppId(win.appId)).length;
+  $: mountedHeavyCount = openWindows.filter((win) =>
+    isHeavyAppId(win.appId) && !win.restoreSuspended && win.mode !== 'minimized'
+  ).length;
+  $: minimizedCount = openWindows.filter((win) => win.mode === 'minimized').length;
+  $: activeWindow = openWindows.find((win) => win.windowId === activeWindowId) || null;
+  $: pressureLevel = mountedHeavyCount >= 6 || openWindows.length >= 14
+    ? 'high'
+    : mountedHeavyCount >= 3 || openWindows.length >= 10
+    ? 'elevated'
+    : 'steady';
 
   function refreshViewport() {
     if (typeof window === 'undefined') return;
@@ -44,6 +55,11 @@
     dispatch('suspendwindow', { windowId });
   }
 
+  function keepActiveOnly() {
+    if (!activeWindowId) return;
+    dispatch('keepactiveonly', { windowId: activeWindowId });
+  }
+
   function handleKeydown(event) {
     if (event.key === 'Escape') closeOverview();
   }
@@ -62,8 +78,9 @@
     const zRange = Math.max(1, maxZ - minZ);
     const left = Math.max(0, Math.min(92, ((win.x || 0) / viewportWidth) * 100));
     const top = Math.max(0, Math.min(88, ((win.y || 0) / viewportHeight) * 100));
-    const width = Math.max(18, Math.min(92, ((win.width || 260) / viewportWidth) * 100));
-    const height = Math.max(18, Math.min(82, ((win.height || 180) / viewportHeight) * 100));
+    const dense = openWindows.length >= 10;
+    const width = Math.max(dense ? 10 : 18, Math.min(92, ((win.width || 260) / viewportWidth) * 100));
+    const height = Math.max(dense ? 9 : 18, Math.min(82, ((win.height || 180) / viewportHeight) * 100));
     const layer = 10 + Math.round(((win.zIndex || 0) - minZ) / zRange * 80);
     return `left:${left}%; top:${top}%; width:${width}%; height:${height}%; z-index:${layer};`;
   }
@@ -88,8 +105,18 @@
       <div>
         <p class="overview-kicker">Desktop Overview</p>
         <h2 id="desktop-overview-title">Open windows</h2>
-        <p class="overview-summary" data-overview-summary>
-          {openWindows.length} open, {visibleCount} visible, {heavyCount} heavy, {suspendedCount} suspended
+        <p
+          class="overview-summary"
+          data-overview-summary
+          data-overview-window-count={openWindows.length}
+          data-overview-visible-count={visibleCount}
+          data-overview-heavy-count={heavyCount}
+          data-overview-mounted-heavy-count={mountedHeavyCount}
+          data-overview-suspended-count={suspendedCount}
+          data-overview-minimized-count={minimizedCount}
+          data-overview-pressure={pressureLevel}
+        >
+          {openWindows.length} open, {visibleCount} visible, {heavyCount} heavy, {mountedHeavyCount} mounted, {suspendedCount} suspended
         </p>
       </div>
       <button class="overview-close" type="button" on:click={closeOverview} data-overview-close aria-label="Close Desktop Overview">Close</button>
@@ -101,7 +128,27 @@
         <p>Open an app from the Desk menu or desktop icons.</p>
       </div>
     {:else}
-      <div class="overview-map" data-overview-map aria-label="Spatial map of open windows">
+      <div class="overview-pressure" class:high={pressureLevel === 'high'} class:elevated={pressureLevel === 'elevated'} data-overview-pressure-panel>
+        <div>
+          <span>Restore pressure</span>
+          <strong>{pressureLevel}</strong>
+        </div>
+        <div>
+          <span>Mounted heavy apps</span>
+          <strong>{mountedHeavyCount}/{heavyCount}</strong>
+        </div>
+        <div>
+          <span>Active window</span>
+          <strong>{activeWindow?.title || 'none'}</strong>
+        </div>
+      </div>
+
+      <div
+        class="overview-map"
+        class:dense={openWindows.length >= 10}
+        data-overview-map
+        aria-label="Spatial map of open windows"
+      >
         {#each openWindows as win (win.windowId)}
           <button
             class:active={win.windowId === activeWindowId}
@@ -113,10 +160,13 @@
             on:click={() => focusWindow(win.windowId)}
             data-overview-map-window
             data-overview-map-window-id={win.windowId}
+            data-overview-map-window-app-id={win.appId}
+            data-overview-map-window-state={modeLabel(win)}
             aria-label="Focus {win.title}"
           >
             <span>{win.icon || '□'}</span>
             <strong>{win.title}</strong>
+            <em>{modeLabel(win)}</em>
           </button>
         {/each}
       </div>
@@ -129,6 +179,14 @@
           <button type="button" on:click={() => dispatch('opencomputemonitor')} data-overview-open-compute-monitor>
             Open Compute Monitor
           </button>
+          <button
+            type="button"
+            on:click={keepActiveOnly}
+            disabled={!activeWindowId}
+            data-overview-keep-active-only
+          >
+            Keep active only
+          </button>
           <button type="button" on:click={() => dispatch('clearsavedwindows')} data-overview-clear-saved>
             Clear saved windows
           </button>
@@ -136,26 +194,54 @@
       </div>
 
       <div class="overview-cards" data-overview-cards>
-        {#each [...openWindows].reverse() as win (win.windowId)}
+        {#each layeredWindows as win, index (win.windowId)}
           <article
             class:active={win.windowId === activeWindowId}
+            class:heavy={isHeavyAppId(win.appId)}
+            class:minimized={win.mode === 'minimized'}
             class:suspended={win.restoreSuspended}
             class="overview-card"
             data-overview-card
             data-overview-card-window-id={win.windowId}
             data-overview-card-app-id={win.appId}
+            data-overview-card-state={modeLabel(win)}
+            data-overview-card-heavy={isHeavyAppId(win.appId) ? 'true' : 'false'}
+            data-overview-card-suspended={win.restoreSuspended ? 'true' : 'false'}
           >
             <button class="card-main" type="button" on:click={() => focusWindow(win.windowId)} data-overview-focus-window>
               <span class="card-icon">{win.icon || '□'}</span>
               <span class="card-copy">
                 <strong>{win.title}</strong>
-                <small>{win.appId} · {modeLabel(win)}</small>
+                <small>{win.appId} · layer {layeredWindows.length - index} · {modeLabel(win)}</small>
               </span>
             </button>
+            <div class="card-badges" aria-label="Window state">
+              {#if win.windowId === activeWindowId}
+                <span class="badge active-badge">active</span>
+              {/if}
+              {#if isHeavyAppId(win.appId)}
+                <span class="badge heavy-badge">heavy</span>
+              {/if}
+              {#if win.restoreSuspended}
+                <span class="badge suspended-badge">suspended</span>
+              {:else if isHeavyAppId(win.appId) && win.mode !== 'minimized'}
+                <span class="badge mounted-badge">mounted</span>
+              {/if}
+              {#if win.mode === 'minimized'}
+                <span class="badge">minimized</span>
+              {/if}
+            </div>
             <div class="card-actions">
               <button type="button" on:click={() => focusWindow(win.windowId)} data-overview-card-focus>Focus</button>
               <button type="button" on:click={() => minimizeWindow(win.windowId)} disabled={win.mode === 'minimized'} data-overview-card-minimize>Minimize</button>
-              <button type="button" on:click={() => suspendWindow(win.windowId)} disabled={!isHeavyAppId(win.appId) || win.restoreSuspended} data-overview-card-suspend>Suspend</button>
+              <button
+                type="button"
+                on:click={() => suspendWindow(win.windowId)}
+                disabled={!isHeavyAppId(win.appId) || win.restoreSuspended || win.windowId === activeWindowId}
+                data-overview-card-suspend
+              >
+                Suspend
+              </button>
               <button class="danger" type="button" on:click={() => closeWindow(win.windowId)} data-overview-card-close>Close</button>
             </div>
           </article>
@@ -185,7 +271,7 @@
     position: absolute;
     inset: clamp(12px, 3vw, 28px);
     display: grid;
-    grid-template-rows: auto minmax(160px, 1fr) auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(170px, 0.95fr) auto minmax(0, 1.1fr);
     gap: 0.85rem;
     overflow: hidden;
     border: 1px solid rgba(96, 165, 250, 0.35);
@@ -225,6 +311,51 @@
     margin: 0.28rem 0 0;
     color: #aebbd3;
     font-size: 0.9rem;
+  }
+
+  .overview-pressure {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .overview-pressure > div {
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.64);
+    padding: 0.58rem 0.7rem;
+  }
+
+  .overview-pressure span,
+  .overview-pressure strong {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overview-pressure span {
+    color: #94a3b8;
+    font-size: 0.68rem;
+    font-weight: 820;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .overview-pressure strong {
+    margin-top: 0.18rem;
+    color: #dbeafe;
+    font-size: 0.94rem;
+  }
+
+  .overview-pressure.elevated > div:first-child {
+    border-color: rgba(251, 191, 36, 0.36);
+  }
+
+  .overview-pressure.high > div:first-child {
+    border-color: rgba(248, 113, 113, 0.44);
   }
 
   .overview-close,
@@ -267,6 +398,10 @@
     background-size: 32px 32px;
   }
 
+  .overview-map.dense {
+    min-height: 220px;
+  }
+
   .map-window {
     position: absolute;
     display: grid;
@@ -295,6 +430,18 @@
   .map-window.minimized,
   .map-window.suspended {
     opacity: 0.64;
+  }
+
+  .map-window em {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    color: #94a3b8;
+    font-size: 0.6rem;
+    font-style: normal;
+    font-weight: 760;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .map-window strong {
@@ -335,8 +482,16 @@
     background: rgba(30, 64, 175, 0.22);
   }
 
+  .overview-card.heavy {
+    border-color: rgba(125, 211, 252, 0.22);
+  }
+
   .overview-card.suspended {
     border-style: dashed;
+  }
+
+  .overview-card.minimized {
+    opacity: 0.72;
   }
 
   .card-main {
@@ -392,6 +547,45 @@
     gap: 0.4rem;
   }
 
+  .card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .badge {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.7);
+    color: #aebbd3;
+    font-size: 0.66rem;
+    font-weight: 820;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    padding: 0.22rem 0.43rem;
+    text-transform: uppercase;
+  }
+
+  .active-badge {
+    border-color: rgba(96, 165, 250, 0.48);
+    color: #bfdbfe;
+  }
+
+  .heavy-badge {
+    border-color: rgba(125, 211, 252, 0.34);
+    color: #bae6fd;
+  }
+
+  .suspended-badge {
+    border-color: rgba(251, 191, 36, 0.34);
+    color: #fde68a;
+  }
+
+  .mounted-badge {
+    border-color: rgba(134, 239, 172, 0.32);
+    color: #bbf7d0;
+  }
+
   .card-actions .danger {
     border-color: rgba(248, 113, 113, 0.32);
     color: #fecaca;
@@ -419,7 +613,7 @@
   @media (max-width: 768px) {
     .overview-panel {
       inset: 8px;
-      grid-template-rows: auto minmax(180px, 0.72fr) auto minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(190px, 0.7fr) auto minmax(0, 1fr);
       gap: 0.65rem;
       border-radius: 14px;
       padding: 0.7rem;
@@ -443,7 +637,7 @@
 
     .overview-actions {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .overview-actions button {
@@ -454,6 +648,19 @@
     .card-actions button {
       flex: 1 1 calc(50% - 0.4rem);
       min-width: 6rem;
+    }
+
+    .overview-pressure {
+      grid-template-columns: 1fr;
+      gap: 0.38rem;
+    }
+
+    .overview-pressure > div {
+      padding: 0.48rem 0.6rem;
+    }
+
+    .overview-pressure strong {
+      font-size: 0.86rem;
     }
   }
 </style>
