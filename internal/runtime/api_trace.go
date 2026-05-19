@@ -540,7 +540,7 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		}
 	}
 
-	title := traceTrajectoryTitle(latestRun, trajectoryID)
+	title := traceTrajectoryTitle(traceTrajectoryTitleRun(trajectoryID, runs, latestRun), trajectoryID)
 	subtitle := traceTrajectorySubtitle(latestRun, leadAgents)
 	docID := traceRunMetadataString(latestRun, "doc_id")
 	if docID == "" {
@@ -572,6 +572,34 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		SearchSuccessCount:   search.Successes,
 		SearchRateLimitCount: search.RateLimits,
 	}
+}
+
+func traceTrajectoryTitleRun(trajectoryID string, runs []types.RunRecord, fallback types.RunRecord) types.RunRecord {
+	var earliestRoot types.RunRecord
+	var earliestPromptBarRoot types.RunRecord
+	for _, run := range runs {
+		if strings.TrimSpace(run.RunID) == strings.TrimSpace(trajectoryID) {
+			return run
+		}
+		if strings.TrimSpace(run.ParentRunID) != "" {
+			continue
+		}
+		if strings.TrimSpace(earliestRoot.RunID) == "" || traceRunActivityTime(run).Before(traceRunActivityTime(earliestRoot)) {
+			earliestRoot = run
+		}
+		if traceRunProfile(run) == AgentProfileConductor && traceRunMetadataString(run, "input_source") == "prompt_bar" {
+			if strings.TrimSpace(earliestPromptBarRoot.RunID) == "" || traceRunActivityTime(run).Before(traceRunActivityTime(earliestPromptBarRoot)) {
+				earliestPromptBarRoot = run
+			}
+		}
+	}
+	if strings.TrimSpace(earliestPromptBarRoot.RunID) != "" {
+		return earliestPromptBarRoot
+	}
+	if strings.TrimSpace(earliestRoot.RunID) != "" {
+		return earliestRoot
+	}
+	return fallback
 }
 
 func buildTraceProvenanceMobileSummary(bundle traceTrajectoryBundle) traceProvenanceMobileSummary {

@@ -116,6 +116,58 @@ func TestHandleTraceTrajectoryIndexOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "prompt-bar-root",
+		AgentID:      "conductor:prompt-bar-root",
+		AgentProfile: AgentProfileConductor,
+		AgentRole:    AgentProfileConductor,
+		OwnerID:      "user-alice",
+		State:        types.RunCompleted,
+		Prompt:       "Trace smoke user-visible title",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileConductor,
+			runMetadataAgentRole:    AgentProfileConductor,
+			runMetadataTrajectoryID: "prompt-bar-root",
+			"input_source":          "prompt_bar",
+		},
+	}
+	child := types.RunRecord{
+		RunID:        "vtext-revision-child",
+		AgentID:      "vtext:vtext-revision-child",
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		OwnerID:      "user-alice",
+		State:        types.RunRunning,
+		Prompt:       "A revise event was triggered for the current vtext document. Intent: regenerate text.",
+		CreatedAt:    now.Add(time.Second),
+		UpdatedAt:    now.Add(2 * time.Second),
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataTrajectoryID: parent.RunID,
+		},
+	}
+
+	runs := []types.RunRecord{parent, child}
+	agents, _ := buildTraceAgentNodes(runs)
+	summary := buildTraceTrajectorySummary(parent.RunID, runs, agents, buildTraceAgentEdges(runs), nil, nil, nil, traceSearchSummary{})
+
+	if summary.Title != parent.Prompt {
+		t.Fatalf("title = %q, want prompt-bar parent prompt %q", summary.Title, parent.Prompt)
+	}
+	if summary.LatestActivityAt != formatTraceTime(child.UpdatedAt) {
+		t.Fatalf("latest activity = %q, want child update %q", summary.LatestActivityAt, formatTraceTime(child.UpdatedAt))
+	}
+	if !summary.Live {
+		t.Fatal("summary should remain live because the child run is running")
+	}
+}
+
 func TestRegisteredTraceRoutesAreReadOnly(t *testing.T) {
 	_, handler := testAPISetup(t)
 
