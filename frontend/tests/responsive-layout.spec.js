@@ -480,7 +480,7 @@ test.describe('Cross-breakpoint checks', () => {
   test('Trace mobile exposes Runs, Summary, Timeline, and Inspector drill-in panels', async ({ page, authenticator }) => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 390, height: 844 });
-    await mockTraceTrajectory(page);
+    const trajectoryId = await mockTraceTrajectory(page);
 
     await openAppViaIcon(page, 'trace');
     const trace = page.locator('[data-trace-app]').last();
@@ -489,6 +489,9 @@ test.describe('Cross-breakpoint checks', () => {
     const tabs = trace.locator('[data-trace-mobile-tabs]');
     await expect(tabs).toBeVisible();
     await expect(trace.locator('[data-trace-summary-panel]')).toBeVisible();
+    const summaryTrajectory = trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`);
+    await expect(summaryTrajectory).toBeVisible();
+    await summaryTrajectory.click();
 
     await tabs.locator('button').filter({ hasText: 'Timeline' }).click();
     await expect(trace.locator('[data-trace-summary-panel]')).not.toBeVisible();

@@ -1992,7 +1992,23 @@
   @container (max-width: 860px) {
     .trace-app {
       grid-template-columns: 1fr;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .mobile-trace-tabs {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .trace-sidebar {
+      grid-column: 1;
+      grid-row: 2;
+      max-height: min(32vh, 14rem);
+    }
+
+    .trace-main {
+      grid-column: 1;
+      grid-row: 3;
     }
 
     .mobile-trace-tabs {
@@ -2032,6 +2048,10 @@
       display: none;
     }
 
+    .trace-app[data-mobile-panel='runs'] .trace-sidebar {
+      max-height: none;
+    }
+
     .trace-app[data-mobile-panel='summary'] .main-grid,
     .trace-app[data-mobile-panel='timeline'] .trace-summary-stack,
     .trace-app[data-mobile-panel='timeline'] [data-trace-inspector],
@@ -2043,7 +2063,6 @@
     .trace-sidebar {
       border-right: none;
       border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      max-height: none;
     }
 
     .sidebar-header,
