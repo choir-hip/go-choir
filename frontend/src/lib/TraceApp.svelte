@@ -1993,6 +1993,9 @@
     .trace-app {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto minmax(0, 1fr);
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .mobile-trace-tabs {
@@ -2003,12 +2006,14 @@
     .trace-sidebar {
       grid-column: 1;
       grid-row: 2;
-      max-height: min(32vh, 14rem);
+      max-height: none;
+      overflow: visible;
     }
 
     .trace-main {
       grid-column: 1;
       grid-row: 3;
+      overflow: visible;
     }
 
     .mobile-trace-tabs {
@@ -2050,6 +2055,18 @@
 
     .trace-app[data-mobile-panel='runs'] .trace-sidebar {
       max-height: none;
+    }
+
+    .trajectory-list,
+    .moment-strip,
+    .detail-stack {
+      max-height: none;
+      overflow: visible;
+    }
+
+    .payload-block.compact {
+      max-height: none;
+      overflow: visible;
     }
 
     .trace-app[data-mobile-panel='summary'] .main-grid,
@@ -2146,6 +2163,21 @@
     [data-trace-inspector],
     [data-trace-run-acceptance] {
       max-height: none;
+    }
+
+    .trace-app {
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .trace-sidebar,
+    .trace-main,
+    .trajectory-list,
+    .moment-strip,
+    .detail-stack,
+    .payload-block.compact {
+      max-height: none;
+      overflow: visible;
     }
   }
 

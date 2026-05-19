@@ -45,9 +45,44 @@ async function openAppViaIcon(page, appId) {
   await icon.dblclick();
 }
 
-async function mockTraceTrajectory(page) {
+async function mockTraceTrajectory(page, options = {}) {
   const trajectoryId = 'trace-mobile-hit-target-regression';
   const timestamp = '2026-05-17T02:47:00Z';
+  const moments = options.longEvidence
+    ? Array.from({ length: 12 }, (_, index) => ({
+        moment_id: `moment-export-${index}`,
+        kind: index % 2 === 0 ? 'loop.completed' : 'channel.message',
+        tone: index % 2 === 0 ? 'success' : 'message',
+        loop_id: 'loop-export',
+        summary: `worker export provenance event ${index + 1} with enough detail to require page scrolling`,
+        created_at: timestamp,
+      }))
+    : [
+        {
+          moment_id: 'moment-export',
+          kind: 'loop.completed',
+          tone: 'success',
+          loop_id: 'loop-export',
+          summary: 'worker export completed',
+          created_at: timestamp,
+        },
+      ];
+  const providers = options.longEvidence
+    ? Array.from({ length: 7 }, (_, index) => ({
+        provider: `provider-${index + 1}`,
+        endpoint: `https://search-${index + 1}.example.test/query`,
+        attempts: 3,
+        successes: index % 3 === 0 ? 1 : 2,
+        result_count: 12 + index,
+        rate_limits: index % 3 === 0 ? 1 : 0,
+        errors: index % 3 === 0 ? 1 : 0,
+        avg_latency_ms: 240 + index * 31,
+        last_error:
+          index % 3 === 0
+            ? `429 Too Many Requests while reading provider ${index + 1}; this long evidence payload should not create a second vertical app scroll zone on mobile.`
+            : '',
+      }))
+    : [];
   const trajectory = {
     trajectory_id: trajectoryId,
     title: 'A revise event was triggered for the current vtext document. Intent: inspect mobile Trace provenance readability.',
@@ -56,7 +91,7 @@ async function mockTraceTrajectory(page) {
     live: false,
     agent_count: 3,
     delegation_count: 2,
-    moment_count: 1,
+    moment_count: moments.length,
     message_count: 4,
     finding_count: 0,
     search_attempt_count: 0,
@@ -74,17 +109,8 @@ async function mockTraceTrajectory(page) {
       { from_agent_id: 'super', to_agent_id: 'implementation', label: 'delegates' },
       { from_agent_id: 'super', to_agent_id: 'verifier', label: 'verifies' },
     ],
-    moments: [
-      {
-        moment_id: 'moment-export',
-        kind: 'loop.completed',
-        tone: 'success',
-        loop_id: 'loop-export',
-        summary: 'worker export completed',
-        created_at: timestamp,
-      },
-    ],
-    search: { providers: [] },
+    moments,
+    search: { providers },
     mobile_summary: {
       headline: 'export-level · accepted · 6 evidence',
       acceptance_state: 'accepted',
@@ -119,7 +145,7 @@ async function mockTraceTrajectory(page) {
     contentType: 'application/json',
     body: JSON.stringify(snapshot),
   }));
-  await page.route(`**/api/trace/trajectories/${trajectoryId}/moments/moment-export`, (route) => route.fulfill({
+  await page.route(`**/api/trace/trajectories/${trajectoryId}/moments/${snapshot.moments[0].moment_id}`, (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -503,6 +529,49 @@ test.describe('Cross-breakpoint checks', () => {
 
     await tabs.locator('button').filter({ hasText: 'Runs' }).click();
     await expect(trace.locator('[data-trace-trajectory-list]')).toBeVisible();
+  });
+
+  test('Trace mobile keeps evidence browsing to one vertical app scroll surface', async ({ page, authenticator }) => {
+    const email = uniqueEmail();
+    await registerAndLoadDesktop(page, authenticator, email, { width: 390, height: 844 });
+    const trajectoryId = await mockTraceTrajectory(page, { longEvidence: true });
+
+    await openAppViaIcon(page, 'trace');
+    const trace = page.locator('[data-trace-app]').last();
+    await expect(trace).toBeVisible({ timeout: 5000 });
+    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
+    await expect(trace.locator('[data-trace-summary-panel]')).toBeVisible();
+
+    const metrics = await trace.evaluate((root) => {
+      const scope = root.closest('[data-window]') || root;
+      const nodes = [scope, ...Array.from(scope.querySelectorAll('*'))];
+      const visible = nodes.filter((node) => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      });
+      const verticalScrollers = visible
+        .filter((node) => {
+          const style = getComputedStyle(node);
+          return ['auto', 'scroll'].includes(style.overflowY) && node.scrollHeight > node.clientHeight + 2;
+        })
+        .map((node) => ({
+          tag: node.tagName.toLowerCase(),
+          classes: String(node.getAttribute('class') || ''),
+          data: Array.from(node.attributes).find((attr) => attr.name.startsWith('data-'))?.name || '',
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+        }));
+      const appLevelScrollers = verticalScrollers.filter(
+        (node) => node.tag !== 'pre' && !node.classes.includes('payload-block'),
+      );
+      return { verticalScrollers, appLevelScrollers };
+    });
+
+    expect(metrics.appLevelScrollers).toHaveLength(1);
+    expect(metrics.appLevelScrollers[0].classes).toContain('trace-app');
+    expect(metrics.appLevelScrollers.some((node) => node.classes.includes('trajectory-list'))).toBe(false);
+    expect(metrics.appLevelScrollers.some((node) => node.classes.includes('trace-main'))).toBe(false);
   });
 
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)

@@ -302,6 +302,11 @@ in
       # (VAL-VM-011).
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
+      # Optional runtime priority overrides. This is intentionally outside the
+      # repo-tracked Nix closure so operators can add paid/real-user always-on
+      # IDs without a platform rebuild:
+      #   VMCTL_ALWAYS_ON_USER_IDS=<auth user UUID>,<auth user UUID>
+      EnvironmentFile = "-/var/lib/go-choir/vmctl-priority.env";
       Environment = [
         "VMCTL_PORT=8083"
         # Firecracker VM configuration (VAL-VM-010):
@@ -326,11 +331,13 @@ in
         "VM_BOOT_READY_TIMEOUT=150s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Staging runs many automated first-user/mobile acceptance probes. Keep
-        # personal computers durable, but do not leave every test-created
-        # primary VM resident until the host is already under memory pressure.
+        # personal computers resident while the host is under capacity. The
+        # pressure policy still reclaims lower-priority candidate and worker VMs
+        # first, and only considers primary computers after lower-priority
+        # reclaim is exhausted.
         "VMCTL_IDLE_TIMEOUT=30m"
         "VMCTL_IDLE_SWEEP_INTERVAL=2m"
-        "VMCTL_PRIMARY_KEEPALIVE_MODE=off"
+        "VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity"
         # Active reclaim uses the same ranking exposed by dry-run mode, but
         # hibernates a bounded number of lower-priority idle computers when
         # host pressure crosses threshold.
