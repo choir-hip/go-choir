@@ -28,6 +28,8 @@
   let rendered = false;
   let rendering = false;
   let renderSeq = 0;
+  let activeRenderTask = null;
+  let activeRenderPromise = null;
   let loadedSourceKey = '';
   let resizeObserver = null;
 
@@ -120,8 +122,18 @@
   async function renderCurrentPage() {
     const seq = ++renderSeq;
     if (!pdfDoc || !canvasEl) return;
+    if (activeRenderTask && activeRenderPromise) {
+      activeRenderTask.cancel();
+      try {
+        await activeRenderPromise;
+      } catch (err) {
+        if (err?.name !== 'RenderingCancelledException') throw err;
+      }
+    }
+    if (seq !== renderSeq) return;
     rendering = true;
     rendered = false;
+    let renderTask = null;
     try {
       await tick();
       const page = await pdfDoc.getPage(pdfPage);
@@ -136,12 +148,20 @@
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
       context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
-      await page.render({ canvasContext: context, viewport }).promise;
+      renderTask = page.render({ canvasContext: context, viewport });
+      activeRenderTask = renderTask;
+      activeRenderPromise = renderTask.promise;
+      await renderTask.promise;
       if (seq !== renderSeq) return;
       rendered = true;
     } catch (err) {
+      if (err?.name === 'RenderingCancelledException') return;
       error = err?.message || 'PDF page render failed';
     } finally {
+      if (activeRenderTask === renderTask) {
+        activeRenderTask = null;
+        activeRenderPromise = null;
+      }
       if (seq === renderSeq) rendering = false;
     }
   }
