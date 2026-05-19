@@ -131,11 +131,12 @@ test('390x844 mobile keeps a real overlapping desktop with Desktop Overview acti
   expect(beforeResize.height - afterResize.height).toBeGreaterThan(20);
 
   const activeId = await activeWindow.getAttribute('data-window-id');
+  const minimizedWindow = page.locator(`[data-window][data-window-id="${activeId}"]`);
   await activeWindow.locator('[data-window-minimize]').click();
-  await expect(page.locator(`[data-window-id="${activeId}"]`)).not.toBeVisible();
+  await expect(minimizedWindow).not.toBeVisible();
   await page.locator(`[data-window-indicator][data-window-id="${activeId}"]`).click();
-  await expect(page.locator(`[data-window-id="${activeId}"]`)).toBeVisible();
-  await expect(page.locator(`[data-window-id="${activeId}"]`)).toHaveAttribute('data-window-active', 'true');
+  await expect(minimizedWindow).toBeVisible();
+  await expect(minimizedWindow).toHaveAttribute('data-window-active', 'true');
 
   await page.locator('[data-desk-button]').click();
   await page.locator('[data-desk-overview]').click();
@@ -151,7 +152,7 @@ test('390x844 mobile keeps a real overlapping desktop with Desktop Overview acti
   const filesWindowId = await filesCard.getAttribute('data-overview-card-window-id');
   await filesCard.locator('[data-overview-focus-window]').click();
   await expect(overview).not.toBeVisible();
-  await expect(page.locator(`[data-window-id="${filesWindowId}"]`)).toHaveAttribute('data-window-active', 'true');
+  await expect(page.locator(`[data-window][data-window-id="${filesWindowId}"]`)).toHaveAttribute('data-window-active', 'true');
 
   const afterMetrics = await readDesktopMetrics(page);
   await assertRealDesktopGeometry(afterMetrics);
