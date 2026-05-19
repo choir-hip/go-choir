@@ -112,9 +112,10 @@
     <p class="video-status">No playable video source is attached to this window.</p>
   {:else if embedUrl}
     <div class="video-theater video-embed-stage" data-media-stage data-video-embed-stage>
-      <div class="video-embed-controls" data-media-toolbar data-video-toolbar>
+      <details class="video-embed-controls" data-media-toolbar data-video-toolbar data-media-controls>
+        <summary>Controls</summary>
         <span data-video-embedded-controls>Embedded player controls active</span>
-      </div>
+      </details>
       <iframe
         title={source.title}
         src={embedUrl}
@@ -128,7 +129,6 @@
       <video
         src={source.displayUrl}
         playsinline
-        controls
         bind:this={mediaEl}
         on:loadedmetadata={restoreMediaPosition}
         on:timeupdate={updateMediaState}
@@ -139,31 +139,34 @@
       >
         <track kind="captions" />
       </video>
-      <div class="video-controls" data-media-player data-video-controls>
-        <div class="video-transport" data-media-transport>
-          <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-video-skip-back>15s back</button>
-          <button type="button" class="video-play" on:click={togglePlayback} data-media-play data-video-play>
-            {mediaPlaying ? 'Pause' : 'Play'}
-          </button>
-          <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-video-skip-forward>30s forward</button>
-          <label>
-            Speed
-            <select bind:value={playbackSpeed} on:change={setPlaybackSpeed} data-media-speed data-video-speed>
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1x</option>
-              <option value={1.25}>1.25x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </label>
+      <details class="video-controls" data-media-player data-video-controls data-media-controls>
+        <summary>Controls</summary>
+        <div class="video-control-panel">
+          <div class="video-transport" data-media-transport>
+            <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-video-skip-back>15s back</button>
+            <button type="button" class="video-play" on:click={togglePlayback} data-media-play data-video-play>
+              {mediaPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-video-skip-forward>30s forward</button>
+            <label>
+              Speed
+              <select bind:value={playbackSpeed} on:change={setPlaybackSpeed} data-media-speed data-video-speed>
+                <option value={0.75}>0.75x</option>
+                <option value={1}>1x</option>
+                <option value={1.25}>1.25x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2x</option>
+              </select>
+            </label>
+          </div>
+          <div class="video-seek-row">
+            <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
+            <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-video-seek />
+            <span data-media-duration>{formatTime(mediaDuration)}</span>
+          </div>
+          <p class="video-position-note" data-media-position-status>Playback position is saved on this device.</p>
         </div>
-        <div class="video-seek-row">
-          <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
-          <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-video-seek />
-          <span data-media-duration>{formatTime(mediaDuration)}</span>
-        </div>
-        <p class="video-position-note" data-media-position-status>Playback position is saved on this device.</p>
-      </div>
+      </details>
     </div>
   {/if}
 
@@ -184,18 +187,20 @@
 <style>
   .video-app {
     position: relative;
-    display: grid;
+    display: block;
     height: 100%;
     min-height: 0;
-    grid-template-rows: minmax(0, 1fr) auto;
     color: #f8fbff;
     background: #02040a;
     overflow: hidden;
   }
 
   .video-theater {
-    position: relative;
+    position: absolute;
+    inset: 0;
     display: grid;
+    width: 100%;
+    height: 100%;
     min-height: 0;
     place-items: center;
     background:
@@ -220,11 +225,18 @@
     right: 12px;
     z-index: 2;
     border: 1px solid rgba(126, 180, 255, 0.26);
-    border-radius: 999px;
-    padding: 7px 10px;
+    border-radius: 12px;
     background: rgba(4, 9, 21, 0.74);
     color: #cbd5e1;
     font-size: 0.82rem;
+    backdrop-filter: blur(12px);
+  }
+
+  .video-embed-controls summary,
+  .video-controls summary {
+    cursor: pointer;
+    font-weight: 820;
+    padding: 8px 10px;
   }
 
   .video-controls {
@@ -232,13 +244,22 @@
     right: 12px;
     bottom: 12px;
     left: 12px;
-    display: grid;
-    gap: 10px;
     border: 1px solid rgba(126, 180, 255, 0.28);
     border-radius: 14px;
-    padding: 12px;
     background: rgba(4, 9, 21, 0.82);
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+  }
+
+  .video-control-panel {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
+
+  .video-embed-controls span {
+    display: block;
+    padding: 0 10px 8px;
   }
 
   .video-transport {
@@ -365,7 +386,6 @@
       right: 8px;
       bottom: 8px;
       left: 8px;
-      padding: 10px;
     }
 
     .video-transport {

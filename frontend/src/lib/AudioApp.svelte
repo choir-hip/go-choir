@@ -139,7 +139,6 @@
       <audio
         src={source.displayUrl}
         preload="metadata"
-        controls
         bind:this={mediaEl}
         on:loadedmetadata={restoreMediaPosition}
         on:timeupdate={updateMediaState}
@@ -166,8 +165,7 @@
 <style>
   .audio-app {
     position: relative;
-    display: flex;
-    flex-direction: column;
+    display: block;
     height: 100%;
     min-height: 0;
     padding: 0;
@@ -179,8 +177,9 @@
   }
 
   .audio-stage {
+    position: absolute;
+    inset: 0;
     display: flex;
-    flex: 1 1 auto;
     min-height: 0;
     flex-direction: column;
     align-items: center;
@@ -275,7 +274,11 @@
   }
 
   .audio-stage audio {
-    width: min(100%, 760px);
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .audio-status,
@@ -292,13 +295,17 @@
   }
 
   .audio-info {
-    flex: 0 0 auto;
-    margin: 0 10px 10px;
+    position: absolute;
+    z-index: 2;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
     border: 1px solid rgba(126, 180, 255, 0.22);
     border-radius: 12px;
     padding: 8px 10px;
     background: rgba(4, 9, 21, 0.82);
     color: #a8adbd;
+    backdrop-filter: blur(12px);
   }
 
   .audio-info summary {

@@ -241,35 +241,6 @@
   {:else if !source.displayUrl}
     <p class="pdf-status">No readable PDF source is attached to this window.</p>
   {:else}
-    <div class="pdf-toolbar" data-media-toolbar data-pdf-toolbar>
-      <button type="button" on:click={() => setPdfPage(pdfPage - 1)} disabled={pdfPage <= 1} data-pdf-prev>Prev</button>
-      <label>
-        Page
-        <input type="number" min="1" max={pageCount || undefined} value={pdfPage} on:change={(event) => setPdfPage(event.currentTarget.value)} data-pdf-page />
-      </label>
-      <span data-pdf-page-count>{pageLabel}</span>
-      <button type="button" on:click={() => setPdfPage(pdfPage + 1)} disabled={pageCount > 0 && pdfPage >= pageCount} data-pdf-next>Next</button>
-      <label>
-        Zoom
-        <select bind:value={pdfZoom} on:change={renderCurrentPage} data-pdf-zoom>
-          <option value="page-width">Fit width</option>
-          <option value="page-fit">Fit page</option>
-          <option value="100">100%</option>
-          <option value="150">150%</option>
-          <option value="200">200%</option>
-        </select>
-      </label>
-      <label class="reader-search">
-        Search
-        <input type="search" bind:value={pdfSearch} on:input={updatePdfSearch} placeholder="Find text" data-pdf-search />
-      </label>
-      {#if pdfSearch.trim()}
-        <span data-pdf-search-count>{pdfSearchMatches.length} matches</span>
-        <button type="button" on:click={() => nextSearchMatch(-1)} disabled={!pdfSearchMatches.length} data-pdf-search-prev>Match -</button>
-        <button type="button" on:click={() => nextSearchMatch(1)} disabled={!pdfSearchMatches.length} data-pdf-search-next>Match +</button>
-      {/if}
-    </div>
-
     <div class="pdf-stage" data-media-stage data-pdf-stage bind:this={stageEl}>
       <div class="pdf-page-shell" class:rendering data-pdf-reader data-pdf-rendered={rendered ? 'true' : 'false'}>
         <canvas bind:this={canvasEl} data-pdf-canvas aria-label={`Page ${pdfPage} of ${pageCount || '?'}`}></canvas>
@@ -279,16 +250,47 @@
       {/if}
     </div>
 
-    {#if pdfSearchMatches.length}
-      <div class="reader-results" data-pdf-search-results>
-        {#each pdfSearchMatches.slice(0, 6) as match}
-          <button type="button" on:click={() => setPdfPage(match.page)} data-pdf-search-result>
-            <strong>Page {match.page}</strong>
-            <span>{match.snippet}</span>
-          </button>
-        {/each}
+    <details class="pdf-controls" data-media-toolbar data-pdf-toolbar data-media-controls>
+      <summary>Controls</summary>
+      <div class="pdf-toolbar">
+        <button type="button" on:click={() => setPdfPage(pdfPage - 1)} disabled={pdfPage <= 1} data-pdf-prev>Prev</button>
+        <label>
+          Page
+          <input type="number" min="1" max={pageCount || undefined} value={pdfPage} on:change={(event) => setPdfPage(event.currentTarget.value)} data-pdf-page />
+        </label>
+        <span data-pdf-page-count>{pageLabel}</span>
+        <button type="button" on:click={() => setPdfPage(pdfPage + 1)} disabled={pageCount > 0 && pdfPage >= pageCount} data-pdf-next>Next</button>
+        <label>
+          Zoom
+          <select bind:value={pdfZoom} on:change={renderCurrentPage} data-pdf-zoom>
+            <option value="page-width">Fit width</option>
+            <option value="page-fit">Fit page</option>
+            <option value="100">100%</option>
+            <option value="150">150%</option>
+            <option value="200">200%</option>
+          </select>
+        </label>
+        <label class="reader-search">
+          Search
+          <input type="search" bind:value={pdfSearch} on:input={updatePdfSearch} placeholder="Find text" data-pdf-search />
+        </label>
+        {#if pdfSearch.trim()}
+          <span data-pdf-search-count>{pdfSearchMatches.length} matches</span>
+          <button type="button" on:click={() => nextSearchMatch(-1)} disabled={!pdfSearchMatches.length} data-pdf-search-prev>Match -</button>
+          <button type="button" on:click={() => nextSearchMatch(1)} disabled={!pdfSearchMatches.length} data-pdf-search-next>Match +</button>
+        {/if}
       </div>
-    {/if}
+      {#if pdfSearchMatches.length}
+        <div class="reader-results" data-pdf-search-results>
+          {#each pdfSearchMatches.slice(0, 6) as match}
+            <button type="button" on:click={() => setPdfPage(match.page)} data-pdf-search-result>
+              <strong>Page {match.page}</strong>
+              <span>{match.snippet}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </details>
 
     <details class="pdf-meta">
       <summary>Info</summary>
@@ -305,27 +307,42 @@
 
 <style>
   .pdf-app {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    position: relative;
+    display: block;
     height: 100%;
     min-height: 0;
-    padding: 8px;
     color: #f5f7ff;
     background: #050814;
     overflow: hidden;
   }
 
+  .pdf-controls {
+    position: absolute;
+    z-index: 4;
+    top: 10px;
+    left: 10px;
+    max-width: min(720px, calc(100% - 20px));
+    max-height: calc(100% - 20px);
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 12px;
+    background: rgba(8, 14, 28, 0.86);
+    color: #cbd5e1;
+    overflow: auto;
+    backdrop-filter: blur(12px);
+  }
+
+  .pdf-controls summary {
+    cursor: pointer;
+    font-weight: 820;
+    padding: 8px 10px;
+  }
+
   .pdf-toolbar {
     display: flex;
-    flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    border: 1px solid rgba(99, 153, 255, 0.28);
-    border-radius: 10px;
-    padding: 8px;
-    background: rgba(8, 14, 28, 0.92);
+    padding: 0 8px 8px;
   }
 
   .pdf-toolbar button {
@@ -376,14 +393,12 @@
   }
 
   .pdf-stage {
-    position: relative;
+    position: absolute;
+    inset: 0;
     display: flex;
-    flex: 1 1 auto;
     align-items: flex-start;
     justify-content: center;
     min-height: 0;
-    border: 1px solid rgba(120, 135, 170, 0.18);
-    border-radius: 12px;
     padding: 10px;
     background: #030712;
     overflow: auto;
@@ -422,9 +437,9 @@
 
   .reader-results {
     display: grid;
-    flex: 0 0 auto;
     gap: 6px;
     max-height: 132px;
+    padding: 0 8px 8px;
     overflow: auto;
   }
 
@@ -446,12 +461,17 @@
   }
 
   .pdf-meta {
-    flex: 0 0 auto;
+    position: absolute;
+    z-index: 4;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 10px;
     padding: 7px 9px;
-    background: rgba(10, 15, 27, 0.68);
+    background: rgba(10, 15, 27, 0.76);
     color: #a8adbd;
+    backdrop-filter: blur(12px);
   }
 
   .pdf-meta summary {
@@ -504,17 +524,19 @@
   }
 
   @media (max-width: 720px) {
-    .pdf-app {
+    .pdf-stage {
       padding: 6px;
+    }
+
+    .pdf-controls {
+      top: 8px;
+      left: 8px;
+      max-width: calc(100% - 16px);
     }
 
     .pdf-toolbar {
       gap: 6px;
-      padding: 6px;
-    }
-
-    .pdf-stage {
-      padding: 6px;
+      padding: 0 6px 6px;
     }
 
     .reader-search {

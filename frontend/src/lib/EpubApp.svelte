@@ -308,36 +308,6 @@
       <span>{error}</span>
     </div>
   {:else if chapters.length}
-    <div class="epub-toolbar" data-media-toolbar data-epub-toolbar>
-      <button type="button" on:click={() => changeReaderSize(-1)} data-epub-font-smaller>-</button>
-      <span data-epub-font-size>{readerFontSize}px</span>
-      <button type="button" on:click={() => changeReaderSize(1)} data-epub-font-larger>+</button>
-      <label>
-        Width
-        <select bind:value={readerMeasure} data-epub-width>
-          <option value={58}>Narrow</option>
-          <option value={72}>Comfort</option>
-          <option value={88}>Wide</option>
-        </select>
-      </label>
-      <label>
-        Chapter
-        <select value={activeChapterIndex} on:change={(event) => setActiveChapter(Number(event.currentTarget.value))} data-epub-toc>
-          {#each chapters as chapter, index}
-            <option value={index}>{index + 1}. {chapter.title}</option>
-          {/each}
-        </select>
-      </label>
-      <span data-epub-progress>{readerProgress}%</span>
-      <label class="reader-search">
-        Search
-        <input type="search" bind:value={epubSearch} on:input={updateEpubSearch} placeholder="Find text" data-epub-search />
-      </label>
-      {#if epubSearch.trim()}
-        <span data-epub-search-count>{epubSearchMatches.length} matches</span>
-      {/if}
-    </div>
-
     <div class="epub-scroll" data-media-stage data-epub-scroll on:scroll={updateReaderProgress} bind:this={scrollEl}>
       <article
         class="epub-reader"
@@ -362,16 +332,48 @@
       </article>
     </div>
 
-    {#if epubSearchMatches.length}
-      <div class="reader-results" data-epub-search-results>
-        {#each epubSearchMatches.slice(0, 8) as match}
-          <button type="button" on:click={() => jumpToMatch(match)} data-epub-search-result>
-            <strong>{match.title}</strong>
-            <span>{match.snippet}</span>
-          </button>
-        {/each}
+    <details class="epub-controls" data-media-toolbar data-epub-toolbar data-media-controls>
+      <summary>Controls</summary>
+      <div class="epub-toolbar">
+        <button type="button" on:click={() => changeReaderSize(-1)} data-epub-font-smaller>-</button>
+        <span data-epub-font-size>{readerFontSize}px</span>
+        <button type="button" on:click={() => changeReaderSize(1)} data-epub-font-larger>+</button>
+        <label>
+          Width
+          <select bind:value={readerMeasure} data-epub-width>
+            <option value={58}>Narrow</option>
+            <option value={72}>Comfort</option>
+            <option value={88}>Wide</option>
+          </select>
+        </label>
+        <label>
+          Chapter
+          <select value={activeChapterIndex} on:change={(event) => setActiveChapter(Number(event.currentTarget.value))} data-epub-toc>
+            {#each chapters as chapter, index}
+              <option value={index}>{index + 1}. {chapter.title}</option>
+            {/each}
+          </select>
+        </label>
+        <span data-epub-progress>{readerProgress}%</span>
+        <label class="reader-search">
+          Search
+          <input type="search" bind:value={epubSearch} on:input={updateEpubSearch} placeholder="Find text" data-epub-search />
+        </label>
+        {#if epubSearch.trim()}
+          <span data-epub-search-count>{epubSearchMatches.length} matches</span>
+        {/if}
       </div>
-    {/if}
+      {#if epubSearchMatches.length}
+        <div class="reader-results" data-epub-search-results>
+          {#each epubSearchMatches.slice(0, 8) as match}
+            <button type="button" on:click={() => jumpToMatch(match)} data-epub-search-result>
+              <strong>{match.title}</strong>
+              <span>{match.snippet}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </details>
   {:else}
     <div class="epub-empty" data-media-stage>
       <div class="epub-blocker" data-epub-blocker>
@@ -398,27 +400,42 @@
 
 <style>
   .epub-app {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    position: relative;
+    display: block;
     height: 100%;
     min-height: 0;
-    padding: 8px;
     color: #f5f7ff;
     background: #050814;
     overflow: hidden;
   }
 
+  .epub-controls {
+    position: absolute;
+    z-index: 4;
+    top: 10px;
+    left: 10px;
+    max-width: min(760px, calc(100% - 20px));
+    max-height: calc(100% - 20px);
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 12px;
+    background: rgba(8, 14, 28, 0.86);
+    color: #cbd5e1;
+    overflow: auto;
+    backdrop-filter: blur(12px);
+  }
+
+  .epub-controls summary {
+    cursor: pointer;
+    font-weight: 820;
+    padding: 8px 10px;
+  }
+
   .epub-toolbar {
     display: flex;
-    flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    border: 1px solid rgba(99, 153, 255, 0.28);
-    border-radius: 10px;
-    padding: 8px;
-    background: rgba(8, 14, 28, 0.92);
+    padding: 0 8px 8px;
   }
 
   .epub-toolbar button {
@@ -455,11 +472,9 @@
   }
 
   .epub-scroll {
-    flex: 1 1 auto;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     min-height: 0;
-    border: 1px solid rgba(120, 135, 170, 0.18);
-    border-radius: 12px;
     background: #070b16;
     overflow: auto;
   }
@@ -548,9 +563,9 @@
 
   .reader-results {
     display: grid;
-    flex: 0 0 auto;
     gap: 6px;
     max-height: 132px;
+    padding: 0 8px 8px;
     overflow: auto;
   }
 
@@ -572,12 +587,17 @@
   }
 
   .epub-meta {
-    flex: 0 0 auto;
+    position: absolute;
+    z-index: 4;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 10px;
     padding: 7px 9px;
-    background: rgba(10, 15, 27, 0.68);
+    background: rgba(10, 15, 27, 0.76);
     color: #a8adbd;
+    backdrop-filter: blur(12px);
   }
 
   .epub-meta summary {
@@ -615,17 +635,19 @@
   }
 
   @media (max-width: 720px) {
-    .epub-app {
-      padding: 6px;
+    .epub-reader {
+      padding: 22px;
+    }
+
+    .epub-controls {
+      top: 8px;
+      left: 8px;
+      max-width: calc(100% - 16px);
     }
 
     .epub-toolbar {
       gap: 6px;
-      padding: 6px;
-    }
-
-    .epub-reader {
-      padding: 22px;
+      padding: 0 6px 6px;
     }
 
     .reader-search {

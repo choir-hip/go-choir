@@ -70,21 +70,24 @@
   {:else if !source.displayUrl}
     <p class="image-status">No readable image source is attached to this window.</p>
   {:else}
-    <div class="image-controls" data-media-toolbar data-image-toolbar>
-      <button type="button" class:selected={imageFitMode === 'fit'} on:click={() => setImageFit('fit')} data-image-fit>Fit</button>
-      <button type="button" class:selected={imageFitMode === 'original'} on:click={() => setImageFit('original')} data-image-original>Original</button>
-      <button type="button" on:click={() => zoomImage(-0.25)} data-image-zoom-out>-</button>
-      <span data-image-zoom-level>{imageZoomLabel}</span>
-      <button type="button" on:click={() => zoomImage(0.25)} data-image-zoom-in>+</button>
-      <button type="button" on:click={() => rotateImage(-90)} data-image-rotate-left>Rotate left</button>
-      <span data-image-rotation>{rotation}deg</span>
-      <button type="button" on:click={() => rotateImage(90)} data-image-rotate-right>Rotate right</button>
-      <button type="button" on:click={resetImageView} data-image-reset>Reset</button>
-    </div>
-
     <div class="image-canvas {imageFitMode}" data-media-stage data-image-stage>
       <img src={source.displayUrl} alt={source.title} data-image-viewer style={`width: ${imageWidth}; transform: rotate(${rotation}deg);`} />
     </div>
+
+    <details class="image-controls" data-media-toolbar data-image-toolbar data-media-controls>
+      <summary>Controls</summary>
+      <div class="image-control-panel">
+        <button type="button" class:selected={imageFitMode === 'fit'} on:click={() => setImageFit('fit')} data-image-fit>Fit</button>
+        <button type="button" class:selected={imageFitMode === 'original'} on:click={() => setImageFit('original')} data-image-original>Original</button>
+        <button type="button" on:click={() => zoomImage(-0.25)} data-image-zoom-out>-</button>
+        <span data-image-zoom-level>{imageZoomLabel}</span>
+        <button type="button" on:click={() => zoomImage(0.25)} data-image-zoom-in>+</button>
+        <button type="button" on:click={() => rotateImage(-90)} data-image-rotate-left>Rotate left</button>
+        <span data-image-rotation>{rotation}deg</span>
+        <button type="button" on:click={() => rotateImage(90)} data-image-rotate-right>Rotate right</button>
+        <button type="button" on:click={resetImageView} data-image-reset>Reset</button>
+      </div>
+    </details>
 
     <details class="image-info">
       <summary>Info</summary>
@@ -117,6 +120,7 @@
 
   .image-canvas {
     display: grid;
+    height: 100%;
     min-height: 0;
     padding: 10px;
     place-items: center;
@@ -145,19 +149,29 @@
     z-index: 2;
     top: 10px;
     left: 10px;
-    right: 10px;
+    max-width: min(520px, calc(100% - 20px));
+    border: 1px solid rgba(99, 153, 255, 0.24);
+    border-radius: 12px;
+    background: rgba(5, 10, 22, 0.76);
+    color: #cbd5e1;
+    backdrop-filter: blur(12px);
+  }
+
+  .image-controls summary {
+    cursor: pointer;
+    font-weight: 820;
+    padding: 8px 10px;
+  }
+
+  .image-control-panel {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 7px;
-    border: 1px solid rgba(99, 153, 255, 0.24);
-    border-radius: 12px;
-    padding: 7px;
-    background: rgba(5, 10, 22, 0.76);
-    backdrop-filter: blur(12px);
+    padding: 0 7px 7px;
   }
 
-  .image-controls button {
+  .image-control-panel button {
     min-height: 32px;
     border: 1px solid rgba(126, 180, 255, 0.32);
     border-radius: 9px;
@@ -168,12 +182,12 @@
     padding: 6px 9px;
   }
 
-  .image-controls button:hover,
-  .image-controls button.selected {
+  .image-control-panel button:hover,
+  .image-control-panel button.selected {
     background: rgba(56, 96, 160, 0.86);
   }
 
-  .image-controls span {
+  .image-control-panel span {
     color: #cbd5e1;
     font-size: 0.82rem;
     font-weight: 760;

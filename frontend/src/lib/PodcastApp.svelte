@@ -369,7 +369,7 @@
   onMount(loadInitialState);
 </script>
 
-<section class="podcast-app" data-podcast-app data-content-app="podcast">
+<section class="podcast-app" data-media-app data-media-kind="podcast" data-podcast-app data-content-app="podcast">
   <header class="podcast-topbar">
     {#if item}
       <button class="back-button" type="button" on:click={backToLibrary} aria-label="Back to podcast library" data-podcast-back>Back</button>
@@ -388,7 +388,7 @@
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else if !item}
-    <section class="podcast-library" data-podcast-library>
+    <section class="podcast-library" data-media-stage data-podcast-library>
       <form class="search-row" on:submit|preventDefault={searchPodcasts} data-podcast-search>
         <input
           bind:value={searchQuery}
@@ -485,7 +485,7 @@
       </div>
     </section>
   {:else if feed && episodes.length > 0}
-    <section class="podcast-detail" data-podcast-feed data-listen-path-id={listenPath?.id || ''}>
+    <section class="podcast-detail" data-media-stage data-podcast-feed data-listen-path-id={listenPath?.id || ''}>
       <section class="show-strip" data-radio-listen-path>
         <div>
           <h3>{feed.title}</h3>
