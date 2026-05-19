@@ -941,23 +941,23 @@
                 />
               </div>
             {:else if win.appId === 'image'}
-              <div class="app-content media-content" data-image-window>
+              <div class="app-content image-content" data-image-window>
                 <ImageApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'audio'}
-              <div class="app-content media-content" data-audio-window>
+              <div class="app-content audio-content" data-audio-window>
                 <AudioApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'video'}
-              <div class="app-content media-content" data-video-window>
+              <div class="app-content video-content" data-video-window>
                 <VideoApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'pdf'}
-              <div class="app-content media-content" data-pdf-window>
+              <div class="app-content pdf-content" data-pdf-window>
                 <PdfApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'epub'}
-              <div class="app-content media-content" data-epub-window>
+              <div class="app-content epub-content" data-epub-window>
                 <EpubApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else}

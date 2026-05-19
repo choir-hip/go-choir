@@ -210,25 +210,18 @@
   });
 </script>
 
-<section class="media-app pdf-app" data-media-app data-media-kind="pdf" data-pdf-app>
-  <header class="media-header">
-    <div>
-      <p>PDF</p>
-      <h2 data-media-title>{source.title}</h2>
-    </div>
-  </header>
-
+<section class="pdf-app" data-media-app data-media-kind="pdf" data-pdf-app>
   {#if loading && !pdfDoc}
-    <p class="media-status">Loading PDF...</p>
+    <p class="pdf-status">Loading PDF...</p>
   {:else if error}
-    <div class="reader-blocker" role="alert" data-pdf-blocker>
+    <div class="pdf-blocker" role="alert" data-pdf-blocker>
       <strong>PDF reader could not open this source.</strong>
       <span>{error}</span>
     </div>
   {:else if !source.displayUrl}
-    <p class="media-status">No readable PDF source is attached to this window.</p>
+    <p class="pdf-status">No readable PDF source is attached to this window.</p>
   {:else}
-    <div class="media-toolbar" data-media-toolbar data-pdf-toolbar>
+    <div class="pdf-toolbar" data-media-toolbar data-pdf-toolbar>
       <button type="button" on:click={() => setPdfPage(pdfPage - 1)} disabled={pdfPage <= 1} data-pdf-prev>Prev</button>
       <label>
         Page
@@ -257,7 +250,7 @@
       {/if}
     </div>
 
-    <div class="media-stage pdf-stage" data-media-stage data-pdf-stage bind:this={stageEl}>
+    <div class="pdf-stage" data-media-stage data-pdf-stage bind:this={stageEl}>
       <div class="pdf-page-shell" class:rendering data-pdf-reader data-pdf-rendered={rendered ? 'true' : 'false'}>
         <canvas bind:this={canvasEl} data-pdf-canvas aria-label={`Page ${pdfPage} of ${pageCount || '?'}`}></canvas>
       </div>
@@ -277,8 +270,9 @@
       </div>
     {/if}
 
-    <details class="media-details">
-      <summary>Source and details</summary>
+    <details class="pdf-meta">
+      <summary>Info</summary>
+      <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
         {#if source.filePath}<dt>File</dt><dd>{source.filePath}</dd>{/if}
@@ -290,13 +284,88 @@
 </section>
 
 <style>
+  .pdf-app {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+    padding: 8px;
+    color: #f5f7ff;
+    background: #050814;
+    overflow: hidden;
+  }
+
+  .pdf-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 10px;
+    padding: 8px;
+    background: rgba(8, 14, 28, 0.92);
+  }
+
+  .pdf-toolbar button {
+    min-height: 34px;
+    border: 1px solid rgba(126, 180, 255, 0.32);
+    border-radius: 9px;
+    background: rgba(37, 64, 108, 0.72);
+    color: #eef5ff;
+    cursor: pointer;
+    font-weight: 760;
+    padding: 7px 10px;
+  }
+
+  .pdf-toolbar button:hover:not(:disabled) {
+    background: rgba(56, 96, 160, 0.82);
+  }
+
+  .pdf-toolbar button:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+
+  .pdf-toolbar span,
+  .pdf-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #a8adbd;
+    font-size: 0.84rem;
+  }
+
+  .pdf-toolbar input[type='number'],
+  .pdf-toolbar select,
+  .pdf-toolbar input[type='search'] {
+    border: 1px solid rgba(99, 153, 255, 0.34);
+    border-radius: 8px;
+    background: rgba(5, 10, 22, 0.72);
+    color: #f8fbff;
+    padding: 7px 8px;
+  }
+
+  .pdf-toolbar input[type='number'] {
+    width: 4.8rem;
+  }
+
+  .reader-search input {
+    width: min(180px, 35vw);
+  }
+
   .pdf-stage {
     position: relative;
     display: flex;
+    flex: 1 1 auto;
     align-items: flex-start;
     justify-content: center;
     min-height: 0;
-    padding: 16px;
+    border: 1px solid rgba(120, 135, 170, 0.18);
+    border-radius: 12px;
+    padding: 10px;
+    background: #030712;
     overflow: auto;
   }
 
@@ -316,15 +385,6 @@
     width: auto;
     height: auto;
     min-height: auto;
-  }
-
-  .reader-search input {
-    width: min(180px, 35vw);
-    border: 1px solid rgba(99, 153, 255, 0.34);
-    border-radius: 8px;
-    background: rgba(5, 10, 22, 0.72);
-    color: #f8fbff;
-    padding: 7px 8px;
   }
 
   .reader-badge {
@@ -365,9 +425,76 @@
     font-size: 0.82rem;
   }
 
+  .pdf-meta {
+    flex: 0 0 auto;
+    border: 1px solid rgba(120, 135, 170, 0.2);
+    border-radius: 10px;
+    padding: 7px 9px;
+    background: rgba(10, 15, 27, 0.68);
+    color: #a8adbd;
+  }
+
+  .pdf-meta summary {
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .pdf-meta h2 {
+    margin: 10px 0;
+    color: #f8fbff;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  .pdf-meta dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0 0 4px;
+  }
+
+  .pdf-meta dt {
+    color: #dbeafe;
+    font-weight: 760;
+  }
+
+  .pdf-meta dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .pdf-meta a {
+    color: #bfdbfe;
+  }
+
+  .pdf-status,
+  .pdf-blocker {
+    margin: 0;
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #a8adbd;
+  }
+
+  .pdf-blocker {
+    display: grid;
+    gap: 6px;
+    color: #dce6ff;
+  }
+
   @media (max-width: 720px) {
+    .pdf-app {
+      padding: 6px;
+    }
+
+    .pdf-toolbar {
+      gap: 6px;
+      padding: 6px;
+    }
+
     .pdf-stage {
-      padding: 10px;
+      padding: 6px;
     }
 
     .reader-search {

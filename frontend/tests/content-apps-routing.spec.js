@@ -61,6 +61,15 @@ async function submitBareReference(page, sourceUrl) {
   return waitForPromptDecision(page, body.submission_id);
 }
 
+async function expectCollapsedMediaInfo(viewer) {
+  const info = viewer.locator('details').last();
+  await expect(info).toBeVisible();
+  await expect(info).toHaveJSProperty('open', false);
+  await info.locator('summary').click();
+  await expect(viewer.locator('[data-media-title]')).toBeVisible();
+  await info.locator('summary').click();
+}
+
 async function routeReaderFixtures(page) {
   const pdfBytes = buildPdfBytes('Choir section seven PDF search proof');
   const epubBytes = await buildEpubBytes({
@@ -140,7 +149,6 @@ test('bare content references open the dedicated content apps from the prompt ba
     } else {
       const viewer = page.locator(`[data-media-app][data-media-kind="${reference.app}"]`).last();
       await expect(viewer).toBeVisible({ timeout: 30_000 });
-      await expect(viewer.locator('[data-media-title]')).toBeVisible();
 
       if (reference.app === 'image') {
         await expect(viewer.locator('[data-image-toolbar]')).toBeVisible();
@@ -150,6 +158,7 @@ test('bare content references open the dedicated content apps from the prompt ba
         await viewer.locator('[data-image-rotate-right]').click();
         await expect(viewer.locator('[data-image-rotation]')).toContainText('90deg');
         await expect(viewer.locator('[data-image-viewer]')).toHaveAttribute('src', reference.url);
+        await expectCollapsedMediaInfo(viewer);
       } else if (reference.app === 'audio') {
         await expect(viewer.locator('[data-media-player]')).toBeVisible();
         await expect(viewer.locator('[data-media-play]')).toBeVisible();
@@ -157,10 +166,12 @@ test('bare content references open the dedicated content apps from the prompt ba
         await expect(viewer.locator('[data-media-speed]')).toBeVisible();
         await expect(viewer.locator('[data-media-position-status]')).toContainText('saved');
         await expect(viewer.locator('[data-audio-element]')).toHaveAttribute('src', reference.url);
+        await expectCollapsedMediaInfo(viewer);
       } else if (reference.app === 'video') {
         await expect(viewer.locator('[data-video-toolbar]')).toBeVisible();
         await expect(viewer.locator('[data-video-embedded-controls]')).toBeVisible();
         await expect(viewer.locator('[data-video-frame]')).toHaveAttribute('src', /youtube\.com\/embed/);
+        await expectCollapsedMediaInfo(viewer);
       } else if (reference.app === 'pdf') {
         await expect(viewer.locator('[data-pdf-toolbar]')).toBeVisible();
         await expect(viewer.locator('[data-pdf-page]')).toBeVisible();
@@ -168,11 +179,13 @@ test('bare content references open the dedicated content apps from the prompt ba
         await expect(viewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
         await viewer.locator('[data-pdf-search]').fill('section seven');
         await expect(viewer.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
+        await expectCollapsedMediaInfo(viewer);
       } else if (reference.app === 'epub') {
         await expect(viewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
         await expect(viewer.locator('[data-epub-chapter-title]')).toContainText('Section Seven');
         await viewer.locator('[data-epub-search]').fill('real reader');
         await expect(viewer.locator('[data-epub-search-count]')).toContainText('1 matches');
+        await expectCollapsedMediaInfo(viewer);
       }
     }
   }

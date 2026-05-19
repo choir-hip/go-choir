@@ -103,23 +103,16 @@
   onMount(loadContentItem);
 </script>
 
-<section class="media-app video-app" data-media-app data-media-kind="video" data-video-app>
-  <header class="media-header">
-    <div>
-      <p>Video</p>
-      <h2 data-media-title>{source.title}</h2>
-    </div>
-  </header>
-
+<section class="video-app" data-media-app data-media-kind="video" data-video-app>
   {#if loading}
-    <p class="media-status">Loading video...</p>
+    <p class="video-status">Loading video...</p>
   {:else if error}
-    <p class="media-error" role="alert">{error}</p>
+    <p class="video-error" role="alert">{error}</p>
   {:else if !source.displayUrl && !embedUrl}
-    <p class="media-status">No playable video source is attached to this window.</p>
+    <p class="video-status">No playable video source is attached to this window.</p>
   {:else if embedUrl}
-    <div class="media-stage video-embed-stage" data-media-stage data-video-embed-stage>
-      <div class="media-toolbar embedded" data-media-toolbar data-video-toolbar>
+    <div class="video-theater video-embed-stage" data-media-stage data-video-embed-stage>
+      <div class="video-embed-controls" data-media-toolbar data-video-toolbar>
         <span data-video-embedded-controls>Embedded player controls active</span>
       </div>
       <iframe
@@ -131,7 +124,7 @@
       />
     </div>
   {:else}
-    <div class="media-stage video-stage" data-media-stage data-video-stage>
+    <div class="video-theater video-stage" data-media-stage data-video-stage>
       <video
         src={source.displayUrl}
         playsinline
@@ -146,10 +139,10 @@
       >
         <track kind="captions" />
       </video>
-      <div class="media-player-card overlay" data-media-player data-video-controls>
-        <div class="media-transport" data-media-transport>
+      <div class="video-controls" data-media-player data-video-controls>
+        <div class="video-transport" data-media-transport>
           <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-video-skip-back>15s back</button>
-          <button type="button" class="primary" on:click={togglePlayback} data-media-play data-video-play>
+          <button type="button" class="video-play" on:click={togglePlayback} data-media-play data-video-play>
             {mediaPlaying ? 'Pause' : 'Play'}
           </button>
           <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-video-skip-forward>30s forward</button>
@@ -164,19 +157,20 @@
             </select>
           </label>
         </div>
-        <div class="seek-row">
+        <div class="video-seek-row">
           <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
           <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-video-seek />
           <span data-media-duration>{formatTime(mediaDuration)}</span>
         </div>
-        <p class="media-position-note" data-media-position-status>Playback position is saved on this device.</p>
+        <p class="video-position-note" data-media-position-status>Playback position is saved on this device.</p>
       </div>
     </div>
   {/if}
 
   {#if !loading && !error}
-    <details class="media-details">
-      <summary>Source and details</summary>
+    <details class="video-info">
+      <summary>Info</summary>
+      <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
         {#if source.filePath}<dt>File</dt><dd>{source.filePath}</dd>{/if}
@@ -188,16 +182,218 @@
 </section>
 
 <style>
-  .video-stage,
-  .video-embed-stage {
-    display: flex;
+  .video-app {
+    position: relative;
+    display: grid;
+    height: 100%;
     min-height: 0;
-    flex-direction: column;
+    grid-template-rows: minmax(0, 1fr) auto;
+    color: #f8fbff;
+    background: #02040a;
+    overflow: hidden;
+  }
+
+  .video-theater {
+    position: relative;
+    display: grid;
+    min-height: 0;
+    place-items: center;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(55, 65, 81, 0.24), transparent 42%),
+      #000;
+    overflow: hidden;
   }
 
   .video-stage video,
   .video-embed-stage iframe {
-    flex: 1 1 auto;
-    min-height: 260px;
+    width: 100%;
+    height: 100%;
+    min-height: 240px;
+    border: 0;
+    object-fit: contain;
+    background: #000;
+  }
+
+  .video-embed-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    border: 1px solid rgba(126, 180, 255, 0.26);
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: rgba(4, 9, 21, 0.74);
+    color: #cbd5e1;
+    font-size: 0.82rem;
+  }
+
+  .video-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    display: grid;
+    gap: 10px;
+    border: 1px solid rgba(126, 180, 255, 0.28);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(4, 9, 21, 0.82);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+  }
+
+  .video-transport {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .video-transport button,
+  .video-transport select {
+    min-height: 36px;
+    border: 1px solid rgba(126, 180, 255, 0.34);
+    border-radius: 999px;
+    background: rgba(20, 38, 72, 0.86);
+    color: #eef5ff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 760;
+    padding: 7px 12px;
+  }
+
+  .video-transport button:hover,
+  .video-transport select:hover {
+    background: rgba(39, 73, 128, 0.9);
+  }
+
+  .video-transport .video-play {
+    min-width: 92px;
+    background: rgba(45, 118, 255, 0.82);
+  }
+
+  .video-transport label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #cbd5e1;
+    font-size: 0.84rem;
+  }
+
+  .video-seek-row {
+    display: grid;
+    grid-template-columns: auto minmax(100px, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    color: #cbd5e1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .video-seek-row input[type='range'] {
+    width: 100%;
+  }
+
+  .video-position-note {
+    margin: 0;
+    color: #a8adbd;
+    font-size: 0.82rem;
+    text-align: center;
+  }
+
+  .video-status,
+  .video-error {
+    place-self: center;
+    margin: 0;
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #a8adbd;
+  }
+
+  .video-error {
+    color: #fecaca;
+  }
+
+  .video-info {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 3;
+    max-width: min(520px, calc(100% - 24px));
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: rgba(4, 9, 21, 0.82);
+    color: #a8adbd;
+  }
+
+  .video-info summary {
+    cursor: pointer;
+    font-weight: 820;
+  }
+
+  .video-info h2 {
+    margin: 10px 0;
+    color: #f8fbff;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  .video-info dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0 0 4px;
+  }
+
+  .video-info dt {
+    color: #dbeafe;
+    font-weight: 760;
+  }
+
+  .video-info dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .video-info a {
+    color: #bfdbfe;
+  }
+
+  @media (max-width: 720px) {
+    .video-controls {
+      right: 8px;
+      bottom: 8px;
+      left: 8px;
+      padding: 10px;
+    }
+
+    .video-transport {
+      justify-content: stretch;
+    }
+
+    .video-transport button,
+    .video-transport label {
+      flex: 1 1 104px;
+      justify-content: center;
+    }
+
+    .video-seek-row {
+      grid-template-columns: auto minmax(80px, 1fr) auto;
+    }
+
+    .video-info,
+    .video-embed-controls {
+      top: 8px;
+    }
+
+    .video-info {
+      left: 8px;
+      max-width: calc(100% - 16px);
+    }
+
+    .video-embed-controls {
+      right: 8px;
+    }
   }
 </style>

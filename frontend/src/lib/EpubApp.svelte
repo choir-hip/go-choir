@@ -299,23 +299,16 @@
   onMount(loadContentItem);
 </script>
 
-<section class="media-app epub-app" data-media-app data-media-kind="epub" data-epub-app>
-  <header class="media-header">
-    <div>
-      <p>EPUB</p>
-      <h2 data-media-title>{readerTitle}</h2>
-    </div>
-  </header>
-
+<section class="epub-app" data-media-app data-media-kind="epub" data-epub-app>
   {#if loading && !chapters.length}
-    <p class="media-status">Loading EPUB...</p>
+    <p class="epub-status">Loading EPUB...</p>
   {:else if error}
-    <div class="reader-blocker" role="alert" data-epub-blocker>
+    <div class="epub-blocker" role="alert" data-epub-blocker>
       <strong>EPUB reader could not open this source.</strong>
       <span>{error}</span>
     </div>
   {:else if chapters.length}
-    <div class="media-toolbar" data-media-toolbar data-epub-toolbar>
+    <div class="epub-toolbar" data-media-toolbar data-epub-toolbar>
       <button type="button" on:click={() => changeReaderSize(-1)} data-epub-font-smaller>-</button>
       <span data-epub-font-size>{readerFontSize}px</span>
       <button type="button" on:click={() => changeReaderSize(1)} data-epub-font-larger>+</button>
@@ -345,7 +338,7 @@
       {/if}
     </div>
 
-    <div class="media-stage epub-scroll" data-media-stage data-epub-scroll on:scroll={updateReaderProgress} bind:this={scrollEl}>
+    <div class="epub-scroll" data-media-stage data-epub-scroll on:scroll={updateReaderProgress} bind:this={scrollEl}>
       <article
         class="epub-reader"
         data-epub-reader
@@ -380,8 +373,8 @@
       </div>
     {/if}
   {:else}
-    <div class="media-stage" data-media-stage>
-      <div class="reader-blocker" data-epub-blocker>
+    <div class="epub-empty" data-media-stage>
+      <div class="epub-blocker" data-epub-blocker>
         <strong>EPUB reader needs a readable source.</strong>
         <span>No EPUB file or extracted text is attached to this window.</span>
         {#if source.filePath}<span>File: {source.filePath}</span>{/if}
@@ -390,8 +383,9 @@
   {/if}
 
   {#if !loading && !error}
-    <details class="media-details">
-      <summary>Source and details</summary>
+    <details class="epub-meta">
+      <summary>Info</summary>
+      <h2 data-media-title>{readerTitle}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
         {#if source.filePath}<dt>File</dt><dd>{source.filePath}</dd>{/if}
@@ -403,9 +397,70 @@
 </section>
 
 <style>
-  .epub-scroll {
+  .epub-app {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     height: 100%;
     min-height: 0;
+    padding: 8px;
+    color: #f5f7ff;
+    background: #050814;
+    overflow: hidden;
+  }
+
+  .epub-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 10px;
+    padding: 8px;
+    background: rgba(8, 14, 28, 0.92);
+  }
+
+  .epub-toolbar button {
+    min-height: 34px;
+    border: 1px solid rgba(126, 180, 255, 0.32);
+    border-radius: 9px;
+    background: rgba(37, 64, 108, 0.72);
+    color: #eef5ff;
+    cursor: pointer;
+    font-weight: 760;
+    padding: 7px 10px;
+  }
+
+  .epub-toolbar button:hover {
+    background: rgba(56, 96, 160, 0.82);
+  }
+
+  .epub-toolbar span,
+  .epub-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #a8adbd;
+    font-size: 0.84rem;
+  }
+
+  .epub-toolbar select,
+  .epub-toolbar input[type='search'] {
+    border: 1px solid rgba(99, 153, 255, 0.34);
+    border-radius: 8px;
+    background: rgba(5, 10, 22, 0.72);
+    color: #f8fbff;
+    padding: 7px 8px;
+  }
+
+  .epub-scroll {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    border: 1px solid rgba(120, 135, 170, 0.18);
+    border-radius: 12px;
+    background: #070b16;
     overflow: auto;
   }
 
@@ -463,13 +518,32 @@
     font-size: 1.35em;
   }
 
+  .epub-empty {
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid rgba(120, 135, 170, 0.18);
+    border-radius: 12px;
+    background: #070b16;
+    overflow: auto;
+  }
+
+  .epub-status,
+  .epub-blocker {
+    margin: 0;
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #a8adbd;
+  }
+
+  .epub-blocker {
+    display: grid;
+    gap: 6px;
+    color: #dce6ff;
+  }
+
   .reader-search input {
     width: min(180px, 35vw);
-    border: 1px solid rgba(99, 153, 255, 0.34);
-    border-radius: 8px;
-    background: rgba(5, 10, 22, 0.72);
-    color: #f8fbff;
-    padding: 7px 8px;
   }
 
   .reader-results {
@@ -497,7 +571,59 @@
     font-size: 0.82rem;
   }
 
+  .epub-meta {
+    flex: 0 0 auto;
+    border: 1px solid rgba(120, 135, 170, 0.2);
+    border-radius: 10px;
+    padding: 7px 9px;
+    background: rgba(10, 15, 27, 0.68);
+    color: #a8adbd;
+  }
+
+  .epub-meta summary {
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .epub-meta h2 {
+    margin: 10px 0;
+    color: #f8fbff;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  .epub-meta dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0 0 4px;
+  }
+
+  .epub-meta dt {
+    color: #dbeafe;
+    font-weight: 760;
+  }
+
+  .epub-meta dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .epub-meta a {
+    color: #bfdbfe;
+  }
+
   @media (max-width: 720px) {
+    .epub-app {
+      padding: 6px;
+    }
+
+    .epub-toolbar {
+      gap: 6px;
+      padding: 6px;
+    }
+
     .epub-reader {
       padding: 22px;
     }

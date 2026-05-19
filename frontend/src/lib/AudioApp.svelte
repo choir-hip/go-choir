@@ -99,27 +99,22 @@
   onMount(loadContentItem);
 </script>
 
-<section class="media-app audio-app" data-media-app data-media-kind="audio" data-audio-app>
-  <header class="media-header">
-    <div>
-      <p>Audio</p>
-      <h2 data-media-title>{source.title}</h2>
-    </div>
-  </header>
-
+<section class="audio-app" data-media-app data-media-kind="audio" data-audio-app>
   {#if loading}
-    <p class="media-status">Loading audio...</p>
+    <p class="audio-status">Loading audio...</p>
   {:else if error}
-    <p class="media-error" role="alert">{error}</p>
+    <p class="audio-error" role="alert">{error}</p>
   {:else if !source.displayUrl}
-    <p class="media-status">No playable audio source is attached to this window.</p>
+    <p class="audio-status">No playable audio source is attached to this window.</p>
   {:else}
-    <div class="media-stage audio-stage" data-media-stage data-audio-stage>
-      <div class="media-player-card" data-media-player data-audio-player>
-        <div class="media-player-title">{source.title}</div>
-        <div class="media-transport" data-media-transport>
+    <div class="audio-stage" data-media-stage data-audio-stage>
+      <div class="audio-player" data-media-player data-audio-player>
+        <div class="audio-art">
+          <span>Audio</span>
+        </div>
+        <div class="audio-transport" data-media-transport>
           <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-audio-skip-back>15s back</button>
-          <button type="button" class="primary" on:click={togglePlayback} data-media-play data-audio-play>
+          <button type="button" class="audio-play" on:click={togglePlayback} data-media-play data-audio-play>
             {mediaPlaying ? 'Pause' : 'Play'}
           </button>
           <button type="button" on:click={() => seekBy(30)} data-media-skip-forward data-audio-skip-forward>30s forward</button>
@@ -134,12 +129,12 @@
             </select>
           </label>
         </div>
-        <div class="seek-row">
+        <div class="audio-seek-row">
           <span data-media-current-time>{formatTime(mediaCurrentTime)}</span>
           <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-audio-seek />
           <span data-media-duration>{formatTime(mediaDuration)}</span>
         </div>
-        <p class="media-position-note" data-media-position-status>Playback position is saved on this device.</p>
+        <p class="audio-position-note" data-media-position-status>Playback position is saved on this device.</p>
       </div>
       <audio
         src={source.displayUrl}
@@ -155,8 +150,9 @@
       />
     </div>
 
-    <details class="media-details">
-      <summary>Source and details</summary>
+    <details class="audio-info">
+      <summary>Info</summary>
+      <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
         {#if source.filePath}<dt>File</dt><dd>{source.filePath}</dd>{/if}
@@ -168,24 +164,203 @@
 </section>
 
 <style>
-  .audio-stage {
-    display: grid;
+  .audio-app {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     min-height: 0;
-    gap: 18px;
-    align-content: center;
-    justify-items: center;
-    padding: 24px;
+    padding: 0;
+    color: #f8fbff;
+    background:
+      radial-gradient(circle at 50% 26%, rgba(37, 99, 235, 0.24), transparent 38%),
+      linear-gradient(150deg, #050814 0%, #071322 52%, #050814 100%);
+    overflow: hidden;
   }
 
-  audio {
+  .audio-stage {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: clamp(16px, 5vw, 48px);
+  }
+
+  .audio-player {
+    display: grid;
+    width: min(100%, 820px);
+    gap: 16px;
+    border: 1px solid rgba(126, 180, 255, 0.24);
+    border-radius: 18px;
+    padding: clamp(18px, 4vw, 34px);
+    background: rgba(4, 9, 21, 0.72);
+    box-shadow: 0 22px 80px rgba(0, 0, 0, 0.32);
+  }
+
+  .audio-art {
+    display: grid;
+    place-items: center;
+    min-height: 150px;
+    border: 1px solid rgba(99, 153, 255, 0.2);
+    border-radius: 16px;
+    background:
+      linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(20, 184, 166, 0.12)),
+      rgba(255, 255, 255, 0.04);
+    color: rgba(226, 232, 240, 0.72);
+    font-size: clamp(1.4rem, 6vw, 3.2rem);
+    font-weight: 860;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .audio-transport {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .audio-transport button,
+  .audio-transport select {
+    min-height: 40px;
+    border: 1px solid rgba(126, 180, 255, 0.34);
+    border-radius: 999px;
+    background: rgba(20, 38, 72, 0.82);
+    color: #eef5ff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 760;
+    padding: 8px 14px;
+  }
+
+  .audio-transport button:hover,
+  .audio-transport select:hover {
+    background: rgba(39, 73, 128, 0.88);
+  }
+
+  .audio-transport .audio-play {
+    min-width: 94px;
+    background: rgba(45, 118, 255, 0.82);
+  }
+
+  .audio-transport label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #a8adbd;
+    font-size: 0.86rem;
+  }
+
+  .audio-seek-row {
+    display: grid;
+    grid-template-columns: auto minmax(100px, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    color: #cbd5e1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .audio-seek-row input[type='range'] {
+    width: 100%;
+  }
+
+  .audio-position-note {
+    margin: 0;
+    color: #a8adbd;
+    font-size: 0.86rem;
+    text-align: center;
+  }
+
+  .audio-stage audio {
     width: min(100%, 760px);
+  }
+
+  .audio-status,
+  .audio-error {
+    margin: auto;
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #a8adbd;
+  }
+
+  .audio-error {
+    color: #fecaca;
+  }
+
+  .audio-info {
+    flex: 0 0 auto;
+    margin: 0 10px 10px;
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: rgba(4, 9, 21, 0.82);
+    color: #a8adbd;
+  }
+
+  .audio-info summary {
+    cursor: pointer;
+    font-weight: 820;
+  }
+
+  .audio-info h2 {
+    margin: 10px 0;
+    color: #f8fbff;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  .audio-info dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0 0 4px;
+  }
+
+  .audio-info dt {
+    color: #dbeafe;
+    font-weight: 760;
+  }
+
+  .audio-info dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .audio-info a {
+    color: #bfdbfe;
   }
 
   @media (max-width: 720px) {
     .audio-stage {
-      align-content: center;
-      justify-items: stretch;
+      align-items: stretch;
+      padding: 12px;
+    }
+
+    .audio-player {
       padding: 14px;
+    }
+
+    .audio-art {
+      min-height: 96px;
+    }
+
+    .audio-transport {
+      justify-content: stretch;
+    }
+
+    .audio-transport button,
+    .audio-transport label {
+      flex: 1 1 108px;
+      justify-content: center;
+    }
+
+    .audio-seek-row {
+      grid-template-columns: auto minmax(80px, 1fr) auto;
     }
   }
 </style>
