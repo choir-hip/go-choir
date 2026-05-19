@@ -113,7 +113,7 @@
   {:else if embedUrl}
     <div class="video-theater video-embed-stage" data-media-stage data-video-embed-stage>
       <details class="video-embed-controls" data-media-toolbar data-video-toolbar data-media-controls>
-        <summary>Controls</summary>
+        <summary aria-label="Video controls" title="Video controls"><span aria-hidden="true">...</span></summary>
         <span data-video-embedded-controls>Embedded player controls active</span>
       </details>
       <iframe
@@ -140,7 +140,7 @@
         <track kind="captions" />
       </video>
       <details class="video-controls" data-media-player data-video-controls data-media-controls>
-        <summary>Controls</summary>
+        <summary aria-label="Video controls" title="Video controls"><span aria-hidden="true">...</span></summary>
         <div class="video-control-panel">
           <div class="video-transport" data-media-transport>
             <button type="button" on:click={() => seekBy(-15)} data-media-skip-back data-video-skip-back>15s back</button>
@@ -172,7 +172,7 @@
 
   {#if !loading && !error}
     <details class="video-info">
-      <summary>Info</summary>
+      <summary aria-label="Video info" title="Video info"><span aria-hidden="true">i</span></summary>
       <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
@@ -224,26 +224,57 @@
     top: 12px;
     right: 12px;
     z-index: 2;
-    border: 1px solid rgba(126, 180, 255, 0.26);
-    border-radius: 12px;
-    background: rgba(4, 9, 21, 0.74);
     color: #cbd5e1;
     font-size: 0.82rem;
-    backdrop-filter: blur(12px);
+    width: max-content;
   }
 
   .video-embed-controls summary,
   .video-controls summary {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid rgba(126, 180, 255, 0.26);
+    border-radius: 999px;
+    background: rgba(4, 9, 21, 0.64);
+    backdrop-filter: blur(12px);
     cursor: pointer;
+    font-size: 0;
     font-weight: 820;
-    padding: 8px 10px;
+    list-style: none;
+    padding: 0;
+  }
+
+  .video-embed-controls summary::-webkit-details-marker,
+  .video-controls summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .video-embed-controls summary span,
+  .video-controls summary span {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .video-embed-controls[open] {
+    border: 1px solid rgba(126, 180, 255, 0.26);
+    border-radius: 12px;
+    background: rgba(4, 9, 21, 0.74);
+    backdrop-filter: blur(12px);
   }
 
   .video-controls {
     position: absolute;
     right: 12px;
     bottom: 12px;
+    width: max-content;
+    color: #cbd5e1;
+  }
+
+  .video-controls[open] {
     left: 12px;
+    width: auto;
     border: 1px solid rgba(126, 180, 255, 0.28);
     border-radius: 14px;
     background: rgba(4, 9, 21, 0.82);
@@ -339,17 +370,42 @@
     top: 12px;
     left: 12px;
     z-index: 3;
+    width: max-content;
     max-width: min(520px, calc(100% - 24px));
-    border: 1px solid rgba(126, 180, 255, 0.22);
-    border-radius: 12px;
-    padding: 8px 10px;
-    background: rgba(4, 9, 21, 0.82);
     color: #a8adbd;
   }
 
   .video-info summary {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(4, 9, 21, 0.64);
+    backdrop-filter: blur(12px);
     cursor: pointer;
+    color: #dbeafe;
+    font-size: 0;
     font-weight: 820;
+    list-style: none;
+    padding: 0;
+  }
+
+  .video-info summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .video-info summary span {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .video-info[open] {
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: rgba(4, 9, 21, 0.82);
   }
 
   .video-info h2 {
@@ -385,6 +441,9 @@
     .video-controls {
       right: 8px;
       bottom: 8px;
+    }
+
+    .video-controls[open] {
       left: 8px;
     }
 

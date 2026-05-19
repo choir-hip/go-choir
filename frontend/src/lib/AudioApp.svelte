@@ -150,7 +150,7 @@
     </div>
 
     <details class="audio-info">
-      <summary>Info</summary>
+      <summary aria-label="Audio info" title="Audio info"><span aria-hidden="true">i</span></summary>
       <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
@@ -267,10 +267,13 @@
   }
 
   .audio-position-note {
-    margin: 0;
-    color: #a8adbd;
-    font-size: 0.86rem;
-    text-align: center;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .audio-stage audio {
@@ -299,18 +302,46 @@
     z-index: 2;
     right: 10px;
     bottom: 10px;
+    width: max-content;
+    max-width: min(520px, calc(100% - 20px));
+    color: #a8adbd;
+  }
+
+  .audio-info summary {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(4, 9, 21, 0.64);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    color: #dbeafe;
+    font-size: 0;
+    font-weight: 820;
+    list-style: none;
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .audio-info summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .audio-info summary span {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .audio-info[open] {
     left: 10px;
+    width: auto;
     border: 1px solid rgba(126, 180, 255, 0.22);
     border-radius: 12px;
     padding: 8px 10px;
     background: rgba(4, 9, 21, 0.82);
-    color: #a8adbd;
     backdrop-filter: blur(12px);
-  }
-
-  .audio-info summary {
-    cursor: pointer;
-    font-weight: 820;
   }
 
   .audio-info h2 {

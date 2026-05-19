@@ -180,6 +180,21 @@ async function expectStageOccupancy(page, viewer, app, viewportLabel, threshold)
   for (let index = 0; index < detailCount; index += 1) {
     await expect(details.nth(index), `${app} ${viewportLabel} detail ${index} closed by default`).toHaveJSProperty('open', false);
   }
+  const closedChrome = await viewer.evaluate((root) =>
+    Array.from(root.querySelectorAll('details')).map((detail) => {
+      const rect = detail.getBoundingClientRect();
+      return {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        text: (detail.querySelector('summary')?.innerText || '').trim(),
+      };
+    })
+  );
+  for (const chrome of closedChrome) {
+    expect(chrome.width, `${app} ${viewportLabel} closed chrome width`).toBeLessThanOrEqual(48);
+    expect(chrome.height, `${app} ${viewportLabel} closed chrome height`).toBeLessThanOrEqual(48);
+    expect(chrome.text, `${app} ${viewportLabel} closed chrome label`).not.toMatch(/Controls|Info|Source|Provenance/i);
+  }
   await expect(viewer.locator('[data-media-open-source]').first()).not.toBeVisible();
 
   const before = await appGeometry(page, viewer, app, viewportLabel, 'closed');

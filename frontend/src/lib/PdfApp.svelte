@@ -250,8 +250,13 @@
       {/if}
     </div>
 
+    <div class="pdf-page-nav" data-pdf-page-nav>
+      <button type="button" on:click={() => setPdfPage(pdfPage - 1)} disabled={pdfPage <= 1} aria-label="Previous PDF page" title="Previous page" data-pdf-prev-float>&lt;</button>
+      <button type="button" on:click={() => setPdfPage(pdfPage + 1)} disabled={pageCount > 0 && pdfPage >= pageCount} aria-label="Next PDF page" title="Next page" data-pdf-next-float>&gt;</button>
+    </div>
+
     <details class="pdf-controls" data-media-toolbar data-pdf-toolbar data-media-controls>
-      <summary>Controls</summary>
+      <summary aria-label="PDF controls" title="PDF controls"><span aria-hidden="true">...</span></summary>
       <div class="pdf-toolbar">
         <button type="button" on:click={() => setPdfPage(pdfPage - 1)} disabled={pdfPage <= 1} data-pdf-prev>Prev</button>
         <label>
@@ -293,7 +298,7 @@
     </details>
 
     <details class="pdf-meta">
-      <summary>Info</summary>
+      <summary aria-label="PDF info" title="PDF info"><span aria-hidden="true">i</span></summary>
       <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
@@ -321,20 +326,43 @@
     z-index: 4;
     top: 10px;
     left: 10px;
+    width: max-content;
     max-width: min(720px, calc(100% - 20px));
     max-height: calc(100% - 20px);
-    border: 1px solid rgba(99, 153, 255, 0.28);
-    border-radius: 12px;
-    background: rgba(8, 14, 28, 0.86);
     color: #cbd5e1;
     overflow: auto;
-    backdrop-filter: blur(12px);
   }
 
   .pdf-controls summary {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 999px;
+    background: rgba(8, 14, 28, 0.68);
+    backdrop-filter: blur(12px);
     cursor: pointer;
+    font-size: 0;
     font-weight: 820;
-    padding: 8px 10px;
+    list-style: none;
+    padding: 0;
+  }
+
+  .pdf-controls summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .pdf-controls summary span {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .pdf-controls[open] {
+    border: 1px solid rgba(99, 153, 255, 0.28);
+    border-radius: 12px;
+    background: rgba(8, 14, 28, 0.86);
+    backdrop-filter: blur(12px);
   }
 
   .pdf-toolbar {
@@ -435,6 +463,46 @@
     font-weight: 800;
   }
 
+  .pdf-page-nav {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    pointer-events: none;
+  }
+
+  .pdf-page-nav button {
+    display: grid;
+    width: 40px;
+    height: 56px;
+    place-items: center;
+    border: 1px solid rgba(126, 180, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(5, 10, 22, 0.44);
+    color: #eaf2ff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.3rem;
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.46;
+    pointer-events: auto;
+    backdrop-filter: blur(10px);
+  }
+
+  .pdf-page-nav button:hover:not(:disabled),
+  .pdf-page-nav button:focus-visible {
+    opacity: 0.92;
+  }
+
+  .pdf-page-nav button:disabled {
+    cursor: default;
+    opacity: 0.14;
+  }
+
   .reader-results {
     display: grid;
     gap: 6px;
@@ -465,18 +533,46 @@
     z-index: 4;
     right: 10px;
     bottom: 10px;
+    width: max-content;
+    max-width: min(520px, calc(100% - 20px));
+    color: #a8adbd;
+  }
+
+  .pdf-meta summary {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgba(120, 135, 170, 0.2);
+    border-radius: 999px;
+    background: rgba(10, 15, 27, 0.64);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    color: #dbeafe;
+    font-size: 0;
+    font-weight: 800;
+    list-style: none;
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .pdf-meta summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .pdf-meta summary span {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .pdf-meta[open] {
     left: 10px;
+    width: auto;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 10px;
     padding: 7px 9px;
     background: rgba(10, 15, 27, 0.76);
-    color: #a8adbd;
     backdrop-filter: blur(12px);
-  }
-
-  .pdf-meta summary {
-    cursor: pointer;
-    font-weight: 800;
   }
 
   .pdf-meta h2 {

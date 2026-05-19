@@ -75,7 +75,7 @@
     </div>
 
     <details class="image-controls" data-media-toolbar data-image-toolbar data-media-controls>
-      <summary>Controls</summary>
+      <summary aria-label="Image controls" title="Image controls"><span aria-hidden="true">...</span></summary>
       <div class="image-control-panel">
         <button type="button" class:selected={imageFitMode === 'fit'} on:click={() => setImageFit('fit')} data-image-fit>Fit</button>
         <button type="button" class:selected={imageFitMode === 'original'} on:click={() => setImageFit('original')} data-image-original>Original</button>
@@ -90,7 +90,7 @@
     </details>
 
     <details class="image-info">
-      <summary>Info</summary>
+      <summary aria-label="Image info" title="Image info"><span aria-hidden="true">i</span></summary>
       <h2 data-media-title>{source.title}</h2>
       <dl>
         {#if source.sourceUrl}<dt>Source</dt><dd><a href={source.sourceUrl} target="_blank" rel="noreferrer" data-media-open-source>{source.sourceUrl}</a></dd>{/if}
@@ -149,18 +149,41 @@
     z-index: 2;
     top: 10px;
     left: 10px;
+    width: max-content;
     max-width: min(520px, calc(100% - 20px));
-    border: 1px solid rgba(99, 153, 255, 0.24);
-    border-radius: 12px;
-    background: rgba(5, 10, 22, 0.76);
     color: #cbd5e1;
-    backdrop-filter: blur(12px);
   }
 
   .image-controls summary {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid rgba(99, 153, 255, 0.24);
+    border-radius: 999px;
+    background: rgba(5, 10, 22, 0.64);
+    backdrop-filter: blur(12px);
     cursor: pointer;
+    font-size: 0;
     font-weight: 820;
-    padding: 8px 10px;
+    list-style: none;
+    padding: 0;
+  }
+
+  .image-controls summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .image-controls summary span {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .image-controls[open] {
+    border: 1px solid rgba(99, 153, 255, 0.24);
+    border-radius: 12px;
+    background: rgba(5, 10, 22, 0.76);
+    backdrop-filter: blur(12px);
   }
 
   .image-control-panel {
@@ -198,18 +221,46 @@
     z-index: 2;
     right: 10px;
     bottom: 10px;
+    width: max-content;
+    max-width: min(520px, calc(100% - 20px));
+    color: #a8adbd;
+  }
+
+  .image-info summary {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid rgba(120, 135, 170, 0.2);
+    border-radius: 999px;
+    background: rgba(10, 15, 27, 0.64);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    color: #dbeafe;
+    font-size: 0;
+    font-weight: 800;
+    list-style: none;
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .image-info summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .image-info summary span {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .image-info[open] {
     left: 10px;
+    width: auto;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 10px;
     padding: 7px 9px;
     background: rgba(10, 15, 27, 0.72);
-    color: #a8adbd;
     backdrop-filter: blur(12px);
-  }
-
-  .image-info summary {
-    cursor: pointer;
-    font-weight: 800;
   }
 
   .image-info h2 {
