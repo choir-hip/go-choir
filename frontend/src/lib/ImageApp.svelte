@@ -17,6 +17,7 @@
   let error = '';
   let zoom = 1;
   let imageFitMode = 'fit';
+  let rotation = 0;
 
   $: source = resolveMediaSource(appContext, item, kind);
   $: imageZoomLabel = `${Math.round(zoom * 100)}%`;
@@ -30,6 +31,16 @@
   function zoomImage(delta) {
     imageFitMode = 'zoom';
     zoom = clampNumber(Math.round((zoom + delta) * 100) / 100, 0.25, 4);
+  }
+
+  function rotateImage(delta) {
+    rotation = (rotation + delta + 360) % 360;
+  }
+
+  function resetImageView() {
+    imageFitMode = 'fit';
+    zoom = 1;
+    rotation = 0;
   }
 
   async function loadContentItem() {
@@ -72,10 +83,14 @@
       <button type="button" on:click={() => zoomImage(-0.25)} data-image-zoom-out>-</button>
       <span data-image-zoom-level>{imageZoomLabel}</span>
       <button type="button" on:click={() => zoomImage(0.25)} data-image-zoom-in>+</button>
+      <button type="button" on:click={() => rotateImage(-90)} data-image-rotate-left>Rotate left</button>
+      <span data-image-rotation>{rotation}deg</span>
+      <button type="button" on:click={() => rotateImage(90)} data-image-rotate-right>Rotate right</button>
+      <button type="button" on:click={resetImageView} data-image-reset>Reset</button>
     </div>
 
     <div class="media-stage image-stage {imageFitMode}" data-media-stage data-image-stage>
-      <img src={source.displayUrl} alt={source.title} data-image-viewer style={`width: ${imageWidth};`} />
+      <img src={source.displayUrl} alt={source.title} data-image-viewer style={`width: ${imageWidth}; transform: rotate(${rotation}deg);`} />
     </div>
 
     <details class="media-details">

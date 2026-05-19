@@ -15,6 +15,7 @@
  * - VAL-FILES-018: Responsive on mobile
  */
 import { test, expect } from './helpers/fixtures.js';
+import { buildEpubBytes, buildPdfBytes, putBinaryFile } from './helpers/media-fixtures.js';
 
 // Helper: open the Files app from the floating desktop icon
 async function openFilesApp(page) {
@@ -311,24 +312,20 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   const downloads = [];
   page.on('download', (download) => downloads.push(download.suggestedFilename()));
 
-  await page.evaluate(async () => {
-    const files = [
-      { name: 'mission-report.pdf', type: 'application/pdf', body: '%PDF-1.7\n' },
-      { name: 'field-guide.epub', type: 'application/epub+zip', body: 'EPUB fixture' },
-    ];
-    for (const file of files) {
-      const res = await fetch('/api/files/' + encodeURIComponent(file.name), {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': file.type },
-        body: file.body,
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`failed to seed ${file.name}: ${res.status} ${body}`);
-      }
-    }
-  });
+  await putBinaryFile(page, 'mission-report.pdf', 'application/pdf', buildPdfBytes('Mission report PDF reader proof'));
+  await putBinaryFile(page, 'field-guide.epub', 'application/epub+zip', await buildEpubBytes({
+    title: 'Field Guide EPUB Proof',
+    chapters: [
+      {
+        title: 'Reader Proof',
+        body: ['The EPUB app opens real archive files and renders this field guide chapter.'],
+      },
+      {
+        title: 'Mobile Chapter',
+        body: ['The reader keeps chapter controls available inside the floating desktop window.'],
+      },
+    ],
+  }));
 
   await openFilesApp(page);
 
@@ -336,15 +333,21 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
   await expect(pdfViewer).toBeVisible({ timeout: 5000 });
   await expect(pdfViewer.locator('[data-pdf-toolbar]')).toBeVisible();
-  await expect(pdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data', /mission-report\.pdf.*disposition=inline/);
+  await expect(pdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
+  await expect(pdfViewer.locator('[data-pdf-page-count]')).toContainText('1 / 1');
+  await pdfViewer.locator('[data-pdf-search]').fill('Mission report');
+  await expect(pdfViewer.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
 
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 
   await page.locator('[data-file-item]').filter({ hasText: 'field-guide.epub' }).click();
   const epubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
   await expect(epubViewer).toBeVisible({ timeout: 5000 });
-  await expect(epubViewer.locator('[data-epub-blocker]')).toBeVisible();
-  await expect(epubViewer.locator('[data-epub-blocker]')).toContainText('does not fake a reader');
+  await expect(epubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
+  await expect(epubViewer.locator('[data-epub-chapter-count]')).toContainText('1 / 2');
+  await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Reader Proof');
+  await epubViewer.locator('[data-epub-toc]').selectOption('1');
+  await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
 
   expect(downloads).toEqual([]);
 });

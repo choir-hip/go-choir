@@ -1,278 +1,289 @@
-# MissionGradient: Real Media Apps And UX Sweep v0
+# MissionGradient: Real Readers And Media Apps UX Sweep v0
 
-Status: ready for overnight execution
-Date: 2026-05-19
-Operator: Codex supervising staging, product-path Playwright, Choir-in-Choir workers where healthy, git, CI, deploy, Trace, VText, and owner review
+**Status:** ready for overnight execution
+**Date:** 2026-05-19
+**Operator:** Codex supervising staging, product-path Playwright, Choir-in-Choir workers where healthy, git, CI, deploy, Trace, VText, and owner review
+**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-real-media-apps-ux-sweep-v0.md as a Codex-operated MissionGradient mission: make Choir's web desktop feel coherent by replacing generic media/content surfaces with real apps and hardening the shell/evidence UX around them. Build first-class Image, Audio, Video, PDF, EPUB, and Podcast apps with app-specific state, controls, routing, Files integration, launcher entries, mobile desktop behavior, and product-path proof; keep shared helpers small and subordinate, not a generic MediaFileApp/ContentViewer island. Also continue the broader UX sweep across Trace readability, VText coexistence/flicker, prompt/bottom-bar/app switching, contextual candidate/promotion surfaces, logged-out read/explore with auth only at mutation, and VM priority/status UX. Preserve mobile as a powerful floating-window desktop, not a reduced phone mode. Prefer Choir-in-Choir worker/candidate dispatch when healthy; if substrate blocks progress, root-cause and repair it directly through git/CI/deploy. Finish with staging identity, screenshots, DOM metrics, VText/Trace/run-acceptance evidence, rollback refs, residual risks, and the next realism axis.
+/goal Run docs/mission-real-media-apps-ux-sweep-v0.md as a Codex-operated MissionGradient mission: continue from deployed platform state c42108f and make Choir's non-Podcast media/readers and desktop shell app-grade. Treat Podcast as a working regression/reference app, not the mission center. Build real first-class PDF and EPUB reader paths first, then improve Image, Audio, and Video with app-specific state, controls, Files routing, launcher entries, mobile floating-desktop behavior, and product-path proof. Keep shared helpers small and subordinate; do not revive a generic MediaFileApp or stuff media back into ContentViewer. Continue the broader UX sweep where it blocks app usability: Trace single-scroll/readability, VText coexistence/flicker, prompt/bottom-bar/app switching, contextual candidate/promotion surfaces, logged-out read/explore with auth only at mutation, and VM wake/status UX. Prefer Choir-in-Choir worker/candidate dispatch when healthy; if substrate blocks progress, root-cause and repair it directly through git/CI/deploy. Finish with updated platform OS/app state docs, staging identity, screenshots, DOM metrics, VText/Trace/run-acceptance evidence, rollback refs, residual risks, and the next realism axis.
 ```
 
 ## Mission Frame
 
-This mission is not "add a few media controls." It is a product-boundary repair.
+The platform now has the right app boundary direction: Podcast has become a real
+app, Files can route known media to separate apps, and the launcher/start bar can
+surface app entries. The next mission should not spend its energy rebuilding
+Podcast. Podcast is the regression reference for what "app-grade" starts to
+mean: ordinary controls, library/detail state, mobile scrollability, and durable
+playback position.
 
-The current system has the right direction but the wrong center of gravity: Podcast has been split out, but Image, Audio, Video, PDF, and EPUB are still mostly thin wrappers over one generic media surface. That repeats the mistake that made Podcast feel like a content artifact instead of an app. Files also still treats important media files as downloads in the user path, and the launcher does not make the media apps visible as first-class desktop capabilities.
-
-The overnight objective is to make the first media-app family feel real, while using that work to harden the automatic computer shell and evidence surfaces. The product should feel like a powerful web desktop that happens to run well on mobile, not a website full of generic viewers.
+The mission is to make the rest of the automatic-computer media surface catch
+up, while preserving the web desktop model on mobile. The highest-value gaps are
+PDF and EPUB. Today they have first-class app boundaries, but PDF is mostly an
+embedded browser object and EPUB blocks raw archives unless text has already
+been extracted. Those are app-boundary placeholders, not real reader apps.
 
 ## Real Artifact
 
-The artifact is the deployed Choir automatic-computer UX substrate:
+The artifact is the deployed platform/default automatic-computer app substrate:
 
 ```text
-Files and content references
+Files / prompt / launcher
 -> typed app routing
--> first-class media apps
--> floating desktop shell
--> prompt/conductor app actions
+-> PDF, EPUB, Image, Audio, Video, Podcast apps
+-> floating-window desktop shell on desktop and mobile
 -> Trace/VText/candidate evidence surfaces
--> deployed mobile and desktop proof
+-> staging proof and platform state ledger
 ```
 
 The artifact is not:
 
-- a single `MediaFileApp` with branches for every type;
-- a swollen `ContentViewer`;
-- a set of separate filenames that still share one generic product behavior;
-- a local-only demo;
-- a checklist that passes while the apps remain unpleasant or unreachable.
-
-Shared code is allowed only when it is a subordinate primitive, such as transport controls, source URL helpers, zoom viewport, metadata drawer, or an app chrome helper. The user-facing app identity, state machine, routing, controls, empty/loading/error states, and tests must be app-specific.
+- a generic media viewer with app names painted over it;
+- a resurrected `ContentViewer` island;
+- a phone-mode UI that abandons floating windows on mobile;
+- local-only screenshots;
+- a checklist that passes while PDF/EPUB are still not readers.
 
 ## Starting Belief State
 
-Known state:
+Known state from the current platform ledger:
 
-- Staging has the recent vmctl liveness fix at `6836249`.
-- `PodcastApp.svelte` exists and is no longer trapped inside `ContentViewer`.
-- `ImageApp.svelte`, `AudioApp.svelte`, `VideoApp.svelte`, `PdfApp.svelte`, and `EpubApp.svelte` exist, but are thin wrappers around `MediaFileApp.svelte`.
-- `ContentViewer.svelte` still exists as a generic content surface and can still exert old design pressure.
-- The Files app currently opens text files in VText but downloads non-text files, including PDF and EPUB, instead of opening the matching apps.
-- The launcher currently emphasizes core apps and does not fully present media apps as first-class capabilities.
-- Trace has mobile drill-in work, but the user still observed multiple vertical scroll zones and unreadable overlap on mobile.
-- VText has reported flicker/coexistence issues with Trace.
-- VM priority policy is documented in `docs/vm-priority-policy.md`, but the product UX still needs clearer warm/waking/degraded state.
+- Staging is deployed at `c42108fc2b322e60b4d65c815ab3f8e2aee5dfa2`.
+- Podcast is a working app-grade v0 and should be protected by regression tests.
+- Files opens known PDF/EPUB/image/audio/video file types into dedicated apps;
+  unknown binaries still download.
+- `ImageApp`, `AudioApp`, and `VideoApp` are first-class apps with basic
+  controls, but they need app-grade state and richer ordinary controls.
+- `PdfApp` is only a first-class opener with toolbar/object embedding. It needs
+  a real reader path.
+- `EpubApp` renders extracted text but cannot yet parse raw EPUB archives. It
+  needs archive parsing, chapters/spine/TOC, search, and persisted reading state.
+- `ContentViewer` remains as legacy code pressure and must not receive new media
+  behavior.
+- Trace and VText have tests, but mobile evidence readability and coexistence
+  remain recurring UX risks.
+- Shell mobile behavior is improving but app switching, prompt/bottom bar
+  growth/shrink, and boot/wake status still need product-path proof.
 
 Highest-impact uncertainty:
 
-- Whether the worst remaining UX failures are caused primarily by app-local layout, shell geometry/focus behavior, or routing/authority boundaries. The mission should probe all three early and fix the shared substrate when one root cause explains multiple symptoms.
-
-Next observations:
-
-- Product-path Playwright on staging for Files -> PDF/EPUB/Image/Audio/Video opens.
-- Mobile screenshots and DOM metrics for each media app at `390x844`.
-- Trace mobile scroll-zone metrics with a real trajectory.
-- VText typing/focus test while Trace is open.
-- Logged-out launcher/app-open proof for read/explore surfaces.
+- Whether the next failing behavior is app-local reader implementation, shared
+  shell geometry, Files/routing, or auth/bootstrap. Probe with Playwright before
+  mutating broad shell code.
 
 ## Invariants
 
-- Mobile remains a desktop. Preserve floating windows, overlap, task switching, and power-user density. Add touch affordances; do not collapse into a single-app phone navigation model.
-- Active user computers must not be mutated directly for risky development. Use candidate/worker paths when healthy; direct Codex platform fixes are allowed only for platform substrate repair and must land through git/CI/deploy.
-- App boundaries must become clearer. Podcast, Image, Audio, Video, PDF, and EPUB are real apps. `ContentViewer` may remain only as a fallback/dispatcher/inspector, not as a primary media app.
-- A generic media component may not be the product architecture. Shared primitives are fine; a single app-shaped branch tree is not.
-- Files and prompt/conductor routes should open the same app family for the same content type.
-- The app launcher should expose real capabilities. Users should not need prompt magic or manual IDs to discover obvious apps.
-- Logged-out read/explore should work where privacy permits. Mutations, persistence, uploads, private state, worker/candidate actions, provider calls, subscriptions, adoption, and promotion require auth.
-- Trace must stay truthful. Do not hide failed evidence or replace missing artifacts with fake summaries.
-- No fake placeholders: no fake transclusion panels, fake readers, fake media renderers, or JSON-only success labels.
-- Platform behavior changes require:
-
-```text
-commit -> push origin main -> monitor CI -> monitor staging deploy
--> verify staging commit identity -> deployed Playwright/API acceptance
-```
+- Mobile remains the same web desktop, with floating windows and app switching.
+  Add touch affordances; do not gimp it into single-pane phone navigation.
+- Podcast remains a regression reference. Do not rewrite it unless a regression
+  or shared helper boundary requires a narrow fix.
+- PDF and EPUB must become real apps continuously deformable into long-term
+  readers. A simplified reader is acceptable; a fake reader is not.
+- Image, Audio, Video, PDF, EPUB, and Podcast stay separate apps with
+  app-specific state machines.
+- Shared helpers are subordinate primitives, not a user-facing app architecture.
+- Files, launcher, prompt/conductor decisions, and public routes should agree on
+  app identity for the same artifact.
+- Debug/provenance/source hashes must not dominate ordinary app workflows.
+  Put them in details, Trace, or evidence views.
+- Logged-out read/explore remains available where no private state or mutation
+  is touched. Mutation asks for auth at the boundary.
+- Active user computers are not the mutation playground for risky development.
+  Use candidate/worker paths when healthy; platform substrate fixes land through
+  git/CI/deploy.
+- Platform behavior claims require deployed staging proof.
 
 ## Value Criterion
 
 Minimize:
 
 ```text
-generic-viewer leakage
-+ app-boundary confusion
-+ media-control incompleteness
-+ Files/download routing surprises
-+ launcher discoverability failure
+reader fakery
++ generic-viewer leakage
++ Files/download surprises
++ launcher discoverability gaps
 + mobile shell friction
-+ evidence inspection friction
++ media-control incompleteness
++ lost playback/reading position
++ Trace evidence unreadability
 + VText focus instability
 + auth overblocking
-+ manual-ID candidate/promotion UX
-+ hidden state and verifier Goodharting
++ candidate/promotion manual-ID friction
++ undocumented platform state drift
 + future cleanup debt
 ```
 
 subject to the invariants above.
 
-The mission moves uphill when a normal user can open the launcher, open Files, click a PDF or EPUB, view it in the appropriate app, play audio/video/podcasts with standard controls, inspect Trace, edit VText, and switch windows on mobile without fighting the shell.
+The mission moves uphill when a normal user can open Files or the launcher,
+open a PDF/EPUB/image/audio/video artifact, use the expected controls in a
+mobile floating window, switch to Trace/VText without layout collapse, and find
+honest evidence of what changed.
 
-## Quality Gradient
+## Priority Surfaces
 
-Expected quality: `solid`.
+### P0: PDF As A Real Reader
 
-Solid means:
+Implement the smallest real PDF reader path:
 
-- each media app has its own product state and tests;
-- shared helpers are named as helpers, not as the app identity;
-- Files and prompt routes agree on media type routing;
-- launcher entries exist and fit on mobile;
-- app controls are reachable in floating windows on mobile and desktop;
-- failures are precise and honest;
-- staging proof exists after deploy.
+- render PDF pages in-app rather than relying only on browser object fallback;
+- show actual page count and page navigation;
+- support zoom, fit width, fit page, and scrollable page view;
+- keep controls reachable on mobile;
+- add search/text extraction if feasible in the same pass, or a precise
+  blocker with the extraction path;
+- preserve source/file routing from Files and prompt decisions;
+- prove with an actual PDF fixture and deployed mobile screenshot/DOM metrics.
 
-Substandard:
+### P0: EPUB As A Real Reader
 
-- renaming `MediaFileApp` without changing behavior;
-- leaving PDF/EPUB clicks as browser downloads;
-- making EPUB pretend to render when extraction/reader support is absent;
-- adding a "view" that is only metadata/provenance/source;
-- hiding media apps behind prompt-only access;
-- fixing mobile by disabling desktop window behavior;
-- claiming success from local screenshots only.
+Implement the smallest real EPUB archive reader path:
+
+- parse the EPUB zip/container/package/spine;
+- render chapters safely from XHTML/text;
+- expose table of contents when available;
+- support font size, measure/width, progress, search or precise blocker, and
+  persisted reading position;
+- keep extracted text/VText handoff as a future-friendly path;
+- prove with an actual EPUB fixture and mobile reader metrics.
+
+### P1: Image App
+
+Move beyond basic image open:
+
+- pan/drag and zoom centered on intent;
+- touch/pinch where feasible;
+- rotate/reset;
+- fit-to-window/original-size;
+- folder gallery next/previous from Files context;
+- metadata/details as secondary UI, not primary chrome.
+
+### P1: Audio App
+
+Move toward ordinary audio-player expectations:
+
+- playback-position persistence;
+- queue/playlist from Files folder context;
+- title/source metadata;
+- speed controls and seek controls remain reachable;
+- Media Session API and keyboard shortcuts if feasible;
+- transcript/VText hook as a precise next path if not implemented.
+
+### P1: Video App
+
+Move toward ordinary video-player expectations:
+
+- playback-position persistence for native media;
+- fullscreen/theater/fit behavior that works in floating windows;
+- captions/subtitle track detection or precise blocker;
+- transcript/VText hook for YouTube/native sources;
+- playlist/folder navigation where Files context exists.
+
+### P1: Shell, Launcher, And Files
+
+Keep app access coherent:
+
+- launcher/start menu exposes real app entries without crowding mobile;
+- Files opens known types in apps and unknown binaries as downloads;
+- task buttons reliably raise/restore focused windows;
+- bottom/prompt bar grows only for prompt content and shrinks when empty;
+- mobile window bounds leave controls visible and avoid accidental hidden tiny
+  scroll regions.
+
+### P1: Trace And VText Evidence Surfaces
+
+Continue hardening only where it supports the sweep:
+
+- Trace should have one intentional app-level vertical scroll surface on mobile,
+  except bounded code/payload blocks;
+- Trace should make run/candidate/promotion/rollback evidence inspectable;
+- VText should remain editable and stable while Trace or media apps are open;
+- final proof should include Trace/VText/run-acceptance evidence when a
+  Choir-in-Choir or candidate path is used.
+
+### P2: Candidate/Promotion And VM Status UX
+
+Do not let supporting UX block real reader progress, but fix high-impact
+failures encountered in product-path proof:
+
+- candidate/promotion surfaces should appear from context rather than requiring
+  manual IDs;
+- boot/wake/recovery should show honest warm/waking/recovering/degraded states;
+- VM priority policy must continue protecting real primary user computers while
+  candidates/workers hibernate first.
 
 ## Homotopy Axes
 
 Increase realism continuously:
 
-- media app boundary: generic viewer -> app-specific route/state/control -> shared helper primitives only where justified;
-- file routing: text-only VText open -> PDF/EPUB/media app open -> unknown binary download fallback;
-- launcher: core apps only -> all first-class apps -> grouped/adaptive launcher;
-- mobile shell: basic fit -> reliable focus/raise/restore -> snap/overview/top-or-bottom panel options;
-- Trace: readable summary -> timeline/inspector drill-in -> run acceptance/candidate/promotion artifacts;
-- VText: basic edit -> no flicker under live updates -> stable Trace coexistence;
-- auth: launch wall -> read/explore guest mode -> mutation-specific auth prompts;
-- proof: local build -> focused local Playwright -> staging Playwright -> Trace/VText/run-acceptance evidence.
+- PDF: object embed -> rendered pages -> search/text -> annotations/thumbnails;
+- EPUB: extracted-text display -> raw archive parse -> TOC/search/bookmarks ->
+  VText/transclusion integration;
+- Image: static display -> pan/zoom/rotate -> gallery/metadata;
+- Audio/Video: single source controls -> persisted state -> queues/transcripts;
+- Files routing: app open -> context-preserving app open -> app package/source
+  provenance;
+- Shell: fits windows -> reliable focus/restore -> configurable top/bottom
+  panel/overview;
+- Evidence: screenshot/test -> Trace/run-acceptance -> promotion/rollback;
+- State docs: common platform ledger -> per-computer product-visible state.
 
-Avoid discontinuous fake ladders. A simplified PDF app can lack full search, but it must still be the real PDF app path. A simplified EPUB app may precisely block if extraction is missing, but it must not fake a reader.
-
-## Priority Surfaces
-
-### P0: Real Media App Boundaries
-
-Create or refactor the media apps so each has app-specific behavior:
-
-- Image app: pan/zoom, fit/original, metadata/inspect secondary, touch drag/zoom if feasible.
-- Audio app: play/pause, seek, speed, duration/progress, source/title metadata, persistence plan.
-- Video app: native video controls or embedded provider controls, fit/full-window, source fallback, speed where browser supports it.
-- PDF app: inline open from Files and prompt routes, page navigation, fit width/page, zoom, scroll, precise blocker for search if deferred.
-- EPUB app: either extracted-text reader with table/chapter/progress/font controls, or a precise no-fake-reader blocker with the extraction path as next probe.
-- Podcast app: subscriptions/library/search/detail/player/progress with RSS import hidden under advanced.
-
-Do not accept a single `MediaFileApp` as the app layer. If shared code remains, split it into primitives with app-owned state machines.
-
-### P0: Files And Launcher Routing
-
-Files:
-
-- Text/Markdown/VText files open in VText.
-- PDF files open PDF app.
-- EPUB files open EPUB app.
-- Image/audio/video files open their apps.
-- Unknown binary files still download.
-- The user sees no unexpected browser download for known media types.
-
-Launcher:
-
-- Image, Audio, Video, PDF, EPUB, and Podcast are visible as first-class apps.
-- The launcher remains usable on mobile; scrolling/grouping is acceptable.
-- Guest mode can launch read/explore apps without auth where no private state is touched.
-
-### P0: Mobile Desktop Shell
-
-Preserve the desktop model while making it usable:
-
-- tapping a task/app indicator reliably raises and focuses the window;
-- minimize/restore does not require toggling show desktop first;
-- prompt/bottom panel grows only for content and shrinks back;
-- media apps, Trace, VText, Files, and Podcast fit within the mobile workspace;
-- snap/fit/overview affordances are added or precisely blocked with the next implementation path.
-
-### P0: Trace Evidence App
-
-Trace must be a usable evidence app:
-
-- exactly one intentional app-level vertical scroll surface on mobile, or a documented reason for a nested scroll where it is a code/payload block;
-- Runs/Summary/Timeline/Inspector reachable on `390x844`;
-- run acceptance, rollback, worker/export/candidate/promotion evidence readable;
-- long payloads wrap or scroll inside bounded blocks without taking over the page.
-
-### P1: VText Stability
-
-Create or repair a focused test:
-
-- VText and Trace open together on mobile;
-- user types while live/refresh/head events occur;
-- selection/focus is not lost;
-- visible flicker is minimized or precisely isolated.
-
-### P1: Candidate/Promotion Context
-
-Candidate Desktop and promotion views should not require manual IDs in ordinary flow:
-
-- show contextual candidate/export/promotion cards from current Trace/run/promotion evidence;
-- keep manual ID entry behind an advanced/debug drawer;
-- link rollback and verifier evidence from product-visible surfaces.
-
-### P1: VM Priority And Wake UX
-
-Carry forward the vmctl priority policy:
-
-- real user primary computers should stay warm under capacity;
-- candidate/worker VMs can hibernate aggressively;
-- the UI should say warm/waking/recovering/degraded rather than hanging indefinitely;
-- do not expose private VM/user IDs in public health.
+Avoid fake ladders. A simple PDF renderer can be real. A button that changes a
+URL fragment on an opaque browser object is not enough.
 
 ## Investigation And Cognitive Reframing
 
 Before stopping on a blocker:
 
-1. Classify it as app-local, shell-level, auth-boundary, routing/substrate, deploy, external provider/browser, or invariant-level.
-2. Run the smallest root-cause probe that distinguishes those classes.
-3. If the next probe/fix is inside current authority, execute it rather than ending the mission.
-4. Apply 2-5 route-changing transforms before declaring a hard blocker:
-   - Boundary transform: is this bug caused by the wrong app owning the state?
-   - Evidence transform: what would convince a skeptical reviewer this behavior exists on staging?
-   - Homotopy transform: is the simplification continuously deformable into the real app?
-   - Authority transform: is this failing because read/explore and mutation share one auth gate?
-   - Shell-vs-app transform: would fixing the window shell solve this class across several apps?
-
-Do not stop with "needs follow-up" while an executable safe probe remains.
+1. Classify it as app-local, shared helper, Files/routing, shell geometry,
+   auth/bootstrap, browser/library limitation, build/deploy, or invariant-level.
+2. Run the smallest probe that distinguishes those classes.
+3. If the next probe/fix is inside current authority, execute another
+   receding-horizon loop instead of ending.
+4. Apply route-changing transforms before declaring a hard blocker:
+   - Boundary transform: is the wrong app owning the state?
+   - Reader transform: is this a real reader path or a fake embed?
+   - Evidence transform: what would convince a skeptical reviewer on staging?
+   - Shell-vs-app transform: would fixing window geometry solve multiple apps?
+   - Authority transform: is auth/active-computer bootstrap being confused with
+     read-only app exploration?
 
 ## Receding-Horizon Control
 
-Run in bounded loops:
+Operate in short loops:
 
-1. Baseline one user-visible failure with Playwright/screenshot/DOM metric.
-2. Identify ownership: app, Files, launcher, shell, auth, Trace, VText, vmctl, or deploy.
-3. Make a small mutation with tests.
+1. Baseline one concrete product failure with Playwright/screenshot/DOM metric.
+2. Identify ownership.
+3. Make a bounded mutation.
 4. Run focused local verification.
-5. Commit and push when behavior changes.
-6. Monitor CI/deploy.
-7. Verify staging identity.
-8. Run deployed proof.
-9. Update evidence ledger and choose next highest-gradient failure.
-
-Prefer one coherent commit per substrate slice. Larger commits are acceptable only when separating app boundaries requires shared helper extraction.
+5. Commit and push platform behavior changes.
+6. Monitor CI and deploy.
+7. Verify staging commit identity.
+8. Run deployed product-path proof.
+9. Update [platform-os-app-state.md](platform-os-app-state.md).
+10. Choose the next highest-gradient app or shell failure.
 
 ## Dense Feedback Channels
 
 Use:
 
 - `npm run build` in `frontend`;
-- focused Playwright specs for Files, media apps, Podcast, Trace, VText, and shell;
-- `go test` for any runtime/sandbox/proxy route changes;
+- focused Playwright for content app routing, Files, Podcast regression, PDF,
+  EPUB, Image, Audio, Video, shell, Trace, and VText;
+- Go tests for proxy/runtime/file-serving changes;
 - staging `/health` build identity;
-- screenshots at `390x844` and desktop viewport;
-- DOM metrics for overflow, scroll ownership, visible controls, and window bounds;
-- Trace trajectory and run-acceptance records for self-development/proof runs;
-- VText report/certificate for final human review.
+- screenshots at `390x844` and a desktop viewport;
+- DOM metrics for overflow, scroll ownership, visible controls, and window
+  bounds;
+- Trace trajectory/run-acceptance records for Choir-in-Choir work;
+- updated platform OS/app state docs.
 
 ## Evidence Ledger
 
-For each claim record:
+For each nontrivial claim record:
 
 ```text
 claim:
@@ -286,64 +297,73 @@ promotion relevance:
 
 Claims that need evidence:
 
-- Files opens PDF/EPUB/media apps without downloads.
-- Launcher exposes media apps and remains usable on mobile.
-- Each media app has reachable controls on mobile.
-- Trace has usable mobile drill-in and bounded scroll.
-- VText remains stable beside Trace.
-- Logged-out read/explore works without mutating private state.
+- PDF renders real pages with working page count/navigation/zoom on staging.
+- EPUB opens a real archive and renders chapters on staging.
+- Files opens PDF/EPUB/image/audio/video apps without browser downloads.
+- Launcher/start menu exposes the app family on mobile.
+- Image/Audio/Video improved controls remain reachable on mobile.
+- Podcast regression tests still pass.
+- Trace/VText coexistence remains usable enough for evidence inspection.
 - Staging is on the pushed commit.
+- Platform state docs were updated with the new truth.
 
 ## Forbidden Shortcuts
 
-- Keeping one generic `MediaFileApp` as the product app and calling wrappers "separate apps."
-- Moving debug/provenance/source controls into primary app chrome.
-- Fake EPUB/PDF/media renderers.
+- Reintroducing `MediaFileApp` or using `ContentViewer` as the media app island.
+- Claiming PDF success from a browser object fallback alone.
+- Claiming EPUB success while raw EPUB archives still cannot be parsed.
+- Putting source hashes, UUIDs, provenance accordions, or debug manifests in the
+  primary user workflow.
 - Browser-public internal/test routes as product proof.
 - Manual success seeding.
-- Local-only proof for deployed claims.
+- Local-only proof for deployed behavior.
 - Disabling mobile floating windows to make tests easier.
-- Mutating active computers directly for risky candidate work.
-- Claiming a platform deploy proves user-computer promotion or fleet adoption.
+- Mutating active user computers directly for risky app/platform development.
+- Hiding provider/build/browser-library failures behind generic labels.
 
 ## Rollback Policy
 
-- Every platform patch has a git rollback SHA.
-- UI changes must be revertible without data migration when possible.
+- Every platform behavior-changing patch has a git rollback SHA.
+- Reader/app changes should be revertible without data migration when possible.
 - File-serving changes must preserve download fallback for unknown binaries.
-- App state migrations, if any, must be additive and tolerate missing old state.
-- VM priority/config changes must preserve candidate/worker reclaim and not leak private IDs.
+- Persisted playback/reading state must be additive and tolerate missing old
+  state.
+- VM/wake/status changes must preserve candidate/worker reclaim and avoid
+  leaking private user or VM identifiers.
 
 ## Learning Side-Channel
 
-Update this mission doc or a follow-up proof doc with:
+Update:
 
-- app-boundary decisions;
-- shell-vs-app root causes;
-- media app shared-helper extraction choices;
-- staging screenshots/metrics;
-- blockers and next probes.
+- [platform-os-app-state.md](platform-os-app-state.md) for current state;
+- this mission doc if the mission target or invariants need reparameterization;
+- a dated proof/report doc only for run evidence that should not become
+  canonical state.
 
-Do not bury architecture learnings only in chat.
+Do not bury app-boundary or reader-architecture learnings only in chat.
 
 ## Stopping Condition
 
 Stop only when either:
 
-1. Full-chain UX proof exists on staging:
-   - Files opens PDF/EPUB/image/audio/video into real apps;
-   - launcher exposes media apps;
-   - Podcast remains usable with player/library/search/progress path;
-   - Trace and VText are usable together on mobile;
-   - prompt/bottom bar/window switching are materially improved or precisely bounded;
-   - logged-out read/explore and auth-on-mutation are verified;
-   - staging identity, screenshots, DOM metrics, tests, rollback refs, residual risks, and next realism axis are recorded.
+1. Full-chain deployed proof exists:
+   - PDF and EPUB have real reader paths or one has a precise invariant-level
+     blocker after root-cause probes;
+   - Image/Audio/Video have materially improved app-specific controls/state or
+     precise next blockers;
+   - Files and launcher route users to the app family coherently;
+   - Podcast regression still passes;
+   - Trace and VText remain usable enough for evidence inspection;
+   - staging identity, screenshots, DOM metrics, tests, rollback refs,
+     residual risks, and updated platform state docs are recorded.
 
-2. A hard blocker remains after root-cause probes and cognitive transforms:
+2. A hard blocker remains:
    - exact failing layer named;
    - evidence captured;
+   - at least one cognitive reframing changed the probe route;
    - no safe executable next probe remains inside authority;
-   - rollback/no-mutation status stated;
-   - next safe probe is concrete.
+   - rollback/no-mutation status and next safe probe are concrete.
 
-Do not stop merely because one app slice passed. The objective is coherent automatic-computer UX substrate, with real media apps as the pressure test.
+Do not stop merely because one app opens. The objective is a coherent
+automatic-computer app substrate, with PDF/EPUB as the next realism axis and
+Podcast as the regression reference.

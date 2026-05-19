@@ -16,6 +16,7 @@ For current operating context, read:
 - [mission-geometry.md](mission-geometry.md)
 - [computer-ontology.md](computer-ontology.md)
 - [current-architecture.md](current-architecture.md)
+- [platform-os-app-state.md](platform-os-app-state.md)
 - [runtime-invariants.md](runtime-invariants.md)
 - [implementation-scope.md](implementation-scope.md)
 

@@ -107,3 +107,32 @@ export function formatTime(seconds) {
   const remainder = String(total % 60).padStart(2, '0');
   return `${minutes}:${remainder}`;
 }
+
+export function mediaStateKey(kind, source = {}) {
+  return `choir-media:${kind}:${source.filePath || source.sourceUrl || source.title || 'untitled'}`;
+}
+
+export function loadMediaPosition(kind, source = {}) {
+  try {
+    const raw = window.localStorage.getItem(mediaStateKey(kind, source));
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    const value = Number(parsed.currentTime);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch (_err) {
+    return 0;
+  }
+}
+
+export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0) {
+  if (!Number.isFinite(currentTime) || currentTime < 0) return;
+  try {
+    window.localStorage.setItem(mediaStateKey(kind, source), JSON.stringify({
+      currentTime,
+      duration: Number.isFinite(duration) ? duration : 0,
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch (_err) {
+    // Local playback state is best-effort.
+  }
+}

@@ -1,6 +1,6 @@
 # Implementation Scope
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-19
 
 This is the near-term build order. For the complete current architecture, read
 [docs/current-architecture.md](current-architecture.md). For the broader goal
@@ -59,21 +59,25 @@ Required behavior:
 Machine-verifiable tests should use fake providers, fake workers, and fake time
 before relying on browser/e2e coverage.
 
-## Second Priority: Ingestion
+## Second Priority: Ingestion And Real Readers
 
-After the vtext loop is reliable, add ingestion skills and apps:
+After the vtext loop is reliable, deepen ingestion skills and real reader/media
+apps:
 
 - URL to extracted text/content
 - YouTube transcript pulling
 - text and Markdown upload
 - PDF upload
 - EPUB upload
-- later audio, video, and image display apps
+- real PDF reading rather than object/embed-only opening
+- real EPUB archive parsing rather than extracted-text-only reading
+- app-grade audio, video, and image controls/state
 
 These should feed `vtext` through typed app/worker updates and durable artifacts,
 not ad hoc prompt stuffing. Media display apps do not need to be appagents at
 first; they become appagents only if they need durable prompts, dynamic UI, or
-domain ownership.
+domain ownership. The current common platform app state is tracked in
+[platform-os-app-state.md](platform-os-app-state.md).
 
 ## Third Priority: Publication
 

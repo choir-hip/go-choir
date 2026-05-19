@@ -1,12 +1,14 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-19
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
 `vmctl`, publication, or appagent behavior. For current vocabulary, read
 [glossary.md](glossary.md). For project direction, read
-[project-goals.md](project-goals.md).
+[project-goals.md](project-goals.md). For the current common platform/default
+computer OS, desktop shell, and app catalog state, read
+[platform-os-app-state.md](platform-os-app-state.md).
 
 ## Current Reality
 
@@ -91,10 +93,12 @@ access to the live private document.
    boundary and then continue through an owned active/candidate computer.
 2. Make `vtext`, researcher, super, and user edits work well and become
    machine-verifiable.
-3. Add ingestion skills: URL to extracted text/content, YouTube transcripts, and
-   text/Markdown/PDF/EPUB upload. Later add audio/video/image display apps so
-   uploaded, linked, or agent-retrieved media can open in the desktop and become
-   available for `vtext` transclusion.
+3. Add ingestion and real reader/media capabilities: URL to extracted
+   text/content, YouTube transcripts, text/Markdown/PDF/EPUB upload, real PDF
+   and EPUB readers, and app-grade image/audio/video surfaces so uploaded,
+   linked, or agent-retrieved media can open in the desktop and become available
+   for `vtext` transclusion. Current app state is tracked in
+   [platform-os-app-state.md](platform-os-app-state.md).
 4. Harden publication UX and review: retraction, supersession, route
    management, richer review evidence, and proposal inbox/acceptance flows.
 5. Deepen Pretext-based text rendering/transclusion for published `vtext` and

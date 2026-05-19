@@ -4,8 +4,10 @@
     appTitle,
     clampNumber,
     formatTime,
+    loadMediaPosition,
     loadContextContentItem,
     resolveMediaSource,
+    saveMediaPosition,
   } from './media-utils.js';
 
   export let appContext = {};
@@ -21,6 +23,7 @@
   let mediaCurrentTime = 0;
   let mediaDuration = 0;
   let mediaPlaying = false;
+  let restoredPosition = false;
 
   $: source = resolveMediaSource(appContext, item, kind);
   $: mediaSeekPercent = mediaDuration > 0 ? Math.min(100, Math.max(0, (mediaCurrentTime / mediaDuration) * 100)) : 0;
@@ -34,6 +37,19 @@
     mediaCurrentTime = Number.isFinite(mediaEl.currentTime) ? mediaEl.currentTime : 0;
     mediaDuration = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
     mediaPlaying = !mediaEl.paused;
+    saveMediaPosition(kind, source, mediaCurrentTime, mediaDuration);
+  }
+
+  function restoreMediaPosition() {
+    if (!mediaEl || restoredPosition) return;
+    const stored = loadMediaPosition(kind, source);
+    const duration = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
+    if (stored > 0 && (!duration || stored < duration - 2)) {
+      mediaEl.currentTime = stored;
+    }
+    restoredPosition = true;
+    setPlaybackSpeed();
+    updateMediaState();
   }
 
   async function togglePlayback() {
@@ -123,13 +139,14 @@
           <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-audio-seek />
           <span data-media-duration>{formatTime(mediaDuration)}</span>
         </div>
+        <p class="media-position-note" data-media-position-status>Playback position is saved on this device.</p>
       </div>
       <audio
         src={source.displayUrl}
         preload="metadata"
         controls
         bind:this={mediaEl}
-        on:loadedmetadata={() => { setPlaybackSpeed(); updateMediaState(); }}
+        on:loadedmetadata={restoreMediaPosition}
         on:timeupdate={updateMediaState}
         on:play={updateMediaState}
         on:pause={updateMediaState}

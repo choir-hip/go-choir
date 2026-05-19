@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-16
+Last reviewed: 2026-05-19
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -29,6 +29,11 @@ Use these buckets when reading or editing docs:
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
 - `docs/vm-priority-policy.md` - current and future VM/computer warmness,
   reclaim, always-on, and uptime-tier policy.
+- `docs/platform-os-app-state.md` - current common platform/default computer
+  state ledger for the OS substrate, desktop shell, app catalog, app boundaries,
+  proof anchors, and known UX/app gaps. Keep it updated as platform app state
+  changes; later divergent user computers should expose their own equivalent
+  state records.
 - `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
 - `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
 - `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
@@ -51,6 +56,9 @@ Use these buckets when reading or editing docs:
   MissionGradient for adaptive computer lifecycle control: primary-computer
   keepalive, future 24/7 uptime policy, correlated instrumentation,
   progressive/stochastic load, and UX-driven performance optimization.
+- `docs/mission-real-media-apps-ux-sweep-v0.md` - proposed MissionGradient for
+  real PDF/EPUB readers, stronger Image/Audio/Video apps, Podcast regression,
+  and shell/Trace/VText/Files/launcher UX proof.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -69,6 +77,8 @@ Use these buckets when reading or editing docs:
   adaptive lifecycle mission for keeping primary computers warm under capacity,
   preparing an always-on tier, and measuring/improving behavior under real
   product-path dynamics.
+- `docs/mission-real-media-apps-ux-sweep-v0.md` - proposed next real readers
+  and media-app UX sweep.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -

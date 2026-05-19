@@ -146,6 +146,12 @@
   overflow-wrap: anywhere;
 }
 
+.media-position-note {
+  margin: 0;
+  color: var(--choir-muted, #a8adbd);
+  font-size: 0.82rem;
+}
+
 .media-transport {
   display: flex;
   flex-wrap: wrap;
