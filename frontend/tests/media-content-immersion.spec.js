@@ -236,6 +236,9 @@ for (const viewport of [
     await routeMediaFixtures(page);
     await registerAndLoadDesktop(page, uniqueEmail(viewport.label));
 
+    const podcast = await openPodcastApp(page, `Immersion Radio ${viewport.label}`);
+    await expectStageOccupancy(page, podcast, 'podcast', viewport.label, 0.8);
+
     const promptRoutedApps = [
       {
         app: 'image',
@@ -275,8 +278,5 @@ for (const viewport of [
       const viewer = await openPromptRoutedApp(page, reference);
       await expectStageOccupancy(page, viewer, reference.app, viewport.label, reference.threshold);
     }
-
-    const podcast = await openPodcastApp(page, `Immersion Radio ${viewport.label}`);
-    await expectStageOccupancy(page, podcast, 'podcast', viewport.label, 0.8);
   });
 }
