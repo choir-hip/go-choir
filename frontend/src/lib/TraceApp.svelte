@@ -489,7 +489,7 @@
 </script>
 
 <div class="trace-frame" data-trace-app>
-  <div class="trace-app" data-mobile-panel={mobilePanel}>
+  <div class="trace-app" data-mobile-panel={mobilePanel} data-trace-scroll-owner>
     <nav class="mobile-trace-tabs" aria-label="Trace sections" data-trace-mobile-tabs>
       <button type="button" class:selected={mobilePanel === 'runs'} on:click={() => (mobilePanel = 'runs')}>Runs</button>
       <button type="button" class:selected={mobilePanel === 'summary'} on:click={() => (mobilePanel = 'summary')}>Summary</button>
@@ -1144,6 +1144,8 @@
     grid-template-columns: 292px minmax(0, 1fr);
     background: #0a0d14;
     color: #e2e8f0;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
 
   .mobile-trace-tabs {

@@ -6,31 +6,48 @@ const BASE_URL =
   process.env.PLAYWRIGHT_BASE_URL ||
   'http://localhost:4173';
 
-const FIXTURE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
+function episodeXml(index, overrides = {}) {
+  const title = overrides.title || `Episode ${String(index).padStart(2, '0')}`;
+  const guid = overrides.guid || `mission-radio-${index}`;
+  const duration = overrides.duration || '12:34';
+  const description = overrides.description || `Episode ${index} keeps the podcast list scrollable on mobile.`;
+  const audio = overrides.audio || `https://example.com/audio/episode-${index}.mp3`;
+  return `
+    <item>
+      <title>${title}</title>
+      <guid>${guid}</guid>
+      <link>https://example.com/mission-radio/${index}</link>
+      <pubDate>Wed, 13 May 2026 ${String((8 + index) % 24).padStart(2, '0')}:00:00 GMT</pubDate>
+      <itunes:duration>${duration}</itunes:duration>
+      <description>${description}</description>
+      <enclosure url="${audio}" type="audio/mpeg" length="${12345 + index}" />
+    </item>`;
+}
+
+function buildPodcastRss(title, episodeItems) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
-    <title>Mission Gradient Radio</title>
+    <title>${title}</title>
     <link>https://example.com/mission-radio</link>
     <description>Dispatches about candidate worlds, verifier contracts, and promoted meaning.</description>
-    <item>
-      <title>Candidate Worlds First</title>
-      <guid>mission-radio-1</guid>
-      <link>https://example.com/mission-radio/1</link>
-      <pubDate>Wed, 13 May 2026 10:00:00 GMT</pubDate>
-      <itunes:duration>12:34</itunes:duration>
-      <description>How background mutation stays out of canonical state until promotion.</description>
-      <enclosure url="https://example.com/audio/candidate-worlds.mp3" type="audio/mpeg" length="12345" />
-    </item>
-    <item>
-      <title>Verifier Contracts</title>
-      <guid>mission-radio-2</guid>
-      <link>https://example.com/mission-radio/2</link>
-      <pubDate>Wed, 13 May 2026 11:00:00 GMT</pubDate>
-      <description>Why verification is a contract and not an agent caste.</description>
-      <enclosure url="https://example.com/audio/verifier-contracts.mp3" type="audio/mpeg" length="67890" />
-    </item>
+    ${episodeItems.join('\n')}
   </channel>
 </rss>`;
+}
+
+const FIXTURE_RSS = buildPodcastRss('Mission Gradient Radio', [
+  episodeXml(1, {
+    title: 'Candidate Worlds First',
+    description: 'How background mutation stays out of canonical state until promotion.',
+    audio: 'https://example.com/audio/candidate-worlds.mp3',
+  }),
+  episodeXml(2, {
+    title: 'Verifier Contracts',
+    description: 'Why verification is a contract and not an agent caste.',
+    audio: 'https://example.com/audio/verifier-contracts.mp3',
+  }),
+]);
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
 test.setTimeout(120_000);
@@ -46,8 +63,8 @@ async function registerAndLoadDesktop(page, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 30_000 });
 }
 
-async function seedPodcastFeed(page) {
-  return page.evaluate(async (rss) => {
+async function seedPodcastFeed(page, { rss = FIXTURE_RSS, title = 'Mission Gradient Radio' } = {}) {
+  return page.evaluate(async ({ rss, title }) => {
     const res = await fetch('/api/content/items', {
       method: 'POST',
       credentials: 'include',
@@ -56,7 +73,7 @@ async function seedPodcastFeed(page) {
         source_type: 'url',
         media_type: 'application/rss+xml',
         app_hint: 'podcast',
-        title: 'Mission Gradient Radio',
+        title,
         source_url: 'https://example.com/mission-radio.rss',
         canonical_url: 'https://example.com/mission-radio',
         text_content: rss,
@@ -68,7 +85,7 @@ async function seedPodcastFeed(page) {
     const body = await res.text();
     if (!res.ok) throw new Error(`seed podcast failed: ${res.status} ${body}`);
     return JSON.parse(body);
-  }, FIXTURE_RSS);
+  }, { rss, title });
 }
 
 test('podcast app opens a durable feed artifact as a full player app', async ({ page, authenticator }) => {
@@ -112,4 +129,61 @@ test('podcast app opens a durable feed artifact as a full player app', async ({ 
   await expect(podcastWindow.locator('text=Loading podcast artifacts...')).toHaveCount(0);
   await expect(podcastWindow.locator('[data-podcast-import]')).not.toBeVisible();
   await expect(seededFeed).toBeVisible();
+});
+
+test('podcast mobile detail keeps a long episode list scrollable with player controls reachable', async ({ page, authenticator }) => {
+  expect(authenticator.authenticatorId).toBeTruthy();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerAndLoadDesktop(page, uniqueEmail());
+  const title = 'Mobile Scroll Radio';
+  const rss = buildPodcastRss(
+    title,
+    Array.from({ length: 18 }, (_, index) => episodeXml(index + 1, {
+      title: `Mobile Episode ${String(index + 1).padStart(2, '0')}`,
+    }))
+  );
+  const contentItem = await seedPodcastFeed(page, { rss, title });
+
+  await page.locator('[data-desktop-icon-id="podcast"]').dblclick();
+  const podcastWindow = page.locator('[data-window]').filter({ has: page.locator('[data-podcast-app]') }).last();
+  const podcastApp = podcastWindow.locator('[data-podcast-app]');
+  await expect(podcastApp.locator('[data-podcast-library]')).toBeVisible({ timeout: 10_000 });
+  await podcastApp.locator('[data-podcast-library-item]').filter({ hasText: contentItem.title }).click();
+
+  const episodeList = podcastApp.locator('[data-podcast-episodes-scroll]');
+  await expect(episodeList).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-episode]')).toHaveCount(18);
+  await expect(podcastApp.locator('[data-podcast-player]')).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-seek-back]')).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-play-pause]')).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-seek-forward]')).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-seek]')).toBeVisible();
+  await expect(podcastApp.locator('[data-podcast-speed]')).toBeVisible();
+
+  const beforeScroll = await episodeList.evaluate((el) => ({
+    clientHeight: el.clientHeight,
+    scrollHeight: el.scrollHeight,
+    overflowY: getComputedStyle(el).overflowY,
+  }));
+  expect(beforeScroll.clientHeight).toBeGreaterThanOrEqual(180);
+  expect(beforeScroll.scrollHeight).toBeGreaterThan(beforeScroll.clientHeight + 120);
+  expect(beforeScroll.overflowY).toMatch(/auto|scroll/);
+
+  await episodeList.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    el.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+
+  const afterScroll = await episodeList.evaluate((el) => {
+    const listBox = el.getBoundingClientRect();
+    const last = el.querySelector('[data-podcast-episode]:last-child');
+    const lastBox = last?.getBoundingClientRect();
+    return {
+      scrollTop: el.scrollTop,
+      lastVisible: !!lastBox && lastBox.bottom <= listBox.bottom + 2 && lastBox.top >= listBox.top - 2,
+    };
+  });
+  expect(afterScroll.scrollTop).toBeGreaterThan(0);
+  expect(afterScroll.lastVisible).toBe(true);
+  await expect(podcastApp.locator('[data-podcast-player]')).toBeVisible();
 });

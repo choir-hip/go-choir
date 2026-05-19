@@ -299,6 +299,7 @@
   style="{windowStyle} z-index: {zIndex};"
   data-window
   data-window-id={windowId}
+  data-window-app-id={appId}
   on:pointerdown={handleFocusWindow}
 >
   <!-- Title bar -->
@@ -433,6 +434,18 @@
     position: relative;
     min-height: 0;
     user-select: text;
+  }
+
+  .window[data-window-app-id='trace'] .window-content,
+  .window[data-window-app-id='podcast'] .window-content,
+  .window[data-window-app-id='vtext'] .window-content,
+  .window[data-window-app-id='image'] .window-content,
+  .window[data-window-app-id='audio'] .window-content,
+  .window[data-window-app-id='video'] .window-content,
+  .window[data-window-app-id='pdf'] .window-content,
+  .window[data-window-app-id='epub'] .window-content,
+  .window[data-window-app-id='candidate-desktop'] .window-content {
+    overflow: hidden;
   }
 
   /* ---- Resize handle: bottom-right corner only ---- */

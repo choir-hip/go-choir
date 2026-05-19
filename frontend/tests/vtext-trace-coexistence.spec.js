@@ -68,7 +68,20 @@ async function mockTraceTrajectory(page) {
         stream_seq: 2,
       },
     ],
-    search: { providers: [] },
+    search: {
+      attempts: 18,
+      successes: 12,
+      providers: Array.from({ length: 12 }, (_, index) => ({
+        provider: `provider-${index + 1}`,
+        endpoint: `https://example.com/search/${index + 1}`,
+        attempts: 2,
+        successes: index % 3 === 0 ? 1 : 2,
+        result_count: 20 + index,
+        rate_limits: index % 4 === 0 ? 1 : 0,
+        errors: 0,
+        avg_latency_ms: 220 + index,
+      })),
+    },
     mobile_summary: {
       headline: 'staging-smoke-level · accepted · VText/Trace coexistence',
       acceptance_state: 'accepted',
@@ -167,6 +180,22 @@ test('VText keeps focused editing stable while Trace is open on mobile desktop',
   const traceWindow = page.locator('[data-window]').filter({ has: page.locator('[data-trace-app]') }).last();
   await expect(traceWindow).toBeVisible({ timeout: 15000 });
   await expect(traceWindow.locator('[data-trace-mobile-tabs]')).toBeVisible();
+  const traceScrollOwners = await traceWindow.evaluate((root) => {
+    const nodes = [root, ...root.querySelectorAll('*')];
+    return nodes
+      .filter((node) => {
+        const style = getComputedStyle(node);
+        return /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 8;
+      })
+      .map((node) => ({
+        className: String(node.className || ''),
+        testId: node.getAttribute('data-trace-scroll-owner') != null ? 'trace-app' : node.getAttribute('data-window-content') != null ? 'window-content' : '',
+        scrollHeight: node.scrollHeight,
+        clientHeight: node.clientHeight,
+      }));
+  });
+  expect(traceScrollOwners).toHaveLength(1);
+  expect(traceScrollOwners[0].testId).toBe('trace-app');
   await traceWindow.locator('[data-trace-mobile-tabs] button', { hasText: 'Inspector' }).click();
   await expect(traceWindow.locator('[data-trace-inspector]')).toBeVisible();
 

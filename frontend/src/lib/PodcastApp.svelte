@@ -756,8 +756,9 @@
 
   .podcast-detail {
     display: grid;
-    grid-template-rows: auto minmax(220px, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 12px;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -787,7 +788,7 @@
     align-content: start;
     gap: 10px;
     padding-right: 4px;
-    min-height: 220px;
+    min-height: 0;
   }
 
   .episode-row {
@@ -828,6 +829,7 @@
 
   .podcast-player {
     display: grid;
+    flex: 0 0 auto;
     gap: 8px;
     border: 1px solid rgba(99, 153, 255, 0.42);
     border-radius: 16px;
@@ -942,11 +944,11 @@
     }
 
     .podcast-detail {
-      grid-template-rows: auto minmax(240px, 1fr) auto;
+      grid-template-rows: auto minmax(0, 1fr) auto;
     }
 
     .episode-list {
-      min-height: 240px;
+      min-height: 0;
     }
   }
 </style>
