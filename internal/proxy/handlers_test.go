@@ -2684,9 +2684,9 @@ func TestVMctlDeny_PublicVMctlBlocked(t *testing.T) {
 	}
 }
 
-// TestVMctlRouting_HealthReportsVMctlStatus tests that proxy health includes
-// vmctl routing status when enabled.
-func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
+// TestVMctlRouting_HealthReportsRedactedVMctlStatus tests that proxy health
+// includes only coarse vmctl status when routing is enabled.
+func TestVMctlRouting_HealthReportsRedactedVMctlStatus(t *testing.T) {
 	handler, _, _, _ := testVMctlProxyEnv(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -2704,17 +2704,14 @@ func TestVMctlRouting_HealthReportsVMctlStatus(t *testing.T) {
 	if result.VMctlRouting != "enabled" {
 		t.Errorf("expected vmctl_routing=enabled, got %s", result.VMctlRouting)
 	}
-	if result.VMctlURL == "" {
-		t.Error("expected non-empty vmctl_url")
+	if result.VMctlStatus != "ok" {
+		t.Errorf("expected vmctl_status=ok, got %s", result.VMctlStatus)
 	}
-	if result.VMctlHealth == nil {
-		t.Fatal("expected vmctl health summary")
-	}
-	if result.VMctlHealth.Reclaim.Mode != vmctl.PressureReclaimModeOff {
-		t.Fatalf("vmctl reclaim mode = %s, want off", result.VMctlHealth.Reclaim.Mode)
-	}
-	if result.VMctlHealth.Warmness.Policy.PrimaryKeepaliveMode != vmctl.PrimaryKeepaliveModeOff {
-		t.Fatalf("vmctl warmness mode = %s, want off", result.VMctlHealth.Warmness.Policy.PrimaryKeepaliveMode)
+	body := w.Body.String()
+	for _, forbidden := range []string{"vmctl_url", "vmctl_health", "active_vms", "total_ownerships", "memory_available_bytes", "sandbox_url", "reclaim", "warmness"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("health leaked %q in %s", forbidden, body)
+		}
 	}
 }
 

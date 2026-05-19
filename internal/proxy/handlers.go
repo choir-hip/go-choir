@@ -46,19 +46,18 @@ type errorResponse struct {
 }
 
 // proxyHealthResponse is the JSON structure returned by the proxy /health
-// endpoint. It includes the proxy status, the upstream sandbox
-// reachability status, and vmctl routing status, making the
-// protected-request backend health observable for VAL-DEPLOY-008.
+// endpoint. It intentionally exposes only coarse service status and deployed
+// build identity; host pressure, global VM inventory, vmctl URLs, and raw VM
+// handles must remain off browser-public surfaces.
 type proxyHealthResponse struct {
-	Status        string                   `json:"status"`
-	Service       string                   `json:"service"`
-	Upstream      string                   `json:"upstream"`
-	VMctlRouting  string                   `json:"vmctl_routing,omitempty"`
-	VMctlURL      string                   `json:"vmctl_url,omitempty"`
-	VMctlHealth   *proxyVMctlHealthSummary `json:"vmctl_health,omitempty"`
-	Lifecycle     lifecycleHealthSummary   `json:"lifecycle,omitempty"`
-	Build         buildinfo.Info           `json:"build"`
-	UpstreamBuild *buildinfo.Info          `json:"upstream_build,omitempty"`
+	Status        string                 `json:"status"`
+	Service       string                 `json:"service"`
+	Upstream      string                 `json:"upstream"`
+	VMctlRouting  string                 `json:"vmctl_routing,omitempty"`
+	VMctlStatus   string                 `json:"vmctl_status,omitempty"`
+	Lifecycle     lifecycleHealthSummary `json:"lifecycle,omitempty"`
+	Build         buildinfo.Info         `json:"build"`
+	UpstreamBuild *buildinfo.Info        `json:"upstream_build,omitempty"`
 }
 
 type proxyVMctlHealthSummary struct {
@@ -801,10 +800,10 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	// Report vmctl routing status (VAL-VM-002).
 	if h.cfg.VmctlRoutingEnabled() {
 		resp.VMctlRouting = "enabled"
-		resp.VMctlURL = h.cfg.VmctlURL
 		if vmctlHealth, ok := h.probeVMctlHealth(); ok {
-			resp.VMctlHealth = vmctlHealth
+			resp.VMctlStatus = vmctlHealth.Status
 		} else {
+			resp.VMctlStatus = "unavailable"
 			resp.Status = "degraded"
 		}
 	}

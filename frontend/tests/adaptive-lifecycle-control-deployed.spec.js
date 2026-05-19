@@ -109,8 +109,14 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
 
   const health = await fetchJSON(page, '/health');
   expect(health.status).toBe(200);
-  expect(health.body?.vmctl_health?.warmness?.policy?.primary_keepalive_mode).toBe('under-capacity');
-  expect(health.body?.vmctl_health?.warmness?.by_class?.primary || 0).toBeGreaterThan(0);
+  expect(health.body?.vmctl_routing).toBe('enabled');
+  expect(health.body?.vmctl_status).toBe('ok');
+  const healthText = JSON.stringify(health.body);
+  expect(healthText).not.toContain('vmctl_health');
+  expect(healthText).not.toContain('vmctl_url');
+  expect(healthText).not.toContain('active_vms');
+  expect(healthText).not.toContain('total_ownerships');
+  expect(healthText).not.toContain('memory_available_bytes');
   expect(health.body?.lifecycle?.stages || []).toEqual(expect.arrayContaining([
     expect.objectContaining({ stage: 'bootstrap.resolve' }),
     expect.objectContaining({ stage: 'bootstrap.total' }),
@@ -126,7 +132,7 @@ test('adaptive lifecycle control deployed product path', async ({ page }, testIn
       returning_vm: returningBootstrap.sandbox_id,
       prewarm_requests: prewarmRequests.length,
       lifecycle_stages: health.body.lifecycle?.stages || [],
-      warmness: health.body.vmctl_health?.warmness || null,
+      vmctl_status: health.body.vmctl_status || null,
     }, null, 2),
   });
 
