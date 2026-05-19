@@ -174,6 +174,58 @@ async function appGeometry(page, viewer, app, viewportLabel, phase) {
   return metrics;
 }
 
+async function expectFloatingNavAtEdges(viewer, app, viewportLabel) {
+  const metrics = await viewer.evaluate((root) => {
+    const rootBox = root.getBoundingClientRect();
+    return Array.from(root.querySelectorAll('[data-pdf-page-nav] button, [data-epub-page-nav] button')).map((button) => {
+      const rect = button.getBoundingClientRect();
+      const leftInset = rect.left - rootBox.left;
+      const rightInset = rootBox.right - rect.right;
+      const nearLeft = Math.abs(leftInset) <= Math.abs(rightInset);
+      return {
+        width: Math.round(rect.width),
+        edgeDistance: Math.round(Math.min(Math.abs(leftInset), Math.abs(rightInset))),
+        insideDepth: Math.round(nearLeft ? rect.right - rootBox.left : rootBox.right - rect.left),
+      };
+    });
+  });
+  for (const metric of metrics) {
+    expect(metric.width, `${app} ${viewportLabel} nav button width`).toBeLessThanOrEqual(34);
+    expect(metric.edgeDistance, `${app} ${viewportLabel} nav button edge distance`).toBeLessThanOrEqual(18);
+    expect(metric.insideDepth, `${app} ${viewportLabel} nav button content intrusion`).toBeLessThanOrEqual(24);
+  }
+}
+
+async function pinchPdfStage(page, viewer) {
+  const stage = viewer.locator('[data-pdf-stage]');
+  const box = await stage.boundingBox();
+  expect(box, 'PDF stage should have a box before pinch').toBeTruthy();
+  const y = Math.round(box.y + box.height * 0.5);
+  const startLeft = Math.round(box.x + box.width * 0.46);
+  const startRight = Math.round(box.x + box.width * 0.54);
+  const endLeft = Math.round(box.x + box.width * 0.34);
+  const endRight = Math.round(box.x + box.width * 0.66);
+  const client = await page.context().newCDPSession(page);
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { id: 1, x: startLeft, y, radiusX: 2, radiusY: 2, force: 1 },
+      { id: 2, x: startRight, y, radiusX: 2, radiusY: 2, force: 1 },
+    ],
+  });
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      { id: 1, x: endLeft, y, radiusX: 2, radiusY: 2, force: 1 },
+      { id: 2, x: endRight, y, radiusX: 2, radiusY: 2, force: 1 },
+    ],
+  });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(viewer, 'PDF pinch should switch to explicit zoom percent').toHaveAttribute('data-pdf-zoom-mode', /^[0-9]+$/, {
+    timeout: 5_000,
+  });
+}
+
 async function expectStageOccupancy(page, viewer, app, viewportLabel, threshold) {
   const details = viewer.locator('details');
   const detailCount = await details.count();
@@ -196,6 +248,7 @@ async function expectStageOccupancy(page, viewer, app, viewportLabel, threshold)
     expect(chrome.text, `${app} ${viewportLabel} closed chrome label`).not.toMatch(/Controls|Info|Source|Provenance/i);
   }
   await expect(viewer.locator('[data-media-open-source]').first()).not.toBeVisible();
+  await expectFloatingNavAtEdges(viewer, app, viewportLabel);
 
   const before = await appGeometry(page, viewer, app, viewportLabel, 'closed');
   expect(before.ratio, `${app} ${viewportLabel} stage ratio`).toBeGreaterThanOrEqual(threshold);
@@ -292,6 +345,9 @@ for (const viewport of [
     for (const reference of promptRoutedApps) {
       const viewer = await openPromptRoutedApp(page, reference);
       await expectStageOccupancy(page, viewer, reference.app, viewport.label, reference.threshold);
+      if (reference.app === 'pdf' && viewport.label === 'mobile390') {
+        await pinchPdfStage(page, viewer);
+      }
     }
   });
 }

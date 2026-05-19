@@ -30,6 +30,10 @@
   let renderSeq = 0;
   let activeRenderTask = null;
   let activeRenderPromise = null;
+  let lastPdfScale = 1;
+  let pinchStartDistance = 0;
+  let pinchStartZoomPercent = 100;
+  let pinchZoomFrame = 0;
   let loadedSourceKey = '';
   let resizeObserver = null;
 
@@ -119,6 +123,44 @@
     return clampNumber((Number(mode) || 100) / 100, 0.2, 5);
   }
 
+  function touchDistance(touches) {
+    const first = touches[0];
+    const second = touches[1];
+    if (!first || !second) return 0;
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+  }
+
+  function currentZoomPercent() {
+    return clampNumber(Math.round(lastPdfScale * 100), 40, 400);
+  }
+
+  function renderZoomPercent(percent) {
+    pdfZoom = String(clampNumber(Math.round(percent), 40, 400));
+    if (pinchZoomFrame) cancelAnimationFrame(pinchZoomFrame);
+    pinchZoomFrame = requestAnimationFrame(() => {
+      pinchZoomFrame = 0;
+      void renderCurrentPage();
+    });
+  }
+
+  function handlePdfTouchStart(event) {
+    if (event.touches.length !== 2) return;
+    pinchStartDistance = touchDistance(event.touches);
+    pinchStartZoomPercent = currentZoomPercent();
+  }
+
+  function handlePdfTouchMove(event) {
+    if (event.touches.length !== 2 || !pinchStartDistance) return;
+    event.preventDefault();
+    const nextDistance = touchDistance(event.touches);
+    if (!nextDistance) return;
+    renderZoomPercent(pinchStartZoomPercent * (nextDistance / pinchStartDistance));
+  }
+
+  function handlePdfTouchEnd(event) {
+    if (event.touches.length < 2) pinchStartDistance = 0;
+  }
+
   async function renderCurrentPage() {
     const seq = ++renderSeq;
     if (!pdfDoc || !canvasEl) return;
@@ -139,6 +181,7 @@
       const page = await pdfDoc.getPage(pdfPage);
       if (seq !== renderSeq) return;
       const scale = zoomScale(page, pdfZoom);
+      lastPdfScale = scale;
       const viewport = page.getViewport({ scale });
       const outputScale = Math.max(1, window.devicePixelRatio || 1);
       const canvas = canvasEl;
@@ -226,11 +269,14 @@
       });
       if (stageEl) resizeObserver.observe(stageEl);
     }
-    return () => resizeObserver?.disconnect();
+    return () => {
+      resizeObserver?.disconnect();
+      if (pinchZoomFrame) cancelAnimationFrame(pinchZoomFrame);
+    };
   });
 </script>
 
-<section class="pdf-app" data-media-app data-media-kind="pdf" data-pdf-app>
+<section class="pdf-app" data-media-app data-media-kind="pdf" data-pdf-app data-pdf-zoom-mode={pdfZoom}>
   {#if loading && !pdfDoc}
     <p class="pdf-status">Loading PDF...</p>
   {:else if error}
@@ -241,7 +287,16 @@
   {:else if !source.displayUrl}
     <p class="pdf-status">No readable PDF source is attached to this window.</p>
   {:else}
-    <div class="pdf-stage" data-media-stage data-pdf-stage bind:this={stageEl}>
+    <div
+      class="pdf-stage"
+      data-media-stage
+      data-pdf-stage
+      bind:this={stageEl}
+      on:touchstart={handlePdfTouchStart}
+      on:touchmove|nonpassive={handlePdfTouchMove}
+      on:touchend={handlePdfTouchEnd}
+      on:touchcancel={handlePdfTouchEnd}
+    >
       <div class="pdf-page-shell" class:rendering data-pdf-reader data-pdf-rendered={rendered ? 'true' : 'false'}>
         <canvas bind:this={canvasEl} data-pdf-canvas aria-label={`Page ${pdfPage} of ${pageCount || '?'}`}></canvas>
       </div>
@@ -325,22 +380,23 @@
     position: absolute;
     z-index: 4;
     top: 10px;
-    left: 10px;
+    left: 0;
     width: max-content;
     max-width: min(720px, calc(100% - 20px));
     max-height: calc(100% - 20px);
     color: #cbd5e1;
     overflow: auto;
+    transform: translateX(-34%);
   }
 
   .pdf-controls summary {
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     place-items: center;
     border: 1px solid rgba(99, 153, 255, 0.28);
     border-radius: 999px;
-    background: rgba(8, 14, 28, 0.68);
+    background: rgba(8, 14, 28, 0.54);
     backdrop-filter: blur(12px);
     cursor: pointer;
     font-size: 0;
@@ -354,15 +410,17 @@
   }
 
   .pdf-controls summary span {
-    font-size: 1rem;
+    font-size: 0.92rem;
     line-height: 1;
   }
 
   .pdf-controls[open] {
+    left: 10px;
     border: 1px solid rgba(99, 153, 255, 0.28);
     border-radius: 12px;
     background: rgba(8, 14, 28, 0.86);
     backdrop-filter: blur(12px);
+    transform: none;
   }
 
   .pdf-toolbar {
@@ -430,6 +488,8 @@
     padding: 10px;
     background: #030712;
     overflow: auto;
+    touch-action: pan-x pan-y;
+    overscroll-behavior: contain;
   }
 
   .pdf-page-shell {
@@ -467,30 +527,38 @@
     position: absolute;
     inset: 0;
     z-index: 3;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
     pointer-events: none;
   }
 
   .pdf-page-nav button {
     display: grid;
-    width: 40px;
-    height: 56px;
+    position: absolute;
+    top: 50%;
+    width: 30px;
+    height: 54px;
     place-items: center;
     border: 1px solid rgba(126, 180, 255, 0.22);
     border-radius: 999px;
-    background: rgba(5, 10, 22, 0.44);
+    background: rgba(5, 10, 22, 0.34);
     color: #eaf2ff;
     cursor: pointer;
     font: inherit;
     font-size: 1.3rem;
     font-weight: 900;
     line-height: 1;
-    opacity: 0.46;
+    opacity: 0.34;
     pointer-events: auto;
     backdrop-filter: blur(10px);
+  }
+
+  .pdf-page-nav button:first-child {
+    left: 0;
+    transform: translate(-42%, -50%);
+  }
+
+  .pdf-page-nav button:last-child {
+    right: 0;
+    transform: translate(42%, -50%);
   }
 
   .pdf-page-nav button:hover:not(:disabled),
@@ -538,14 +606,19 @@
     color: #a8adbd;
   }
 
+  .pdf-meta:not([open]) {
+    right: 0;
+    transform: translateX(34%);
+  }
+
   .pdf-meta summary {
     display: grid;
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     place-items: center;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 999px;
-    background: rgba(10, 15, 27, 0.64);
+    background: rgba(10, 15, 27, 0.52);
     backdrop-filter: blur(12px);
     cursor: pointer;
     color: #dbeafe;
@@ -561,18 +634,20 @@
   }
 
   .pdf-meta summary span {
-    font-size: 0.95rem;
+    font-size: 0.86rem;
     line-height: 1;
   }
 
   .pdf-meta[open] {
     left: 10px;
+    right: 10px;
     width: auto;
     border: 1px solid rgba(120, 135, 170, 0.2);
     border-radius: 10px;
     padding: 7px 9px;
     background: rgba(10, 15, 27, 0.76);
     backdrop-filter: blur(12px);
+    transform: none;
   }
 
   .pdf-meta h2 {
@@ -625,9 +700,12 @@
     }
 
     .pdf-controls {
-      top: 8px;
-      left: 8px;
+      top: 6px;
       max-width: calc(100% - 16px);
+    }
+
+    .pdf-controls[open] {
+      left: 6px;
     }
 
     .pdf-toolbar {
