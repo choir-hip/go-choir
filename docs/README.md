@@ -67,9 +67,9 @@ Use these buckets when reading or editing docs:
   MissionGradient for preserving the same overlapping floating-window desktop
   on mobile and desktop, introducing Shelf/Desk vocabulary and Desktop
   Overview v0.
-- `docs/mission-desktop-overview-heavy-session-v0.md` - proposed successor
+- `docs/mission-desktop-overview-heavy-session-v0.md` - completed
   MissionGradient for making Desktop Overview spatially useful under heavy
-  restored real-user sessions with bounded suspension/recovery controls.
+  restored sessions with bounded suspension/recovery controls.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -95,9 +95,9 @@ Use these buckets when reading or editing docs:
   hydration, and safe computer recovery controls.
 - `docs/mission-mobile-real-desktop-overview-v0.md` - completed mobile real
   desktop and Desktop Overview v0 proof.
-- `docs/mission-desktop-overview-heavy-session-v0.md` - proposed next shell
-  mission for heavy-session Desktop Overview, bounded previews, suspension,
-  and recovery.
+- `docs/mission-desktop-overview-heavy-session-v0.md` - completed shell
+  mission for heavy-session Desktop Overview, bounded suspension, recovery,
+  and Compute Monitor handoff.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -

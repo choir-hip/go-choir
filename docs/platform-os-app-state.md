@@ -2,8 +2,8 @@
 
 **Status:** canonical platform-level state ledger
 **Last updated:** 2026-05-19
-**Baseline checked:** mobile real desktop baseline
-`79b14e2cf6057ee33154dd1d2700ae8cf26ce355`
+**Baseline checked:** heavy-session Desktop Overview baseline
+`b148461dafc6125fa321de9b10814cdc6af285b6`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -125,9 +125,9 @@ Known gaps:
   for real prompt content;
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
   tasteful, configurable desktop environment;
-- Desktop Overview v0 is card/spatial-state based, not live thumbnail based.
-  It is proven for four-window mobile/desktop multitasking, but not yet for
-  heavy restored real-user sessions.
+- Desktop Overview is card/spatial-state based, not live thumbnail based. It is
+  proven for four-window mobile/desktop multitasking and generated 12-window
+  restored heavy sessions. Real long-lived user accounts still need proof.
 
 ## App Catalog
 
@@ -214,6 +214,26 @@ Recent deployed platform proof for mobile real desktop and Desktop Overview:
 - proof covered Files, VText, Trace, and Podcast as overlapping non-fullscreen
   windows on `390x844` and desktop, with drag, resize, minimize, restore,
   Desktop Overview focus, and background suspension controls.
+
+Recent deployed platform proof for heavy-session Desktop Overview:
+
+- behavior commit: `b148461dafc6125fa321de9b10814cdc6af285b6`;
+- CI/deploy run:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26131606449`;
+- staging health reported proxy and sandbox commit
+  `b148461dafc6125fa321de9b10814cdc6af285b6`;
+- deployed heavy-session Playwright:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/desktop-overview-heavy-session.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+- result: `2 passed`;
+- proof opened 12 real app windows through the Desk, persisted and reloaded the
+  session, exercised restore recovery, and verified on both `390x844` and
+  `1280x900`;
+- DOM metrics: 12 visible windows, 11 heavy windows, 10 suspended windows, 1
+  mounted heavy app body, 66 overlap pairs, 12 Overview cards, 12 Overview map
+  windows, pressure `elevated`;
+- proof covered Overview focus/resume, background suspension, Compute Monitor
+  handoff, and keep-active-only recovery without fake thumbnails, host/global
+  telemetry, broad kill controls, or phone-mode simplification.
 
 ## Divergence Plan
 

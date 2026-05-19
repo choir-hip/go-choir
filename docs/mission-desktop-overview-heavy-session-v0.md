@@ -1,12 +1,13 @@
 # MissionGradient: Desktop Overview Heavy Session v0
 
-**Status:** active
+**Status:** complete
 **Date:** 2026-05-19
 **Operator:** Codex supervising staging, product-path Playwright, git, CI, deploy, and owner review
 **Predecessor:** [mission-mobile-real-desktop-overview-v0.md](mission-mobile-real-desktop-overview-v0.md)
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 **Starting deployed behavior baseline:** `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`
 **Latest main test-harness commit:** `5820a88`
+**Completed platform behavior commit:** `b148461dafc6125fa321de9b10814cdc6af285b6`
 
 ## One-Line Goal String
 
@@ -347,49 +348,120 @@ Required final evidence:
 
 Use this section during execution. A checkpoint is not completion.
 
-**Status:** `checkpoint_incomplete`
+**Status:** `complete`
 
-**Last checkpoint:** predecessor mission completed mobile real-desktop v0 at
-`79b14e2cf6057ee33154dd1d2700ae8cf26ce355` with staging proof for four
-overlapping windows and Desktop Overview actions.
+**Last checkpoint:** platform behavior commit
+`b148461dafc6125fa321de9b10814cdc6af285b6` landed and deployed to staging with
+heavy-session Desktop Overview proof on desktop and `390x844` mobile.
 
-**Current artifact state:** Desktop Overview v0 exists and this mission has
-local implementation changes in progress for heavy-session pressure metrics,
-bounded recovery actions, and a staged Playwright proof harness. It is not yet
-proven on staging as a heavy-session control surface.
+**Current artifact state:** Desktop Overview now reports heavy-session pressure
+from real window/app-body state, remains spatial with dense 12-window maps and
+cards, exposes mounted/heavy/suspended/minimized/active state, and offers
+bounded recovery actions: suspend background apps, focus/resume a suspended
+window, open Compute Monitor, keep active window only, and clear saved windows
+behind auth.
 
-**What shipped:** none in this mission yet; platform changes still require
-commit, CI, deploy, staging identity, and deployed proof.
+**What shipped:**
 
-**What was proven:** predecessor proof only. This mission has local frontend
-build/spec syntax checks, but no deployed heavy-session proof yet.
+- `DesktopOverview.svelte` gained mounted-heavy, minimized, pressure, active
+  window, dense map, state badges, and safe recovery action metrics;
+- `Desktop.svelte` wires Overview's authenticated "Keep active only" action to
+  the existing state-preserving saved-window reducer;
+- `desktop-overview-heavy-session.spec.js` opens 12 real app windows through the
+  Desk, persists/reloads them, handles restore recovery, asserts suspension and
+  Overview metrics, checks Compute Monitor handoff, and verifies keep-active
+  recovery;
+- MissionGradient checkpoint semantics were updated in the repo skill copy.
+
+**What was proven:**
+
+- local checks:
+  - `npm run build`;
+  - `npx playwright test tests/desktop-overview-heavy-session.spec.js --list`;
+  - local full product run was blocked by a missing local Dolt runtime store
+    under `/tmp/go-choir-m3/...`, so local proof was not used for staging
+    claims;
+- GitHub Actions run
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26131606449` completed
+  successfully;
+- staging `/health` reported proxy and sandbox commit
+  `b148461dafc6125fa321de9b10814cdc6af285b6`;
+- deployed heavy-session command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/desktop-overview-heavy-session.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line
+```
+
+- result: `2 passed`;
+- deployed regression command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line
+```
+
+- result: `2 passed`;
+- mobile `390x844` heavy proof restored 12 visible overlapping windows, 11
+  heavy windows, 10 suspended windows, 1 mounted heavy body, 66 overlap pairs,
+  12 Overview cards, 12 Overview map windows, and pressure `elevated`;
+- desktop `1280x900` heavy proof restored the same counts and verified the same
+  Overview action path;
+- Compute Monitor handoff opened a user-scoped recovery app, and the
+  keep-active action reduced saved/open windows to one without broad kill or
+  hidden state discard.
 
 **Unproven or partial claims:**
 
-- 12+ window mobile overview usability;
-- returning/restored heavy-session behavior;
-- bounded app body suspension under restore pressure;
-- live preview privacy/memory feasibility;
-- Overview-to-Compute-Monitor recovery handoff under load.
+- no live thumbnails were attempted. Spatial/state Overview was sufficient for
+  this proof and avoids privacy/memory risk;
+- suspension remains app-body level, not app-owned process/resource accounting;
+- this proof uses generated test users, not a long-lived account with days of
+  accumulated real windows;
+- Overview has not yet gained keyboard navigation beyond Escape or richer
+  accessibility semantics.
 
-**Belief-state changes:** update during execution.
+**Belief-state changes:**
 
-**Remaining error field:** heavy-session spatial overview, suspension policy,
-restore/recovery controls, bounded preview feasibility.
+- The heavy-session problem is now mostly a policy and information-design
+  problem, not a mobile-ontology problem. The same overlapping desktop can carry
+  12 restored windows on mobile when heavy background app bodies remain
+  suspended.
+- Live previews are not required for the next step; state density and bounded
+  recovery actions are already useful and cheaper.
 
-**Highest-impact remaining uncertainty:** whether Overview can manage a crowded
-restored desktop without hydrating expensive hidden app bodies.
+**Remaining error field:** app-owned resource accounting, long-lived real-user
+session replay, keyboard/accessibility depth, and future bounded preview
+feasibility.
 
-**Next executable probe:** create a staged heavy-session Playwright proof with
-12+ mixed app windows and capture baseline metrics/screenshots before mutation.
+**Highest-impact remaining uncertainty:** whether real user accounts with
+heterogeneous app-owned state, active media, browser snapshots, Trace runs, and
+candidate windows produce the same bounded restore behavior as the generated
+12-window proof.
 
-**Suggested resume goal string:** use the one-line goal string above unless
-target-level learning updates the route.
+**Next executable probe:** build app-owned resource/restore metadata and replay
+a real returning-account desktop with heterogeneous app state, then decide
+whether Overview needs grouping, keyboard navigation, or bounded live previews.
 
-**Evidence artifact refs:** pending deployed proof.
+**Suggested resume goal string:**
 
-**Rollback refs:** start from `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`;
-future behavior commits must name revert commands here.
+```text
+/goal Run docs/mission-overview-real-user-resource-accounting-v0.md as a Codex-operated MissionGradient mission: make Desktop Overview and Compute Monitor understand app-owned restore/resource weight under real returning-account sessions. Preserve the overlapping desktop ontology, use product-path staging proof, add app-owned resource metadata where safe, improve keyboard/accessibility navigation, and only explore live previews after privacy and memory budgets are explicit. Stop only with deployed proof or an honest checkpoint_incomplete/blocker state.
+```
+
+**Evidence artifact refs:**
+
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-99cd8-red-12-window-heavy-session-chromium/mobile-heavy-session-restored-heavy-windows.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-99cd8-red-12-window-heavy-session-chromium/restore-recovery-gate.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-99cd8-red-12-window-heavy-session-chromium/mobile-heavy-session-heavy-overview.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-99cd8-red-12-window-heavy-session-chromium/mobile-heavy-session-compute-monitor-handoff.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-ea3d1-red-12-window-heavy-session-chromium/desktop-heavy-session-restored-heavy-windows.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-ea3d1-red-12-window-heavy-session-chromium/desktop-heavy-session-heavy-overview.png`
+- `/Users/wiz/go-choir/frontend/test-results/desktop-overview-heavy-ses-ea3d1-red-12-window-heavy-session-chromium/desktop-heavy-session-compute-monitor-handoff.png`
+
+**Rollback refs:**
+
+```bash
+git revert b148461
+```
 
 ## Forbidden Shortcuts
 
