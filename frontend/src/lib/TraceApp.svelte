@@ -2026,7 +2026,8 @@
       color: #eff6ff;
     }
 
-    .trace-app:not([data-mobile-panel='runs']) .trace-sidebar,
+    .trace-app[data-mobile-panel='timeline'] .trace-sidebar,
+    .trace-app[data-mobile-panel='inspector'] .trace-sidebar,
     .trace-app[data-mobile-panel='runs'] .trace-main {
       display: none;
     }
