@@ -25,6 +25,15 @@ async function openFilesApp(page) {
   await page.locator('[data-file-list]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
+async function openMediaControls(viewer, selector) {
+  const controls = viewer.locator(selector);
+  await expect(controls).toBeVisible();
+  await expect(controls).toHaveJSProperty('open', false);
+  await controls.locator('summary').click();
+  await expect(controls).toHaveJSProperty('open', true);
+  return controls;
+}
+
 // Helper: seed test directories via API (authed)
 async function seedTestFiles(page) {
   const results = await page.evaluate(async () => {
@@ -332,11 +341,11 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   await page.locator('[data-file-item]').filter({ hasText: 'mission-report.pdf' }).click();
   const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
   await expect(pdfViewer).toBeVisible({ timeout: 5000 });
-  await expect(pdfViewer.locator('[data-pdf-toolbar]')).toBeVisible();
+  const pdfControls = await openMediaControls(pdfViewer, '[data-pdf-toolbar]');
   await expect(pdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
-  await expect(pdfViewer.locator('[data-pdf-page-count]')).toContainText('1 / 1');
-  await pdfViewer.locator('[data-pdf-search]').fill('Mission report');
-  await expect(pdfViewer.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
+  await expect(pdfControls.locator('[data-pdf-page-count]')).toContainText('1 / 1');
+  await pdfControls.locator('[data-pdf-search]').fill('Mission report');
+  await expect(pdfControls.locator('[data-pdf-search-count]')).toContainText('1 matches', { timeout: 10_000 });
 
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 
@@ -346,7 +355,8 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   await expect(epubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
   await expect(epubViewer.locator('[data-epub-chapter-count]')).toContainText('1 / 2');
   await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Reader Proof');
-  await epubViewer.locator('[data-epub-toc]').selectOption('1');
+  const epubControls = await openMediaControls(epubViewer, '[data-epub-toolbar]');
+  await epubControls.locator('[data-epub-toc]').selectOption('1');
   await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
 
   expect(downloads).toEqual([]);
