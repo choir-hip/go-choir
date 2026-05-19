@@ -1148,6 +1148,51 @@ func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_WarmAlwaysOnResumesHibernatedPrimaryOnly(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	mock := &mockVMManager{}
+	reg.SetVMManager(mock)
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{
+		AlwaysOnUserIDs: map[string]bool{"premium-user": true},
+	})
+
+	premium, err := reg.ResolveOrAssign("premium-user")
+	if err != nil {
+		t.Fatalf("resolve premium-user: %v", err)
+	}
+	if err := reg.HibernateVM("premium-user"); err != nil {
+		t.Fatalf("hibernate premium-user: %v", err)
+	}
+	if _, err := reg.ResolveOrAssign("ordinary-user"); err != nil {
+		t.Fatalf("resolve ordinary-user: %v", err)
+	}
+	if err := reg.HibernateVM("ordinary-user"); err != nil {
+		t.Fatalf("hibernate ordinary-user: %v", err)
+	}
+	if _, err := reg.ForkDesktop("premium-user", PrimaryDesktopID, "candidate-a"); err != nil {
+		t.Fatalf("fork candidate: %v", err)
+	}
+	if err := reg.HibernateVMForDesktop("premium-user", "candidate-a"); err != nil {
+		t.Fatalf("hibernate candidate: %v", err)
+	}
+
+	if warmed := reg.WarmAlwaysOnDesktops(); warmed != 1 {
+		t.Fatalf("warmed = %d, want 1", warmed)
+	}
+	if len(mock.resumes) != 1 || mock.resumes[0] != premium.VMID {
+		t.Fatalf("resumes = %+v, want only premium primary %s", mock.resumes, premium.VMID)
+	}
+	if got := reg.GetOwnership("premium-user"); got == nil || got.State != VMStateActive {
+		t.Fatalf("premium primary = %+v, want active", got)
+	}
+	if got := reg.GetOwnership("ordinary-user"); got == nil || got.State != VMStateHibernated {
+		t.Fatalf("ordinary primary = %+v, want hibernated", got)
+	}
+	if got := reg.GetOwnershipForDesktop("premium-user", "candidate-a"); got == nil || got.State != VMStateHibernated {
+		t.Fatalf("premium candidate = %+v, want hibernated", got)
+	}
+}
+
 func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
 	srv, reg := newTestServer(t)
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{

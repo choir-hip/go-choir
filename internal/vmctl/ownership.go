@@ -596,6 +596,9 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		interval = time.Minute
 	}
 	sweep := func() {
+		if warmed := r.WarmAlwaysOnDesktops(); warmed > 0 {
+			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)
+		}
 		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
 			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
 				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
@@ -2039,6 +2042,55 @@ func (r *OwnershipRegistry) StopIdleVMs() int {
 		}
 	}
 	return stopped
+}
+
+// WarmAlwaysOnDesktops resumes explicitly configured always-on primary
+// desktops that already have an ownership record. It intentionally does not
+// create new ownerships for configured users and does not warm candidate
+// desktops or worker VMs.
+func (r *OwnershipRegistry) WarmAlwaysOnDesktops() int {
+	r.mu.RLock()
+	cfg := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
+	if len(cfg.AlwaysOnUserIDs) == 0 {
+		r.mu.RUnlock()
+		return 0
+	}
+	type warmTarget struct {
+		userID    string
+		desktopID string
+		vmID      string
+	}
+	targets := make([]warmTarget, 0)
+	for _, own := range r.ownerships {
+		if own == nil {
+			continue
+		}
+		if own.Kind == VMKindWorker || own.DesktopID != PrimaryDesktopID || !own.Published {
+			continue
+		}
+		if !cfg.AlwaysOnUserIDs[strings.TrimSpace(own.UserID)] {
+			continue
+		}
+		if own.State != VMStateStopped && own.State != VMStateHibernated {
+			continue
+		}
+		targets = append(targets, warmTarget{
+			userID:    own.UserID,
+			desktopID: own.DesktopID,
+			vmID:      own.VMID,
+		})
+	}
+	r.mu.RUnlock()
+
+	warmed := 0
+	for _, target := range targets {
+		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
+			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
+			continue
+		}
+		warmed++
+	}
+	return warmed
 }
 
 // SetSandboxCredential stores the gateway credential for a VM's sandbox.
