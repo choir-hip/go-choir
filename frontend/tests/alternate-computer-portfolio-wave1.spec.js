@@ -168,15 +168,17 @@ async function traceSnapshot(page, trajectoryId) {
   return res.ok ? res.json : { error: res.text, status: res.status };
 }
 
-async function synthesizeRunAcceptance(page, lane, marker, wave) {
+async function synthesizeRunAcceptance(page, lane, marker, wave, options = {}) {
+  const trajectoryID = options.trajectoryID || lane.submission_id;
+  const targetSuffix = options.targetSuffix ? `-${safeID(options.targetSuffix)}` : '';
   const res = await postJSON(page, '/api/run-acceptances/synthesize', {
-    target_mission_id: `mission-alternate-computer-ux-experiment-portfolio-v0-wave${wave}-${lane.id}`,
+    target_mission_id: `mission-alternate-computer-ux-experiment-portfolio-v0-wave${wave}-${lane.id}${targetSuffix}`,
     source_prompt_or_objective: [
       `Wave ${wave} ${lane.name} portfolio lane.`,
       `Marker: ${marker}.`,
       lane.objective,
     ].join(' '),
-    trajectory_id: lane.submission_id,
+    trajectory_id: trajectoryID,
     staging_url: new URL(BASE_URL).origin,
   });
   if (res.ok) {
@@ -452,6 +454,7 @@ async function adoptPackageIntoRecipient(page, lane, pkg, marker) {
   const lineageEnd = await fetchJSON(page, `/api/computers/${encodeURIComponent(targetComputerID)}/source-lineage`);
   return {
     status: promoted.ok ? 'owner_pullable_experiment' : 'checkpoint_package',
+    trace_id: traceID,
     package: detail.json,
     adoption_initial: adoption,
     verified: verify.json,
@@ -555,11 +558,25 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
       const diagnostics = await traceDiagnostics(source.page, lane.submission_id);
       const matches = packagesResult.byLane[lane.id] || [];
       const pkg = matches[0] || null;
-      const runAcceptance = await synthesizeRunAcceptance(source.page, lane, marker, wave);
+      const sourceRunAcceptance = await synthesizeRunAcceptance(source.page, lane, marker, wave, {
+        trajectoryID: lane.submission_id,
+        targetSuffix: 'source',
+      });
       if (pkg) {
         const adoption = await adoptPackageIntoRecipient(recipient.page, lane, pkg, marker);
+        const recipientRunAcceptance = adoption.trace_id
+          ? await synthesizeRunAcceptance(recipient.page, lane, marker, wave, {
+            trajectoryID: adoption.trace_id,
+            targetSuffix: 'recipient',
+          })
+          : null;
+        const acceptedRecipientEvidence = recipientRunAcceptance?.state === 'accepted'
+          && ['promotion-level', 'continuation-level'].includes(recipientRunAcceptance?.acceptance_level || '');
+        const laneStatus = adoption.status === 'owner_pullable_experiment' && acceptedRecipientEvidence
+          ? 'owner_pullable_experiment'
+          : 'checkpoint_package';
         laneReports[lane.id] = {
-          status: adoption.status,
+          status: laneStatus,
           lane,
           prompt,
           trace_mobile_summary: trace.mobile_summary || null,
@@ -573,11 +590,13 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
             package_manifest_sha256: candidate.package_manifest_sha256,
           })),
           owner_recipient_adoption: adoption,
-          run_acceptance: runAcceptance,
+          run_acceptance: recipientRunAcceptance || sourceRunAcceptance,
+          source_run_acceptance: sourceRunAcceptance,
+          recipient_run_acceptance: recipientRunAcceptance,
           trace_diagnostics: diagnostics,
-          recommendation: adoption.status === 'owner_pullable_experiment'
+          recommendation: laneStatus === 'owner_pullable_experiment'
             ? 'iterate: package crossed into an owner-review recipient computer with build/adoption evidence'
-            : 'checkpoint: inspect verifier blocker before promotion',
+            : 'checkpoint: inspect verifier or run-acceptance blocker before promotion',
         };
       } else {
         const delegateBlocker = findDelegateBlocker(diagnostics);
@@ -587,7 +606,9 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           prompt,
           trace_mobile_summary: trace.mobile_summary || null,
           trace_diagnostics: diagnostics,
-          run_acceptance: runAcceptance,
+          run_acceptance: sourceRunAcceptance,
+          source_run_acceptance: sourceRunAcceptance,
+          recipient_run_acceptance: null,
           package_candidates: [],
           blocker: delegateBlocker || `No matching AppChangePackage for ${lane.appID} after ${PACKAGE_WAIT_MS}ms.`,
           recommendation: 'root-cause super/vsuper worker package publication before retrying this lane',
@@ -641,7 +662,8 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           `Status: ${laneReport.status}`,
           `Prompt submission: ${lane.submission_id}`,
           `Packages: ${(laneReport.package_candidates || []).map((pkg) => pkg.package_id).join(', ') || 'none'}`,
-          `Run acceptance: ${laneReport.run_acceptance?.acceptance_id || 'none'} ${laneReport.run_acceptance?.acceptance_level || ''} ${laneReport.run_acceptance?.state || ''}`.trim(),
+          `Source run acceptance: ${laneReport.source_run_acceptance?.acceptance_id || 'none'} ${laneReport.source_run_acceptance?.acceptance_level || ''} ${laneReport.source_run_acceptance?.state || ''}`.trim(),
+          `Recipient run acceptance: ${laneReport.recipient_run_acceptance?.acceptance_id || 'none'} ${laneReport.recipient_run_acceptance?.acceptance_level || ''} ${laneReport.recipient_run_acceptance?.state || ''}`.trim(),
           `Recommendation: ${laneReport.recommendation}`,
           laneReport.blocker ? `Blocker: ${laneReport.blocker}` : '',
         ].filter(Boolean);

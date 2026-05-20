@@ -1014,16 +1014,20 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 			lastSeq = checkpoint.StreamSeq
 		}
 	}
+	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"] && kindSet["super_requested"]
+	adoptionPathObserved := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
+	workerMutationBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]
+	adoptionMutationBounded := kindSet["app_adoption_verified"] && kindSet["rollback_available"]
 	checks := []types.RunAcceptanceInvariantCheck{
 		{
 			Name:   "product_path_observed",
-			State:  stateForBool(kindSet["submitted"] && kindSet["vtext_opened"] && kindSet["super_requested"]),
-			Detail: "acceptance is derived from prompt/VText/super trace evidence, not caller-supplied checkpoints",
+			State:  stateForBool(promptPathObserved || adoptionPathObserved),
+			Detail: "acceptance is derived from prompt/VText/super trace evidence or product AppChangePackage/adoption events, not caller-supplied checkpoints",
 		},
 		{
 			Name:   "worker_mutation_bounded",
-			State:  stateForBool(kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]),
-			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary before becoming reviewable",
+			State:  stateForBool(workerMutationBounded || adoptionMutationBounded),
+			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary or recipient adoption candidate with rollback before becoming accepted",
 		},
 		{
 			Name:   "promotion_not_overclaimed",

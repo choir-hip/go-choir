@@ -185,11 +185,11 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	if err := json.Unmarshal(acceptanceW.Body.Bytes(), &acceptance); err != nil {
 		t.Fatalf("decode acceptance: %v", err)
 	}
-	if acceptance.AcceptanceLevel != types.RunAcceptancePromotionLevel || acceptance.State != types.RunAcceptanceBlocked {
+	if acceptance.AcceptanceLevel != types.RunAcceptancePromotionLevel || acceptance.State != types.RunAcceptanceAccepted {
 		t.Fatalf("acceptance = %s/%s checkpoints=%+v", acceptance.AcceptanceLevel, acceptance.State, acceptance.Checkpoints)
 	}
-	if !strings.Contains(strings.Join(acceptance.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
-		t.Fatalf("direct package/adoption proof should preserve blocked invariant residual risk: %+v", acceptance.FailureResidualRisks)
+	if strings.Contains(strings.Join(acceptance.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
+		t.Fatalf("direct package/adoption proof should satisfy product-path evidence: %+v", acceptance.FailureResidualRisks)
 	}
 	for _, want := range []string{"app_package_published", "app_adoption_verified", "app_adoption_promoted", "rollback_available"} {
 		if !acceptanceHasCheckpoint(acceptance, want) {

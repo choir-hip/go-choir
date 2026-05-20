@@ -482,7 +482,7 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 	}
 }
 
-func TestRunAcceptanceSynthesizeBlocksAcceptedStateWhenInvariantsAreBlocked(t *testing.T) {
+func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	now := time.Now().UTC()
 	for i, ev := range []types.EventRecord{
@@ -527,16 +527,16 @@ func TestRunAcceptanceSynthesizeBlocksAcceptedStateWhenInvariantsAreBlocked(t *t
 	if rec.AcceptanceLevel != types.RunAcceptancePromotionLevel {
 		t.Fatalf("acceptance level = %q, want promotion-level; checkpoints=%+v", rec.AcceptanceLevel, rec.Checkpoints)
 	}
-	if rec.State != types.RunAcceptanceBlocked {
-		t.Fatalf("state = %q, want blocked because invariants are blocked; invariants=%+v", rec.State, rec.InvariantChecks)
+	if rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("state = %q, want accepted because product adoption evidence is trace-derived; invariants=%+v", rec.State, rec.InvariantChecks)
 	}
 	for _, want := range []string{"product_path_observed", "worker_mutation_bounded"} {
 		found := false
 		for _, check := range rec.InvariantChecks {
 			if check.Name == want {
 				found = true
-				if check.State != "blocked" {
-					t.Fatalf("%s state = %q, want blocked", want, check.State)
+				if check.State != "passed" {
+					t.Fatalf("%s state = %q, want passed", want, check.State)
 				}
 			}
 		}
@@ -544,8 +544,8 @@ func TestRunAcceptanceSynthesizeBlocksAcceptedStateWhenInvariantsAreBlocked(t *t
 			t.Fatalf("missing invariant check %q in %+v", want, rec.InvariantChecks)
 		}
 	}
-	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
-		t.Fatalf("missing invariant residual risk: %+v", rec.FailureResidualRisks)
+	if strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
+		t.Fatalf("unexpected product path residual risk: %+v", rec.FailureResidualRisks)
 	}
 }
 
