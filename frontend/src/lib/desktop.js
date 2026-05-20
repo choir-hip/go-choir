@@ -57,17 +57,21 @@ export async function fetchDesktopState() {
  * @param {object} state - The desktop state to save.
  * @param {Array} state.windows - Open windows.
  * @param {string} [state.active_window_id] - Currently focused window ID.
+ * @param {object} [options] - Fetch behavior options.
+ * @param {boolean} [options.keepalive] - Allow browser lifecycle flushes.
  * @returns {Promise<{ok: boolean, updated_at: string}>}
  * @throws {AuthRequiredError} If auth renewal fails.
  */
-export async function saveDesktopState(state) {
+export async function saveDesktopState(state, options = {}) {
+  const body = JSON.stringify({
+    windows: state.windows,
+    active_window_id: state.active_window_id || '',
+  });
   const res = await fetchWithRenewal('/api/desktop/state', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      windows: state.windows,
-      active_window_id: state.active_window_id || '',
-    }),
+    keepalive: options.keepalive === true && body.length < 60_000,
+    body,
   });
 
   if (!res.ok) {

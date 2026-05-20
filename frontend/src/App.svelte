@@ -23,7 +23,7 @@
 <script>
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
-  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer } from './lib/auth.js';
+  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession } from './lib/auth.js';
   import { DEFAULT_THEME, THEME_STORAGE_KEY, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in'} */
@@ -63,17 +63,7 @@
     const seq = ++sessionCheckSeq;
     const isCurrentCheck = () => seq === sessionCheckSeq;
     try {
-      const res = await fetch('/auth/session', {
-        method: 'GET',
-        credentials: 'include',
-      });
-      if (!isCurrentCheck()) return { authenticated: false, stale: true };
-      if (!res.ok) {
-        authState = 'signed_out';
-        currentUser = null;
-        return { authenticated: false };
-      }
-      const data = await res.json();
+      const data = await getSession();
       if (!isCurrentCheck()) return { authenticated: false, stale: true };
       if (data.authenticated && data.user) {
         authState = 'signed_in';

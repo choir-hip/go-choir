@@ -19,7 +19,7 @@ import {
   getSession,
 } from './helpers/auth.js';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 
 function uniqueEmail() {
   return `e2e-rehy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -149,6 +149,57 @@ test('expired access cookie renews through refresh rotation on reload', async ({
 
   // Live channel status should be visible.
   await expect(page.locator('[data-shell-live-status]')).toBeVisible();
+});
+
+test('concurrent frontend renewal attempts share one refresh rotation', async ({
+  page,
+  authenticator,
+  context,
+}) => {
+  test.skip(!BASE_URL.includes('localhost'), 'source module import coverage runs against the Vite dev server');
+  const email = uniqueEmail();
+
+  await page.goto(BASE_URL);
+  await registerPasskey(page, email, BASE_URL);
+  await page.reload();
+  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
+
+  await context.clearCookies({ name: 'choir_access' });
+
+  const result = await page.evaluate(async () => {
+    const auth = await import('/src/lib/auth.js');
+    const originalFetch = window.fetch.bind(window);
+    let sessionRequestCount = 0;
+    window.fetch = (input, init) => {
+      const rawURL = input instanceof Request ? input.url : String(input);
+      const path = new URL(rawURL, window.location.origin).pathname;
+      if (path === '/auth/session') {
+        sessionRequestCount += 1;
+      }
+      return originalFetch(input, init);
+    };
+
+    try {
+      const [first, second, third] = await Promise.all([
+        auth.renewSession(),
+        auth.renewSession(),
+        auth.renewSession(),
+      ]);
+      return {
+        sessionRequestCount,
+        renewed: [first.renewed, second.renewed, third.renewed],
+      };
+    } finally {
+      window.fetch = originalFetch;
+    }
+  });
+
+  expect(result.sessionRequestCount).toBe(1);
+  expect(result.renewed).toEqual([true, true, true]);
+
+  const session = await getSession(page, BASE_URL);
+  expect(session.authenticated).toBe(true);
+  expect(session.user.email).toBe(email);
 });
 
 test('live channel reconnects after successful renewal following access expiry', async ({

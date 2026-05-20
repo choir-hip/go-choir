@@ -240,12 +240,9 @@ export async function prewarmAuthenticatedComputer() {
 // Session helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Gets the current session state via GET /auth/session.
- *
- * @returns {Promise<{authenticated: boolean, user?: object}>}
- */
-export async function getSession() {
+let sessionRequestPromise = null;
+
+async function requestSessionState() {
   const res = await fetch('/auth/session', {
     method: 'GET',
     credentials: 'include',
@@ -254,6 +251,25 @@ export async function getSession() {
     throw new Error(`/auth/session failed: ${res.status}`);
   }
   return res.json();
+}
+
+function serializedSessionRequest() {
+  if (!sessionRequestPromise) {
+    sessionRequestPromise = requestSessionState()
+      .finally(() => {
+        sessionRequestPromise = null;
+      });
+  }
+  return sessionRequestPromise;
+}
+
+/**
+ * Gets the current session state via GET /auth/session.
+ *
+ * @returns {Promise<{authenticated: boolean, user?: object}>}
+ */
+export async function getSession() {
+  return serializedSessionRequest();
 }
 
 /**
@@ -300,14 +316,7 @@ export class AuthRequiredError extends Error {
  */
 export async function renewSession() {
   try {
-    const res = await fetch('/auth/session', {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      return { renewed: false };
-    }
-    const data = await res.json();
+    const data = await serializedSessionRequest();
     if (data.authenticated && data.user) {
       return { renewed: true, user: data.user };
     }

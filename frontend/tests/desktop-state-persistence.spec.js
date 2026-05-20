@@ -460,6 +460,33 @@ test('desktop state persists across fresh browser context', async ({
   }
 });
 
+test('desktop state flushes on page hide without waiting for debounce', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const saveResponse = page.waitForResponse((response) =>
+    response.url().includes('/api/desktop/state') &&
+    response.request().method() === 'PUT' &&
+    response.ok(),
+  );
+
+  await openApp(page, 'files');
+  const windowId = await page.locator('[data-window]').first().getAttribute('data-window-id');
+  expect(windowId).toBeTruthy();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+  });
+  await saveResponse;
+
+  await page.reload();
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await expect(page.locator(`[data-window-id="${windowId}"]`)).toBeVisible({ timeout: 5000 });
+});
+
 // ---------------------------------------------------------------
 // Test: empty desktop state (no windows) preserved after reload
 // (VAL-SHELL-022)

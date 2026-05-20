@@ -141,10 +141,14 @@
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
   $: if (mounted && authenticated !== lastAuthenticated) {
+    const wasAuthenticated = lastAuthenticated === true;
     lastAuthenticated = authenticated;
     if (authenticated) {
       startAuthenticatedDesktop();
     } else {
+      if (wasAuthenticated) {
+        void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });
+      }
       enterPublicDesktop();
     }
   }
@@ -550,6 +554,21 @@
     }));
   }
 
+  function readDesktopStateForSave() {
+    let currentWindows;
+    let currentActiveId;
+    let currentIconPositions;
+    windows.subscribe((w) => { currentWindows = w; })();
+    activeWindowId.subscribe((id) => { currentActiveId = id; })();
+    iconPositions.subscribe((p) => { currentIconPositions = p; })();
+
+    return {
+      windows: serializeWindowsForSave((currentWindows || []).filter((w) => w.mode !== 'hidden')),
+      active_window_id: currentActiveId || '',
+      icon_positions: currentIconPositions,
+    };
+  }
+
   async function persistWindowSet(nextWindows, nextActiveId) {
     setWindows(nextWindows, nextActiveId || '');
     await tick();
@@ -626,22 +645,24 @@
     saveTimer = setTimeout(persistDesktopState, SAVE_DEBOUNCE_MS);
   }
 
-  async function persistDesktopState() {
-    if (!authenticated || !stateLoaded) return;
-    try {
-      let currentWindows;
-      let currentActiveId;
-      let currentIconPositions;
-      windows.subscribe((w) => { currentWindows = w; })();
-      activeWindowId.subscribe((id) => { currentActiveId = id; })();
-      iconPositions.subscribe((p) => { currentIconPositions = p; })();
+  async function flushDesktopState(options = {}) {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    await persistDesktopState(options);
+  }
 
-      const state = {
-        windows: serializeWindowsForSave(currentWindows.filter((w) => w.mode !== 'hidden')),
-        active_window_id: currentActiveId || '',
-        icon_positions: currentIconPositions,
-      };
-      await saveDesktopState(state);
+  async function persistDesktopState(options = {}) {
+    if ((!authenticated && !options.allowSignedOutTransition) || !stateLoaded) return;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    try {
+      await saveDesktopState(readDesktopStateForSave(), {
+        keepalive: options.keepalive === true,
+      });
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -654,6 +675,16 @@
   let unsubscribeWindows;
   let unsubscribeActive;
   let unsubscribeIconPositions;
+
+  function handlePageHide() {
+    void flushDesktopState({ keepalive: true });
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+      void flushDesktopState({ keepalive: true });
+    }
+  }
 
   // ---- Bootstrap fetch (preserved for session renewal, not displayed) ----
 
@@ -937,6 +968,7 @@
   }
 
   function handleLogout() {
+    void flushDesktopState({ keepalive: true });
     closeLiveChannel();
     dispatch('logout');
   }
@@ -1254,6 +1286,8 @@
     mounted = true;
     refreshOverviewViewport();
     window.addEventListener('resize', refreshOverviewViewport);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
     if (authenticated) {
       startAuthenticatedDesktop();
@@ -1275,7 +1309,10 @@
 
   onDestroy(() => {
     mounted = false;
+    void flushDesktopState({ keepalive: true });
     window.removeEventListener('resize', refreshOverviewViewport);
+    window.removeEventListener('pagehide', handlePageHide);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (unsubscribeWindows) unsubscribeWindows();
