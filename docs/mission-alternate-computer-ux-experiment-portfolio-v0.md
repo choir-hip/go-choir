@@ -20,6 +20,7 @@ candidate/background computers where healthy
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 **Liquid design input:** [choir-liquid-material-engine-design-v0.md](choir-liquid-material-engine-design-v0.md)
 **Python code mode input:** `/Users/wiz/Downloads/choir_python_code_mode_experiment.md`
+**Epoch review:** [alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md](alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md)
 **Preflight gate:**
 [mission-promotion-substrate-preflight-hard-cutover-v0.md](mission-promotion-substrate-preflight-hard-cutover-v0.md)
 

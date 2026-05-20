@@ -9,7 +9,7 @@ const DESKTOP_BOOT_TIMEOUT_MS = Number(process.env.GO_CHOIR_DESKTOP_BOOT_TIMEOUT
 
 const HEAVY_APP_IDS = new Set([
   'browser',
-  'candidate-desktop',
+  'apps-changes',
   'terminal',
   'vtext',
   'trace',

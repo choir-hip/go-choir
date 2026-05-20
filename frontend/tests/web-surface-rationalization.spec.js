@@ -5,7 +5,7 @@ async function openStartApp(page, appId) {
   await page.locator(`[data-start-app-id="${appId}"]`).click();
 }
 
-test('Candidate Desktop Viewer embeds the same Svelte route with desktop_id', async ({ desktopSession }) => {
+test('Apps & Changes replaces manual candidate desktop entry points', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const forbiddenRemoteDisplayRequests = [];
   page.on('request', (request) => {
@@ -15,20 +15,22 @@ test('Candidate Desktop Viewer embeds the same Svelte route with desktop_id', as
     }
   });
 
-  await openStartApp(page, 'candidate-desktop');
-  const viewer = page.locator('[data-candidate-desktop-viewer]');
-  await expect(viewer).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('[data-candidate-desktop-queue]')).toBeVisible();
-  await expect(page.locator('[data-candidate-desktop-preview-empty]')).toBeVisible();
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+  });
 
-  await page.locator('[data-candidate-desktop-manual] summary').click();
-  await page.locator('[data-candidate-desktop-input]').fill('branch-a');
-  await page.locator('[data-candidate-desktop-open]').click();
-
-  const frame = page.locator('[data-candidate-desktop-frame]');
-  await expect(frame).toBeVisible({ timeout: 10_000 });
-  await expect(frame).toHaveAttribute('src', /desktop_id=branch-a/);
-  await expect(frame).toHaveAttribute('src', /embedded=1/);
+  await page.locator('[data-start-button]').click();
+  await expect(page.locator('[data-start-app-id="candidate-desktop"]')).toHaveCount(0);
+  await page.locator('[data-start-app-id="apps-changes"]').click();
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  await expect(store.locator('[data-change-card]')).toHaveCount(4);
+  await expect(store.locator('[data-change-evidence]')).toContainText('VText report pending');
+  await expect(store.locator('[data-change-preview-empty]')).toBeVisible();
+  await expect(store.locator('[data-candidate-desktop-input]')).toHaveCount(0);
   expect(forbiddenRemoteDisplayRequests).toEqual([]);
 });
 

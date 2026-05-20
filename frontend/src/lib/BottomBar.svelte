@@ -54,7 +54,7 @@
     'video',
     'pdf',
     'epub',
-    'candidate-desktop',
+    'apps-changes',
     'terminal',
     'settings',
   ];

@@ -37,7 +37,7 @@
   import { openFileDocument } from './vtext.js';
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
-  import CandidateDesktopViewer from './CandidateDesktopViewer.svelte';
+  import AppsChangesApp from './AppsChangesApp.svelte';
   import TerminalApp from './TerminalApp.svelte';
   import ComputeMonitorApp from './ComputeMonitorApp.svelte';
   import PodcastApp from './PodcastApp.svelte';
@@ -1439,9 +1439,9 @@
                   on:openvtext={handleOpenVTextFromContent}
                 />
               </div>
-            {:else if win.appId === 'candidate-desktop'}
-              <div class="app-content candidate-desktop-content" data-candidate-desktop-window>
-                <CandidateDesktopViewer appContext={win.appContext} on:authexpired={() => dispatch('authexpired')} />
+            {:else if win.appId === 'apps-changes'}
+              <div class="app-content apps-changes-content" data-apps-changes-window>
+                <AppsChangesApp appContext={win.appContext} on:authexpired={() => dispatch('authexpired')} />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>
@@ -1852,9 +1852,9 @@
     background: #080d18;
   }
 
-  .candidate-desktop-content {
+  .apps-changes-content {
     padding: 0;
-    background: #0d1117;
+    background: #07111e;
   }
 
   .suspended-app-content {

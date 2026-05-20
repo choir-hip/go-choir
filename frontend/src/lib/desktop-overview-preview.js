@@ -2,7 +2,7 @@ export const OVERVIEW_MOBILE_BREAKPOINT = 768;
 export const OVERVIEW_MOBILE_LIVE_LIMIT = 3;
 export const OVERVIEW_DESKTOP_LIVE_LIMIT = 6;
 
-const REDACTED_PREVIEW_APP_IDS = new Set(['candidate-desktop', 'terminal']);
+const REDACTED_PREVIEW_APP_IDS = new Set(['terminal']);
 
 function isVisibleWindow(win) {
   return win && win.mode !== 'closed' && win.mode !== 'hidden';

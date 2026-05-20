@@ -24,7 +24,7 @@ export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
   { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
   { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'candidate-desktop', name: 'Candidate Desktop', icon: '🧪', description: 'Preview candidate VM desktops', singleton: true, window: { desktop: { width: 1040, height: 700, minWidth: 720, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
+  { id: 'apps-changes', name: 'Apps & Changes', icon: '🧩', description: 'Discover and manage computer changes', singleton: true, window: { desktop: { width: 1100, height: 760, minWidth: 760, minHeight: 540 }, compact: { minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
   { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
   { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { minWidth: 280, minHeight: 420 } } },
@@ -54,7 +54,7 @@ export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
 
 export const HEAVY_APP_IDS = new Set([
   'browser',
-  'candidate-desktop',
+  'apps-changes',
   'terminal',
   'vtext',
   'trace',

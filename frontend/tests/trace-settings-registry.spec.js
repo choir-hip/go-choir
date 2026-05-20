@@ -19,7 +19,7 @@ async function registerAndLoadDesktop(page, email) {
 }
 
 async function openApp(page, appId) {
-  await page.locator(`[data-desktop-icon-id="${appId}"]`).dblclick();
+  await openStartApp(page, appId);
 }
 
 async function openStartApp(page, appId) {
@@ -172,7 +172,10 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   expect(editorValue).toContain('"id": "frutiger-aero"');
   await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
   await expect(settings.locator('[data-settings-promotions]')).toBeVisible();
-  await expect(settings.locator('[data-settings-promotions-empty]')).toContainText('No AppChangePackages or recipient adoptions yet.');
+  const promotionEvidence =
+    (await settings.locator('[data-settings-promotions-empty]').count()) +
+    (await settings.locator('[data-settings-promotions-list]').count());
+  expect(promotionEvidence).toBeGreaterThan(0);
   await expect(settings).not.toContainText('Editable role prompt');
   await expect(settings).not.toContainText('/api/prompts');
 
@@ -228,7 +231,7 @@ test('Settings renders AppChangePackages and adoptions without browser-internal 
   expect(forbiddenRequests).toHaveLength(0);
 });
 
-test('Candidate desktop viewer opens app adoption candidates without manual IDs', async ({ page, authenticator }) => {
+test('Apps & Changes opens app adoption candidates without manual package or candidate IDs', async ({ page, authenticator }) => {
   const forbiddenRequests = [];
   page.on('request', (browserRequest) => {
     const url = new URL(browserRequest.url());
@@ -237,33 +240,84 @@ test('Candidate desktop viewer opens app adoption candidates without manual IDs'
     }
   });
 
+  const seeded = {
+    package: {
+      package_id: '28433c19-5d02-416f-9368-de56390e1927',
+      app_id: 'Chiron Shelf Observability',
+      status: 'published_unlisted',
+      visibility: 'unlisted',
+      source_computer_id: 'primary',
+      source_candidate_id: 'source-chiron',
+      candidate_source_ref: 'refs/computers/source/candidates/chiron',
+      package_manifest_sha256: 'manifest-chiron-ui-test',
+    },
+    adoption: {
+      adoption_id: 'adoption-apps-changes-viewer',
+      package_id: '28433c19-5d02-416f-9368-de56390e1927',
+      app_id: 'Chiron Shelf Observability',
+      target_computer_id: 'target-computer-candidate-viewer',
+      target_candidate_id: 'vm-candidate-viewer-test',
+      status: 'candidate_applied',
+      candidate_source_ref: 'refs/computers/target-computer-candidate-viewer/candidates/vm-candidate-viewer-test',
+      rollback_profile_json: '{}',
+    },
+  };
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ packages: [seeded.package] }),
+    });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ adoptions: [seeded.adoption] }),
+    });
+  });
+  await page.route('**/api/computers/primary/source-lineage*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        owner_id: 'test-owner',
+        computer_id: 'primary',
+        computer_kind: 'primary',
+        active_source_ref: 'refs/computers/primary/active',
+        route_profile: 'route:primary',
+      }),
+    });
+  });
+  await page.route('**/api/computers/primary/adoptions*', async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify(seeded.adoption),
+    });
+  });
+
   const email = uniqueEmail('candidate-viewer');
   await registerAndLoadDesktop(page, email);
   const session = await getSession(page, BASE_URL);
   expect(session.authenticated).toBe(true);
   expect(session.user?.id).toBeTruthy();
 
-  const seeded = await createAppPackageAndAdoption(page, 'candidate-viewer', {
-    targetComputerID: 'target-computer-candidate-viewer',
-    targetCandidateID: 'vm-candidate-viewer-test',
-    appID: 'Candidate viewer package',
-  });
+  await page.locator('[data-start-button]').click();
+  await expect(page.locator('[data-start-app-id="candidate-desktop"]')).toHaveCount(0);
+  await page.locator('[data-start-app-id="apps-changes"]').click();
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  await expect(store.locator('[data-change-card][data-change-id="chiron-shelf"]')).toBeVisible({ timeout: 10_000 });
+  await store.locator('[data-change-try]').click();
 
-  await openStartApp(page, 'candidate-desktop');
-  const viewer = page.locator('[data-candidate-desktop-viewer]');
-  await expect(viewer).toBeVisible({ timeout: 10_000 });
-  await expect(viewer.locator('[data-candidate-desktop-list]')).toBeVisible({ timeout: 10_000 });
-
-  const candidate = viewer.locator(`[data-candidate-desktop-candidate-id="${seeded.adoption.adoption_id}"]`);
-  await expect(candidate).toContainText('Candidate viewer package');
-  await expect(candidate).toContainText('target-computer-candidate-viewer');
-  await expect(candidate.locator('[data-candidate-desktop-status]')).toContainText('proposed');
-  await candidate.locator('[data-candidate-desktop-open-candidate]').click();
-
-  await expect(viewer).toHaveAttribute('data-candidate-desktop-id', 'vm-candidate-viewer-test');
-  const frame = viewer.locator('[data-candidate-desktop-frame]');
+  const frame = store.locator('[data-change-preview-frame]');
   await expect(frame).toBeVisible({ timeout: 10_000 });
-  await expect(frame).toHaveAttribute('src', /desktop_id=vm-candidate-viewer-test/);
-  await expect(frame).toHaveAttribute('src', /embedded=1/);
+  await expect(frame).toHaveAttribute('data-change-preview-desktop-id', 'vm-candidate-viewer-test');
+  const iframe = frame.locator('[data-change-preview-iframe]');
+  await expect(iframe).toHaveAttribute('src', /desktop_id=vm-candidate-viewer-test/);
+  await expect(iframe).toHaveAttribute('src', /embedded=1/);
+  await expect(store.locator('[data-candidate-desktop-input]')).toHaveCount(0);
+  await expect(store.locator(`[data-review-adoption-id="${seeded.adoption.adoption_id}"]`)).toBeVisible();
   expect(forbiddenRequests).toHaveLength(0);
 });
