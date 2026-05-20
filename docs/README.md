@@ -113,12 +113,19 @@ Use these buckets when reading or editing docs:
   next shell mission for replacing hard-coded preview heuristics with app-owned
   descriptors and proving a quieter, more spatial Overview under real-session
   clutter.
+- `docs/mission-promotion-substrate-preflight-hard-cutover-v0.md` - completed
+  preflight hard cutover that made AppChangePackage -> adoption -> recipient
+  build -> promote/rollback the current patch movement path.
+- `docs/mission-source-lineage-promotion-control-plane-v0.md` - source-lineage
+  and divergent-computer promotion design for moving app changes between user
+  computers and the platform computer.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
   active/landing substrate mission for platform Dolt publication/retrieval/
   citation.
-- `docs/mission-run-acceptance-verification-v0.md` - completed export-level acceptance mission and evidence record.
+- `docs/mission-run-acceptance-verification-v0.md` - historical run acceptance
+  mission and evidence record.
 - `docs/mission-embedded-dolt-runtime-migration-v0.md` - completed embedded
   Dolt runtime/control migration with staging acceptance and Node B disk
   evidence.

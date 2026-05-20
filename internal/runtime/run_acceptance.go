@@ -339,6 +339,9 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	builder.record.AcceptanceLevel, builder.record.State = acceptanceLevelAndState(builder.record.Checkpoints)
 	builder.record.EvidenceRefs = builder.evidence
 	builder.record.InvariantChecks = buildAcceptanceInvariantChecks(builder.record)
+	if builder.record.State == types.RunAcceptanceAccepted && acceptanceHasBlockedInvariant(builder.record.InvariantChecks) {
+		builder.record.State = types.RunAcceptanceBlocked
+	}
 	builder.record.VerifierContracts = buildAcceptanceVerifierContracts(builder.record)
 	builder.record.FailureResidualRisks = buildAcceptanceResidualRisks(builder.record)
 	rec, err := rt.store.UpsertRunAcceptance(ctx, builder.record)
@@ -1036,6 +1039,15 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 	return checks
 }
 
+func acceptanceHasBlockedInvariant(checks []types.RunAcceptanceInvariantCheck) bool {
+	for _, check := range checks {
+		if check.State == "blocked" {
+			return true
+		}
+	}
+	return false
+}
+
 func stateForBool(ok bool) string {
 	if ok {
 		return "passed"
@@ -1053,7 +1065,12 @@ func buildAcceptanceVerifierContracts(rec types.RunAcceptanceRecord) []types.Run
 		{
 			Name:    "export-level-product-path",
 			Purpose: "prove prompt/VText/super/vmctl/delegate/AppChangePackage/adoption prefix without browser-public internal orchestration APIs",
-			State:   stateForBool(rec.AcceptanceLevel == types.RunAcceptanceExportLevel || rec.AcceptanceLevel == types.RunAcceptancePromotionLevel || rec.AcceptanceLevel == types.RunAcceptanceContinuationLevel),
+			State: stateForBool(
+				rec.State == types.RunAcceptanceAccepted &&
+					(rec.AcceptanceLevel == types.RunAcceptanceExportLevel ||
+						rec.AcceptanceLevel == types.RunAcceptancePromotionLevel ||
+						rec.AcceptanceLevel == types.RunAcceptanceContinuationLevel),
+			),
 		},
 	}
 }
@@ -1103,6 +1120,11 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 	}
 	if rec.VMMode == "local_worktree" {
 		risks = append(risks, "worker isolation used local worktree mode; this is a diagnostic fallback unless staging vmctl is expected to run that mode")
+	}
+	for _, check := range rec.InvariantChecks {
+		if check.State == "blocked" {
+			risks = append(risks, fmt.Sprintf("acceptance invariant %s is blocked: %s", check.Name, check.Detail))
+		}
 	}
 	return risks
 }

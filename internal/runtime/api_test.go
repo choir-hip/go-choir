@@ -482,6 +482,73 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 	}
 }
 
+func TestRunAcceptanceSynthesizeBlocksAcceptedStateWhenInvariantsAreBlocked(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	now := time.Now().UTC()
+	for i, ev := range []types.EventRecord{
+		{
+			EventID:      "event-direct-package",
+			OwnerID:      "user-alice",
+			TrajectoryID: "traj-direct-package",
+			Timestamp:    now,
+			Kind:         types.EventAppChangePackagePublished,
+			Payload:      json.RawMessage(`{"package_id":"pkg-direct","app_id":"podcast","source_computer_id":"computer-a","source_candidate_id":"candidate-a","candidate_source_ref":"refs/computers/computer-a/candidates/candidate-a","package_manifest_sha":"sha256-manifest-direct"}`),
+		},
+		{
+			EventID:      "event-direct-adoption-verified",
+			OwnerID:      "user-alice",
+			TrajectoryID: "traj-direct-package",
+			Timestamp:    now.Add(time.Second),
+			Kind:         types.EventAppAdoptionVerified,
+			Payload:      json.RawMessage(`{"adoption_id":"adoption-direct","package_id":"pkg-direct","target_computer_id":"computer-b","runtime_artifact_digest":"runtime-recipient-digest-b","ui_artifact_digest":"ui-recipient-digest-b","foreground_tail_merge_result":"no-conflict"}`),
+		},
+		{
+			EventID:      "event-direct-adoption-promoted",
+			OwnerID:      "user-alice",
+			TrajectoryID: "traj-direct-package",
+			Timestamp:    now.Add(2 * time.Second),
+			Kind:         types.EventAppAdoptionPromoted,
+			Payload:      json.RawMessage(`{"adoption_id":"adoption-direct","package_id":"pkg-direct","target_computer_id":"computer-b","candidate_source_ref":"refs/computers/computer-b/candidates/adoption-direct","runtime_artifact_digest":"runtime-recipient-digest-b","ui_artifact_digest":"ui-recipient-digest-b","route_profile":"primary","rollback_source_ref":"refs/computers/computer-b/active-before-adoption"}`),
+		},
+	} {
+		ev.StreamSeq = int64(i + 1)
+		appendAcceptanceEvent(t, rt, ev)
+	}
+
+	body := `{"target_mission_id":"mission-direct-package","trajectory_id":"traj-direct-package"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptancePromotionLevel {
+		t.Fatalf("acceptance level = %q, want promotion-level; checkpoints=%+v", rec.AcceptanceLevel, rec.Checkpoints)
+	}
+	if rec.State != types.RunAcceptanceBlocked {
+		t.Fatalf("state = %q, want blocked because invariants are blocked; invariants=%+v", rec.State, rec.InvariantChecks)
+	}
+	for _, want := range []string{"product_path_observed", "worker_mutation_bounded"} {
+		found := false
+		for _, check := range rec.InvariantChecks {
+			if check.Name == want {
+				found = true
+				if check.State != "blocked" {
+					t.Fatalf("%s state = %q, want blocked", want, check.State)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("missing invariant check %q in %+v", want, rec.InvariantChecks)
+		}
+	}
+	if !strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
+		t.Fatalf("missing invariant residual risk: %+v", rec.FailureResidualRisks)
+	}
+}
+
 func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 	seedRunAcceptanceTrajectoryWithDelegateStatus(t, rt, "worker_run_completed", string(types.RunCompleted), "")
 }
