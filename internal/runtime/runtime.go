@@ -1708,11 +1708,16 @@ func (rt *Runtime) reconcileCompletedVTextRun(rec *types.RunRecord) {
 	if rec == nil {
 		return
 	}
-	taskType, _ := rec.Metadata["type"].(string)
-	if taskType != "vtext_agent_revision" {
-		return
-	}
 	docID, _ := rec.Metadata["doc_id"].(string)
+	if strings.TrimSpace(docID) == "" {
+		agentID := agentIDForRun(rec)
+		if strings.HasPrefix(agentID, "vtext:") {
+			docID = strings.TrimPrefix(agentID, "vtext:")
+		}
+	}
+	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == AgentProfileVText {
+		docID = channelIDForRun(rec)
+	}
 	if strings.TrimSpace(docID) == "" || strings.TrimSpace(rec.OwnerID) == "" {
 		return
 	}
@@ -2005,6 +2010,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 			rt.emitVTextAgentEvent(persistCtx, rec, types.EventVTextAgentRevisionFailed,
 				events.CauseProviderFailure, failPayload)
 		}
+	}
+	if state.Terminal() {
+		rt.reconcileCompletedVTextRun(rec)
 	}
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)

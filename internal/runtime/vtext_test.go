@@ -2325,8 +2325,10 @@ func TestVTextWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 
 func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated persisted findings into the next revision."))
+	provider.delay = 500 * time.Millisecond
+	clock := &fakeVTextWakeClock{}
 
-	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
+	h, s, rt := vtextAPISetupWithProviderAndOptions(t, provider, true, withVTextWakeAfterFuncForTest(clock.afterFunc))
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := vtextCreateRevisionRequest{
@@ -2351,6 +2353,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start vtext run: %v", err)
 	}
+	waitForRunRunning(t, rt, vtextRun.RunID, "user-1", 5*time.Second)
 	researcherRun, err := rt.StartChildRun(context.Background(), vtextRun.RunID, "Research the update", "user-1", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
@@ -2387,6 +2390,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("submit_research_findings status = %q, want submitted", findingResp.Status)
 	}
 
+	clock.fireAll()
 	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
 	foundAppAgent := false
 	for _, rev := range revs {
@@ -2420,8 +2424,10 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 
 func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated structured super update into the next revision."))
+	provider.delay = 500 * time.Millisecond
+	clock := &fakeVTextWakeClock{}
 
-	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
+	h, s, rt := vtextAPISetupWithProviderAndOptions(t, provider, true, withVTextWakeAfterFuncForTest(clock.afterFunc))
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := vtextCreateRevisionRequest{
@@ -2446,6 +2452,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start vtext run: %v", err)
 	}
+	waitForRunRunning(t, rt, vtextRun.RunID, "user-1", 5*time.Second)
 	superRun, err := rt.StartChildRun(context.Background(), vtextRun.RunID, "Build and verify a toy artifact", "user-1", map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
@@ -2477,6 +2484,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("submit_worker_update response = %+v, want submitted with cursor", updateResp)
 	}
 
+	clock.fireAll()
 	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
 	var agentRev *types.Revision
 	for _, rev := range revs {
