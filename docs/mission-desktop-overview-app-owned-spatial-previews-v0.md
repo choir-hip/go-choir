@@ -12,7 +12,7 @@ CI, deploy, product-path evidence, and design/taste review
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-desktop-overview-app-owned-spatial-previews-v0.md as a Codex-operated MissionGradient mission: make Desktop Overview feel like a premium spatial control room for Choir's real overlapping desktop under ordinary and heavy real-user sessions. Starting from live DOM previews at 2f8ad7a, replace hard-coded preview heuristics with app-owned preview descriptors for privacy, heaviness, restore cost, preview fidelity, safe summary fields, and Overview actions; make safe windows animate as real DOM, while suspended, heavy, private, terminal, and candidate surfaces render honest app-owned or redacted preview cards. Polish the Overview layout so it is spatial, quiet, hospitable, and useful with many windows: active task legible, stack depth visible, controls available on intent, keyboard/touch navigation reliable, and no phone-mode simplification. Do not use WebGPU, canvas screenshots, duplicated app mounts, persisted preview captures, fake thumbnails, host/global telemetry, or local-only proof as the acceptance path. Land platform changes through git/CI/deploy and prove staging identity with desktop and 390x844 Playwright screenshots/DOM metrics under ordinary, generated heavy, and at least one returning-session-style restore profile. Stop only with deployed evidence of app-owned preview policy, bounded live previews, redaction/resource safety, Overview interaction quality, rollback refs, residual risks, and the next realism axis; otherwise report checkpoint_incomplete or blocked_incomplete with a resumable mission-doc checkpoint and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
+/goal Run docs/mission-desktop-overview-app-owned-spatial-previews-v0.md as a Codex-operated MissionGradient mission: make Desktop Overview feel like a premium spatial control room for Choir's real overlapping desktop under ordinary and heavy real-user sessions. Starting from live DOM previews at 2f8ad7a, replace hard-coded preview heuristics with app-owned preview descriptors for privacy, heaviness, restore cost, preview fidelity, safe summary fields, and Overview actions; make safe windows animate as real DOM, while suspended, heavy, private, terminal, and candidate surfaces render honest app-owned or redacted preview cards. Polish the Overview layout and shell layering so it is spatial, quiet, hospitable, and useful with many windows: active task legible, stack depth visible, controls available on intent, Desk menu/Shelf controls always above app windows when invoked, keyboard/touch navigation reliable, and no phone-mode simplification. Do not use WebGPU, canvas screenshots, duplicated app mounts, persisted preview captures, fake thumbnails, host/global telemetry, or local-only proof as the acceptance path. Land platform changes through git/CI/deploy and prove staging identity with desktop and 390x844 Playwright screenshots/DOM metrics under ordinary, generated heavy, and at least one returning-session-style restore profile, including PDF and EPUB windows covering the Desk button area before the Desk menu is opened. Stop only with deployed evidence of app-owned preview policy, bounded live previews, redaction/resource safety, Overview interaction quality, shell-menu top-layer behavior, rollback refs, residual risks, and the next realism axis; otherwise report checkpoint_incomplete or blocked_incomplete with a resumable mission-doc checkpoint and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
 ```
 
 ## Mission Frame
@@ -83,6 +83,11 @@ The artifact is not:
   handles, or platform-wide telemetry.
 - Platform behavior changes require the landing loop: commit, push, CI,
   deploy, staging identity, deployed product-path proof.
+- The Desk menu button on the Shelf is a global shell control. When invoked,
+  its menu must render above every app window, including immersive PDF, EPUB,
+  media, Trace, VText, terminal, and candidate windows. App z-index, transforms,
+  overflow, or fullscreen-ish content stages must not trap the Desk menu below
+  app chrome.
 
 ## Value Criterion
 
@@ -122,6 +127,8 @@ Solid means:
 - suspended heavy apps remain unmounted until explicitly resumed;
 - Overview keyboard/touch navigation can focus, close, suspend, and resume
   without breaking the desktop;
+- the Desk menu opens above app windows from the bottom-left Shelf control even
+  when PDF, EPUB, media, Trace, or other windows overlap that corner;
 - DOM metrics prove descriptor coverage, preview state counts, mounted heavy
   body count, active preview id, and redaction/suspension counts;
 - screenshots show a spatial control room, not a list-heavy admin dashboard.
@@ -167,6 +174,9 @@ Substandard work:
 - **Returning-session-style restore:** a staged proof profile that resembles a
   real user's messy desktop: mixed apps, minimized windows, suspended heavy
   apps, active media/readers, VText/Trace coexistence, and stale saved windows.
+- **Desk menu top layer:** the bottom-left Shelf menu is part of the desktop
+  shell's control plane and must visually and interactively sit above app
+  windows whenever it is open.
 
 ## Homotopy Parameters
 
@@ -187,6 +197,9 @@ Increase realism continuously:
   suspend/close/keep-active -> accessible command palette or conductor intents.
 - **Taste polish:** visible cards -> quiet chrome -> spatial grouping -> active
   task emphasis -> reduced-motion and touch quality.
+- **Shell layering:** ordinary windows below Shelf -> app content near Shelf
+  edge -> PDF/EPUB/media overlapping the bottom-left corner -> Desk menu opens
+  above every app class.
 
 ## Starting Belief State
 
@@ -317,6 +330,9 @@ overviewActions
 - Make controls quiet until hover, focus, tap, or keyboard selection.
 - Add roving keyboard/touch selection for cards/previews.
 - Improve group/stack presentation for many windows without hiding them.
+- Fix global shell layering so the Desk menu and any related Shelf menus enter
+  a reliable top layer above all floating app windows, app content stages,
+  transforms, and overflow containers.
 - Support reduced-motion and avoid layout shifts.
 
 ### P4: Returning-Session-Style Proof Harness
@@ -325,6 +341,10 @@ overviewActions
   multiple VText/Trace/media/reader windows, minimized windows, suspended heavy
   windows, terminal/candidate redaction surfaces, active media/reader state,
   and Compute Monitor handoff.
+- Add an explicit shell-layering assertion: open PDF and EPUB windows so their
+  content overlaps the bottom-left Shelf area, open the Desk menu, and verify
+  with screenshots and DOM hit-testing that the menu is visible, clickable, and
+  above app windows.
 - Assert:
   - descriptor coverage;
   - live/card/redacted/suspended counts;
@@ -332,6 +352,8 @@ overviewActions
   - active preview id and focus outcome;
   - no terminal/candidate live content;
   - no host/global telemetry;
+  - Desk menu top-layer behavior above PDF, EPUB, media, Trace, and VText app
+    windows;
   - mobile and desktop screenshots.
 
 ### P5: Optional Richer Preview Effects
@@ -351,7 +373,7 @@ overviewActions
 - screenshots at desktop and `390x844`;
 - DOM metrics for descriptor coverage, preview state counts, mounted heavy body
   count, redacted surfaces, active preview id, keyboard/touch focus, action
-  outcomes, and restore pressure;
+  outcomes, Desk menu top-layer hit-testing, and restore pressure;
 - staging `/health` identity;
 - Compute Monitor/product health evidence when resource or recovery claims are
   made.
@@ -383,6 +405,8 @@ Required claims:
   restores;
 - Overview focus, keyboard/touch navigation, suspend/resume, and close actions
   preserve desktop state;
+- Desk menu/Shelf controls render above app windows when invoked, including
+  PDF and EPUB windows whose content overlaps the bottom-left corner;
 - screenshots show a spatial, quiet, usable Overview rather than an admin grid;
 - staging build identity matches the pushed behavior commit.
 
@@ -394,11 +418,11 @@ last checkpoint: mission authored after live-spatial Overview proof at 2f8ad7a a
 current artifact state: Overview has bounded live DOM previews and card/suspended/redacted fallbacks, but preview semantics are still mostly shell-owned heuristics
 what shipped: none for this mission yet
 what was proven: prior live-spatial Overview proof at 2f8ad7a
-unproven or partial claims: app-owned descriptors, richer app-specific cards, returning-session-style proof, premium spatial/touch/keyboard polish
+unproven or partial claims: app-owned descriptors, richer app-specific cards, returning-session-style proof, premium spatial/touch/keyboard polish, Desk menu top-layer behavior over immersive app windows
 belief-state changes: none yet
 remaining error field: Overview is functional but still too generic and system-management flavored
 highest-impact remaining uncertainty: descriptor shape and app-specific preview policy that scales to user-installed/candidate apps without privacy or memory regression
-next executable probe: define the descriptor contract, wire it into preview decisions, and convert a representative set of apps while preserving deployed live-preview behavior
+next executable probe: define the descriptor contract, wire it into preview decisions, convert a representative set of apps while preserving deployed live-preview behavior, and add a shell-layering proof that the Desk menu opens above PDF/EPUB/media windows
 suggested resume goal string: use the One-Line Goal String above
 evidence artifact refs: prior CI/deploy run 26133712240; prior staging health at 2f8ad7a; frontend/tests/mobile-real-desktop-overview.spec.js; frontend/tests/desktop-overview-heavy-session.spec.js
 rollback refs: revert this mission's behavior commit and redeploy; fallback behavior baseline 2f8ad7adc2697d6faff00dbc90991057c19781e9
@@ -420,6 +444,8 @@ useful partial checkpoint complete.
 - Do not let a generic media/content card erase separate Image, Audio, Video,
   PDF, EPUB, and Podcast app identities.
 - Do not collapse mobile into full-screen phone-mode cards.
+- Do not allow app windows, media/reader stages, CSS transforms, or z-index
+  islands to cover an invoked Desk menu or other global Shelf control.
 - Do not replace product-path proof with local screenshots.
 - Do not weaken heavy-session recovery to make Overview prettier.
 
@@ -467,6 +493,8 @@ Report `complete` only when:
   desktop and `390x844`;
 - Overview supports reliable focus, close, suspend/resume, keyboard/touch
   selection, and recovery actions;
+- the Desk menu opens above PDF, EPUB, media, Trace, and VText windows on
+  desktop and `390x844`, with screenshot and DOM hit-test proof;
 - ordinary, generated heavy, and returning-session-style staging Playwright
   sessions pass;
 - screenshots show a premium spatial Overview with quiet chrome and clear
