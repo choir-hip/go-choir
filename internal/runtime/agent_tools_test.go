@@ -3262,6 +3262,102 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 	}
 }
 
+func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	workerEvents := []types.EventRecord{
+		{
+			EventID:   "worker-update-without-package",
+			RunID:     "worker-package-required-no-package",
+			AgentID:   "agent-vsuper-no-package",
+			OwnerID:   "user-alice",
+			Timestamp: now,
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"submit_worker_update",
+				"is_error":false,
+				"output":"{\"status\":\"completed\",\"summary\":\"implemented candidate work but did not publish\"}"
+			}`),
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        "worker-package-required-no-package",
+				AgentID:      "agent-vsuper-no-package",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-package-required-no-package":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-package-required-no-package",
+				AgentID:      "agent-vsuper-no-package",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunCompleted,
+				OwnerID:      "user-alice",
+				Result:       "completed candidate changes without package publication",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-package-required-no-package/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: workerEvents})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate package-required no-package", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-package-required-no-package",
+		runMetadataChannelID:    "doc-package-required-no-package",
+		"requested_by_profile":  AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-package-required-no-package",
+		"vm_id": "vm-package-required-no-package",
+		"objective": "commit the candidate checkout and publish_app_change_package for an owner-pullable package",
+		"profile": "vsuper",
+		"timeout_seconds": 2
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm: %v", err)
+	}
+
+	var result struct {
+		Status            string           `json:"status"`
+		State             types.RunState   `json:"state"`
+		CompletionBlocker string           `json:"completion_blocker"`
+		TerminalError     string           `json:"terminal_error"`
+		AppChangePackages []map[string]any `json:"app_change_packages"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode delegate result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_incomplete" || result.State != types.RunCompleted {
+		t.Fatalf("package-required delegate status = %+v, want incomplete\nraw=%s", result, raw)
+	}
+	if result.CompletionBlocker != "vsuper_completed_without_required_app_change_package" {
+		t.Fatalf("completion blocker = %q, want required package blocker\nraw=%s", result.CompletionBlocker, raw)
+	}
+	if !strings.Contains(result.TerminalError, "without publish_app_change_package evidence") {
+		t.Fatalf("terminal error missing package evidence blocker: %+v\nraw=%s", result, raw)
+	}
+	if len(result.AppChangePackages) != 0 {
+		t.Fatalf("unexpected AppChangePackages: %+v\nraw=%s", result.AppChangePackages, raw)
+	}
+}
+
 func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) {
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := os.RemoveAll(activeCWD); err != nil {

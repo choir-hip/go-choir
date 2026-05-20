@@ -1,6 +1,7 @@
 # MissionGradient: Alternate Computer UX Experiment Portfolio v0
 
-**Status:** draft; Wave 0 package/adoption checkpoint proven
+**Status:** checkpoint_incomplete; Wave 0 package/adoption checkpoint proven,
+Wave 1 package-publication blocker recorded
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -549,18 +550,32 @@ Latest checkpoint:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: Wave 0 package/adoption proof reached product-path recipient
-  build and promotion evidence on deployed staging at d1f3bb5. User clarified
-  that direct owner login to alternate accounts is not required because patches
-  can be promoted/pulled into an owner-controlled account/computer.
+last checkpoint: Wave 1 two-lane prompt-bar probe ran on deployed staging at
+  d1f3bb5. Chiron and animation objectives were accepted concurrently and
+  routed through VText/Trace, but neither lane produced a matching
+  AppChangePackage after 40 minutes. Root-cause investigation found that a
+  package-required vsuper delegate could still return `worker_run_completed`
+  when it emitted only worker-update/narrative evidence and no
+  `publish_app_change_package` result.
 current artifact state: four-lane experiment portfolio defined; Wave 0 proved
   AppChangePackage -> adoption -> actual recipient Go/Svelte build -> promote
   through staging product APIs. The review invariant is now owner-pullable
   packages, not loginable Playwright-created accounts.
+review-path decision: direct owner login to alternate accounts is not required
+  for this portfolio. Experiments should publish AppChangePackages that the
+  owner can inspect, pull, adopt, or reject inside an owner-controlled
+  computer. Do not add auth handoff code solely for manual QA of virtual
+  Playwright accounts.
 what shipped: preflight substrate hard-cut landed before this mission; during
   Wave 0, a run-acceptance false-success edge was identified and patched so
   records with blocked invariant checks cannot still claim accepted state.
-  No auth handoff code should be added for this mission.
+  No auth handoff code should be added for this mission. Docs were then updated
+  to make owner-pull/adoption the review invariant. Current local patch makes
+  `delegate_worker_vm` mark package-required vsuper results without package
+  evidence as `worker_run_incomplete` with blocker
+  `vsuper_completed_without_required_app_change_package`, and tells super not
+  to summarize package/candidate delegate results without `app_change_packages`
+  as completed owner-reviewable work.
 what was proven:
   - old export_patchset and /api/promotions paths are invalid acceptance paths
   - current acceptance path is AppChangePackage/adoption/recipient build
@@ -574,6 +589,20 @@ what was proven:
     trace traj-alt-portfolio-wave0-1779270395944
     run acceptance runacc-19c10e4b57c2f0828c5b
     VText evidence doc ab093136-d504-4745-8f42-d9d30a008bdc
+  - Wave 1 concurrent prompt-bar probe at marker
+    alt-portfolio-wave1-1779272533882 created two source-account submissions:
+    Chiron submission 5f9db432-87d6-477a-ba10-26ccc0825641
+    Animation submission 180525db-2944-4b08-b453-8a321ff709cf
+  - both Wave 1 submissions reached completed prompt state and opened VText
+    docs, with Trace mobile summaries:
+    Chiron: 3 agents, 128 moments, 11 messages
+    Animation: 2 agents, 26 moments, 2 messages
+  - Wave 1 used no forbidden browser requests and wrote durable VText evidence:
+    doc e7e927ec-09fa-404a-8df8-b2e4973a6f89
+    revision b47d8471-13d6-4331-a6e2-66a38b67baf3
+  - focused local regression tests pass inside the repo Nix dev shell:
+    nix develop .# --command go test -count=1 ./internal/runtime -run
+    'TestDelegateWorkerVM(FollowsCompletedVSuperChildrenBeforeReturning|MarksCompletedVSuperWithoutExportOrUpdateIncomplete|MarksPackageRequiredVSuperWithoutPackageIncomplete|ReturnsFailedRunEvidence|ReturnsTimeoutRunEvidence)'
   - session renewal is required across long recipient builds because access
     cookies are intentionally short-lived and refresh cookies are scoped to
     /auth
@@ -582,32 +611,48 @@ what was proven:
 unproven or partial claims:
   - owner-pull/adoption into ymnath@choir-ip.com or another owner-controlled
     active computer for a real experiment package
-  - Choir-in-Choir two-lane concurrency under current substrate
+  - Choir-in-Choir two-lane concurrency reached prompt/Trace/VText evidence
+    but did not reach worker/vsuper package publication
   - mobile Safari liquid material feasibility
   - Python mode A/B implementation and benchmark
   - run acceptance remains promotion-level/blocked for Wave 0 because
     product_path_observed and worker_mutation_bounded are intentionally strict
     for this synthetic package checkpoint
 remaining error field:
-  - owner pull/adoption UX and evidence path for tomorrow's manual QA
-  - worker/candidate throughput under concurrent lanes
+  - explicit candidate/package objectives from prompt bar can terminally
+    complete as VText/Super activity without preserving the worker-vsuper
+    package-publication topology
+  - Wave 1 traces show VText/Super activity but no matching AppChangePackage
+    for either lane marker
+  - owner pull/adoption UX and evidence path for tomorrow's manual QA remains
+    unproven for real experiment packages because no real Wave 1 package exists
   - evidence synthesis across alternate computers
+  - the delegate boundary fix is not proven on staging until commit, CI/deploy,
+    staging identity verification, and a rerun of Wave 1
 highest-impact remaining uncertainty:
-  - Can Choir produce multiple useful experiment AppChangePackages and let the
-    owner inspect/pull/adopt them without falling back to platform-default
-    deploys or direct alternate-account login?
+  - Can prompt-bar initiated Choir-in-Choir candidate work reliably force
+    super -> worker VM -> vsuper package publication, rather than stopping at
+    VText document activity?
 next executable probe:
-  - Launch Wave 1 lanes in two-lane concurrency only if package/adoption
-    evidence remains isolated. For each lane, produce an AppChangePackage and
-    owner-pull/adoption recommendation before considering promotion.
+  - Commit, push, monitor CI/deploy, verify staging identity, then rerun Wave 1
+    with the same Chiron and animation lane shapes. Expected improvement: if a
+    lane still fails to publish an AppChangePackage, Trace should show
+    `worker_run_incomplete` and blocker
+    `vsuper_completed_without_required_app_change_package` rather than a
+    completed narrative update being mistaken for package evidence.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:
   - test-results/alternate-portfolio-wave0-deployed/alternate-portfolio-wave0-evidence.json
   - frontend/test-results/alternate-computer-portfol-682da--or-records-precise-blocker-chromium/alternate-portfolio-wave0-desktop.png
+  - test-results/alternate-portfolio-wave1-deployed/alternate-portfolio-wave1-evidence.json
+  - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/alternate-portfolio-wave1-source-desktop.png
+  - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/trace.zip
 rollback refs:
   - previous_active_source_ref
     refs/computers/target-computer-alt-portfolio-wave0-1779270395944/active-foreground-tail-alt-portfolio-wave0-1779270395944
+  - Wave 1 made no active-computer promotion and produced no package/adoption
+    rollback refs
 learning log:
   - Evidence gates prevented a fake direct-login claim: Playwright passkey
     accounts are real product accounts but their credentials are trapped in the
@@ -617,4 +662,10 @@ learning log:
   - Evidence gates also found a run-acceptance false-success edge: promotion
     checkpoints alone were enough to claim accepted even when invariant checks
     were blocked.
+  - Wave 1 concurrency was useful because it exposed the real next substrate
+    gap: both lanes could be submitted and observed, but no lane crossed from
+    VText/Super activity into AppChangePackage publication.
+  - Root-cause sharpened from "VText/Super did not delegate" to "delegation can
+    still launder package-required work into completed narrative updates when
+    no AppChangePackage was published."
 ```

@@ -827,7 +827,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				result["completion_blocker"] = firstNonEmpty(stringMapValue(result, "completion_blocker"), "vsuper_ended_non_completed_after_reviewable_package")
 			}
 			applyWorkerRunEvidence(result, evidence)
-			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, packages) {
+			if finalResp.State == types.RunCompleted && delegateRequiresAppChangePackage(profile, in.Objective) && len(packages) == 0 {
+				result["status"] = "worker_run_incomplete"
+				result["completion_blocker"] = "vsuper_completed_without_required_app_change_package"
+				result["terminal_error"] = "worker vsuper completed a package-required objective without publish_app_change_package evidence"
+			} else if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, packages) {
 				result["status"] = "worker_run_incomplete"
 				result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
 				result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_worker_update evidence"
@@ -1543,6 +1547,28 @@ func vSuperDelegateIncomplete(evidence workerRunEvidence, packages []map[string]
 		return false
 	}
 	return !hasSuccessfulToolResult(evidence.Events, "submit_worker_update")
+}
+
+func delegateRequiresAppChangePackage(profile, objective string) bool {
+	if canonicalAgentProfile(profile) != AgentProfileVSuper {
+		return false
+	}
+	objective = strings.ToLower(objective)
+	for _, needle := range []string{
+		"publish_app_change_package",
+		"appchangepackage",
+		"app change package",
+		"package id",
+		"publish exactly one package",
+		"publish one package",
+		"owner-pullable package",
+		"package/adoption",
+	} {
+		if strings.Contains(objective, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {
