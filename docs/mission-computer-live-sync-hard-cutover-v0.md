@@ -1,6 +1,6 @@
 # MissionGradient: Computer Live Sync Hard Cutover v0
 
-**Status:** ready for execution
+**Status:** complete at staging-smoke level
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient mission with staging Playwright,
 git, CI, deploy, product APIs, Trace/VText/run-acceptance evidence, and
@@ -435,19 +435,22 @@ Required claims:
 Update this section during or after execution. A checkpoint is not completion.
 
 ```text
-status: implementation_checkpoint_pending_staging
-last checkpoint: local hard-cutover implementation and tests prepared from baseline 3b5890a3660611b98821e8c8214cd04f6bc37bc5
-current artifact state: /api/ws is runtime-owned and event-backed; old sandbox echo WS handler removed; media progress/recents and theme preferences are Dolt-backed product APIs; desktop/content/file/media/theme mutations emit owner-scoped product events; covered manual refresh UI and synced-state browser-storage calls are removed
-what shipped: not yet deployed at this checkpoint
-what was proven: frontend build; source-level no localStorage/manual-refresh regression; focused Go tests for media/theme storage and event emission; focused Go tests for /api/ws live delivery and after_seq catch-up; sandbox/cmd compile
-unproven or partial claims: deployed staging identity; two-browser-context convergence on staging; 390x844 mobile screenshots/DOM metrics; true push events for host/proxy-originated computer warmness changes
-belief-state changes: Files mutations live outside runtime canonical tables, so file API writes now emit product events through the sandbox file handler after filesystem mutation; Compute Monitor can refresh on product events but still lacks a first-class vmctl status push source
-remaining error field: staging deployment and cross-device proof; computer-status live source; broader Trace/VText live convergence proof beyond existing scoped SSE
-highest-impact remaining uncertainty: whether staging proxy/runtime route order and VM boot state expose the new runtime /api/ws semantics cleanly under authenticated two-context use
-next executable probe: push the implementation, monitor CI/deploy, verify staging commit identity, then run two-context desktop/mobile Playwright proof for theme/media/desktop/file convergence without manual refresh
-suggested resume goal string: see One-Line Goal String
-evidence artifact refs: local commands named in final report
-rollback refs: git baseline 3b5890a3660611b98821e8c8214cd04f6bc37bc5
+status: complete_staging_smoke
+last checkpoint: deployed hard-cutover plus VText worker wake race fix
+current artifact state: /api/ws is runtime-owned and event-backed; old sandbox echo WS handler removed; media progress/recents and theme preferences are Dolt-backed product APIs; desktop/content/file/media/theme mutations emit owner-scoped product events; covered manual refresh UI and synced-state browser-storage calls are removed; frontend live-event helpers connect, reconnect, suppress own-device echo, and dispatch product events
+what shipped: 7e06ba1 Hard cut over computer live sync; 803080701e41cb0fc048ff4766ed079cc07bb299 Fix VText worker wake reconciliation race
+what was proven locally: npm frontend build; Playwright source-level no localStorage/manual-refresh regression; focused Go tests for media/theme storage and event emission; focused Go tests for /api/ws live delivery and after_seq catch-up; sandbox/cmd compile; exact CI internal/runtime shard 3 reproduced locally after VText reconciliation fix
+what was proven in CI/deploy: GitHub Actions run 26142190275 succeeded; Go runtime shards 0-3, non-runtime tests, vet/build, frontend build, and Node B staging deploy all passed
+staging identity: https://draft.choir-ip.com/health reported proxy and sandbox commit 803080701e41cb0fc048ff4766ed079cc07bb299 with deployed_at 2026-05-20T04:56:25Z
+deployed product proof: authenticated Playwright proof registered a fresh user, opened desktop and 390x844 mobile contexts from the same user computer, connected both to /api/ws, wrote /api/media/progress, /api/media/recents, /api/desktop/state, and /api/preferences/theme through product APIs, observed cross-context live events for media.progress.updated, media.recent.updated, desktop.state.updated, and theme.updated, verified durable reads from the second context, then opened a third context with after_seq=1 and received persisted catch-up events for media.recent.updated, desktop.state.updated, and theme.updated
+screenshots and proof refs: test-results/computer-live-sync-hard-cutover-deployed/proof.json; test-results/computer-live-sync-hard-cutover-deployed/desktop-authenticated-live-sync.png; test-results/computer-live-sync-hard-cutover-deployed/mobile-authenticated-live-sync.png
+DOM metrics: desktop viewport 1440x900 signed_in shellVisible true manualRefreshControls []; mobile viewport 390x844 signed_in shellVisible true manualRefreshControls []
+belief-state changes: Files mutations live outside runtime canonical tables, so file API writes emit product events through the sandbox file handler after filesystem mutation; Compute Monitor can refresh on product events but still lacks a first-class vmctl status push source; catch-up requires a real positive after_seq cursor, so after_seq=0 is treated as live-only
+residual risks: Trace and VText retain their scoped SSE streams rather than being fully folded into /api/ws; candidate/promotion queue freshness depends on existing product events and refetch paths, not a newly proven queue mutation during this run; Compute Monitor does not yet receive every host/proxy-originated vmctl warmness change as a durable user-computer event; media-progress conflict handling is conservative but not yet stress-tested with simultaneous active playback on two devices
+highest-impact remaining uncertainty: whether every domain currently labeled live has an authoritative product event source under heavy real-user sessions, especially vmctl computer status, candidate/promotion queue transitions, Trace trajectory updates, and VText recent/head updates beyond existing scoped streams
+next executable probe: build domain-level live-source coverage tests for vmctl status, candidate/promotion transitions, Trace/VText queue surfaces, and Files/content mutations under two authenticated contexts; add user-visible stale/reconnecting indicators where catch-up is delayed
+suggested resume goal string: make domain live-source coverage exhaustive now that the Computer Live Bus substrate is deployed
+rollback refs: revert 803080701e41cb0fc048ff4766ed079cc07bb299 and 7e06ba1, or roll platform back to baseline 3b5890a3660611b98821e8c8214cd04f6bc37bc5
 ```
 
 ## Forbidden Shortcuts
