@@ -20,8 +20,8 @@ candidate/background computers where healthy
 > It must not use `export_patchset`, `/api/promotions`, or synthetic recipient
 > digests as acceptable evidence.
 >
-> Direct owner login to alternate experiment accounts is out of scope unless it
-> already works without new auth machinery. The review invariant is package
+> Direct owner login to alternate experiment accounts is out of scope. It is
+> not an acceptance path for this portfolio. The review invariant is package
 > mobility: an experiment computer publishes a product-visible
 > AppChangePackage, the owner inspects the evidence, then pulls, adopts, or
 > promotes the package into an owner-controlled computer for manual QA,
@@ -39,7 +39,7 @@ candidate/background computers where healthy
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Start from the deployed 74230a3 package-mobility substrate and the Wave 1/Wave 2 checkpoints where Chiron Shelf, process/window animation, Choir Liquid Material Engine, and Python code mode A/B all produced product-visible AppChangePackages that were pulled, verified, and promoted in recipient computers. Continue with the quality/evidence pass required before calling the portfolio complete: eliminate or precisely explain duplicate package identities, strengthen run-acceptance synthesis so owner-pullable package/adoption evidence is reflected instead of remaining staging-smoke blocked, and produce a concise owner review certificate for all four packages with Trace/VText/run-acceptance refs, screenshots or Playwright video refs, benchmarks where relevant, rollback refs, residual risks, and promotion recommendations. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion while run-acceptance or duplicate-package evidence contradicts clean success. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Start from the deployed 74230a3 package-mobility substrate and the Wave 1/Wave 2 checkpoints where Chiron Shelf, process/window animation, Choir Liquid Material Engine, and Python code mode A/B all produced product-visible AppChangePackages that were pulled, verified, and promoted in recipient computers. Continue with the quality/evidence pass required before calling the portfolio complete: eliminate or precisely explain duplicate package identities, strengthen run-acceptance synthesis so owner-pullable package/adoption evidence is reflected instead of remaining staging-smoke blocked, and produce a concise owner review certificate for all four packages with Trace/VText/run-acceptance refs, screenshots or Playwright video refs, benchmarks where relevant, rollback refs, residual risks, and promotion recommendations. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope and is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion while run-acceptance or duplicate-package evidence contradicts clean success. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -50,8 +50,7 @@ feature. The target is an experiment portfolio the owner can inspect the next
 day by reviewing package/adoption evidence, pulling promising packages into an
 owner-controlled account/computer when useful, comparing results, and choosing
 what should move toward promotion. Direct login to distinct experiment accounts
-is not part of the required QA path. It is out of scope unless the auth surface
-already supports it without new machinery.
+is not part of the QA path and must not become a mission subproblem.
 
 Manual owner review should therefore look like:
 
@@ -84,10 +83,10 @@ successful experiment publishes a product-visible AppChangePackage that can be
 inspected, pulled, adopted, promoted, or rejected from an owner-controlled
 computer such as `ymnath@choir-ip.com`.
 
-Direct login to source experiment accounts is therefore a non-goal. If it
-already works, it may be noted, but it is not evidence of success and it must
-not consume mission time. Auth work belongs in this mission only when the
-package/adoption/promotion path itself cannot function without it.
+Direct login to source experiment accounts is therefore a non-goal. It is not
+evidence of success and it must not consume mission time. Auth work belongs in
+this mission only when the package/adoption/promotion path itself cannot
+function without it.
 
 The four experiments are:
 
@@ -624,7 +623,7 @@ current artifact state: four-lane experiment portfolio exists as owner-pullable
   accounts may be disposable or non-loginable; the package must be inspectable,
   pullable, adoptable, or promotable into an owner-controlled computer.
 review-path decision: direct owner login to alternate accounts is out of scope
-  for this portfolio unless it already works without new auth machinery.
+  for this portfolio and is not an acceptance path.
   Experiments should publish product-visible AppChangePackages that the owner
   can inspect, pull, adopt, promote, or reject inside an owner-controlled
   account/computer such as ymnath@choir-ip.com. Do not add auth handoff code
