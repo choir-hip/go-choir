@@ -284,6 +284,37 @@ func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *te
 	}
 }
 
+func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptanceSourcePackageOnlyTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-run-acceptance-source-package","trajectory_id":"traj-source-package"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel || rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("acceptance = %s/%s, want export-level/accepted; checkpoints=%+v invariants=%+v contracts=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.VerifierContracts)
+	}
+	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published"} {
+		if !acceptanceHasCheckpoint(rec, want) {
+			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
+		}
+	}
+	if acceptanceHasCheckpoint(rec, "app_adoption_verified") || acceptanceHasCheckpoint(rec, "app_adoption_promoted") {
+		t.Fatalf("source package proof must not synthesize recipient adoption checkpoints: %+v", rec.Checkpoints)
+	}
+	for _, contract := range rec.VerifierContracts {
+		if contract.Name == "export-level-product-path" && contract.State != "passed" {
+			t.Fatalf("export-level-product-path contract = %+v, want passed", contract)
+		}
+	}
+}
+
 func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
@@ -551,6 +582,162 @@ func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.
 
 func seedRunAcceptanceTrajectory(t *testing.T, rt *Runtime) {
 	seedRunAcceptanceTrajectoryWithDelegateStatus(t, rt, "worker_run_completed", string(types.RunCompleted), "")
+}
+
+func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	finishedAt := now.Add(15 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-source-package",
+			AgentID:      "agent-conductor-source-package",
+			ChannelID:    "channel-source-package",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Publish one reviewable AppChangePackage.",
+			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-source-package"}`,
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-source-package",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+				"input_source":          "prompt_bar",
+			},
+		},
+		{
+			RunID:        "run-vtext-source-package",
+			AgentID:      "agent-vtext-source-package",
+			ChannelID:    "channel-source-package",
+			ParentRunID:  "run-conductor-source-package",
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Own the package proof document.",
+			CreatedAt:    now.Add(3 * time.Second),
+			UpdatedAt:    now.Add(4 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileVText,
+				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataTrajectoryID: "traj-source-package",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+		{
+			RunID:        "run-super-source-package",
+			AgentID:      "agent-super-source-package",
+			ChannelID:    "channel-source-package",
+			ParentRunID:  "run-vtext-source-package",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Delegate a worker and publish one AppChangePackage.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(12 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-source-package",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+	}
+	for _, run := range runs {
+		if err := rt.store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-submit-source-package",
+		RunID:        "run-conductor-source-package",
+		AgentID:      "agent-conductor-source-package",
+		ChannelID:    "channel-source-package",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-source-package",
+		Timestamp:    now,
+		Kind:         types.EventRunSubmitted,
+		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-vtext-source-package",
+		RunID:        "run-vtext-source-package",
+		AgentID:      "agent-vtext-source-package",
+		ChannelID:    "channel-source-package",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-source-package",
+		Timestamp:    now.Add(4 * time.Second),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      json.RawMessage(`{"doc_id":"doc-source-package","revision_id":"rev-source-package"}`),
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-source-package", "run-vtext-source-package", "agent-vtext-source-package", "traj-source-package", "channel-source-package", now.Add(5*time.Second), "request_super_execution", map[string]any{
+		"agent_id": "agent-super-source-package",
+		"loop_id":  "run-super-source-package",
+		"state":    "running",
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-worker-lease-source-package", "run-super-source-package", "agent-super-source-package", "traj-source-package", "channel-source-package", now.Add(6*time.Second), "request_worker_vm", map[string]any{
+		"status": "worker_requested",
+		"handle": map[string]any{
+			"kind":          "worker",
+			"worker_id":     "worker-source-package",
+			"vm_id":         "vm-source-package",
+			"desktop_id":    types.PrimaryDesktopID,
+			"machine_class": "standard",
+			"sandbox_url":   "http://127.0.0.1:8085",
+		},
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-delegate-source-package", "run-super-source-package", "agent-super-source-package", "traj-source-package", "channel-source-package", now.Add(10*time.Second), "delegate_worker_vm", map[string]any{
+		"status":                  "worker_run_completed",
+		"state":                   string(types.RunCompleted),
+		"worker_vm_id":            "vm-source-package",
+		"worker_id":               "worker-source-package",
+		"worker_sandbox_url":      "http://127.0.0.1:8085",
+		"loop_id":                 "run-worker-source-package",
+		"event_count":             12,
+		"worker_child_run_ids":    []string{"run-implementation-source-package", "run-verifier-source-package"},
+		"worker_event_summary":    []map[string]any{{"kind": "tool.result", "tool": "publish_app_change_package", "output_excerpt": "published pkg-source-only"}},
+		"worker_spawned_profiles": []string{AgentProfileCoSuper},
+		"app_change_packages": []map[string]any{{
+			"status":                         "published_unlisted",
+			"package_id":                     "pkg-source-only",
+			"app_id":                         "portfolio-source-package",
+			"base_sha":                       "base-source-package",
+			"candidate_head_sha":             "worker-head-source-package",
+			"source_computer_id":             "computer-source",
+			"source_candidate_id":            "candidate-source",
+			"candidate_source_ref":           "refs/computers/computer-source/candidates/candidate-source",
+			"package_manifest_sha256":        "sha256-manifest-source-package",
+			"runtime_source_delta_sha256":    "sha256-runtime-delta-source-package",
+			"ui_source_delta_sha256":         "sha256-ui-delta-source-package",
+			"recipient_build_required":       true,
+			"source_runtime_artifact_digest": "runtime-source-digest",
+			"source_ui_artifact_digest":      "ui-source-digest",
+		}},
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-app-package-source-package",
+		RunID:        "run-worker-source-package",
+		AgentID:      "agent-super-source-package",
+		ChannelID:    "channel-source-package",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-source-package",
+		Timestamp:    now.Add(11 * time.Second),
+		Kind:         types.EventAppChangePackagePublished,
+		Payload:      json.RawMessage(`{"package_id":"pkg-source-only","app_id":"portfolio-source-package","source_computer_id":"computer-source","source_candidate_id":"candidate-source","candidate_source_ref":"refs/computers/computer-source/candidates/candidate-source","package_manifest_sha":"sha256-manifest-source-package"}`),
+	})
 }
 
 func seedRunAcceptanceExportedTimeoutTrajectory(t *testing.T, rt *Runtime) {
@@ -985,6 +1172,10 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 }
 
 func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool string, output map[string]any) {
+	appendAcceptanceToolResultForTrajectory(t, rt, eventID, runID, agentID, "traj-acceptance", "channel-acceptance", at, tool, output)
+}
+
+func appendAcceptanceToolResultForTrajectory(t *testing.T, rt *Runtime, eventID, runID, agentID, trajectoryID, channelID string, at time.Time, tool string, output map[string]any) {
 	t.Helper()
 	outputJSON, err := json.Marshal(output)
 	if err != nil {
@@ -1003,9 +1194,9 @@ func appendAcceptanceToolResult(t *testing.T, rt *Runtime, eventID, runID, agent
 		EventID:      eventID,
 		RunID:        runID,
 		AgentID:      agentID,
-		ChannelID:    "channel-acceptance",
+		ChannelID:    channelID,
 		OwnerID:      "user-alice",
-		TrajectoryID: "traj-acceptance",
+		TrajectoryID: trajectoryID,
 		Timestamp:    at,
 		Kind:         types.EventToolResult,
 		Payload:      payload,

@@ -985,7 +985,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && has["vtext_opened"] {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["app_package_published"] && has["app_adoption_verified"] {
+	if has["app_package_published"] && (has["worker_delegated"] || has["app_adoption_verified"]) {
 		level = types.RunAcceptanceExportLevel
 		state = types.RunAcceptanceAccepted
 	}

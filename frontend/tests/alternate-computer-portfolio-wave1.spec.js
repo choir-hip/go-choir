@@ -558,10 +558,19 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
       const diagnostics = await traceDiagnostics(source.page, lane.submission_id);
       const matches = packagesResult.byLane[lane.id] || [];
       const pkg = matches[0] || null;
+      const duplicatePackageBlocker = matches.length > 1
+        ? `Expected one migrating AppChangePackage identity for ${lane.appID}, found ${matches.length}: ${matches.map((candidate) => candidate.package_id).join(', ')}`
+        : '';
       const sourceRunAcceptance = await synthesizeRunAcceptance(source.page, lane, marker, wave, {
         trajectoryID: lane.submission_id,
         targetSuffix: 'source',
       });
+      const packageTraceRunAcceptance = pkg?.trace_id && pkg.trace_id !== lane.submission_id
+        ? await synthesizeRunAcceptance(source.page, lane, marker, wave, {
+          trajectoryID: pkg.trace_id,
+          targetSuffix: `source-package-${pkg.package_id}`,
+        })
+        : null;
       if (pkg) {
         const adoption = await adoptPackageIntoRecipient(recipient.page, lane, pkg, marker);
         const recipientRunAcceptance = adoption.trace_id
@@ -572,7 +581,7 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           : null;
         const acceptedRecipientEvidence = recipientRunAcceptance?.state === 'accepted'
           && ['promotion-level', 'continuation-level'].includes(recipientRunAcceptance?.acceptance_level || '');
-        const laneStatus = adoption.status === 'owner_pullable_experiment' && acceptedRecipientEvidence
+        const laneStatus = adoption.status === 'owner_pullable_experiment' && acceptedRecipientEvidence && !duplicatePackageBlocker
           ? 'owner_pullable_experiment'
           : 'checkpoint_package';
         laneReports[lane.id] = {
@@ -592,10 +601,14 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           owner_recipient_adoption: adoption,
           run_acceptance: recipientRunAcceptance || sourceRunAcceptance,
           source_run_acceptance: sourceRunAcceptance,
+          package_trace_run_acceptance: packageTraceRunAcceptance,
           recipient_run_acceptance: recipientRunAcceptance,
           trace_diagnostics: diagnostics,
+          duplicate_package_blocker: duplicatePackageBlocker,
           recommendation: laneStatus === 'owner_pullable_experiment'
             ? 'iterate: package crossed into an owner-review recipient computer with build/adoption evidence'
+            : duplicatePackageBlocker
+              ? 'checkpoint: package crossed into a recipient computer, but duplicate package identities must be resolved or explicitly selected before clean promotion'
             : 'checkpoint: inspect verifier or run-acceptance blocker before promotion',
         };
       } else {
@@ -608,6 +621,7 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           trace_diagnostics: diagnostics,
           run_acceptance: sourceRunAcceptance,
           source_run_acceptance: sourceRunAcceptance,
+          package_trace_run_acceptance: null,
           recipient_run_acceptance: null,
           package_candidates: [],
           blocker: delegateBlocker || `No matching AppChangePackage for ${lane.appID} after ${PACKAGE_WAIT_MS}ms.`,
@@ -663,7 +677,11 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
           `Prompt submission: ${lane.submission_id}`,
           `Packages: ${(laneReport.package_candidates || []).map((pkg) => pkg.package_id).join(', ') || 'none'}`,
           `Source run acceptance: ${laneReport.source_run_acceptance?.acceptance_id || 'none'} ${laneReport.source_run_acceptance?.acceptance_level || ''} ${laneReport.source_run_acceptance?.state || ''}`.trim(),
+          laneReport.package_trace_run_acceptance
+            ? `Package trace run acceptance: ${laneReport.package_trace_run_acceptance.acceptance_id || 'none'} ${laneReport.package_trace_run_acceptance.acceptance_level || ''} ${laneReport.package_trace_run_acceptance.state || ''}`.trim()
+            : '',
           `Recipient run acceptance: ${laneReport.recipient_run_acceptance?.acceptance_id || 'none'} ${laneReport.recipient_run_acceptance?.acceptance_level || ''} ${laneReport.recipient_run_acceptance?.state || ''}`.trim(),
+          laneReport.duplicate_package_blocker ? `Duplicate package blocker: ${laneReport.duplicate_package_blocker}` : '',
           `Recommendation: ${laneReport.recommendation}`,
           laneReport.blocker ? `Blocker: ${laneReport.blocker}` : '',
         ].filter(Boolean);
