@@ -205,6 +205,13 @@ test('Settings renders AppChangePackages and adoptions without browser-internal 
   expect(session.authenticated).toBe(true);
   expect(session.user?.id).toBeTruthy();
 
+  const legacyPromotionsRoute = await page.evaluate(async () => {
+    const res = await fetch('/api/promotions', { credentials: 'include' });
+    return { status: res.status, body: await res.text() };
+  });
+  expect(legacyPromotionsRoute.status).toBe(404);
+  expect(legacyPromotionsRoute.body).not.toContain('PromotionCandidate');
+
   const seeded = await createAppPackageAndAdoption(page, 'settings');
 
   await openApp(page, 'settings');
@@ -216,7 +223,7 @@ test('Settings renders AppChangePackages and adoptions without browser-internal 
   const adoption = settings.locator(`[data-settings-adoption-id="${seeded.adoption.adoption_id}"]`);
   await expect(adoption).toContainText(seeded.appID);
   await expect(adoption).toContainText(seeded.targetComputerID);
-  await expect(adoption.locator('[data-settings-promotion-status]')).toContainText('proposed');
+  await expect(adoption.locator('[data-settings-promotion-status]')).toContainText('candidate_applied');
   await expect(adoption.locator('[data-settings-adoption-verify]')).toBeVisible();
   expect(forbiddenRequests).toHaveLength(0);
 });

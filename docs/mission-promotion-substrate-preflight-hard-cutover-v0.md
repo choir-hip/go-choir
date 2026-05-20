@@ -288,8 +288,8 @@ Examples:
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete
-last checkpoint: local hard-cut implementation and focused validation completed
+status: complete
+last checkpoint: deployed hard-cut implementation and staging product-path smoke completed
 current artifact state:
 - Dolt ICU cgo discovery is repo-owned through the repo Nix dev shell and
   `.envrc`, while `go.mod` continues to use upstream `github.com/dolthub/go-icu-regex`.
@@ -300,7 +300,22 @@ current artifact state:
   path are removed from active product/runtime/agent flows.
 - Historical promotion candidate storage/types and Trace readability remain
   inert for old records; they are not current success paths.
-what shipped: not yet shipped; awaiting commit/push/CI/deploy
+what shipped:
+- behavior hard-cut commit: `305b0e48a4f5133a466dae5da9176cdbb6576949`
+  (`Hard cut promotion substrate to app adoptions`)
+- cleanup/dev-shell commit: `98b73c58930dab1c123f5be3eedb8130b19f796c`
+  (`Use dev shell for Dolt ICU wiring`)
+CI/deploy:
+- GitHub Actions run `26150144224` for `305b0e48...` passed all Go/frontend
+  gates but failed the Node B deploy because Nix fixed-output vendoring saw
+  `github.com/dolthub/go-icu-regex` replaced in `go.mod` while
+  `vendor/modules.txt` did not mark that replacement.
+- GitHub Actions run `26151055695` for `98b73c5...` passed all Go/frontend
+  gates and `Deploy to Staging (Node B)` succeeded in 5m01s.
+staging identity:
+- `https://draft.choir-ip.com/health` reported proxy and sandbox deployed
+  commit `98b73c58930dab1c123f5be3eedb8130b19f796c`, deployed at
+  `2026-05-20T08:34:29Z`.
 what was proven:
 - focused runtime hard-cut suite passed:
   go test -count=1 ./internal/runtime -run
@@ -323,29 +338,48 @@ what was proven:
   'TestAppChangePackageMigratesAcrossCandidateComputers|TestAppAdoptionRequiresActualRecipientBuild|TestRunAcceptanceSynthesizeDerivesExportLevelRecord|TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel|TestDelegateWorkerVMReturnsTimeoutRunEvidence'
 - frontend build passed with only existing Vite chunk-size warnings:
   pnpm --dir frontend build
-- live code exact-string audit is clean excluding one untracked temporary
-  historical proof file:
-  rg -n 'QueuePromotionCandidate|VerifyPromotionCandidate|ApprovePromotionCandidate|PromotePromotionCandidate|RejectPromotionCandidate|/internal/promotions|/api/promotions|export_patchset|export_patchsets|promotion_queue|require_recipient_build' internal/runtime frontend/src frontend/tests -g '!frontend/dist/**' -g '!frontend/tests/platform-promotion-substrate-proof.tmp.spec.js'
+- live code exact-string audit is clean for active runtime/frontend product
+  surfaces:
+  rg -n 'QueuePromotionCandidate|VerifyPromotionCandidate|ApprovePromotionCandidate|PromotePromotionCandidate|RejectPromotionCandidate|/internal/promotions|/api/promotions|export_patchset|export_patchsets|promotion_queue|require_recipient_build' internal/runtime frontend/src -g '!frontend/dist/**'
+- deployed product-path smoke passed against staging:
+  PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com pnpm --dir frontend exec
+  playwright test tests/trace-settings-registry.spec.js -g
+  'Settings renders AppChangePackages and adoptions without browser-internal routes'
+  --workers=1 --reporter=line
+- deployed smoke registered a real passkey user, verified authenticated
+  `/api/promotions` returns `404`, seeded `/api/app-change-packages` and
+  `/api/computers/:id/adoptions`, and observed Settings rendering the adoption
+  lifecycle state as `candidate_applied` with no browser-internal route use.
 unproven or partial claims:
-- CI/deploy/staging identity and deployed product-path smoke are not yet proven
+- full end-to-end alternate-computer experiment portfolio remains unstarted;
+  this mission only removes false-success paths before that portfolio
 - the untracked frontend/tests/platform-promotion-substrate-proof.tmp.spec.js
   still contains historical old-path strings but is not tracked or active
 belief-state changes:
 - old patchset promotion should be treated as historical audit data only;
   current experiment portfolio evidence must be package/adoption evidence
 remaining error field:
-- none in the focused local hard-cut proof; remaining errors may surface in
-  full tests, CI, or staging smoke
+- none for this preflight; staging smoke passed on the current deployed cutover
 highest-impact remaining uncertainty:
-- whether deployed staging identity and product smoke confirm the hard cut
-  under the real Node B runtime
+- whether candidate workers consistently enter the repo dev shell when local
+  Dolt/ICU tests are required; the platform CI/deploy path itself remains
+  upstream-DoltHub/Nix-owned and green
 next executable probe:
-- finish full runtime/store tests, commit, push main, monitor CI/deploy, verify
-  staging identity, and run product-path smoke against draft.choir-ip.com
+- run the alternate-computer experiment portfolio with AppChangePackage/adoption
+  evidence as the only current patch movement path
 suggested resume goal string:
 - /goal Run docs/mission-promotion-substrate-preflight-hard-cutover-v0.md as a Codex-operated MissionGradient preflight mission...
 evidence artifact refs:
 - local command outputs in this Codex session
+- GitHub Actions: https://github.com/yusefmosiah/go-choir/actions/runs/26151055695
+- staging `/health` identity for `98b73c5...`
 rollback refs:
 - pre-mission git SHA: 11327dbd580e2259aa84c17782b1c31ba56ee35d
+- behavior hard-cut rollback: revert `305b0e48a4f5133a466dae5da9176cdbb6576949`
+- dev-shell cleanup rollback: revert `98b73c58930dab1c123f5be3eedb8130b19f796c`
+go/no-go certificate:
+- GO for the alternate-computer experiment portfolio, with one condition:
+  success evidence must use AppChangePackage -> adoption -> recipient build ->
+  promote/rollback records. `export_patchset`, `/api/promotions`, synthetic
+  recipient digests, and old promotion queue UI are not acceptable evidence.
 ```
