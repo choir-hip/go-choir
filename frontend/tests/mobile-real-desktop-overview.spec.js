@@ -37,6 +37,59 @@ async function openRealDesktopSet(page) {
   await expect(page.locator('[data-window]')).toHaveCount(4, { timeout: 20000 });
 }
 
+async function forceReaderWindowsOverShelf(page) {
+  for (const appId of ['pdf', 'epub']) {
+    const win = page.locator(`[data-window-app-id="${appId}"]`).last();
+    await expect(win).toBeVisible({ timeout: 20000 });
+    await win.evaluate((element, index) => {
+      Object.assign(element.style, {
+        left: `${8 + index * 20}px`,
+        top: '96px',
+        width: '360px',
+        height: '680px',
+        zIndex: `${5000 + index}`,
+      });
+    }, appId === 'pdf' ? 0 : 1);
+  }
+}
+
+async function expectDeskMenuTopLayer(page, testInfo, label) {
+  await page.locator('[data-desk-button]').click();
+  const menu = page.locator('[data-desk-menu]');
+  await expect(menu).toBeVisible({ timeout: 10000 });
+  await page.screenshot({ path: testInfo.outputPath(`${label}-desk-menu-top-layer.png`), fullPage: false });
+
+  const layering = await page.evaluate(() => {
+    const shelf = document.querySelector('[data-shelf]');
+    const menuElement = document.querySelector('[data-desk-menu]');
+    const button = document.querySelector('[data-desk-button]');
+    const menuBox = menuElement?.getBoundingClientRect();
+    const buttonBox = button?.getBoundingClientRect();
+    const menuProbe = menuBox
+      ? document.elementFromPoint(menuBox.left + 24, menuBox.top + 24)
+      : null;
+    const buttonProbe = buttonBox
+      ? document.elementFromPoint(buttonBox.left + buttonBox.width / 2, buttonBox.top + buttonBox.height / 2)
+      : null;
+    return {
+      shelfMenuOpen: shelf?.getAttribute('data-desk-menu-open') || '',
+      shelfZIndex: Number.parseInt(getComputedStyle(shelf).zIndex || '0', 10) || 0,
+      menuZIndex: Number.parseInt(getComputedStyle(menuElement).zIndex || '0', 10) || 0,
+      menuProbeInside: Boolean(menuElement?.contains(menuProbe)),
+      buttonProbeInside: Boolean(button?.contains(buttonProbe)),
+      menuProbeWindow: menuProbe?.closest?.('[data-window]')?.getAttribute('data-window-app-id') || '',
+      buttonProbeWindow: buttonProbe?.closest?.('[data-window]')?.getAttribute('data-window-app-id') || '',
+    };
+  });
+
+  expect(layering.shelfMenuOpen).toBe('true');
+  expect(layering.shelfZIndex).toBeGreaterThanOrEqual(10000);
+  expect(layering.menuProbeInside).toBe(true);
+  expect(layering.buttonProbeInside).toBe(true);
+  expect(layering.menuProbeWindow).toBe('');
+  expect(layering.buttonProbeWindow).toBe('');
+}
+
 async function readDesktopMetrics(page) {
   return page.evaluate(() => {
     const desktop = document.querySelector('[data-desktop-windows]')?.getBoundingClientRect();
@@ -216,4 +269,23 @@ test('desktop overview preserves the same shell model on desktop viewport', asyn
   expect(overviewMetrics.overview.livePreviewCount).toBe(overviewMetrics.overview.domLivePreviewCount);
 
   console.log(JSON.stringify({ phase: 'desktop-real-desktop', metrics }, null, 2));
+});
+
+test('Desk menu stays above high-z reader windows on mobile and desktop', async ({
+  page,
+  authenticator,
+}, testInfo) => {
+  const viewports = [
+    { label: 'mobile', size: { width: 390, height: 844 } },
+    { label: 'desktop', size: { width: 1280, height: 900 } },
+  ];
+
+  for (const { label, size } of viewports) {
+    const email = uniqueEmail(`desk-menu-layer-${label}`);
+    await registerAndLoadDesktop(page, email, size);
+    await launchFromDesk(page, 'pdf');
+    await launchFromDesk(page, 'epub');
+    await forceReaderWindowsOverShelf(page);
+    await expectDeskMenuTopLayer(page, testInfo, label);
+  }
 });

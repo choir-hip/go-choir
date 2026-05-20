@@ -170,7 +170,14 @@
   });
 </script>
 
-<div class="bottom-bar" data-bottom-bar data-shelf bind:this={bottomBarEl}>
+<div
+  class:menu-open={menuOpen}
+  class="bottom-bar"
+  data-bottom-bar
+  data-shelf
+  data-desk-menu-open={menuOpen ? 'true' : 'false'}
+  bind:this={bottomBarEl}
+>
   <!-- Left section: Desk menu + open windows -->
   <div class="bar-left">
     <button
@@ -345,6 +352,10 @@
     gap: 12px;
   }
 
+  .bottom-bar.menu-open {
+    z-index: 10000;
+  }
+
   .bar-left {
     position: relative;
     display: flex;
@@ -412,7 +423,7 @@
       rgba(15, 23, 42, 0.96);
     box-shadow: var(--choir-shadow-soft, 0 18px 48px rgba(0, 0, 0, 0.4));
     padding: 0.8rem;
-    z-index: 300;
+    z-index: 1;
     max-height: min(76dvh, 40rem);
     overflow-y: auto;
     backdrop-filter: blur(18px);

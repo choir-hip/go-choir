@@ -80,6 +80,7 @@ const BOTTOM_BAR_HEIGHT = 56;
 const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
+const WINDOW_Z_INDEX_COMPACT_AT = 80;
 export function getAppDefinition(appId) {
   return APP_REGISTRY.find((app) => app.id === appId) || null;
 }
@@ -562,10 +563,13 @@ export function suspendWindowBody(windowId) {
 
 /** Set windows state (used for loading from server) */
 export function setWindows(newWindows, newActiveId) {
-  windows.set(newWindows.map((windowState) => normalizeWindowGeometry(windowState)));
+  const normalizedWindows = normalizeWindowStackOrder(
+    newWindows.map((windowState) => normalizeWindowGeometry(windowState))
+  );
+  windows.set(normalizedWindows);
   activeWindowId.set(newActiveId || '');
-  if (newWindows.length > 0) {
-    const maxZ = Math.max(...newWindows.map((w) => w.zIndex || 1));
+  if (normalizedWindows.length > 0) {
+    const maxZ = Math.max(...normalizedWindows.map((w) => w.zIndex || 1));
     nextZIndex.set(maxZ + 1);
   }
 }
@@ -625,10 +629,57 @@ export function toggleShowDesktop() {
 // ---- Internal helpers ----
 
 function getNextZIndex() {
+  let current;
+  const unsubscribe = nextZIndex.subscribe((value) => {
+    current = value;
+  });
+  unsubscribe();
+  if (current > WINDOW_Z_INDEX_COMPACT_AT) {
+    compactWindowStackOrder();
+  }
+
   let next;
   nextZIndex.update((n) => {
     next = n;
     return n + 1;
   });
   return next;
+}
+
+function isStackedWindow(windowState) {
+  return windowState?.mode !== 'closed' && windowState?.mode !== 'hidden';
+}
+
+function normalizeWindowStackOrder(windowStates = []) {
+  const zById = new Map();
+  [...windowStates]
+    .filter(isStackedWindow)
+    .sort((a, b) => {
+      const zDiff = (a.zIndex || 0) - (b.zIndex || 0);
+      if (zDiff !== 0) return zDiff;
+      return String(a.windowId || '').localeCompare(String(b.windowId || ''));
+    })
+    .forEach((windowState, index) => {
+      if (windowState.windowId) {
+        zById.set(windowState.windowId, index + 1);
+      }
+    });
+
+  return windowStates.map((windowState) =>
+    zById.has(windowState.windowId)
+      ? { ...windowState, zIndex: zById.get(windowState.windowId) }
+      : windowState
+  );
+}
+
+function compactWindowStackOrder() {
+  let maxZ = 0;
+  windows.update(($windows) => {
+    const compacted = normalizeWindowStackOrder($windows);
+    maxZ = compacted.reduce((max, windowState) => (
+      isStackedWindow(windowState) ? Math.max(max, windowState.zIndex || 0) : max
+    ), 0);
+    return compacted;
+  });
+  nextZIndex.set(maxZ + 1);
 }
