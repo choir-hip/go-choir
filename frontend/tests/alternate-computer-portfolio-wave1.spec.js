@@ -5,12 +5,17 @@ import { getSession, registerPasskey } from './helpers/auth.js';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://draft.choir-ip.com';
-const RUN_WAVE1 = process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE1 === '1';
-const PACKAGE_WAIT_MS = Number(process.env.GO_CHOIR_ALT_PORTFOLIO_WAVE1_PACKAGE_WAIT_MS || 40 * 60 * 1000);
+const PORTFOLIO_WAVE = process.env.GO_CHOIR_ALT_PORTFOLIO_WAVE
+  || (process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE2 === '1' ? '2' : '1');
+const RUN_PORTFOLIO_WAVE = process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE1 === '1'
+  || process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE2 === '1';
+const PACKAGE_WAIT_MS = Number(process.env.GO_CHOIR_ALT_PORTFOLIO_PACKAGE_WAIT_MS
+  || process.env.GO_CHOIR_ALT_PORTFOLIO_WAVE1_PACKAGE_WAIT_MS
+  || 40 * 60 * 1000);
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
 test.setTimeout(Math.max(PACKAGE_WAIT_MS + 20 * 60 * 1000, 60 * 60 * 1000));
-test.skip(!RUN_WAVE1, 'set GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE1=1 to run deployed portfolio Wave 1 proof');
+test.skip(!RUN_PORTFOLIO_WAVE, 'set GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE1=1 or GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE2=1 to run deployed portfolio proof');
 
 function uniqueEmail(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -161,6 +166,28 @@ async function promptStatus(page, submissionId) {
 async function traceSnapshot(page, trajectoryId) {
   const res = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
   return res.ok ? res.json : { error: res.text, status: res.status };
+}
+
+async function synthesizeRunAcceptance(page, lane, marker, wave) {
+  const res = await postJSON(page, '/api/run-acceptances/synthesize', {
+    target_mission_id: `mission-alternate-computer-ux-experiment-portfolio-v0-wave${wave}-${lane.id}`,
+    source_prompt_or_objective: [
+      `Wave ${wave} ${lane.name} portfolio lane.`,
+      `Marker: ${marker}.`,
+      lane.objective,
+    ].join(' '),
+    trajectory_id: lane.submission_id,
+    staging_url: new URL(BASE_URL).origin,
+  });
+  if (res.ok) {
+    return res.json;
+  }
+  return {
+    state: 'blocked',
+    acceptance_level: 'docs-level',
+    synthesize_status: res.status,
+    synthesize_error: res.text,
+  };
 }
 
 function tryParseJSON(value) {
@@ -444,6 +471,7 @@ function lanePrompt(lane, marker) {
     'Foreground super must request a worker VM and delegate a vsuper candidate-world run.',
     'VSuper should coordinate at most two co-super children: one implementation worker and one verifier.',
     'The implementation should make the smallest real source change that expresses this experiment in Choir, commit it in the candidate checkout, and publish exactly one AppChangePackage.',
+    'If an implementation child publishes an AppChangePackage, the vsuper parent must not publish a second package; return the child package id and treat duplicate package publication as a blocker.',
     'Use publish_app_change_package, not export_patchset or /api/promotions.',
     `Set app_id to ${lane.appID}, visibility unlisted, and include marker ${marker} in the package summary, provenance, or source delta.`,
     'Do not push to GitHub, do not mutate the active computer directly, and do not claim platform promotion.',
@@ -452,9 +480,25 @@ function lanePrompt(lane, marker) {
   ].join(' ');
 }
 
-test('Wave 1 launches Chiron and animation lanes and records package/adoption evidence', async ({ browser }, testInfo) => {
-  const marker = `alt-portfolio-wave1-${Date.now()}`;
-  const lanes = [
+function portfolioLanes(wave, marker) {
+  if (String(wave) === '2') {
+    return [
+      {
+        id: 'liquid',
+        name: 'Choir Liquid Material Engine',
+        appID: `portfolio-liquid-material-${safeID(marker)}`,
+        objective: 'Experiment goal: build a custom WebGL-first shell material prototype for Choir with one renderer context, owned synthetic material fields, registered shell surfaces, DOM controls/text above the material, reduced transparency/reduced motion fallback, and product-safe benchmarks for WebGL context count, frame-time/resource cost, and heavy-window behavior. Do not capture private app DOM into GPU textures and do not use liquid-dom as mobile Safari proof.',
+      },
+      {
+        id: 'python',
+        name: 'Python code mode A/B',
+        appID: `portfolio-python-code-mode-${safeID(marker)}`,
+        objective: 'Experiment goal: create a candidate super/vsuper/co-super profile family that replaces bash with a minimal Python execution primitive for the candidate profile family, then benchmark against the existing bash family on token use, tool-loop iterations, wall-clock time, tool execution time, traceability, changed files, and foreground-mutation safety. Python must replace bash in this candidate family rather than being added beside bash.',
+      },
+    ];
+  }
+
+  return [
     {
       id: 'chiron',
       name: 'Chiron Shelf observability',
@@ -468,9 +512,15 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
       objective: 'Experiment goal: add a tasteful state-motion vocabulary for boot/wake, app launch, window raise/minimize/restore, live sync, and candidate/worker status; include reduced-motion handling and do not add decorative shimmer detached from real state.',
     },
   ];
+}
 
-  const source = await newRegisteredDesktop(browser, 'alt-portfolio-wave1-source');
-  const recipient = await newRegisteredDesktop(browser, 'alt-portfolio-wave1-recipient');
+test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adoption evidence`, async ({ browser }, testInfo) => {
+  const wave = safeID(PORTFOLIO_WAVE);
+  const marker = `alt-portfolio-wave${wave}-${Date.now()}`;
+  const lanes = portfolioLanes(wave, marker);
+
+  const source = await newRegisteredDesktop(browser, `alt-portfolio-wave${wave}-source`);
+  const recipient = await newRegisteredDesktop(browser, `alt-portfolio-wave${wave}-recipient`);
   const forbiddenRequests = [];
   for (const page of [source.page, recipient.page]) {
     page.on('request', (request) => {
@@ -505,6 +555,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
       const diagnostics = await traceDiagnostics(source.page, lane.submission_id);
       const matches = packagesResult.byLane[lane.id] || [];
       const pkg = matches[0] || null;
+      const runAcceptance = await synthesizeRunAcceptance(source.page, lane, marker, wave);
       if (pkg) {
         const adoption = await adoptPackageIntoRecipient(recipient.page, lane, pkg, marker);
         laneReports[lane.id] = {
@@ -522,6 +573,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
             package_manifest_sha256: candidate.package_manifest_sha256,
           })),
           owner_recipient_adoption: adoption,
+          run_acceptance: runAcceptance,
           trace_diagnostics: diagnostics,
           recommendation: adoption.status === 'owner_pullable_experiment'
             ? 'iterate: package crossed into an owner-review recipient computer with build/adoption evidence'
@@ -535,6 +587,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
           prompt,
           trace_mobile_summary: trace.mobile_summary || null,
           trace_diagnostics: diagnostics,
+          run_acceptance: runAcceptance,
           package_candidates: [],
           blocker: delegateBlocker || `No matching AppChangePackage for ${lane.appID} after ${PACKAGE_WAIT_MS}ms.`,
           recommendation: 'root-cause super/vsuper worker package publication before retrying this lane',
@@ -544,9 +597,10 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
 
     const report = {
       status: Object.values(laneReports).every((lane) => lane.status === 'owner_pullable_experiment')
-        ? 'checkpoint_wave1_owner_pullable'
+        ? `checkpoint_wave${wave}_owner_pullable`
         : 'checkpoint_incomplete',
       marker,
+      wave,
       base_url: BASE_URL,
       deployed_commit: health.build?.deployed_commit || health.build?.commit || '',
       source_account_email: source.email,
@@ -558,7 +612,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
       forbidden_browser_requests: forbiddenRequests,
       learning_log: [{
         timestamp: new Date().toISOString(),
-        lane_or_substrate: 'Wave 1',
+        lane_or_substrate: `Wave ${wave}`,
         observed_situation: 'Two experiment objectives were submitted through the product prompt-bar from one source computer and monitored for AppChangePackage publication.',
         mission_gradient_pressure: 'Push toward concurrent Choir-in-Choir package evidence without claiming success from prompt submission alone.',
         decision_taken: 'Treat each lane as owner_pullable only after a second account can inspect and adopt the package; otherwise record checkpoint/blocker evidence.',
@@ -569,8 +623,8 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
       }],
     };
 
-    const vtext = await createVTextReport(source.page, 'Alternate Computer Portfolio Wave 1 Evidence', 'wave1', [
-      '# Alternate Computer Portfolio Wave 1 Evidence',
+    const vtext = await createVTextReport(source.page, `Alternate Computer Portfolio Wave ${wave} Evidence`, `wave${wave}`, [
+      `# Alternate Computer Portfolio Wave ${wave} Evidence`,
       '',
       `Status: ${report.status}`,
       `Marker: ${marker}`,
@@ -587,6 +641,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
           `Status: ${laneReport.status}`,
           `Prompt submission: ${lane.submission_id}`,
           `Packages: ${(laneReport.package_candidates || []).map((pkg) => pkg.package_id).join(', ') || 'none'}`,
+          `Run acceptance: ${laneReport.run_acceptance?.acceptance_id || 'none'} ${laneReport.run_acceptance?.acceptance_level || ''} ${laneReport.run_acceptance?.state || ''}`.trim(),
           `Recommendation: ${laneReport.recommendation}`,
           laneReport.blocker ? `Blocker: ${laneReport.blocker}` : '',
         ].filter(Boolean);
@@ -594,10 +649,10 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
     ].join('\n'));
     report.vtext = vtext;
 
-    await writeEvidence(testInfo, 'alternate-portfolio-wave1-evidence.json', report);
-    const screenshot = testInfo.outputPath('alternate-portfolio-wave1-source-desktop.png');
+    await writeEvidence(testInfo, `alternate-portfolio-wave${wave}-evidence.json`, report);
+    const screenshot = testInfo.outputPath(`alternate-portfolio-wave${wave}-source-desktop.png`);
     await source.page.screenshot({ path: screenshot, fullPage: false });
-    await testInfo.attach('alternate-portfolio-wave1-source-desktop', { path: screenshot, contentType: 'image/png' });
+    await testInfo.attach(`alternate-portfolio-wave${wave}-source-desktop`, { path: screenshot, contentType: 'image/png' });
 
     expect(forbiddenRequests).toHaveLength(0);
     expect(Object.values(laneReports).some((lane) => lane.status !== 'blocked_incomplete')).toBe(true);
