@@ -407,6 +407,69 @@ func (rt *Runtime) workerVMRequestInvalidatedByRunEvents(ctx context.Context, ru
 	return false, nil
 }
 
+func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID string, in delegateWorkerVMArgs, profile string) (string, bool, error) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return "", false, nil
+	}
+	key := workerVMLeaseKey{
+		WorkerID:   strings.TrimSpace(in.WorkerID),
+		VMID:       strings.TrimSpace(in.VMID),
+		SandboxURL: strings.TrimSpace(in.WorkerSandboxURL),
+	}
+	if !key.Valid() {
+		return "", false, nil
+	}
+	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	if err != nil {
+		return "", false, fmt.Errorf("delegate_worker_vm dedupe scan: %w", err)
+	}
+	profile = canonicalAgentProfile(profile)
+	var candidate string
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload struct {
+			Tool    string `json:"tool"`
+			IsError bool   `json:"is_error"`
+			Output  string `json:"output"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "delegate_worker_vm" {
+			continue
+		}
+		output, ok := decodeWorkerToolOutput(payload.Output)
+		if !ok {
+			continue
+		}
+		if !workerVMLeaseKeyFromDelegateOutput(output).Matches(key) {
+			continue
+		}
+		if outputProfile := canonicalAgentProfile(stringMapValue(output, "profile")); profile != "" && outputProfile != "" && outputProfile != profile {
+			continue
+		}
+		if !delegateWorkerVMResultReusable(output) {
+			continue
+		}
+		candidate = payload.Output
+	}
+	return candidate, candidate != "", nil
+}
+
+func delegateWorkerVMResultReusable(output map[string]any) bool {
+	status := stringMapValue(output, "status")
+	switch status {
+	case "worker_run_completed",
+		"worker_run_incomplete",
+		"worker_run_failed",
+		"worker_run_cancelled",
+		"worker_run_blocked",
+		"worker_run_timeout":
+		return true
+	default:
+		return false
+	}
+}
+
 func markToolResultDeduped(raw, reason string) (string, error) {
 	var output map[string]any
 	if err := json.Unmarshal([]byte(raw), &output); err != nil {
@@ -593,6 +656,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			agentID := stringFromToolContext(ctx, toolCtxAgentID)
+			if cached, ok, err := rt.findExistingWorkerVMDelegation(ctx, runID, in, profile); err != nil {
+				return "", err
+			} else if ok {
+				return markToolResultDeduped(cached, "super_run_already_delegated_worker_vm")
+			}
 			trajectoryID := ""
 			if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
 				trajectoryID = metadataStringValue(rec.Metadata, runMetadataTrajectoryID)

@@ -1424,6 +1424,72 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 	}
 }
 
+func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate one worker delegation", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+		runMetadataTrajectoryID: "traj-delegate-dedupe",
+	})
+	if err != nil {
+		t.Fatalf("submit super task: %v", err)
+	}
+	existing := map[string]any{
+		"status":             "worker_run_completed",
+		"worker_id":          "worker-duplicate",
+		"worker_vm_id":       "vm-duplicate",
+		"worker_sandbox_url": "http://worker-duplicate.test",
+		"loop_id":            "worker-run-existing",
+		"profile":            AgentProfileVSuper,
+		"state":              string(types.RunCompleted),
+		"app_change_packages": []map[string]any{{
+			"package_id":                   "package-existing",
+			"package_manifest_sha256":      "manifest-existing",
+			"canonical_package_id":         "package-existing",
+			"canonical_mirror_status":      "mirrored",
+			"canonical_product_visibility": "published_unlisted",
+		}},
+	}
+	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", existing)
+
+	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superTask), "delegate_worker_vm", json.RawMessage(`{
+		"worker_sandbox_url": "http://worker-duplicate.test",
+		"worker_id": "worker-duplicate",
+		"vm_id": "vm-duplicate",
+		"objective": "run the same candidate-world package work again",
+		"profile": "vsuper",
+		"timeout_seconds": 1
+	}`))
+	if err != nil {
+		t.Fatalf("delegate_worker_vm dedupe: %v", err)
+	}
+	var got struct {
+		Deduped      bool             `json:"deduped"`
+		DedupeReason string           `json:"dedupe_reason"`
+		Status       string           `json:"status"`
+		LoopID       string           `json:"loop_id"`
+		Packages     []map[string]any `json:"app_change_packages"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("decode delegate_worker_vm dedupe: %v\n%s", err, raw)
+	}
+	if !got.Deduped || got.DedupeReason != "super_run_already_delegated_worker_vm" {
+		t.Fatalf("dedupe fields = %+v, raw=%s", got, raw)
+	}
+	if got.Status != "worker_run_completed" || got.LoopID != "worker-run-existing" {
+		t.Fatalf("deduped status/loop = %+v, raw=%s", got, raw)
+	}
+	if len(got.Packages) != 1 || stringMapValue(got.Packages[0], "package_id") != "package-existing" {
+		t.Fatalf("deduped packages = %+v, raw=%s", got.Packages, raw)
+	}
+}
+
 func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {

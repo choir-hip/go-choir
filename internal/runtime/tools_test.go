@@ -627,6 +627,46 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	executions := 0
+	if err := registry.Register(Tool{
+		Name: "delegate_worker_vm",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			mu.Lock()
+			executions++
+			mu.Unlock()
+			return `{"status":"worker_run_completed","worker_id":"worker-1","app_change_packages":[{"package_id":"package-1"}]}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register delegate_worker_vm: %v", err)
+	}
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "super-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileSuper,
+	})
+	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"publish exactly one package","profile":"vsuper"}`)
+	results := executeTools(ctx, registry, []types.ToolCall{
+		{ID: "delegate-1", Name: "delegate_worker_vm", Arguments: args},
+		{ID: "delegate-2", Name: "delegate_worker_vm", Arguments: args},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	mu.Lock()
+	gotExecutions := executions
+	mu.Unlock()
+	if gotExecutions != 1 {
+		t.Fatalf("delegate executions = %d, want one", gotExecutions)
+	}
+	if results[0].IsError {
+		t.Fatalf("first delegate = %#v, want success", results[0])
+	}
+	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate delegate_worker_vm") {
+		t.Fatalf("second delegate = %#v, want duplicate skip", results[1])
+	}
+}
+
 func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	registry := NewToolRegistry()
 	var mu sync.Mutex

@@ -559,6 +559,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenCast := map[string]int{}
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
+	seenDelegateWorker := map[string]int{}
 
 	for i, call := range calls {
 		switch call.Name {
@@ -611,6 +612,19 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			seenExport[key] = i
+		case "delegate_worker_vm":
+			if profile != AgentProfileSuper {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenDelegateWorker[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate delegate_worker_vm payload already planned in this turn at call %s; wait for the first worker result instead of starting the same worker delegation twice", calls[previous].ID))
+				continue
+			}
+			seenDelegateWorker[key] = i
 		}
 	}
 }
