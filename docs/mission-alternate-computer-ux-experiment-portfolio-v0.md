@@ -12,8 +12,8 @@ recovered, then Wave 2 Liquid/Python was reproven cleanly on the same deployed
 packages with source acceptance, recipient acceptance, adoption, artifact
 digests, and rollback refs. The mission is still incomplete because owner pull
 into an owner-controlled computer such as `ymnath@choir-ip.com`, hands-on QA,
-richer Liquid/Python benchmarks, and deployed proof for the stale VM-state
-cleanup checkpoint remain the next realism axis.
+richer Liquid/Python benchmarks, and post-deploy observation of the stale
+VM-state cleanup checkpoint remain the next realism axis.
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -55,7 +55,7 @@ candidate/background computers where healthy
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-pullable AppChangePackage experiment portfolio, not a platform-default UX merge and not a loginable-alt-account demo. Continue from the deployed `575ff30` proof set and the owner review certificate `docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md`: Wave 1 Chiron/animation and Wave 2 Liquid/Python are all clean `owner_pullable_experiment` packages on staging with source acceptance, recipient acceptance, adoption, artifact digests, rollback refs, screenshot/Trace evidence, and no forbidden browser requests. Treat source experiment accounts as disposable source lineages; direct login to those accounts is out of scope. The next realism axis is owner-controlled package pull/adoption/promotion into an account/computer the owner already controls, such as `ymnath@choir-ip.com`, plus hands-on QA and richer Liquid/Python benchmark evidence. Also harden the operational lesson from the run by adding product-safe stale candidate/worker VM-state GC or an equivalent bounded recovery policy before another large portfolio run can fill Node B again. Maintain the learning log about MissionGradient behavior, but do not use it as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion until owner pull/QA, required benchmarks, and recovery policy evidence are durable. If a substrate blocker prevents owner-controlled package adoption or real package evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-pullable AppChangePackage experiment portfolio, not a platform-default UX merge and not a loginable-alt-account demo. Continue from the deployed `575ff30` proof set, the deployed stale VM-state cleanup checkpoint `664dc1b`, and the owner review certificate `docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md`: Wave 1 Chiron/animation and Wave 2 Liquid/Python are all clean `owner_pullable_experiment` packages on staging with source acceptance, recipient acceptance, adoption, artifact digests, rollback refs, screenshot/Trace evidence, and no forbidden browser requests. Treat source experiment accounts as disposable source lineages; direct login to those accounts is out of scope. The next realism axis is owner-controlled package pull/adoption/promotion into an account/computer the owner already controls, such as `ymnath@choir-ip.com`, plus hands-on QA, richer Liquid/Python benchmark evidence, and post-deploy observation that stale worker/candidate VM-state reclaim protects Node B without harming active user computers. Maintain the learning log about MissionGradient behavior, but do not use it as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion until owner pull/QA, required benchmarks, and recovery policy evidence are durable. If a substrate blocker prevents owner-controlled package adoption or real package evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -1086,13 +1086,16 @@ what was proven:
     `sha256:d0f5ab65f52b6df2e03db25bb68d84b1535a6f108db8d1ce00c480473da2d6d4`
     and UI digest
     `sha256:b5cc68456c76598faa7d267f546ded558531cbd114e0a94cde2f3c445aa81519`.
-  - A stale VM-state cleanup patch has been prepared for the next landing
-    checkpoint. It makes low `/var/lib/go-choir/vm-state` free space a real
-    pressure signal, adds bounded deletion of stale terminal worker and
-    unpublished candidate VM-state directories, protects active/primary/
-    published/premium/recent/critical work, wires Node B thresholds, and updates
-    `docs/vm-priority-policy.md`. Focused proof before landing:
-    `go test ./internal/vmctl ./internal/vmmanager ./cmd/vmctl`.
+  - Stale VM-state cleanup is landed and deployed at `664dc1b`. It makes low
+    `/var/lib/go-choir/vm-state` free space a real pressure signal, adds
+    bounded deletion of stale terminal worker and unpublished candidate
+    VM-state directories, protects active/primary/published/premium/recent/
+    critical work, wires Node B thresholds, and updates
+    `docs/vm-priority-policy.md`. Focused proof:
+    `go test ./internal/vmctl ./internal/vmmanager ./cmd/vmctl`. GitHub
+    Actions run `26193426970` passed, including Node B staging deploy, and
+    `/health` reported proxy and sandbox deployed commit
+    `664dc1b7949e852705daebd2c3f94416e61733ab`.
 unproven or partial claims:
   - owner-pull/adoption/promotion into ymnath@choir-ip.com specifically remains
     a manual QA target, not a source-account auth blocker. The fresh `575ff30`
@@ -1121,9 +1124,9 @@ unproven or partial claims:
     scaffolding, but not yet a completed measured A/B table across real runs
 remaining error field:
   - staging auth was recovered, and product-safe stale candidate/worker
-    VM-state cleanup now has a focused local patch plus tests, but it still
-    needs the platform landing loop: commit, push, CI, Node B deploy, staging
-    identity check, and deployed health evidence. Nix generation cleanup remains
+    VM-state cleanup is now deployed, but it still needs observation under a
+    future large portfolio run to prove it reclaims stale terminal state before
+    Node B reaches a hard disk-pressure failure. Nix generation cleanup remains
     an operational companion to VM-state cleanup, not solved by vmctl alone.
   - persistent super serializes concurrent lane work enough that animation can
     lag behind Chiron under bounded proof windows
@@ -1148,14 +1151,14 @@ highest-impact remaining uncertainty:
     decide iterate/abandon/promote without reading raw traces or touching the
     disposable source accounts?
 next executable probe:
-  - Land the stale VM-state cleanup checkpoint through git/CI/deploy, verify
-    staging identity and vmctl health, then use the owner review certificate to
-    pull selected package refs into an owner-controlled account/computer such as
-    `ymnath@choir-ip.com`, run hands-on QA, and record the adoption/promotion/
-    rollback evidence there. For Liquid and Python, add the missing benchmark
-    evidence: mobile Safari/WebKit and desktop frame/resource numbers for
-    Liquid, and a matched bash-vs-Python task-set token/time/tool-loop table for
-    Python.
+  - Use the owner review certificate to pull selected package refs into an
+    owner-controlled account/computer such as `ymnath@choir-ip.com`, run
+    hands-on QA, and record the adoption/promotion/rollback evidence there. In
+    parallel with that next large portfolio-style run, observe the deployed
+    `664dc1b` stale VM-state reclaim path so Node B recovery remains evidence
+    based. For Liquid and Python, add the missing benchmark evidence: mobile
+    Safari/WebKit and desktop frame/resource numbers for Liquid, and a matched
+    bash-vs-Python task-set token/time/tool-loop table for Python.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:

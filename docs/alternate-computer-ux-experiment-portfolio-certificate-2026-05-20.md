@@ -18,6 +18,12 @@ context, and rolled back by named refs.
 - GitHub Actions run for `575ff30`: `26187590374`, passed
 - Node B deploy identity: proxy and sandbox both reported
   `575ff3014a85524da4233e60ce44345804d46807`
+- Recovery hardening checkpoint: `664dc1b7949e852705daebd2c3f94416e61733ab`
+  landed and deployed after this certificate's experiment proof. GitHub
+  Actions run `26193426970` passed, including Node B staging deploy, and
+  `/health` reported proxy and sandbox on `664dc1b`. This added bounded stale
+  terminal worker/candidate VM-state reclaim under state-dir pressure; it does
+  not change the selected experiment package refs below.
 - Proof environment: `https://draft.choir-ip.com`
 - Auth/disk recovery during proof:
   - failure: `/auth/register/begin` returned `502` because
@@ -175,9 +181,10 @@ VText:
 - Package-trace run-acceptance remains noisy: source and recipient acceptance
   records are the terminal evidence; package-trace acceptance fields are still
   `docs-level`/blocked or absent.
-- VM-state disk pressure was resolved operationally by Nix/journal cleanup, but
-  the platform still needs a product-safe stale candidate/worker VM-state GC
-  policy so this does not recur.
+- VM-state disk pressure was resolved operationally by Nix/journal cleanup, and
+  first product-safe stale candidate/worker VM-state reclaim has since landed at
+  `664dc1b`. It still needs observation under the next large portfolio-style
+  run, and Nix generation/journal cleanup remains a separate operational axis.
 - Owner pull/adoption into `ymnath@choir-ip.com` specifically remains the manual
   QA step. The proof used generated recipient product accounts and durable
   package refs.
@@ -191,5 +198,5 @@ spend effort making the generated source accounts directly loginable. For
 Liquid and Python specifically, add measured benchmark evidence: mobile
 Safari/WebKit and desktop frame/resource numbers for Liquid; matched
 bash-vs-Python task-set token/time/tool-loop metrics for Python. In parallel,
-build the stale candidate/worker VM-state garbage-collection control so package
-portfolio runs cannot fill Node B again.
+observe the deployed stale candidate/worker VM-state reclaim control during the
+next package portfolio run so Node B disk recovery remains evidence based.
