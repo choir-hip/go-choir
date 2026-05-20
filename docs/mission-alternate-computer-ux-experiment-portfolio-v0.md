@@ -26,11 +26,15 @@ candidate/background computers where healthy
 > Do not add auth handoff machinery merely to make Playwright-created accounts
 > directly loginable. The owner may review all promising experiments by pulling
 > their packages into one existing owner-controlled account/computer.
+> Package mobility is the auth solution for this portfolio: manual QA should
+> happen by pulling or adopting experiment packages into an account the owner
+> already controls, such as `ymnath@choir-ip.com`, not by making every source
+> experiment account manually loginable.
 
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is package publish -> owner pull/adoption into an existing owner-controlled account/computer; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, or adopt tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is package publish -> owner pull/adoption into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, or adopt tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -59,6 +63,13 @@ transfer alternate-account login state. Alternate accounts may be created by
 Playwright or worker flows, but their loginability is not the product proof.
 The proof is that the patch can move as source/package evidence and be adopted
 inside a computer the owner can already access.
+
+The owner QA path may be centralized. Multiple experiment packages can be
+pulled into the same owner-controlled account/computer as separate candidate or
+adoption attempts. The mission should preserve source experiment identities,
+package identities, verifier evidence, and rollback refs, but it should not
+spend effort on making every source account a place the owner can manually log
+into.
 
 The four experiments are:
 
@@ -439,8 +450,9 @@ blocked_incomplete
 
 - the experiment was built in an isolated user/candidate computer;
 - an AppChangePackage exists with source deltas/contracts/provenance;
-- an owner-controlled recipient computer can import, build, verify, adopt, or
-  reject it through product APIs;
+- an owner-controlled recipient computer, including one of the owner's existing
+  accounts/computers, can import, build, verify, adopt, or reject it through
+  product APIs;
 - the owner does not need direct login to the source experiment account in order
   to inspect, test, or promote the result;
 - evidence docs name the source computer, package, adoption/build, verifier,
@@ -466,8 +478,10 @@ auth work to this portfolio.
 Do not store or print reusable credentials in the mission doc. If current auth
 requires passkeys or operator-mediated setup, do not widen auth solely for this
 mission. Prefer package publish -> owner pull/adoption into an owner-controlled
-account/computer. Record the exact missing capability only when that package
-path itself is blocked.
+account/computer. Pulling several packages into one owner account is acceptable
+and preferable to auth work when the package identities and rollback refs remain
+distinct. Record the exact missing capability only when that package path itself
+is blocked.
 
 ## Dense Feedback
 
@@ -592,7 +606,10 @@ review-path decision: direct owner login to alternate accounts is out of scope
   Experiments should publish AppChangePackages that the owner can inspect, pull,
   adopt, or reject inside an owner-controlled account/computer such as
   ymnath@choir-ip.com. Do not add auth handoff code solely for manual QA of
-  virtual Playwright accounts.
+  virtual Playwright accounts. The owner may review many experiments by pulling
+  their packages into one current owner account as separate candidate/adoption
+  attempts; keep package/source/rollback identity distinct rather than making
+  per-experiment manual login the review mechanism.
 what shipped: preflight substrate hard-cut landed before this mission; during
   Wave 0, a run-acceptance false-success edge was identified and patched so
   records with blocked invariant checks cannot still claim accepted state.

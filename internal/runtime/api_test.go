@@ -1934,7 +1934,7 @@ func TestHandleRunStatusReturnsCorrelatedHandle(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/status?loop_id=%s", rec.RunID), "", "user-alice")
@@ -2102,7 +2102,7 @@ func TestHandleRunStatusByIDReturnsTaskRecord(t *testing.T) {
 	}
 
 	// Wait for task to complete.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/%s/status", rec.RunID), "", "user-alice")
@@ -2150,7 +2150,7 @@ func TestHandleRunStatusByIDCompletedResult(t *testing.T) {
 	}
 
 	// Wait for task to complete.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/%s/status", rec.RunID), "", "user-alice")
@@ -2329,7 +2329,7 @@ func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
 	}
 
 	// Wait for the child task to complete.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, child.RunID, "user-alice", 5*time.Second)
 
 	req := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/%s/status", child.RunID), "", "user-alice")
@@ -2391,7 +2391,7 @@ func TestHandleRunStatusByIDStateTransitions(t *testing.T) {
 	}
 
 	// Wait for task to complete.
-	time.Sleep(200 * time.Millisecond)
+	waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
 
 	req2 := authenticatedRequest(http.MethodGet,
 		fmt.Sprintf("/api/agent/%s/status", rec.RunID), "", "user-alice")
