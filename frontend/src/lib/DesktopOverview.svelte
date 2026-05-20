@@ -1,10 +1,15 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { isHeavyAppId } from './stores/desktop.js';
+  import {
+    getOverviewPreviewDecision,
+    summarizeOverviewPreviewDecisions,
+  } from './desktop-overview-preview.js';
 
   export let windows = [];
   export let activeWindowId = '';
   export let authenticated = false;
+  export let previewDecisions = {};
 
   const dispatch = createEventDispatcher();
 
@@ -23,6 +28,7 @@
   ).length;
   $: minimizedCount = openWindows.filter((win) => win.mode === 'minimized').length;
   $: activeWindow = openWindows.find((win) => win.windowId === activeWindowId) || null;
+  $: previewSummary = summarizeOverviewPreviewDecisions(previewDecisions);
   $: pressureLevel = mountedHeavyCount >= 6 || openWindows.length >= 14
     ? 'high'
     : mountedHeavyCount >= 3 || openWindows.length >= 10
@@ -65,10 +71,17 @@
   }
 
   function modeLabel(win) {
+    const previewState = getOverviewPreviewDecision(previewDecisions, win.windowId).state;
+    if (previewState === 'live') return 'live';
+    if (previewState === 'redacted') return 'redacted';
     if (win.restoreSuspended) return 'suspended';
     if (win.mode === 'minimized') return 'minimized';
     if (win.mode === 'maximized') return 'maximized';
     return win.windowId === activeWindowId ? 'active' : 'open';
+  }
+
+  function previewState(win) {
+    return getOverviewPreviewDecision(previewDecisions, win.windowId).state;
   }
 
   function mapStyle(win) {
@@ -114,9 +127,13 @@
           data-overview-mounted-heavy-count={mountedHeavyCount}
           data-overview-suspended-count={suspendedCount}
           data-overview-minimized-count={minimizedCount}
+          data-overview-live-preview-count={previewSummary.live}
+          data-overview-card-preview-count={previewSummary.card}
+          data-overview-redacted-preview-count={previewSummary.redacted}
+          data-overview-suspended-preview-count={previewSummary.suspended}
           data-overview-pressure={pressureLevel}
         >
-          {openWindows.length} open, {visibleCount} visible, {heavyCount} heavy, {mountedHeavyCount} mounted, {suspendedCount} suspended
+          {openWindows.length} open, {previewSummary.live} live, {previewSummary.suspended} suspended, {previewSummary.redacted} redacted
         </p>
       </div>
       <button class="overview-close" type="button" on:click={closeOverview} data-overview-close aria-label="Close Desktop Overview">Close</button>
@@ -141,6 +158,15 @@
           <span>Active window</span>
           <strong>{activeWindow?.title || 'none'}</strong>
         </div>
+        <div>
+          <span>Live previews</span>
+          <strong>{previewSummary.live}/{openWindows.length}</strong>
+        </div>
+      </div>
+
+      <div class="overview-live-hint" data-overview-live-hint>
+        <span>{previewSummary.live} live window{previewSummary.live === 1 ? '' : 's'} arranged from the real desktop</span>
+        <span>{previewSummary.suspended + previewSummary.redacted + previewSummary.card} honest card fallback{previewSummary.suspended + previewSummary.redacted + previewSummary.card === 1 ? '' : 's'}</span>
       </div>
 
       <div
@@ -162,6 +188,7 @@
             data-overview-map-window-id={win.windowId}
             data-overview-map-window-app-id={win.appId}
             data-overview-map-window-state={modeLabel(win)}
+            data-overview-map-window-preview-state={previewState(win)}
             aria-label="Focus {win.title}"
           >
             <span>{win.icon || '□'}</span>
@@ -205,6 +232,7 @@
             data-overview-card-window-id={win.windowId}
             data-overview-card-app-id={win.appId}
             data-overview-card-state={modeLabel(win)}
+            data-overview-card-preview-state={previewState(win)}
             data-overview-card-heavy={isHeavyAppId(win.appId) ? 'true' : 'false'}
             data-overview-card-suspended={win.restoreSuspended ? 'true' : 'false'}
           >
@@ -218,6 +246,13 @@
             <div class="card-badges" aria-label="Window state">
               {#if win.windowId === activeWindowId}
                 <span class="badge active-badge">active</span>
+              {/if}
+              {#if previewState(win) === 'live'}
+                <span class="badge live-badge">live</span>
+              {:else if previewState(win) === 'redacted'}
+                <span class="badge redacted-badge">redacted</span>
+              {:else if previewState(win) === 'card'}
+                <span class="badge">card</span>
               {/if}
               {#if isHeavyAppId(win.appId)}
                 <span class="badge heavy-badge">heavy</span>
@@ -255,33 +290,35 @@
   .desktop-overview {
     position: fixed;
     inset: 0;
-    z-index: 10000;
+    z-index: 12000;
     color: #e5eefc;
+    pointer-events: none;
   }
 
   .overview-backdrop {
     position: absolute;
     inset: 0;
     border: 0;
-    background: rgba(3, 7, 18, 0.72);
+    background:
+      radial-gradient(circle at 50% 42%, rgba(37, 99, 235, 0.12), transparent 42%),
+      rgba(3, 7, 18, 0.46);
     cursor: default;
+    pointer-events: none;
   }
 
   .overview-panel {
     position: absolute;
     inset: clamp(12px, 3vw, 28px);
     display: grid;
-    grid-template-rows: auto auto minmax(170px, 0.95fr) auto minmax(0, 1.1fr);
+    grid-template-rows: auto auto auto minmax(120px, 1fr) auto minmax(0, 150px);
     gap: 0.85rem;
     overflow: hidden;
-    border: 1px solid rgba(96, 165, 250, 0.35);
-    border-radius: 18px;
-    background:
-      linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98)),
-      rgba(15, 23, 42, 0.98);
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(15, 23, 42, 0.8);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     padding: clamp(0.8rem, 2vw, 1.1rem);
-    backdrop-filter: blur(18px);
+    pointer-events: none;
   }
 
   .overview-header {
@@ -289,6 +326,14 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
+    max-width: min(44rem, calc(100vw - 2rem));
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    border-radius: 16px;
+    background: rgba(5, 10, 20, 0.68);
+    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
+    padding: 0.75rem 0.85rem;
+    pointer-events: auto;
+    backdrop-filter: blur(16px);
   }
 
   .overview-kicker {
@@ -315,8 +360,10 @@
 
   .overview-pressure {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.55rem;
+    max-width: min(58rem, calc(100vw - 2rem));
+    pointer-events: auto;
   }
 
   .overview-pressure > div {
@@ -325,6 +372,26 @@
     border-radius: 12px;
     background: rgba(15, 23, 42, 0.64);
     padding: 0.58rem 0.7rem;
+  }
+
+  .overview-live-hint {
+    justify-self: start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    max-width: min(48rem, calc(100vw - 2rem));
+    pointer-events: auto;
+  }
+
+  .overview-live-hint span {
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    border-radius: 999px;
+    background: rgba(5, 10, 20, 0.58);
+    color: #cbd5e1;
+    font-size: 0.74rem;
+    font-weight: 760;
+    padding: 0.35rem 0.55rem;
+    backdrop-filter: blur(14px);
   }
 
   .overview-pressure span,
@@ -388,18 +455,24 @@
   .overview-map {
     position: relative;
     overflow: hidden;
-    min-height: 180px;
+    align-self: end;
+    max-width: min(24rem, calc(100vw - 2rem));
+    min-height: 120px;
+    max-height: 180px;
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 14px;
     background:
       linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-      rgba(2, 6, 23, 0.8);
+      rgba(2, 6, 23, 0.48);
     background-size: 32px 32px;
+    opacity: 0.72;
+    pointer-events: none;
+    backdrop-filter: blur(12px);
   }
 
   .overview-map.dense {
-    min-height: 220px;
+    min-height: 150px;
   }
 
   .map-window {
@@ -418,6 +491,7 @@
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
     color: #dbeafe;
     cursor: pointer;
+    pointer-events: none;
     padding: 0.45rem;
     text-align: left;
   }
@@ -456,15 +530,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
+    pointer-events: auto;
   }
 
   .overview-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(min(18rem, 82vw), 22rem);
     gap: 0.65rem;
     min-height: 0;
-    overflow: auto;
-    padding-right: 0.15rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0.15rem 0.25rem 0;
+    pointer-events: auto;
   }
 
   .overview-card {
@@ -473,8 +551,14 @@
     min-width: 0;
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 14px;
-    background: rgba(15, 23, 42, 0.72);
+    background: rgba(15, 23, 42, 0.76);
     padding: 0.65rem;
+    backdrop-filter: blur(16px);
+  }
+
+  .overview-card[data-overview-card-preview-state='live'] {
+    background: rgba(8, 18, 32, 0.58);
+    opacity: 0.72;
   }
 
   .overview-card.active {
@@ -571,6 +655,16 @@
     color: #bfdbfe;
   }
 
+  .live-badge {
+    border-color: rgba(45, 212, 191, 0.42);
+    color: #99f6e4;
+  }
+
+  .redacted-badge {
+    border-color: rgba(216, 180, 254, 0.36);
+    color: #e9d5ff;
+  }
+
   .heavy-badge {
     border-color: rgba(125, 211, 252, 0.34);
     color: #bae6fd;
@@ -613,7 +707,7 @@
   @media (max-width: 768px) {
     .overview-panel {
       inset: 8px;
-      grid-template-rows: auto auto minmax(190px, 0.7fr) auto minmax(0, 1fr);
+      grid-template-rows: auto auto auto minmax(170px, 1fr) auto minmax(0, 138px);
       gap: 0.65rem;
       border-radius: 14px;
       padding: 0.7rem;
@@ -621,6 +715,8 @@
 
     .overview-header {
       align-items: center;
+      max-width: calc(100vw - 1.4rem);
+      padding: 0.62rem 0.68rem;
     }
 
     .overview-header h2 {
@@ -651,7 +747,7 @@
     }
 
     .overview-pressure {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.38rem;
     }
 
@@ -661,6 +757,25 @@
 
     .overview-pressure strong {
       font-size: 0.86rem;
+    }
+
+    .overview-live-hint {
+      gap: 0.3rem;
+    }
+
+    .overview-live-hint span {
+      font-size: 0.66rem;
+      padding: 0.28rem 0.44rem;
+    }
+
+    .overview-map {
+      max-width: min(18rem, calc(100vw - 1.4rem));
+      min-height: 116px;
+      max-height: 132px;
+    }
+
+    .overview-cards {
+      grid-auto-columns: minmax(min(15.5rem, 78vw), 17.5rem);
     }
   }
 </style>

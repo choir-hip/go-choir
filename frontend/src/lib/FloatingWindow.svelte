@@ -40,6 +40,9 @@
   export let zIndex = 1;
   export let active = false;
   export let restoredGeometry = null;
+  export let overviewOpen = false;
+  export let overviewPreviewState = 'normal';
+  export let overviewPreviewStyle = '';
 
   // Suppress unused-export warnings — props used by parent for persistence
   $: _appId = appId;
@@ -160,6 +163,7 @@
   // ---- Drag handlers (title bar only) ----
 
   function handleDragStart(event) {
+    if (overviewOpen) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('button')) return;
     if (mode === 'maximized') return;
@@ -195,6 +199,7 @@
   // ---- Resize handler (bottom-right handle only) ----
 
   function handleResizeStart(event) {
+    if (overviewOpen) return;
     if (mode !== 'normal') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
@@ -294,19 +299,27 @@
 
   $: maxRestoreIcon = mode === 'maximized' ? '❐' : '☐';
   $: maxRestoreTitle = mode === 'maximized' ? 'Restore' : 'Maximize';
-  $: showResizeHandle = mode === 'normal';
+  $: showResizeHandle = mode === 'normal' && !overviewOpen;
+  $: overviewClass = overviewOpen ? `overview-preview overview-preview-${overviewPreviewState}` : '';
+  $: effectiveZIndex = overviewOpen
+    ? overviewPreviewState === 'live'
+      ? 11000 + (zIndex || 0)
+      : 9000 + (zIndex || 0)
+    : zIndex;
+  $: combinedStyle = `${windowStyle} z-index: ${effectiveZIndex}; ${overviewOpen ? overviewPreviewStyle : ''}`;
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
-  class="window {active ? 'window-active' : ''}"
-  style="{windowStyle} z-index: {zIndex};"
+  class="window {active ? 'window-active' : ''} {overviewClass}"
+  style={combinedStyle}
   data-window
   data-window-id={windowId}
   data-window-app-id={appId}
   data-window-mode={mode}
   data-window-active={active ? 'true' : 'false'}
+  data-overview-preview-state={overviewOpen ? overviewPreviewState : 'normal'}
   on:pointerdown={handleFocusWindow}
 >
   <!-- Title bar -->
@@ -367,10 +380,54 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    transform-origin: top left;
     transition: box-shadow 0.15s, border-color 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 16px);
+  }
+
+  .window.overview-preview {
+    user-select: none;
+    will-change: transform, opacity;
+  }
+
+  .window.overview-preview-live {
+    cursor: pointer;
+    transform:
+      translate(
+        var(--overview-translate-x, 0px),
+        var(--overview-translate-y, 0px)
+      )
+      scale(var(--overview-scale, 1));
+    transition:
+      transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.2s ease,
+      border-color 0.2s ease,
+      opacity 0.2s ease;
+    box-shadow:
+      0 24px 70px rgba(0, 0, 0, 0.52),
+      0 0 0 1px rgba(125, 211, 252, 0.18);
+  }
+
+  .window.overview-preview-live.window-active {
+    border-color: rgba(125, 211, 252, 0.95);
+    box-shadow:
+      0 28px 86px rgba(37, 99, 235, 0.32),
+      0 0 0 2px rgba(125, 211, 252, 0.28),
+      0 0 44px rgba(59, 130, 246, 0.24);
+  }
+
+  .window.overview-preview-card,
+  .window.overview-preview-redacted,
+  .window.overview-preview-suspended {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.92);
+  }
+
+  .window.overview-preview-live .titlebar {
+    cursor: pointer;
   }
 
   .window-active {
@@ -508,6 +565,12 @@
     .resize-se {
       width: 28px;
       height: 28px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .window.overview-preview-live {
+      transition: none;
     }
   }
 </style>

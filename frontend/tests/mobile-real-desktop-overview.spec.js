@@ -41,6 +41,14 @@ async function readDesktopMetrics(page) {
   return page.evaluate(() => {
     const desktop = document.querySelector('[data-desktop-windows]')?.getBoundingClientRect();
     const shelf = document.querySelector('[data-shelf]')?.getBoundingClientRect();
+    const overviewSummary = document.querySelector('[data-overview-summary]');
+    const previewWindows = Array.from(document.querySelectorAll('[data-window][data-overview-preview-state]'))
+      .map((el) => el.getAttribute('data-overview-preview-state') || 'normal')
+      .filter((state) => state !== 'normal');
+    const previewStateCounts = previewWindows.reduce((counts, state) => {
+      counts[state] = (counts[state] || 0) + 1;
+      return counts;
+    }, {});
     const windows = Array.from(document.querySelectorAll('[data-window]'))
       .filter((el) => {
         const box = el.getBoundingClientRect();
@@ -81,6 +89,19 @@ async function readDesktopMetrics(page) {
       uniqueLefts: new Set(windows.map((win) => win.x)).size,
       uniqueTops: new Set(windows.map((win) => win.y)).size,
       overlapPairs,
+      overview: overviewSummary
+        ? {
+            windowCount: Number(overviewSummary.getAttribute('data-overview-window-count') || '0'),
+            livePreviewCount: Number(overviewSummary.getAttribute('data-overview-live-preview-count') || '0'),
+            cardPreviewCount: Number(overviewSummary.getAttribute('data-overview-card-preview-count') || '0'),
+            redactedPreviewCount: Number(overviewSummary.getAttribute('data-overview-redacted-preview-count') || '0'),
+            suspendedPreviewCount: Number(overviewSummary.getAttribute('data-overview-suspended-preview-count') || '0'),
+            domLivePreviewCount: previewStateCounts.live || 0,
+            domCardPreviewCount: previewStateCounts.card || 0,
+            domSuspendedPreviewCount: previewStateCounts.suspended || 0,
+            domRedactedPreviewCount: previewStateCounts.redacted || 0,
+          }
+        : null,
     };
   });
 }
@@ -143,10 +164,21 @@ test('390x844 mobile keeps a real overlapping desktop with Desktop Overview acti
   const overview = page.locator('[data-desktop-overview]');
   await expect(overview).toBeVisible();
   await expect(page.locator('[data-overview-card]')).toHaveCount(4);
+  await expect(page.locator('[data-overview-live-hint]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mobile-desktop-overview.png'), fullPage: false });
+
+  const overviewMetrics = await readDesktopMetrics(page);
+  expect(overviewMetrics.overview.windowCount).toBe(4);
+  expect(overviewMetrics.overview.livePreviewCount).toBeGreaterThanOrEqual(2);
+  expect(overviewMetrics.overview.livePreviewCount).toBeLessThanOrEqual(3);
+  expect(overviewMetrics.overview.livePreviewCount).toBe(overviewMetrics.overview.domLivePreviewCount);
+  expect(overviewMetrics.overview.livePreviewCount + overviewMetrics.overview.cardPreviewCount).toBe(4);
 
   await page.locator('[data-overview-suspend-background]').click();
   await expect(page.locator('[data-overview-card].suspended')).toHaveCount(2, { timeout: 10000 });
+  const afterSuspendOverviewMetrics = await readDesktopMetrics(page);
+  expect(afterSuspendOverviewMetrics.overview.suspendedPreviewCount).toBeGreaterThanOrEqual(2);
+  expect(afterSuspendOverviewMetrics.overview.livePreviewCount).toBeGreaterThanOrEqual(1);
 
   const filesCard = page.locator('[data-overview-card-app-id="files"]').first();
   const filesWindowId = await filesCard.getAttribute('data-overview-card-window-id');
@@ -177,6 +209,11 @@ test('desktop overview preserves the same shell model on desktop viewport', asyn
   await expect(page.locator('[data-overview-card]')).toHaveCount(4);
   await expect(page.locator('[data-overview-map-window]')).toHaveCount(4);
   await page.screenshot({ path: testInfo.outputPath('desktop-overview.png'), fullPage: false });
+
+  const overviewMetrics = await readDesktopMetrics(page);
+  expect(overviewMetrics.overview.windowCount).toBe(4);
+  expect(overviewMetrics.overview.livePreviewCount).toBe(4);
+  expect(overviewMetrics.overview.livePreviewCount).toBe(overviewMetrics.overview.domLivePreviewCount);
 
   console.log(JSON.stringify({ phase: 'desktop-real-desktop', metrics }, null, 2));
 });

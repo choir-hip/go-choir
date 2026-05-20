@@ -131,6 +131,13 @@ async function readHeavyMetrics(page) {
     }
     const summary = document.querySelector('[data-overview-summary]');
     const overviewCards = Array.from(document.querySelectorAll('[data-overview-card]'));
+    const previewWindows = Array.from(document.querySelectorAll('[data-window][data-overview-preview-state]'))
+      .map((el) => el.getAttribute('data-overview-preview-state') || 'normal')
+      .filter((state) => state !== 'normal');
+    const previewStateCounts = previewWindows.reduce((counts, state) => {
+      counts[state] = (counts[state] || 0) + 1;
+      return counts;
+    }, {});
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       desktop: desktop ? { width: Math.round(desktop.width), height: Math.round(desktop.height) } : null,
@@ -148,11 +155,19 @@ async function readHeavyMetrics(page) {
             mountedHeavyCount: Number(summary.getAttribute('data-overview-mounted-heavy-count') || '0'),
             suspendedCount: Number(summary.getAttribute('data-overview-suspended-count') || '0'),
             minimizedCount: Number(summary.getAttribute('data-overview-minimized-count') || '0'),
+            livePreviewCount: Number(summary.getAttribute('data-overview-live-preview-count') || '0'),
+            cardPreviewCount: Number(summary.getAttribute('data-overview-card-preview-count') || '0'),
+            redactedPreviewCount: Number(summary.getAttribute('data-overview-redacted-preview-count') || '0'),
+            suspendedPreviewCount: Number(summary.getAttribute('data-overview-suspended-preview-count') || '0'),
             pressure: summary.getAttribute('data-overview-pressure') || '',
             cardCount: overviewCards.length,
             suspendedCardCount: overviewCards.filter((card) => card.getAttribute('data-overview-card-suspended') === 'true').length,
             heavyCardCount: overviewCards.filter((card) => card.getAttribute('data-overview-card-heavy') === 'true').length,
             mapCount: document.querySelectorAll('[data-overview-map-window]').length,
+            domLivePreviewCount: previewStateCounts.live || 0,
+            domCardPreviewCount: previewStateCounts.card || 0,
+            domSuspendedPreviewCount: previewStateCounts.suspended || 0,
+            domRedactedPreviewCount: previewStateCounts.redacted || 0,
           }
         : null,
     };
@@ -176,6 +191,11 @@ function assertOverviewMetrics(metrics) {
   expect(metrics.overview.heavyCount).toBeGreaterThanOrEqual(10);
   expect(metrics.overview.suspendedCount).toBeGreaterThanOrEqual(8);
   expect(metrics.overview.mountedHeavyCount).toBeLessThanOrEqual(2);
+  expect(metrics.overview.livePreviewCount).toBeGreaterThanOrEqual(1);
+  expect(metrics.overview.livePreviewCount).toBeLessThanOrEqual(metrics.viewport.width < 768 ? 3 : 6);
+  expect(metrics.overview.livePreviewCount).toBe(metrics.overview.domLivePreviewCount);
+  expect(metrics.overview.suspendedPreviewCount).toBeGreaterThanOrEqual(8);
+  expect(metrics.overview.suspendedPreviewCount).toBe(metrics.overview.domSuspendedPreviewCount);
   expect(['steady', 'elevated', 'high']).toContain(metrics.overview.pressure);
 }
 
@@ -187,6 +207,7 @@ async function exerciseOverviewRecovery(page, testInfo, label) {
   const overview = await openOverview(page);
   await expect(page.locator('[data-overview-card]')).toHaveCount(HEAVY_SESSION_APPS.length);
   await expect(page.locator('[data-overview-map-window]')).toHaveCount(HEAVY_SESSION_APPS.length);
+  await expect(page.locator('[data-overview-live-hint]')).toBeVisible();
   await expect(page.locator('[data-overview-keep-active-only]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath(`${label}-heavy-overview.png`), fullPage: false });
 

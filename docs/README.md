@@ -70,6 +70,10 @@ Use these buckets when reading or editing docs:
 - `docs/mission-desktop-overview-heavy-session-v0.md` - completed
   MissionGradient for making Desktop Overview spatially useful under heavy
   restored sessions with bounded suspension/recovery controls.
+- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - proposed
+  MissionGradient for turning Desktop Overview into a bounded live spatial
+  preview/control surface without WebGPU, fake thumbnails, duplicate app
+  mounts, preview privacy leaks, or memory-regression shortcuts.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -98,6 +102,9 @@ Use these buckets when reading or editing docs:
 - `docs/mission-desktop-overview-heavy-session-v0.md` - completed shell
   mission for heavy-session Desktop Overview, bounded suspension, recovery,
   and Compute Monitor handoff.
+- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - proposed next
+  shell mission for live spatial Overview previews, bounded preview policy,
+  suspended/redacted cards, and premium motion without memory/privacy regressions.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -

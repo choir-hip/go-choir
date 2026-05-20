@@ -70,6 +70,10 @@
     getAppIcon,
     isHeavyAppId,
   } from './stores/desktop.js';
+  import {
+    createOverviewPreviewDecisions,
+    getOverviewPreviewDecision,
+  } from './desktop-overview-preview.js';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -123,10 +127,17 @@
   let restoreRecoverySaving = false;
   let restoreRecoveryStatus = '';
   let desktopOverviewOpen = false;
+  let overviewViewportWidth = 1280;
+  let overviewViewportHeight = 800;
+  let overviewBottomBarHeight = 56;
 
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
   const RESTORE_RECOVERY_WINDOW_LIMIT = 6;
   const RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT = 3;
+  const OVERVIEW_STAGE_TOP_MOBILE = 76;
+  const OVERVIEW_STAGE_TOP_DESKTOP = 96;
+  const OVERVIEW_STAGE_BOTTOM_RAIL_MOBILE = 190;
+  const OVERVIEW_STAGE_BOTTOM_RAIL_DESKTOP = 196;
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
   $: if (mounted && authenticated !== lastAuthenticated) {
@@ -161,6 +172,11 @@
     lastAppReplayId = appReplay.id;
     openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {});
   }
+  $: overviewPreviewDecisions = desktopOverviewOpen
+    ? createOverviewPreviewDecisions($windows, $activeWindowId, {
+        viewportWidth: overviewViewportWidth,
+      })
+    : {};
 
   // ---- Desktop state persistence ----
 
@@ -338,6 +354,148 @@
 
   function isWindowAppBodySuspended(win) {
     return Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
+  }
+
+  function readOverviewBottomBarHeight() {
+    if (typeof document === 'undefined') return 56;
+    const bottomBar = document.querySelector('[data-bottom-bar]');
+    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+    const fromTheme = window
+      .getComputedStyle(document.documentElement)
+      .getPropertyValue('--choir-bottom-bar-height');
+    const parsed = Number.parseFloat(fromTheme);
+    return Number.isFinite(parsed) ? parsed : 56;
+  }
+
+  function refreshOverviewViewport() {
+    if (typeof window === 'undefined') return;
+    overviewViewportWidth = window.innerWidth || 1280;
+    overviewViewportHeight = window.innerHeight || 800;
+    overviewBottomBarHeight = readOverviewBottomBarHeight();
+  }
+
+  function clampOverviewValue(value, min, max) {
+    return Math.min(Math.max(value, min), Math.max(min, max));
+  }
+
+  function renderedWindowGeometryForOverview(win) {
+    const mobile = overviewViewportWidth <= RESTORE_RECOVERY_COMPACT_BREAKPOINT;
+    const tablet = overviewViewportWidth <= 1024;
+    const margin = mobile ? 8 : tablet ? 16 : 12;
+    const minWidth = 200;
+    const minHeight = 120;
+    const maxWidth = Math.max(minWidth, overviewViewportWidth - margin * 2);
+    const maxHeight = Math.max(
+      minHeight,
+      overviewViewportHeight - overviewBottomBarHeight - margin * 2
+    );
+    const width = Math.min(Math.max(win.width || 600, minWidth), maxWidth);
+    const height = Math.min(Math.max(win.height || 400, minHeight), maxHeight);
+    const maxX = Math.max(margin, overviewViewportWidth - width - margin);
+    const maxY = Math.max(
+      margin,
+      overviewViewportHeight - overviewBottomBarHeight - height - margin
+    );
+
+    if (win.mode === 'maximized') {
+      return {
+        x: 0,
+        y: 0,
+        width: overviewViewportWidth,
+        height: Math.max(minHeight, overviewViewportHeight - overviewBottomBarHeight),
+      };
+    }
+
+    return {
+      x: clampOverviewValue(win.x || margin, margin, maxX),
+      y: clampOverviewValue(win.y || margin, margin, maxY),
+      width,
+      height,
+    };
+  }
+
+  function getOverviewPreviewState(win, decision = null) {
+    return (decision || getOverviewPreviewDecision(overviewPreviewDecisions, win.windowId)).state;
+  }
+
+  function getOverviewPreviewStyle(win, decision = null) {
+    if (!desktopOverviewOpen) return '';
+    const previewDecision = decision || getOverviewPreviewDecision(overviewPreviewDecisions, win.windowId);
+    if (previewDecision.state !== 'live') return '';
+
+    const mobile = overviewViewportWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT;
+    const stageX = mobile ? 20 : 56;
+    const stageTop = mobile ? OVERVIEW_STAGE_TOP_MOBILE : OVERVIEW_STAGE_TOP_DESKTOP;
+    const bottomRail = mobile
+      ? OVERVIEW_STAGE_BOTTOM_RAIL_MOBILE
+      : OVERVIEW_STAGE_BOTTOM_RAIL_DESKTOP;
+    const stageWidth = Math.max(260, overviewViewportWidth - stageX * 2);
+    const stageHeight = Math.max(
+      220,
+      overviewViewportHeight - overviewBottomBarHeight - stageTop - bottomRail
+    );
+    const source = renderedWindowGeometryForOverview(win);
+    const preferredScale = mobile
+      ? previewDecision.liveCount <= 2 ? 0.58 : 0.48
+      : previewDecision.liveCount <= 3 ? 0.48 : 0.38;
+    const scale = clampOverviewValue(
+      Math.min(
+        preferredScale,
+        (stageWidth * 0.72) / Math.max(source.width, 1),
+        (stageHeight * 0.74) / Math.max(source.height, 1)
+      ),
+      mobile ? 0.32 : 0.24,
+      mobile ? 0.62 : 0.54
+    );
+    const targetWidth = source.width * scale;
+    const targetHeight = source.height * scale;
+    const sourceMaxX = Math.max(1, overviewViewportWidth - source.width);
+    const sourceMaxY = Math.max(1, overviewViewportHeight - overviewBottomBarHeight - source.height);
+    const normalizedX = clampOverviewValue(source.x / sourceMaxX, 0, 1);
+    const normalizedY = clampOverviewValue(source.y / sourceMaxY, 0, 1);
+    const liveIndex = Math.max(0, previewDecision.liveIndex);
+    const slotWidth = Math.max(0, stageWidth - targetWidth);
+    const slotHeight = Math.max(0, stageHeight - targetHeight);
+    const mobileSlots = [
+      { x: 0.02, y: 0.02 },
+      { x: 0.58, y: 0.2 },
+      { x: 0.25, y: 0.47 },
+    ];
+    let slotX = normalizedX;
+    let slotY = normalizedY;
+
+    if (mobile && previewDecision.liveCount <= mobileSlots.length) {
+      slotX = mobileSlots[liveIndex]?.x ?? normalizedX;
+      slotY = mobileSlots[liveIndex]?.y ?? normalizedY;
+    } else if (!mobile) {
+      const columns = Math.min(3, Math.max(1, previewDecision.liveCount));
+      const rows = Math.max(1, Math.ceil(previewDecision.liveCount / columns));
+      const col = liveIndex % columns;
+      const row = Math.floor(liveIndex / columns);
+      slotX = columns === 1 ? 0.5 : col / (columns - 1);
+      slotY = rows === 1 ? 0.12 : row / (rows - 1);
+    }
+
+    const nudgeX = (normalizedX - 0.5) * (mobile ? 18 : 28);
+    const nudgeY = (normalizedY - 0.5) * (mobile ? 14 : 22);
+    const targetX = clampOverviewValue(
+      stageX + slotX * slotWidth + nudgeX,
+      stageX,
+      stageX + slotWidth
+    );
+    const targetY = clampOverviewValue(
+      stageTop + slotY * slotHeight + nudgeY,
+      stageTop,
+      stageTop + slotHeight
+    );
+    const translateX = Math.round(targetX - source.x);
+    const translateY = Math.round(targetY - source.y);
+
+    return [
+      `--overview-translate-x:${translateX}px;`,
+      `--overview-translate-y:${translateY}px;`,
+      `--overview-scale:${scale.toFixed(4)};`,
+    ].join(' ');
   }
 
   function restoreRecoveryRequestedByURL() {
@@ -973,6 +1131,7 @@
   }
 
   function handleShowDesktopOverview() {
+    refreshOverviewViewport();
     desktopOverviewOpen = true;
   }
 
@@ -1093,6 +1252,8 @@
 
   onMount(() => {
     mounted = true;
+    refreshOverviewViewport();
+    window.addEventListener('resize', refreshOverviewViewport);
     lastAuthenticated = authenticated;
     if (authenticated) {
       startAuthenticatedDesktop();
@@ -1114,6 +1275,7 @@
 
   onDestroy(() => {
     mounted = false;
+    window.removeEventListener('resize', refreshOverviewViewport);
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (unsubscribeWindows) unsubscribeWindows();
@@ -1197,6 +1359,9 @@
             zIndex={win.zIndex}
             active={win.windowId === $activeWindowId}
             restoredGeometry={win.restoredGeometry}
+            overviewOpen={desktopOverviewOpen}
+            overviewPreviewState={getOverviewPreviewState(win, overviewPreviewDecisions[win.windowId])}
+            overviewPreviewStyle={getOverviewPreviewStyle(win, overviewPreviewDecisions[win.windowId])}
             on:close={handleWindowClose}
             on:focus={handleWindowFocus}
             on:minimize={handleWindowMinimize}
@@ -1325,6 +1490,7 @@
         windows={$windows}
         activeWindowId={$activeWindowId}
         {authenticated}
+        previewDecisions={overviewPreviewDecisions}
         on:close={handleCloseDesktopOverview}
         on:focuswindow={handleOverviewFocusWindow}
         on:minimizewindow={handleOverviewMinimizeWindow}
