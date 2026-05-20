@@ -535,7 +535,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 		AppAdoptions      []map[string]any `json:"app_adoptions"`
 	}
 	if len(workerHandleResp.ChainedDelegationOutput) > 0 {
-		if workerHandleResp.DelegationStatus != "worker_delegated" {
+		if workerHandleResp.DelegationStatus != "worker_run_completed" {
 			t.Fatalf("unexpected chained delegation status: %+v", workerHandleResp)
 		}
 		if err := json.Unmarshal(workerHandleResp.ChainedDelegationOutput, &delegateResp); err != nil {
