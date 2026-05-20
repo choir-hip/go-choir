@@ -125,6 +125,14 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			sourceCandidateID := firstNonEmpty(strings.TrimSpace(in.SourceCandidateID), runID, sanitizeExportPart(headSHA))
 			appID := firstNonEmpty(strings.TrimSpace(in.AppID), "computer-change")
 			visibility := firstNonEmpty(strings.TrimSpace(in.Visibility), "unlisted")
+			candidateSourceRef := strings.TrimSpace(in.CandidateSourceRef)
+			sourceLedgerCandidateRef := strings.TrimSpace(in.SourceLedgerCandidateRef)
+			if candidateSourceRef != "" && !isProductCandidateSourceRef(candidateSourceRef) {
+				if sourceLedgerCandidateRef == "" {
+					sourceLedgerCandidateRef = candidateSourceRef
+				}
+				candidateSourceRef = ""
+			}
 			contract := strings.TrimSpace(in.AppProtocolContract)
 			if contract == "" {
 				contract = "recipient_build_required: " + firstNonEmpty(strings.TrimSpace(in.Summary), "candidate source change requires recipient Go/Svelte rebuild")
@@ -135,10 +143,10 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				SourceComputerID:            sourceComputerID,
 				SourceCandidateID:           sourceCandidateID,
 				SourceActiveRef:             strings.TrimSpace(in.SourceActiveRef),
-				CandidateSourceRef:          strings.TrimSpace(in.CandidateSourceRef),
+				CandidateSourceRef:          candidateSourceRef,
 				SourceLedgerRepo:            strings.TrimSpace(in.SourceLedgerRepo),
 				SourceLedgerBaseRef:         firstNonEmpty(strings.TrimSpace(in.SourceLedgerBaseRef), baseSHA),
-				SourceLedgerCandidateRef:    strings.TrimSpace(in.SourceLedgerCandidateRef),
+				SourceLedgerCandidateRef:    sourceLedgerCandidateRef,
 				SourceLedgerCommitSHA:       strings.TrimSpace(headSHA),
 				RuntimeSourceDelta:          runtimeDelta,
 				UISourceDelta:               uiDelta,
@@ -175,6 +183,10 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			})
 		},
 	}
+}
+
+func isProductCandidateSourceRef(ref string) bool {
+	return strings.Contains(strings.TrimSpace(ref), "/candidates/")
 }
 
 func gitDiffInDir(ctx context.Context, dir, base, head string, paths ...string) (string, error) {

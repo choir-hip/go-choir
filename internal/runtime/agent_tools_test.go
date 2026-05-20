@@ -2835,12 +2835,13 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
 	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "publish_app_change_package", json.RawMessage(fmt.Sprintf(`{
-		"repo_path": "repo",
-		"base_sha": %q,
-		"snapshot_id": "snapshot-tool",
-		"summary": "worker package proof",
-		"checks": ["grep -q worker README.md"]
-	}`, base)))
+			"repo_path": "repo",
+			"base_sha": %q,
+			"candidate_source_ref": "refs/heads/candidate/package-proof",
+			"snapshot_id": "snapshot-tool",
+			"summary": "worker package proof",
+			"checks": ["grep -q worker README.md"]
+		}`, base)))
 	if err != nil {
 		t.Fatalf("publish_app_change_package: %v", err)
 	}
@@ -2851,6 +2852,7 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 		PackageManifestSHA256    string `json:"package_manifest_sha256"`
 		RuntimeSourceDeltaSHA256 string `json:"runtime_source_delta_sha256"`
 		CandidateHeadSHA         string `json:"candidate_head_sha"`
+		CandidateSourceRef       string `json:"candidate_source_ref"`
 		GitHubPush               bool   `json:"github_push"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
@@ -2858,6 +2860,20 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	}
 	if result.Status != "published_unlisted" || result.GitHubPush || result.PackageID == "" || result.PackageManifestSHA256 == "" || result.RuntimeSourceDeltaSHA256 == "" || result.CandidateHeadSHA == "" {
 		t.Fatalf("unexpected package result: %+v", result)
+	}
+	if strings.Contains(result.CandidateSourceRef, "refs/heads/candidate/") || !strings.Contains(result.CandidateSourceRef, "/candidates/") {
+		t.Fatalf("candidate_source_ref = %q, want canonical product candidate ref", result.CandidateSourceRef)
+	}
+	pkg, err := rt.store.GetAppChangePackage(context.Background(), result.PackageID)
+	if err != nil {
+		t.Fatalf("get app change package: %v", err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(pkg.ManifestJSON, &manifest); err != nil {
+		t.Fatalf("decode package manifest: %v", err)
+	}
+	if manifest["source_ledger_candidate_ref"] != "refs/heads/candidate/package-proof" {
+		t.Fatalf("source_ledger_candidate_ref = %q, want worker git branch", manifest["source_ledger_candidate_ref"])
 	}
 }
 

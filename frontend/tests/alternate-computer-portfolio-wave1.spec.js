@@ -163,6 +163,178 @@ async function traceSnapshot(page, trajectoryId) {
   return res.ok ? res.json : { error: res.text, status: res.status };
 }
 
+function tryParseJSON(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+  try {
+    return JSON.parse(value);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function summarizeTracePayload(payload) {
+  const parsedPayload = typeof payload === 'string' ? tryParseJSON(payload) : payload;
+  if (!parsedPayload || typeof parsedPayload !== 'object') {
+    return { raw_preview: String(payload || '').slice(0, 2000) };
+  }
+
+  const summarized = {};
+  for (const key of ['tool', 'call_id', 'is_error', 'output_len', 'phase', 'status', 'chained_from']) {
+    if (Object.prototype.hasOwnProperty.call(parsedPayload, key)) {
+      summarized[key] = parsedPayload[key];
+    }
+  }
+  if (parsedPayload.arguments) {
+    summarized.arguments = parsedPayload.arguments;
+  }
+
+  if (typeof parsedPayload.output === 'string') {
+    summarized.output_preview = parsedPayload.output.slice(0, 4000);
+    const output = tryParseJSON(parsedPayload.output);
+    if (output && typeof output === 'object') {
+      summarized.output_json = {};
+      for (const key of [
+        'status',
+        'state',
+        'loop_id',
+        'agent_id',
+        'profile',
+        'completion_blocker',
+        'terminal_error',
+        'error',
+        'worker_update_checkpoint',
+        'worker_event_error',
+        'worker_channel_message_count',
+        'worker_spawned_profiles',
+        'worker_child_run_ids',
+        'worker_child_statuses',
+        'worker_child_status_errors',
+        'app_change_packages',
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(output, key)) {
+          summarized.output_json[key] = output[key];
+        }
+      }
+      if (Array.isArray(output.worker_event_summary)) {
+        summarized.output_json.worker_event_summary = output.worker_event_summary.slice(0, 40);
+      }
+      if (Object.prototype.hasOwnProperty.call(output, 'chained_delegation_output')) {
+        summarized.output_json.chained_delegation_output = output.chained_delegation_output;
+      }
+    }
+  }
+
+  return summarized;
+}
+
+function detailContainsPackageSignal(detail) {
+  const haystack = JSON.stringify(detail || {}).toLowerCase();
+  return (
+    haystack.includes('delegate_worker_vm') ||
+    haystack.includes('request_worker_vm') ||
+    haystack.includes('publish_app_change_package') ||
+    haystack.includes('appchangepackage') ||
+    haystack.includes('app_change_package') ||
+    haystack.includes('worker_run') ||
+    haystack.includes('completion_blocker')
+  );
+}
+
+function summarizeTraceDetail(detail) {
+  return {
+    moment: detail?.moment || null,
+    references: detail?.references || {},
+    artifacts: {
+      app_change_package_id: detail?.artifacts?.app_change_package?.package_id || '',
+      app_adoption_id: detail?.artifacts?.app_adoption?.adoption_id || '',
+      run_memory_entry_id: detail?.artifacts?.run_memory?.entry_id || '',
+      continuation_id: detail?.artifacts?.continuation?.continuation_id || '',
+    },
+    events: Array.isArray(detail?.events) ? detail.events.map((event) => ({
+      event_id: event.event_id,
+      kind: event.kind,
+      run_id: event.run_id,
+      agent_id: event.agent_id,
+      stream_seq: event.stream_seq,
+      payload: summarizeTracePayload(event.payload),
+    })) : [],
+    messages: Array.isArray(detail?.messages) ? detail.messages.map((message) => ({
+      channel_id: message.channel_id,
+      seq: message.seq,
+      sender_profile: message.sender_profile,
+      sender_role: message.sender_role,
+      content_preview: String(message.content || '').slice(0, 4000),
+    })) : [],
+  };
+}
+
+async function traceDiagnostics(page, trajectoryId) {
+  const snapshot = await traceSnapshot(page, trajectoryId);
+  if (snapshot.error || snapshot.status) {
+    return { snapshot };
+  }
+  const moments = Array.isArray(snapshot.moments) ? snapshot.moments : [];
+  const relevant = moments.filter((moment) => (
+    detailContainsPackageSignal(moment) ||
+    ['tool.invoked', 'tool.result', 'channel.message', 'run.completed', 'run.failed'].includes(moment.kind)
+  ));
+
+  const detailResults = [];
+  for (const moment of relevant.slice(-40)) {
+    const res = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`);
+    if (res.ok) {
+      const detail = summarizeTraceDetail(res.json);
+      if (detailContainsPackageSignal(detail)) {
+        detailResults.push(detail);
+      }
+    } else {
+      detailResults.push({
+        moment,
+        detail_error: `${res.status} ${res.text}`,
+      });
+    }
+  }
+
+  return {
+    trajectory: snapshot.trajectory || null,
+    mobile_summary: snapshot.mobile_summary || null,
+    agent_count: Array.isArray(snapshot.agents) ? snapshot.agents.length : 0,
+    moment_count: moments.length,
+    relevant_moment_count: relevant.length,
+    details: detailResults,
+  };
+}
+
+function findDelegateBlocker(traceDiag) {
+  const details = Array.isArray(traceDiag?.details) ? traceDiag.details : [];
+  const delegateResults = [];
+  for (const detail of details) {
+    for (const event of detail.events || []) {
+      const payload = event.payload || {};
+      if (payload.tool !== 'delegate_worker_vm' && payload.output_json?.chained_delegation_output == null) {
+        continue;
+      }
+      const output = payload.output_json?.chained_delegation_output || payload.output_json || {};
+      delegateResults.push(output);
+    }
+  }
+  const blocked = delegateResults.find((output) => output.completion_blocker || output.terminal_error || output.status === 'worker_run_incomplete');
+  if (blocked) {
+    return [
+      `delegate_worker_vm returned ${blocked.status || 'unknown status'}`,
+      blocked.completion_blocker ? `completion_blocker=${blocked.completion_blocker}` : '',
+      blocked.terminal_error ? `terminal_error=${blocked.terminal_error}` : '',
+    ].filter(Boolean).join('; ');
+  }
+  const last = delegateResults[delegateResults.length - 1];
+  if (last) {
+    return `delegate_worker_vm returned ${last.status || 'unknown status'} with ${Array.isArray(last.app_change_packages) ? last.app_change_packages.length : 0} AppChangePackages`;
+  }
+  return '';
+}
+
 function packageMatchesLane(pkg, lane) {
   const haystack = JSON.stringify(pkg || {}).toLowerCase();
   return haystack.includes(lane.marker.toLowerCase()) || haystack.includes(lane.appID.toLowerCase());
@@ -317,6 +489,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
     for (const lane of lanes) {
       const prompt = await promptStatus(source.page, lane.submission_id);
       const trace = await traceSnapshot(source.page, lane.submission_id);
+      const diagnostics = await traceDiagnostics(source.page, lane.submission_id);
       const matches = packagesResult.byLane[lane.id] || [];
       const pkg = matches[0] || null;
       if (pkg) {
@@ -335,18 +508,21 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
             package_manifest_sha256: candidate.package_manifest_sha256,
           })),
           owner_recipient_adoption: adoption,
+          trace_diagnostics: diagnostics,
           recommendation: adoption.status === 'owner_pullable_experiment'
             ? 'iterate: package crossed into an owner-review recipient computer with build/adoption evidence'
             : 'checkpoint: inspect verifier blocker before promotion',
         };
       } else {
+        const delegateBlocker = findDelegateBlocker(diagnostics);
         laneReports[lane.id] = {
           status: 'blocked_incomplete',
           lane,
           prompt,
           trace_mobile_summary: trace.mobile_summary || null,
+          trace_diagnostics: diagnostics,
           package_candidates: [],
-          blocker: `No matching AppChangePackage for ${lane.appID} after ${PACKAGE_WAIT_MS}ms.`,
+          blocker: delegateBlocker || `No matching AppChangePackage for ${lane.appID} after ${PACKAGE_WAIT_MS}ms.`,
           recommendation: 'root-cause super/vsuper worker package publication before retrying this lane',
         };
       }

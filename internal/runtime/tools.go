@@ -467,6 +467,9 @@ func augmentWorkerRequestWithDelegation(requestOutput, delegateOutput string, de
 	var parsed any
 	if err := json.Unmarshal([]byte(delegateOutput), &parsed); err == nil {
 		decoded["chained_delegation_output"] = parsed
+		if parsedMap, ok := parsed.(map[string]any); ok {
+			propagateChainedWorkerDelegation(decoded, parsedMap)
+		}
 	} else {
 		decoded["chained_delegation_output"] = delegateOutput
 	}
@@ -475,6 +478,36 @@ func augmentWorkerRequestWithDelegation(requestOutput, delegateOutput string, de
 		return requestOutput
 	}
 	return string(out)
+}
+
+func propagateChainedWorkerDelegation(requestOutput, delegateOutput map[string]any) {
+	if status, _ := delegateOutput["status"].(string); strings.TrimSpace(status) != "" {
+		requestOutput["delegation_status"] = strings.TrimSpace(status)
+	}
+	for _, key := range []string{
+		"app_change_packages",
+		"completion_blocker",
+		"terminal_error",
+		"reviewable_package_observed",
+		"worker_update_checkpoint",
+		"worker_event_error",
+		"worker_event_summary",
+		"worker_spawned_profiles",
+		"worker_channel_message_count",
+		"worker_child_run_ids",
+		"worker_child_statuses",
+		"worker_child_status_errors",
+	} {
+		if value, ok := delegateOutput[key]; ok {
+			requestOutput[key] = value
+		}
+	}
+	if _, ok := requestOutput["app_change_packages"]; !ok {
+		requestOutput["app_change_packages"] = []any{}
+	}
+	if requestOutput["completion_blocker"] != nil || requestOutput["terminal_error"] != nil || requestOutput["delegation_status"] == "worker_run_incomplete" {
+		requestOutput["delegation_incomplete"] = true
+	}
 }
 
 func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {

@@ -18,17 +18,19 @@ candidate/background computers where healthy
 > It must not use `export_patchset`, `/api/promotions`, or synthetic recipient
 > digests as acceptable evidence.
 >
-> Direct owner login to alternate experiment accounts is optional, not the
-> review invariant. The current intended review path is: experiment computer
-> publishes an AppChangePackage, the owner inspects the evidence, then pulls or
-> adopts the package into an owner-controlled computer for manual QA or
-> promotion. Do not add auth handoff machinery merely to make Playwright-created
-> accounts directly loginable.
+> Direct owner login to alternate experiment accounts is out of scope unless it
+> already works without new auth machinery. The review invariant is package
+> mobility: an experiment computer publishes an AppChangePackage, the owner
+> inspects the evidence, then pulls or adopts the package into an
+> owner-controlled computer for manual QA, iteration, promotion, or rejection.
+> Do not add auth handoff machinery merely to make Playwright-created accounts
+> directly loginable. The owner may review all promising experiments by pulling
+> their packages into one existing owner-controlled account/computer.
 
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is package publish -> owner pull/adoption into an owner-controlled computer; direct login to alternate experiment accounts is optional, not required. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, or adopt tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is package publish -> owner pull/adoption into an existing owner-controlled account/computer; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, or adopt tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -37,10 +39,26 @@ Choir needs a research mode where ambitious UI/runtime ideas can be expressed in
 real user computers before platform promotion. The target is not one merged
 feature. The target is an experiment portfolio the owner can inspect the next
 day by reviewing package/adoption evidence, pulling promising packages into an
-owner-controlled computer when useful, comparing results, and choosing what
-should move toward promotion. Direct login to distinct experiment accounts is a
-useful bonus when the auth surface supports it, but it is no longer the mission
-invariant.
+owner-controlled account/computer when useful, comparing results, and choosing
+what should move toward promotion. Direct login to distinct experiment accounts
+is not part of the required QA path. It is out of scope unless the auth surface
+already supports it without new machinery.
+
+Manual owner review should therefore look like:
+
+```text
+experiment computer produces package evidence
+-> owner inspects package/Trace/VText/run-acceptance refs
+-> owner pulls or adopts selected package into an owner-controlled account/computer
+-> owner tests that adopted package in their own active/candidate context
+-> owner decides iterate, abandon, or promote
+```
+
+This route is better aligned with the promotion architecture than trying to
+transfer alternate-account login state. Alternate accounts may be created by
+Playwright or worker flows, but their loginability is not the product proof.
+The proof is that the patch can move as source/package evidence and be adopted
+inside a computer the owner can already access.
 
 The four experiments are:
 
@@ -88,7 +106,7 @@ experiment computer/package portfolio
 -> four candidate/user-computer lanes
 -> product-visible state and evidence for each lane
 -> AppChangePackage/adoption/build evidence where code changed
--> owner pull/adoption path into an owner-controlled computer
+-> owner pull/adoption path into an owner-controlled account/computer
 -> owner-reviewable screenshots/video/benchmarks
 -> Trace/VText/run-acceptance/certificate records
 -> promotion recommendations and rollback/package/adoption refs
@@ -111,9 +129,12 @@ The artifact is not:
   artifacts.
 - The owner must be able to inspect each successful experiment after the run by
   product evidence and, for code-changing lanes, by an AppChangePackage that
-  can be pulled or adopted into an owner-controlled computer. Direct account
-  login is optional and must not become auth-surface scope unless it is needed
-  for the package/adoption path itself.
+  can be pulled or adopted into an owner-controlled account/computer. Direct
+  account login is out of scope and must not become auth-surface scope unless it
+  is needed for the package/adoption path itself.
+- Alternate experiment accounts may be non-loginable to the owner. That is not
+  a blocker when package refs, source deltas, verifier evidence, screenshots or
+  videos, and owner pull/adoption records are durable and inspectable.
 - Platform deploys are allowed for substrate repairs, but not as proof that a
   user-computer experiment succeeded.
 - Patch movement uses the current hard-cut path: AppChangePackage -> adoption
@@ -382,7 +403,7 @@ Start with two lanes in parallel, not four.
 Recommended wave order:
 
 ```text
-Wave 0: account/computer creation, review path, and package/adoption smoke
+Wave 0: experiment computer/package creation, review path, and package/adoption smoke
 Wave 1: Lane A Chiron + Lane B animation language
 Wave 2: Lane C liquid material + Lane D Python code mode
 ```
@@ -393,7 +414,7 @@ throughput, continue with Wave 2 concurrently.
 If concurrency causes:
 
 - worker/vsuper timeouts;
-- ambiguous account identity;
+- ambiguous computer/package identity;
 - missing Trace/run/package/adoption evidence;
 - cross-experiment contamination;
 - staging instability;
@@ -420,12 +441,15 @@ blocked_incomplete
 - an AppChangePackage exists with source deltas/contracts/provenance;
 - an owner-controlled recipient computer can import, build, verify, adopt, or
   reject it through product APIs;
+- the owner does not need direct login to the source experiment account in order
+  to inspect, test, or promote the result;
 - evidence docs name the source computer, package, adoption/build, verifier,
   and rollback refs without leaking secrets.
 
-`loginable_experiment` is an optional stronger form of
-`owner_pullable_experiment`, not a required outcome. It means the owner can also
-log into the experiment account/computer directly tomorrow.
+`loginable_experiment` is supplemental evidence, not a required mission outcome.
+It means the owner can also log into the experiment account/computer directly,
+but this must not be used as a substitute for package mobility and must not add
+auth work to this portfolio.
 
 `checkpoint_package` means:
 
@@ -441,8 +465,9 @@ log into the experiment account/computer directly tomorrow.
 
 Do not store or print reusable credentials in the mission doc. If current auth
 requires passkeys or operator-mediated setup, do not widen auth solely for this
-mission. Prefer package publish -> owner pull/adoption. Record the exact missing
-capability only when that package path itself is blocked.
+mission. Prefer package publish -> owner pull/adoption into an owner-controlled
+account/computer. Record the exact missing capability only when that package
+path itself is blocked.
 
 ## Dense Feedback
 
@@ -551,31 +576,37 @@ Latest checkpoint:
 ```text
 status: checkpoint_incomplete
 last checkpoint: Wave 1 two-lane prompt-bar probe ran on deployed staging at
-  d1f3bb5. Chiron and animation objectives were accepted concurrently and
-  routed through VText/Trace, but neither lane produced a matching
-  AppChangePackage after 40 minutes. Root-cause investigation found that a
-  package-required vsuper delegate could still return `worker_run_completed`
-  when it emitted only worker-update/narrative evidence and no
-  `publish_app_change_package` result.
+  a0a4d6c with diagnostic Trace detail capture. Chiron reached a real
+  implementation/verification commit in worker/vsuper/co-super flow but
+  package publication failed because `publish_app_change_package` treated the
+  worker Git branch ref `refs/heads/candidate/<marker>` as the product
+  `candidate_source_ref`. Animation was submitted concurrently but was queued
+  behind the persistent super; it only reached a fresh worker lease near the end
+  of the 15-minute diagnostic probe.
 current artifact state: four-lane experiment portfolio defined; Wave 0 proved
   AppChangePackage -> adoption -> actual recipient Go/Svelte build -> promote
   through staging product APIs. The review invariant is now owner-pullable
   packages, not loginable Playwright-created accounts.
-review-path decision: direct owner login to alternate accounts is not required
-  for this portfolio. Experiments should publish AppChangePackages that the
-  owner can inspect, pull, adopt, or reject inside an owner-controlled
-  computer. Do not add auth handoff code solely for manual QA of virtual
-  Playwright accounts.
+review-path decision: direct owner login to alternate accounts is out of scope
+  for this portfolio unless it already works without new auth machinery.
+  Experiments should publish AppChangePackages that the owner can inspect, pull,
+  adopt, or reject inside an owner-controlled account/computer such as
+  ymnath@choir-ip.com. Do not add auth handoff code solely for manual QA of
+  virtual Playwright accounts.
 what shipped: preflight substrate hard-cut landed before this mission; during
   Wave 0, a run-acceptance false-success edge was identified and patched so
   records with blocked invariant checks cannot still claim accepted state.
   No auth handoff code should be added for this mission. Docs were then updated
-  to make owner-pull/adoption the review invariant. Current local patch makes
+  to make owner-pull/adoption the review invariant. Commit a0a4d6c makes
   `delegate_worker_vm` mark package-required vsuper results without package
   evidence as `worker_run_incomplete` with blocker
   `vsuper_completed_without_required_app_change_package`, and tells super not
   to summarize package/candidate delegate results without `app_change_packages`
-  as completed owner-reviewable work.
+  as completed owner-reviewable work. Current local patch also propagates
+  auto-chained `delegate_worker_vm` package/blocker fields onto the top-level
+  `request_worker_vm` result and maps worker Git candidate branches into
+  `source_ledger_candidate_ref` while allowing canonical product
+  `candidate_source_ref` generation.
 what was proven:
   - old export_patchset and /api/promotions paths are invalid acceptance paths
   - current acceptance path is AppChangePackage/adoption/recipient build
@@ -590,7 +621,7 @@ what was proven:
     run acceptance runacc-19c10e4b57c2f0828c5b
     VText evidence doc ab093136-d504-4745-8f42-d9d30a008bdc
   - Wave 1 concurrent prompt-bar probe at marker
-    alt-portfolio-wave1-1779272533882 created two source-account submissions:
+    alt-portfolio-wave1-1779272533882 created two source-computer submissions:
     Chiron submission 5f9db432-87d6-477a-ba10-26ccc0825641
     Animation submission 180525db-2944-4b08-b453-8a321ff709cf
   - both Wave 1 submissions reached completed prompt state and opened VText
@@ -600,6 +631,14 @@ what was proven:
   - Wave 1 used no forbidden browser requests and wrote durable VText evidence:
     doc e7e927ec-09fa-404a-8df8-b2e4973a6f89
     revision b47d8471-13d6-4331-a6e2-66a38b67baf3
+  - diagnostic Wave 1 probe at deployed commit a0a4d6c with marker
+    alt-portfolio-wave1-1779279580320 captured Trace moment details:
+    Chiron produced implementation commits 48d2d11959f6fe0fe02a4dfd8ce710d034f5ab7f
+    and 17f4b9ca7d25be99cf709f42308b408603dfe35b, verifier PASS evidence,
+    and repeated `publish_app_change_package` failures:
+    `candidate_source_ref must be a candidate ref`.
+    Evidence file:
+    test-results/alternate-portfolio-wave1-diagnostics-a0a4d6c-20260520T1216/alternate-portfolio-wave1-evidence.json
   - focused local regression tests pass inside the repo Nix dev shell:
     nix develop .# --command go test -count=1 ./internal/runtime -run
     'TestDelegateWorkerVM(FollowsCompletedVSuperChildrenBeforeReturning|MarksCompletedVSuperWithoutExportOrUpdateIncomplete|MarksPackageRequiredVSuperWithoutPackageIncomplete|ReturnsFailedRunEvidence|ReturnsTimeoutRunEvidence)'
@@ -611,41 +650,47 @@ what was proven:
 unproven or partial claims:
   - owner-pull/adoption into ymnath@choir-ip.com or another owner-controlled
     active computer for a real experiment package
-  - Choir-in-Choir two-lane concurrency reached prompt/Trace/VText evidence
-    but did not reach worker/vsuper package publication
+  - Choir-in-Choir two-lane concurrency reached prompt/Trace/VText evidence;
+    Chiron reached implementation/verifier evidence but not package
+    publication, and animation did not complete a package run inside the
+    bounded diagnostic window
   - mobile Safari liquid material feasibility
   - Python mode A/B implementation and benchmark
   - run acceptance remains promotion-level/blocked for Wave 0 because
     product_path_observed and worker_mutation_bounded are intentionally strict
     for this synthetic package checkpoint
 remaining error field:
-  - explicit candidate/package objectives from prompt bar can terminally
-    complete as VText/Super activity without preserving the worker-vsuper
-    package-publication topology
-  - Wave 1 traces show VText/Super activity but no matching AppChangePackage
-    for either lane marker
+  - package publication rejects common worker Git candidate branch refs instead
+    of preserving them as source-ledger refs and generating canonical product
+    candidate refs
+  - auto-chained worker delegation evidence is nested under request_worker_vm
+    unless propagated, making package blockers easier for super to miss
+  - persistent super serializes concurrent lane work enough that animation can
+    lag behind Chiron under a 15-minute diagnostic proof window
   - owner pull/adoption UX and evidence path for tomorrow's manual QA remains
     unproven for real experiment packages because no real Wave 1 package exists
   - evidence synthesis across alternate computers
-  - the delegate boundary fix is not proven on staging until commit, CI/deploy,
-    staging identity verification, and a rerun of Wave 1
+  - the candidate-ref mapping and top-level delegation propagation fixes are
+    not proven on staging until commit, CI/deploy, staging identity
+    verification, and a rerun of Wave 1
 highest-impact remaining uncertainty:
-  - Can prompt-bar initiated Choir-in-Choir candidate work reliably force
-    super -> worker VM -> vsuper package publication, rather than stopping at
-    VText document activity?
+  - After product candidate-ref generation is fixed, can Chiron publish an
+    AppChangePackage and can the two-lane portfolio proof produce at least one
+    owner-pullable package while preserving lane attribution?
 next executable probe:
-  - Commit, push, monitor CI/deploy, verify staging identity, then rerun Wave 1
-    with the same Chiron and animation lane shapes. Expected improvement: if a
-    lane still fails to publish an AppChangePackage, Trace should show
-    `worker_run_incomplete` and blocker
-    `vsuper_completed_without_required_app_change_package` rather than a
-    completed narrative update being mistaken for package evidence.
+  - Commit the local candidate-ref/delegation evidence patch, push, monitor
+    CI/deploy, verify staging identity, then rerun Wave 1 with the same Chiron
+    and animation lane shapes. Expected improvement: Chiron should publish an
+    AppChangePackage using canonical product `candidate_source_ref` plus worker
+    branch `source_ledger_candidate_ref`; if it still fails, Trace detail should
+    name the exact publication or verifier blocker.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:
   - test-results/alternate-portfolio-wave0-deployed/alternate-portfolio-wave0-evidence.json
   - frontend/test-results/alternate-computer-portfol-682da--or-records-precise-blocker-chromium/alternate-portfolio-wave0-desktop.png
   - test-results/alternate-portfolio-wave1-deployed/alternate-portfolio-wave1-evidence.json
+  - test-results/alternate-portfolio-wave1-diagnostics-a0a4d6c-20260520T1216/alternate-portfolio-wave1-evidence.json
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/alternate-portfolio-wave1-source-desktop.png
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/trace.zip
 rollback refs:
@@ -668,4 +713,7 @@ learning log:
   - Root-cause sharpened from "VText/Super did not delegate" to "delegation can
     still launder package-required work into completed narrative updates when
     no AppChangePackage was published."
+  - Diagnostic detail capture changed the search space: Chiron was not stuck at
+    implementation, verification, or delegation. It was blocked at the boundary
+    between worker Git refs and product source-lineage refs.
 ```
