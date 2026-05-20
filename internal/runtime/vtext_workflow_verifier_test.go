@@ -421,6 +421,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 
 	workerHandler := NewAPIHandler(workerRT)
 	workerMux := http.NewServeMux()
+	workerMux.HandleFunc("/internal/runtime/app-change-packages/", workerHandler.HandleInternalAppChangePackageDetail)
 	workerMux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
 	workerMux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
 	workerSrv := httptest.NewServer(workerMux)

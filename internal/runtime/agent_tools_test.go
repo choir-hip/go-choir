@@ -2953,6 +2953,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 
 	workerHandler := NewAPIHandler(workerRT)
 	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/app-change-packages/", workerHandler.HandleInternalAppChangePackageDetail)
 	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
 	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
 	srv := httptest.NewServer(mux)
@@ -2983,10 +2984,11 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 
 	var result struct {
-		State             types.RunState   `json:"state"`
-		WorkerVMID        string           `json:"worker_vm_id"`
-		AppChangePackages []map[string]any `json:"app_change_packages"`
-		AppAdoptions      []map[string]any `json:"app_adoptions"`
+		State                               types.RunState   `json:"state"`
+		WorkerVMID                          string           `json:"worker_vm_id"`
+		AppChangePackages                   []map[string]any `json:"app_change_packages"`
+		AppAdoptions                        []map[string]any `json:"app_adoptions"`
+		ProductVisibleAppChangePackageCount int              `json:"product_visible_app_change_package_count"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -3000,8 +3002,19 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	if got, _ := result.AppChangePackages[0]["candidate_head_sha"].(string); strings.TrimSpace(got) == "" {
 		t.Fatalf("worker package missing candidate_head_sha: %+v", result.AppChangePackages[0])
 	}
+	if result.ProductVisibleAppChangePackageCount != 1 || result.AppChangePackages[0]["canonical_mirror_status"] != "mirrored" || result.AppChangePackages[0]["product_visible"] != true {
+		t.Fatalf("worker package was not mirrored into active product store: %+v\nraw=%s", result.AppChangePackages, raw)
+	}
 	if len(result.AppAdoptions) != 0 {
 		t.Fatalf("delegate_worker_vm must not queue old promotion candidates, got %+v", result.AppAdoptions)
+	}
+	packageID, _ := result.AppChangePackages[0]["package_id"].(string)
+	mirrored, err := activeStore.GetAppChangePackageForViewer(context.Background(), "user-bob", packageID)
+	if err != nil {
+		t.Fatalf("mirrored package should be visible to another authenticated viewer: %v", err)
+	}
+	if mirrored.PackageID != packageID || !strings.Contains(mirrored.RuntimeSourceDelta, "background worker change") {
+		t.Fatalf("mirrored package missing full source delta: %+v", mirrored)
 	}
 	updates, err := activeStore.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-worker-delegation", 10)
 	if err != nil {
@@ -3014,7 +3027,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	if !strings.Contains(joinedFindings, "returned 1 AppChangePackage") || strings.Contains(joinedFindings, "no AppChangePackages") {
 		t.Fatalf("worker update checkpoint did not preserve successful package: %+v", updates[0])
 	}
-	if packageID, _ := result.AppChangePackages[0]["package_id"].(string); packageID == "" || !containsString(updates[0].EvidenceIDs, "app_change_package:"+packageID) {
+	if packageID == "" || !containsString(updates[0].EvidenceIDs, "app_change_package:"+packageID) {
 		t.Fatalf("worker update checkpoint missing AppChangePackage evidence: %+v", updates[0])
 	}
 }
@@ -3972,6 +3985,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/app-change-packages/package-timeout":
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
@@ -4329,6 +4344,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 
 	workerHandler := NewAPIHandler(workerRT)
 	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/app-change-packages/", workerHandler.HandleInternalAppChangePackageDetail)
 	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
 	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
 	srv := httptest.NewServer(mux)

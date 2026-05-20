@@ -675,7 +675,10 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				}
 				applyWorkerRunEvidence(result, evidence)
 				if packages := collectAppChangePackageResults(evidence.Events); len(packages) > 0 {
+					var mirrorErrors []string
+					packages, mirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, packages)
 					result["app_change_packages"] = packages
+					annotateWorkerPackageMirrorResult(result, packages, mirrorErrors)
 				}
 				if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
 					result["worker_event_summary"] = summary
@@ -756,7 +759,10 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 							applyWorkerRunEvidence(result, evidence)
 							packages := collectAppChangePackageResults(evidence.Events)
 							if len(packages) > 0 {
+								var mirrorErrors []string
+								packages, mirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, packages)
 								result["app_change_packages"] = packages
+								annotateWorkerPackageMirrorResult(result, packages, mirrorErrors)
 								result["reviewable_package_observed"] = true
 								if pollErr.TimedOut {
 									result["completion_blocker"] = "vsuper_timed_out_after_reviewable_package"
@@ -808,6 +814,8 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID, evidence, timeout)
 			}
 			packages := collectAppChangePackageResults(evidence.Events)
+			var packageMirrorErrors []string
+			packages, packageMirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, packages)
 
 			result := map[string]any{
 				"status":              delegateWorkerRunStatus(finalResp.State),
@@ -822,15 +830,21 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				"error":               finalResp.Error,
 				"app_change_packages": packages,
 			}
+			annotateWorkerPackageMirrorResult(result, packages, packageMirrorErrors)
 			if finalResp.State != types.RunCompleted && len(packages) > 0 {
 				result["reviewable_package_observed"] = true
 				result["completion_blocker"] = firstNonEmpty(stringMapValue(result, "completion_blocker"), "vsuper_ended_non_completed_after_reviewable_package")
 			}
 			applyWorkerRunEvidence(result, evidence)
-			if finalResp.State == types.RunCompleted && delegateRequiresAppChangePackage(profile, in.Objective) && len(packages) == 0 {
+			requiresPackage := delegateRequiresAppChangePackage(profile, in.Objective)
+			if finalResp.State == types.RunCompleted && requiresPackage && len(packages) == 0 {
 				result["status"] = "worker_run_incomplete"
 				result["completion_blocker"] = "vsuper_completed_without_required_app_change_package"
 				result["terminal_error"] = "worker vsuper completed a package-required objective without publish_app_change_package evidence"
+			} else if finalResp.State == types.RunCompleted && requiresPackage && len(packages) > 0 && countProductVisibleAppChangePackages(packages) == 0 {
+				result["status"] = "worker_run_incomplete"
+				result["completion_blocker"] = "app_change_package_not_product_visible"
+				result["terminal_error"] = "worker vsuper published AppChangePackage evidence, but no package could be mirrored into the product-visible package store"
 			} else if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, packages) {
 				result["status"] = "worker_run_incomplete"
 				result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
@@ -1620,6 +1634,118 @@ func collectAppChangePackageResults(events []types.EventRecord) []map[string]any
 		packages = append(packages, output)
 	}
 	return packages
+}
+
+func (rt *Runtime) mirrorWorkerAppChangePackages(ctx context.Context, client *http.Client, baseURL, ownerID string, packages []map[string]any) ([]map[string]any, []string) {
+	if len(packages) == 0 {
+		return packages, nil
+	}
+	out := make([]map[string]any, 0, len(packages))
+	var mirrorErrors []string
+	for _, pkg := range packages {
+		item := copyStringAnyMap(pkg)
+		packageID := appChangePackageResultString(item, "package_id")
+		if packageID == "" {
+			out = append(out, item)
+			continue
+		}
+		if rt == nil || rt.store == nil {
+			item["canonical_mirror_status"] = "failed"
+			item["canonical_mirror_error"] = "active runtime store unavailable"
+			mirrorErrors = append(mirrorErrors, packageID+": active runtime store unavailable")
+			out = append(out, item)
+			continue
+		}
+		rec, err := fetchInternalWorkerAppChangePackage(ctx, client, baseURL, ownerID, packageID)
+		if err != nil {
+			item["canonical_mirror_status"] = "failed"
+			item["canonical_mirror_error"] = err.Error()
+			mirrorErrors = append(mirrorErrors, packageID+": "+err.Error())
+			out = append(out, item)
+			continue
+		}
+		rec, err = rt.store.UpsertAppChangePackage(ctx, rec)
+		if err != nil {
+			item["canonical_mirror_status"] = "failed"
+			item["canonical_mirror_error"] = err.Error()
+			mirrorErrors = append(mirrorErrors, packageID+": "+err.Error())
+			out = append(out, item)
+			continue
+		}
+		item["canonical_mirror_status"] = "mirrored"
+		item["product_visible"] = true
+		item["canonical_package_id"] = rec.PackageID
+		item["canonical_owner_id"] = rec.OwnerID
+		item["runtime_source_delta_present"] = strings.TrimSpace(rec.RuntimeSourceDelta) != ""
+		item["ui_source_delta_present"] = strings.TrimSpace(rec.UISourceDelta) != ""
+		out = append(out, item)
+	}
+	return out, mirrorErrors
+}
+
+func fetchInternalWorkerAppChangePackage(ctx context.Context, client *http.Client, baseURL, ownerID, packageID string) (types.AppChangePackageRecord, error) {
+	values := url.Values{"owner_id": []string{strings.TrimSpace(ownerID)}}
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/app-change-packages/"+url.PathEscape(packageID), values)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.AppChangePackageRecord{}, fmt.Errorf("worker app change package detail: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return types.AppChangePackageRecord{}, fmt.Errorf("worker app change package detail failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+	var out types.AppChangePackageRecord
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return types.AppChangePackageRecord{}, fmt.Errorf("decode worker app change package detail: %w", err)
+	}
+	if strings.TrimSpace(out.PackageID) == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("worker app change package detail missing package_id")
+	}
+	return out, nil
+}
+
+func annotateWorkerPackageMirrorResult(result map[string]any, packages []map[string]any, mirrorErrors []string) {
+	if len(packages) == 0 {
+		return
+	}
+	result["product_visible_app_change_package_count"] = countProductVisibleAppChangePackages(packages)
+	if len(mirrorErrors) > 0 {
+		result["app_change_package_mirror_errors"] = mirrorErrors
+	}
+}
+
+func countProductVisibleAppChangePackages(packages []map[string]any) int {
+	count := 0
+	for _, pkg := range packages {
+		if value, ok := pkg["product_visible"].(bool); ok && value {
+			count++
+			continue
+		}
+		if appChangePackageResultString(pkg, "canonical_mirror_status") == "mirrored" {
+			count++
+		}
+	}
+	return count
+}
+
+func copyStringAnyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func appChangePackageResultFingerprint(output map[string]any) string {

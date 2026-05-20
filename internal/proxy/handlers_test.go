@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"golang.org/x/crypto/ssh"
 )
@@ -204,6 +205,80 @@ func writeTestPublicKey(t *testing.T, path string, pub ed25519.PublicKey) {
 	data := ssh.MarshalAuthorizedKey(sshPub)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write public key: %v", err)
+	}
+}
+
+func TestAppChangePackagePullImportsPackageIntoTargetComputer(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	sourcePackage := types.AppChangePackageRecord{
+		PackageID:          "package-pull-test",
+		OwnerID:            "source-user",
+		AppID:              "portfolio-pull-test",
+		Status:             types.AppChangePackagePublishedUnlisted,
+		Visibility:         "unlisted",
+		SourceComputerID:   "source-computer",
+		SourceCandidateID:  "source-candidate",
+		CandidateSourceRef: "refs/computers/source-computer/candidates/source-candidate",
+		RuntimeSourceDelta: "runtime delta for pull",
+		UISourceDelta:      "ui delta for pull",
+	}
+	var imported types.AppChangePackageRecord
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/internal/runtime/app-change-packages/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller marker")
+		}
+		if got := r.URL.Query().Get("viewer_id"); got != "recipient-user" {
+			t.Fatalf("viewer_id = %q, want recipient-user", got)
+		}
+		_ = json.NewEncoder(w).Encode(sourcePackage)
+	})
+	sandboxMux.HandleFunc("/internal/runtime/app-change-packages", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing import internal caller marker")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&imported); err != nil {
+			t.Fatalf("decode import: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(imported)
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandbox.Close() })
+
+	handler, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	body := strings.NewReader(`{"package_id":"package-pull-test","source_owner_id":"source-user"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/app-change-packages/pull", body)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "recipient-user")})
+	w := httptest.NewRecorder()
+	handler.HandleAppChangePackagePull(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("pull status = %d body=%s", w.Code, w.Body.String())
+	}
+	if imported.PackageID != sourcePackage.PackageID || imported.OwnerID != sourcePackage.OwnerID || imported.RuntimeSourceDelta != sourcePackage.RuntimeSourceDelta {
+		t.Fatalf("import did not preserve package source identity/delta: %+v", imported)
+	}
+	var resp appChangePackagePullResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode pull response: %v", err)
+	}
+	if resp.TargetOwnerID != "recipient-user" || resp.SourceOwnerID != "source-user" || resp.Package.PackageID != sourcePackage.PackageID {
+		t.Fatalf("unexpected pull response: %+v", resp)
 	}
 }
 

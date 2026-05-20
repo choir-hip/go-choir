@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -220,6 +222,76 @@ func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
 	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID, "", "user-bob")
 	if otherW.Code != http.StatusNotFound {
 		t.Fatalf("private package visible to other owner: status=%d body=%s", otherW.Code, otherW.Body.String())
+	}
+}
+
+func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body := `{
+		"app_id":"portfolio-experiment",
+		"visibility":"unlisted",
+		"source_computer_id":"worker-computer",
+		"source_candidate_id":"worker-candidate",
+		"runtime_source_delta":"runtime delta from worker",
+		"ui_source_delta":"ui delta from worker",
+		"app_protocol_contract":"contract"
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+
+	publicReq := httptest.NewRequest(http.MethodGet, "/internal/runtime/app-change-packages/"+pkg.PackageID+"?owner_id=user-alice", nil)
+	publicW := httptest.NewRecorder()
+	handler.HandleInternalAppChangePackageDetail(publicW, publicReq)
+	if publicW.Code != http.StatusForbidden {
+		t.Fatalf("internal package detail without internal marker status = %d body=%s", publicW.Code, publicW.Body.String())
+	}
+
+	internalReq := httptest.NewRequest(http.MethodGet, "/internal/runtime/app-change-packages/"+pkg.PackageID+"?owner_id=user-alice", nil)
+	internalReq.Header.Set("X-Internal-Caller", "true")
+	internalW := httptest.NewRecorder()
+	handler.HandleInternalAppChangePackageDetail(internalW, internalReq)
+	if internalW.Code != http.StatusOK {
+		t.Fatalf("internal package detail status = %d body=%s", internalW.Code, internalW.Body.String())
+	}
+	var got types.AppChangePackageRecord
+	if err := json.Unmarshal(internalW.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode internal package detail: %v", err)
+	}
+	if got.PackageID != pkg.PackageID || !strings.Contains(got.RuntimeSourceDelta, "worker") || !strings.Contains(got.UISourceDelta, "worker") {
+		t.Fatalf("internal package detail did not include full package source deltas: %+v", got)
+	}
+
+	importReq := httptest.NewRequest(http.MethodPost, "/internal/runtime/app-change-packages", strings.NewReader(`{
+		"package_id":"package-imported-internal",
+		"owner_id":"source-owner",
+		"app_id":"portfolio-imported",
+		"status":"published_unlisted",
+		"visibility":"unlisted",
+		"source_computer_id":"source-computer",
+		"source_candidate_id":"source-candidate",
+		"candidate_source_ref":"refs/computers/source-computer/candidates/source-candidate",
+		"runtime_source_delta":"imported runtime delta",
+		"ui_source_delta":"imported ui delta",
+		"package_manifest_sha256":"manifest-sha"
+	}`))
+	importReq.Header.Set("X-Internal-Caller", "true")
+	importW := httptest.NewRecorder()
+	handler.HandleInternalAppChangePackagesRoot(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("internal package import status = %d body=%s", importW.Code, importW.Body.String())
+	}
+	imported, err := handler.rt.store.GetAppChangePackageForViewer(context.Background(), "recipient-viewer", "package-imported-internal")
+	if err != nil {
+		t.Fatalf("imported package should be visible to recipient viewer: %v", err)
+	}
+	if imported.OwnerID != "source-owner" || !strings.Contains(imported.RuntimeSourceDelta, "imported runtime") {
+		t.Fatalf("imported package did not preserve source identity/delta: %+v", imported)
 	}
 }
 

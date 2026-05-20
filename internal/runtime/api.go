@@ -1387,6 +1387,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
+	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
+	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/vtext/proposals", h.HandleInternalVTextProposalDelivery)

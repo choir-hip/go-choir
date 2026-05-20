@@ -369,6 +369,17 @@ async function adoptPackageIntoRecipient(page, lane, pkg, marker) {
   const adoptionID = `adoption-owner-review-${lane.id}-${safeID(marker)}`;
   const traceID = pkg.trace_id || lane.submission_id || `traj-owner-review-${lane.id}-${safeID(marker)}`;
 
+  const pulled = await postJSON(page, '/api/app-change-packages/pull', {
+    package_id: pkg.package_id,
+    source_owner_id: pkg.owner_id || '',
+  });
+  if (!pulled.ok) {
+    return {
+      status: 'blocked_incomplete',
+      blocker: `recipient could not pull package ${pkg.package_id}: ${pulled.status} ${pulled.text}`,
+    };
+  }
+
   const detail = await fetchJSON(page, `/api/app-change-packages/${encodeURIComponent(pkg.package_id)}`);
   if (!detail.ok) {
     return {
@@ -501,6 +512,7 @@ test('Wave 1 launches Chiron and animation lanes and records package/adoption ev
           trace_mobile_summary: trace.mobile_summary || null,
           package_candidates: matches.map((candidate) => ({
             package_id: candidate.package_id,
+            owner_id: candidate.owner_id,
             app_id: candidate.app_id,
             status: candidate.status,
             visibility: candidate.visibility,

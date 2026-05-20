@@ -103,6 +103,30 @@ func (h *APIHandler) HandleAppChangePackagesRoot(w http.ResponseWriter, r *http.
 	}
 }
 
+func (h *APIHandler) HandleInternalAppChangePackagesRoot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	var rec types.AppChangePackageRecord
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rec); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app change package import"})
+		return
+	}
+	imported, err := h.rt.store.UpsertAppChangePackage(r.Context(), rec)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, imported)
+}
+
 func (h *APIHandler) HandleAppChangePackageDetail(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -120,6 +144,37 @@ func (h *APIHandler) HandleAppChangePackageDetail(w http.ResponseWriter, r *http
 		return
 	}
 	rec, err := h.rt.store.GetAppChangePackageForViewer(r.Context(), ownerID, packageID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, rec)
+}
+
+func (h *APIHandler) HandleInternalAppChangePackageDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	viewerID := strings.TrimSpace(r.URL.Query().Get("viewer_id"))
+	if viewerID == "" {
+		viewerID = strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	}
+	if viewerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "viewer_id is required"})
+		return
+	}
+	const prefix = "/internal/runtime/app-change-packages/"
+	packageID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	if packageID == "" || strings.Contains(packageID, "/") {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
+		return
+	}
+	rec, err := h.rt.store.GetAppChangePackageForViewer(r.Context(), viewerID, packageID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
 		return

@@ -392,6 +392,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/compute/recovery":
 		h.HandleComputeRecovery(w, r)
 		return
+	case path == "/api/app-change-packages/pull":
+		h.HandleAppChangePackagePull(w, r)
+		return
 	case strings.HasPrefix(path, "/api/system/"):
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
