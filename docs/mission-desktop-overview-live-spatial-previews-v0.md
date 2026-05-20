@@ -1,6 +1,6 @@
 # MissionGradient: Desktop Overview Live Spatial Previews v0
 
-**Status:** proposed
+**Status:** complete
 **Date:** 2026-05-19
 **Operator:** Codex or Choir-in-Choir supervisor with staging Playwright, git,
 CI, deploy, and product-path evidence
@@ -8,6 +8,10 @@ CI, deploy, and product-path evidence
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 **Starting platform doc head:** `824c793d95bd0d3863b0761aed8d155f22ad684f`
 **Starting deployed behavior baseline:** `b148461dafc6125fa321de9b10814cdc6af285b6`
+**Completed behavior commit:** `2f8ad7adc2697d6faff00dbc90991057c19781e9`
+**CI/deploy run:** `https://github.com/yusefmosiah/go-choir/actions/runs/26133712240`
+**Staging identity:** proxy and sandbox reported
+`2f8ad7adc2697d6faff00dbc90991057c19781e9` after deploy.
 
 ## One-Line Goal String
 
@@ -84,6 +88,17 @@ persistent desktop/window state
 -> app-owned suspended/redacted preview cards where needed
 -> focus/suspend/minimize/close/recover actions
 -> staging proof under ordinary and heavy restored sessions
+```
+
+Implemented v0 artifact:
+
+```text
+explicit preview policy
+-> safe live windows remain the same mounted DOM tree
+-> Overview applies bounded CSS transforms into spatial preview positions
+-> suspended/heavy/redacted/unsafe windows become honest cards
+-> DOM metrics expose live/card/redacted/suspended preview counts
+-> ordinary and heavy restored staging Playwright proof
 ```
 
 The artifact is not:
@@ -362,22 +377,66 @@ Required claims:
 - mounted heavy app count remains bounded under heavy restored session;
 - staging build identity matches the pushed behavior commit.
 
+Completed evidence:
+
+```text
+claim: live previews are actual transformed window DOM, not screenshots or duplicate mounts
+evidence source: frontend implementation and deployed Playwright DOM metrics
+command or observation: FloatingWindow keeps one app instance mounted and applies overview CSS transforms through data-overview-preview-state="live"; fallback/card windows are hidden instead of remounted
+artifact path: frontend/src/lib/FloatingWindow.svelte, frontend/src/lib/Desktop.svelte, frontend/src/lib/DesktopOverview.svelte
+result: live windows in Overview have real transform matrices and opacity 1; card/suspended windows do not mount duplicate app bodies
+uncertainty/caveat: v0 uses app-id based redaction/heaviness policy, not a richer app-owned privacy descriptor system
+promotion relevance: proves Overview can become spatial without fake thumbnails or screenshot capture
+
+claim: preview budget is enforced on mobile and desktop
+evidence source: deployed Playwright
+command or observation: mobile ordinary session produced 3 live previews and 1 card; desktop ordinary session produced 4 live previews; heavy sessions produced 2 live previews and 10 suspended previews
+artifact path: frontend/tests/mobile-real-desktop-overview.spec.js, frontend/tests/desktop-overview-heavy-session.spec.js
+result: tests passed and DOM live counts matched summary counts
+uncertainty/caveat: richer adaptive budgeting by measured memory pressure remains future work
+promotion relevance: avoids the restore/crash class from eagerly hydrating every saved app
+
+claim: heavy/suspended/private windows use honest cards or redaction
+evidence source: heavy restored staging Playwright
+command or observation: 12-window heavy session asserted 10 suspended preview states, card records for all windows, and only 1 mounted heavy app body
+artifact path: frontend/test-results/desktop-overview-heavy-ses-*/
+result: mobile and desktop heavy tests passed with 12 visible windows, 11 heavy windows, 10 suspended windows, 1 mounted heavy app body, 66 overlap pairs
+uncertainty/caveat: terminal/candidate redaction is conservative and should become app-owned policy later
+promotion relevance: preserves heavy-session recovery while making Overview readable
+
+claim: Overview focus/resume/close actions preserve state
+evidence source: deployed ordinary and heavy Playwright tests
+command or observation: tests focus a preview/window from Overview, resume/suspend heavy backgrounds through Compute Monitor paths, and return to normal desktop
+artifact path: Playwright command outputs in this mission log
+result: ordinary and heavy proof passed on staging
+uncertainty/caveat: real long-lived user accounts with many organic windows still need taste/visual QA
+promotion relevance: proves Overview remains a control surface, not just a visual board
+
+claim: staging build identity matches the pushed behavior commit
+evidence source: GitHub Actions and staging /health
+command or observation: gh run view 26133712240; curl -fsS https://draft.choir-ip.com/health
+artifact path: GitHub Actions run 26133712240
+result: CI/deploy completed successfully; proxy and sandbox reported commit 2f8ad7adc2697d6faff00dbc90991057c19781e9, built_at 20260520002859, deployed_at 2026-05-20T00:31:14Z
+uncertainty/caveat: docs-only evidence update after this behavior commit intentionally skips CI/CD
+promotion relevance: makes this a deployed platform shell claim, not a local proof
+```
+
 ## Run Checkpoint And Resumption State
 
 ```text
-status: proposed
-last checkpoint: mission authored from heavy-session completion and live-preview design review
-current artifact state: Desktop Overview is spatial/card based with heavy-session recovery proof, not live-preview based
-what shipped: none for this mission yet
-what was proven: prior heavy-session Overview proof at b148461
-unproven or partial claims: live transformed previews, preview privacy policy, preview budget, polished motion
-belief-state changes: none yet
-remaining error field: Overview still feels like a management grid rather than a live spatial room
-highest-impact remaining uncertainty: can live DOM transforms produce premium previews without increasing memory/crash risk?
-next executable probe: implement preview policy data model and a bounded live-transform prototype for safe visible windows
-suggested resume goal string: use the One-Line Goal String above
-evidence artifact refs: prior heavy-session Playwright artifacts under frontend/test-results/desktop-overview-heavy-session-*
-rollback refs: revert behavior commit from this mission; prior deployed baseline b148461
+status: complete
+last checkpoint: deployed staging proof completed 2026-05-20
+current artifact state: Desktop Overview has bounded live spatial previews for safe mounted windows and honest card/suspended/redacted fallbacks for unsafe or heavy windows
+what shipped: preview policy helper, FloatingWindow overview transform states, Desktop overview placement computation, Overview summary metrics/cards, ordinary and heavy-session Playwright assertions
+what was proven: staging ordinary mobile/desktop multitasking and 12-window heavy restored sessions with bounded live previews and mounted-heavy count preserved
+unproven or partial claims: richer app-owned preview descriptors, optional live/effect thumbnails, real long-lived user visual QA, adaptive budget from measured client memory
+belief-state changes: live DOM transforms are sufficient for v0; WebGPU/canvas screenshots are not required for the core Overview control surface
+remaining error field: Overview can be more spatially beautiful and app-specific, but no longer needs to be a static management grid
+highest-impact remaining uncertainty: how far to push preview fidelity without privacy or memory regression, especially for Trace/VText/media/candidate windows
+next executable probe: add app-owned preview descriptors and a visual/taste pass for real heavy user sessions, then consider optional live thumbnails/effects only under measured privacy and memory budgets
+suggested resume goal string: run a follow-up mission for app-owned Overview previews and premium spatial polish under real long-lived sessions
+evidence artifact refs: GitHub Actions 26133712240; staging health at 2f8ad7a; deployed Playwright commands in this mission report; frontend/test-results/desktop-overview-heavy-ses-*
+rollback refs: revert 2f8ad7adc2697d6faff00dbc90991057c19781e9 and redeploy; previous deployed baseline b148461dafc6125fa321de9b10814cdc6af285b6
 ```
 
 During or after execution, update this section with `complete`,

@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-19
+Last reviewed: 2026-05-20
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -70,7 +70,7 @@ Use these buckets when reading or editing docs:
 - `docs/mission-desktop-overview-heavy-session-v0.md` - completed
   MissionGradient for making Desktop Overview spatially useful under heavy
   restored sessions with bounded suspension/recovery controls.
-- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - proposed
+- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - completed
   MissionGradient for turning Desktop Overview into a bounded live spatial
   preview/control surface without WebGPU, fake thumbnails, duplicate app
   mounts, preview privacy leaks, or memory-regression shortcuts.
@@ -102,7 +102,7 @@ Use these buckets when reading or editing docs:
 - `docs/mission-desktop-overview-heavy-session-v0.md` - completed shell
   mission for heavy-session Desktop Overview, bounded suspension, recovery,
   and Compute Monitor handoff.
-- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - proposed next
+- `docs/mission-desktop-overview-live-spatial-previews-v0.md` - completed
   shell mission for live spatial Overview previews, bounded preview policy,
   suspended/redacted cards, and premium motion without memory/privacy regressions.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.

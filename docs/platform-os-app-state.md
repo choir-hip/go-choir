@@ -1,9 +1,9 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-19
-**Baseline checked:** heavy-session Desktop Overview baseline
-`b148461dafc6125fa321de9b10814cdc6af285b6`
+**Last updated:** 2026-05-20
+**Baseline checked:** live-spatial Desktop Overview baseline
+`2f8ad7adc2697d6faff00dbc90991057c19781e9`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -125,9 +125,12 @@ Known gaps:
   for real prompt content;
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
   tasteful, configurable desktop environment;
-- Desktop Overview is card/spatial-state based, not live thumbnail based. It is
-  proven for four-window mobile/desktop multitasking and generated 12-window
-  restored heavy sessions. Real long-lived user accounts still need proof.
+- Desktop Overview now has bounded live spatial previews for safe mounted
+  windows by transforming the real window DOM into Overview positions, with
+  honest card/suspended/redacted fallbacks for heavy, private, or unsafe
+  windows. It is proven for four-window mobile/desktop multitasking and
+  generated 12-window restored heavy sessions. Real long-lived user accounts
+  still need taste/visual QA and richer app-owned preview descriptors.
 
 ## App Catalog
 
@@ -234,6 +237,31 @@ Recent deployed platform proof for heavy-session Desktop Overview:
 - proof covered Overview focus/resume, background suspension, Compute Monitor
   handoff, and keep-active-only recovery without fake thumbnails, host/global
   telemetry, broad kill controls, or phone-mode simplification.
+
+Recent deployed platform proof for live-spatial Desktop Overview previews:
+
+- behavior commit: `2f8ad7adc2697d6faff00dbc90991057c19781e9`;
+- CI/deploy run:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26133712240`;
+- staging health reported proxy and sandbox commit
+  `2f8ad7adc2697d6faff00dbc90991057c19781e9`, built at
+  `20260520002859`, deployed at `2026-05-20T00:31:14Z`;
+- deployed ordinary-session Playwright:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+- result: `2 passed`;
+- ordinary proof covered Files, VText, Trace, and Podcast as overlapping
+  windows on `390x844` and desktop, with bounded live Overview previews and
+  fallback cards;
+- deployed heavy-session Playwright:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/desktop-overview-heavy-session.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+- result: `2 passed`;
+- mobile and desktop heavy DOM metrics: 12 visible windows, 11 heavy windows,
+  10 suspended windows, 1 mounted heavy app body, 66 overlap pairs, 2 live
+  previews, 10 suspended previews, 12 Overview cards, 12 map windows, pressure
+  `elevated`;
+- proof kept live previews as transformed real DOM, not WebGPU/canvas
+  screenshots, duplicated app mounts, persisted preview captures, fake
+  thumbnails, host/global telemetry, or phone-mode simplification.
 
 ## Divergence Plan
 
