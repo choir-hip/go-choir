@@ -2,13 +2,18 @@
 
 **Status:** checkpoint_incomplete. The auth/review model is now explicit:
 source experiment accounts do not need to be manually loginable; package
-mobility is the review path. Wave 0 package/adoption proof is complete, Wave 2
-Liquid/Python is cleanly owner-pullable at `6db0632`, and source/recipient
-run-acceptance bridges are deployed. A fresh Wave 1 audit exposed duplicate
-Chiron package publication from repeated `delegate_worker_vm` calls in the same
-super run. The runtime dedupe fix is `575ff30`; it must finish CI/deploy and
-then reprove Wave 1 on staging before the final owner review certificate can
-call all four lanes clean.
+mobility is the review path. Wave 0 package/adoption proof is complete,
+source/recipient run-acceptance bridges are deployed, the Wave 1
+duplicate-package blocker was root-caused to repeated same-run
+`delegate_worker_vm` calls, fixed in `575ff30`, deployed to staging, and
+reproven cleanly. The Node B disk/auth incident was also root-caused and
+recovered, then Wave 2 Liquid/Python was reproven cleanly on the same deployed
+`575ff30` identity. All four lanes are now `owner_pullable_experiment`
+packages with source acceptance, recipient acceptance, adoption, artifact
+digests, and rollback refs. The mission is still incomplete because owner pull
+into an owner-controlled computer such as `ymnath@choir-ip.com`, hands-on QA,
+richer Liquid/Python benchmarks, and durable stale VM-state GC remain the next
+realism axis.
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -50,7 +55,7 @@ candidate/background computers where healthy
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-pullable AppChangePackage experiment portfolio, not a platform-default UX merge and not a loginable-alt-account demo. First finish the `575ff30` worker-delegation dedupe deploy and rerun Wave 1 on staging so Chiron and animation produce clean selected package identities with export-level source acceptance plus promotion-level recipient acceptance; preserve Wave 2 Liquid/Python proof from `6db0632` unless new evidence supersedes it. Complete the evidence-quality pass: produce a concise owner review certificate for all four packages with package ids, Trace/VText/run-acceptance refs, screenshots or Playwright video refs, benchmarks where relevant, selected package identities when historical duplicate candidates exist, rollback refs, residual risks, and promotion recommendations. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; this is the canonical auth/review path, not a fallback, and direct login to alternate experiment accounts is out of scope and is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion without the owner review certificate and a clean Wave 1 rerun after `575ff30`. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-pullable AppChangePackage experiment portfolio, not a platform-default UX merge and not a loginable-alt-account demo. Continue from the deployed `575ff30` proof set and the owner review certificate `docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md`: Wave 1 Chiron/animation and Wave 2 Liquid/Python are all clean `owner_pullable_experiment` packages on staging with source acceptance, recipient acceptance, adoption, artifact digests, rollback refs, screenshot/Trace evidence, and no forbidden browser requests. Treat source experiment accounts as disposable source lineages; direct login to those accounts is out of scope. The next realism axis is owner-controlled package pull/adoption/promotion into an account/computer the owner already controls, such as `ymnath@choir-ip.com`, plus hands-on QA and richer Liquid/Python benchmark evidence. Also harden the operational lesson from the run by adding product-safe stale candidate/worker VM-state GC or an equivalent bounded recovery policy before another large portfolio run can fill Node B again. Maintain the learning log about MissionGradient behavior, but do not use it as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion until owner pull/QA, required benchmarks, and recovery policy evidence are durable. If a substrate blocker prevents owner-controlled package adoption or real package evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -642,18 +647,24 @@ last checkpoint: Wave 0 proved AppChangePackage -> adoption -> actual
   added Chiron and animation packages, then Wave 2 added Liquid Material Engine
   and Python code mode packages. Recipient run-acceptance bridging shipped at
   65956c4, source-package acceptance shipped at 09a95ad, and persistent-super
-  concurrent inbox draining shipped at 6db0632. The latest deployed Wave 2
-  rerun at 6db0632 produced one Liquid package and one Python package; both
-  have export-level accepted source-run records and promotion-level accepted
-  recipient-run records. A fresh Wave 1 rerun at 6db0632 then found a real
-  evidence-quality bug: Chiron published three packages for one lane because
-  repeated `delegate_worker_vm` calls against the same worker/same super run
-  started repeated candidate/package work. Commit 575ff30 dedupes repeated
-  worker delegations; CI/deploy and a fresh Wave 1 staging proof are required
-  before the final owner review certificate can call Chiron clean.
+  concurrent inbox draining shipped at 6db0632. The 6db0632 Wave 2 rerun
+  produced one Liquid package and one Python package; both had export-level
+  accepted source-run records and promotion-level accepted recipient-run
+  records. A fresh Wave 1 rerun at 6db0632 then found a real evidence-quality
+  bug: Chiron published three packages for one lane because repeated
+  `delegate_worker_vm` calls against the same worker/same super run started
+  repeated candidate/package work. Commit 575ff30 deduped repeated worker
+  delegations, passed CI, deployed to staging, and was reproven cleanly for
+  Wave 1. A later Node B disk/auth incident blocked fresh Wave 2 account
+  registration; it was root-caused to a full root filesystem, recovered by
+  journal and Nix store cleanup, and Wave 2 was rerun cleanly on deployed
+  575ff30. Chiron, animation, Liquid, and Python now each have exactly one
+  selected package in the fresh selected proof set, with export-level source
+  acceptance plus promotion-level recipient acceptance.
 current artifact state: the four-lane experiment portfolio exists as
-  owner-reviewable package/adoption evidence, but Wave 1's selected package
-  identities must be reproven after 575ff30. The review invariant is
+  owner-reviewable package/adoption evidence. Wave 1 selected package
+  identities are clean after 575ff30; Wave 2 selected package identities are
+  clean after the fresh 575ff30 reproof. The review invariant is
   owner-pullable packages, not loginable Playwright-created accounts. Source
   experiment accounts may be disposable or non-loginable; each successful
   package must be inspectable, pullable, adoptable, or promotable into an
@@ -698,8 +709,11 @@ what shipped: preflight substrate hard-cut landed before this mission; during
   Commit 575ff30 dedupes repeated `delegate_worker_vm` calls in the same super
   run for the same worker/profile and skips same-turn duplicate delegate
   payloads, so a single worker lease should not publish repeated package
-  identities for one lane. Its staging deploy and fresh Wave 1 proof remain the
-  current acceptance gate.
+  identities for one lane. GitHub Actions run 26187590374 passed, Node B
+  deployed 575ff3014a85524da4233e60ce44345804d46807, and `/health` reported
+  that deployed identity before the fresh Wave 1 proof. Docs-only commit
+  3701425 updated this mission and intentionally did not trigger CI/CD because
+  docs-only path filters are the current repo policy.
 what was proven:
   - old export_patchset and /api/promotions paths are invalid acceptance paths
   - current acceptance path is AppChangePackage/adoption/recipient build
@@ -957,69 +971,163 @@ what was proven:
     start or collect a separate candidate/package result. Commit `575ff30`
     makes `delegate_worker_vm` idempotent for a matching same-run worker/profile
     terminal result and skips same-turn duplicate delegate payloads. Focused
-    local runtime tests passed before push; staging proof is still required.
+    local runtime tests passed before push; the fresh Wave 1 staging proof
+    below validates the fix on the product path.
+  - commit `575ff30` finished CI and deployed to staging. GitHub Actions run
+    `26187590374` passed; Node B deploy succeeded; `/health` reported proxy and
+    sandbox commit `575ff3014a85524da4233e60ce44345804d46807`, built at
+    `20260520201906`, deployed at `2026-05-20T20:20:53Z`.
+  - deployed Wave 1 proof at `575ff30` passed on staging in 19.6 minutes,
+    using marker `alt-portfolio-wave1-1779308875528` and evidence:
+    `test-results/alternate-portfolio-wave1-deployed-575ff30-runacc-20260520T202754/alternate-portfolio-wave1-evidence.json`.
+    The evidence status is `checkpoint_wave1_owner_pullable`, with no forbidden
+    browser requests and durable VText evidence doc
+    `1d74a744-23be-4c07-8357-54beea5010ab`, revision
+    `08456a8d-9ca3-48b8-bd9d-7f98c4d1cdfc`.
+  - Chiron Shelf observability produced exactly one selected package in the
+    `575ff30` rerun:
+    `28433c19-5d02-416f-9368-de56390e1927` for app
+    `portfolio-chiron-shelf-alt-portfolio-wave1-1779308875528`, manifest
+    `ff72e7f90a5d32f5cbb6a1e1f181c68b5af721ebab48dda1946baaeb2df2eecb`.
+    Source run acceptance `runacc-a352091712fdd96aa00d` is `export-level`,
+    accepted. Recipient run acceptance `runacc-c3d70f753b81fd591442` is
+    `promotion-level`, accepted. Recipient adoption
+    `adoption-owner-review-chiron-alt-portfolio-wave1-1779308875528`
+    promoted with runtime digest
+    `sha256:9a72bd1fe32ba54fd83eeeead73dd41a3302654d710ddb9e5e2d647b7dcc62ee`
+    and UI digest
+    `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`.
+  - Process/window/agent animation produced exactly one selected package in
+    the `575ff30` rerun:
+    `98b98c73-eef0-4a88-a6f5-b7dfe695be09` for app
+    `portfolio-animation-language-alt-portfolio-wave1-1779308875528`,
+    manifest `8336ee42b4940a26a647c29d57a32b3107f0df473988675f0aa5c73a34882228`.
+    Source run acceptance `runacc-5784f0028b01753ad0ca` is `export-level`,
+    accepted. Recipient run acceptance `runacc-3b54c9ae8dac2337184a` is
+    `promotion-level`, accepted. Recipient adoption
+    `adoption-owner-review-animation-alt-portfolio-wave1-1779308875528`
+    promoted with runtime digest
+    `sha256:4127a692054045e9a1362e941d387a52352ac4d71dc20384c892376eafbc484e`
+    and UI digest
+    `sha256:c1ce98da0c2f203160b63c1c66a45467234fc086834eb3546ffe07cbc5c9e271`.
+  - fresh Wave 2 rerun on `575ff30` first hit operational auth blockers, not
+    experiment-account login blockers. The first attempt ran for 20.3 minutes
+    and then failed because `/api/app-change-packages?limit=100` returned
+    `401`. The harness was patched locally to re-authenticate product
+    Playwright accounts during long waits and record `auth_recovery_events`;
+    `node --check frontend/tests/alternate-computer-portfolio-wave1.spec.js`
+    passed. A second Wave 2 attempt could not start because
+    `/auth/register/begin` returned `502`.
+  - root-cause investigation of the `502` found `go-choir-auth.service`
+    crash-looping on Node B with SQLite WAL `disk I/O error` and SIGBUS. Node B
+    root filesystem was full (`/dev/md127` 476G used, 64K free, 100%). The
+    largest consumers were `/var/lib/go-choir` at about 252G, especially
+    accumulated 8G VM state images under `/var/lib/go-choir/vm-state`, plus
+    `/nix` at about 222G. `nix store gc --dry-run` also failed because the Nix
+    DB could not write while the disk was full.
+  - staging disk/auth was recovered without deleting active/protected user
+    computers. Journal vacuum reclaimed about 2.7G and allowed auth to restart;
+    then deleting NixOS system generations older than 3 days and running
+    `nix store gc` reclaimed about 201,413 MiB. `/auth/register/begin` returned
+    `200` after recovery, root free space recovered to about 168G before the
+    final Wave 2 proof and about 156G after it, and vmctl health showed active
+    and hibernated computer state still present.
+  - deployed Wave 2 proof at `575ff30` passed after recovery in 26.6 minutes,
+    using marker `alt-portfolio-wave2-1779312477616` and evidence:
+    `test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T212756/alternate-portfolio-wave2-evidence.json`.
+    The evidence status is `checkpoint_wave2_owner_pullable`, with no forbidden
+    browser requests, no auth recovery events needed during the final run, and
+    durable VText evidence doc `12bf4059-5036-47fd-9209-053729d80055`,
+    revision `c5b9ed96-83e6-4d01-acd0-763917d35e2a`.
+  - Choir Liquid Material Engine produced exactly one selected package in the
+    `575ff30` Wave 2 rerun:
+    `1dad3dfc-7f83-4b22-bfb5-7f1714159f66` for app
+    `portfolio-liquid-material-alt-portfolio-wave2-1779312477616`, manifest
+    `707d28c0e0408dcab8ff3d7efa77935f7ae2ec1e06421f2e03d4e8693cf05c0e`.
+    Source run acceptance `runacc-0194bfce2cdecffea784` is `export-level`,
+    accepted. Recipient run acceptance `runacc-d144087c5ffacad2e147` is
+    `promotion-level`, accepted. Recipient adoption
+    `adoption-owner-review-liquid-alt-portfolio-wave2-1779312477616`
+    promoted with runtime digest
+    `sha256:1031aeb7c1d53c73077fa945661c6993c0aa9b14c3db82c7bb01ade33bde5ae3`
+    and UI digest
+    `sha256:e09ca2307c8e0aa0b38ec5509fe50a243d19b8c7fe0482c06377101f604d79c5`.
+  - Python code mode A/B produced exactly one selected package in the
+    `575ff30` Wave 2 rerun:
+    `f31edbc8-1b43-44f5-82a1-834dce4833ca` for app
+    `portfolio-python-code-mode-alt-portfolio-wave2-1779312477616`, manifest
+    `1ec8f96baa00f14062c024b3982b876b787c7353c96cc470d0b5274c42215cbb`.
+    Source run acceptance `runacc-a7e993d7c4f56d4420d9` is `export-level`,
+    accepted. Recipient run acceptance `runacc-45495b8caebc3e1b82c5` is
+    `promotion-level`, accepted. Recipient adoption
+    `adoption-owner-review-python-alt-portfolio-wave2-1779312477616`
+    promoted with runtime digest
+    `sha256:d0f5ab65f52b6df2e03db25bb68d84b1535a6f108db8d1ce00c480473da2d6d4`
+    and UI digest
+    `sha256:b5cc68456c76598faa7d267f546ded558531cbd114e0a94cde2f3c445aa81519`.
 unproven or partial claims:
   - owner-pull/adoption/promotion into ymnath@choir-ip.com specifically remains
-    a manual QA target, not a source-account auth blocker. The 74230a3,
-    65956c4, and 6db0632 proofs used newly registered recipient product accounts, which are
-    acceptable substrate evidence when the final certificate also gives exact
-    package refs and pull/adopt/promote instructions for an owner-controlled
-    account.
-  - exactly one migrating AppChangePackage identity per lane after the 575ff30
-    worker-delegation dedupe fix. Animation produced a duplicate
-    product-visible package during an earlier Wave 1 run, Liquid produced three
-    package identities during the 65956c4 Wave 2 rerun, and Chiron produced
-    three package identities in the 6db0632 Wave 1 audit. The latest 6db0632
-    Wave 2 rerun was cleanly single-package for both Liquid and Python. The
-    owner certificate should name the selected package identity for each lane
-    and preserve duplicate candidates as residual risk unless the 575ff30 Wave
-    1 reproof is clean.
+    a manual QA target, not a source-account auth blocker. The fresh `575ff30`
+    proof uses newly registered source and recipient product accounts, which
+    are acceptable substrate evidence because the certificate gives exact
+    package refs, adoption refs, artifact digests, rollback refs, and a path
+    for pulling selected packages into an owner-controlled account.
+  - exactly one migrating AppChangePackage identity per lane is now proven for
+    both Wave 1 and Wave 2 after the 575ff30 worker-delegation dedupe fix.
+    Historical duplicates remain relevant residual risk:
+    animation produced a duplicate product-visible package during an earlier
+    Wave 1 run, Liquid produced three package identities during the 65956c4
+    Wave 2 rerun, and Chiron produced three package identities in the 6db0632
+    Wave 1 audit. The owner certificate should name the selected package
+    identity for each lane and preserve duplicate candidates as historical
+    residual risk.
   - Choir-in-Choir two-lane concurrency reached owner-pull/adoption for all four
-    lanes across prior runs, and recipient-run acceptance now reaches
-    promotion-level accepted when package/adoption evidence exists. Source-run
-    package-publication acceptance is now deployed/proven for fresh Liquid and
-    Python packages in the 6db0632 rerun.
+    lanes, and recipient-run acceptance now reaches promotion-level accepted
+    when package/adoption evidence exists. Source-run package-publication
+    acceptance is deployed/proven for the fresh `575ff30` Chiron, animation,
+    Liquid, and Python packages.
   - mobile Safari liquid material feasibility; the package contains a
     WebGL-first prototype and benchmark hooks, not a real mobile Safari manual
     review
   - Python mode A/B contains candidate implementation and benchmark
     scaffolding, but not yet a completed measured A/B table across real runs
 remaining error field:
-  - duplicate package publication/export behavior remains the current Wave 1
-    acceptance blocker until the 575ff30 deployed rerun proves that repeated
-    parent `delegate_worker_vm` behavior for the same lane/objective is now
-    deduped.
+  - staging auth was recovered, but the incident exposed a durable reliability
+    gap: stale candidate/worker VM state and old Nix generations can exhaust
+    Node B root disk. The platform needs product-safe stale VM-state garbage
+    collection and disk-pressure recovery controls that preserve primary and
+    protected user computers.
   - persistent super serializes concurrent lane work enough that animation can
     lag behind Chiron under bounded proof windows
   - persistent super/source trajectory attribution can place package evidence
     outside the source submission whose run-acceptance record is being
     synthesized, as seen in the Python 65956c4 source-run record; the 6db0632
     rerun proves this is no longer blocking a fresh Python source package.
-  - owner pull/adoption/promotion UX for tomorrow's hands-on QA still needs a
-    concise package handoff packet for ymnath@choir-ip.com or another
-    owner-controlled account, though the underlying product path is proven
-    through fresh recipient product accounts
+  - owner pull/adoption/promotion into ymnath@choir-ip.com or another
+    owner-controlled account still needs to be executed as hands-on QA. The
+    concise package handoff packet now exists in
+    docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md,
+    and the underlying product path is proven through fresh recipient product
+    accounts.
   - package-trace run-acceptance fields were still odd in the 6db0632 report
     (`docs-level`, blocked, no useful acceptance id) even though the source run
     and recipient run acceptance records were accepted. Do not use
     package-trace acceptance as the terminal signal until this field is cleaned
     up or removed.
 highest-impact remaining uncertainty:
-  - Can the portfolio be reduced into a clean owner-review certificate where
-    all four package lanes name selected package identities, source-run package
-    publication and recipient-run adoption are accepted at the right levels,
-    and the owner can decide iterate/abandon/promote without reading raw traces?
+  - Can the owner pull one or more experiment packages into an
+    owner-controlled computer, inspect the result in normal product UI, and
+    decide iterate/abandon/promote without reading raw traces or touching the
+    disposable source accounts?
 next executable probe:
-  - Finish CI/deploy for `575ff30`, verify staging identity, then rerun Wave 1
-    on staging. If Chiron and animation both have clean selected package
-    identities with source/recipient acceptance and no duplicate blocker, write
-    the concise owner review certificate covering all four packages, their
-    Trace, VText, source/recipient run-acceptance, adoption, rollback,
-    screenshot/video, benchmark, and promotion recommendation refs. Include
-    exact pull/adopt/promote instructions for an owner-controlled account such
-    as `ymnath@choir-ip.com`. If the 575ff30 rerun still shows duplicate
-    package behavior, do not write a completion certificate; record
-    `checkpoint_incomplete` with the exact worker/run evidence and next probe.
+  - Use the owner review certificate to pull selected package refs into an
+    owner-controlled account/computer such as `ymnath@choir-ip.com`, run
+    hands-on QA, and record the adoption/promotion/rollback evidence there.
+    In parallel or before another large portfolio run, add stale
+    candidate/worker VM-state GC or an equivalent bounded disk-pressure
+    recovery policy. For Liquid and Python, add the missing benchmark evidence:
+    mobile Safari/WebKit and desktop frame/resource numbers for Liquid, and a
+    matched bash-vs-Python task-set token/time/tool-loop table for Python.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:
@@ -1030,6 +1138,17 @@ evidence artifact refs:
   - test-results/alternate-portfolio-wave1-deployed-f11e848-20260520T1310/alternate-portfolio-wave1-evidence.json
   - test-results/alternate-portfolio-wave1-deployed-74230a3-20260520T1447/alternate-portfolio-wave1-evidence.json
   - test-results/alternate-portfolio-wave1-deployed-6db0632-runacc-20260520T194502/alternate-portfolio-wave1-evidence.json
+  - test-results/alternate-portfolio-wave1-deployed-575ff30-runacc-20260520T202754/alternate-portfolio-wave1-evidence.json
+  - test-results/alternate-portfolio-wave1-deployed-575ff30-runacc-20260520T202754/alternate-portfolio-wave1-source-desktop.png
+  - test-results/alternate-portfolio-wave1-deployed-575ff30-runacc-20260520T202754/trace.zip
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T204915/error-context.md
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T204915/trace-auth-failure.zip
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T211157/error-context.md
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T211157/trace-register-502.zip
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T212756/alternate-portfolio-wave2-evidence.json
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T212756/alternate-portfolio-wave2-source-desktop.png
+  - test-results/alternate-portfolio-wave2-deployed-575ff30-runacc-20260520T212756/trace.zip
+  - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
   - test-results/alternate-portfolio-wave2-deployed-74230a3-20260520T1525/alternate-portfolio-wave2-evidence.json
   - test-results/alternate-portfolio-wave2-deployed-74230a3-runacc-20260520T1558/alternate-portfolio-wave2-evidence.json
   - test-results/alternate-portfolio-wave2-deployed-65956c4-runacc-20260520T170222/alternate-portfolio-wave2-evidence.json
@@ -1076,6 +1195,22 @@ rollback refs:
     adoption-owner-review-python-alt-portfolio-wave2-1779304507917
     previous_active_source_ref
     refs/computers/owner-review-python-alt-portfolio-wave2-1779304507917/active-foreground-tail-alt-portfolio-wave2-1779304507917
+  - Wave 1 575ff30 Chiron rollback refs:
+    adoption-owner-review-chiron-alt-portfolio-wave1-1779308875528
+    previous_active_source_ref
+    refs/computers/owner-review-chiron-alt-portfolio-wave1-1779308875528/active-foreground-tail-alt-portfolio-wave1-1779308875528
+  - Wave 1 575ff30 animation rollback refs:
+    adoption-owner-review-animation-alt-portfolio-wave1-1779308875528
+    previous_active_source_ref
+    refs/computers/owner-review-animation-alt-portfolio-wave1-1779308875528/active-foreground-tail-alt-portfolio-wave1-1779308875528
+  - Wave 2 575ff30 Liquid rollback refs:
+    adoption-owner-review-liquid-alt-portfolio-wave2-1779312477616
+    previous_active_source_ref
+    refs/computers/owner-review-liquid-alt-portfolio-wave2-1779312477616/active-foreground-tail-alt-portfolio-wave2-1779312477616
+  - Wave 2 575ff30 Python rollback refs:
+    adoption-owner-review-python-alt-portfolio-wave2-1779312477616
+    previous_active_source_ref
+    refs/computers/owner-review-python-alt-portfolio-wave2-1779312477616/active-foreground-tail-alt-portfolio-wave2-1779312477616
 learning log:
   - Evidence gates prevented a fake direct-login claim: Playwright passkey
     accounts are real product accounts but their credentials are trapped in the
@@ -1135,4 +1270,21 @@ learning log:
     a recipient-run acceptance record should prove pull/adoption/build/verify/
     promote/rollback evidence. The owner review certificate can connect both
     without requiring direct login to source experiment accounts.
+  - The 575ff30 rerun validated the duplicate-delegation fix for Wave 1:
+    Chiron and animation each produced one selected package with export-level
+    source acceptance and promotion-level recipient acceptance. This is the
+    clearest evidence so far that MissionGradient persistence paid off: the
+    earlier duplicate package symptoms were not accepted as "good enough" and
+    were reduced to a targeted runtime idempotency fix.
+  - The fresh Wave 2 reproof initially failed for an operational reason:
+    staging auth crashed because Node B root disk filled with accumulated VM
+    state and Nix store data. This was not a reason to revisit
+    alternate-account login; it strengthened the package-mobility design
+    because review should not depend on source-account credentials.
+  - After disk/auth recovery, the `575ff30` Wave 2 proof passed with exactly
+    one Liquid package and one Python package, each with export-level source
+    acceptance and promotion-level recipient acceptance. The reliability lesson
+    remains: VM-state garbage collection and safe disk-pressure recovery must
+    preserve active/protected user computers while reclaiming stale candidate
+    and worker state before the next large portfolio run.
 ```

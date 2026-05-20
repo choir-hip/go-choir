@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test, expect } from './helpers/fixtures.js';
-import { getSession, registerPasskey } from './helpers/auth.js';
+import { getSession, loginPasskey, registerPasskey } from './helpers/auth.js';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://draft.choir-ip.com';
@@ -124,11 +124,34 @@ async function newRegisteredDesktop(browser, emailPrefix) {
     page,
     email,
     session,
+    reauthEvents: [],
     close: async () => {
       await removeVirtualAuthenticator(client, authenticatorId).catch(() => {});
       await context.close();
     },
   };
+}
+
+async function ensureAuthenticatedDesktop(desktop, reason) {
+  const current = await getSession(desktop.page, BASE_URL);
+  if (current.authenticated) {
+    desktop.session = current;
+    return false;
+  }
+
+  await loginPasskey(desktop.page, desktop.email, BASE_URL);
+  const renewed = await getSession(desktop.page, BASE_URL);
+  if (!renewed.authenticated) {
+    throw new Error(`failed to re-authenticate ${desktop.email} for ${reason}`);
+  }
+  desktop.session = renewed;
+  desktop.reauthEvents.push({
+    reason,
+    timestamp: new Date().toISOString(),
+    email: desktop.email,
+    user_id: renewed.user?.id || '',
+  });
+  return true;
 }
 
 async function writeEvidence(testInfo, name, data) {
@@ -371,8 +394,9 @@ function packageMatchesLane(pkg, lane) {
     .some((needle) => haystack.includes(String(needle).toLowerCase()));
 }
 
-async function listLanePackages(page, lanes) {
-  const listed = await requireFetchJSON(page, '/api/app-change-packages?limit=100');
+async function listLanePackages(desktop, lanes) {
+  await ensureAuthenticatedDesktop(desktop, 'list-lane-packages');
+  const listed = await requireFetchJSON(desktop.page, '/api/app-change-packages?limit=100');
   const packages = Array.isArray(listed.packages) ? listed.packages : [];
   const byLane = {};
   for (const lane of lanes) {
@@ -381,20 +405,22 @@ async function listLanePackages(page, lanes) {
   return { packages, byLane };
 }
 
-async function waitForLanePackages(page, lanes, timeoutMs) {
+async function waitForLanePackages(desktop, lanes, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let latest = null;
   while (Date.now() < deadline) {
-    latest = await listLanePackages(page, lanes);
+    latest = await listLanePackages(desktop, lanes);
     if (lanes.every((lane) => latest.byLane[lane.id]?.length > 0)) {
       return latest;
     }
-    await page.waitForTimeout(10_000);
+    await desktop.page.waitForTimeout(10_000);
   }
-  return latest || await listLanePackages(page, lanes);
+  return latest || await listLanePackages(desktop, lanes);
 }
 
-async function adoptPackageIntoRecipient(page, lane, pkg, marker) {
+async function adoptPackageIntoRecipient(desktop, lane, pkg, marker) {
+  await ensureAuthenticatedDesktop(desktop, `adopt-package-${lane.id}`);
+  const { page } = desktop;
   const targetComputerID = `owner-review-${lane.id}-${safeID(marker)}`;
   const targetCandidateID = `candidate-owner-review-${lane.id}-${safeID(marker)}`;
   const adoptionID = `adoption-owner-review-${lane.id}-${safeID(marker)}`;
@@ -550,7 +576,7 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
       submissions[lane.id] = submitted;
     }));
 
-    const packagesResult = await waitForLanePackages(source.page, lanes, PACKAGE_WAIT_MS);
+    const packagesResult = await waitForLanePackages(source, lanes, PACKAGE_WAIT_MS);
     const laneReports = {};
     for (const lane of lanes) {
       const prompt = await promptStatus(source.page, lane.submission_id);
@@ -572,7 +598,7 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
         })
         : null;
       if (pkg) {
-        const adoption = await adoptPackageIntoRecipient(recipient.page, lane, pkg, marker);
+        const adoption = await adoptPackageIntoRecipient(recipient, lane, pkg, marker);
         const recipientRunAcceptance = adoption.trace_id
           ? await synthesizeRunAcceptance(recipient.page, lane, marker, wave, {
             trajectoryID: adoption.trace_id,
@@ -630,6 +656,7 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
       }
     }
 
+    await ensureAuthenticatedDesktop(source, 'write-wave-report');
     const report = {
       status: Object.values(laneReports).every((lane) => lane.status === 'owner_pullable_experiment')
         ? `checkpoint_wave${wave}_owner_pullable`
@@ -642,6 +669,10 @@ test(`Wave ${PORTFOLIO_WAVE} launches portfolio lanes and records package/adopti
       source_account_user_id: source.session.user?.id,
       recipient_account_email: recipient.email,
       recipient_account_user_id: recipient.session.user?.id,
+      auth_recovery_events: {
+        source: source.reauthEvents,
+        recipient: recipient.reauthEvents,
+      },
       submissions,
       lane_reports: laneReports,
       forbidden_browser_requests: forbiddenRequests,
