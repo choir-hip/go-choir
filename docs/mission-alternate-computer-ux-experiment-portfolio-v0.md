@@ -12,8 +12,8 @@ recovered, then Wave 2 Liquid/Python was reproven cleanly on the same deployed
 packages with source acceptance, recipient acceptance, adoption, artifact
 digests, and rollback refs. The mission is still incomplete because owner pull
 into an owner-controlled computer such as `ymnath@choir-ip.com`, hands-on QA,
-richer Liquid/Python benchmarks, and durable stale VM-state GC remain the next
-realism axis.
+richer Liquid/Python benchmarks, and deployed proof for the stale VM-state
+cleanup checkpoint remain the next realism axis.
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -114,6 +114,27 @@ required output is a durable package mobility packet that the owner can pull
 into one of their accounts later, plus product-path proof that the same package
 can be pulled, adopted, verified, promoted, and rolled back in a recipient
 computer.
+
+### Owner Pull Hub
+
+Manual QA may happen through a single owner-controlled computer. The owner can
+pull Chiron, animation, Liquid, Python, or future experiment packages into one
+account/computer as separate candidate/adoption attempts, inspect each attempt
+there, then reject, iterate, promote into that computer, or promote onward to
+the platform computer. This is the intended path, not a fallback for auth
+friction.
+
+That means the source experiment accounts are allowed to be disposable producer
+identities. Their job is to publish source/package evidence. The review hub's
+job is to import the package, rebuild recipient-specific runtime/UI artifacts,
+run verifier contracts, preserve rollback refs, and make the result available
+to the owner in the computer they already use.
+
+Auth is mission-relevant only when it blocks this package mobility path: for
+example, if the owner-controlled computer cannot list, pull, adopt, verify, or
+promote an AppChangePackage through product APIs. Auth is not mission-relevant
+when the only missing capability is direct human login to a temporary source
+experiment account.
 
 The four experiments are:
 
@@ -1065,6 +1086,13 @@ what was proven:
     `sha256:d0f5ab65f52b6df2e03db25bb68d84b1535a6f108db8d1ce00c480473da2d6d4`
     and UI digest
     `sha256:b5cc68456c76598faa7d267f546ded558531cbd114e0a94cde2f3c445aa81519`.
+  - A stale VM-state cleanup patch has been prepared for the next landing
+    checkpoint. It makes low `/var/lib/go-choir/vm-state` free space a real
+    pressure signal, adds bounded deletion of stale terminal worker and
+    unpublished candidate VM-state directories, protects active/primary/
+    published/premium/recent/critical work, wires Node B thresholds, and updates
+    `docs/vm-priority-policy.md`. Focused proof before landing:
+    `go test ./internal/vmctl ./internal/vmmanager ./cmd/vmctl`.
 unproven or partial claims:
   - owner-pull/adoption/promotion into ymnath@choir-ip.com specifically remains
     a manual QA target, not a source-account auth blocker. The fresh `575ff30`
@@ -1092,11 +1120,11 @@ unproven or partial claims:
   - Python mode A/B contains candidate implementation and benchmark
     scaffolding, but not yet a completed measured A/B table across real runs
 remaining error field:
-  - staging auth was recovered, but the incident exposed a durable reliability
-    gap: stale candidate/worker VM state and old Nix generations can exhaust
-    Node B root disk. The platform needs product-safe stale VM-state garbage
-    collection and disk-pressure recovery controls that preserve primary and
-    protected user computers.
+  - staging auth was recovered, and product-safe stale candidate/worker
+    VM-state cleanup now has a focused local patch plus tests, but it still
+    needs the platform landing loop: commit, push, CI, Node B deploy, staging
+    identity check, and deployed health evidence. Nix generation cleanup remains
+    an operational companion to VM-state cleanup, not solved by vmctl alone.
   - persistent super serializes concurrent lane work enough that animation can
     lag behind Chiron under bounded proof windows
   - persistent super/source trajectory attribution can place package evidence
@@ -1120,14 +1148,14 @@ highest-impact remaining uncertainty:
     decide iterate/abandon/promote without reading raw traces or touching the
     disposable source accounts?
 next executable probe:
-  - Use the owner review certificate to pull selected package refs into an
-    owner-controlled account/computer such as `ymnath@choir-ip.com`, run
-    hands-on QA, and record the adoption/promotion/rollback evidence there.
-    In parallel or before another large portfolio run, add stale
-    candidate/worker VM-state GC or an equivalent bounded disk-pressure
-    recovery policy. For Liquid and Python, add the missing benchmark evidence:
-    mobile Safari/WebKit and desktop frame/resource numbers for Liquid, and a
-    matched bash-vs-Python task-set token/time/tool-loop table for Python.
+  - Land the stale VM-state cleanup checkpoint through git/CI/deploy, verify
+    staging identity and vmctl health, then use the owner review certificate to
+    pull selected package refs into an owner-controlled account/computer such as
+    `ymnath@choir-ip.com`, run hands-on QA, and record the adoption/promotion/
+    rollback evidence there. For Liquid and Python, add the missing benchmark
+    evidence: mobile Safari/WebKit and desktop frame/resource numbers for
+    Liquid, and a matched bash-vs-Python task-set token/time/tool-loop table for
+    Python.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:

@@ -1,7 +1,7 @@
 # VM And Computer Priority Policy
 
 **Status:** current policy and roadmap
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-20
 
 This document defines how Choir decides which VM-backed computers stay warm,
 which may hibernate, and what a future paid or reserved 24/7 uptime tier must
@@ -21,6 +21,10 @@ VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity
 VMCTL_PRESSURE_RECLAIM_MODE=active
 VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m
 VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5
+VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB=32768
+VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_PERCENT=10
+VMCTL_STALE_STATE_MIN_AGE=6h
+VMCTL_STALE_STATE_MAX_DELETES=5
 ```
 
 Node B also loads optional operator priority overrides from:
@@ -94,6 +98,31 @@ remain protected.
 Candidate computers and workers are intentionally hibernation-friendly. They
 are mutation contexts and should not consume scarce capacity ahead of a real
 user's primary desktop.
+
+## Stale VM-State Reclaim
+
+Hibernation frees CPU and memory pressure, but it does not free the sparse
+per-VM state directories under `/var/lib/go-choir/vm-state`. Large
+Choir-in-Choir portfolio runs can therefore leave many stopped or hibernated
+candidate/worker `data.img` directories behind even after active pressure
+reclaim has done its job.
+
+The current hardening policy treats low state-dir free space as pressure. When
+state-dir pressure is present, vmctl may delete a bounded number of stale
+terminal VM-state directories per sweep:
+
+- eligible states: `stopped`, `hibernated`, or `failed`;
+- eligible kinds: worker VMs and unpublished non-primary candidate computers;
+- minimum age: `VMCTL_STALE_STATE_MIN_AGE`;
+- sweep bound: `VMCTL_STALE_STATE_MAX_DELETES`;
+- protected: active, booting, degraded, stopping, primary, published,
+  premium-always-on, recent, unknown-last-active, and recently critical
+  verifier/promotion/rollback/publication work.
+
+This is a substrate cleanup policy, not a product deletion action. It must only
+delete disposable producer machine state after package/source/adoption evidence
+has moved into durable product ledgers. Owner review should use
+AppChangePackage and adoption refs, not stale source VM disks.
 
 ## Always-On Semantics
 
@@ -182,4 +211,3 @@ entitlement + recent activity + work criticality + host pressure + migration opt
 - `cmd/vmctl/main.go` - environment parsing for lifecycle policy.
 - `nix/node-b.nix` - staging Node B vmctl service policy and runtime priority
   environment file.
-

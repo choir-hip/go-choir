@@ -193,6 +193,7 @@ func (m *blockingBootVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*
 func (m *blockingBootVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 2, Healthy: true, State: "running"}, nil
 }
+func (m *blockingBootVMManager) DestroyVMState(vmID string) error      { return nil }
 func (m *blockingBootVMManager) GetVM(vmID string) *VMInstanceInfo     { return nil }
 func (m *blockingBootVMManager) CheckHealth(vmID string) (bool, error) { return true, nil }
 
@@ -844,6 +845,169 @@ func TestOwnershipRegistry_PressureReclaimProtectsCriticalWorkerPurpose(t *testi
 	}
 	if !foundCriticalWorker {
 		t.Fatalf("candidates = %+v, want protected critical worker", plan.Candidates)
+	}
+}
+
+func TestOwnershipRegistry_StateDirPressureTriggersReclaimPlan(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeDryRun,
+		MinIdle:                   10 * time.Minute,
+		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
+		MaxCandidates:             5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:                "2026-05-20T12:00:00Z",
+			StateDirAvailableBytes:   512 * 1024 * 1024,
+			StateDirAvailablePercent: 2,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("storage-pressure-user"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("storage-pressure-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-2 * time.Hour)
+	reg.mu.Unlock()
+
+	plan := reg.PressureReclaimPlan()
+	if !plan.Pressure.Pressure || !plan.Pressure.StateDirPressure {
+		t.Fatalf("expected state-dir pressure in plan: %+v", plan.Pressure)
+	}
+	if plan.Decision != "would_reclaim" {
+		t.Fatalf("decision = %s, want would_reclaim", plan.Decision)
+	}
+}
+
+func TestOwnershipRegistry_ReclaimStaleVMStateDestroysOnlyTerminalWorkersAndUnpublishedCandidates(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeActive,
+		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
+		StaleStateMinAge:          time.Hour,
+		MaxStateDeletes:           5,
+		MaxCandidates:             5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:                "2026-05-20T12:00:00Z",
+			StateDirAvailableBytes:   512 * 1024 * 1024,
+			StateDirAvailablePercent: 2,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("stale-user"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	unpublished, err := reg.ForkDesktop("stale-user", PrimaryDesktopID, "candidate-old")
+	if err != nil {
+		t.Fatalf("fork unpublished: %v", err)
+	}
+	published, err := reg.ForkDesktop("stale-user", PrimaryDesktopID, "candidate-published")
+	if err != nil {
+		t.Fatalf("fork published: %v", err)
+	}
+	if _, err := reg.PublishDesktop("stale-user", "candidate-published"); err != nil {
+		t.Fatalf("publish candidate: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "stale-user",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "agent-stale",
+		Purpose:       "experiment cleanup worker",
+		MachineClass:  "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request worker: %v", err)
+	}
+	recentWorker, err := reg.RequestWorker(WorkerRequest{
+		UserID:               "stale-user",
+		DesktopID:            PrimaryDesktopID,
+		ParentAgentID:        "agent-recent",
+		Purpose:              "recent experiment worker",
+		ObjectiveFingerprint: "recent",
+		MachineClass:         "worker-small",
+	})
+	if err != nil {
+		t.Fatalf("request recent worker: %v", err)
+	}
+
+	old := time.Now().Add(-3 * time.Hour)
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("stale-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("stale-user", "candidate-old")].State = VMStateHibernated
+	reg.ownerships[ownershipKey("stale-user", "candidate-old")].LastActiveAt = old
+	reg.ownerships[ownershipKey("stale-user", "candidate-published")].State = VMStateHibernated
+	reg.ownerships[ownershipKey("stale-user", "candidate-published")].LastActiveAt = old
+	reg.workerVMs[worker.WorkerID].State = VMStateHibernated
+	reg.workerVMs[worker.WorkerID].LastActiveAt = old
+	reg.workerVMs[recentWorker.WorkerID].State = VMStateHibernated
+	reg.workerVMs[recentWorker.WorkerID].LastActiveAt = time.Now()
+	reg.mu.Unlock()
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	destroyed := reg.ReclaimStaleVMState()
+	if destroyed != 2 {
+		t.Fatalf("destroyed = %d, want 2 (destroy calls=%v)", destroyed, mgr.destroys)
+	}
+	if !containsString(mgr.destroys, unpublished.VMID) || !containsString(mgr.destroys, worker.VMID) {
+		t.Fatalf("destroyed VMs = %v, want unpublished candidate %s and worker %s", mgr.destroys, unpublished.VMID, worker.VMID)
+	}
+	if reg.GetOwnershipForDesktop("stale-user", "candidate-old") != nil {
+		t.Fatalf("unpublished candidate ownership should be removed")
+	}
+	if reg.GetOwnershipByVMID(worker.VMID) != nil {
+		t.Fatalf("worker ownership should be removed")
+	}
+	if reg.GetOwnershipForDesktop("stale-user", "candidate-published") == nil {
+		t.Fatalf("published candidate should be protected (vm=%s)", published.VMID)
+	}
+	if reg.GetOwnershipByVMID(recentWorker.VMID) == nil {
+		t.Fatalf("recent worker should be protected")
+	}
+	if reg.GetOwnership("stale-user") == nil {
+		t.Fatalf("primary ownership should be protected")
+	}
+}
+
+func TestOwnershipRegistry_ReclaimStaleVMStateRequiresStoragePressure(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeActive,
+		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
+		StaleStateMinAge:          time.Hour,
+		MaxStateDeletes:           5,
+		MaxCandidates:             5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:                "2026-05-20T12:00:00Z",
+			StateDirAvailableBytes:   20 * 1024 * 1024 * 1024,
+			StateDirAvailablePercent: 20,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("no-storage-pressure-user"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	candidate, err := reg.ForkDesktop("no-storage-pressure-user", PrimaryDesktopID, "candidate-old")
+	if err != nil {
+		t.Fatalf("fork: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("no-storage-pressure-user", "candidate-old")].State = VMStateHibernated
+	reg.ownerships[ownershipKey("no-storage-pressure-user", "candidate-old")].LastActiveAt = time.Now().Add(-3 * time.Hour)
+	reg.mu.Unlock()
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	if destroyed := reg.ReclaimStaleVMState(); destroyed != 0 {
+		t.Fatalf("destroyed = %d, want 0", destroyed)
+	}
+	if len(mgr.destroys) != 0 {
+		t.Fatalf("destroy calls = %v, want none", mgr.destroys)
+	}
+	if reg.GetOwnershipByVMID(candidate.VMID) == nil {
+		t.Fatalf("candidate should remain when storage pressure is absent")
 	}
 }
 
@@ -2617,6 +2781,7 @@ type mockVMManager struct {
 	resumes    []string
 	reattaches []string
 	recovers   []string
+	destroys   []string
 	tokens     map[string]string
 	// Configurable responses
 	bootResponse     *VMInstanceInfo
@@ -2685,6 +2850,11 @@ func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 		return m.recoverResponse, nil
 	}
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9003", Epoch: 2, Healthy: true, State: "running"}, nil
+}
+
+func (m *mockVMManager) DestroyVMState(vmID string) error {
+	m.destroys = append(m.destroys, vmID)
+	return nil
 }
 
 func (m *mockVMManager) GetVM(vmID string) *VMInstanceInfo {

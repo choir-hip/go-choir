@@ -916,6 +916,53 @@ func (m *Manager) RemoveVM(vmID string) error {
 	return nil
 }
 
+// DestroyVMState removes a stopped VM from management and deletes its state
+// directory. This is intentionally stronger than RemoveVM and is used only by
+// vmctl's stale worker/candidate cleanup policy after primary/published/active
+// computers have already been excluded.
+func (m *Manager) DestroyVMState(vmID string) error {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" || strings.Contains(vmID, string(os.PathSeparator)) || vmID == "." || vmID == ".." {
+		return fmt.Errorf("invalid VM ID %q", vmID)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if inst, ok := m.vms[vmID]; ok {
+		if inst.State == StateRunning || inst.State == StatePending {
+			return fmt.Errorf("vm %s is still running; refuse to destroy state", vmID)
+		}
+		if inst.PID > 0 && processExists(inst.PID) {
+			return fmt.Errorf("vm %s has live process %d; refuse to destroy state", vmID, inst.PID)
+		}
+		delete(m.vms, vmID)
+	}
+	if pids := firecrackerPIDsForVM(vmID); len(pids) > 0 {
+		return fmt.Errorf("vm %s still has Firecracker process(es); refuse to destroy state", vmID)
+	}
+	if pid, err := m.loadPID(vmID); err == nil {
+		if processExists(pid) && firecrackerCmdlineMatchesVM(pid, vmID) {
+			return fmt.Errorf("vm %s still has Firecracker pid %d; refuse to destroy state", vmID, pid)
+		}
+		_ = os.Remove(m.pidPath(vmID))
+	}
+
+	if len(vmID) >= 8 {
+		m.deleteTapDevice(fmt.Sprintf("vm-%s-tap", vmID[:8]))
+	}
+	stateRoot := filepath.Clean(m.cfg.StateDir)
+	stateDir := filepath.Clean(filepath.Join(stateRoot, vmID))
+	if stateDir == stateRoot || !strings.HasPrefix(stateDir, stateRoot+string(os.PathSeparator)) {
+		return fmt.Errorf("refuse to delete VM state outside state dir: %s", stateDir)
+	}
+	if err := os.RemoveAll(stateDir); err != nil {
+		return fmt.Errorf("destroy VM state %s: %w", vmID, err)
+	}
+	log.Printf("vmmanager: destroyed stale VM state %s (%s)", vmID, stateDir)
+	return nil
+}
+
 // CheckHealth probes the VM's guest health endpoint.
 func (m *Manager) CheckHealth(vmID string) (bool, error) {
 	m.mu.RLock()

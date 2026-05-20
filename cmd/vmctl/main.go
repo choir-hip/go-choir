@@ -204,6 +204,10 @@ func (a *vmManagerAdapter) RecoverVM(vmID string) (*vmctl.VMInstanceInfo, error)
 	}, nil
 }
 
+func (a *vmManagerAdapter) DestroyVMState(vmID string) error {
+	return a.mgr.DestroyVMState(vmID)
+}
+
 func (a *vmManagerAdapter) GetVM(vmID string) *vmctl.VMInstanceInfo {
 	inst := a.mgr.GetVM(vmID)
 	if inst == nil {
@@ -257,6 +261,16 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 			cfg.MinMemoryAvailablePercent = pct
 		}
 	}
+	if v := os.Getenv("VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB"); v != "" {
+		if mib, err := strconv.ParseUint(v, 10, 64); err == nil {
+			cfg.MinStateDirAvailableBytes = mib * 1024 * 1024
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_PERCENT"); v != "" {
+		if pct, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.MinStateDirAvailablePercent = pct
+		}
+	}
 	if v := os.Getenv("VMCTL_PRESSURE_MAX_MEMORY_SOME_AVG10"); v != "" {
 		if avg, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.MaxMemorySomeAvg10 = avg
@@ -275,6 +289,16 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.MaxCandidates = n
+		}
+	}
+	if v := os.Getenv("VMCTL_STALE_STATE_MIN_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.StaleStateMinAge = d
+		}
+	}
+	if v := os.Getenv("VMCTL_STALE_STATE_MAX_DELETES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxStateDeletes = n
 		}
 	}
 	if v := os.Getenv("VM_STATE_DIR"); v != "" {

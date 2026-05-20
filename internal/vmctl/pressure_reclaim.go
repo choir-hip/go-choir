@@ -23,43 +23,49 @@ const (
 // number of eligible idle computers when pressure crosses the configured
 // threshold.
 type PressureReclaimConfig struct {
-	Mode                      string
-	MinIdle                   time.Duration
-	MinMemoryAvailableBytes   uint64
-	MinMemoryAvailablePercent float64
-	MaxMemorySomeAvg10        float64
-	MaxCPUSomeAvg10           float64
-	MaxIOSomeAvg10            float64
-	StateDir                  string
-	MaxCandidates             int
+	Mode                        string
+	MinIdle                     time.Duration
+	MinMemoryAvailableBytes     uint64
+	MinMemoryAvailablePercent   float64
+	MinStateDirAvailableBytes   uint64
+	MinStateDirAvailablePercent float64
+	MaxMemorySomeAvg10          float64
+	MaxCPUSomeAvg10             float64
+	MaxIOSomeAvg10              float64
+	StateDir                    string
+	MaxCandidates               int
+	StaleStateMinAge            time.Duration
+	MaxStateDeletes             int
 }
 
 // HostPressureSample is a single host resource-pressure observation.
 type HostPressureSample struct {
-	SampledAt                    string  `json:"sampled_at"`
-	MemoryTotalBytes             uint64  `json:"memory_total_bytes,omitempty"`
-	MemoryAvailableBytes         uint64  `json:"memory_available_bytes,omitempty"`
-	MemoryAvailablePercent       float64 `json:"memory_available_percent,omitempty"`
-	MemorySomeAvg10              float64 `json:"memory_some_avg10,omitempty"`
-	MemoryFullAvg10              float64 `json:"memory_full_avg10,omitempty"`
-	CPUSomeAvg10                 float64 `json:"cpu_some_avg10,omitempty"`
-	CPUFullAvg10                 float64 `json:"cpu_full_avg10,omitempty"`
-	IOSomeAvg10                  float64 `json:"io_some_avg10,omitempty"`
-	IOFullAvg10                  float64 `json:"io_full_avg10,omitempty"`
-	StateDirAvailableBytes       uint64  `json:"state_dir_available_bytes,omitempty"`
-	StateDirAvailablePercent     float64 `json:"state_dir_available_percent,omitempty"`
-	PIDCurrent                   int     `json:"pid_current,omitempty"`
-	PIDMax                       int     `json:"pid_max,omitempty"`
-	PIDAvailable                 int     `json:"pid_available,omitempty"`
-	ObservationError             string  `json:"observation_error,omitempty"`
-	MemoryPressure               bool    `json:"memory_pressure"`
-	CPUPressure                  bool    `json:"cpu_pressure"`
-	IOPressure                   bool    `json:"io_pressure"`
-	Pressure                     bool    `json:"pressure"`
-	MemoryAvailableThresholdText string  `json:"memory_available_threshold,omitempty"`
-	MemoryPSIThresholdText       string  `json:"memory_psi_threshold,omitempty"`
-	CPUPSIThresholdText          string  `json:"cpu_psi_threshold,omitempty"`
-	IOPSIThresholdText           string  `json:"io_psi_threshold,omitempty"`
+	SampledAt                      string  `json:"sampled_at"`
+	MemoryTotalBytes               uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryAvailableBytes           uint64  `json:"memory_available_bytes,omitempty"`
+	MemoryAvailablePercent         float64 `json:"memory_available_percent,omitempty"`
+	MemorySomeAvg10                float64 `json:"memory_some_avg10,omitempty"`
+	MemoryFullAvg10                float64 `json:"memory_full_avg10,omitempty"`
+	CPUSomeAvg10                   float64 `json:"cpu_some_avg10,omitempty"`
+	CPUFullAvg10                   float64 `json:"cpu_full_avg10,omitempty"`
+	IOSomeAvg10                    float64 `json:"io_some_avg10,omitempty"`
+	IOFullAvg10                    float64 `json:"io_full_avg10,omitempty"`
+	StateDirAvailableBytes         uint64  `json:"state_dir_available_bytes,omitempty"`
+	StateDirAvailablePercent       float64 `json:"state_dir_available_percent,omitempty"`
+	PIDCurrent                     int     `json:"pid_current,omitempty"`
+	PIDMax                         int     `json:"pid_max,omitempty"`
+	PIDAvailable                   int     `json:"pid_available,omitempty"`
+	ObservationError               string  `json:"observation_error,omitempty"`
+	MemoryPressure                 bool    `json:"memory_pressure"`
+	CPUPressure                    bool    `json:"cpu_pressure"`
+	IOPressure                     bool    `json:"io_pressure"`
+	StateDirPressure               bool    `json:"state_dir_pressure"`
+	Pressure                       bool    `json:"pressure"`
+	MemoryAvailableThresholdText   string  `json:"memory_available_threshold,omitempty"`
+	StateDirAvailableThresholdText string  `json:"state_dir_available_threshold,omitempty"`
+	MemoryPSIThresholdText         string  `json:"memory_psi_threshold,omitempty"`
+	CPUPSIThresholdText            string  `json:"cpu_psi_threshold,omitempty"`
+	IOPSIThresholdText             string  `json:"io_psi_threshold,omitempty"`
 }
 
 type PressureReclaimInventory struct {
@@ -95,29 +101,37 @@ type PressureReclaimPlan struct {
 }
 
 type PressureReclaimConfigSummary struct {
-	MinIdleSeconds            int64   `json:"min_idle_seconds"`
-	MinMemoryAvailableBytes   uint64  `json:"min_memory_available_bytes,omitempty"`
-	MinMemoryAvailablePercent float64 `json:"min_memory_available_percent,omitempty"`
-	MaxMemorySomeAvg10        float64 `json:"max_memory_some_avg10,omitempty"`
-	MaxCPUSomeAvg10           float64 `json:"max_cpu_some_avg10,omitempty"`
-	MaxIOSomeAvg10            float64 `json:"max_io_some_avg10,omitempty"`
-	MaxCandidates             int     `json:"max_candidates"`
-	StateDir                  string  `json:"state_dir,omitempty"`
+	MinIdleSeconds              int64   `json:"min_idle_seconds"`
+	MinMemoryAvailableBytes     uint64  `json:"min_memory_available_bytes,omitempty"`
+	MinMemoryAvailablePercent   float64 `json:"min_memory_available_percent,omitempty"`
+	MinStateDirAvailableBytes   uint64  `json:"min_state_dir_available_bytes,omitempty"`
+	MinStateDirAvailablePercent float64 `json:"min_state_dir_available_percent,omitempty"`
+	MaxMemorySomeAvg10          float64 `json:"max_memory_some_avg10,omitempty"`
+	MaxCPUSomeAvg10             float64 `json:"max_cpu_some_avg10,omitempty"`
+	MaxIOSomeAvg10              float64 `json:"max_io_some_avg10,omitempty"`
+	MaxCandidates               int     `json:"max_candidates"`
+	StaleStateMinAgeSeconds     int64   `json:"stale_state_min_age_seconds,omitempty"`
+	MaxStateDeletes             int     `json:"max_state_deletes,omitempty"`
+	StateDir                    string  `json:"state_dir,omitempty"`
 }
 
 type hostPressureSampler func(PressureReclaimConfig) HostPressureSample
 
 func DefaultPressureReclaimConfig() PressureReclaimConfig {
 	return PressureReclaimConfig{
-		Mode:                      PressureReclaimModeOff,
-		MinIdle:                   30 * time.Minute,
-		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
-		MinMemoryAvailablePercent: 15,
-		MaxMemorySomeAvg10:        1.0,
-		MaxCPUSomeAvg10:           90.0,
-		MaxIOSomeAvg10:            5.0,
-		StateDir:                  "/var/lib/go-choir/vm-state",
-		MaxCandidates:             5,
+		Mode:                        PressureReclaimModeOff,
+		MinIdle:                     30 * time.Minute,
+		MinMemoryAvailableBytes:     2 * 1024 * 1024 * 1024,
+		MinMemoryAvailablePercent:   15,
+		MinStateDirAvailableBytes:   0,
+		MinStateDirAvailablePercent: 0,
+		MaxMemorySomeAvg10:          1.0,
+		MaxCPUSomeAvg10:             90.0,
+		MaxIOSomeAvg10:              5.0,
+		StateDir:                    "/var/lib/go-choir/vm-state",
+		MaxCandidates:               5,
+		StaleStateMinAge:            6 * time.Hour,
+		MaxStateDeletes:             5,
 	}
 }
 
@@ -139,6 +153,12 @@ func normalizePressureReclaimConfig(cfg PressureReclaimConfig) PressureReclaimCo
 	if cfg.MaxCandidates <= 0 {
 		cfg.MaxCandidates = 5
 	}
+	if cfg.StaleStateMinAge <= 0 {
+		cfg.StaleStateMinAge = 6 * time.Hour
+	}
+	if cfg.MaxStateDeletes <= 0 {
+		cfg.MaxStateDeletes = cfg.MaxCandidates
+	}
 	if strings.TrimSpace(cfg.StateDir) == "" {
 		cfg.StateDir = "/var/lib/go-choir/vm-state"
 	}
@@ -147,14 +167,18 @@ func normalizePressureReclaimConfig(cfg PressureReclaimConfig) PressureReclaimCo
 
 func pressureConfigSummary(cfg PressureReclaimConfig) PressureReclaimConfigSummary {
 	return PressureReclaimConfigSummary{
-		MinIdleSeconds:            int64(cfg.MinIdle.Seconds()),
-		MinMemoryAvailableBytes:   cfg.MinMemoryAvailableBytes,
-		MinMemoryAvailablePercent: cfg.MinMemoryAvailablePercent,
-		MaxMemorySomeAvg10:        cfg.MaxMemorySomeAvg10,
-		MaxCPUSomeAvg10:           cfg.MaxCPUSomeAvg10,
-		MaxIOSomeAvg10:            cfg.MaxIOSomeAvg10,
-		MaxCandidates:             cfg.MaxCandidates,
-		StateDir:                  cfg.StateDir,
+		MinIdleSeconds:              int64(cfg.MinIdle.Seconds()),
+		MinMemoryAvailableBytes:     cfg.MinMemoryAvailableBytes,
+		MinMemoryAvailablePercent:   cfg.MinMemoryAvailablePercent,
+		MinStateDirAvailableBytes:   cfg.MinStateDirAvailableBytes,
+		MinStateDirAvailablePercent: cfg.MinStateDirAvailablePercent,
+		MaxMemorySomeAvg10:          cfg.MaxMemorySomeAvg10,
+		MaxCPUSomeAvg10:             cfg.MaxCPUSomeAvg10,
+		MaxIOSomeAvg10:              cfg.MaxIOSomeAvg10,
+		MaxCandidates:               cfg.MaxCandidates,
+		StaleStateMinAgeSeconds:     int64(cfg.StaleStateMinAge.Seconds()),
+		MaxStateDeletes:             cfg.MaxStateDeletes,
+		StateDir:                    cfg.StateDir,
 	}
 }
 
@@ -219,8 +243,10 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 	sample.MemoryPressure = false
 	sample.CPUPressure = false
 	sample.IOPressure = false
+	sample.StateDirPressure = false
 	sample.Pressure = false
 	sample.MemoryAvailableThresholdText = ""
+	sample.StateDirAvailableThresholdText = ""
 	sample.MemoryPSIThresholdText = ""
 	sample.CPUPSIThresholdText = ""
 	sample.IOPSIThresholdText = ""
@@ -259,7 +285,24 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 			sample.IOPressure = true
 		}
 	}
-	sample.Pressure = sample.MemoryPressure || sample.CPUPressure || sample.IOPressure
+	if cfg.MinStateDirAvailableBytes > 0 {
+		sample.StateDirAvailableThresholdText = fmt.Sprintf("available_bytes<%d", cfg.MinStateDirAvailableBytes)
+		if sample.StateDirAvailableBytes > 0 && sample.StateDirAvailableBytes < cfg.MinStateDirAvailableBytes {
+			sample.StateDirPressure = true
+		}
+	}
+	if cfg.MinStateDirAvailablePercent > 0 {
+		threshold := fmt.Sprintf("available_percent<%.2f", cfg.MinStateDirAvailablePercent)
+		if sample.StateDirAvailableThresholdText == "" {
+			sample.StateDirAvailableThresholdText = threshold
+		} else {
+			sample.StateDirAvailableThresholdText += "," + threshold
+		}
+		if sample.StateDirAvailablePercent > 0 && sample.StateDirAvailablePercent < cfg.MinStateDirAvailablePercent {
+			sample.StateDirPressure = true
+		}
+	}
+	sample.Pressure = sample.MemoryPressure || sample.CPUPressure || sample.IOPressure || sample.StateDirPressure
 }
 
 func readMemInfo() (totalBytes uint64, availableBytes uint64, err error) {

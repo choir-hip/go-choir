@@ -221,6 +221,10 @@ type VMManager interface {
 	// RecoverVM force-kills and reboots a failed VM (new epoch).
 	RecoverVM(vmID string) (*VMInstanceInfo, error)
 
+	// DestroyVMState deletes stopped terminal VM state. The registry calls this
+	// only after policy checks exclude primary/published/active computers.
+	DestroyVMState(vmID string) error
+
 	// GetVM returns the VM instance info, or nil if not found.
 	GetVM(vmID string) *VMInstanceInfo
 
@@ -607,6 +611,9 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
 			if reclaimed := r.ReclaimPressureVMs(); reclaimed > 0 {
 				log.Printf("vmctl: pressure reclaim hibernated %d VM(s)", reclaimed)
+			}
+			if destroyed := r.ReclaimStaleVMState(); destroyed > 0 {
+				log.Printf("vmctl: pressure reclaim destroyed %d stale worker/candidate VM state directories", destroyed)
 			}
 		}
 		if stopped := r.StopIdleVMs(); stopped > 0 {
@@ -1826,6 +1833,156 @@ func (r *OwnershipRegistry) ReclaimPressureVMs() int {
 		}
 	}
 	return reclaimed
+}
+
+// ReclaimStaleVMState deletes terminal worker/candidate VM state only when
+// state-dir storage pressure is present. It intentionally excludes active,
+// primary, published, premium, and recent work; package/source evidence must
+// survive outside these disposable producer machines before their VM state is
+// eligible for deletion.
+func (r *OwnershipRegistry) ReclaimStaleVMState() int {
+	candidates := r.staleStateReclaimCandidates()
+	destroyed := 0
+	for _, candidate := range candidates {
+		if candidate == nil {
+			continue
+		}
+		if r.destroyStaleVMState(candidate) {
+			destroyed++
+		}
+	}
+	return destroyed
+}
+
+func (r *OwnershipRegistry) staleStateReclaimCandidates() []*VMOwnership {
+	r.mu.RLock()
+	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
+	warmnessPolicy := r.warmnessPolicy
+	sampler := r.pressureSampler
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	for _, own := range r.ownerships {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	for _, own := range r.workerVMs {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
+	r.mu.RUnlock()
+
+	if cfg.Mode != PressureReclaimModeActive || cfg.MaxStateDeletes <= 0 {
+		return nil
+	}
+	if sampler == nil {
+		sampler = sampleHostPressure
+	}
+	sample := sampler(cfg)
+	annotatePressure(&sample, cfg)
+	if !sample.StateDirPressure {
+		return nil
+	}
+
+	now := time.Now()
+	candidates := make([]*VMOwnership, 0, len(ownerships))
+	for _, own := range ownerships {
+		if staleVMStateReclaimable(own, cfg, warmnessPolicy, now) {
+			candidates = append(candidates, own)
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left, right := candidates[i], candidates[j]
+		if left.Kind != right.Kind {
+			return left.Kind == VMKindWorker
+		}
+		leftIdle := now.Sub(left.LastActiveAt)
+		rightIdle := now.Sub(right.LastActiveAt)
+		if leftIdle != rightIdle {
+			return leftIdle > rightIdle
+		}
+		return left.VMID < right.VMID
+	})
+	if len(candidates) > cfg.MaxStateDeletes {
+		candidates = candidates[:cfg.MaxStateDeletes]
+	}
+	return candidates
+}
+
+func staleVMStateReclaimable(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) bool {
+	if own == nil || strings.TrimSpace(own.VMID) == "" || own.LastActiveAt.IsZero() {
+		return false
+	}
+	switch own.State {
+	case VMStateStopped, VMStateHibernated, VMStateFailed:
+	default:
+		return false
+	}
+	if now.Sub(own.LastActiveAt) < cfg.StaleStateMinAge {
+		return false
+	}
+	switch warmnessClassForOwnership(own, warmnessPolicy) {
+	case WarmnessClassPremiumAlwaysOn:
+		return false
+	case WarmnessClassCriticalProtected:
+		if !staleCriticalWorkerIdle(now.Sub(own.LastActiveAt)) {
+			return false
+		}
+	}
+	if own.Kind == VMKindWorker {
+		return true
+	}
+	if own.Kind != VMKindInteractive {
+		return false
+	}
+	if own.DesktopID == PrimaryDesktopID || own.Published {
+		return false
+	}
+	return true
+}
+
+func (r *OwnershipRegistry) destroyStaleVMState(candidate *VMOwnership) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
+	warmnessPolicy := r.warmnessPolicy
+	now := time.Now()
+	current, key := r.currentOwnershipForCandidateLocked(candidate)
+	if !staleVMStateReclaimable(current, cfg, warmnessPolicy, now) {
+		return false
+	}
+	if r.vmManager == nil {
+		return false
+	}
+	if err := r.vmManager.DestroyVMState(current.VMID); err != nil {
+		log.Printf("vmctl: stale VM state destroy skipped for %s: %v", current.VMID, err)
+		return false
+	}
+	if current.Kind == VMKindWorker {
+		delete(r.workerVMs, strings.TrimSpace(current.WorkerID))
+	} else if key != "" {
+		delete(r.ownerships, key)
+	}
+	delete(r.vmByID, current.VMID)
+	r.saveLocked()
+	log.Printf("vmctl: destroyed stale %s VM state %s for desktop %s", current.Kind, current.VMID, current.DesktopID)
+	return true
+}
+
+func (r *OwnershipRegistry) currentOwnershipForCandidateLocked(candidate *VMOwnership) (*VMOwnership, string) {
+	if candidate == nil {
+		return nil, ""
+	}
+	if candidate.Kind == VMKindWorker {
+		own := r.workerVMs[strings.TrimSpace(candidate.WorkerID)]
+		if own != nil && own.VMID == candidate.VMID {
+			return own, ""
+		}
+		return nil, ""
+	}
+	key := ownershipKey(candidate.UserID, candidate.DesktopID)
+	own := r.ownerships[key]
+	if own != nil && own.VMID == candidate.VMID {
+		return own, key
+	}
+	return nil, ""
 }
 
 // ResumeVM resumes a stopped or hibernated VM for the given user,

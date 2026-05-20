@@ -221,6 +221,64 @@ func TestManagerGetListRemoveVM(t *testing.T) {
 	}
 }
 
+func TestManagerDestroyVMStateRemovesStoppedStateDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = tmpDir
+	mgr := NewManager(cfg)
+
+	vmID := "test-vm-destroy"
+	stateDir := filepath.Join(tmpDir, vmID)
+	if err := os.MkdirAll(filepath.Join(stateDir, "persist"), 0o755); err != nil {
+		t.Fatalf("mkdir state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "data.img"), []byte("state"), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	mgr.mu.Lock()
+	mgr.vms[vmID] = &VMInstance{
+		Config: VMConfig{VMID: vmID},
+		State:  StateStopped,
+	}
+	mgr.mu.Unlock()
+
+	if err := mgr.DestroyVMState(vmID); err != nil {
+		t.Fatalf("DestroyVMState: %v", err)
+	}
+	if _, err := os.Stat(stateDir); !os.IsNotExist(err) {
+		t.Fatalf("state dir still exists or stat failed: %v", err)
+	}
+	if got := mgr.GetVM(vmID); got != nil {
+		t.Fatalf("manager still tracks VM: %+v", got)
+	}
+}
+
+func TestManagerDestroyVMStateRefusesRunningVM(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = tmpDir
+	mgr := NewManager(cfg)
+
+	vmID := "test-vm-running"
+	stateDir := filepath.Join(tmpDir, vmID)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir state: %v", err)
+	}
+	mgr.mu.Lock()
+	mgr.vms[vmID] = &VMInstance{
+		Config: VMConfig{VMID: vmID},
+		State:  StateRunning,
+	}
+	mgr.mu.Unlock()
+
+	if err := mgr.DestroyVMState(vmID); err == nil {
+		t.Fatalf("DestroyVMState should reject running VM")
+	}
+	if _, err := os.Stat(stateDir); err != nil {
+		t.Fatalf("state dir should remain: %v", err)
+	}
+}
+
 func TestManagerMarkFailed(t *testing.T) {
 	mgr := NewManager(DefaultManagerConfig())
 

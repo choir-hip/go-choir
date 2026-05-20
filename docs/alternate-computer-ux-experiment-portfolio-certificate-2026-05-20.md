@@ -48,6 +48,12 @@ path is to pull selected package refs from this certificate into an account the
 owner already controls, such as `ymnath@choir-ip.com`, then adopt, inspect,
 iterate, promote, or reject there.
 
+The same owner-controlled computer can be the review hub for multiple
+experiments. Each package should enter that computer as its own candidate or
+adoption attempt with distinct source refs, artifact digests, verifier results,
+and rollback refs. Source-account login is not required for owner review unless
+the package pull/adoption path itself fails and the root cause is auth.
+
 ## Wave 1: Chiron And Animation
 
 Evidence packet:
@@ -179,8 +185,11 @@ VText:
 ## Next Realism Axis
 
 Pull the four package refs into an owner-controlled computer and run hands-on
-QA there. For Liquid and Python specifically, add measured benchmark evidence:
-mobile Safari/WebKit and desktop frame/resource numbers for Liquid; matched
+QA there, preferably as separate candidate/adoption attempts inside
+`ymnath@choir-ip.com` or another account the owner already controls. Do not
+spend effort making the generated source accounts directly loginable. For
+Liquid and Python specifically, add measured benchmark evidence: mobile
+Safari/WebKit and desktop frame/resource numbers for Liquid; matched
 bash-vs-Python task-set token/time/tool-loop metrics for Python. In parallel,
 build the stale candidate/worker VM-state garbage-collection control so package
 portfolio runs cannot fill Node B again.
