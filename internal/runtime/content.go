@@ -175,6 +175,7 @@ func (h *APIHandler) HandleContentCreate(w http.ResponseWriter, r *http.Request)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create content item"})
 		return
 	}
+	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventContentItemCreated, contentItemEventPayload(item))
 	writeAPIJSON(w, http.StatusCreated, item)
 }
 
@@ -331,7 +332,23 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
 		return types.ContentItem{}, err
 	}
+	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
 	return item, nil
+}
+
+func contentItemEventPayload(item types.ContentItem) map[string]any {
+	return map[string]any{
+		"content_id":   item.ContentID,
+		"source_type":  item.SourceType,
+		"media_type":   item.MediaType,
+		"app_hint":     item.AppHint,
+		"title":        item.Title,
+		"source_url":   item.SourceURL,
+		"file_path":    item.FilePath,
+		"content_hash": item.ContentHash,
+		"created_at":   item.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":   item.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
 }
 
 func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fetchRungName, htmlRungName, textRungName string) (fetchedURLContent, error) {

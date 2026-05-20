@@ -39,6 +39,7 @@
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { createEventDispatcher } from 'svelte';
   import { mediaRouteForFileName } from './media-utils.js';
+  import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
 
   const dispatch = createEventDispatcher();
 
@@ -135,7 +136,10 @@
       : '/api/files/' + encodeURIComponent(name);
 
     try {
-      const res = await fetchWithRenewal(path, { method: 'POST' });
+      const res = await fetchWithRenewal(path, {
+        method: 'POST',
+        headers: { 'X-Choir-Device': currentDeviceId() },
+      });
       if (!res.ok) {
         if (res.status === 401) {
           dispatch('authexpired');
@@ -171,7 +175,10 @@
       : '/api/files/' + encodeURIComponent(deleteTarget.name);
 
     try {
-      const res = await fetchWithRenewal(path, { method: 'DELETE' });
+      const res = await fetchWithRenewal(path, {
+        method: 'DELETE',
+        headers: { 'X-Choir-Device': currentDeviceId() },
+      });
       if (!res.ok) {
         if (res.status === 401) {
           dispatch('authexpired');
@@ -210,7 +217,10 @@
           : '/api/files/' + encodeURIComponent(file.name);
         const res = await fetchWithRenewal(path, {
           method: 'PUT',
-          headers: file.type ? { 'Content-Type': file.type } : {},
+          headers: {
+            ...(file.type ? { 'Content-Type': file.type } : {}),
+            'X-Choir-Device': currentDeviceId(),
+          },
           body: file,
         });
         if (!res.ok) {
@@ -297,6 +307,30 @@
       uploadStatus = '';
       fetchDirectory(currentPath);
     }
+  }
+
+  function currentDirectoryPath() {
+    return currentPath.join('/');
+  }
+
+  function parentPathFor(path) {
+    const normalized = String(path || '').replace(/^\/+|\/+$/g, '');
+    if (!normalized.includes('/')) return '';
+    return normalized.split('/').slice(0, -1).join('/');
+  }
+
+  function liveEventTouchesCurrentDirectory(message) {
+    if (isOwnLiveEvent(message)) return false;
+    const payload = liveEventPayload(message);
+    const kind = liveEventKind(message);
+    if (kind === 'file.changed') {
+      return String(payload.parent_path || '') === currentDirectoryPath();
+    }
+    if (kind === 'content.item.created') {
+      const filePath = payload.file_path || '';
+      return filePath && parentPathFor(filePath) === currentDirectoryPath();
+    }
+    return false;
   }
 
   function handleFileClick(entry) {
@@ -421,6 +455,14 @@
 
   onMount(() => {
     fetchDirectory([]);
+    const removeLiveListener = addLiveEventListener((message) => {
+      if (liveEventTouchesCurrentDirectory(message)) {
+        void fetchDirectory(currentPath);
+      }
+    });
+    return () => {
+      removeLiveListener();
+    };
   });
 </script>
 

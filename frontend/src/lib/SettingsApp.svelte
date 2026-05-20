@@ -1,11 +1,12 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { BUILD_INFO } from './build-info.js';
+  import { fetchThemePreference } from './preferences.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
   import {
     DEFAULT_THEME,
     THEME_PRESETS,
-    THEME_STORAGE_KEY,
     normalizeThemeConfig,
     themeCSSVariables,
     validateThemeConfig,
@@ -135,13 +136,12 @@
     dispatch('opencomputemonitor');
   }
 
-  function loadStoredTheme() {
+  async function loadStoredTheme() {
     try {
-      const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (!raw) return DEFAULT_THEME;
-      const parsed = JSON.parse(raw);
-      const validation = validateThemeConfig(parsed);
-      return validation.ok ? normalizeThemeConfig(parsed) : DEFAULT_THEME;
+      const stored = await fetchThemePreference();
+      const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
+      const validation = validateThemeConfig(theme);
+      return validation.ok ? normalizeThemeConfig(theme) : DEFAULT_THEME;
     } catch (_err) {
       return DEFAULT_THEME;
     }
@@ -177,11 +177,38 @@
     }
   }
 
-  onMount(() => {
-    selectedTheme = loadStoredTheme();
+  let removeLiveListener = () => {};
+
+  onMount(async () => {
+    selectedTheme = await loadStoredTheme();
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
     void refreshPromotions();
+    removeLiveListener = addLiveEventListener((message) => {
+      const kind = liveEventKind(message);
+      if (
+        kind === 'promotion.candidate.queued' ||
+        kind === 'promotion.candidate.verified' ||
+        kind === 'promotion.candidate.failed' ||
+        kind === 'promotion.candidate.promoted' ||
+        kind === 'promotion.candidate.reviewed'
+      ) {
+        void refreshPromotions();
+      }
+      if (kind === 'theme.updated') {
+        void loadStoredTheme().then((theme) => {
+          selectedTheme = theme;
+          themeJSON = JSON.stringify(selectedTheme, null, 2);
+        });
+      }
+      if (kind === 'runtime.health' || kind === 'runtime.degraded') {
+        void refreshStatus();
+      }
+    });
+  });
+
+  onDestroy(() => {
+    removeLiveListener();
   });
 </script>
 
@@ -264,9 +291,6 @@
           <h3>Promotion queue</h3>
           <p class="muted">Review candidate-world patchsets before canonical promotion.</p>
         </div>
-        <button class="secondary-action" data-settings-promotions-refresh on:click={refreshPromotions} disabled={promotionLoading}>
-          {promotionLoading ? 'Checking…' : 'Refresh'}
-        </button>
       </div>
 
       {#if promotionError}
@@ -351,9 +375,6 @@
           <h3>Runtime status</h3>
           <p class="muted">Read-only deploy and backend identity.</p>
         </div>
-        <button class="secondary-action" on:click={refreshStatus} disabled={loading}>
-          {loading ? 'Checking…' : 'Refresh'}
-        </button>
       </div>
 
       {#if error}
@@ -601,10 +622,6 @@
     justify-content: space-between;
     gap: 1rem;
     align-items: flex-start;
-  }
-
-  .status-header .secondary-action {
-    margin-top: 0;
   }
 
   .status-list {

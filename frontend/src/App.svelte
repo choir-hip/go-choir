@@ -24,7 +24,9 @@
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession } from './lib/auth.js';
-  import { DEFAULT_THEME, THEME_STORAGE_KEY, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
+  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
+  import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
+  import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
   /** @type {'checking' | 'signed_out' | 'signed_in'} */
   let authState = 'checking';
@@ -69,6 +71,7 @@
         authState = 'signed_in';
         currentUser = data.user;
         startAuthenticatedPrewarm();
+        void loadServerTheme();
         return { authenticated: true, user: data.user };
       } else {
         authState = 'signed_out';
@@ -224,38 +227,37 @@
     }
     currentTheme = normalized;
     applyThemeToElement(document.documentElement, normalized);
-    if (persist) {
-      try {
-        window.localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(normalized));
-      } catch (_err) {
-        // Theme application should not depend on storage availability.
-      }
+    if (persist && isAuthenticated) {
+      saveThemePreference(normalized).catch(() => {});
     }
     return validation;
   }
 
-  function loadStoredTheme() {
+  async function loadServerTheme() {
+    if (!isAuthenticated) return;
     try {
-      const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (!raw) return DEFAULT_THEME;
-      const parsed = JSON.parse(raw);
-      const validation = validateThemeConfig(parsed);
-      return validation.ok ? normalizeThemeConfig(parsed) : DEFAULT_THEME;
+      const stored = await fetchThemePreference();
+      const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
+      applyTheme(theme, false);
     } catch (_err) {
-      return DEFAULT_THEME;
+      // Theme sync should not block desktop recovery.
     }
   }
 
   import { onMount } from 'svelte';
   onMount(() => {
     publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
-    applyTheme(loadStoredTheme(), false);
+    applyTheme(DEFAULT_THEME, false);
     checkSession();
 
     function handleThemeChange(event) {
       applyTheme(event.detail?.theme || DEFAULT_THEME);
     }
     window.addEventListener('choir-theme-change', handleThemeChange);
+    const removeLiveListener = addLiveEventListener((message) => {
+      if (message.kind !== 'theme.updated' || isOwnLiveEvent(message)) return;
+      applyTheme(liveEventPayload(message).theme || DEFAULT_THEME, false);
+    });
 
     // Prevent bfcache from resurrecting an authenticated shell after
     // logout. When the page is restored from back/forward cache, the
@@ -284,6 +286,7 @@
 
     return () => {
       window.removeEventListener('choir-theme-change', handleThemeChange);
+      removeLiveListener();
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('focus', handleFocus);
     };

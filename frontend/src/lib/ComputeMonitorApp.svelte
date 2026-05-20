@@ -3,6 +3,7 @@
   import { activeWindowId, focusWindow, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
   import { AuthRequiredError } from './auth.js';
   import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
 
   export let windowId = '';
   export let authenticated = false;
@@ -14,7 +15,7 @@
   let loading = false;
   let error = '';
   let actionStatus = '';
-  let refreshTimer = null;
+  let removeLiveListener = () => {};
 
   $: currentComputer = status?.current_computer || {};
   $: computers = status?.computers || [];
@@ -36,11 +37,16 @@
 
   onMount(() => {
     refresh();
-    refreshTimer = setInterval(refresh, 15000);
+    removeLiveListener = addLiveEventListener((message) => {
+      const kind = liveEventKind(message);
+      if (kind === 'computer.status.updated' || kind === 'desktop.state.updated' || kind === 'runtime.health' || kind === 'runtime.degraded') {
+        void refresh();
+      }
+    });
   });
 
   onDestroy(() => {
-    if (refreshTimer) clearInterval(refreshTimer);
+    removeLiveListener();
   });
 
   async function refresh() {
@@ -130,9 +136,6 @@
     </div>
     <div class="status-cluster">
       <span class="health-pill {levelClass()}" data-compute-monitor-health>{healthState}</span>
-      <button type="button" class="icon-button" on:click={refresh} disabled={loading} title="Refresh status" aria-label="Refresh status">
-        ↻
-      </button>
     </div>
   </header>
 

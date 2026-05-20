@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func main() {
@@ -24,10 +26,7 @@ func main() {
 	h := sandbox.NewHandler(cfg.SandboxID)
 	sandbox.RegisterRoutes(s, h)
 
-	// Initialize the file browser handler with sandbox files root.
 	filesRoot := sandbox.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
-	fileHandler := sandbox.NewFilesHandler(filesRoot)
-	sandbox.RegisterFileRoutes(s, fileHandler)
 
 	// Initialize the terminal PTY WebSocket handler.
 	terminalHandler := sandbox.NewTerminalHandler()
@@ -124,6 +123,30 @@ func main() {
 	var rtOpts []runtime.RuntimeOption
 
 	rt := runtime.New(rtCfg, db, bus, rtProvider, rtOpts...)
+
+	// Initialize the file browser handler with sandbox files root. File
+	// mutations publish owner-scoped product events after the filesystem write
+	// succeeds so other devices can refresh Files without manual reload UI.
+	fileHandler := sandbox.NewFilesHandlerWithObserver(filesRoot, func(r *http.Request, event sandbox.FileChangeEvent) {
+		ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
+		if ownerID == "" {
+			return
+		}
+		_, err := rt.EmitProductEvent(r.Context(), ownerID, desktopIDFromRequest(r), types.EventFileChanged, map[string]any{
+			"operation":        event.Operation,
+			"path":             event.Path,
+			"parent_path":      event.ParentPath,
+			"name":             event.Name,
+			"entry_type":       event.EntryType,
+			"size":             event.Size,
+			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+		})
+		if err != nil {
+			log.Printf("sandbox: file change event failed: %v", err)
+		}
+	})
+	sandbox.RegisterFileRoutes(s, fileHandler)
+
 	// Default-on: install the full per-profile tool registry. Set
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
 	// should run). RUNTIME_ENABLE_TOOLS is still honored for back-compat but
@@ -212,6 +235,19 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 
 	return cfg
+}
+
+func desktopIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return types.PrimaryDesktopID
+	}
+	if desktopID := strings.TrimSpace(r.URL.Query().Get("desktop_id")); desktopID != "" {
+		return desktopID
+	}
+	if desktopID := strings.TrimSpace(r.Header.Get("X-Choir-Desktop")); desktopID != "" {
+		return desktopID
+	}
+	return types.PrimaryDesktopID
 }
 
 func sizeOfRegistry(registry *runtime.ToolRegistry) int {

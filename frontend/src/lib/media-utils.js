@@ -1,4 +1,5 @@
 import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+import { currentDeviceId } from './live-events.js';
 
 export const MEDIA_FILE_ROUTES = [
   { appId: 'image', mediaType: 'image/png', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] },
@@ -110,44 +111,59 @@ export function formatTime(seconds) {
   return `${minutes}:${remainder}`;
 }
 
-export function mediaStateKey(kind, source = {}) {
-  return `choir-media:${kind}:${source.filePath || source.sourceUrl || source.title || 'untitled'}`;
+export function mediaSourceIdentity(source = {}) {
+  return source.filePath || source.sourceUrl || source.contentId || source.title || '';
 }
 
-export function loadMediaPosition(kind, source = {}) {
+export async function loadMediaProgress(kind, source = {}) {
+  const identity = mediaSourceIdentity(source);
+  if (!kind || !identity) return { currentTime: 0, duration: 0, playbackRate: 1 };
+  let res;
   try {
-    const raw = window.localStorage.getItem(mediaStateKey(kind, source));
-    if (!raw) return 0;
-    const parsed = JSON.parse(raw);
-    const value = Number(parsed.currentTime);
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  } catch (_err) {
-    return 0;
+    res = await fetchWithRenewal(`/api/media/progress?kind=${encodeURIComponent(kind)}&identity=${encodeURIComponent(identity)}`);
+  } catch (err) {
+    if (err instanceof AuthRequiredError) return { currentTime: 0, duration: 0, playbackRate: 1 };
+    throw err;
   }
+  if (!res.ok) {
+    return { currentTime: 0, duration: 0, playbackRate: 1 };
+  }
+  const body = await res.json();
+  return {
+    currentTime: Number(body.current_time) || 0,
+    duration: Number(body.duration) || 0,
+    playbackRate: Number(body.playback_rate) || 1,
+    updatedByDevice: body.updated_by_device || '',
+  };
+}
+
+export async function loadMediaPosition(kind, source = {}) {
+  const progress = await loadMediaProgress(kind, source);
+  return Number.isFinite(progress.currentTime) && progress.currentTime > 0 ? progress.currentTime : 0;
 }
 
 export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0) {
   if (!Number.isFinite(currentTime) || currentTime < 0) return;
-  try {
-    window.localStorage.setItem(mediaStateKey(kind, source), JSON.stringify({
-      currentTime,
+  const identity = mediaSourceIdentity(source);
+  if (!kind || !identity) return;
+  fetchWithRenewal('/api/media/progress', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Choir-Device': currentDeviceId(),
+    },
+    body: JSON.stringify({
+      kind,
+      identity,
+      current_time: currentTime,
       duration: Number.isFinite(duration) ? duration : 0,
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch (_err) {
-    // Local playback state is best-effort.
-  }
+      playback_rate: Number(source.playbackRate) || 1,
+      updated_by_device: currentDeviceId(),
+    }),
+  }).catch(() => {});
 }
 
 const MEDIA_RECENT_LIMIT = 10;
-
-export function mediaRecentStorageKey(kind) {
-  return `choir-media-recent:${kind}`;
-}
-
-function mediaSourceIdentity(source = {}) {
-  return source.filePath || source.sourceUrl || source.contentId || '';
-}
 
 function displayFileName(source = {}) {
   const raw = source.filePath || source.sourceUrl || source.title || '';
@@ -160,37 +176,64 @@ function displayFileName(source = {}) {
   }
 }
 
-export function loadRecentMedia(kind) {
+export async function loadRecentMedia(kind) {
+  const suffix = kind ? `?kind=${encodeURIComponent(kind)}&limit=${MEDIA_RECENT_LIMIT}` : `?limit=${MEDIA_RECENT_LIMIT}`;
+  let res;
   try {
-    const raw = window.localStorage.getItem(mediaRecentStorageKey(kind));
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((entry) => entry?.identity).slice(0, MEDIA_RECENT_LIMIT) : [];
-  } catch (_err) {
+    res = await fetchWithRenewal(`/api/media/recents${suffix}`);
+  } catch (err) {
+    if (err instanceof AuthRequiredError) return [];
+    throw err;
+  }
+  if (!res.ok) {
     return [];
   }
+  const body = await res.json();
+  return Array.isArray(body.items) ? body.items.map((entry) => ({
+    identity: entry.identity,
+    kind: entry.kind,
+    title: entry.title,
+    fileName: entry.file_name,
+    filePath: entry.file_path,
+    sourceUrl: entry.source_url,
+    mediaType: entry.media_type,
+    contentId: entry.content_id,
+    openedAt: entry.opened_at,
+  })).filter((entry) => entry.identity).slice(0, MEDIA_RECENT_LIMIT) : [];
 }
 
-export function rememberRecentMedia(kind, source = {}) {
+export async function rememberRecentMedia(kind, source = {}) {
   const identity = mediaSourceIdentity(source);
   if (!kind || !identity) return false;
+  const entry = {
+    identity,
+    kind,
+    title: source.title || displayFileName(source) || appTitle(kind),
+    file_name: displayFileName(source),
+    file_path: source.filePath || '',
+    source_url: source.sourceUrl || '',
+    media_type: source.mediaType || '',
+    content_id: source.contentId || '',
+  };
   try {
-    const entry = {
-      identity,
-      kind,
-      title: source.title || displayFileName(source) || appTitle(kind),
-      fileName: displayFileName(source),
-      filePath: source.filePath || '',
-      sourceUrl: source.sourceUrl || '',
-      mediaType: source.mediaType || '',
-      contentId: source.contentId || '',
-      openedAt: new Date().toISOString(),
-    };
-    const next = [
-      entry,
-      ...loadRecentMedia(kind).filter((candidate) => candidate.identity !== identity),
-    ].slice(0, MEDIA_RECENT_LIMIT);
-    window.localStorage.setItem(mediaRecentStorageKey(kind), JSON.stringify(next));
-    return true;
+    const res = await fetchWithRenewal('/api/media/recents', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Choir-Device': currentDeviceId(),
+      },
+      body: JSON.stringify({
+        kind,
+        identity,
+        title: entry.title,
+        file_name: entry.file_name,
+        file_path: entry.file_path,
+        source_url: entry.source_url,
+        media_type: entry.media_type,
+        content_id: entry.content_id,
+      }),
+    });
+    return res.ok;
   } catch (_err) {
     return false;
   }

@@ -4,11 +4,15 @@
     appTitle,
     clampNumber,
     loadRecentMedia,
+    loadMediaProgress,
     loadContextContentItem,
+    mediaSourceIdentity,
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
+    saveMediaPosition,
   } from './media-utils.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let appContext = {};
   export let windowId = '';
@@ -32,6 +36,7 @@
   let loadedSourceKey = '';
   let selectedContext = null;
   let recentFiles = [];
+  let rememberedIdentity = '';
 
   $: effectiveContext = selectedContext || appContext || {};
   $: source = resolveMediaSource(effectiveContext, item, kind);
@@ -39,9 +44,20 @@
   $: extractedText = item?.text_content || effectiveContext.textContent || '';
   $: activeChapter = chapters[activeChapterIndex] || null;
   $: readerTitle = epubTitle || source.title;
-  $: positionKey = `choir-epub-position:${source.filePath || source.sourceUrl || source.title || 'untitled'}`;
-  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
-    recentFiles = loadRecentMedia(kind);
+  $: sourceIdentity = mediaSourceIdentity(source);
+  $: if (source.displayUrl && sourceIdentity && sourceIdentity !== rememberedIdentity) {
+    void rememberCurrentSource();
+  }
+
+  async function refreshRecentFiles() {
+    recentFiles = await loadRecentMedia(kind);
+  }
+
+  async function rememberCurrentSource() {
+    rememberedIdentity = sourceIdentity;
+    if (await rememberRecentMedia(kind, source)) {
+      await refreshRecentFiles();
+    }
   }
 
   function sourceFetchOptions(url) {
@@ -112,35 +128,20 @@
     return file ? file.async('text') : '';
   }
 
-  function loadStoredPosition() {
+  async function loadStoredPosition() {
     try {
-      const raw = window.localStorage.getItem(positionKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Number.isFinite(parsed.chapter)) {
-        activeChapterIndex = clampNumber(parsed.chapter, 0, Math.max(0, chapters.length - 1));
+      const progress = await loadMediaProgress(kind, source);
+      if (Number.isFinite(progress.currentTime)) {
+        activeChapterIndex = clampNumber(Math.floor(progress.currentTime), 0, Math.max(0, chapters.length - 1));
+        readerProgress = clampNumber(Math.round((progress.currentTime - activeChapterIndex) * 100), 0, 100);
       }
-      tick().then(() => {
-        if (scrollEl && Number.isFinite(parsed.scrollTop)) {
-          scrollEl.scrollTop = parsed.scrollTop;
-          updateReaderProgress({ currentTarget: scrollEl });
-        }
-      });
     } catch (_err) {
-      // Ignore corrupt local reader state.
+      // Reader progress sync is additive; loading must not block reading.
     }
   }
 
   function savePosition() {
-    try {
-      window.localStorage.setItem(positionKey, JSON.stringify({
-        chapter: activeChapterIndex,
-        scrollTop: scrollEl?.scrollTop || 0,
-        progress: readerProgress,
-      }));
-    } catch (_err) {
-      // Local persistence is best-effort.
-    }
+    saveMediaPosition(kind, source, activeChapterIndex + (readerProgress / 100), Math.max(1, chapters.length));
   }
 
   function setActiveChapter(index) {
@@ -278,7 +279,7 @@
       activeChapterIndex = 0;
       updateEpubSearch();
       await tick();
-      loadStoredPosition();
+      await loadStoredPosition();
     } catch (err) {
       const message = err?.message || 'EPUB load failed';
       error = `${message}. The EPUB app needs a valid browser-fetchable EPUB archive; CORS-blocked remote files should be imported into Files first.`;
@@ -305,7 +306,7 @@
       chapters = extractedTextChapters(extractedText);
       epubTitle = source.title;
       await tick();
-      loadStoredPosition();
+      await loadStoredPosition();
       return;
     }
     await loadEpubArchive();
@@ -326,8 +327,14 @@
   }
 
   onMount(() => {
-    recentFiles = loadRecentMedia(kind);
+    void refreshRecentFiles();
     void loadContentItem();
+    const removeLiveListener = addLiveEventListener((message) => {
+      if (liveEventKind(message) === 'media.recent.updated' && liveEventPayload(message).kind === kind) {
+        void refreshRecentFiles();
+      }
+    });
+    return () => removeLiveListener();
   });
 </script>
 

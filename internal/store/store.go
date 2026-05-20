@@ -356,6 +356,42 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	PRIMARY KEY (owner_id, update_id)
 );
 
+CREATE TABLE IF NOT EXISTS media_progress (
+	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
+	media_kind        VARCHAR(64) NOT NULL DEFAULT '',
+	media_identity_hash VARCHAR(64) NOT NULL DEFAULT '',
+	media_identity    LONGTEXT NOT NULL DEFAULT '',
+	position_seconds  DOUBLE NOT NULL DEFAULT 0,
+	duration_seconds  DOUBLE NOT NULL DEFAULT 0,
+	playback_rate     DOUBLE NOT NULL DEFAULT 1,
+	updated_by_device VARCHAR(255) NOT NULL DEFAULT '',
+	updated_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, media_kind, media_identity_hash)
+);
+
+CREATE TABLE IF NOT EXISTS media_recents (
+	owner_id        VARCHAR(255) NOT NULL DEFAULT '',
+	media_kind      VARCHAR(64) NOT NULL DEFAULT '',
+	media_identity_hash VARCHAR(64) NOT NULL DEFAULT '',
+	media_identity  LONGTEXT NOT NULL DEFAULT '',
+	title           LONGTEXT NOT NULL DEFAULT '',
+	file_name       LONGTEXT NOT NULL DEFAULT '',
+	file_path       LONGTEXT NOT NULL DEFAULT '',
+	source_url      LONGTEXT NOT NULL DEFAULT '',
+	media_type      VARCHAR(255) NOT NULL DEFAULT '',
+	content_id      VARCHAR(255) NOT NULL DEFAULT '',
+	opened_at       DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, media_kind, media_identity_hash)
+);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+	owner_id        VARCHAR(255) NOT NULL DEFAULT '',
+	preference_key  VARCHAR(255) NOT NULL DEFAULT '',
+	value_json      LONGTEXT NOT NULL DEFAULT '{}',
+	updated_at      DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, preference_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_agents_owner_id ON agents(owner_id);
 CREATE INDEX IF NOT EXISTS idx_agents_channel_id ON agents(channel_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_id ON runs(owner_id);
@@ -402,6 +438,9 @@ CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_fin
 CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_media_progress_owner_kind_updated ON media_progress(owner_id, media_kind, updated_at);
+CREATE INDEX IF NOT EXISTS idx_media_recents_owner_kind_opened ON media_recents(owner_id, media_kind, opened_at);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_owner_updated ON user_preferences(owner_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS desktop_state (
 	owner_id       VARCHAR(255) PRIMARY KEY,

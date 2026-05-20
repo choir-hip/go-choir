@@ -5,10 +5,12 @@
     clampNumber,
     loadRecentMedia,
     loadContextContentItem,
+    mediaSourceIdentity,
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
   } from './media-utils.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let appContext = {};
   export let windowId = '';
@@ -24,13 +26,26 @@
   let rotation = 0;
   let selectedContext = null;
   let recentFiles = [];
+  let rememberedIdentity = '';
 
   $: effectiveContext = selectedContext || appContext || {};
   $: source = resolveMediaSource(effectiveContext, item, kind);
   $: imageZoomLabel = `${Math.round(zoom * 100)}%`;
   $: imageWidth = imageFitMode === 'original' ? 'auto' : `${Math.round(zoom * 100)}%`;
-  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
-    recentFiles = loadRecentMedia(kind);
+  $: sourceIdentity = mediaSourceIdentity(source);
+  $: if (source.displayUrl && sourceIdentity && sourceIdentity !== rememberedIdentity) {
+    void rememberCurrentSource();
+  }
+
+  async function refreshRecentFiles() {
+    recentFiles = await loadRecentMedia(kind);
+  }
+
+  async function rememberCurrentSource() {
+    rememberedIdentity = sourceIdentity;
+    if (await rememberRecentMedia(kind, source)) {
+      await refreshRecentFiles();
+    }
   }
 
   function setImageFit(mode) {
@@ -79,8 +94,14 @@
   }
 
   onMount(() => {
-    recentFiles = loadRecentMedia(kind);
+    void refreshRecentFiles();
     void loadContentItem();
+    const removeLiveListener = addLiveEventListener((message) => {
+      if (liveEventKind(message) === 'media.recent.updated' && liveEventPayload(message).kind === kind) {
+        void refreshRecentFiles();
+      }
+    });
+    return () => removeLiveListener();
   });
 </script>
 

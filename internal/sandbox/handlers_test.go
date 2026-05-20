@@ -6,9 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 func TestHandleBootstrapReturnsSandboxIdentity(t *testing.T) {
@@ -152,109 +149,6 @@ func TestHandleErrorReturnsJSONContentType(t *testing.T) {
 	}
 }
 
-func TestHandleWSUpgradesAndEchoes(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-ws-test"}
-	h := NewHandler(cfg.SandboxID)
-
-	// Create a test HTTP server that routes to the WS handler.
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.HandleWS(w, r)
-	}))
-	defer s.Close()
-
-	// Connect via WebSocket.
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		t.Fatalf("failed to dial websocket: %v", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	// Read the initial connected message.
-	var connected WSMessage
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("failed to read connected message: %v", err)
-	}
-
-	if connected.SandboxID != "sandbox-ws-test" {
-		t.Errorf("expected sandbox_id %q, got %q", "sandbox-ws-test", connected.SandboxID)
-	}
-	if connected.Type != "connected" {
-		t.Errorf("expected type %q, got %q", "connected", connected.Type)
-	}
-
-	// Send an echo message and verify it comes back.
-	msg := WSMessage{
-		Type:    "test",
-		Payload: "hello-from-shell",
-	}
-	if err := conn.WriteJSON(msg); err != nil {
-		t.Fatalf("failed to write message: %v", err)
-	}
-
-	var echo WSMessage
-	if err := conn.ReadJSON(&echo); err != nil {
-		t.Fatalf("failed to read echo message: %v", err)
-	}
-
-	if echo.SandboxID != "sandbox-ws-test" {
-		t.Errorf("expected echo sandbox_id %q, got %q", "sandbox-ws-test", echo.SandboxID)
-	}
-	if echo.Type != "echo" {
-		t.Errorf("expected echo type %q, got %q", "echo", echo.Type)
-	}
-	if echo.Payload != "hello-from-shell" {
-		t.Errorf("expected echo payload %q, got %q", "hello-from-shell", echo.Payload)
-	}
-}
-
-func TestHandleWSEchoesUserContext(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-ws-user"}
-	h := NewHandler(cfg.SandboxID)
-
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.HandleWS(w, r)
-	}))
-	defer s.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
-	header := http.Header{}
-	header.Set("X-Authenticated-User", "user-bob@example.com")
-
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
-	if err != nil {
-		t.Fatalf("failed to dial websocket: %v", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	// Read the initial connected message and check user context.
-	var connected WSMessage
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("failed to read connected message: %v", err)
-	}
-
-	if connected.User != "user-bob@example.com" {
-		t.Errorf("expected user %q in connected message, got %q", "user-bob@example.com", connected.User)
-	}
-
-	// Send a message and check user context in the echo.
-	msg := WSMessage{Type: "test", Payload: "ping"}
-	if err := conn.WriteJSON(msg); err != nil {
-		t.Fatalf("failed to write message: %v", err)
-	}
-
-	var echo WSMessage
-	if err := conn.ReadJSON(&echo); err != nil {
-		t.Fatalf("failed to read echo message: %v", err)
-	}
-
-	if echo.User != "user-bob@example.com" {
-		t.Errorf("expected user %q in echo, got %q", "user-bob@example.com", echo.User)
-	}
-}
-
 func TestBootstrapNoUserContextWithoutHeader(t *testing.T) {
 	cfg := Config{Port: "0", SandboxID: "sandbox-test-001"}
 	h := NewHandler(cfg.SandboxID)
@@ -271,33 +165,5 @@ func TestBootstrapNoUserContextWithoutHeader(t *testing.T) {
 
 	if resp.User != "" {
 		t.Errorf("expected empty user when no header set, got %q", resp.User)
-	}
-}
-
-func TestHandleWSNoUserContextWithoutHeader(t *testing.T) {
-	cfg := Config{Port: "0", SandboxID: "sandbox-ws-no-user"}
-	h := NewHandler(cfg.SandboxID)
-
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.HandleWS(w, r)
-	}))
-	defer s.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
-	// No X-Authenticated-User header.
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		t.Fatalf("failed to dial websocket: %v", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	var connected WSMessage
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("failed to read connected message: %v", err)
-	}
-
-	if connected.User != "" {
-		t.Errorf("expected empty user in connected message, got %q", connected.User)
 	}
 }

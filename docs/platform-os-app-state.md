@@ -136,20 +136,20 @@ Known gaps:
 
 | App | Current state | Known gaps / next realism axis |
 | --- | --- | --- |
-| **Files** | First-class file browser with navigation, upload, text-to-VText open, and known media routing to Image/Audio/Video/PDF/EPUB apps. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries. |
+| **Files** | First-class file browser with navigation, upload, text-to-VText open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
 | **VText** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. | Continue flicker/focus/coexistence hardening, especially while Trace or live updates are open. Improve document/read surfaces without mixing worker patches directly into canonical text. |
 | **Trace** | Evidence app for trajectories, runs, summaries, timelines, inspectors, search/provider stats, and run-acceptance surfaces. | Eliminate confusing multi-scroll layouts on mobile except bounded code/payload blocks. Make run/candidate/promotion evidence easier to drill into on desktop and mobile. |
 | **Web Lens / Browser** | Browser-style URL input with backend Web Lens snapshots when authenticated/configured and iframe fallback for guest/external pages. | Backend control/screenshot support remains a distinct substrate frontier. Browser should remain an app, not a bypass around product APIs. |
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
-| **Settings** | Account, runtime health, theme presets/editing, and promotion queue controls. | Theme system needs taste/design hardening. Promotion/candidate surfaces should become contextual rather than manual/debug-first. |
-| **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. It is available from the launcher and Settings. | Add event-backed trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Candidate Desktop** | Preview surface for candidate VM desktops. | Candidate/promotion cards should appear from current run/Trace context instead of requiring manual IDs. |
-| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and local playback-position persistence. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
+| **Settings** | Account, runtime health, server-backed theme presets/editing, and promotion queue controls. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Promotion/candidate surfaces should become contextual rather than manual/debug-first. Runtime health still needs a true push source rather than opportunistic event refreshes. |
+| **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
+| **Candidate Desktop** | Preview surface for candidate VM desktops. Candidate queue refresh UI has been removed in favor of live promotion events. | Candidate/promotion cards should appear from current run/Trace context instead of requiring manual IDs. |
+| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
-| **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, and local playback-position persistence. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
-| **Video** | First-class app for native video and YouTube embeds. Native video has custom/native controls, speed/seek, and local playback-position persistence. | Add fullscreen/theater fit, captions/subtitles, transcript/VText hook, playlist/folder navigation, and consistent YouTube/native control surfaces. |
-| **PDF** | Real reader path using PDF.js: browser-fetchable PDFs render to canvas pages with actual page count, page navigation, zoom/fit width/fit page, and text search. Files/prompt routes can open the PDF app. | Add thumbnails/outline, annotations, richer text selection, and server-side/import fallback for CORS-blocked remote PDFs. |
-| **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, and local reading-position persistence. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and VText/transclusion handoff. |
+| **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
+| **Video** | First-class app for native video and YouTube embeds. Native video has custom/native controls, speed/seek, server-backed recents, and server-backed playback-position sync. | Add fullscreen/theater fit, captions/subtitles, transcript/VText hook, playlist/folder navigation, and consistent YouTube/native control surfaces. |
+| **PDF** | Real reader path using PDF.js: browser-fetchable PDFs render to canvas pages with actual page count, page navigation, zoom/fit width/fit page, text search, and server-backed recents. Files/prompt routes can open the PDF app. | Add thumbnails/outline, annotations, richer text selection, and server-side/import fallback for CORS-blocked remote PDFs. |
+| **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, server-backed recents, and server-backed reading-position sync. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and VText/transclusion handoff. |
 | **ContentViewer** | Legacy generic content surface still exists in code but is not the place to add media behavior. | Do not put new app work here. Retain only as fallback/dispatcher/inspector until it can be safely retired or narrowed. |
 
 ## App Boundary Rules
@@ -157,7 +157,7 @@ Known gaps:
 - A user-facing capability should have one obvious app owner.
 - Podcast, Image, Audio, Video, PDF, and EPUB are separate apps.
 - Shared code may exist only as subordinate helpers: source URL resolution,
-  MIME/extension routing, time formatting, persisted-state helpers, transport
+  MIME/extension routing, time formatting, product-backed persisted-state helpers, transport
   controls, viewport math, and safe parsing utilities.
 - Do not revive a generic `MediaFileApp` or grow `ContentViewer` into an
   everything-viewer.
@@ -168,6 +168,21 @@ Known gaps:
   not at the top of ordinary app workflows.
 - No fake readers, fake transclusion panels, fake media players, fake candidate
   cards, or JSON-only success records.
+
+## Live State Rules
+
+- User-computer state that must follow a user across devices belongs in
+  product APIs backed by embedded Dolt, not browser storage.
+- `/api/ws` is the owner/computer-scoped notification and catch-up fabric for
+  product events. It is not canonical storage.
+- Browser localStorage/sessionStorage must not be used for synced media
+  progress, media recents, desktop/window state, theme state, Files listings,
+  or candidate/promotion queues.
+- Product apps should not expose manual Refresh/Reload controls to repair
+  stale data. Browser page reload remains a browser app navigation command, not
+  Choir state synchronization.
+- Existing VText and Trace SSE streams remain valid scoped transports where
+  they preserve stronger revision/trajectory catch-up semantics.
 
 ## Current Proof Anchors
 

@@ -148,8 +148,10 @@ All built from the same Go module in `go-choir`, different `cmd/` entry points:
 - Handles both auth flows (talks to auth service) and desktop/app flows (talks to proxy → sandbox)
 - Pretext (`@chenglou/pretext`) used for vtext editor component
 - Window management (drag, resize, minimize, maximize, z-ordering) implemented client-side
-- Real-time: SSE for status streams, WebSocket for interactive sessions
-- Communicates exclusively via JSON API and WebSocket
+- Real-time: `/api/ws` is the authenticated user-computer live bus for
+  owner/computer-scoped product events; VText and Trace may keep scoped SSE
+  streams where document/trajectory catch-up semantics are stronger
+- Communicates exclusively via JSON API, WebSocket, and scoped SSE streams
 
 ### 2.6 Mapping Summary: Current → Unified
 
@@ -479,8 +481,8 @@ const (
 | Request routing to VMs | **proxy** service | Maps authenticated user → correct sandbox VM via vmctl registry |
 | Window management | **Svelte SPA** (browser) | Drag, resize, minimize, maximize, z-ordering — all client-side |
 | App rendering | **Svelte SPA** (browser) | Reactive UI, component rendering |
-| Real-time updates | **Svelte SPA** (browser) ↔ **sandbox** (via proxy) | SSE/WebSocket through proxy to sandbox |
-| Desktop state persistence | **sandbox** | Window state, app state stored in sandbox's Dolt database |
+| Real-time updates | **Svelte SPA** (browser) ↔ **sandbox** (via proxy) | `/api/ws` owner/computer live bus plus scoped VText/Trace SSE |
+| Desktop state persistence | **sandbox** | Window state, app state, media progress/recents, and theme state stored in sandbox's Dolt database |
 
 **Key interfaces** (within the sandbox):
 
@@ -585,6 +587,14 @@ Note: Dolt supports normal SQL writes without committing. You can INSERT/UPDATE 
 - **Each service owns its own database**: No shared database across services. Services communicate via internal HTTP APIs, not shared state.
 - **No event store actor**: The choiros-rs pattern of an `EventStoreActor` wrapping a database is unnecessary — Go's `database/sql` with proper transaction handling provides the same sequential write guarantee.
 - **Event log preserved**: Append-only `events` table in the sandbox's Dolt is the canonical audit trail. All significant state changes emit events.
+- **WebSocket is notification, not truth**: durable product APIs write Dolt
+  first, then append owner/computer-scoped events. `/api/ws` delivers those
+  events and supports sequence catch-up; clients refetch product projections
+  rather than treating websocket payloads as canonical state.
+- **Browser storage is not computer state**: synced desktop/window state, media
+  progress, media recents, theme state, Files listings, and promotion/candidate
+  queues belong in Dolt-backed product APIs. localStorage/sessionStorage are not
+  compatibility stores for those surfaces.
 
 **Dolt schema within sandbox**: Merges the table schemas adapted from cogent (sessions, jobs, turns, events, work_items, work_edges, attestation_records, etc.) with vtext tables (documents, content, citations, metadata) and desktop state tables (windows, app registrations). The SQLite CRUD patterns from cogent are adapted to Dolt's MySQL-compatible SQL dialect (driver changes from `modernc.org/sqlite` to `dolthub/driver`). Migration: additive schema evolution (CREATE TABLE IF NOT EXISTS).
 

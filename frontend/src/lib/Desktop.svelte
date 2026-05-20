@@ -26,6 +26,7 @@
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
+  import { dispatchLiveEvent, isOwnLiveEvent } from './live-events.js';
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
   import BottomBar from './BottomBar.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
@@ -87,8 +88,6 @@
   let bootstrapData = null;
   let bootstrapError = '';
   let bootstrapStable = false;
-  let refreshing = false;
-  let refreshStatus = '';
   let desktopReady = false;
   let promptPlaceholder = 'Connecting to desktop...';
   let promptStatus = '';
@@ -104,6 +103,7 @@
   let wsClosedByLogout = false;
   let wsReconnectAttempt = 0;
   let wsReconnecting = false;
+  let lastLiveStreamSeq = 0;
   const MAX_WS_RECONNECT_ATTEMPTS = 5;
   const WS_RECONNECT_BASE_DELAY = 1000;
   let toasts = [];
@@ -200,8 +200,6 @@
     bootstrapData = null;
     bootstrapError = '';
     bootstrapStable = true;
-    refreshing = false;
-    refreshStatus = '';
     stateLoaded = true;
     desktopReady = true;
     bootLines = [];
@@ -231,7 +229,6 @@
     bootStartedAt = Date.now();
     bootPromptPlaceholder = 'Booting user computer...';
     bootstrapError = '';
-    refreshStatus = '';
     promptStatus = '';
     wsClosedByLogout = false;
     restoreRecovery = null;
@@ -321,6 +318,12 @@
             restoreRecoveryStatus = '';
             setWindows(restoredWindows, state.active_window_id || '');
           }
+        } else {
+          restoreRecovery = null;
+          restoreRecoveryWindows = [];
+          restoreRecoveryActiveId = '';
+          restoreRecoveryStatus = '';
+          setWindows([], '');
         }
       }
     } catch (err) {
@@ -753,32 +756,6 @@
     }
   }
 
-  async function handleRefresh() {
-    if (!authenticated) {
-      requestAuth({ kind: 'refresh' });
-      return;
-    }
-    refreshing = true;
-    refreshStatus = '';
-    bootstrapError = '';
-    try {
-      const stable = await stabilizeBootstrap();
-      if (!stable) {
-        refreshStatus = 'Refresh failed';
-        return;
-      }
-      refreshStatus = 'Session renewed';
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      refreshStatus = 'Refresh failed';
-    } finally {
-      refreshing = false;
-    }
-  }
-
   // ---- Live channel (WebSocket) ----
 
   function connectLiveChannel() {
@@ -786,13 +763,16 @@
     liveStatus.set('connecting');
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = withDesktopSelector(`${protocol}//${window.location.host}/api/ws`);
+      const baseUrl = `${protocol}//${window.location.host}/api/ws`;
+      const wsUrl = withDesktopSelector(lastLiveStreamSeq > 0 ? `${baseUrl}?after_seq=${lastLiveStreamSeq}` : baseUrl);
       ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         liveStatus.set('connected');
         wsReconnectAttempt = 0;
       };
-      ws.onmessage = () => {};
+      ws.onmessage = (event) => {
+        handleLiveMessage(event.data);
+      };
       ws.onerror = () => {
         liveStatus.set('error');
       };
@@ -806,6 +786,32 @@
       };
     } catch (_err) {
       liveStatus.set('error');
+    }
+  }
+
+  function handleLiveMessage(raw) {
+    let message;
+    try {
+      message = JSON.parse(raw);
+    } catch (_err) {
+      return;
+    }
+    if (message?.type === 'event') {
+      if (Number.isFinite(Number(message.stream_seq))) {
+        lastLiveStreamSeq = Math.max(lastLiveStreamSeq, Number(message.stream_seq));
+      }
+      dispatchLiveEvent(message);
+      if (message.kind === 'desktop.state.updated' && !isOwnLiveEvent(message)) {
+        void loadDesktopState();
+      }
+      return;
+    }
+    if (message?.type === 'ping' && ws?.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'ack', stream_seq: lastLiveStreamSeq }));
+      } catch (_err) {
+        // The close handler owns reconnect decisions.
+      }
     }
   }
 

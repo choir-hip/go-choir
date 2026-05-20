@@ -4,8 +4,9 @@
   Svelte shell is still loaded from the current frontend origin.
 -->
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
 
   export let appContext = {};
 
@@ -16,6 +17,7 @@
   let loading = true;
   let error = '';
   let candidates = [];
+  let removeLiveListener = () => {};
 
   $: normalizedDesktopId = String(desktopId || '').trim();
   $: candidateSrc = normalizedDesktopId
@@ -79,6 +81,22 @@
 
   onMount(() => {
     void refreshCandidates();
+    removeLiveListener = addLiveEventListener((message) => {
+      const kind = liveEventKind(message);
+      if (
+        kind === 'promotion.candidate.queued' ||
+        kind === 'promotion.candidate.verified' ||
+        kind === 'promotion.candidate.failed' ||
+        kind === 'promotion.candidate.promoted' ||
+        kind === 'promotion.candidate.reviewed'
+      ) {
+        void refreshCandidates();
+      }
+    });
+  });
+
+  onDestroy(() => {
+    removeLiveListener();
   });
 </script>
 
@@ -92,14 +110,6 @@
       <strong>Candidate Desktop</strong>
       <span>Open queued candidate worlds without copying raw IDs.</span>
     </div>
-    <button
-      class="refresh-btn"
-      data-candidate-desktop-refresh
-      on:click={refreshCandidates}
-      disabled={loading}
-    >
-      {loading ? 'Checking…' : 'Refresh'}
-    </button>
   </header>
 
   <div class="viewer-body">
@@ -359,8 +369,7 @@
     padding: 7px 8px;
   }
 
-  .open-btn,
-  .refresh-btn {
+  .open-btn {
     min-height: 34px;
     border: 1px solid rgba(96, 165, 250, 0.38);
     border-radius: 4px;
@@ -379,8 +388,7 @@
     margin-top: 8px;
   }
 
-  .open-btn:disabled,
-  .refresh-btn:disabled {
+  .open-btn:disabled {
     cursor: not-allowed;
     opacity: 0.5;
   }

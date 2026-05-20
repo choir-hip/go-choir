@@ -294,6 +294,32 @@ const (
 	// user-authored save through the document API. The payload includes doc_id,
 	// revision_id, and current_revision_id so the editor can follow head changes.
 	EventVTextDocumentRevisionCreated EventKind = "vtext.document_revision.created"
+
+	// EventDesktopStateUpdated is emitted when a user's persisted desktop
+	// workspace changes.
+	EventDesktopStateUpdated EventKind = "desktop.state.updated"
+
+	// EventContentItemCreated is emitted when a durable content item is created.
+	EventContentItemCreated EventKind = "content.item.created"
+
+	// EventMediaProgressUpdated is emitted when media playback or reading
+	// progress is persisted.
+	EventMediaProgressUpdated EventKind = "media.progress.updated"
+
+	// EventMediaRecentUpdated is emitted when a media app records a recently
+	// opened source.
+	EventMediaRecentUpdated EventKind = "media.recent.updated"
+
+	// EventThemeUpdated is emitted when a user's theme preference changes.
+	EventThemeUpdated EventKind = "theme.updated"
+
+	// EventFileChanged is emitted when the authenticated Files surface creates,
+	// updates, or deletes a file-system entry.
+	EventFileChanged EventKind = "file.changed"
+
+	// EventComputerStatusUpdated is emitted when a user-scoped computer status
+	// snapshot changes.
+	EventComputerStatusUpdated EventKind = "computer.status.updated"
 )
 
 // EventRecord represents a single runtime event emitted during run execution

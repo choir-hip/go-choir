@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
@@ -7,11 +7,13 @@
     loadRecentMedia,
     loadMediaPosition,
     loadContextContentItem,
+    mediaSourceIdentity,
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
     saveMediaPosition,
   } from './media-utils.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let appContext = {};
   export let windowId = '';
@@ -30,12 +32,26 @@
   let restoredPosition = false;
   let selectedContext = null;
   let recentFiles = [];
+  let rememberedIdentity = '';
+  let removeLiveListener = () => {};
 
   $: effectiveContext = selectedContext || appContext || {};
   $: source = resolveMediaSource(effectiveContext, item, kind);
   $: mediaSeekPercent = mediaDuration > 0 ? Math.min(100, Math.max(0, (mediaCurrentTime / mediaDuration) * 100)) : 0;
-  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
-    recentFiles = loadRecentMedia(kind);
+  $: sourceIdentity = mediaSourceIdentity(source);
+  $: if (source.displayUrl && sourceIdentity && sourceIdentity !== rememberedIdentity) {
+    void rememberCurrentSource();
+  }
+
+  async function refreshRecentFiles() {
+    recentFiles = await loadRecentMedia(kind);
+  }
+
+  async function rememberCurrentSource() {
+    rememberedIdentity = sourceIdentity;
+    if (await rememberRecentMedia(kind, source)) {
+      await refreshRecentFiles();
+    }
   }
 
   function setPlaybackSpeed() {
@@ -47,12 +63,12 @@
     mediaCurrentTime = Number.isFinite(mediaEl.currentTime) ? mediaEl.currentTime : 0;
     mediaDuration = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
     mediaPlaying = !mediaEl.paused;
-    saveMediaPosition(kind, source, mediaCurrentTime, mediaDuration);
+    saveMediaPosition(kind, { ...source, playbackRate: playbackSpeed }, mediaCurrentTime, mediaDuration);
   }
 
-  function restoreMediaPosition() {
+  async function restoreMediaPosition() {
     if (!mediaEl || restoredPosition) return;
-    const stored = loadMediaPosition(kind, source);
+    const stored = await loadMediaPosition(kind, source);
     const duration = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
     if (stored > 0 && (!duration || stored < duration - 2)) {
       mediaEl.currentTime = stored;
@@ -120,8 +136,26 @@
   }
 
   onMount(() => {
-    recentFiles = loadRecentMedia(kind);
+    void refreshRecentFiles();
     void loadContentItem();
+    removeLiveListener = addLiveEventListener((message) => {
+      if (liveEventKind(message) === 'media.recent.updated') {
+        if (liveEventPayload(message).kind === kind) void refreshRecentFiles();
+        return;
+      }
+      if (liveEventKind(message) !== 'media.progress.updated') return;
+      const payload = liveEventPayload(message);
+      if (payload.kind !== kind || payload.identity !== sourceIdentity || mediaPlaying) return;
+      mediaCurrentTime = Number(payload.current_time) || mediaCurrentTime;
+      mediaDuration = Number(payload.duration) || mediaDuration;
+      if (mediaEl && Math.abs((mediaEl.currentTime || 0) - mediaCurrentTime) > 3) {
+        mediaEl.currentTime = mediaCurrentTime;
+      }
+    });
+  });
+
+  onDestroy(() => {
+    removeLiveListener();
   });
 </script>
 
@@ -173,7 +207,7 @@
           <input type="range" min="0" max="100" step="0.1" value={mediaSeekPercent} on:input={seekMedia} data-media-seek data-audio-seek />
           <span data-media-duration>{formatTime(mediaDuration)}</span>
         </div>
-        <p class="audio-position-note" data-media-position-status>Playback position is saved on this device.</p>
+        <p class="audio-position-note" data-media-position-status>Playback position syncs across your devices.</p>
       </div>
       <audio
         src={source.displayUrl}

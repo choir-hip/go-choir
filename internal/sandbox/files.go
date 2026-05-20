@@ -53,26 +53,69 @@ type FileErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// FileChangeEvent is emitted after an authenticated Files mutation succeeds.
+type FileChangeEvent struct {
+	Operation  string `json:"operation"`
+	Path       string `json:"path"`
+	ParentPath string `json:"parent_path"`
+	Name       string `json:"name"`
+	EntryType  string `json:"entry_type"`
+	Size       int64  `json:"size,omitempty"`
+}
+
+// FileChangeObserver receives durable Files mutation notifications.
+type FileChangeObserver func(r *http.Request, event FileChangeEvent)
+
 // FilesHandler provides HTTP handlers for file browser operations.
 type FilesHandler struct {
-	rootDir string
+	rootDir  string
+	observer FileChangeObserver
 }
 
 // NewFilesHandler creates a new file browser handler rooted at rootDir.
 // If rootDir is empty, the SANDBOX_FILES_ROOT env var is used, falling back
 // to /tmp/go-choir-files.
 func NewFilesHandler(rootDir string) *FilesHandler {
+	return NewFilesHandlerWithObserver(rootDir, nil)
+}
+
+// NewFilesHandlerWithObserver creates a file browser handler and emits
+// mutation events to observer after successful writes.
+func NewFilesHandlerWithObserver(rootDir string, observer FileChangeObserver) *FilesHandler {
 	rootDir = ResolveFilesRoot(rootDir)
 	// Ensure root directory exists.
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		log.Printf("files: could not create root directory %s: %v", rootDir, err)
 	}
-	return &FilesHandler{rootDir: rootDir}
+	return &FilesHandler{rootDir: rootDir, observer: observer}
 }
 
 // RootDir returns the configured root directory path.
 func (fh *FilesHandler) RootDir() string {
 	return fh.rootDir
+}
+
+func (fh *FilesHandler) relativePath(absPath string) string {
+	rel, err := filepath.Rel(fh.rootDir, absPath)
+	if err != nil || rel == "." {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+func (fh *FilesHandler) emitChange(r *http.Request, event FileChangeEvent) {
+	if fh.observer == nil {
+		return
+	}
+	event.Path = strings.Trim(event.Path, "/")
+	event.ParentPath = strings.Trim(event.ParentPath, "/")
+	if event.ParentPath == "." {
+		event.ParentPath = ""
+	}
+	event.Name = strings.TrimSpace(event.Name)
+	event.Operation = strings.TrimSpace(event.Operation)
+	event.EntryType = strings.TrimSpace(event.EntryType)
+	fh.observer(r, event)
 }
 
 // resolvePath safely resolves a user-supplied relative path against the
@@ -285,6 +328,15 @@ func (fh *FilesHandler) handleCreateDirectory(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	relPath := fh.relativePath(absPath)
+	fh.emitChange(r, FileChangeEvent{
+		Operation:  "created",
+		Path:       relPath,
+		ParentPath: filepath.ToSlash(filepath.Dir(relPath)),
+		Name:       filepath.Base(absPath),
+		EntryType:  "directory",
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -297,6 +349,10 @@ func (fh *FilesHandler) handleCreateDirectory(w http.ResponseWriter, r *http.Req
 // does not exist, it is created. Parent directories must already exist.
 func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request, absPath string) {
 	info, err := os.Stat(absPath)
+	operation := "updated"
+	if os.IsNotExist(err) {
+		operation = "created"
+	}
 	if err == nil && info.IsDir() {
 		writeFileError(w, http.StatusConflict, "path is a directory")
 		return
@@ -338,6 +394,16 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		writeFileError(w, http.StatusInternalServerError, "failed to write file")
 		return
 	}
+
+	relPath := fh.relativePath(absPath)
+	fh.emitChange(r, FileChangeEvent{
+		Operation:  operation,
+		Path:       relPath,
+		ParentPath: filepath.ToSlash(filepath.Dir(relPath)),
+		Name:       filepath.Base(absPath),
+		EntryType:  "file",
+		Size:       int64(len(body)),
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -384,6 +450,20 @@ func (fh *FilesHandler) handleDelete(w http.ResponseWriter, r *http.Request, abs
 			return
 		}
 	}
+
+	entryType := "file"
+	if info.IsDir() {
+		entryType = "directory"
+	}
+	relPath := fh.relativePath(absPath)
+	fh.emitChange(r, FileChangeEvent{
+		Operation:  "deleted",
+		Path:       relPath,
+		ParentPath: filepath.ToSlash(filepath.Dir(relPath)),
+		Name:       filepath.Base(absPath),
+		EntryType:  entryType,
+		Size:       info.Size(),
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

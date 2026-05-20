@@ -29,8 +29,6 @@ export const DEFAULT_THEME = {
   },
 };
 
-export const THEME_STORAGE_KEY = 'choir.theme.v1';
-
 export const THEME_PRESETS = [
   DEFAULT_THEME,
   {

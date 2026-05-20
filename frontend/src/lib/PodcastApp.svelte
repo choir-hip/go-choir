@@ -1,8 +1,10 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { buildListenPath, formatTime, parsePodcastFeed } from './podcast.js';
+  import { loadMediaProgress, saveMediaPosition } from './media-utils.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
 
   export let appContext = {};
   export let authenticated = false;
@@ -29,6 +31,7 @@
   let playbackDuration = 0;
   let playbackError = '';
   let isPlaying = false;
+  let removeLiveListener = () => {};
 
   const recommendedPodcasts = [
     {
@@ -295,24 +298,41 @@
     dispatch('authrequired', { kind, appId: 'podcast', appName: 'Podcast' });
   }
 
-  function storageKeyForEpisode(episode = activeEpisode) {
-    return episode ? `choir-podcast-position:${episode.id}` : '';
+  function episodeProgressSource(episode = activeEpisode) {
+    return episode ? {
+      filePath: `podcast:${episode.id}`,
+      contentId: episode.id,
+      sourceUrl: episode.audioUrl || '',
+      title: episode.title || '',
+      playbackRate,
+    } : {};
   }
 
-  function selectEpisode(episode) {
+  async function selectEpisode(episode) {
     activeEpisodeId = episode.id;
-    playbackPosition = Number(localStorage.getItem(storageKeyForEpisode(episode)) || 0);
+    try {
+      const progress = await loadMediaProgress('podcast', episodeProgressSource(episode));
+      playbackPosition = Number(progress.currentTime) || 0;
+    } catch (_err) {
+      playbackPosition = 0;
+    }
     playbackDuration = 0;
     playbackError = '';
     isPlaying = false;
-    syncAudioFromStorage();
+    syncAudioFromServer();
   }
 
-  function syncAudioFromStorage() {
-    setTimeout(() => {
+  function syncAudioFromServer() {
+    setTimeout(async () => {
       if (!activeAudioEl || !activeEpisode) return;
       activeAudioEl.playbackRate = playbackSpeed;
-      const saved = Number(localStorage.getItem(storageKeyForEpisode()) || 0);
+      let saved = playbackPosition;
+      try {
+        const progress = await loadMediaProgress('podcast', episodeProgressSource());
+        saved = Number(progress.currentTime) || 0;
+      } catch (_err) {
+        saved = playbackPosition;
+      }
       if (saved && Number.isFinite(saved) && Math.abs(activeAudioEl.currentTime - saved) > 3) {
         activeAudioEl.currentTime = saved;
       }
@@ -324,7 +344,7 @@
     if (!activeAudioEl || !activeEpisode) return;
     playbackPosition = activeAudioEl.currentTime || 0;
     playbackDuration = Number.isFinite(activeAudioEl.duration) ? activeAudioEl.duration : 0;
-    localStorage.setItem(storageKeyForEpisode(), String(Math.floor(playbackPosition)));
+    saveMediaPosition('podcast', episodeProgressSource(), playbackPosition, playbackDuration);
   }
 
   async function togglePlayback() {
@@ -366,7 +386,26 @@
     if (activeAudioEl) activeAudioEl.playbackRate = playbackSpeed;
   }
 
-  onMount(loadInitialState);
+  onMount(() => {
+    void loadInitialState();
+    removeLiveListener = addLiveEventListener((message) => {
+      const kind = liveEventKind(message);
+      if (kind === 'content.item.created' && !item) {
+        void loadLibrary({ force: true });
+      }
+      if (kind === 'media.progress.updated' && activeEpisode?.id) {
+        const payload = message.payload || {};
+        if (payload.kind === 'podcast' && payload.identity === `podcast:${activeEpisode.id}` && !isPlaying) {
+          playbackPosition = Number(payload.current_time) || playbackPosition;
+          playbackDuration = Number(payload.duration) || playbackDuration;
+        }
+      }
+    });
+  });
+
+  onDestroy(() => {
+    removeLiveListener();
+  });
 </script>
 
 <section class="podcast-app" data-media-app data-media-kind="podcast" data-podcast-app data-content-app="podcast">
@@ -518,7 +557,7 @@
             src={activeEpisode.audioUrl}
             preload="metadata"
             bind:this={activeAudioEl}
-            on:loadedmetadata={syncAudioFromStorage}
+            on:loadedmetadata={syncAudioFromServer}
             on:durationchange={savePlaybackProgress}
             on:timeupdate={savePlaybackProgress}
             on:play={() => isPlaying = true}

@@ -23,6 +23,7 @@
     submitAgentRevision,
     submitPublicationProposal,
   } from './vtext.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
 
   export let currentUser = null;
   export let appContext = {};
@@ -64,6 +65,7 @@
   let publishedProposal = null;
   let publishedActionPending = false;
   let publishResult = null;
+  let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
 
@@ -1132,11 +1134,22 @@
       initializedKey = contextKey;
       loadContext();
     }
+    removeLiveListener = addLiveEventListener((message) => {
+      const kind = liveEventKind(message);
+      if (
+        showRecent &&
+        (kind === 'vtext.document_revision.created' ||
+          kind === 'vtext.agent_revision.completed')
+      ) {
+        void loadRecentDocuments();
+      }
+    });
   });
 
   onDestroy(() => {
     clearAutosaveTimer();
     closeDocumentStream();
+    removeLiveListener();
   });
 </script>
 
@@ -1152,9 +1165,6 @@
       <div class="recent-actions">
         <button class="primary-action" data-vtext-new-document on:click={handleNewDocument} disabled={loading || recentLoading}>
           New document
-        </button>
-        <button class="ghost-action" on:click={loadRecentDocuments} disabled={recentLoading}>
-          {recentLoading ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
@@ -1437,8 +1447,7 @@
   .prompt-btn,
   .secondary-action,
   .update-pill,
-  .primary-action,
-  .ghost-action {
+  .primary-action {
     border: 1px solid rgba(96, 165, 250, 0.28);
     background: rgba(15, 23, 42, 0.82);
     color: #e0ecff;
@@ -1633,8 +1642,7 @@
     flex-wrap: wrap;
   }
 
-  .primary-action,
-  .ghost-action {
+  .primary-action {
     border-radius: 999px;
     padding: 0.62rem 0.9rem;
     font-weight: 750;
@@ -1721,8 +1729,7 @@
   .prompt-btn:hover:enabled,
   .secondary-action:hover:enabled,
   .update-pill:hover:enabled,
-  .primary-action:hover:enabled,
-  .ghost-action:hover:enabled {
+  .primary-action:hover:enabled {
     transform: translateY(-1px);
     background: rgba(30, 41, 59, 0.92);
     border-color: rgba(96, 165, 250, 0.42);
@@ -1732,8 +1739,7 @@
   .prompt-btn:disabled,
   .secondary-action:disabled,
   .update-pill:disabled,
-  .primary-action:disabled,
-  .ghost-action:disabled {
+  .primary-action:disabled {
     opacity: 0.46;
     cursor: not-allowed;
   }

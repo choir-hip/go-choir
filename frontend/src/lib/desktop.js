@@ -15,6 +15,7 @@
  */
 
 import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+import { currentDeviceId } from './live-events.js';
 
 // ---------------------------------------------------------------------------
 // Desktop state fetch
@@ -69,7 +70,10 @@ export async function saveDesktopState(state, options = {}) {
   });
   const res = await fetchWithRenewal('/api/desktop/state', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Choir-Device': currentDeviceId(),
+    },
     keepalive: options.keepalive === true && body.length < 60_000,
     body,
   });

@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -30,31 +29,15 @@ type ErrorResponse struct {
 	Error      string `json:"error"`
 }
 
-// WSMessage is a simple JSON message echoed over the WebSocket channel.
-type WSMessage struct {
-	SandboxID string `json:"sandbox_id"`
-	User      string `json:"user,omitempty"`
-	Type      string `json:"type"`
-	Payload   string `json:"payload"`
-}
-
-// Handler provides the placeholder sandbox HTTP and WebSocket handlers.
+// Handler provides the placeholder sandbox HTTP handlers.
 type Handler struct {
-	cfg      Config
-	upgrader websocket.Upgrader
+	cfg Config
 }
 
 // NewHandler creates a sandbox handler with the given sandbox ID.
 func NewHandler(sandboxID string) *Handler {
 	return &Handler{
 		cfg: Config{SandboxID: sandboxID},
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				// Allow all origins for the placeholder sandbox; the proxy
-				// is the trust boundary for origin validation.
-				return true
-			},
-		},
 	}
 }
 
@@ -97,54 +80,12 @@ func (h *Handler) HandleError(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleWS upgrades the connection to WebSocket and echoes messages back.
-// It also sends an initial connected message with the sandbox identity and
-// user context on successful upgrade.
-func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
-	user := r.Header.Get("X-Authenticated-User")
-
-	conn, err := h.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
-	}
-	defer func() { _ = conn.Close() }()
-
-	// Send initial connected message with sandbox identity and user context.
-	connected := WSMessage{
-		SandboxID: h.cfg.SandboxID,
-		User:      user,
-		Type:      "connected",
-		Payload:   "websocket channel open",
-	}
-	if err := conn.WriteJSON(connected); err != nil {
-		return
-	}
-
-	// Echo loop: read messages and echo them back with sandbox context.
-	for {
-		var msg WSMessage
-		if err := conn.ReadJSON(&msg); err != nil {
-			break
-		}
-		echo := WSMessage{
-			SandboxID: h.cfg.SandboxID,
-			User:      user,
-			Type:      "echo",
-			Payload:   msg.Payload,
-		}
-		if err := conn.WriteJSON(echo); err != nil {
-			break
-		}
-	}
-}
-
 // RegisterRoutes registers all sandbox routes on the given server.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)
 	if sandboxTestRoutesEnabled() {
 		s.HandleFunc("/api/shell/error", h.HandleError)
 	}
-	s.HandleFunc("/api/ws", h.HandleWS)
 }
 
 func sandboxTestRoutesEnabled() bool {

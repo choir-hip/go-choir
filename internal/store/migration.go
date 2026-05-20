@@ -23,6 +23,9 @@ var runtimeTables = []string{
 	"browser_sessions",
 	"research_findings",
 	"worker_updates",
+	"media_progress",
+	"media_recents",
+	"user_preferences",
 	"desktop_state",
 	"desktop_workspaces",
 }

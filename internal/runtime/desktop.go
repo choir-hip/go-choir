@@ -173,6 +173,13 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save desktop state"})
 		return
 	}
+	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopStateUpdated, map[string]any{
+		"desktop_id":       desktopID,
+		"active_window_id": activeWindowID,
+		"window_count":     len(windows),
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+	})
 
 	writeAPIJSON(w, http.StatusOK, desktopStateSaveResponse{
 		OK:        true,

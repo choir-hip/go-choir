@@ -5,10 +5,12 @@
     clampNumber,
     loadRecentMedia,
     loadContextContentItem,
+    mediaSourceIdentity,
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
   } from './media-utils.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let appContext = {};
   export let windowId = '';
@@ -42,13 +44,26 @@
   let resizeObserver = null;
   let selectedContext = null;
   let recentFiles = [];
+  let rememberedIdentity = '';
 
   $: effectiveContext = selectedContext || appContext || {};
   $: source = resolveMediaSource(effectiveContext, item, kind);
   $: sourceKey = source.displayUrl || '';
   $: pageLabel = pageCount ? `${pdfPage} / ${pageCount}` : String(pdfPage);
-  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
-    recentFiles = loadRecentMedia(kind);
+  $: sourceIdentity = mediaSourceIdentity(source);
+  $: if (source.displayUrl && sourceIdentity && sourceIdentity !== rememberedIdentity) {
+    void rememberCurrentSource();
+  }
+
+  async function refreshRecentFiles() {
+    recentFiles = await loadRecentMedia(kind);
+  }
+
+  async function rememberCurrentSource() {
+    rememberedIdentity = sourceIdentity;
+    if (await rememberRecentMedia(kind, source)) {
+      await refreshRecentFiles();
+    }
   }
 
   function sourceFetchOptions(url) {
@@ -288,7 +303,7 @@
   }
 
   onMount(() => {
-    recentFiles = loadRecentMedia(kind);
+    void refreshRecentFiles();
     void loadContentItem();
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
@@ -296,7 +311,13 @@
       });
       if (stageEl) resizeObserver.observe(stageEl);
     }
+    const removeLiveListener = addLiveEventListener((message) => {
+      if (liveEventKind(message) === 'media.recent.updated' && liveEventPayload(message).kind === kind) {
+        void refreshRecentFiles();
+      }
+    });
     return () => {
+      removeLiveListener();
       resizeObserver?.disconnect();
       if (pinchZoomFrame) cancelAnimationFrame(pinchZoomFrame);
     };
