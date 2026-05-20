@@ -337,7 +337,9 @@ function findDelegateBlocker(traceDiag) {
 
 function packageMatchesLane(pkg, lane) {
   const haystack = JSON.stringify(pkg || {}).toLowerCase();
-  return haystack.includes(lane.marker.toLowerCase()) || haystack.includes(lane.appID.toLowerCase());
+  return [lane.marker, lane.appID, lane.name]
+    .filter(Boolean)
+    .some((needle) => haystack.includes(String(needle).toLowerCase()));
 }
 
 async function listLanePackages(page, lanes) {

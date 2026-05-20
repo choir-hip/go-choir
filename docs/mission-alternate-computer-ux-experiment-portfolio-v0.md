@@ -1,7 +1,8 @@
 # MissionGradient: Alternate Computer UX Experiment Portfolio v0
 
 **Status:** checkpoint_incomplete; Wave 0 package/adoption checkpoint proven,
-Wave 1 worker-local package publication/product-visibility blocker recorded
+Wave 1 Chiron/animation owner-pullable package/adoption checkpoint proven,
+Liquid and Python lanes still pending
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -37,7 +38,7 @@ candidate/background computers where healthy
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint and the Wave 1 finding that worker-published package summaries can reach Trace before they become product-visible/owner-pullable. First repair or precisely isolate that package-visibility boundary, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, adopt, or promote tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint and the Wave 1 staging checkpoint at 74230a3 where the worker-package visibility boundary was repaired enough for Chiron Shelf and process/window animation packages to become product-visible, owner-pullable, verified, and promoted in a recipient computer. Continue the portfolio by producing the remaining custom Choir Liquid Material Engine and Python code mode A/B experiment computers/packages, while preserving the Chiron/animation evidence and tightening duplicate package identity if it recurs. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope unless it already works, and it is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, adopt, or promote tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -607,13 +608,12 @@ Latest checkpoint:
 ```text
 status: checkpoint_incomplete
 last checkpoint: Wave 1 two-lane prompt-bar probe reran on deployed staging at
-  f11e848 after the candidate-ref/delegation propagation fix. The old
-  `candidate_source_ref must be a candidate ref` failure moved uphill:
-  worker/vsuper runs now produced AppChangePackage summaries in Trace/delegate
-  evidence, but the Playwright product API path could not list or adopt those
-  packages through `/api/app-change-packages` after a 40-minute wait. Current
-  blocker: package evidence is worker-local/Trace-visible, not yet
-  product-visible and owner-pullable.
+  74230a3 after the package visibility/pull-path fix. The previous f11e848
+  blocker moved uphill: worker/vsuper AppChangePackages are now mirrored into
+  the active product package store, can be pulled by a recipient computer
+  through `/api/app-change-packages/pull`, and can be verified/promoted through
+  the current adoption APIs. Chiron and animation are owner-pullable
+  checkpoints; Liquid Material Engine and Python code mode remain to be run.
 current artifact state: four-lane experiment portfolio defined; Wave 0 proved
   AppChangePackage -> adoption -> actual recipient Go/Svelte build -> promote
   through staging product APIs. The review invariant is now owner-pullable
@@ -643,7 +643,12 @@ what shipped: preflight substrate hard-cut landed before this mission; during
   `request_worker_vm` result, maps worker Git candidate branches into
   `source_ledger_candidate_ref` while allowing canonical product
   `candidate_source_ref` generation, and hardens run-status tests that had
-  timing-sensitive sleeps.
+  timing-sensitive sleeps. Commit 74230a3 adds the product-safe worker package
+  visibility path: worker-published AppChangePackages are fetched through
+  internal worker runtime package endpoints, mirrored into the active runtime
+  store, and made pullable across computers through
+  `/api/app-change-packages/pull`. It also updates the mission doc to make
+  package mobility, not alternate-account login, the owner QA path.
 what was proven:
   - old export_patchset and /api/promotions paths are invalid acceptance paths
   - current acceptance path is AppChangePackage/adoption/recipient build
@@ -690,6 +695,30 @@ what was proven:
       portfolio-animation-language-alt-portfolio-wave1-1779282590489
   - staging identity for f11e848 was verified through `/health`, with CI run
     26164257461 and Node B deploy success before the Wave 1 probe
+  - deployed Wave 1 owner-pullable proof at 74230a3 passed on staging in
+    29.4 minutes, using marker alt-portfolio-wave1-1779288477047 and evidence:
+    test-results/alternate-portfolio-wave1-deployed-74230a3-20260520T1447/alternate-portfolio-wave1-evidence.json
+  - Chiron Shelf observability produced product-visible package
+    f2fe930b-6477-4146-ac9c-b5161c193dea for app
+    portfolio-chiron-shelf-alt-portfolio-wave1-1779288477047, status
+    published_unlisted, manifest
+    91138f28ff1433618f92de9234512cccdbf78d1cf4661928cdb2670eba1a7479.
+    Recipient adoption adoption-owner-review-chiron-alt-portfolio-wave1-1779288477047
+    verified and promoted with status 200.
+  - Process/window/agent animation produced product-visible package
+    4fb2d440-6db4-4c7e-8154-291fafaa0047 for app
+    portfolio-animation-language-alt-portfolio-wave1-1779288477047, status
+    published_unlisted, manifest
+    776a4264bc29400d28d74f3a8cf0fb296d6ea51586cd6676fa606126954a27b7.
+    Recipient adoption adoption-owner-review-animation-alt-portfolio-wave1-1779288477047
+    verified and promoted with status 200. A second animation package
+    8ea326a4-2343-42e7-8edd-64ca3d9890dc was also published for the same lane,
+    so duplicate package identity remains a quality issue even though the owner
+    pull/adoption path passed.
+  - Wave 1 74230a3 used no forbidden browser requests, wrote durable VText
+    evidence doc ef3c2192-0352-406e-aa4c-048fbbc4a633 and revision
+    1b9f77f5-6af4-4709-a86c-5a8c7a283878, and recorded deployed_commit
+    74230a388ce1d2ff947867ae8059c86dee0b3086 in the evidence packet.
   - focused local regression tests pass inside the repo Nix dev shell:
     nix develop .# --command go test -count=1 ./internal/runtime -run
     'TestDelegateWorkerVM(FollowsCompletedVSuperChildrenBeforeReturning|MarksCompletedVSuperWithoutExportOrUpdateIncomplete|MarksPackageRequiredVSuperWithoutPackageIncomplete|ReturnsFailedRunEvidence|ReturnsTimeoutRunEvidence)'
@@ -703,49 +732,39 @@ what was proven:
   - virtual-authenticator passkeys are not manually transferable, but that is
     no longer a mission blocker when package pull/adoption/promotion evidence is durable
 unproven or partial claims:
-  - owner-pull/adoption/promotion into ymnath@choir-ip.com or another owner-controlled
-    active computer for a real experiment package
-  - product-visible canonical package records for worker/vsuper-published
-    packages; Trace-visible summaries are not enough
-  - exactly one migrating AppChangePackage identity per lane; Chiron currently
-    produced duplicate worker-local packages during Wave 1
-  - Choir-in-Choir two-lane concurrency reached prompt/Trace/VText/package
-    summary evidence, but owner-pull/adoption/promotion is still blocked at package
-    visibility/mirroring
+  - owner-pull/adoption/promotion into ymnath@choir-ip.com specifically; the
+    74230a3 proof used a newly registered recipient product account, which is
+    acceptable substrate evidence but not yet the owner's personal QA pull
+  - exactly one migrating AppChangePackage identity per lane; animation
+    produced a duplicate product-visible package during Wave 1
+  - Choir-in-Choir two-lane concurrency has now reached owner-pull/adoption for
+    Chiron and animation, but Liquid and Python lanes remain unrun
   - mobile Safari liquid material feasibility
   - Python mode A/B implementation and benchmark
   - run acceptance remains promotion-level/blocked for Wave 0 because
     product_path_observed and worker_mutation_bounded are intentionally strict
     for this synthetic package checkpoint
 remaining error field:
-  - `publish_app_change_package` inside worker/vsuper appears to write the
-    package into the worker runtime/store; `delegate_worker_vm` can collect the
-    package summary from worker events, but the active product runtime queried
-    by `/api/app-change-packages` cannot list or adopt it
-  - package evidence needs a product-visible mirror/import path that preserves
-    full source deltas/contracts/provenance without stuffing large deltas into
-    Trace/tool outputs
-  - Chiron duplicate package publication/export behavior remains and should be
-    corrected before the portfolio claims clean one-lane package identity
+  - duplicate package publication/export behavior remains and should be
+    corrected if it recurs before the portfolio claims clean one-lane package
+    identity
   - persistent super serializes concurrent lane work enough that animation can
     lag behind Chiron under bounded proof windows
   - owner pull/adoption/promotion UX and evidence path for tomorrow's manual QA remains
-    unproven for real experiment packages because no real Wave 1 package is
-    product-visible through the canonical package/adoption APIs
+    unproven specifically for ymnath@choir-ip.com, though it is proven through
+    a fresh recipient product account
   - evidence synthesis across alternate computers
 highest-impact remaining uncertainty:
-  - Can worker/vsuper-published AppChangePackages be mirrored or imported into
-    the canonical product runtime store with full source deltas and ownership
-    intact, so the owner can inspect, pull, adopt, or promote them through the
-    existing product APIs?
+  - Can the same owner-pullable package path carry the remaining Liquid Material
+    Engine and Python code mode experiments with real screenshots/video and
+    benchmarks, while avoiding duplicate package identities?
 next executable probe:
-  - Add a product-safe worker package visibility path: fetch full package
-    details from the worker runtime through an internal worker endpoint or
-    equivalent controlled channel, mirror/upsert them into the active product
-    runtime store with the correct owner/source refs, mark delegate results
-    incomplete when mirroring fails for package-required work, add focused
-    tests proving active-store list/detail/adoption can see worker packages,
-    then land through git/CI/deploy and rerun Wave 1.
+  - Run the next two-lane portfolio wave for custom Choir Liquid Material
+    Engine and Python code mode A/B through the same product prompt-bar and
+    owner-pull/adoption proof path. Preserve Chiron/animation package refs as
+    checkpoints, add screenshots/video/benchmarks where relevant, and treat any
+    duplicate package publication as a quality blocker to investigate rather
+    than a success condition.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:
@@ -754,13 +773,20 @@ evidence artifact refs:
   - test-results/alternate-portfolio-wave1-deployed/alternate-portfolio-wave1-evidence.json
   - test-results/alternate-portfolio-wave1-diagnostics-a0a4d6c-20260520T1216/alternate-portfolio-wave1-evidence.json
   - test-results/alternate-portfolio-wave1-deployed-f11e848-20260520T1310/alternate-portfolio-wave1-evidence.json
+  - test-results/alternate-portfolio-wave1-deployed-74230a3-20260520T1447/alternate-portfolio-wave1-evidence.json
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/alternate-portfolio-wave1-source-desktop.png
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/trace.zip
 rollback refs:
   - previous_active_source_ref
     refs/computers/target-computer-alt-portfolio-wave0-1779270395944/active-foreground-tail-alt-portfolio-wave0-1779270395944
-  - Wave 1 made no active-computer promotion and produced no product-visible
-    package/adoption rollback refs
+  - Wave 1 74230a3 Chiron rollback refs:
+    adoption-owner-review-chiron-alt-portfolio-wave1-1779288477047
+    previous_active_source_ref
+    refs/computers/owner-review-chiron-alt-portfolio-wave1-1779288477047/active-foreground-tail-alt-portfolio-wave1-1779288477047
+  - Wave 1 74230a3 animation rollback refs:
+    adoption-owner-review-animation-alt-portfolio-wave1-1779288477047
+    previous_active_source_ref
+    refs/computers/owner-review-animation-alt-portfolio-wave1-1779288477047/active-foreground-tail-alt-portfolio-wave1-1779288477047
 learning log:
   - Evidence gates prevented a fake direct-login claim: Playwright passkey
     accounts are real product accounts but their credentials are trapped in the
@@ -784,4 +810,8 @@ learning log:
     worker-local. The right auth solution is still package mobility; the next
     substrate fix should make the package product-visible, not make source
     experiment accounts loginable.
+  - The 74230a3 rerun validated that package mobility is enough for auth/review:
+    the owner does not need source-account login when a package can be made
+    product-visible, pulled into another product account, verified, promoted,
+    and reported with rollback refs.
 ```
