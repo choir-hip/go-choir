@@ -115,21 +115,18 @@ Local development is useful for frontend iteration, focused unit shaping, and re
 
 ## Tests
 
-Focused Go tests on macOS need ICU flags:
+Go tests that touch Dolt need ICU headers. Use the repo dev shell so the
+compiler and linker paths come from Nix instead of hand-entered `CGO_*` flags:
 
 ```sh
-CGO_CFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
-CGO_CXXFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
-CGO_LDFLAGS='-L/opt/homebrew/opt/icu4c@78/lib' \
+nix develop
 go test -count=1 ./internal/store ./internal/runtime
 ```
 
-Full local test shaping:
+If you use `direnv`, run `direnv allow` once and the same environment will load
+automatically when you enter the repo. Full local test shaping:
 
 ```sh
-CGO_CFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
-CGO_CXXFLAGS='-I/opt/homebrew/opt/icu4c@78/include' \
-CGO_LDFLAGS='-L/opt/homebrew/opt/icu4c@78/lib' \
 go test ./... -count=1
 
 cd frontend

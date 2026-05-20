@@ -25,6 +25,31 @@
       buildCommit = self.rev or self.dirtyRev or "local";
       buildDate = self.lastModifiedDate or "unknown";
       sourceRepoRemote = "https://github.com/yusefmosiah/go-choir.git";
+      devSystems = [
+        "aarch64-darwin"
+        "x86_64-darwin"
+        "aarch64-linux"
+        "x86_64-linux"
+      ];
+      forDevSystems = nixpkgs.lib.genAttrs devSystems;
+      mkDevShell = devSystem:
+        let
+          devPkgs = import nixpkgs { system = devSystem; };
+        in
+        devPkgs.mkShell {
+          packages = [
+            devPkgs.git
+            devPkgs.go
+            devPkgs.pkg-config
+            devPkgs.icu
+          ];
+          shellHook = ''
+            export PKG_CONFIG_PATH="${devPkgs.icu.dev}/lib/pkgconfig:${devPkgs.icu}/lib/pkgconfig''${PKG_CONFIG_PATH:+:''${PKG_CONFIG_PATH}}"
+            export CGO_CFLAGS="$(pkg-config --cflags icu-i18n icu-uc 2>/dev/null) ''${CGO_CFLAGS:-}"
+            export CGO_CXXFLAGS="$(pkg-config --cflags icu-i18n icu-uc 2>/dev/null) ''${CGO_CXXFLAGS:-}"
+            export CGO_LDFLAGS="$(pkg-config --libs icu-i18n icu-uc 2>/dev/null) ''${CGO_LDFLAGS:-}"
+          '';
+        };
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
@@ -179,6 +204,10 @@ EOF
       '';
     in
     {
+      devShells = forDevSystems (devSystem: {
+        default = mkDevShell devSystem;
+      });
+
       packages.${system} = goChoirPackages // {
         default = self.packages.${system}.auth;
         # Expose the guest image as a top-level package for easy building:

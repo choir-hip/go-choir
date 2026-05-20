@@ -119,13 +119,13 @@ Known observations:
 - The source ledger repository exists:
   `https://github.com/yusefmosiah/choir-source-ledger`, private, default branch
   `choir/platform/main`.
-- Focused AppChangePackage/adoption tests pass when macOS ICU cgo flags are
-  supplied manually.
-- `go test` without those flags can fail in `github.com/dolthub/go-icu-regex`
-  with `fatal error: 'unicode/regex.h' file not found`.
-- The local machine has ICU headers at `/opt/homebrew/opt/icu4c@78`.
-- `pkg-config --cflags --libs icu-uc icu-i18n` currently returns nothing in the
-  local shell, so Go/cgo does not discover ICU automatically.
+- Focused AppChangePackage/adoption tests previously required manually supplied
+  macOS ICU cgo flags in a bare shell.
+- `go test` in a bare shell can fail in `github.com/dolthub/go-icu-regex` with
+  `fatal error: 'unicode/regex.h' file not found`.
+- The clean ownership boundary is to keep upstream `github.com/dolthub/go-icu-regex`
+  and make the repo development environment supply ICU discovery through Nix,
+  not to carry a local copy of DoltHub's ICU binding.
 - Product APIs currently expose both `/api/app-change-packages` /
   `/api/adoptions` and legacy `/api/promotions`.
 - The current AppChangePackage verifier has a non-build branch that computes
@@ -133,8 +133,8 @@ Known observations:
 
 Main uncertainties:
 
-- Whether the right ICU fix is Nix/dev-shell environment wiring, Go package
-  build tag adaptation, CI environment change, or a small repo wrapper command.
+- Whether the Nix dev shell plus optional `.envrc` is enough for all local agent
+  loops, or whether candidate workers also need to enter that shell explicitly.
 - How much old promotion queue code is still needed by Trace, Settings,
   Candidate Desktop, run-acceptance synthesis, or worker delegation tests.
 - The cleanest replacement interface for worker/vsuper exports: direct
@@ -279,7 +279,8 @@ budget. The final report must not call the mission complete.
 `blocked_incomplete` requires named root-cause probes and cognitive transforms.
 Examples:
 
-- Dolt/go-icu-regex cannot be made portable without upstream or Nix changes;
+- Dolt/go-icu-regex cannot be made portable in local bare shells without an
+  accepted repo environment contract, upstream change, or a dependency fork;
 - existing worker delegation cannot produce AppChangePackage records without a
   deeper substrate redesign;
 - staging deploy cannot be verified because of an external outage.
@@ -290,9 +291,8 @@ Examples:
 status: checkpoint_incomplete
 last checkpoint: local hard-cut implementation and focused validation completed
 current artifact state:
-- Dolt ICU cgo discovery is repo-owned through a tracked `go.mod`
-  replacement to `third_party/go-icu-regex`, with cgo flags for the Homebrew
-  ICU layouts used by local/dev loops.
+- Dolt ICU cgo discovery is repo-owned through the repo Nix dev shell and
+  `.envrc`, while `go.mod` continues to use upstream `github.com/dolthub/go-icu-regex`.
 - Runtime/product surfaces now use AppChangePackage -> recipient adoption ->
   mandatory recipient Go/Svelte build -> promote/rollback.
 - `/api/promotions`, `/internal/promotions`, runtime Queue/Verify/Promote
@@ -305,17 +305,20 @@ what was proven:
 - focused runtime hard-cut suite passed:
   go test -count=1 ./internal/runtime -run
   'TestBrowserSessionRejectsLegacyPromotionCandidateBinding|TestHandleTraceTrajectorySnapshotIncludesControlArtifactLinks|TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages|TestExecuteToolsChainsRequiredWorkerDelegation|TestAppChangePackageMigratesAcrossCandidateComputers|TestAppAdoptionRequiresActualRecipientBuild|TestRunAcceptanceSynthesizeDerivesExportLevelRecord|TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel|TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped|TestDelegateWorkerVMReturnsTimeoutRunEvidence|TestDelegateWorkerVM'
-- full runtime suite passed after the tracked ICU replacement was added:
+- full runtime suite passed during the initial local hard-cut validation:
   go test -count=1 ./internal/runtime
-- store suite passed after the tracked ICU replacement was added, without
-  manually supplied ICU flags:
-  go test -count=1 ./internal/store
-- Go module resolution points at the tracked ICU replacement:
-  go list -m -json github.com/dolthub/go-icu-regex
+- store suite passed inside the repo-owned Nix dev shell, without hand-entered
+  ICU flags:
+  nix develop .# --command go test -count=1 ./internal/store
+- focused promotion/adoption runtime subset passed inside the repo-owned Nix dev
+  shell after adding `git` to the shell tools:
+  nix develop .# --command go test -count=1 ./internal/runtime -run
+  'TestAppChangePackageMigratesAcrossCandidateComputers|TestAppAdoptionRequiresActualRecipientBuild|TestBrowserSessionRejectsLegacyPromotionCandidateBinding|TestRunAcceptanceSynthesizeDerivesExportLevelRecord|TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel'
 - post-doc-string-change acceptance subset passed:
   go test -count=1 ./internal/runtime -run
   'TestRunAcceptanceSynthesizeDerivesExportLevelRecord|TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel|TestRunAcceptanceSynthesizeKeepsDocsLevelForPackageWithoutVerifiedAdoption|TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped'
-- focused runtime hard-cut subset also passed after the tracked ICU replacement:
+- focused runtime hard-cut subset also passed during the initial local
+  hard-cut validation:
   go test -count=1 ./internal/runtime -run
   'TestAppChangePackageMigratesAcrossCandidateComputers|TestAppAdoptionRequiresActualRecipientBuild|TestRunAcceptanceSynthesizeDerivesExportLevelRecord|TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel|TestDelegateWorkerVMReturnsTimeoutRunEvidence'
 - frontend build passed with only existing Vite chunk-size warnings:
