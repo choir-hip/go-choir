@@ -484,7 +484,7 @@ test('desktop state flushes on page hide without waiting for debounce', async ({
 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
-  await expect(page.locator(`[data-window-id="${windowId}"]`)).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(`[data-window][data-window-id="${windowId}"]`)).toBeVisible({ timeout: 5000 });
 });
 
 // ---------------------------------------------------------------

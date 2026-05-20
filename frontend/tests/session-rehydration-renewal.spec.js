@@ -25,6 +25,12 @@ function uniqueEmail() {
   return `e2e-rehy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
+async function expectAuthenticatedSession(page, email) {
+  const session = await getSession(page, BASE_URL);
+  expect(session.authenticated).toBe(true);
+  expect(session.user.email).toBe(email);
+}
+
 // ---------------------------------------------------------------------------
 // Helper: wait for live channel to show "Connected"
 // ---------------------------------------------------------------------------
@@ -69,10 +75,7 @@ test('hard reload at / rehydrates the authenticated shell from cookies', async (
   await page.reload();
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // The desktop shell should show the current user (from cookie-backed rehydration).
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
+  await expectAuthenticatedSession(page, email);
 
   // Live channel status should be visible.
   await expect(page.locator('[data-shell-live-status]')).toBeVisible();
@@ -100,10 +103,7 @@ test('new tab at / rehydrates the authenticated shell from cookies', async ({
   // The new tab should rehydrate the shell from cookies.
   await newPage.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // Verify the current user is shown.
-  const userArea = newPage.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
+  await expectAuthenticatedSession(newPage, email);
 
   // Live channel status should be visible.
   await expect(newPage.locator('[data-shell-live-status]')).toBeVisible();
@@ -142,10 +142,7 @@ test('expired access cookie renews through refresh rotation on reload', async ({
   await page.reload();
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // The desktop shell should show the current user (renewed, not re-logged-in).
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
+  await expectAuthenticatedSession(page, email);
 
   // Live channel status should be visible.
   await expect(page.locator('[data-shell-live-status]')).toBeVisible();
