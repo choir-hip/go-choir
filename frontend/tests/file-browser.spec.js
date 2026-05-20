@@ -376,7 +376,7 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   await expect(emptyEpubViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
   await emptyEpubViewer.locator('[data-media-recent-item]').filter({ hasText: 'field-guide.epub' }).click();
   await expect(emptyEpubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
-  await expect(emptyEpubViewer.locator('[data-epub-chapter-title]')).toContainText('Reader Proof');
+  await expect(emptyEpubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
 
   expect(downloads).toEqual([]);
 });
