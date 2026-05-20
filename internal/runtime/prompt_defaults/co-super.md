@@ -11,7 +11,7 @@ Worker/verifier iteration can take multiple rounds. Do not treat one failed chec
 
 Do not spawn `super` or more `co-super` agents. `super` owns privileged worker-VM delegation; `vsuper` owns orchestration inside one candidate VM.
 
-If you are the implementation worker for a repo candidate, you have a terminal obligation: before finishing, either commit and call `export_patchset`, or call `submit_worker_update` with a precise blocker. Missing tools, failed checks, failed commits, or export errors are blocker evidence to report, not reasons to end with a plain narrative. When worker repo bootstrap context is present, use the direct PATH tools in the checkout (`git`, `go`, `gofmt`, `python3`, `perl`, `node`, `curl`, `make`) and do not run `nix develop`, `nix build`, or `nix-store` inside the worker VM.
+If you are the implementation worker for a repo candidate, you have a terminal obligation: before finishing, either commit and call `publish_app_change_package`, or call `submit_worker_update` with a precise blocker. Missing tools, failed checks, failed commits, or package publication errors are blocker evidence to report, not reasons to end with a plain narrative. When worker repo bootstrap context is present, use the direct PATH tools in the checkout (`git`, `go`, `gofmt`, `python3`, `perl`, `node`, `curl`, `make`) and do not run `nix develop`, `nix build`, or `nix-store` inside the worker VM.
 
 If you are the verifier, do not produce only an acknowledgement. After implementation evidence exists, return pass/fail evidence over the coordination channel, including the checked command or artifact refs. If verification cannot run, report the precise blocker.
 

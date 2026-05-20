@@ -139,59 +139,62 @@ async function waitForDocumentContent(page, docId, checks, timeout = 180_000) {
   throw new Error(`final vtext document did not include background worker proof material; head=${JSON.stringify(state.head)}`);
 }
 
-function exportedPatchsetsFromResults(results) {
+function appChangePackagesFromResults(results) {
   return results.flatMap((result) =>
-    (result.output?.export_patchsets || [])
-      .filter((item) => item?.status === 'exported')
+    (result.output?.app_change_packages || [])
+      .filter((item) => item?.package_id && String(item?.status || '').startsWith('published'))
       .map((item) => ({
         worker_vm_id: result.output.worker_vm_id,
-        manifest_path: item.manifest_path,
-        patchset_path: item.patchset_path,
+        package_id: item.package_id,
+        package_manifest_sha256: item.package_manifest_sha256,
+        runtime_source_delta_sha256: item.runtime_source_delta_sha256,
+        ui_source_delta_sha256: item.ui_source_delta_sha256,
         base_sha: item.base_sha,
-        worker_head: item.worker_head,
+        candidate_head_sha: item.candidate_head_sha,
+        source_candidate_id: item.source_candidate_id,
         github_push: item.github_push,
       }))
   );
 }
 
-function contentIncludesExport(content, item) {
+function contentIncludesPackage(content, item) {
   return Boolean(
     item?.worker_vm_id &&
-    item?.manifest_path &&
-    item?.patchset_path &&
+    item?.package_id &&
+    item?.package_manifest_sha256 &&
     item?.base_sha &&
-    item?.worker_head &&
+    item?.candidate_head_sha &&
     content.includes(item.worker_vm_id) &&
-    content.includes(item.manifest_path) &&
-    content.includes(item.patchset_path) &&
+    content.includes(item.package_id) &&
+    content.includes(item.package_manifest_sha256) &&
     content.includes(item.base_sha) &&
-    content.includes(item.worker_head)
+    content.includes(item.candidate_head_sha)
   );
 }
 
-async function waitForDocumentContentWithExport(page, docId, trajectoryId, marker, timeout = 180_000) {
+async function waitForDocumentContentWithPackage(page, docId, trajectoryId, marker, timeout = 180_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const state = await loadVTextState(page, docId);
     const content = state.head?.content || '';
     const delegated = await loadToolResults(page, trajectoryId, 'delegate_worker_vm');
-    const exportedPatchsets = exportedPatchsetsFromResults(delegated.results);
-    const matchedExport = exportedPatchsets.find((item) => contentIncludesExport(content, item));
+    const appChangePackages = appChangePackagesFromResults(delegated.results);
+    const matchedPackage = appChangePackages.find((item) => contentIncludesPackage(content, item));
     if (
       state.head?.metadata?.source === 'edit_vtext' &&
       content.includes(marker) &&
       /verified|verification|grep|passed/i.test(content) &&
-      matchedExport
+      matchedPackage
     ) {
-      return { state, matchedExport, exportedPatchsets };
+      return { state, matchedPackage, appChangePackages };
     }
     await page.waitForTimeout(1500);
   }
   const state = await loadVTextState(page, docId);
-  throw new Error(`final vtext document did not include concrete exported patchset proof material; head=${JSON.stringify(state.head)}`);
+  throw new Error(`final vtext document did not include concrete AppChangePackage proof material; head=${JSON.stringify(state.head)}`);
 }
 
-test('prompt bar can route coding work through a background worker VM export', async ({ page, authenticator }) => {
+test('prompt bar can route coding work through a background worker VM AppChangePackage', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, uniqueEmail());
 
   const forbiddenBrowserRequests = [];
@@ -212,8 +215,8 @@ test('prompt bar can route coding work through a background worker VM export', a
     'This is a coding workflow proof, not a research brief.',
     'VText should ask super to perform the mutable coding work in a background worker VM, not in the active desktop VM.',
     `The worker should create a tiny git repository containing README.md with the literal marker ${marker},`,
-    'commit the change, verify it with grep, and call export_patchset.',
-    'The final VText document must report the worker VM id, export manifest path, patchset path, base SHA, worker head SHA, and verification result.',
+    'commit the change, verify it with grep, and call publish_app_change_package.',
+    'The final VText document must report the worker VM id, AppChangePackage id, package manifest SHA, source delta SHAs, base SHA, candidate head SHA, and verification result.',
   ].join(' ');
 
   const promptBarResponse = page.waitForResponse((response) =>
@@ -242,22 +245,22 @@ test('prompt bar can route coding work through a background worker VM export', a
   const delegated = await waitForToolResult(page, submitted.submission_id, 'delegate_worker_vm', (output) =>
     output?.status === 'worker_run_completed' &&
     output?.worker_vm_id &&
-    Array.isArray(output?.export_patchsets) &&
-    output.export_patchsets.some((item) =>
-      item?.status === 'exported' &&
+    Array.isArray(output?.app_change_packages) &&
+    output.app_change_packages.some((item) =>
+      String(item?.status || '').startsWith('published') &&
       item?.github_push === false &&
-      item?.manifest_path &&
-      item?.patchset_path &&
+      item?.package_id &&
+      item?.package_manifest_sha256 &&
       item?.base_sha &&
-      item?.worker_head
+      item?.candidate_head_sha
     )
   );
 
-  const initialExportedPatchsets = exportedPatchsetsFromResults(delegated.results);
-  expect(initialExportedPatchsets.length).toBeGreaterThan(0);
-  expect(initialExportedPatchsets.every((item) => item.github_push === false)).toBe(true);
+  const initialAppChangePackages = appChangePackagesFromResults(delegated.results);
+  expect(initialAppChangePackages.length).toBeGreaterThan(0);
+  expect(initialAppChangePackages.every((item) => item.github_push === false)).toBe(true);
 
-  const { state: finalState, exportedPatchsets } = await waitForDocumentContentWithExport(
+  const { state: finalState, appChangePackages } = await waitForDocumentContentWithPackage(
     page,
     decision.doc_id,
     submitted.submission_id,
@@ -265,7 +268,7 @@ test('prompt bar can route coding work through a background worker VM export', a
   );
   expect(finalState.head.metadata.source).toBe('edit_vtext');
   const finalContent = finalState.head.content || '';
-  expect(exportedPatchsets.some((item) => contentIncludesExport(finalContent, item))).toBe(true);
+  expect(appChangePackages.some((item) => contentIncludesPackage(finalContent, item))).toBe(true);
 
   expect(forbiddenBrowserRequests).toHaveLength(0);
 
@@ -279,8 +282,7 @@ test('prompt bar can route coding work through a background worker VM export', a
     trajectory_id: submitted.submission_id,
     staging_url: new URL(BASE_URL).origin,
   });
-  expect(acceptance.acceptance_level).toBe('export-level');
-  expect(acceptance.state).toBe('accepted');
+  expect(acceptance.state).toBe('blocked');
   const checkpointKinds = (acceptance.checkpoints || []).map((checkpoint) => checkpoint.kind);
   expect(checkpointKinds).toEqual(expect.arrayContaining([
     'submitted',
@@ -288,14 +290,11 @@ test('prompt bar can route coding work through a background worker VM export', a
     'super_requested',
     'worker_leased',
     'worker_delegated',
-    'export_observed',
-    'promotion_candidate_queued',
-    'rollback_available',
+    'app_package_published',
   ]));
   expect(acceptance.evidence_refs?.length || 0).toBeGreaterThan(4);
-  const promotionEvidence = (acceptance.evidence_refs || []).find((ref) => ref.kind === 'promotion_candidate');
-  expect(promotionEvidence?.details?.patchset_sha256 || '').toMatch(/^[a-f0-9]{64}$/);
-  expect(promotionEvidence?.details?.patchset_path || '').toContain('/promotion-artifacts/');
+  const packageEvidence = (acceptance.evidence_refs || []).find((ref) => ref.kind === 'tool.result' && ref.summary?.includes('AppChangePackage'));
+  expect(packageEvidence?.details?.package_count || 0).toBeGreaterThan(0);
   expect(acceptance.gateway_provider_evidence || '').toContain('active_provider=');
   expect(acceptance.base_sha || '').toBeTruthy();
 

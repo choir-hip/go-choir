@@ -123,16 +123,16 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	terminalError := firstNonEmpty(stringMapValue(output, "terminal_error"), stringMapValue(output, "error"))
 	eventCount := intMapValue(output, "event_count")
 	channelMessages := intMapValue(output, "worker_channel_message_count")
-	exportCount := len(mapSliceValue(output, "export_patchsets"))
+	exportCount := len(mapSliceValue(output, "app_change_packages"))
 
 	findings := []string{
 		fmt.Sprintf("delegate_worker_vm returned status %q with worker state %q before super reported back to VText.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
 		fmt.Sprintf("super run ended with %s; preserving delegate evidence as a structured worker update.", firstNonEmpty(string(rec.State), "terminal state")),
 	}
 	if exportCount > 0 {
-		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d export patchset(s).", exportCount))
+		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d AppChangePackage(s).", exportCount))
 	} else {
-		findings = append(findings, "delegate_worker_vm returned no export patchsets; treat this as blocked below export-level.")
+		findings = append(findings, "delegate_worker_vm returned no AppChangePackages; treat this as blocked below package-level.")
 	}
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
@@ -185,7 +185,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		Artifacts:     trimDedupeNonEmpty(artifacts),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/export probe that makes vsuper call export_patchset or submit_worker_update before delegate timeout.",
+			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_worker_update before delegate timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -201,16 +201,16 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	terminalError := firstNonEmpty(stringMapValue(output, "terminal_error"), stringMapValue(output, "error"))
 	eventCount := intMapValue(output, "event_count")
 	channelMessages := intMapValue(output, "worker_channel_message_count")
-	exportCount := len(mapSliceValue(output, "export_patchsets"))
+	exportCount := len(mapSliceValue(output, "app_change_packages"))
 
 	findings := []string{
 		fmt.Sprintf("delegate_worker_vm returned status %q with worker state %q.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
 		"super preserved this delegate result as a VText worker-update checkpoint before relying on another LLM turn.",
 	}
 	if exportCount > 0 {
-		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d export patchset(s).", exportCount))
+		findings = append(findings, fmt.Sprintf("delegate_worker_vm returned %d AppChangePackage(s).", exportCount))
 	} else {
-		findings = append(findings, "delegate_worker_vm returned no export patchsets; treat this as blocked below export-level.")
+		findings = append(findings, "delegate_worker_vm returned no AppChangePackages; treat this as blocked below package-level.")
 	}
 	if eventCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker event summary was preserved with %d event(s) and %d channel message(s).", eventCount, channelMessages))
@@ -261,7 +261,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		Artifacts:     trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...)),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/export probe that prevents candidate checkout races and requires export_patchset or submit_worker_update before delegate timeout.",
+			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or submit_worker_update before delegate timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -371,10 +371,10 @@ func mapSliceValue(m map[string]any, key string) []map[string]any {
 }
 
 func exportArtifactRefs(output map[string]any) []string {
-	exports := mapSliceValue(output, "export_patchsets")
+	exports := mapSliceValue(output, "app_change_packages")
 	refs := []string{}
 	for _, export := range exports {
-		for _, key := range []string{"manifest_path", "patchset_path"} {
+		for _, key := range []string{"package_id", "package_manifest_sha256", "runtime_source_delta_sha256", "ui_source_delta_sha256"} {
 			if value := stringMapValue(export, key); value != "" {
 				refs = append(refs, value)
 			}
@@ -409,11 +409,11 @@ func delegateWorkerStructuredProvenance(output map[string]any) delegateWorkerPro
 		provenance.Findings = append(provenance.Findings, "worker spawned child profile(s): "+strings.Join(profiles, ", "))
 	}
 
-	for _, export := range mapSliceValue(output, "export_patchsets") {
+	for _, export := range mapSliceValue(output, "app_change_packages") {
 		provenance = appendExportProvenance(provenance, export)
 	}
-	for _, candidate := range mapSliceValue(output, "promotion_queue") {
-		provenance = appendPromotionProvenance(provenance, candidate)
+	for _, adoption := range mapSliceValue(output, "app_adoptions") {
+		provenance = appendAdoptionProvenance(provenance, adoption)
 	}
 	for _, item := range mapSliceValue(output, "worker_event_summary") {
 		provenance = appendWorkerEventProvenance(provenance, item)
@@ -422,69 +422,68 @@ func delegateWorkerStructuredProvenance(output map[string]any) delegateWorkerPro
 }
 
 func appendExportProvenance(provenance delegateWorkerProvenance, export map[string]any) delegateWorkerProvenance {
-	manifestPath := stringMapValue(export, "manifest_path")
-	patchsetPath := stringMapValue(export, "patchset_path")
+	packageID := stringMapValue(export, "package_id")
 	baseSHA := stringMapValue(export, "base_sha")
-	workerHead := firstNonEmpty(stringMapValue(export, "worker_head_sha"), stringMapValue(export, "worker_head"))
-	patchSHA := stringMapValue(export, "patchset_sha256")
+	workerHead := firstNonEmpty(stringMapValue(export, "candidate_head_sha"), stringMapValue(export, "worker_head_sha"), stringMapValue(export, "worker_head"))
+	manifestSHA := stringMapValue(export, "package_manifest_sha256")
+	runtimeDeltaSHA := stringMapValue(export, "runtime_source_delta_sha256")
+	uiDeltaSHA := stringMapValue(export, "ui_source_delta_sha256")
 	loopID := stringMapValue(export, "loop_id")
-	if manifestPath != "" {
-		provenance.Refs = append(provenance.Refs, "export_manifest:"+manifestPath)
-		provenance.Artifacts = append(provenance.Artifacts, manifestPath)
-	}
-	if patchsetPath != "" {
-		provenance.Refs = append(provenance.Refs, "export_patchset:"+patchsetPath)
-		provenance.Artifacts = append(provenance.Artifacts, patchsetPath)
+	if packageID != "" {
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "app_change_package:"+packageID)
+		provenance.Refs = append(provenance.Refs, "app_change_package:"+packageID)
 	}
 	if baseSHA != "" {
-		provenance.Refs = append(provenance.Refs, "export_base_sha:"+baseSHA)
+		provenance.Refs = append(provenance.Refs, "package_base_sha:"+baseSHA)
 	}
 	if workerHead != "" {
 		provenance.Refs = append(provenance.Refs, "worker_head:"+workerHead)
 	}
-	if patchSHA != "" {
-		provenance.Refs = append(provenance.Refs, "patchset_sha256:"+patchSHA)
+	if manifestSHA != "" {
+		provenance.Refs = append(provenance.Refs, "package_manifest_sha256:"+manifestSHA)
+	}
+	if runtimeDeltaSHA != "" {
+		provenance.Refs = append(provenance.Refs, "runtime_source_delta_sha256:"+runtimeDeltaSHA)
+	}
+	if uiDeltaSHA != "" {
+		provenance.Refs = append(provenance.Refs, "ui_source_delta_sha256:"+uiDeltaSHA)
 	}
 	if loopID != "" {
-		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "export_loop:"+loopID)
+		provenance.EvidenceIDs = append(provenance.EvidenceIDs, "package_loop:"+loopID)
 	}
 	details := []string{}
 	for _, detail := range []string{
-		"manifest=" + manifestPath,
-		"patchset=" + patchsetPath,
+		"package_id=" + packageID,
 		"base_sha=" + baseSHA,
 		"worker_head=" + workerHead,
-		"patchset_sha256=" + patchSHA,
+		"manifest_sha256=" + manifestSHA,
+		"runtime_delta_sha256=" + runtimeDeltaSHA,
+		"ui_delta_sha256=" + uiDeltaSHA,
 	} {
 		if !strings.HasSuffix(detail, "=") {
 			details = append(details, detail)
 		}
 	}
 	if len(details) > 0 {
-		provenance.Findings = append(provenance.Findings, "worker export evidence: "+strings.Join(details, "; "))
+		provenance.Findings = append(provenance.Findings, "worker package evidence: "+strings.Join(details, "; "))
 	}
 	return provenance
 }
 
-func appendPromotionProvenance(provenance delegateWorkerProvenance, candidate map[string]any) delegateWorkerProvenance {
-	candidateID := firstNonEmpty(stringMapValue(candidate, "candidate_id"), stringMapValue(candidate, "candidateID"))
-	if candidateID == "" {
+func appendAdoptionProvenance(provenance delegateWorkerProvenance, adoption map[string]any) delegateWorkerProvenance {
+	adoptionID := firstNonEmpty(stringMapValue(adoption, "adoption_id"), stringMapValue(adoption, "adoptionID"))
+	if adoptionID == "" {
 		return provenance
 	}
-	provenance.EvidenceIDs = append(provenance.EvidenceIDs, "promotion_candidate:"+candidateID)
-	provenance.Refs = append(provenance.Refs, "promotion_candidate:"+candidateID)
-	for _, key := range []string{"manifest_path", "patchset_path"} {
-		if value := stringMapValue(candidate, key); value != "" {
-			provenance.Artifacts = append(provenance.Artifacts, value)
-		}
-	}
-	details := []string{"id=" + candidateID}
-	for _, key := range []string{"status", "integration_branch", "destination_branch", "base_sha", "worker_head", "worker_head_sha", "patchset_sha256"} {
-		if value := stringMapValue(candidate, key); value != "" {
+	provenance.EvidenceIDs = append(provenance.EvidenceIDs, "app_adoption:"+adoptionID)
+	provenance.Refs = append(provenance.Refs, "app_adoption:"+adoptionID)
+	details := []string{"id=" + adoptionID}
+	for _, key := range []string{"status", "package_id", "target_computer_id", "target_candidate_id", "candidate_source_ref", "runtime_artifact_digest", "ui_artifact_digest"} {
+		if value := stringMapValue(adoption, key); value != "" {
 			details = append(details, key+"="+value)
 		}
 	}
-	provenance.Findings = append(provenance.Findings, "promotion candidate queued: "+strings.Join(details, "; "))
+	provenance.Findings = append(provenance.Findings, "App adoption evidence: "+strings.Join(details, "; "))
 	return provenance
 }
 
@@ -499,7 +498,7 @@ func appendWorkerEventProvenance(provenance delegateWorkerProvenance, item map[s
 			provenance = appendSpawnAgentProvenance(provenance, output)
 		}
 	}
-	if kind == "tool.result" && tool == "export_patchset" {
+	if kind == "tool.result" && tool == "publish_app_change_package" {
 		if output := parseJSONMapString(stringMapValue(item, "output_excerpt")); output != nil {
 			provenance = appendExportProvenance(provenance, output)
 		}

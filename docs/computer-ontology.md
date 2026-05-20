@@ -262,10 +262,11 @@ Current state:
 
 - the code still has a `sandbox` service and many docs say VM;
 - users do not yet have fully first-class durable computer lineage;
-- candidate worker export can queue promotion candidates with parent-visible
-  artifacts;
-- promotion-level acceptance is blocked on first-class promotion workspace and
-  verifier authority;
+- candidate worker export now publishes reviewable AppChangePackage evidence
+  instead of queuing old patchset promotion candidates;
+- promotion-level acceptance is AppChangePackage adoption with mandatory
+  recipient Go/Svelte build, verifier contracts, promote/rollback evidence,
+  and owner/platform authority;
 - docs now distinguish canonical/current/evidence/historical/stale material.
 
 Near target:

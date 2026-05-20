@@ -20,7 +20,6 @@ type publishAppChangePackageInput struct {
 	PackageID                   string          `json:"package_id,omitempty"`
 	AppID                       string          `json:"app_id,omitempty"`
 	Visibility                  string          `json:"visibility,omitempty"`
-	RequireRecipientBuild       bool            `json:"require_recipient_build,omitempty"`
 	SourceComputerID            string          `json:"source_computer_id"`
 	SourceCandidateID           string          `json:"source_candidate_id"`
 	SourceActiveRef             string          `json:"source_active_ref,omitempty"`
@@ -109,8 +108,8 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 	if in.SourceCandidateID == "" {
 		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: source_candidate_id is required")
 	}
-	if strings.TrimSpace(in.RuntimeSourceDelta) == "" || strings.TrimSpace(in.UISourceDelta) == "" {
-		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: runtime_source_delta and ui_source_delta are required")
+	if strings.TrimSpace(in.RuntimeSourceDelta) == "" && strings.TrimSpace(in.UISourceDelta) == "" {
+		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: at least one source delta is required")
 	}
 	if err := rejectPrivateSourcePayload(in.RuntimeSourceDelta + "\n" + in.UISourceDelta + "\n" + in.AppProtocolContract); err != nil {
 		return types.AppChangePackageRecord{}, err
@@ -160,7 +159,7 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		"source_runtime_artifact_digest": sourceRuntimeDigest,
 		"source_ui_artifact_digest":      sourceUIDigest,
 		"visibility":                     visibility,
-		"require_recipient_build":        in.RequireRecipientBuild,
+		"recipient_build_required":       true,
 		"source_ledger_repo":             firstNonEmptyPromotion(strings.TrimSpace(in.SourceLedgerRepo), rt.cfg.SourceLedgerRepo),
 		"source_ledger_base_ref":         strings.TrimSpace(in.SourceLedgerBaseRef),
 		"source_ledger_candidate_ref":    firstNonEmptyPromotion(strings.TrimSpace(in.SourceLedgerCandidateRef), candidateRef),
@@ -209,7 +208,7 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		"source_ledger_repo":       manifest["source_ledger_repo"],
 		"source_ledger_ref":        manifest["source_ledger_candidate_ref"],
 		"source_ledger_commit_sha": manifest["source_ledger_commit_sha"],
-		"require_recipient_build":  in.RequireRecipientBuild,
+		"recipient_build_required": true,
 		"continuous_app_change":    true,
 	})
 	return rec, nil
@@ -300,7 +299,7 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 	rec.MergeStrategy = firstNonEmptyPromotion(strings.TrimSpace(in.MergeStrategy), rec.MergeStrategy, "rebase")
 	rec.MergeConflictsJSON = rawJSONOrFallback(in.MergeConflicts, "[]")
 	rec.RollbackProfileJSON = appAdoptionRollbackProfileJSON(rec, lineage)
-	buildReport := appAdoptionBuildReport{Required: appChangePackageRequiresRecipientBuild(pkg)}
+	buildReport := appAdoptionBuildReport{Required: true}
 	rec.Status = types.AppAdoptionVerifying
 	rec.Error = ""
 	startedResults := appAdoptionVerificationStartedResults(pkg, rec, buildReport)
@@ -321,20 +320,15 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 		"recipient_build_status":       "started",
 		"continuous_app_change":        true,
 	})
-	if buildReport.Required {
-		var buildErr error
-		buildReport, buildErr = rt.materializeAppAdoptionCandidate(ctx, pkg, rec, cutoverRef)
-		if buildErr != nil {
-			buildReport.Required = true
-			buildReport.Status = "failed"
-			buildReport.Error = buildErr.Error()
-		} else {
-			rec.RuntimeArtifactDigest = buildReport.RuntimeArtifactDigest
-			rec.UIArtifactDigest = buildReport.UIArtifactDigest
-		}
+	var buildErr error
+	buildReport, buildErr = rt.materializeAppAdoptionCandidate(ctx, pkg, rec, cutoverRef)
+	if buildErr != nil {
+		buildReport.Required = true
+		buildReport.Status = "failed"
+		buildReport.Error = buildErr.Error()
 	} else {
-		rec.RuntimeArtifactDigest = "sha256:" + digestParts("target-runtime", rec.OwnerID, rec.TargetComputerID, rec.TargetCandidateID, pkg.PackageManifestSHA256, rec.CandidateSourceRef, cutoverRef)
-		rec.UIArtifactDigest = "sha256:" + digestParts("target-ui", rec.OwnerID, rec.TargetComputerID, rec.TargetCandidateID, pkg.PackageManifestSHA256, rec.CandidateSourceRef, cutoverRef)
+		rec.RuntimeArtifactDigest = buildReport.RuntimeArtifactDigest
+		rec.UIArtifactDigest = buildReport.UIArtifactDigest
 	}
 	results, status, errText := verifierResultsForAppAdoption(pkg, rec, buildReport)
 	resultsJSON, _ := json.Marshal(results)
@@ -503,12 +497,15 @@ func verifierResultsForAppAdoption(pkg types.AppChangePackageRecord, rec types.A
 		"source_ledger_candidate_ref": stringFromMap(manifest, "source_ledger_candidate_ref"),
 		"source_ledger_commit_sha":    stringFromMap(manifest, "source_ledger_commit_sha"),
 	})
-	if strings.TrimSpace(pkg.RuntimeSourceDelta) == "" || strings.TrimSpace(pkg.UISourceDelta) == "" {
+	if strings.TrimSpace(pkg.RuntimeSourceDelta) == "" && strings.TrimSpace(pkg.UISourceDelta) == "" {
 		status = "failed"
-		errText = "runtime_source_delta and ui_source_delta are required"
+		errText = "at least one source delta is required"
 		add("source-deltas-present", "failed", errText, nil)
 	} else {
-		add("source-deltas-present", "passed", "runtime_source_delta and ui_source_delta are present", nil)
+		add("source-deltas-present", "passed", "one or more source deltas are present", map[string]any{
+			"runtime_source_delta_present": strings.TrimSpace(pkg.RuntimeSourceDelta) != "",
+			"ui_source_delta_present":      strings.TrimSpace(pkg.UISourceDelta) != "",
+		})
 	}
 	if strings.TrimSpace(pkg.PackageManifestSHA256) == "" {
 		status = "failed"
@@ -549,30 +546,23 @@ func verifierResultsForAppAdoption(pkg types.AppChangePackageRecord, rec types.A
 		"foreground_tail_merge_result":                rec.ForegroundTailMergeResult,
 		"merge_strategy":                              rec.MergeStrategy,
 	})
-	if buildReport.Required {
-		details := map[string]any{
-			"status":                  buildReport.Status,
-			"workspace_path":          buildReport.WorkspacePath,
-			"build_scratch_path":      buildReport.BuildScratchPath,
-			"base_sha":                buildReport.BaseSHA,
-			"head_sha":                buildReport.HeadSHA,
-			"runtime_artifact_digest": buildReport.RuntimeArtifactDigest,
-			"ui_artifact_digest":      buildReport.UIArtifactDigest,
-			"commands":                buildReport.Commands,
-			"error":                   buildReport.Error,
-		}
-		if buildReport.Status != "passed" {
-			status = "failed"
-			errText = firstNonEmptyPromotion(buildReport.Error, "recipient runtime/UI build failed")
-			add("actual-recipient-runtime-ui-build", "failed", errText, details)
-		} else {
-			add("actual-recipient-runtime-ui-build", "passed", "runtime/UI digests were hashed from actual recipient build outputs", details)
-		}
+	details := map[string]any{
+		"status":                  buildReport.Status,
+		"workspace_path":          buildReport.WorkspacePath,
+		"build_scratch_path":      buildReport.BuildScratchPath,
+		"base_sha":                buildReport.BaseSHA,
+		"head_sha":                buildReport.HeadSHA,
+		"runtime_artifact_digest": buildReport.RuntimeArtifactDigest,
+		"ui_artifact_digest":      buildReport.UIArtifactDigest,
+		"commands":                buildReport.Commands,
+		"error":                   buildReport.Error,
+	}
+	if buildReport.Status != "passed" {
+		status = "failed"
+		errText = firstNonEmptyPromotion(buildReport.Error, "recipient runtime/UI build failed")
+		add("actual-recipient-runtime-ui-build", "failed", errText, details)
 	} else {
-		add("matched-runtime-ui-rebuild", "passed", "runtime/UI digests are computed from package and target candidate inputs", map[string]any{
-			"runtime_artifact_digest": rec.RuntimeArtifactDigest,
-			"ui_artifact_digest":      rec.UIArtifactDigest,
-		})
+		add("actual-recipient-runtime-ui-build", "passed", "runtime/UI digests were hashed from actual recipient build outputs", details)
 	}
 	return results, status, errText
 }
@@ -632,11 +622,7 @@ func appAdoptionRollbackProfileJSON(rec types.AppAdoptionRecord, lineage types.C
 }
 
 func appChangePackageRequiresRecipientBuild(pkg types.AppChangePackageRecord) bool {
-	manifest := appChangePackageManifest(pkg)
-	if boolFromMap(manifest, "require_recipient_build") {
-		return true
-	}
-	return strings.Contains(strings.ToLower(pkg.AppProtocolContract), "recipient_build_required")
+	return true
 }
 
 func appChangePackageManifest(pkg types.AppChangePackageRecord) map[string]any {

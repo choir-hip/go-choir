@@ -388,24 +388,32 @@ func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
 		"next_loop_id":          "loop-next-123",
 	})
 	rt.emitEvent(ctx, parent, types.EventRunContinuationSelected, "run_memory", continuationPayload)
-	promotionCandidate, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:       "candidate-123456",
-		OwnerID:           parent.OwnerID,
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       parent.RunID,
-		TraceID:           parent.RunID,
-		VMID:              "vm-trace-artifact",
-		BaseSHA:           "base-trace-artifact",
-		WorkerHeadSHA:     "worker-trace-artifact",
-		ManifestPath:      "/tmp/trace-manifest.json",
-		PatchsetPath:      "/tmp/trace.patch",
-		IntegrationBranch: "agent/trace-artifact/candidate",
-		DestinationBranch: "main",
-		Summary:           "Trace artifact promotion candidate",
-		ReportJSON:        json.RawMessage(`{"rollback":{"revert_command":"git reset --hard base-trace-artifact"}}`),
+	appPackage, err := rt.PublishAppChangePackage(ctx, parent.OwnerID, publishAppChangePackageInput{
+		PackageID:             "package-123456",
+		AppID:                 "trace-artifact-app",
+		Visibility:            "unlisted",
+		SourceComputerID:      "source-computer-trace",
+		SourceCandidateID:     "source-candidate-trace",
+		SourceLedgerBaseRef:   "base-trace-artifact",
+		CandidateSourceRef:    "refs/computers/source/candidates/trace-artifact",
+		RuntimeSourceDelta:    "diff --git a/runtime.txt b/runtime.txt\nnew file mode 100644\n--- /dev/null\n+++ b/runtime.txt\n@@ -0,0 +1 @@\n+trace artifact\n",
+		UISourceDelta:         "diff --git a/frontend/ui.txt b/frontend/ui.txt\nnew file mode 100644\n--- /dev/null\n+++ b/frontend/ui.txt\n@@ -0,0 +1 @@\n+trace artifact\n",
+		AppProtocolContract:   "trace artifact app contract",
+		SourceLedgerCommitSHA: "worker-trace-artifact",
+		TraceID:               parent.RunID,
 	})
 	if err != nil {
-		t.Fatalf("queue promotion artifact: %v", err)
+		t.Fatalf("publish app package artifact: %v", err)
+	}
+	appAdoption, err := rt.CreateAppAdoption(ctx, parent.OwnerID, "target-computer-trace", createAppAdoptionInput{
+		AdoptionID:         "adoption-123456",
+		PackageID:          appPackage.PackageID,
+		TargetCandidateID:  "target-candidate-trace",
+		CandidateSourceRef: "refs/computers/target/candidates/trace-artifact",
+		TraceID:            parent.RunID,
+	})
+	if err != nil {
+		t.Fatalf("create app adoption artifact: %v", err)
 	}
 
 	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID, "", "user-alice")
@@ -428,16 +436,21 @@ func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
 	if got := summaries[types.EventRunContinuationSelected].Summary; !strings.Contains(got, "selected continuation") || !strings.Contains(got, "abcdef") {
 		t.Fatalf("continuation summary = %q", got)
 	}
-	if got := summaries[types.EventPromotionCandidateQueued].Summary; !strings.Contains(got, "queued promotion candidate") {
-		t.Fatalf("promotion summary = %q", got)
+	if got := summaries[types.EventAppChangePackagePublished].Summary; !strings.Contains(got, "published app package") {
+		t.Fatalf("app package summary = %q", got)
+	}
+	if got := summaries[types.EventAppAdoptionProposed].Summary; !strings.Contains(got, "started app adoption") {
+		t.Fatalf("app adoption summary = %q", got)
 	}
 	if summaries[types.EventRunCompactionCompleted].Tone != "success" ||
 		summaries[types.EventRunContinuationSelected].Tone != "active" ||
-		summaries[types.EventPromotionCandidateQueued].Tone != "active" {
-		t.Fatalf("unexpected tones: compaction=%q continuation=%q promotion=%q",
+		summaries[types.EventAppChangePackagePublished].Tone != "active" ||
+		summaries[types.EventAppAdoptionProposed].Tone != "active" {
+		t.Fatalf("unexpected tones: compaction=%q continuation=%q appPackage=%q appAdoption=%q",
 			summaries[types.EventRunCompactionCompleted].Tone,
 			summaries[types.EventRunContinuationSelected].Tone,
-			summaries[types.EventPromotionCandidateQueued].Tone)
+			summaries[types.EventAppChangePackagePublished].Tone,
+			summaries[types.EventAppAdoptionProposed].Tone)
 	}
 
 	for kind, assertArtifact := range map[types.EventKind]func(traceMomentDetailResponse){
@@ -457,12 +470,20 @@ func TestTraceRunGeometryMomentsHaveReadableSummaries(t *testing.T) {
 				t.Fatalf("continuation artifact = %+v, want %s", detail.Artifacts.Continuation, continuation.ContinuationID)
 			}
 		},
-		types.EventPromotionCandidateQueued: func(detail traceMomentDetailResponse) {
-			if detail.References.PromotionCandidateID != promotionCandidate.CandidateID {
-				t.Fatalf("promotion reference = %q, want %q", detail.References.PromotionCandidateID, promotionCandidate.CandidateID)
+		types.EventAppChangePackagePublished: func(detail traceMomentDetailResponse) {
+			if detail.References.AppChangePackageID != appPackage.PackageID {
+				t.Fatalf("app package reference = %q, want %q", detail.References.AppChangePackageID, appPackage.PackageID)
 			}
-			if detail.Artifacts.PromotionCandidate == nil || detail.Artifacts.PromotionCandidate.CandidateID != promotionCandidate.CandidateID {
-				t.Fatalf("promotion artifact = %+v, want %s", detail.Artifacts.PromotionCandidate, promotionCandidate.CandidateID)
+			if detail.Artifacts.AppChangePackage == nil || detail.Artifacts.AppChangePackage.PackageID != appPackage.PackageID {
+				t.Fatalf("app package artifact = %+v, want %s", detail.Artifacts.AppChangePackage, appPackage.PackageID)
+			}
+		},
+		types.EventAppAdoptionProposed: func(detail traceMomentDetailResponse) {
+			if detail.References.AppAdoptionID != appAdoption.AdoptionID {
+				t.Fatalf("app adoption reference = %q, want %q", detail.References.AppAdoptionID, appAdoption.AdoptionID)
+			}
+			if detail.Artifacts.AppAdoption == nil || detail.Artifacts.AppAdoption.AdoptionID != appAdoption.AdoptionID {
+				t.Fatalf("app adoption artifact = %+v, want %s", detail.Artifacts.AppAdoption, appAdoption.AdoptionID)
 			}
 		},
 	} {

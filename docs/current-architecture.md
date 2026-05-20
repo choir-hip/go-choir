@@ -62,8 +62,8 @@ private public surface     -> selected route projection, not whole-computer expo
 
 Run acceptance is a first-class artifact. A `RunAcceptanceRecord` should be
 synthesized from existing product/control evidence: runs, Trace moments, worker
-exports, promotion candidates, verifier contracts, rollback refs, and deployed
-build identity. It replaces ad hoc claims like "the Trace looked good."
+AppChangePackages, recipient adoptions, verifier contracts, rollback refs, and
+deployed build identity. It replaces ad hoc claims like "the Trace looked good."
 
 The embedded Dolt runtime migration is complete on staging. As of commit
 `c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
@@ -273,8 +273,8 @@ configured always-on primary computers have an explicit protected/resume lane.
 `candidate_computer`:
 
 - A background computer allowed to mutate and fail.
-- Produces exports, findings, manifests, patchsets, traces, diagnostics, and
-  promotion candidates.
+- Produces findings, traces, diagnostics, AppChangePackages, and recipient
+  adoption evidence.
 - Does not mutate canonical foreground state directly.
 - Becomes canonical only through promotion after verifier contracts and owner
   decision, or remains discardable/archivable with rollback evidence.

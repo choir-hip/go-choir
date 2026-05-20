@@ -36,8 +36,7 @@ type browserCapabilitiesResponse struct {
 }
 
 type browserSessionCreateRequest struct {
-	InitialURL           string `json:"initial_url,omitempty"`
-	PromotionCandidateID string `json:"promotion_candidate_id,omitempty"`
+	InitialURL string `json:"initial_url,omitempty"`
 }
 
 type browserNavigateRequest struct {
@@ -138,23 +137,6 @@ func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Re
 			State:          state,
 			CurrentURL:     currentURL,
 			Error:          sessionErr,
-		}
-		if candidateID := strings.TrimSpace(req.PromotionCandidateID); candidateID != "" {
-			candidate, err := h.rt.store.GetPromotionCandidate(r.Context(), ownerID, candidateID)
-			if err != nil {
-				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
-				return
-			}
-			if strings.TrimSpace(candidate.VMID) == "" {
-				writeAPIJSON(w, http.StatusConflict, apiError{Error: "promotion candidate has no VM identity"})
-				return
-			}
-			rec.WorldKind = "candidate_world"
-			rec.CandidateID = candidate.CandidateID
-			rec.VMID = candidate.VMID
-			rec.SnapshotID = candidate.SnapshotID
-			rec.SourceRunID = candidate.SourceRunID
-			rec.CandidateTraceID = candidate.TraceID
 		}
 		rec, err := h.rt.Store().CreateBrowserSession(r.Context(), rec)
 		if err != nil {

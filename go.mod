@@ -2,6 +2,10 @@ module github.com/yusefmosiah/go-choir
 
 go 1.25.6
 
+// Local replacement adds Homebrew ICU cgo discovery so ordinary Go
+// test/build loops do not depend on hand-entered CGO_* flags.
+replace github.com/dolthub/go-icu-regex => ./third_party/go-icu-regex
+
 require (
 	github.com/dolthub/driver v1.84.1
 	github.com/go-webauthn/webauthn v0.16.4

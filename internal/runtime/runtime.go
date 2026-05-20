@@ -618,13 +618,13 @@ func (rt *Runtime) activeChildRunForCoSuperSlot(ctx context.Context, parentRunID
 	return types.RunRecord{}, false, nil
 }
 
-func (rt *Runtime) latestChildExportPatchset(ctx context.Context, parentRunID string) (map[string]any, bool, error) {
+func (rt *Runtime) latestChildAppChangePackage(ctx context.Context, parentRunID string) (map[string]any, bool, error) {
 	if rt == nil || rt.store == nil {
 		return nil, false, nil
 	}
 	children, err := rt.store.ListChildRuns(ctx, parentRunID, 100)
 	if err != nil {
-		return nil, false, fmt.Errorf("list child runs for export reuse: %w", err)
+		return nil, false, fmt.Errorf("list child runs for app package reuse: %w", err)
 	}
 	var latestEvent types.EventRecord
 	var latestOutput map[string]any
@@ -637,7 +637,7 @@ func (rt *Runtime) latestChildExportPatchset(ctx context.Context, parentRunID st
 		if err != nil {
 			return nil, false, fmt.Errorf("list child run events for export reuse: %w", err)
 		}
-		ev, output, ok := latestSuccessfulToolResultOutput(childEvents, "export_patchset")
+		ev, output, ok := latestSuccessfulToolResultOutput(childEvents, "publish_app_change_package")
 		if !ok {
 			continue
 		}

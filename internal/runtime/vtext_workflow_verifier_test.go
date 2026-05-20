@@ -338,7 +338,7 @@ func TestVerifyVTextWorkflowSeededStochasticOrdering(t *testing.T) {
 	}
 }
 
-func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
+func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 	const ownerID = "user-1"
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Choir dogfood working document.\n\nInitial product route is stable."))
 	h, _, rt := vtextAPISetupWithProvider(t, provider, true)
@@ -376,12 +376,9 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 		"timeout_ms": 15000,
 	})
 	exportArgs, _ := json.Marshal(map[string]any{
-		"repo_path":   ".",
-		"output_dir":  ".choir/exports/prompt-product-path",
-		"base_sha":    base,
-		"snapshot_id": "snapshot-prompt-product-path",
-		"summary":     "prompt bar to worker worktree promotion queue proof",
-		"checks":      []string{"test -f choir-in-choir-proof.txt"},
+		"repo_path": ".",
+		"base_sha":  base,
+		"summary":   "prompt bar to worker worktree AppChangePackage proof",
 	})
 	workerProvider := newMockToolLoopProvider(
 		&ToolLoopResponse{
@@ -396,13 +393,13 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
-				Name:      "export_patchset",
+				Name:      "publish_app_change_package",
 				Arguments: exportArgs,
 			}},
 		},
 		&ToolLoopResponse{
 			StopReason: "end_turn",
-			Text:       "Exported product-path patchset.",
+			Text:       "Published product-path AppChangePackage.",
 		},
 	)
 	workerRT := New(Config{
@@ -485,7 +482,7 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 		ID:   "request-super-product-path",
 		Name: "request_super_execution",
 		Arguments: json.RawMessage(`{
-			"objective":"Request a background worker VM, export one narrow product proof patch, and queue it for promotion without mutating foreground.",
+			"objective":"Request a background worker VM, publish one narrow product proof AppChangePackage without mutating foreground active state.",
 			"channel_id":"` + decision.DocID + `"
 		}`),
 	}})
@@ -528,14 +525,14 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 	}
 
 	var delegateResp struct {
-		State           types.RunState   `json:"state"`
-		RunID           string           `json:"loop_id"`
-		WorkerIsolation string           `json:"worker_isolation"`
-		WorkerWorktree  string           `json:"worker_worktree_path"`
-		WorkerBranch    string           `json:"worker_branch"`
-		WorkerBaseSHA   string           `json:"worker_base_sha"`
-		ExportPatchsets []map[string]any `json:"export_patchsets"`
-		PromotionQueue  []map[string]any `json:"promotion_queue"`
+		State             types.RunState   `json:"state"`
+		RunID             string           `json:"loop_id"`
+		WorkerIsolation   string           `json:"worker_isolation"`
+		WorkerWorktree    string           `json:"worker_worktree_path"`
+		WorkerBranch      string           `json:"worker_branch"`
+		WorkerBaseSHA     string           `json:"worker_base_sha"`
+		AppChangePackages []map[string]any `json:"app_change_packages"`
+		AppAdoptions      []map[string]any `json:"app_adoptions"`
 	}
 	if len(workerHandleResp.ChainedDelegationOutput) > 0 {
 		if workerHandleResp.DelegationStatus != "worker_delegated" {
@@ -568,21 +565,14 @@ func TestPromptBarToWorkerWorktreePromotionQueueDeterministic(t *testing.T) {
 	if delegateResp.WorkerWorktree == "" || delegateResp.WorkerBranch == "" {
 		t.Fatalf("delegate response missing worktree provenance: %+v", delegateResp)
 	}
-	if len(delegateResp.ExportPatchsets) != 1 || len(delegateResp.PromotionQueue) != 1 {
-		t.Fatalf("expected exported patchset and queued promotion: %+v", delegateResp)
+	if len(delegateResp.AppChangePackages) != 1 || len(delegateResp.AppAdoptions) != 0 {
+		t.Fatalf("expected one AppChangePackage and no old promotion queue entry: %+v", delegateResp)
 	}
 	if _, err := os.Stat(filepath.Join(activeCWD, "choir-in-choir-proof.txt")); !os.IsNotExist(err) {
 		t.Fatalf("foreground repo was mutated; stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(delegateResp.WorkerWorktree, "choir-in-choir-proof.txt")); err != nil {
 		t.Fatalf("worker proof missing from isolated worktree: %v", err)
-	}
-	candidates, err := rt.Store().ListPromotionCandidates(ctx, ownerID, 10)
-	if err != nil {
-		t.Fatalf("list promotion candidates: %v", err)
-	}
-	if len(candidates) != 1 || candidates[0].Status != types.PromotionCandidateQueued || candidates[0].BaseSHA != base || candidates[0].VMID != workerHandleResp.Handle.VMID {
-		t.Fatalf("promotion queue = %+v, want one queued candidate at base %s for vm %s", candidates, base, workerHandleResp.Handle.VMID)
 	}
 }
 

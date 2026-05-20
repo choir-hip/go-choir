@@ -2,9 +2,12 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -21,8 +24,8 @@ type ContinuationProposal struct {
 }
 
 // SynthesizeRunContinuation chooses the next bounded objective from durable
-// runtime signals. It is intentionally deterministic and conservative: queued
-// promotion work beats open-ended mission continuation, and it only returns a
+// runtime signals. It is intentionally deterministic and conservative: app
+// adoption work beats open-ended mission continuation, and it only returns a
 // proposal for SelectRunContinuation to record through the normal compaction
 // and fingerprint path.
 func (rt *Runtime) SynthesizeRunContinuation(ctx context.Context, sourceRunID, ownerID string) (ContinuationProposal, error) {
@@ -33,11 +36,11 @@ func (rt *Runtime) SynthesizeRunContinuation(ctx context.Context, sourceRunID, o
 	if err != nil {
 		return ContinuationProposal{}, err
 	}
-	candidates, err := rt.store.ListPromotionCandidates(ctx, ownerID, 100)
+	adoptions, err := rt.store.ListAppAdoptions(ctx, ownerID, 100)
 	if err != nil {
-		return ContinuationProposal{}, fmt.Errorf("synthesize run continuation: list promotion candidates: %w", err)
+		return ContinuationProposal{}, fmt.Errorf("synthesize run continuation: list app adoptions: %w", err)
 	}
-	if proposal, ok := continuationFromPromotionCandidates(source, candidates); ok {
+	if proposal, ok := continuationFromAppAdoptions(source, adoptions); ok {
 		return proposal, nil
 	}
 	missionDoc := metadataStringValue(source.Metadata, "mission_doc")
@@ -45,8 +48,8 @@ func (rt *Runtime) SynthesizeRunContinuation(ctx context.Context, sourceRunID, o
 		missionDoc = "docs/mission-choir-grand-deformation-v0.md"
 	}
 	return ContinuationProposal{
-		Objective:        "Continue " + missionDoc + " by selecting the next verifier-dense Choir-in-Choir deformation from run memory, Trace, promotion state, and product gaps.",
-		Reason:           "run control memory found no pending promotion candidate, so it falls back to mission-gradient continuation",
+		Objective:        "Continue " + missionDoc + " by selecting the next verifier-dense Choir-in-Choir deformation from run memory, Trace, app adoption state, and product gaps.",
+		Reason:           "run control memory found no pending AppChangePackage adoption, so it falls back to mission-gradient continuation",
 		AuthorityProfile: AgentProfileVSuper,
 		LeaseSeconds:     4 * 60 * 60,
 		Details: map[string]any{
@@ -229,84 +232,114 @@ func (rt *Runtime) maybeStartConfiguredContinuation(ctx context.Context, rec *ty
 	}
 }
 
-func continuationFromPromotionCandidates(source *types.RunRecord, candidates []types.PromotionCandidateRecord) (ContinuationProposal, bool) {
+func continuationFromAppAdoptions(source *types.RunRecord, adoptions []types.AppAdoptionRecord) (ContinuationProposal, bool) {
 	if source == nil {
 		return ContinuationProposal{}, false
 	}
 	sourceRunID := strings.TrimSpace(source.RunID)
 	trajectoryID := metadataStringValue(source.Metadata, runMetadataTrajectoryID)
-	for _, status := range []types.PromotionCandidateStatus{
-		types.PromotionCandidateQueued,
-		types.PromotionCandidateIntegrated,
-		types.PromotionCandidateVerificationFailed,
-		types.PromotionCandidateVerified,
+	for _, status := range []types.AppAdoptionStatus{
+		types.AppAdoptionProposed,
+		types.AppAdoptionCandidateApplied,
+		types.AppAdoptionBlocked,
+		types.AppAdoptionVerified,
 	} {
-		for _, candidate := range candidates {
-			if candidate.Status != status || !promotionCandidateImpactsSource(candidate, sourceRunID, trajectoryID) {
+		for _, adoption := range adoptions {
+			if adoption.Status != status || !appAdoptionImpactsSource(adoption, sourceRunID, trajectoryID) {
 				continue
 			}
-			return continuationFromPromotionCandidate(candidate), true
+			return continuationFromAppAdoption(adoption), true
 		}
 	}
 	return ContinuationProposal{}, false
 }
 
-func promotionCandidateImpactsSource(candidate types.PromotionCandidateRecord, sourceRunID, trajectoryID string) bool {
-	if strings.TrimSpace(candidate.SourceRunID) == sourceRunID {
+func appAdoptionImpactsSource(adoption types.AppAdoptionRecord, sourceRunID, trajectoryID string) bool {
+	if strings.TrimSpace(adoption.AdoptionID) == "" {
+		return false
+	}
+	if trajectoryID != "" && strings.TrimSpace(adoption.TraceID) == trajectoryID {
 		return true
 	}
-	if trajectoryID != "" && strings.TrimSpace(candidate.TraceID) == trajectoryID {
-		return true
-	}
-	return false
+	return sourceRunID != "" && strings.Contains(adoption.AdoptionID, sourceRunID)
 }
 
-func continuationFromPromotionCandidate(candidate types.PromotionCandidateRecord) ContinuationProposal {
-	summary := strings.TrimSpace(candidate.Summary)
+func continuationFromAppAdoption(adoption types.AppAdoptionRecord) ContinuationProposal {
+	summary := strings.TrimSpace(adoption.AppID)
 	if summary == "" {
-		summary = "candidate-world patchset"
+		summary = adoption.PackageID
+	}
+	if summary == "" {
+		summary = "AppChangePackage adoption"
 	}
 	details := map[string]any{
 		"selection_source":     "run_control_memory",
-		"signal":               "promotion_candidate",
-		"candidate_id":         candidate.CandidateID,
-		"candidate_status":     string(candidate.Status),
-		"source_loop_id":       candidate.SourceRunID,
-		"trace_id":             candidate.TraceID,
-		"verifier_target":      "promotion_candidate",
-		"integration_branch":   candidate.IntegrationBranch,
-		"destination_branch":   candidate.DestinationBranch,
-		"candidate_summary":    summary,
-		"canonical_mutation":   "forbidden_until_verified_and_approved",
-		"promotion_queue_only": true,
+		"signal":               "app_adoption",
+		"adoption_id":          adoption.AdoptionID,
+		"package_id":           adoption.PackageID,
+		"adoption_status":      string(adoption.Status),
+		"trace_id":             adoption.TraceID,
+		"verifier_target":      "app_adoption",
+		"target_computer_id":   adoption.TargetComputerID,
+		"target_candidate_id":  adoption.TargetCandidateID,
+		"candidate_source_ref": adoption.CandidateSourceRef,
+		"canonical_mutation":   "forbidden_until_verified_with_rollback",
 	}
-	switch candidate.Status {
-	case types.PromotionCandidateVerified:
+	switch adoption.Status {
+	case types.AppAdoptionVerified:
 		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Prepare owner review for verified promotion candidate %s: %s", candidate.CandidateID, summary),
-			Reason:           "run control memory found a verified candidate that still requires explicit owner approval before promotion",
+			Objective:        fmt.Sprintf("Prepare promotion or rollback decision for verified app adoption %s: %s", adoption.AdoptionID, summary),
+			Reason:           "run control memory found a verified recipient adoption that still needs promotion/rollback closure",
 			AuthorityProfile: AgentProfileCoSuper,
 			LeaseSeconds:     60 * 60,
 			Details:          details,
 		}
-	case types.PromotionCandidateVerificationFailed:
-		details["error"] = candidate.Error
+	case types.AppAdoptionBlocked:
+		details["error"] = adoption.Error
 		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Recover failed promotion candidate %s without mutating canonical state: %s", candidate.CandidateID, summary),
-			Reason:           "run control memory found a failed verifier contract that should produce diagnostics or a safer candidate",
+			Objective:        fmt.Sprintf("Recover blocked app adoption %s without mutating active state: %s", adoption.AdoptionID, summary),
+			Reason:           "run control memory found a blocked recipient build/verifier contract",
 			AuthorityProfile: AgentProfileVSuper,
 			LeaseSeconds:     2 * 60 * 60,
 			Details:          details,
 		}
 	default:
 		return ContinuationProposal{
-			Objective:        fmt.Sprintf("Verify queued promotion candidate %s before any canonical promotion: %s", candidate.CandidateID, summary),
-			Reason:           "run control memory found a queued candidate that needs verifier contracts before promotion",
+			Objective:        fmt.Sprintf("Verify app adoption %s with actual recipient build evidence before promotion: %s", adoption.AdoptionID, summary),
+			Reason:           "run control memory found a proposed recipient adoption that needs verifier contracts",
 			AuthorityProfile: AgentProfileVSuper,
 			LeaseSeconds:     2 * 60 * 60,
 			Details:          details,
 		}
 	}
+}
+
+func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) string {
+	parts := []string{
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(trajectoryID),
+		strings.TrimSpace(parentRunID),
+		normalizeObjectiveText(objective),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeObjectiveText(raw string) string {
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace && b.Len() > 0 {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func boundedContinuationProfile(profile string) (string, error) {
@@ -340,14 +373,13 @@ func (rt *Runtime) emitContinuationEvent(ctx context.Context, source *types.RunR
 		for _, key := range []string{
 			"compaction_status",
 			"compaction_error",
-			"candidate_id",
+			"adoption_id",
+			"package_id",
+			"adoption_status",
 			"trace_id",
-			"vm_id",
-			"base_sha",
-			"worker_head_sha",
-			"manifest_path",
-			"patchset_path",
-			"patchset_sha256",
+			"target_computer_id",
+			"target_candidate_id",
+			"candidate_source_ref",
 			"objective_fingerprint",
 		} {
 			if value, ok := rec.Details[key]; ok && value != nil {

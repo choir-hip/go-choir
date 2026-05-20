@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -60,12 +59,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -82,7 +81,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "export_patchset"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -123,8 +122,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("edit_vtext"); ok {
 		t.Fatalf("researcher should not have edit_vtext")
 	}
-	if _, ok := researcher.Lookup("export_patchset"); ok {
-		t.Fatalf("researcher should not have export_patchset")
+	if _, ok := researcher.Lookup("publish_app_change_package"); ok {
+		t.Fatalf("researcher should not have publish_app_change_package")
 	}
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
@@ -154,8 +153,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("submit_worker_update"); ok {
 		t.Fatalf("vtext should not have submit_worker_update")
 	}
-	if _, ok := vtext.Lookup("export_patchset"); ok {
-		t.Fatalf("vtext should not have export_patchset")
+	if _, ok := vtext.Lookup("publish_app_change_package"); ok {
+		t.Fatalf("vtext should not have publish_app_change_package")
 	}
 	if _, ok := vtext.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("vtext should not have delegate_worker_vm")
@@ -163,8 +162,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := conductor.Lookup("edit_vtext"); ok {
 		t.Fatalf("conductor should not have edit_vtext")
 	}
-	if _, ok := conductor.Lookup("export_patchset"); ok {
-		t.Fatalf("conductor should not have export_patchset")
+	if _, ok := conductor.Lookup("publish_app_change_package"); ok {
+		t.Fatalf("conductor should not have publish_app_change_package")
 	}
 	if _, ok := conductor.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("conductor should not have delegate_worker_vm")
@@ -1816,10 +1815,14 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	if err := s.CreateRun(ctx, child); err != nil {
 		t.Fatalf("create active child: %v", err)
 	}
-	appendRuntimeToolResult(t, s, child, "export_patchset", map[string]any{
-		"status":          "exported",
-		"patchset_sha256": "child-sha",
-		"worker_head_sha": "child-head",
+	appendRuntimeToolResult(t, s, child, "publish_app_change_package", map[string]any{
+		"status":                      "published_unlisted",
+		"package_id":                  "child-package",
+		"package_manifest_sha256":     "child-manifest-sha",
+		"candidate_head_sha":          "child-head",
+		"recipient_build_required":    true,
+		"runtime_source_delta_sha256": "child-runtime-sha",
+		"ui_source_delta_sha256":      "child-ui-sha",
 	})
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
@@ -1837,7 +1840,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode cancel response: %v", err)
 	}
-	if resp.Status != "not_cancelled" || resp.LoopID != child.RunID || !strings.Contains(resp.Reason, "export_patchset") {
+	if resp.Status != "not_cancelled" || resp.LoopID != child.RunID || !strings.Contains(resp.Reason, "publish_app_change_package") {
 		t.Fatalf("cancel response = %+v, want exported child preserved", resp)
 	}
 	stored, err := s.GetRun(ctx, child.RunID)
@@ -1849,7 +1852,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	}
 }
 
-func TestVSuperExportPatchsetReusesChildExport(t *testing.T) {
+func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -1887,7 +1890,7 @@ func TestVSuperExportPatchsetReusesChildExport(t *testing.T) {
 		OwnerID:      parent.OwnerID,
 		SandboxID:    parent.SandboxID,
 		State:        types.RunCompleted,
-		Prompt:       "Implement candidate change and export.",
+		Prompt:       "Implement candidate change and publish a package.",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
@@ -1899,16 +1902,15 @@ func TestVSuperExportPatchsetReusesChildExport(t *testing.T) {
 	if err := s.CreateRun(ctx, child); err != nil {
 		t.Fatalf("create child: %v", err)
 	}
-	appendRuntimeToolResult(t, s, child, "export_patchset", map[string]any{
-		"status":          "exported",
-		"patchset_sha256": "child-sha",
-		"patchset_path":   "/tmp/child.patch",
-		"manifest_path":   "/tmp/manifest.json",
-		"worker_head_sha": "child-head",
+	appendRuntimeToolResult(t, s, child, "publish_app_change_package", map[string]any{
+		"status":                  "published_unlisted",
+		"package_id":              "child-package",
+		"package_manifest_sha256": "child-manifest-sha",
+		"candidate_head_sha":      "child-head",
 	})
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "export_patchset", json.RawMessage(`{
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "publish_app_change_package", json.RawMessage(`{
 		"repo_path":"does-not-exist",
 		"base_sha":"base-sha"
 	}`))
@@ -1916,17 +1918,18 @@ func TestVSuperExportPatchsetReusesChildExport(t *testing.T) {
 		t.Fatalf("reuse child export: %v", err)
 	}
 	var resp struct {
-		PatchsetSHA256    string `json:"patchset_sha256"`
-		ChildLoopID       string `json:"child_loop_id"`
-		ChildSlot         string `json:"child_slot"`
-		ReusedChildExport bool   `json:"reused_child_export"`
-		ParentLoopID      string `json:"parent_loop_id"`
+		PackageID          string `json:"package_id"`
+		ManifestSHA256     string `json:"package_manifest_sha256"`
+		ChildLoopID        string `json:"child_loop_id"`
+		ChildSlot          string `json:"child_slot"`
+		ReusedChildPackage bool   `json:"reused_child_package"`
+		ParentLoopID       string `json:"parent_loop_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode export response: %v", err)
+		t.Fatalf("decode package response: %v", err)
 	}
-	if resp.PatchsetSHA256 != "child-sha" || resp.ChildLoopID != child.RunID || resp.ChildSlot != "implementation" || !resp.ReusedChildExport || resp.ParentLoopID != parent.RunID {
-		t.Fatalf("export response = %+v, want reused child export", resp)
+	if resp.PackageID != "child-package" || resp.ManifestSHA256 != "child-manifest-sha" || resp.ChildLoopID != child.RunID || resp.ChildSlot != "implementation" || !resp.ReusedChildPackage || resp.ParentLoopID != parent.RunID {
+		t.Fatalf("package response = %+v, want reused child package", resp)
 	}
 }
 
@@ -2568,7 +2571,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 		"terminal_error":               "worker run worker-run-timeout did not finish within 15m0s",
 		"event_count":                  12,
 		"worker_channel_message_count": 2,
-		"export_patchsets":             []map[string]any{},
+		"app_change_packages":          []map[string]any{},
 	}
 	outputJSON, _ := json.Marshal(delegateOutput)
 	payload, _ := json.Marshal(map[string]any{
@@ -2617,7 +2620,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if !containsString(update.EvidenceIDs, "event:event-delegate-fallback") || !containsString(update.EvidenceIDs, "worker_loop:worker-run-timeout") {
 		t.Fatalf("evidence ids missing delegate refs: %+v", update.EvidenceIDs)
 	}
-	if !strings.Contains(strings.Join(update.Findings, "\n"), "no export patchsets") {
+	if !strings.Contains(strings.Join(update.Findings, "\n"), "no AppChangePackages") {
 		t.Fatalf("findings missing export blocker: %+v", update.Findings)
 	}
 	if !strings.Contains(update.Content, "delegate_worker_vm returned") {
@@ -2796,7 +2799,7 @@ func TestResearcherWebSearchWithoutGatewayIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
+func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	rt.cfg.SandboxID = "vm-tool-export"
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -2822,7 +2825,7 @@ func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
 	runGit(t, repo, "add", "README.md")
 	runGit(t, repo, "commit", "-m", "worker change")
 
-	superRun, err := rt.StartRunWithMetadata(context.Background(), "export worker patchset", "user-alice", map[string]any{
+	superRun, err := rt.StartRunWithMetadata(context.Background(), "publish worker AppChangePackage", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 		runMetadataAgentRole:    AgentProfileCoSuper,
 		runMetadataTrajectoryID: "trace-export-tool",
@@ -2831,56 +2834,30 @@ func TestExportPatchsetToolExportsWithoutGitHubPush(t *testing.T) {
 		t.Fatalf("start co-super run: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "export_patchset", json.RawMessage(fmt.Sprintf(`{
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "publish_app_change_package", json.RawMessage(fmt.Sprintf(`{
 		"repo_path": "repo",
-		"output_dir": "exports/proof",
 		"base_sha": %q,
 		"snapshot_id": "snapshot-tool",
-		"summary": "worker export proof",
+		"summary": "worker package proof",
 		"checks": ["grep -q worker README.md"]
 	}`, base)))
 	if err != nil {
-		t.Fatalf("export_patchset: %v", err)
+		t.Fatalf("publish_app_change_package: %v", err)
 	}
 
 	var result struct {
-		Status       string `json:"status"`
-		ManifestPath string `json:"manifest_path"`
-		PatchsetPath string `json:"patchset_path"`
-		GitHubPush   bool   `json:"github_push"`
+		Status                   string `json:"status"`
+		PackageID                string `json:"package_id"`
+		PackageManifestSHA256    string `json:"package_manifest_sha256"`
+		RuntimeSourceDeltaSHA256 string `json:"runtime_source_delta_sha256"`
+		CandidateHeadSHA         string `json:"candidate_head_sha"`
+		GitHubPush               bool   `json:"github_push"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		t.Fatalf("decode export result: %v\n%s", err, raw)
+		t.Fatalf("decode package result: %v\n%s", err, raw)
 	}
-	if result.Status != "exported" || result.GitHubPush {
-		t.Fatalf("unexpected export result: %+v", result)
-	}
-	for _, path := range []string{result.ManifestPath, result.PatchsetPath} {
-		if !strings.HasPrefix(path, cwd+string(os.PathSeparator)) {
-			t.Fatalf("export path escaped cwd: %s", path)
-		}
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("expected export artifact %s: %v", path, err)
-		}
-	}
-
-	data, err := os.ReadFile(result.ManifestPath)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	var manifest struct {
-		RunID           string `json:"run_id"`
-		TraceID         string `json:"trace_id"`
-		VMID            string `json:"vm_id"`
-		SnapshotID      string `json:"snapshot_id"`
-		BaseSHA         string `json:"base_sha"`
-		ExpectedHeadSHA string `json:"expected_head_sha"`
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("decode manifest: %v", err)
-	}
-	if manifest.RunID != superRun.RunID || manifest.TraceID != "trace-export-tool" || manifest.VMID != "vm-tool-export" || manifest.SnapshotID != "snapshot-tool" || manifest.BaseSHA != base || manifest.ExpectedHeadSHA == "" {
-		t.Fatalf("manifest provenance mismatch: %+v", manifest)
+	if result.Status != "published_unlisted" || result.GitHubPush || result.PackageID == "" || result.PackageManifestSHA256 == "" || result.RuntimeSourceDeltaSHA256 == "" || result.CandidateHeadSHA == "" {
+		t.Fatalf("unexpected package result: %+v", result)
 	}
 }
 
@@ -2932,7 +2909,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
-				Name:      "export_patchset",
+				Name:      "publish_app_change_package",
 				Arguments: json.RawMessage(exportArgs),
 			}},
 		},
@@ -2990,28 +2967,25 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 
 	var result struct {
-		State           types.RunState   `json:"state"`
-		WorkerVMID      string           `json:"worker_vm_id"`
-		ExportPatchsets []map[string]any `json:"export_patchsets"`
-		PromotionQueue  []map[string]any `json:"promotion_queue"`
+		State             types.RunState   `json:"state"`
+		WorkerVMID        string           `json:"worker_vm_id"`
+		AppChangePackages []map[string]any `json:"app_change_packages"`
+		AppAdoptions      []map[string]any `json:"app_adoptions"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
 	}
-	if result.State != types.RunCompleted || result.WorkerVMID != "vm-worker-proof" || len(result.ExportPatchsets) != 1 {
+	if result.State != types.RunCompleted || result.WorkerVMID != "vm-worker-proof" || len(result.AppChangePackages) != 1 {
 		t.Fatalf("unexpected delegate result: %+v\nraw=%s", result, raw)
 	}
-	if pushed, _ := result.ExportPatchsets[0]["github_push"].(bool); pushed {
-		t.Fatalf("worker export reported github push: %+v", result.ExportPatchsets[0])
+	if pushed, _ := result.AppChangePackages[0]["github_push"].(bool); pushed {
+		t.Fatalf("worker export reported github push: %+v", result.AppChangePackages[0])
 	}
-	if got, _ := result.ExportPatchsets[0]["worker_head"].(string); strings.TrimSpace(got) == "" {
-		t.Fatalf("worker export missing worker_head: %+v", result.ExportPatchsets[0])
+	if got, _ := result.AppChangePackages[0]["candidate_head_sha"].(string); strings.TrimSpace(got) == "" {
+		t.Fatalf("worker package missing candidate_head_sha: %+v", result.AppChangePackages[0])
 	}
-	if len(result.PromotionQueue) != 1 {
-		t.Fatalf("expected one queued promotion candidate, got %+v", result.PromotionQueue)
-	}
-	if got, _ := result.PromotionQueue[0]["candidate_id"].(string); strings.TrimSpace(got) == "" {
-		t.Fatalf("queued promotion missing candidate_id: %+v", result.PromotionQueue[0])
+	if len(result.AppAdoptions) != 0 {
+		t.Fatalf("delegate_worker_vm must not queue old promotion candidates, got %+v", result.AppAdoptions)
 	}
 	updates, err := activeStore.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-worker-delegation", 10)
 	if err != nil {
@@ -3021,12 +2995,11 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
 	}
 	joinedFindings := strings.Join(updates[0].Findings, "\n")
-	if !strings.Contains(joinedFindings, "returned 1 export patchset") || strings.Contains(joinedFindings, "no export patchsets") {
-		t.Fatalf("worker update checkpoint did not preserve successful export: %+v", updates[0])
+	if !strings.Contains(joinedFindings, "returned 1 AppChangePackage") || strings.Contains(joinedFindings, "no AppChangePackages") {
+		t.Fatalf("worker update checkpoint did not preserve successful package: %+v", updates[0])
 	}
-	if !containsString(updates[0].Artifacts, result.ExportPatchsets[0]["manifest_path"].(string)) ||
-		!containsString(updates[0].Artifacts, result.ExportPatchsets[0]["patchset_path"].(string)) {
-		t.Fatalf("worker update checkpoint missing export artifacts: %+v", updates[0])
+	if packageID, _ := result.AppChangePackages[0]["package_id"].(string); packageID == "" || !containsString(updates[0].EvidenceIDs, "app_change_package:"+packageID) {
+		t.Fatalf("worker update checkpoint missing AppChangePackage evidence: %+v", updates[0])
 	}
 }
 
@@ -3061,7 +3034,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 			Timestamp: now.Add(time.Second),
 			Kind:      types.EventToolResult,
 			Payload: json.RawMessage(`{
-				"tool":"export_patchset",
+				"tool":"publish_app_change_package",
 				"is_error":false,
 				"output":"{\"status\":\"exported\",\"manifest_json\":\"{\\\"run_id\\\":\\\"worker-child\\\"}\",\"patchset_content\":\"diff --git a/TRACE.md b/TRACE.md\\n+TRACE_PROVENANCE_CHILD_FOLLOW\\n\",\"base_sha\":\"base-child\",\"worker_head\":\"head-child\",\"snapshot_id\":\"snapshot-child\"}"
 			}`),
@@ -3144,11 +3117,11 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 	var result struct {
 		Status            string                    `json:"status"`
 		State             types.RunState            `json:"state"`
-		ExportPatchsets   []map[string]any          `json:"export_patchsets"`
+		AppChangePackages []map[string]any          `json:"app_change_packages"`
 		WorkerChildRunIDs []string                  `json:"worker_child_run_ids"`
 		WorkerChildStates map[string]types.RunState `json:"worker_child_run_states"`
 		CompletionBlocker string                    `json:"completion_blocker"`
-		PromotionQueue    []map[string]any          `json:"promotion_queue"`
+		AppAdoptions      []map[string]any          `json:"app_adoptions"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -3159,14 +3132,14 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 	if result.CompletionBlocker != "" {
 		t.Fatalf("completed child export should not be marked incomplete: %+v\nraw=%s", result, raw)
 	}
-	if len(result.ExportPatchsets) != 1 || result.ExportPatchsets[0]["loop_id"] != "worker-child" {
-		t.Fatalf("child export was not collected after child follow-up: %+v\nraw=%s", result.ExportPatchsets, raw)
+	if len(result.AppChangePackages) != 1 || result.AppChangePackages[0]["loop_id"] != "worker-child" {
+		t.Fatalf("child package was not collected after child follow-up: %+v\nraw=%s", result.AppChangePackages, raw)
 	}
 	if !containsString(result.WorkerChildRunIDs, "worker-child") || result.WorkerChildStates["worker-child"] != types.RunCompleted {
 		t.Fatalf("child run follow-up evidence missing: %+v states=%+v raw=%s", result.WorkerChildRunIDs, result.WorkerChildStates, raw)
 	}
-	if len(result.PromotionQueue) != 1 {
-		t.Fatalf("child export should queue a promotion candidate, got %+v\nraw=%s", result.PromotionQueue, raw)
+	if len(result.AppAdoptions) != 0 {
+		t.Fatalf("child package should not queue an old promotion candidate, got %+v\nraw=%s", result.AppAdoptions, raw)
 	}
 }
 
@@ -3269,7 +3242,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 		State             types.RunState            `json:"state"`
 		CompletionBlocker string                    `json:"completion_blocker"`
 		TerminalError     string                    `json:"terminal_error"`
-		ExportPatchsets   []map[string]any          `json:"export_patchsets"`
+		AppChangePackages []map[string]any          `json:"app_change_packages"`
 		WorkerChildStates map[string]types.RunState `json:"worker_child_run_states"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
@@ -3278,11 +3251,11 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 	if result.Status != "worker_run_incomplete" || result.State != types.RunCompleted {
 		t.Fatalf("unexpected incomplete delegate status: %+v\nraw=%s", result, raw)
 	}
-	if result.CompletionBlocker != "vsuper_completed_without_export_or_worker_update" || !strings.Contains(result.TerminalError, "completed after child coordination") {
+	if result.CompletionBlocker != "vsuper_completed_without_app_change_package_or_worker_update" || !strings.Contains(result.TerminalError, "completed after child coordination") {
 		t.Fatalf("missing completion blocker evidence: %+v\nraw=%s", result, raw)
 	}
-	if len(result.ExportPatchsets) != 0 {
-		t.Fatalf("unexpected export patchsets for incomplete delegate: %+v\nraw=%s", result.ExportPatchsets, raw)
+	if len(result.AppChangePackages) != 0 {
+		t.Fatalf("unexpected AppChangePackages for incomplete delegate: %+v\nraw=%s", result.AppChangePackages, raw)
 	}
 	if result.WorkerChildStates["worker-child-incomplete"] != types.RunCompleted {
 		t.Fatalf("child completion state missing: %+v\nraw=%s", result.WorkerChildStates, raw)
@@ -3851,9 +3824,9 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			Timestamp: now.Add(2 * time.Second),
 			Kind:      types.EventToolResult,
 			Payload: json.RawMessage(`{
-				"tool":"export_patchset",
+				"tool":"publish_app_change_package",
 				"is_error":false,
-				"output":"{\"status\":\"exported\",\"manifest_path\":\"/mnt/persistent/files/patchsets/manifest.json\",\"patchset_path\":\"/mnt/persistent/files/patchsets/patch.diff\",\"base_sha\":\"base-timeout\",\"worker_head\":\"head-timeout\"}"
+				"output":"{\"status\":\"published_unlisted\",\"package_id\":\"package-timeout\",\"package_manifest_sha256\":\"manifest-timeout\",\"base_sha\":\"base-timeout\",\"candidate_head_sha\":\"head-timeout\",\"recipient_build_required\":true}"
 			}`),
 		},
 	}
@@ -3928,9 +3901,9 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		WorkerChannelMessageCount int               `json:"worker_channel_message_count"`
 		WorkerChildRunIDs         []string          `json:"worker_child_run_ids"`
 		WorkerChildRunStates      map[string]string `json:"worker_child_run_states"`
-		ExportPatchsets           []map[string]any  `json:"export_patchsets"`
-		PromotionQueue            []map[string]any  `json:"promotion_queue"`
-		ReviewableExportObserved  bool              `json:"reviewable_export_observed"`
+		AppChangePackages         []map[string]any  `json:"app_change_packages"`
+		AppAdoptions              []map[string]any  `json:"app_adoptions"`
+		ReviewablePackageObserved bool              `json:"reviewable_package_observed"`
 		CompletionBlocker         string            `json:"completion_blocker"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
@@ -3948,19 +3921,19 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	if !containsString(result.WorkerChildRunIDs, "child-export-run") {
 		t.Fatalf("child run evidence missing: %+v\nraw=%s", result, raw)
 	}
-	if len(result.ExportPatchsets) != 1 ||
-		result.ExportPatchsets[0]["manifest_path"] != "/mnt/persistent/files/patchsets/manifest.json" ||
-		result.ExportPatchsets[0]["loop_id"] != "child-export-run" {
-		t.Fatalf("child export evidence missing: %+v\nraw=%s", result.ExportPatchsets, raw)
+	if len(result.AppChangePackages) != 1 ||
+		result.AppChangePackages[0]["package_id"] != "package-timeout" ||
+		result.AppChangePackages[0]["loop_id"] != "child-export-run" {
+		t.Fatalf("child package evidence missing: %+v\nraw=%s", result.AppChangePackages, raw)
 	}
-	if !result.ReviewableExportObserved || result.CompletionBlocker != "vsuper_timed_out_after_reviewable_export" {
+	if !result.ReviewablePackageObserved || result.CompletionBlocker != "vsuper_timed_out_after_reviewable_package" {
 		t.Fatalf("timeout export should remain reviewable with blocker: %+v\nraw=%s", result, raw)
 	}
 	if result.WorkerChildRunStates["child-export-run"] != string(types.RunCompleted) {
 		t.Fatalf("child status evidence missing: %+v\nraw=%s", result.WorkerChildRunStates, raw)
 	}
-	if len(result.PromotionQueue) != 1 {
-		t.Fatalf("timeout export should queue reviewable promotion candidate: %+v\nraw=%s", result.PromotionQueue, raw)
+	if len(result.AppAdoptions) != 0 {
+		t.Fatalf("timeout package must not queue old promotion candidates: %+v\nraw=%s", result.AppAdoptions, raw)
 	}
 	if len(result.WorkerSpawnedProfiles) != 1 || result.WorkerSpawnedProfiles[0] != "co-super" {
 		t.Fatalf("spawn profile evidence missing: %+v\nraw=%s", result, raw)
@@ -3981,11 +3954,11 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		t.Fatalf("worker update checkpoint missing delegate evidence: %+v", updates[0])
 	}
 	joinedFindings := strings.Join(updates[0].Findings, "\n")
-	if !strings.Contains(joinedFindings, "returned 1 export patchset") || strings.Contains(joinedFindings, "no export patchsets") {
-		t.Fatalf("worker update checkpoint did not preserve child export evidence: %+v", updates[0])
+	if !strings.Contains(joinedFindings, "returned 1 AppChangePackage") || strings.Contains(joinedFindings, "no AppChangePackages") {
+		t.Fatalf("worker update checkpoint did not preserve child package evidence: %+v", updates[0])
 	}
-	if !containsString(updates[0].Artifacts, "/mnt/persistent/files/patchsets/manifest.json") ||
-		!containsString(updates[0].Artifacts, "/mnt/persistent/files/patchsets/patch.diff") {
+	if !containsString(updates[0].Artifacts, "package-timeout") ||
+		!containsString(updates[0].Artifacts, "manifest-timeout") {
 		t.Fatalf("worker update checkpoint missing child export artifacts: %+v", updates[0])
 	}
 }
@@ -4117,9 +4090,9 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"exclusive writer for go-choir-candidate",
 		"do not run reset, clean, edit, or commit commands",
 		"verifier should inspect only after the implementation child has reported",
-		"missing tools, failed tests, or export failure must end in submit_worker_update",
-		"both child runs finish without export_patchset or submit_worker_update",
-		"export_patchset",
+		"missing tools, failed tests, or package publication failure must end in submit_worker_update",
+		"both child runs finish without publish_app_change_package or submit_worker_update",
+		"publish_app_change_package",
 	} {
 		if !strings.Contains(contract, want) {
 			t.Fatalf("delegate contract missing %q in %q", want, contract)
@@ -4216,7 +4189,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
-				Name:      "export_patchset",
+				Name:      "publish_app_change_package",
 				Arguments: exportArgs,
 			}},
 		},
@@ -4275,14 +4248,14 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 	}
 
 	var result struct {
-		State           types.RunState   `json:"state"`
-		RunID           string           `json:"loop_id"`
-		WorkerIsolation string           `json:"worker_isolation"`
-		WorkerWorktree  string           `json:"worker_worktree_path"`
-		WorkerBranch    string           `json:"worker_branch"`
-		WorkerBaseSHA   string           `json:"worker_base_sha"`
-		ExportPatchsets []map[string]any `json:"export_patchsets"`
-		PromotionQueue  []map[string]any `json:"promotion_queue"`
+		State             types.RunState   `json:"state"`
+		RunID             string           `json:"loop_id"`
+		WorkerIsolation   string           `json:"worker_isolation"`
+		WorkerWorktree    string           `json:"worker_worktree_path"`
+		WorkerBranch      string           `json:"worker_branch"`
+		WorkerBaseSHA     string           `json:"worker_base_sha"`
+		AppChangePackages []map[string]any `json:"app_change_packages"`
+		AppAdoptions      []map[string]any `json:"app_adoptions"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
@@ -4299,239 +4272,8 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(result.WorkerWorktree, "isolated-worker-proof.txt")); err != nil {
 		t.Fatalf("worker proof missing from isolated worktree: %v", err)
 	}
-	if len(result.ExportPatchsets) != 1 || len(result.PromotionQueue) != 1 {
-		t.Fatalf("expected exported patchset and queued promotion: %+v", result)
-	}
-	if got, _ := result.PromotionQueue[0]["vm_id"].(string); got != "vm-local-worktree" {
-		t.Fatalf("queued promotion vm_id = %q, want vm-local-worktree; queue=%+v", got, result.PromotionQueue[0])
-	}
-}
-
-func TestQueuePromotionCandidatesForWorkerExportsDedupesExactExport(t *testing.T) {
-	rt, _, _ := testRuntimeWithTempCWD(t)
-	ctx := context.Background()
-	export := map[string]any{
-		"loop_id":         "candidate-loop-dedupe",
-		"vm_id":           "sandbox-dev",
-		"snapshot_id":     "snapshot-dedupe",
-		"base_sha":        "base-dedupe",
-		"worker_head":     "worker-head-dedupe",
-		"manifest_path":   "/tmp/dedupe-manifest.json",
-		"patchset_path":   "/tmp/dedupe.patch",
-		"worker_head_sha": "worker-head-dedupe",
-	}
-	in := workerExportQueueContext{
-		OwnerID:        "user-alice",
-		ParentRunID:    "super-run-dedupe",
-		CandidateRunID: "candidate-loop-dedupe",
-		TraceID:        "trace-dedupe",
-		WorkerVMID:     "vm-worker-dedupe",
-		WorkerID:       "worker-dedupe",
-		Objective:      "dedupe exact worker export",
-		Exports:        []map[string]any{export},
-	}
-
-	first, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
-	if err != nil {
-		t.Fatalf("queue first candidate: %v", err)
-	}
-	second, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
-	if err != nil {
-		t.Fatalf("queue duplicate candidate: %v", err)
-	}
-	if len(first) != 1 || len(second) != 1 {
-		t.Fatalf("queue results = first %+v second %+v, want one result each", first, second)
-	}
-	if first[0]["candidate_id"] != second[0]["candidate_id"] {
-		t.Fatalf("duplicate export queued new candidate: first=%+v second=%+v", first[0], second[0])
-	}
-	if first[0]["vm_id"] != "vm-worker-dedupe" || second[0]["vm_id"] != "vm-worker-dedupe" {
-		t.Fatalf("queued candidate should preserve worker VM id: first=%+v second=%+v", first[0], second[0])
-	}
-	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
-	if err != nil {
-		t.Fatalf("list candidates: %v", err)
-	}
-	if len(candidates) != 1 {
-		t.Fatalf("stored candidates = %+v, want one deduped candidate", candidates)
-	}
-}
-
-func TestCollectExportPatchsetResultsDedupesRepeatedExports(t *testing.T) {
-	exportEvent := func(runID, sha, patchsetPath, exportedAt string) types.EventRecord {
-		t.Helper()
-		output, err := json.Marshal(map[string]any{
-			"patchset_sha256": sha,
-			"patchset_path":   patchsetPath,
-			"exported_at":     exportedAt,
-		})
-		if err != nil {
-			t.Fatalf("marshal output: %v", err)
-		}
-		payload, err := json.Marshal(map[string]any{
-			"tool":     "export_patchset",
-			"is_error": false,
-			"output":   string(output),
-		})
-		if err != nil {
-			t.Fatalf("marshal payload: %v", err)
-		}
-		return types.EventRecord{
-			EventID: "event-" + runID + "-" + exportedAt,
-			RunID:   runID,
-			Kind:    types.EventToolResult,
-			Payload: payload,
-		}
-	}
-
-	exports := collectExportPatchsetResults([]types.EventRecord{
-		exportEvent("loop-1", "sha-repeat", "/tmp/repeat.patch", "2026-05-16T01:00:00Z"),
-		exportEvent("loop-1", "sha-repeat", "/tmp/repeat.patch", "2026-05-16T01:01:00Z"),
-		exportEvent("loop-2", "sha-distinct", "/tmp/distinct.patch", "2026-05-16T01:02:00Z"),
-	})
-
-	if len(exports) != 2 {
-		t.Fatalf("exports = %+v, want two unique patchsets", exports)
-	}
-	if exports[0]["loop_id"] != "loop-1" || exports[1]["loop_id"] != "loop-2" {
-		t.Fatalf("deduped exports should preserve first loop ids: %+v", exports)
-	}
-}
-
-func TestQueuePromotionCandidatesDedupesEquivalentPatchsetFingerprint(t *testing.T) {
-	rt, _, _ := testRuntimeWithTempCWD(t)
-	ctx := context.Background()
-	dir := t.TempDir()
-	patchA := filepath.Join(dir, "candidate-a.patch")
-	patchB := filepath.Join(dir, "candidate-b.patch")
-	patchContent := []byte("diff --git a/product.txt b/product.txt\n+same product patch\n")
-	if err := os.WriteFile(patchA, patchContent, 0o644); err != nil {
-		t.Fatalf("write patch A: %v", err)
-	}
-	if err := os.WriteFile(patchB, patchContent, 0o644); err != nil {
-		t.Fatalf("write patch B: %v", err)
-	}
-
-	in := workerExportQueueContext{
-		OwnerID:     "user-alice",
-		ParentRunID: "super-run-fingerprint",
-		TraceID:     "trace-fingerprint",
-		WorkerVMID:  "vm-worker-fingerprint",
-		WorkerID:    "worker-fingerprint",
-		Objective:   "Run the same product patch",
-		Exports: []map[string]any{{
-			"loop_id":         "candidate-loop-a",
-			"base_sha":        "base-fingerprint",
-			"worker_head":     "worker-head-a",
-			"manifest_path":   filepath.Join(dir, "manifest-a.json"),
-			"patchset_path":   patchA,
-			"worker_head_sha": "worker-head-a",
-		}},
-	}
-	first, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
-	if err != nil {
-		t.Fatalf("queue first candidate: %v", err)
-	}
-	in.Objective = " run THE same/product patch!! "
-	in.Exports = []map[string]any{{
-		"loop_id":         "candidate-loop-b",
-		"base_sha":        "base-fingerprint",
-		"worker_head":     "worker-head-b",
-		"manifest_path":   filepath.Join(dir, "manifest-b.json"),
-		"patchset_path":   patchB,
-		"worker_head_sha": "worker-head-b",
-	}}
-	second, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
-	if err != nil {
-		t.Fatalf("queue equivalent candidate: %v", err)
-	}
-	if len(first) != 1 || len(second) != 1 {
-		t.Fatalf("queue results = first %+v second %+v, want one result each", first, second)
-	}
-	if first[0]["candidate_id"] != second[0]["candidate_id"] {
-		t.Fatalf("equivalent export queued new candidate: first=%+v second=%+v", first[0], second[0])
-	}
-	if first[0]["objective_fingerprint"] == "" || first[0]["patchset_sha256"] == "" {
-		t.Fatalf("candidate queue missing fingerprint evidence: %+v", first[0])
-	}
-	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
-	if err != nil {
-		t.Fatalf("list candidates: %v", err)
-	}
-	if len(candidates) != 1 {
-		t.Fatalf("stored candidates = %+v, want one fingerprint-deduped candidate", candidates)
-	}
-}
-
-func TestQueuePromotionCandidatesMaterializesInlineWorkerExportArtifacts(t *testing.T) {
-	rt, _, _ := testRuntimeWithTempCWD(t)
-	ctx := context.Background()
-	_ = os.RemoveAll(promotionArtifactRoot(rt))
-	patchContent := "diff --git a/product.txt b/product.txt\n--- a/product.txt\n+++ b/product.txt\n@@ -0,0 +1 @@\n+materialized worker patch\n"
-	manifestContent := `{"run_id":"candidate-loop-materialized","trace_id":"trace-materialized","vm_id":"vm-worker-materialized","base_sha":"base-materialized"}`
-	in := workerExportQueueContext{
-		OwnerID:     "user-alice",
-		ParentRunID: "super-run-materialized",
-		TraceID:     "trace-materialized",
-		WorkerVMID:  "vm-worker-materialized",
-		WorkerID:    "worker-materialized",
-		Objective:   "Materialize an inline worker export",
-		Exports: []map[string]any{{
-			"loop_id":          "candidate-loop-materialized",
-			"base_sha":         "base-materialized",
-			"worker_head":      "worker-head-materialized",
-			"worker_head_sha":  "worker-head-materialized",
-			"manifest_path":    "/worker-only/manifest.json",
-			"patchset_path":    "/worker-only/changes.patch",
-			"manifest_json":    manifestContent,
-			"patchset_content": patchContent,
-		}},
-	}
-
-	queued, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in)
-	if err != nil {
-		t.Fatalf("queue candidate: %v", err)
-	}
-	if len(queued) != 1 {
-		t.Fatalf("queued = %+v, want one candidate", queued)
-	}
-	candidates, err := rt.Store().ListPromotionCandidates(ctx, "user-alice", 10)
-	if err != nil {
-		t.Fatalf("list candidates: %v", err)
-	}
-	if len(candidates) != 1 {
-		t.Fatalf("stored candidates = %+v, want one", candidates)
-	}
-	patchBytes, err := os.ReadFile(candidates[0].PatchsetPath)
-	if err != nil {
-		t.Fatalf("read materialized patch: %v", err)
-	}
-	if string(patchBytes) != patchContent {
-		t.Fatalf("materialized patch = %q, want %q", string(patchBytes), patchContent)
-	}
-	manifestBytes, err := os.ReadFile(candidates[0].ManifestPath)
-	if err != nil {
-		t.Fatalf("read materialized manifest: %v", err)
-	}
-	if string(manifestBytes) != manifestContent {
-		t.Fatalf("materialized manifest = %q, want %q", string(manifestBytes), manifestContent)
-	}
-	var world promotion.CandidateWorld
-	if err := json.Unmarshal(candidates[0].CandidateJSON, &world); err != nil {
-		t.Fatalf("decode candidate world: %v", err)
-	}
-	if world.PatchsetSHA256 == "" || world.PatchsetPath != candidates[0].PatchsetPath {
-		t.Fatalf("candidate world missing materialized patch evidence: %+v", world)
-	}
-	if _, err := queuePromotionCandidatesForWorkerExports(ctx, rt, in); err != nil {
-		t.Fatalf("queue duplicate candidate: %v", err)
-	}
-	artifactDirs, err := os.ReadDir(promotionArtifactRoot(rt))
-	if err != nil {
-		t.Fatalf("read promotion artifact root: %v", err)
-	}
-	if len(artifactDirs) != 1 {
-		t.Fatalf("artifact dirs = %d, want one materialized candidate after duplicate export", len(artifactDirs))
+	if len(result.AppChangePackages) != 1 || len(result.AppAdoptions) != 0 {
+		t.Fatalf("expected one AppChangePackage and no old promotion queue entry: %+v", result)
 	}
 }
 

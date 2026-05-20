@@ -29,7 +29,6 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	bodyBytes, err := json.Marshal(map[string]any{
 		"app_id":                      "podcast",
 		"visibility":                  "unlisted",
-		"require_recipient_build":     true,
 		"source_computer_id":          "user-a-computer",
 		"source_candidate_id":         "candidate-user-a-podcast-build",
 		"candidate_source_ref":        "refs/heads/computers/user-a-computer/candidates/candidate-user-a-podcast-build",
@@ -52,7 +51,7 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v", err)
 	}
-	if !strings.Contains(string(pkg.ManifestJSON), `"require_recipient_build":true`) {
+	if !strings.Contains(string(pkg.ManifestJSON), `"recipient_build_required":true`) {
 		t.Fatalf("package manifest does not require recipient build: %s", string(pkg.ManifestJSON))
 	}
 
@@ -103,7 +102,6 @@ func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T
 	bodyBytes, err := json.Marshal(map[string]any{
 		"app_id":                      "podcast",
 		"visibility":                  "unlisted",
-		"require_recipient_build":     true,
 		"source_computer_id":          "user-a-computer",
 		"source_candidate_id":         "candidate-user-a-podcast-build-failure",
 		"candidate_source_ref":        "refs/heads/computers/user-a-computer/candidates/candidate-user-a-podcast-build-failure",

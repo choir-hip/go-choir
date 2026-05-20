@@ -154,6 +154,9 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 }
 
 func writeAndApplyAppPromotionPatch(ctx context.Context, repoPath, candidateDir string, env []string, patchText, name string) error {
+	if strings.TrimSpace(patchText) == "" {
+		return nil
+	}
 	if !looksLikeGitPatch(patchText) {
 		return fmt.Errorf("recipient build: %s is not a git patch", name)
 	}

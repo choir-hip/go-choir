@@ -565,7 +565,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			seenCast[key] = i
-		case "export_patchset":
+		case "publish_app_change_package":
 			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 				continue
 			}
@@ -574,7 +574,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			if previous, exists := seenExport[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate export_patchset payload already planned in this turn at call %s; one export attempt per candidate state is allowed", calls[previous].ID))
+				setSkip(i, fmt.Sprintf("tool_error: duplicate publish_app_change_package payload already planned in this turn at call %s; one package publication attempt per candidate state is allowed", calls[previous].ID))
 				continue
 			}
 			seenExport[key] = i

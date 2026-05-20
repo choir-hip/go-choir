@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
-	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -48,9 +47,9 @@ type acceptanceToolInvocation struct {
 }
 
 // SynthesizeRunAcceptance derives a durable run acceptance record from
-// product-path evidence already present in runs, Trace events, worker export
-// results, and promotion records. The caller chooses the target trajectory; the
-// verifier chooses checkpoints.
+// product-path evidence already present in runs, Trace events, worker
+// AppChangePackages, and recipient adoption records. The caller chooses the
+// target trajectory; the verifier chooses checkpoints.
 func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, in runAcceptanceSynthesizeInput) (types.RunAcceptanceRecord, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: runtime store is unavailable")
@@ -100,12 +99,6 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	sort.Slice(events, func(i, j int) bool {
 		return events[i].StreamSeq < events[j].StreamSeq
 	})
-
-	promotionCandidates, err := rt.store.ListPromotionCandidates(ctx, ownerID, 500)
-	if err != nil {
-		return types.RunAcceptanceRecord{}, fmt.Errorf("synthesize run acceptance: list promotion candidates: %w", err)
-	}
-	promotionCandidates = filterAcceptancePromotionCandidates(promotionCandidates, in.TrajectoryID, in.RunID, trajectoryRuns)
 
 	root := chooseAcceptanceRootRun(trajectoryRuns, in.RunID)
 	if root.RunID == "" && len(events) == 0 {
@@ -197,36 +190,36 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	}
 
 	delegateResults := collectAcceptanceToolResults(events, "delegate_worker_vm")
-	var exportRefs []string
-	var nonExportDelegateResults []acceptanceToolResult
-	exportCount := 0
+	var packageRefs []string
+	var nonPackageDelegateResults []acceptanceToolResult
+	packageCount := 0
 	for _, item := range delegateResults {
-		exports := acceptanceOutputSlice(item.output, "export_patchsets")
+		packages := acceptanceOutputSlice(item.output, "app_change_packages")
 		status := payloadString(item.output, "status")
-		if len(exports) == 0 {
-			nonExportDelegateResults = append(nonExportDelegateResults, item)
+		if len(packages) == 0 {
+			nonPackageDelegateResults = append(nonPackageDelegateResults, item)
 			continue
 		}
-		exportCount += len(exports)
+		packageCount += len(packages)
 		if mode := payloadString(item.output, "worker_isolation"); mode != "" {
 			builder.record.VMMode = mode
 		}
-		for _, export := range exports {
+		for _, pkg := range packages {
 			if builder.record.BaseSHA == "" {
-				builder.record.BaseSHA = payloadString(export, "base_sha")
+				builder.record.BaseSHA = payloadString(pkg, "base_sha")
 			}
 		}
-		delegateDetails := acceptanceDelegateWorkerDetails(item.output, exports)
-		evidenceSummary := "worker run exported concrete patchset evidence"
+		delegateDetails := acceptanceDelegateWorkerDetails(item.output, packages)
+		evidenceSummary := "worker run published concrete AppChangePackage evidence"
 		if status != "" && status != "worker_run_completed" {
 			delegateDetails["non_clean_delegate_status"] = status
-			evidenceSummary = "worker run returned reviewable export evidence with non-clean delegate status"
+			evidenceSummary = "worker run returned reviewable AppChangePackage evidence with non-clean delegate status"
 		}
 		ref := builder.addEventEvidence(item.event, evidenceSummary, delegateDetails)
-		exportRefs = append(exportRefs, ref)
+		packageRefs = append(packageRefs, ref)
 		builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, delegateDetails)
 	}
-	if exportCount == 0 {
+	if packageCount == 0 {
 		delegateErrors := collectAcceptanceToolErrors(events, "delegate_worker_vm")
 		pendingDelegates := collectAcceptancePendingToolInvocations(events, "delegate_worker_vm")
 		var refs []string
@@ -239,14 +232,14 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 				blockedSeq = ev.StreamSeq
 			}
 		}
-		if len(nonExportDelegateResults) > 0 {
-			for _, item := range nonExportDelegateResults {
-				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without export evidence", acceptanceDelegateWorkerDetails(item.output, nil))
+		if len(nonPackageDelegateResults) > 0 {
+			for _, item := range nonPackageDelegateResults {
+				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without AppChangePackage evidence", acceptanceDelegateWorkerDetails(item.output, nil))
 				refs = append(refs, ref)
 				rememberLatest(item.event)
 			}
-			last := nonExportDelegateResults[len(nonExportDelegateResults)-1]
-			details["result_count"] = len(nonExportDelegateResults)
+			last := nonPackageDelegateResults[len(nonPackageDelegateResults)-1]
+			details["result_count"] = len(nonPackageDelegateResults)
 			details["last_result_status"] = payloadString(last.output, "status")
 			details["last_result_state"] = payloadString(last.output, "state")
 			details["worker_id"] = payloadString(last.output, "worker_id")
@@ -295,7 +288,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		}
 		if len(delegateErrors) > 0 {
 			for _, item := range delegateErrors {
-				ref := builder.addEventEvidence(item.event, "worker VM delegation failed before export", map[string]any{
+				ref := builder.addEventEvidence(item.event, "worker VM delegation failed before AppChangePackage publication", map[string]any{
 					"tool":  "delegate_worker_vm",
 					"error": item.output,
 				})
@@ -325,7 +318,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			details["last_pending_worker_vm_id"] = payloadString(last.arguments, "vm_id")
 			details["last_pending_worker_sandbox_url"] = payloadString(last.arguments, "worker_sandbox_url")
 			details["pending_status"] = "invoked_without_terminal_result"
-			if len(nonExportDelegateResults) == 0 && len(delegateErrors) == 0 {
+			if len(nonPackageDelegateResults) == 0 && len(delegateErrors) == 0 {
 				details["worker_id"] = payloadString(last.arguments, "worker_id")
 				details["worker_vm_id"] = payloadString(last.arguments, "vm_id")
 				details["worker_sandbox_url"] = payloadString(last.arguments, "worker_sandbox_url")
@@ -336,39 +329,8 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			builder.addCheckpoint("worker_delegated", "blocked", blockedAt, blockedSeq, refs, details)
 		}
 	}
-	if exportCount > 0 {
-		builder.addCheckpoint("export_observed", "passed", time.Now().UTC(), 0, exportRefs, map[string]any{"export_count": exportCount})
-	}
-
-	var candidateRefs []string
-	for _, candidate := range promotionCandidates {
-		ref := builder.addPromotionEvidence(candidate)
-		candidateRefs = append(candidateRefs, ref)
-		if builder.record.BaseSHA == "" {
-			builder.record.BaseSHA = candidate.BaseSHA
-		}
-		if builder.record.VMMode == "" && candidate.VMID != "" {
-			builder.record.VMMode = "worker"
-		}
-	}
-	if len(candidateRefs) > 0 {
-		builder.addCheckpoint("promotion_candidate_queued", "passed", promotionCandidates[0].UpdatedAt, 0, candidateRefs, map[string]any{"candidate_count": len(candidateRefs)})
-		builder.record.RollbackRefs = append(builder.record.RollbackRefs, acceptanceRollbackRefs(promotionCandidates)...)
-		if len(builder.record.RollbackRefs) > 0 {
-			builder.addCheckpoint("rollback_available", "passed", promotionCandidates[0].UpdatedAt, 0, candidateRefs, map[string]any{"rollback_ref_count": len(builder.record.RollbackRefs)})
-		}
-	}
-	if candidate := firstPromotionWithStatus(promotionCandidates, types.PromotionCandidateVerified, types.PromotionCandidatePromoted); candidate != nil {
-		builder.addCheckpoint("verification_passed", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{"candidate_id": candidate.CandidateID})
-	}
-	if candidate := firstPromotionWithOwnerReview(promotionCandidates); candidate != nil {
-		builder.addCheckpoint("owner_reviewed", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{
-			"candidate_id": candidate.CandidateID,
-			"status":       candidate.Status,
-		})
-	}
-	if candidate := firstPromotionWithStatus(promotionCandidates, types.PromotionCandidatePromoted); candidate != nil {
-		builder.addCheckpoint("promoted", "passed", candidate.UpdatedAt, 0, []string{"promotion:" + candidate.CandidateID}, map[string]any{"candidate_id": candidate.CandidateID})
+	if packageCount > 0 {
+		builder.addCheckpoint("app_package_published", "passed", time.Now().UTC(), 0, packageRefs, map[string]any{"package_count": packageCount})
 	}
 	addAcceptanceAppPromotionCheckpoints(&builder, events)
 
@@ -408,26 +370,6 @@ func chooseAcceptanceRootRun(runs []types.RunRecord, runID string) types.RunReco
 		return runs[0]
 	}
 	return types.RunRecord{}
-}
-
-func filterAcceptancePromotionCandidates(candidates []types.PromotionCandidateRecord, trajectoryID, runID string, runs []types.RunRecord) []types.PromotionCandidateRecord {
-	runIDs := map[string]bool{}
-	for _, run := range runs {
-		runIDs[run.RunID] = true
-	}
-	if runID != "" {
-		runIDs[runID] = true
-	}
-	var filtered []types.PromotionCandidateRecord
-	for _, candidate := range candidates {
-		if candidate.TraceID == trajectoryID || runIDs[candidate.SourceRunID] {
-			filtered = append(filtered, candidate)
-		}
-	}
-	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].UpdatedAt.After(filtered[j].UpdatedAt)
-	})
-	return filtered
 }
 
 func acceptanceAuthorityProfile(runs []types.RunRecord) string {
@@ -636,13 +578,13 @@ func acceptanceOutputSlice(output map[string]any, key string) []map[string]any {
 	}
 }
 
-func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string]any) map[string]any {
-	if exports == nil {
-		exports = acceptanceOutputSlice(output, "export_patchsets")
+func acceptanceDelegateWorkerDetails(output map[string]any, packages []map[string]any) map[string]any {
+	if packages == nil {
+		packages = acceptanceOutputSlice(output, "app_change_packages")
 	}
 	details := map[string]any{
-		"tool":         "delegate_worker_vm",
-		"export_count": len(exports),
+		"tool":          "delegate_worker_vm",
+		"package_count": len(packages),
 	}
 	for _, key := range []string{
 		"status",
@@ -690,11 +632,8 @@ func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string
 	if summary := acceptanceOutputSlice(output, "worker_event_summary"); len(summary) > 0 {
 		details["worker_event_summary"] = summary
 	}
-	if len(exports) > 0 {
-		details["export_patchsets"] = acceptanceExportSummaries(exports)
-	}
-	if promotions := acceptanceOutputSlice(output, "promotion_queue"); len(promotions) > 0 {
-		details["promotion_queue"] = acceptancePromotionSummaries(promotions)
+	if len(packages) > 0 {
+		details["app_change_packages"] = acceptanceAppPackageSummaries(packages)
 	}
 	if checkpoint := output["worker_update_checkpoint"]; checkpoint != nil {
 		details["worker_update_checkpoint"] = checkpoint
@@ -702,28 +641,14 @@ func acceptanceDelegateWorkerDetails(output map[string]any, exports []map[string
 	return details
 }
 
-func acceptanceExportSummaries(exports []map[string]any) []map[string]any {
-	out := make([]map[string]any, 0, len(exports))
-	for _, export := range exports {
+func acceptanceAppPackageSummaries(packages []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(packages))
+	for _, pkg := range packages {
 		item := map[string]any{}
-		for _, key := range []string{"status", "loop_id", "manifest_path", "patchset_path", "base_sha", "worker_head", "worker_head_sha", "patchset_sha256"} {
-			if value := payloadString(export, key); value != "" {
+		for _, key := range []string{"status", "package_id", "app_id", "loop_id", "base_sha", "candidate_head_sha", "source_computer_id", "source_candidate_id", "candidate_source_ref", "package_manifest_sha256", "runtime_source_delta_sha256", "ui_source_delta_sha256"} {
+			if value := payloadString(pkg, key); value != "" {
 				item[key] = value
-			}
-		}
-		if len(item) > 0 {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func acceptancePromotionSummaries(candidates []map[string]any) []map[string]any {
-	out := make([]map[string]any, 0, len(candidates))
-	for _, candidate := range candidates {
-		item := map[string]any{}
-		for _, key := range []string{"candidate_id", "status", "source_loop_id", "candidate_loop_id", "trace_id", "vm_id", "base_sha", "worker_head", "worker_head_sha", "manifest_path", "patchset_path", "integration_branch", "destination_branch", "objective_fingerprint", "patchset_sha256"} {
-			if value := payloadString(candidate, key); value != "" {
+			} else if value := pkg[key]; value != nil {
 				item[key] = value
 			}
 		}
@@ -818,37 +743,6 @@ func (b *acceptanceBuilder) addEventEvidence(ev types.EventRecord, summary strin
 	return refID
 }
 
-func (b *acceptanceBuilder) addPromotionEvidence(candidate types.PromotionCandidateRecord) string {
-	refID := "promotion:" + candidate.CandidateID
-	details := map[string]any{
-		"status":          candidate.Status,
-		"source_loop_id":  candidate.SourceRunID,
-		"trace_id":        candidate.TraceID,
-		"vm_id":           candidate.VMID,
-		"base_sha":        candidate.BaseSHA,
-		"worker_head_sha": candidate.WorkerHeadSHA,
-		"manifest_path":   candidate.ManifestPath,
-		"patchset_path":   candidate.PatchsetPath,
-	}
-	if len(candidate.CandidateJSON) > 0 {
-		var world promotion.CandidateWorld
-		if json.Unmarshal(candidate.CandidateJSON, &world) == nil {
-			details["objective_fingerprint"] = world.ObjectiveFingerprint
-			details["patchset_sha256"] = world.PatchsetSHA256
-		}
-	}
-	b.addEvidence(types.RunAcceptanceEvidenceRef{
-		RefID:      refID,
-		Kind:       "promotion_candidate",
-		Summary:    "worker export queued a promotion candidate",
-		RunID:      candidate.SourceRunID,
-		Trajectory: candidate.TraceID,
-		URL:        "/api/promotions/" + candidate.CandidateID,
-		Details:    details,
-	})
-	return refID
-}
-
 func (b *acceptanceBuilder) addEvidence(ref types.RunAcceptanceEvidenceRef) {
 	if ref.RefID == "" || b.evidenceSet[ref.RefID] {
 		return
@@ -880,59 +774,6 @@ func compactStringRefs(refs []string) []string {
 		out = append(out, ref)
 	}
 	return out
-}
-
-func firstPromotionWithStatus(candidates []types.PromotionCandidateRecord, statuses ...types.PromotionCandidateStatus) *types.PromotionCandidateRecord {
-	want := map[types.PromotionCandidateStatus]bool{}
-	for _, status := range statuses {
-		want[status] = true
-	}
-	for i := range candidates {
-		if want[candidates[i].Status] {
-			return &candidates[i]
-		}
-	}
-	return nil
-}
-
-func firstPromotionWithOwnerReview(candidates []types.PromotionCandidateRecord) *types.PromotionCandidateRecord {
-	for i := range candidates {
-		if candidates[i].Status == types.PromotionCandidatePromoted || candidates[i].Status == types.PromotionCandidateRejected {
-			return &candidates[i]
-		}
-		var report promotion.Report
-		if len(candidates[i].ReportJSON) == 0 || !json.Valid(candidates[i].ReportJSON) {
-			continue
-		}
-		if err := json.Unmarshal(candidates[i].ReportJSON, &report); err != nil {
-			continue
-		}
-		if report.PromotionApproved || strings.TrimSpace(report.PromotionDecisionAt) != "" {
-			return &candidates[i]
-		}
-	}
-	return nil
-}
-
-func acceptanceRollbackRefs(candidates []types.PromotionCandidateRecord) []types.RunAcceptanceRollbackRef {
-	var refs []types.RunAcceptanceRollbackRef
-	for _, candidate := range candidates {
-		if candidate.BaseSHA != "" {
-			refs = append(refs, types.RunAcceptanceRollbackRef{
-				Kind:    "git_base",
-				Ref:     candidate.BaseSHA,
-				Summary: "candidate can be discarded or integrated work can return to the recorded base SHA before promotion",
-			})
-		}
-		if candidate.Status != types.PromotionCandidatePromoted {
-			refs = append(refs, types.RunAcceptanceRollbackRef{
-				Kind:    "candidate_world",
-				Ref:     candidate.CandidateID,
-				Summary: "candidate has not been canonically promoted; rollback is discard/archive of this queued candidate",
-			})
-		}
-	}
-	return refs
 }
 
 func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
@@ -1114,14 +955,13 @@ func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
 		"lease_seconds",
 		"compaction_status",
 		"compaction_error",
-		"candidate_id",
+		"adoption_id",
+		"package_id",
+		"adoption_status",
 		"trace_id",
-		"vm_id",
-		"base_sha",
-		"worker_head_sha",
-		"manifest_path",
-		"patchset_path",
-		"patchset_sha256",
+		"target_computer_id",
+		"target_candidate_id",
+		"candidate_source_ref",
 	} {
 		if value, ok := payload[key]; ok && value != nil {
 			details[key] = value
@@ -1142,16 +982,8 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && has["vtext_opened"] {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["export_observed"] && has["promotion_candidate_queued"] {
-		level = types.RunAcceptanceExportLevel
-		state = types.RunAcceptanceAccepted
-	}
 	if has["app_package_published"] && has["app_adoption_verified"] {
 		level = types.RunAcceptanceExportLevel
-		state = types.RunAcceptanceAccepted
-	}
-	if has["verification_passed"] && has["owner_reviewed"] && (has["promoted"] || has["rollback_available"]) {
-		level = types.RunAcceptancePromotionLevel
 		state = types.RunAcceptanceAccepted
 	}
 	if has["app_adoption_verified"] && has["app_adoption_promoted"] && has["rollback_available"] {
@@ -1187,13 +1019,13 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 		},
 		{
 			Name:   "worker_mutation_bounded",
-			State:  stateForBool(kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["export_observed"]),
-			Detail: "mutable coding work reached a worker VM/export boundary before becoming reviewable",
+			State:  stateForBool(kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]),
+			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary before becoming reviewable",
 		},
 		{
 			Name:   "promotion_not_overclaimed",
 			State:  "passed",
-			Detail: "export-level acceptance remains distinct from promotion-level acceptance",
+			Detail: "package/adoption acceptance remains distinct from promotion-level acceptance",
 		},
 		{
 			Name:   "checkpoint_causal_order",
@@ -1215,12 +1047,12 @@ func buildAcceptanceVerifierContracts(rec types.RunAcceptanceRecord) []types.Run
 	return []types.RunAcceptanceVerifierContract{
 		{
 			Name:    "trace-derived-state-machine",
-			Purpose: "derive acceptance checkpoints from durable run/trace/promotion evidence",
+			Purpose: "derive acceptance checkpoints from durable run/trace/package/adoption evidence",
 			State:   stateForBool(len(rec.Checkpoints) > 0 && len(rec.EvidenceRefs) > 0),
 		},
 		{
 			Name:    "export-level-product-path",
-			Purpose: "prove prompt/VText/super/vmctl/delegate/export/promotion-queue prefix without browser-public internal orchestration APIs",
+			Purpose: "prove prompt/VText/super/vmctl/delegate/AppChangePackage/adoption prefix without browser-public internal orchestration APIs",
 			State:   stateForBool(rec.AcceptanceLevel == types.RunAcceptanceExportLevel || rec.AcceptanceLevel == types.RunAcceptancePromotionLevel || rec.AcceptanceLevel == types.RunAcceptanceContinuationLevel),
 		},
 	}
@@ -1245,26 +1077,26 @@ func buildAcceptanceResidualRisks(rec types.RunAcceptanceRecord) []string {
 		}
 	}
 	if rec.AcceptanceLevel == types.RunAcceptanceExportLevel {
-		risks = append(risks, "promotion-level acceptance is not proven until verifier contracts, owner review, promotion or rollback evidence are recorded")
+		risks = append(risks, "promotion-level acceptance is not proven until recipient build verifier contracts, app adoption promotion, and rollback evidence are recorded")
 	}
-	hasVerification := false
-	hasOwnerReview := false
+	hasAdoptionVerification := false
+	hasAdoptionPromotion := false
 	for _, checkpoint := range rec.Checkpoints {
-		if checkpoint.Kind == "verification_passed" && checkpoint.State == "passed" {
-			hasVerification = true
+		if checkpoint.Kind == "app_adoption_verified" && checkpoint.State == "passed" {
+			hasAdoptionVerification = true
 		}
-		if checkpoint.Kind == "owner_reviewed" && checkpoint.State == "passed" {
-			hasOwnerReview = true
+		if checkpoint.Kind == "app_adoption_promoted" && checkpoint.State == "passed" {
+			hasAdoptionPromotion = true
 		}
 	}
-	if hasVerification && !hasOwnerReview {
-		risks = append(risks, "verified candidates still require durable owner review before promotion-level acceptance")
+	if hasAdoptionVerification && !hasAdoptionPromotion {
+		risks = append(risks, "verified app adoptions still require durable promote/rollback closure before promotion-level acceptance")
 	}
 	if delegationBlocked && !has["worker_delegated"] {
-		risks = append(risks, "worker VM delegation did not complete, so co-super, export, and promotion acceptance remain unproven")
+		risks = append(risks, "worker VM delegation did not complete, so co-super, package, and adoption acceptance remain unproven")
 	}
 	if nonCleanExportStatus != "" {
-		risks = append(risks, "worker export evidence was reviewable but delegate returned non-clean status "+nonCleanExportStatus+"; termination behavior still needs hardening before promotion-level acceptance")
+		risks = append(risks, "AppChangePackage evidence was reviewable but delegate returned non-clean status "+nonCleanExportStatus+"; termination behavior still needs hardening before promotion-level acceptance")
 	}
 	if !has["compacted"] {
 		risks = append(risks, "continuation-level acceptance is not proven until run-memory compaction and continuation evidence are recorded")

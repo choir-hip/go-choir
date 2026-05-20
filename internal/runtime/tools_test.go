@@ -586,7 +586,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	}
 	registerCountingTool("spawn_agent")
 	registerCountingTool("cast_agent")
-	registerCountingTool("export_patchset")
+	registerCountingTool("publish_app_change_package")
 
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
 		RunID:        "vsuper-run",
@@ -599,20 +599,20 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
 		{ID: "cast-1", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
 		{ID: "cast-2", Name: "cast_agent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
-		{ID: "export-1", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
-		{ID: "export-2", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
 
 	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
 	gotCounts := map[string]int{
-		"spawn_agent":     counts["spawn_agent"],
-		"cast_agent":      counts["cast_agent"],
-		"export_patchset": counts["export_patchset"],
+		"spawn_agent":                counts["spawn_agent"],
+		"cast_agent":                 counts["cast_agent"],
+		"publish_app_change_package": counts["publish_app_change_package"],
 	}
 	mu.Unlock()
-	if gotCounts["spawn_agent"] != 2 || gotCounts["cast_agent"] != 1 || gotCounts["export_patchset"] != 1 {
+	if gotCounts["spawn_agent"] != 2 || gotCounts["cast_agent"] != 1 || gotCounts["publish_app_change_package"] != 1 {
 		t.Fatalf("executed counts = %+v, want spawn=2 cast=1 export=1", gotCounts)
 	}
 	for _, idx := range []int{1, 4, 6} {
@@ -632,7 +632,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	var mu sync.Mutex
 	exports := 0
 	if err := registry.Register(Tool{
-		Name: "export_patchset",
+		Name: "publish_app_change_package",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
 			exports++
@@ -640,7 +640,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 			return "export ok", nil
 		},
 	}); err != nil {
-		t.Fatalf("register export_patchset: %v", err)
+		t.Fatalf("register publish_app_change_package: %v", err)
 	}
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
 		RunID:        "cosuper-run",
@@ -648,8 +648,8 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 		AgentProfile: AgentProfileCoSuper,
 	})
 	calls := []types.ToolCall{
-		{ID: "export-1", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
-		{ID: "export-2", Name: "export_patchset", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
+		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"go-choir-candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
 
 	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -663,7 +663,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	if results[0].IsError {
 		t.Fatalf("first export = %#v, want success", results[0])
 	}
-	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate export_patchset") {
+	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate publish_app_change_package") {
 		t.Fatalf("second export = %#v, want duplicate skip", results[1])
 	}
 }
@@ -807,7 +807,7 @@ func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
 			if err := json.Unmarshal(args, &delegatedArgs); err != nil {
 				return "", err
 			}
-			return `{"status":"worker_run_completed","patchset_path":"/tmp/patch.diff"}`, nil
+			return `{"status":"worker_run_completed","app_change_packages":[{"package_id":"package-worker-1","package_manifest_sha256":"manifest-sha"}]}`, nil
 		},
 	}); err != nil {
 		t.Fatalf("register delegate_worker_vm: %v", err)
@@ -849,7 +849,7 @@ func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
 		t.Fatalf("delegated objective = %q, want parent prompt", delegatedArgs.Objective)
 	}
 	if !strings.Contains(results[0].Output, `"delegation_status":"worker_delegated"`) ||
-		!strings.Contains(results[0].Output, `"/tmp/patch.diff"`) {
+		!strings.Contains(results[0].Output, `"package-worker-1"`) {
 		t.Fatalf("request output = %s, want chained delegation evidence", results[0].Output)
 	}
 	if strings.Join(emitted, ",") != "request_worker_vm,delegate_worker_vm" {

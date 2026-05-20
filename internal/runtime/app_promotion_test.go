@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,18 +14,31 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	ownerID := "mission-owner"
 	traceID := "traj-app-change-migration"
+	sourceRepo := testAppPromotionSourceRepo(t)
+	rt.cfg.PromotionSourceRepo = sourceRepo
+	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
+	rt.cfg.AppPromotionRuntimeBuildCommand = `mkdir -p .choir-promotion-artifacts/runtime && cp runtime.txt .choir-promotion-artifacts/runtime/runtime.txt`
+	rt.cfg.AppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/runtime.txt"
+	rt.cfg.AppPromotionUIBuildCommand = `mkdir -p frontend/dist && cp frontend/ui.txt frontend/dist/ui.txt`
+	rt.cfg.AppPromotionUIArtifactPath = "frontend/dist"
 
-	packageBody := `{
-		"app_id":"podcast",
-		"visibility":"unlisted",
-		"source_computer_id":"user-a-computer",
-		"source_candidate_id":"candidate-user-a-podcast",
-		"runtime_source_delta":"runtime: add GET /api/podcast/library fixture endpoint for candidate podcast app",
-		"ui_source_delta":"ui: add Podcast panel route with fixture-backed subscription and episode row",
-		"app_protocol_contract":"GET /api/podcast/library returns {items:[{podcast_id,title,episodes:[{episode_id,title,audio_url}]}]} for the Svelte podcast panel",
-		"trace_id":"` + traceID + `"
-	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", packageBody, ownerID)
+	runtimePatch := testGitDiffForPath(t, sourceRepo, "runtime.txt", "runtime v1\n")
+	uiPatch := testGitDiffForPath(t, sourceRepo, "frontend/ui.txt", "ui v1\n")
+	packageBytes, err := json.Marshal(map[string]any{
+		"app_id":                "podcast",
+		"visibility":            "unlisted",
+		"source_computer_id":    "user-a-computer",
+		"source_candidate_id":   "candidate-user-a-podcast",
+		"candidate_source_ref":  "refs/heads/computers/user-a-computer/candidates/candidate-user-a-podcast",
+		"runtime_source_delta":  runtimePatch,
+		"ui_source_delta":       uiPatch,
+		"app_protocol_contract": "GET /api/podcast/library returns {items:[{podcast_id,title,episodes:[{episode_id,title,audio_url}]}]} for the Svelte podcast panel",
+		"trace_id":              traceID,
+	})
+	if err != nil {
+		t.Fatalf("marshal package: %v", err)
+	}
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", string(packageBytes), ownerID)
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}

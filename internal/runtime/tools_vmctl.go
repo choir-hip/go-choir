@@ -3,8 +3,6 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,11 +15,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -647,13 +643,12 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 
 			baseResult := func(status string) map[string]any {
 				result := map[string]any{
-					"status":             status,
-					"worker_id":          strings.TrimSpace(in.WorkerID),
-					"worker_vm_id":       strings.TrimSpace(in.VMID),
-					"worker_sandbox_url": strings.TrimSpace(in.WorkerSandboxURL),
-					"export_patchsets":   []map[string]any{},
-					"promotion_queue":    []map[string]any{},
-					"event_count":        0,
+					"status":              status,
+					"worker_id":           strings.TrimSpace(in.WorkerID),
+					"worker_vm_id":        strings.TrimSpace(in.VMID),
+					"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+					"app_change_packages": []map[string]any{},
+					"event_count":         0,
 				}
 				if isolation.Enabled {
 					result["worker_isolation"] = isolation.Kind
@@ -679,8 +674,8 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 					return result
 				}
 				applyWorkerRunEvidence(result, evidence)
-				if exports := collectExportPatchsetResults(evidence.Events); len(exports) > 0 {
-					result["export_patchsets"] = exports
+				if packages := collectAppChangePackageResults(evidence.Events); len(packages) > 0 {
+					result["app_change_packages"] = packages
 				}
 				if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
 					result["worker_event_summary"] = summary
@@ -707,23 +702,6 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 				}
 				return result
 			}
-			queueWorkerExportCandidates := func(candidateRunID string, exports []map[string]any) ([]map[string]any, error) {
-				if len(exports) == 0 {
-					return nil, nil
-				}
-				return queuePromotionCandidatesForWorkerExports(ctx, rt, workerExportQueueContext{
-					OwnerID:             ownerID,
-					ParentRunID:         runID,
-					CandidateRunID:      candidateRunID,
-					TraceID:             trajectoryID,
-					WorkerVMID:          strings.TrimSpace(in.VMID),
-					WorkerID:            strings.TrimSpace(in.WorkerID),
-					ForegroundDesktopID: metadataStringValue(metadata, runMetadataDesktopID),
-					Objective:           delegatedObjective,
-					Exports:             exports,
-				})
-			}
-
 			var startResp *runStatusResponse
 			var finalResp *runStatusResponse
 			for attempt := 1; attempt <= maxDelegateWorkerRunAttempts; attempt++ {
@@ -776,17 +754,12 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 							result["worker_event_error"] = eventsErr.Error()
 						} else {
 							applyWorkerRunEvidence(result, evidence)
-							exports := collectExportPatchsetResults(evidence.Events)
-							if len(exports) > 0 {
-								result["export_patchsets"] = exports
-								result["reviewable_export_observed"] = true
+							packages := collectAppChangePackageResults(evidence.Events)
+							if len(packages) > 0 {
+								result["app_change_packages"] = packages
+								result["reviewable_package_observed"] = true
 								if pollErr.TimedOut {
-									result["completion_blocker"] = "vsuper_timed_out_after_reviewable_export"
-								}
-								if queued, queueErr := queueWorkerExportCandidates(workerRunID, exports); queueErr != nil {
-									result["promotion_queue_error"] = queueErr.Error()
-								} else if len(queued) > 0 {
-									result["promotion_queue"] = queued
+									result["completion_blocker"] = "vsuper_timed_out_after_reviewable_package"
 								}
 							}
 							if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
@@ -834,42 +807,30 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted {
 				evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, finalResp.RunID, evidence, timeout)
 			}
-			exports := collectExportPatchsetResults(evidence.Events)
-			var promotionCandidates []map[string]any
-			var promotionQueueErr error
-			if len(exports) > 0 {
-				promotionCandidates, promotionQueueErr = queueWorkerExportCandidates(finalResp.RunID, exports)
-				if promotionQueueErr != nil && finalResp.State == types.RunCompleted {
-					return "", promotionQueueErr
-				}
-			}
+			packages := collectAppChangePackageResults(evidence.Events)
 
 			result := map[string]any{
-				"status":             delegateWorkerRunStatus(finalResp.State),
-				"worker_id":          strings.TrimSpace(in.WorkerID),
-				"worker_vm_id":       strings.TrimSpace(in.VMID),
-				"worker_sandbox_url": strings.TrimSpace(in.WorkerSandboxURL),
-				"loop_id":            finalResp.RunID,
-				"agent_id":           finalResp.AgentID,
-				"profile":            finalResp.AgentProfile,
-				"state":              finalResp.State,
-				"result":             finalResp.Result,
-				"error":              finalResp.Error,
-				"export_patchsets":   exports,
-				"promotion_queue":    promotionCandidates,
+				"status":              delegateWorkerRunStatus(finalResp.State),
+				"worker_id":           strings.TrimSpace(in.WorkerID),
+				"worker_vm_id":        strings.TrimSpace(in.VMID),
+				"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+				"loop_id":             finalResp.RunID,
+				"agent_id":            finalResp.AgentID,
+				"profile":             finalResp.AgentProfile,
+				"state":               finalResp.State,
+				"result":              finalResp.Result,
+				"error":               finalResp.Error,
+				"app_change_packages": packages,
 			}
-			if promotionQueueErr != nil {
-				result["promotion_queue_error"] = promotionQueueErr.Error()
-			}
-			if finalResp.State != types.RunCompleted && len(exports) > 0 {
-				result["reviewable_export_observed"] = true
-				result["completion_blocker"] = firstNonEmpty(stringMapValue(result, "completion_blocker"), "vsuper_ended_non_completed_after_reviewable_export")
+			if finalResp.State != types.RunCompleted && len(packages) > 0 {
+				result["reviewable_package_observed"] = true
+				result["completion_blocker"] = firstNonEmpty(stringMapValue(result, "completion_blocker"), "vsuper_ended_non_completed_after_reviewable_package")
 			}
 			applyWorkerRunEvidence(result, evidence)
-			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, exports) {
+			if profile == AgentProfileVSuper && finalResp.State == types.RunCompleted && vSuperDelegateIncomplete(evidence, packages) {
 				result["status"] = "worker_run_incomplete"
-				result["completion_blocker"] = "vsuper_completed_without_export_or_worker_update"
-				result["terminal_error"] = "worker vsuper completed after child coordination without export_patchset or submit_worker_update evidence"
+				result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
+				result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_worker_update evidence"
 			}
 			if finalResp.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", finalResp.RunID, finalResp.State, strings.TrimSpace(finalResp.Error)))
@@ -926,18 +887,6 @@ func delegateWorkerRunStatus(state types.RunState) string {
 		}
 		return "worker_run_" + stateText
 	}
-}
-
-type workerExportQueueContext struct {
-	OwnerID             string
-	ParentRunID         string
-	CandidateRunID      string
-	TraceID             string
-	WorkerVMID          string
-	WorkerID            string
-	ForegroundDesktopID string
-	Objective           string
-	Exports             []map[string]any
 }
 
 type localWorkerIsolation struct {
@@ -1041,9 +990,9 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"The worker VM exposes repo tools directly in PATH, including git, go, gofmt, python3, perl, node, curl, make, gcc, pkg-config, and ICU libraries.",
 		"Run gofmt, go test, node, and scripts directly from the checkout. Do not run nix develop, nix build, or nix-store inside the worker VM; the guest Nix store is read-only and those commands are not verifier evidence.",
 		"Use set -euo pipefail for multi-step bash commands so a failed commit, test, or export cannot be hidden by a later successful command.",
-		"Commit candidate changes before calling export_patchset.",
-		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when exporting a patchset.",
-		"If clone, checkout, build, verification, or export fails, report diagnostics with submit_worker_update instead of claiming repository work or ending with a plain narrative.",
+		"Commit candidate changes before calling publish_app_change_package.",
+		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when publishing an AppChangePackage.",
+		"If clone, checkout, build, verification, or package publication fails, report diagnostics with submit_worker_update instead of claiming repository work or ending with a plain narrative.",
 	}, "\n")
 }
 
@@ -1056,16 +1005,16 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 		"Worker-vsuper delegate contract:",
 		"- Keep at most one implementation co-super and one verifier co-super active for candidate repo work.",
 		"- Set spawn_agent slot=\"implementation\" for the implementation worker and slot=\"verifier\" for the verifier, and put the role plus terminal obligation directly in each objective; do not depend on a later role-correction cast as the child's first authoritative instruction.",
-		"- If you spawn an implementation co-super, treat that child as the exclusive writer for go-choir-candidate while it is active; do not run reset, clean, edit, or commit commands in the same checkout until the child reports commit/export/blocker evidence.",
-		"- Do not cancel a child that has produced export_patchset evidence. Incorporate the child export instead.",
-		"- The verifier should inspect only after the implementation child has reported a commit, export, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
-		"- If the objective asks a helper to export, do not override that with \"do not export\"; let the helper export, then report that child export.",
-		"- Tell the implementation child that missing tools, failed tests, or export failure must end in submit_worker_update with exact command output refs, not a plain final answer.",
-		"- Once a committed repo diff and focused verification evidence exist, make exactly one export_patchset call for the candidate. If a child already exported, do not parent-export again.",
-		"- After export evidence exists, immediately produce the terminal summary or submit_worker_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the export is invalid and you are doing one focused repair.",
-		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/export/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
-		"- If both child runs finish without export_patchset or submit_worker_update evidence, inspect their final results and tool errors, then submit_worker_update naming the child loop ids and the missing terminal evidence.",
-		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: export_patchset or submit_worker_update with a precise blocker.",
+		"- If you spawn an implementation co-super, treat that child as the exclusive writer for go-choir-candidate while it is active; do not run reset, clean, edit, or commit commands in the same checkout until the child reports commit/package/blocker evidence.",
+		"- Do not cancel a child that has produced publish_app_change_package evidence. Incorporate the child package instead.",
+		"- The verifier should inspect only after the implementation child has reported a commit, package, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
+		"- If the objective asks a helper to publish a package, do not override that with \"do not publish\"; let the helper publish, then report that child package.",
+		"- Tell the implementation child that missing tools, failed tests, or package publication failure must end in submit_worker_update with exact command output refs, not a plain final answer.",
+		"- Once a committed repo diff and focused verification evidence exist, make exactly one publish_app_change_package call for the candidate. If a child already published, do not parent-publish again.",
+		"- After package evidence exists, immediately produce the terminal summary or submit_worker_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the package is invalid and you are doing one focused repair.",
+		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/package/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
+		"- If both child runs finish without publish_app_change_package or submit_worker_update evidence, inspect their final results and tool errors, then submit_worker_update naming the child loop ids and the missing terminal evidence.",
+		"- Reserve the last " + reserve.String() + " of the delegate budget for exactly one terminal action: publish_app_change_package or submit_worker_update with a precise blocker.",
 		"- A blocked submit_worker_update is preferred to running until the parent delegate timeout.",
 	}, "\n")
 }
@@ -1164,8 +1113,8 @@ func createLocalWorkerWorktree(ctx context.Context, cwd, workerID, vmID, runID s
 		"Local worker isolation is active.",
 		"The current working directory is an isolated git worktree for this worker, not the foreground repository.",
 		"Do not write outside the current working directory.",
-		"Commit any repo changes in this worktree before calling export_patchset.",
-		"Use repo_path \".\" and base_sha " + baseSHA + " when exporting a patchset.",
+		"Commit any repo changes in this worktree before calling publish_app_change_package.",
+		"Use repo_path \".\" and base_sha " + baseSHA + " when publishing an AppChangePackage.",
 	}, "\n")
 	return localWorkerIsolation{
 		Enabled:      true,
@@ -1214,275 +1163,6 @@ func safeWorkerGitRemote(raw string) string {
 		return ""
 	}
 	return parsed.String()
-}
-
-func objectiveFingerprint(ownerID, trajectoryID, parentRunID, objective string) string {
-	parts := []string{
-		strings.TrimSpace(ownerID),
-		strings.TrimSpace(trajectoryID),
-		strings.TrimSpace(parentRunID),
-		normalizeObjectiveText(objective),
-	}
-	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(sum[:])
-}
-
-func normalizeObjectiveText(raw string) string {
-	var b strings.Builder
-	lastSpace := false
-	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-			lastSpace = false
-			continue
-		}
-		if !lastSpace && b.Len() > 0 {
-			b.WriteByte(' ')
-			lastSpace = true
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func patchsetDigest(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("read patchset digest: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, f); err != nil {
-		return "", fmt.Errorf("hash patchset: %w", err)
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-func queuePromotionCandidatesForWorkerExports(ctx context.Context, rt *Runtime, in workerExportQueueContext) ([]map[string]any, error) {
-	if rt == nil || len(in.Exports) == 0 {
-		return nil, nil
-	}
-	objectiveFingerprint := objectiveFingerprint(in.OwnerID, in.TraceID, in.ParentRunID, in.Objective)
-	queued := make([]map[string]any, 0, len(in.Exports))
-	for _, export := range in.Exports {
-		candidateID := uuid.NewString()
-		patchsetSHA256 := strings.TrimSpace(exportString(export, "patchset_sha256"))
-		if patchsetSHA256 == "" {
-			if content := exportRawString(export, "patchset_content"); content != "" {
-				sum := sha256.Sum256([]byte(content))
-				patchsetSHA256 = hex.EncodeToString(sum[:])
-			}
-		}
-		if patchsetSHA256 == "" {
-			var err error
-			patchsetSHA256, err = patchsetDigest(exportString(export, "patchset_path"))
-			if err != nil {
-				return nil, err
-			}
-		}
-		if existing, ok, err := existingPromotionCandidateForWorkerExport(ctx, rt, in, export, objectiveFingerprint, patchsetSHA256); err != nil {
-			return nil, err
-		} else if ok {
-			queued = append(queued, promotionCandidateQueueMap(existing))
-			continue
-		}
-		materializedExport, err := materializeWorkerExportArtifacts(rt, candidateID, export)
-		if err != nil {
-			return nil, err
-		}
-		export = materializedExport
-		if patchsetSHA256 == "" {
-			patchsetSHA256 = strings.TrimSpace(exportString(export, "patchset_sha256"))
-		}
-		vmID := firstNonEmpty(in.WorkerVMID, exportString(export, "vm_id"), in.WorkerID, "worker-vm")
-		candidateRunID := firstNonEmpty(exportString(export, "loop_id"), in.CandidateRunID)
-		candidate := promotion.CandidateWorld{
-			CandidateID:          candidateID,
-			OwnerID:              in.OwnerID,
-			ForegroundDesktopID:  in.ForegroundDesktopID,
-			ParentRunID:          in.ParentRunID,
-			CandidateRunID:       candidateRunID,
-			VMID:                 vmID,
-			SnapshotID:           exportString(export, "snapshot_id"),
-			Purpose:              in.Objective,
-			ObjectiveFingerprint: objectiveFingerprint,
-			BaseSHA:              exportString(export, "base_sha"),
-			WorkerHeadSHA:        firstNonEmpty(exportString(export, "worker_head_sha"), exportString(export, "worker_head")),
-			PatchsetSHA256:       patchsetSHA256,
-			ManifestPath:         exportString(export, "manifest_path"),
-			PatchsetPath:         exportString(export, "patchset_path"),
-			IntegrationBranch:    "agent/" + sanitizeExportPart(candidateRunID) + "/candidate",
-			CreatedAt:            time.Now().UTC().Format(time.RFC3339),
-		}
-		candidateJSON, err := json.Marshal(candidate)
-		if err != nil {
-			return nil, fmt.Errorf("marshal queued promotion candidate: %w", err)
-		}
-		rec, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-			CandidateID:       candidateID,
-			OwnerID:           in.OwnerID,
-			Status:            types.PromotionCandidateQueued,
-			SourceRunID:       in.ParentRunID,
-			TraceID:           in.TraceID,
-			VMID:              vmID,
-			SnapshotID:        candidate.SnapshotID,
-			BaseSHA:           candidate.BaseSHA,
-			WorkerHeadSHA:     candidate.WorkerHeadSHA,
-			ManifestPath:      candidate.ManifestPath,
-			PatchsetPath:      candidate.PatchsetPath,
-			IntegrationBranch: candidate.IntegrationBranch,
-			DestinationBranch: "main",
-			Summary:           in.Objective,
-			CandidateJSON:     candidateJSON,
-			ContractsJSON:     json.RawMessage(`[]`),
-			ReportJSON:        json.RawMessage(`{}`),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("queue promotion candidate for worker export: %w", err)
-		}
-		queued = append(queued, promotionCandidateQueueMap(rec))
-	}
-	return queued, nil
-}
-
-func materializeWorkerExportArtifacts(rt *Runtime, candidateID string, export map[string]any) (map[string]any, error) {
-	if len(export) == 0 {
-		return export, nil
-	}
-	manifestContent := exportRawString(export, "manifest_json")
-	patchsetContent := exportRawString(export, "patchset_content")
-	if strings.TrimSpace(manifestContent) == "" && strings.TrimSpace(patchsetContent) == "" {
-		return export, nil
-	}
-	root := promotionArtifactRoot(rt)
-	if root == "" {
-		return export, nil
-	}
-	dir := filepath.Join(root, sanitizeExportPart(candidateID))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create promotion artifact dir: %w", err)
-	}
-	out := make(map[string]any, len(export)+3)
-	for key, value := range export {
-		out[key] = value
-	}
-	if strings.TrimSpace(manifestContent) != "" {
-		manifestPath := filepath.Join(dir, "manifest.json")
-		if err := os.WriteFile(manifestPath, []byte(manifestContent), 0o644); err != nil {
-			return nil, fmt.Errorf("write materialized manifest: %w", err)
-		}
-		out["manifest_path"] = manifestPath
-	}
-	if strings.TrimSpace(patchsetContent) != "" {
-		patchPath := filepath.Join(dir, "changes.patch")
-		if err := os.WriteFile(patchPath, []byte(patchsetContent), 0o644); err != nil {
-			return nil, fmt.Errorf("write materialized patchset: %w", err)
-		}
-		sum := sha256.Sum256([]byte(patchsetContent))
-		out["patchset_path"] = patchPath
-		out["patchset_sha256"] = hex.EncodeToString(sum[:])
-	}
-	return out, nil
-}
-
-func promotionArtifactRoot(rt *Runtime) string {
-	base := ""
-	if rt != nil {
-		base = filepath.Dir(strings.TrimSpace(rt.cfg.StorePath))
-	}
-	if strings.TrimSpace(base) == "" || base == "." {
-		base = filepath.Join(os.TempDir(), "go-choir-promotion-artifacts")
-	}
-	return filepath.Join(base, "promotion-artifacts")
-}
-
-func exportRawString(export map[string]any, key string) string {
-	if export == nil {
-		return ""
-	}
-	value, _ := export[key].(string)
-	return value
-}
-
-func existingPromotionCandidateForWorkerExport(ctx context.Context, rt *Runtime, in workerExportQueueContext, export map[string]any, objectiveFingerprint, patchsetSHA256 string) (types.PromotionCandidateRecord, bool, error) {
-	workerHead := firstNonEmpty(exportString(export, "worker_head_sha"), exportString(export, "worker_head"))
-	patchsetPath := exportString(export, "patchset_path")
-	baseSHA := exportString(export, "base_sha")
-	manifestPath := exportString(export, "manifest_path")
-	if strings.TrimSpace(workerHead) == "" || strings.TrimSpace(patchsetPath) == "" || strings.TrimSpace(baseSHA) == "" {
-		return types.PromotionCandidateRecord{}, false, nil
-	}
-	candidates, err := rt.store.ListPromotionCandidates(ctx, in.OwnerID, 500)
-	if err != nil {
-		return types.PromotionCandidateRecord{}, false, fmt.Errorf("list promotion candidates for worker export dedupe: %w", err)
-	}
-	for _, rec := range candidates {
-		if rec.SourceRunID == in.ParentRunID &&
-			rec.BaseSHA == baseSHA &&
-			rec.WorkerHeadSHA == workerHead &&
-			rec.PatchsetPath == patchsetPath &&
-			rec.ManifestPath == manifestPath {
-			return rec, true, nil
-		}
-		var candidate promotion.CandidateWorld
-		if len(rec.CandidateJSON) == 0 || json.Unmarshal(rec.CandidateJSON, &candidate) != nil {
-			continue
-		}
-		if rec.SourceRunID == in.ParentRunID &&
-			rec.BaseSHA == baseSHA &&
-			strings.TrimSpace(objectiveFingerprint) != "" &&
-			strings.TrimSpace(patchsetSHA256) != "" &&
-			candidate.ObjectiveFingerprint == objectiveFingerprint &&
-			candidate.PatchsetSHA256 == patchsetSHA256 {
-			return rec, true, nil
-		}
-	}
-	return types.PromotionCandidateRecord{}, false, nil
-}
-
-func promotionCandidateQueueMap(rec types.PromotionCandidateRecord) map[string]any {
-	out := map[string]any{
-		"candidate_id":       rec.CandidateID,
-		"status":             rec.Status,
-		"source_loop_id":     rec.SourceRunID,
-		"candidate_loop_id":  candidateLoopIDForPromotionRecord(rec),
-		"vm_id":              rec.VMID,
-		"base_sha":           rec.BaseSHA,
-		"worker_head":        rec.WorkerHeadSHA,
-		"manifest_path":      rec.ManifestPath,
-		"patchset_path":      rec.PatchsetPath,
-		"integration_branch": rec.IntegrationBranch,
-		"destination_branch": rec.DestinationBranch,
-	}
-	if len(rec.CandidateJSON) != 0 {
-		var candidate promotion.CandidateWorld
-		if err := json.Unmarshal(rec.CandidateJSON, &candidate); err == nil {
-			if candidate.ObjectiveFingerprint != "" {
-				out["objective_fingerprint"] = candidate.ObjectiveFingerprint
-			}
-			if candidate.PatchsetSHA256 != "" {
-				out["patchset_sha256"] = candidate.PatchsetSHA256
-			}
-		}
-	}
-	return out
-}
-
-func candidateLoopIDForPromotionRecord(rec types.PromotionCandidateRecord) string {
-	if len(rec.CandidateJSON) == 0 {
-		return ""
-	}
-	var candidate promotion.CandidateWorld
-	if err := json.Unmarshal(rec.CandidateJSON, &candidate); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(candidate.CandidateRunID)
 }
 
 func copyMetadataMap(in map[string]any) map[string]any {
@@ -1858,8 +1538,8 @@ func applyWorkerRunEvidence(result map[string]any, evidence workerRunEvidence) {
 	}
 }
 
-func vSuperDelegateIncomplete(evidence workerRunEvidence, exports []map[string]any) bool {
-	if len(evidence.ChildRunIDs) == 0 || len(exports) > 0 {
+func vSuperDelegateIncomplete(evidence workerRunEvidence, packages []map[string]any) bool {
+	if len(evidence.ChildRunIDs) == 0 || len(packages) > 0 {
 		return false
 	}
 	return !hasSuccessfulToolResult(evidence.Events, "submit_worker_update")
@@ -1885,8 +1565,8 @@ func workerRuntimeURL(baseURL, path string, query url.Values) (string, error) {
 	return parsed.String(), nil
 }
 
-func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
-	var exports []map[string]any
+func collectAppChangePackageResults(events []types.EventRecord) []map[string]any {
+	var packages []map[string]any
 	seen := make(map[string]bool)
 	for _, ev := range events {
 		if ev.Kind != types.EventToolResult {
@@ -1897,7 +1577,7 @@ func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 			IsError bool   `json:"is_error"`
 			Output  string `json:"output"`
 		}
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "export_patchset" {
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "publish_app_change_package" {
 			continue
 		}
 		var output map[string]any
@@ -1905,31 +1585,31 @@ func collectExportPatchsetResults(events []types.EventRecord) []map[string]any {
 			output = map[string]any{"raw_output": payload.Output}
 		}
 		output["loop_id"] = ev.RunID
-		if fingerprint := workerExportPatchsetResultFingerprint(output); fingerprint != "" {
+		if fingerprint := appChangePackageResultFingerprint(output); fingerprint != "" {
 			if seen[fingerprint] {
 				continue
 			}
 			seen[fingerprint] = true
 		}
-		exports = append(exports, output)
+		packages = append(packages, output)
 	}
-	return exports
+	return packages
 }
 
-func workerExportPatchsetResultFingerprint(output map[string]any) string {
-	if sha := workerExportPatchsetResultString(output, "patchset_sha256"); sha != "" {
-		return "patchset_sha256:" + sha
+func appChangePackageResultFingerprint(output map[string]any) string {
+	if packageID := appChangePackageResultString(output, "package_id"); packageID != "" {
+		return "package_id:" + packageID
 	}
-	if patchsetPath := workerExportPatchsetResultString(output, "patchset_path"); patchsetPath != "" {
-		return "patchset_path:" + patchsetPath
+	if sha := appChangePackageResultString(output, "runtime_source_delta_sha256"); sha != "" {
+		return "runtime_delta_sha256:" + sha
 	}
-	if manifestPath := workerExportPatchsetResultString(output, "manifest_path"); manifestPath != "" {
-		return "manifest_path:" + manifestPath
+	if sha := appChangePackageResultString(output, "ui_source_delta_sha256"); sha != "" {
+		return "ui_delta_sha256:" + sha
 	}
 
 	parts := make([]string, 0, 4)
-	for _, key := range []string{"base_sha", "worker_head_sha", "worker_head", "loop_id"} {
-		if value := workerExportPatchsetResultString(output, key); value != "" {
+	for _, key := range []string{"app_id", "base_sha", "worker_head_sha", "worker_head", "loop_id"} {
+		if value := appChangePackageResultString(output, key); value != "" {
 			parts = append(parts, key+"="+value)
 		}
 	}
@@ -1939,7 +1619,7 @@ func workerExportPatchsetResultFingerprint(output map[string]any) string {
 	return strings.Join(parts, "|")
 }
 
-func workerExportPatchsetResultString(output map[string]any, key string) string {
+func appChangePackageResultString(output map[string]any, key string) string {
 	value, ok := output[key]
 	if !ok || value == nil {
 		return ""
@@ -2064,11 +1744,6 @@ func workerEventExcerpt(text string, limit int) string {
 		return text
 	}
 	return text[:limit] + fmt.Sprintf("…[%d bytes]", len(text))
-}
-
-func exportString(export map[string]any, key string) string {
-	value, _ := export[key].(string)
-	return strings.TrimSpace(value)
 }
 
 func firstNonEmpty(values ...string) string {

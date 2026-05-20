@@ -26,17 +26,17 @@
   $: activeCandidate = candidates.find((candidate) => candidateDesktopId(candidate) === normalizedDesktopId);
 
   function candidateDesktopId(candidate) {
-    return String(candidate?.vm_id || candidate?.desktop_id || candidate?.candidate_id || '').trim();
+    return String(candidate?.target_candidate_id || candidate?.vm_id || candidate?.desktop_id || candidate?.candidate_id || '').trim();
   }
 
   function candidateTitle(candidate) {
-    return candidate?.summary || candidate?.candidate_id || 'Candidate patchset';
+    return candidate?.app_id || candidate?.package_id || candidate?.adoption_id || 'App adoption candidate';
   }
 
   function candidateMeta(candidate) {
     return [
-      candidate?.vm_id || 'no VM id',
-      candidate?.integration_branch || candidate?.destination_branch || 'not integrated',
+      candidate?.target_computer_id || 'target computer',
+      candidate?.candidate_source_ref || candidate?.package_id || 'not applied',
     ].join(' · ');
   }
 
@@ -44,18 +44,18 @@
     loading = true;
     error = '';
     try {
-      const res = await fetchWithRenewal('/api/promotions?limit=20', { method: 'GET' });
+      const res = await fetchWithRenewal('/api/adoptions?limit=20', { method: 'GET' });
       if (!res.ok) {
-        throw new Error(`Promotion candidates failed (${res.status})`);
+        throw new Error(`App adoption candidates failed (${res.status})`);
       }
       const body = await res.json();
-      candidates = Array.isArray(body?.candidates) ? body.candidates : [];
+      candidates = Array.isArray(body?.adoptions) ? body.adoptions : [];
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Promotion candidates unavailable';
+      error = err.message || 'App adoption candidates unavailable';
       candidates = [];
     } finally {
       loading = false;
@@ -66,7 +66,7 @@
     desktopId = String(draftDesktopId || '').trim();
   }
 
-  function openPromotionCandidate(candidate) {
+  function openAppAdoptionCandidate(candidate) {
     const nextDesktopId = candidateDesktopId(candidate);
     if (!nextDesktopId) return;
     draftDesktopId = nextDesktopId;
@@ -84,11 +84,12 @@
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
       if (
-        kind === 'promotion.candidate.queued' ||
-        kind === 'promotion.candidate.verified' ||
-        kind === 'promotion.candidate.failed' ||
-        kind === 'promotion.candidate.promoted' ||
-        kind === 'promotion.candidate.reviewed'
+        kind === 'app_adoption.proposed' ||
+        kind === 'app_adoption.verification_started' ||
+        kind === 'app_adoption.verified' ||
+        kind === 'app_adoption.blocked' ||
+        kind === 'app_adoption.promoted' ||
+        kind === 'app_adoption.rolled_back'
       ) {
         void refreshCandidates();
       }
@@ -108,25 +109,25 @@
   <header class="viewer-toolbar">
     <div class="viewer-title">
       <strong>Candidate Desktop</strong>
-      <span>Open queued candidate worlds without copying raw IDs.</span>
+      <span>Open app adoption candidate computers without copying raw IDs.</span>
     </div>
   </header>
 
   <div class="viewer-body">
     <aside class="candidate-queue" data-candidate-desktop-queue>
       <div class="queue-header">
-        <strong>Queued candidates</strong>
+        <strong>App adoption candidates</strong>
         <span>{candidates.length} available</span>
       </div>
 
       {#if error}
         <div class="state-card error" data-candidate-desktop-error role="alert">{error}</div>
       {:else if loading}
-        <div class="state-card" data-candidate-desktop-loading>Loading candidate patchsets…</div>
+        <div class="state-card" data-candidate-desktop-loading>Loading app adoption candidates…</div>
       {:else if candidates.length === 0}
         <div class="state-card" data-candidate-desktop-empty>
-          <strong>No candidate patchsets queued</strong>
-          <span>When worker or candidate-world exports exist, they appear here automatically.</span>
+          <strong>No app adoption candidates</strong>
+          <span>When an AppChangePackage is applied to a candidate computer, it appears here automatically.</span>
         </div>
       {:else}
         <div class="candidate-list" data-candidate-desktop-list>
@@ -135,7 +136,7 @@
               class:active={candidateDesktopId(candidate) === normalizedDesktopId}
               class="candidate-card"
               data-candidate-desktop-card
-              data-candidate-desktop-candidate-id={candidate.candidate_id}
+              data-candidate-desktop-candidate-id={candidate.adoption_id || candidate.candidate_id}
             >
               <div class="candidate-card-top">
                 <strong>{candidateTitle(candidate)}</strong>
@@ -148,7 +149,7 @@
               <button
                 class="open-btn"
                 data-candidate-desktop-open-candidate
-                on:click={() => openPromotionCandidate(candidate)}
+                on:click={() => openAppAdoptionCandidate(candidate)}
                 disabled={!candidateDesktopId(candidate)}
               >
                 {candidateDesktopId(candidate) === normalizedDesktopId ? 'Viewing' : 'Open candidate'}

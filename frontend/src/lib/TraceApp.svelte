@@ -95,15 +95,15 @@
   }
 
   function runGeometryStats(items) {
-    const stats = { compactions: 0, continuations: 0, retries: 0, promotions: 0 };
+    const stats = { compactions: 0, continuations: 0, retries: 0, appMoves: 0 };
     for (const moment of items || []) {
       const kind = String(moment?.kind || '');
       if (kind.startsWith('loop.compaction')) stats.compactions += 1;
       if (kind.startsWith('loop.continuation')) stats.continuations += 1;
       if (kind === 'loop.retry') stats.retries += 1;
-      if (kind.startsWith('promotion.candidate')) stats.promotions += 1;
+      if (kind.startsWith('app_change_package') || kind.startsWith('app_adoption')) stats.appMoves += 1;
     }
-    return { ...stats, total: stats.compactions + stats.continuations + stats.retries + stats.promotions };
+    return { ...stats, total: stats.compactions + stats.continuations + stats.retries + stats.appMoves };
   }
 
   function runGeometryMetrics(stats) {
@@ -111,12 +111,12 @@
       { label: 'compactions', value: stats.compactions },
       { label: 'continuations', value: stats.continuations },
       { label: 'retries', value: stats.retries },
-      { label: 'promotions', value: stats.promotions },
+      { label: 'app moves', value: stats.appMoves },
     ].filter((metric) => metric.value > 0);
   }
 
   function hasArtifacts(artifacts) {
-    return !!(artifacts?.run_memory || artifacts?.continuation || artifacts?.promotion_candidate);
+    return !!(artifacts?.run_memory || artifacts?.continuation || artifacts?.app_change_package || artifacts?.app_adoption);
   }
 
   function latestRunId(items) {
@@ -809,7 +809,7 @@
           <div class="panel-header">
             <div>
               <h4>Run geometry</h4>
-              <p>Memory, continuation, retry, and promotion control points in this trajectory.</p>
+              <p>Memory, continuation, retry, and app package/adoption control points in this trajectory.</p>
             </div>
             <span class="status-pill active">{geometry.total} control moments</span>
           </div>
@@ -1033,18 +1033,34 @@
                       </div>
                     {/if}
 
-                    {#if activeDetail.artifacts.promotion_candidate}
-                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="promotion">
+                    {#if activeDetail.artifacts.app_change_package}
+                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="app-change-package">
                         <div class="detail-card-top">
-                          <strong>Promotion candidate</strong>
-                          <span>{activeDetail.artifacts.promotion_candidate.status}</span>
+                          <strong>AppChangePackage</strong>
+                          <span>{activeDetail.artifacts.app_change_package.status}</span>
                         </div>
                         <div class="detail-meta">
-                          {activeDetail.artifacts.promotion_candidate.vm_id || 'vm'} · {activeDetail.artifacts.promotion_candidate.destination_branch || 'main'}
+                          {activeDetail.artifacts.app_change_package.source_computer_id || 'source computer'} · {activeDetail.artifacts.app_change_package.visibility || 'visibility'}
                         </div>
-                        <pre class="payload-block compact">{activeDetail.artifacts.promotion_candidate.summary || activeDetail.artifacts.promotion_candidate.candidate_id}</pre>
-                        {#if activeDetail.artifacts.promotion_candidate.report_json?.rollback}
-                          <pre class="payload-block compact">{formatPayload(activeDetail.artifacts.promotion_candidate.report_json.rollback)}</pre>
+                        <pre class="payload-block compact">{activeDetail.artifacts.app_change_package.app_id || activeDetail.artifacts.app_change_package.package_id}</pre>
+                      </div>
+                    {/if}
+
+                    {#if activeDetail.artifacts.app_adoption}
+                      <div class="detail-card" data-trace-artifact-card data-trace-artifact-kind="app-adoption">
+                        <div class="detail-card-top">
+                          <strong>App adoption</strong>
+                          <span>{activeDetail.artifacts.app_adoption.status}</span>
+                        </div>
+                        <div class="detail-meta">
+                          {activeDetail.artifacts.app_adoption.target_computer_id || 'target computer'} · {activeDetail.artifacts.app_adoption.package_id}
+                        </div>
+                        {#if activeDetail.artifacts.app_adoption.runtime_artifact_digest || activeDetail.artifacts.app_adoption.ui_artifact_digest}
+                          <pre class="payload-block compact">{formatPayload({
+                            runtime_artifact_digest: activeDetail.artifacts.app_adoption.runtime_artifact_digest,
+                            ui_artifact_digest: activeDetail.artifacts.app_adoption.ui_artifact_digest,
+                            rollback_profile: activeDetail.artifacts.app_adoption.rollback_profile_json
+                          })}</pre>
                         {/if}
                       </div>
                     {/if}

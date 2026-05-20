@@ -27,7 +27,8 @@
   let promotionError = '';
   let promotionActionError = '';
   let promotionActingId = '';
-  let promotions = [];
+  let packages = [];
+  let adoptions = [];
 
   $: themeValidation = validateThemeConfig(selectedTheme);
   $: themePreviewVars = themeCSSVariables(selectedTheme);
@@ -52,72 +53,69 @@
     }
   }
 
-  async function refreshPromotions() {
+  async function refreshPromotionSubstrate() {
     promotionLoading = true;
     promotionError = '';
     try {
-      const res = await fetchWithRenewal('/api/promotions', { method: 'GET' });
-      if (!res.ok) {
-        throw new Error(`Promotion queue failed (${res.status})`);
+      const [packageRes, adoptionRes] = await Promise.all([
+        fetchWithRenewal('/api/app-change-packages?limit=50', { method: 'GET' }),
+        fetchWithRenewal('/api/adoptions?limit=50', { method: 'GET' }),
+      ]);
+      if (!packageRes.ok) {
+        throw new Error(`App change packages failed (${packageRes.status})`);
       }
-      const body = await res.json();
-      promotions = Array.isArray(body?.candidates) ? body.candidates : [];
+      if (!adoptionRes.ok) {
+        throw new Error(`App adoptions failed (${adoptionRes.status})`);
+      }
+      const packageBody = await packageRes.json();
+      const adoptionBody = await adoptionRes.json();
+      packages = Array.isArray(packageBody?.packages) ? packageBody.packages : [];
+      adoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      promotionError = err.message || 'Promotion queue unavailable';
-      promotions = [];
+      promotionError = err.message || 'App promotion substrate unavailable';
+      packages = [];
+      adoptions = [];
     } finally {
       promotionLoading = false;
     }
   }
 
-  function promotionReport(candidate) {
-    return candidate?.report_json && typeof candidate.report_json === 'object' ? candidate.report_json : {};
+  function canVerifyAdoption(adoption) {
+    return adoption && ['adoption_proposed', 'candidate_applied', 'blocked'].includes(adoption.status);
   }
 
-  function promotionApproved(candidate) {
-    return promotionReport(candidate).promotion_approved === true;
+  function canPromoteAdoption(adoption) {
+    return adoption?.status === 'verified' || adoption?.status === 'owner_approved';
   }
 
-  function canApprovePromotion(candidate) {
-    return candidate?.status === 'verified' && !promotionApproved(candidate);
+  function canRollbackAdoption(adoption) {
+    return adoption && ['verified', 'adopted', 'blocked'].includes(adoption.status);
   }
 
-  function canPromotePromotion(candidate) {
-    return candidate?.status === 'verified' && promotionApproved(candidate);
-  }
-
-  function canVerifyPromotion(candidate) {
-    return candidate && ['queued', 'integrated', 'verification_failed'].includes(candidate.status);
-  }
-
-  function canRejectPromotion(candidate) {
-    return candidate && !['promoted', 'rejected'].includes(candidate.status);
-  }
-
-  async function reviewPromotion(candidate, action) {
-    if (!candidate?.candidate_id) return;
+  async function reviewAdoption(adoption, action) {
+    if (!adoption?.adoption_id) return;
     promotionActionError = '';
-    promotionActingId = `${candidate.candidate_id}:${action}`;
+    promotionActingId = `${adoption.adoption_id}:${action}`;
     try {
-      const res = await fetchWithRenewal(`/api/promotions/${encodeURIComponent(candidate.candidate_id)}/${action}`, {
+      const res = await fetchWithRenewal(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/${action}`, {
         method: 'POST',
         body: ['verify', 'promote'].includes(action) ? '{}' : undefined,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Promotion action failed (${res.status})`);
+        throw new Error(body?.error || `App adoption action failed (${res.status})`);
       }
-      await refreshPromotions();
+      await refreshPromotionSubstrate();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      promotionActionError = err.message || 'Promotion action failed';
+      promotionActionError = err.message || 'App adoption action failed';
     } finally {
       promotionActingId = '';
     }
@@ -183,17 +181,19 @@
     selectedTheme = await loadStoredTheme();
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
-    void refreshPromotions();
+    void refreshPromotionSubstrate();
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
       if (
-        kind === 'promotion.candidate.queued' ||
-        kind === 'promotion.candidate.verified' ||
-        kind === 'promotion.candidate.failed' ||
-        kind === 'promotion.candidate.promoted' ||
-        kind === 'promotion.candidate.reviewed'
+        kind === 'app_change_package.published' ||
+        kind === 'app_adoption.proposed' ||
+        kind === 'app_adoption.verification_started' ||
+        kind === 'app_adoption.verified' ||
+        kind === 'app_adoption.blocked' ||
+        kind === 'app_adoption.promoted' ||
+        kind === 'app_adoption.rolled_back'
       ) {
-        void refreshPromotions();
+        void refreshPromotionSubstrate();
       }
       if (kind === 'theme.updated') {
         void loadStoredTheme().then((theme) => {
@@ -288,8 +288,8 @@
     <section class="settings-card promotion-card" data-settings-promotions>
       <div class="status-header">
         <div>
-          <h3>Promotion queue</h3>
-          <p class="muted">Review candidate-world patchsets before canonical promotion.</p>
+          <h3>App promotion</h3>
+          <p class="muted">AppChangePackages and recipient-computer adoptions only. Old patchset queues are not a success path.</p>
         </div>
       </div>
 
@@ -300,64 +300,65 @@
           <div class="settings-error" data-settings-promotions-action-error role="alert">{promotionActionError}</div>
         {/if}
         {#if promotionLoading}
-          <p class="promotion-empty" data-settings-promotions-loading>Loading promotion candidates…</p>
-        {:else if promotions.length === 0}
-          <p class="promotion-empty" data-settings-promotions-empty>No candidate patchsets queued.</p>
+          <p class="promotion-empty" data-settings-promotions-loading>Loading app packages and adoptions…</p>
+        {:else if packages.length === 0 && adoptions.length === 0}
+          <p class="promotion-empty" data-settings-promotions-empty>No AppChangePackages or recipient adoptions yet.</p>
         {:else}
           <div class="promotion-list" data-settings-promotions-list>
-            {#each promotions as candidate}
-              <article class="promotion-item" data-settings-promotion-candidate data-settings-promotion-id={candidate.candidate_id}>
+            {#each packages as pkg}
+              <article class="promotion-item" data-settings-app-change-package data-settings-package-id={pkg.package_id}>
                 <div>
-                  <strong>{candidate.summary || candidate.candidate_id}</strong>
-                  <span>{candidate.vm_id || 'no-vm'} · {candidate.integration_branch || 'not integrated'}</span>
+                  <strong>{pkg.app_id || pkg.package_id}</strong>
+                  <span>{pkg.source_computer_id || 'source computer'} · {pkg.visibility || 'visibility'} · {pkg.package_manifest_sha256 || 'manifest pending'}</span>
                 </div>
-                <span class="promotion-status" data-settings-promotion-status>{candidate.status}</span>
-                {#if candidate.error}
-                  <p>{candidate.error}</p>
+                <span class="promotion-status" data-settings-promotion-status>{pkg.status}</span>
+              </article>
+            {/each}
+            {#each adoptions as adoption}
+              <article class="promotion-item" data-settings-app-adoption data-settings-adoption-id={adoption.adoption_id}>
+                <div>
+                  <strong>{adoption.app_id || adoption.package_id}</strong>
+                  <span>{adoption.target_computer_id || 'target computer'} · {adoption.package_id}</span>
+                </div>
+                <span class="promotion-status" data-settings-promotion-status>{adoption.status}</span>
+                {#if adoption.error}
+                  <p>{adoption.error}</p>
                 {/if}
-                {#if promotionApproved(candidate)}
-                  <p class="promotion-approved" data-settings-promotion-approved>Owner approved</p>
+                {#if adoption.runtime_artifact_digest || adoption.ui_artifact_digest}
+                  <p class="promotion-approved" data-settings-adoption-artifacts>
+                    runtime {shortCommit(adoption.runtime_artifact_digest)} · UI {shortCommit(adoption.ui_artifact_digest)}
+                  </p>
                 {/if}
-                {#if canVerifyPromotion(candidate) || canApprovePromotion(candidate) || canPromotePromotion(candidate) || canRejectPromotion(candidate)}
+                {#if canVerifyAdoption(adoption) || canPromoteAdoption(adoption) || canRollbackAdoption(adoption)}
                   <div class="promotion-actions" data-settings-promotion-actions>
-                    {#if canVerifyPromotion(candidate)}
+                    {#if canVerifyAdoption(adoption)}
                       <button
                         class="promotion-action verify"
-                        data-settings-promotion-verify
-                        on:click={() => reviewPromotion(candidate, 'verify')}
-                        disabled={promotionActingId === `${candidate.candidate_id}:verify`}
+                        data-settings-adoption-verify
+                        on:click={() => reviewAdoption(adoption, 'verify')}
+                        disabled={promotionActingId === `${adoption.adoption_id}:verify`}
                       >
-                        {promotionActingId === `${candidate.candidate_id}:verify` ? 'Verifying…' : 'Verify'}
+                        {promotionActingId === `${adoption.adoption_id}:verify` ? 'Verifying…' : 'Verify'}
                       </button>
                     {/if}
-                    {#if canApprovePromotion(candidate)}
+                    {#if canPromoteAdoption(adoption)}
                       <button
                         class="promotion-action approve"
-                        data-settings-promotion-approve
-                        on:click={() => reviewPromotion(candidate, 'approve')}
-                        disabled={promotionActingId === `${candidate.candidate_id}:approve`}
+                        data-settings-adoption-promote
+                        on:click={() => reviewAdoption(adoption, 'promote')}
+                        disabled={promotionActingId === `${adoption.adoption_id}:promote`}
                       >
-                        {promotionActingId === `${candidate.candidate_id}:approve` ? 'Approving…' : 'Approve'}
+                        {promotionActingId === `${adoption.adoption_id}:promote` ? 'Promoting…' : 'Promote'}
                       </button>
                     {/if}
-                    {#if canPromotePromotion(candidate)}
-                      <button
-                        class="promotion-action approve"
-                        data-settings-promotion-promote
-                        on:click={() => reviewPromotion(candidate, 'promote')}
-                        disabled={promotionActingId === `${candidate.candidate_id}:promote`}
-                      >
-                        {promotionActingId === `${candidate.candidate_id}:promote` ? 'Promoting…' : 'Promote'}
-                      </button>
-                    {/if}
-                    {#if canRejectPromotion(candidate)}
+                    {#if canRollbackAdoption(adoption)}
                       <button
                         class="promotion-action reject"
-                        data-settings-promotion-reject
-                        on:click={() => reviewPromotion(candidate, 'reject')}
-                        disabled={promotionActingId === `${candidate.candidate_id}:reject`}
+                        data-settings-adoption-rollback
+                        on:click={() => reviewAdoption(adoption, 'rollback')}
+                        disabled={promotionActingId === `${adoption.adoption_id}:rollback`}
                       >
-                        {promotionActingId === `${candidate.candidate_id}:reject` ? 'Rejecting…' : 'Reject'}
+                        {promotionActingId === `${adoption.adoption_id}:rollback` ? 'Rolling back…' : 'Rollback'}
                       </button>
                     {/if}
                   </div>

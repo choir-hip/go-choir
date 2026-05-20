@@ -471,7 +471,6 @@
     data-browser-execution-scope={backendSession?.execution_scope || ''}
     data-browser-backend-session-id={backendSession?.backend_session_id || ''}
     data-browser-world-kind={backendSession?.world_kind || ''}
-    data-browser-promotion-candidate-id={backendSession?.promotion_candidate_id || ''}
     data-browser-vm-id={backendSession?.vm_id || ''}
     data-browser-snapshot-id={backendSession?.snapshot_id || ''}
     data-browser-source-loop-id={backendSession?.source_loop_id || ''}

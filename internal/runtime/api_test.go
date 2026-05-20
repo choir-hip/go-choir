@@ -196,7 +196,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	if rec.State != types.RunAcceptanceAccepted {
 		t.Fatalf("state = %q, want accepted", rec.State)
 	}
-	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "export_observed", "promotion_candidate_queued", "rollback_available"} {
+	for _, want := range []string{"submitted", "vtext_opened", "super_requested", "worker_leased", "worker_delegated", "app_package_published", "app_adoption_verified"} {
 		if !acceptanceHasCheckpoint(rec, want) {
 			t.Fatalf("missing checkpoint %q in %+v", want, rec.Checkpoints)
 		}
@@ -226,11 +226,8 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	if delegated.Details["worker_event_summary"] == nil {
 		t.Fatalf("worker_delegated missing worker event summary: %+v", delegated.Details)
 	}
-	if delegated.Details["export_patchsets"] == nil {
-		t.Fatalf("worker_delegated missing export summaries: %+v", delegated.Details)
-	}
-	if delegated.Details["promotion_queue"] == nil {
-		t.Fatalf("worker_delegated missing promotion queue summary: %+v", delegated.Details)
+	if delegated.Details["app_change_packages"] == nil {
+		t.Fatalf("worker_delegated missing AppChangePackage summaries: %+v", delegated.Details)
 	}
 
 	loaded, err := rt.store.GetRunAcceptance(ctx, "user-alice", rec.AcceptanceID)
@@ -436,20 +433,9 @@ func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testin
 	}
 }
 
-func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.T) {
+func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *testing.T) {
 	rt, handler := testAPISetup(t)
-	ctx := context.Background()
 	seedRunAcceptanceTrajectory(t, rt)
-
-	candidate, err := rt.store.GetPromotionCandidate(ctx, "user-alice", "candidate-acceptance")
-	if err != nil {
-		t.Fatalf("get candidate: %v", err)
-	}
-	candidate.Status = types.PromotionCandidateVerified
-	candidate.ReportJSON = json.RawMessage(`{"status":"verified","promotion_approved":false}`)
-	if _, err := rt.store.UpdatePromotionCandidate(ctx, candidate); err != nil {
-		t.Fatalf("update verified candidate: %v", err)
-	}
 
 	body := `{"target_mission_id":"mission-run-acceptance-v0","trajectory_id":"traj-acceptance"}`
 	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
@@ -461,31 +447,38 @@ func TestRunAcceptanceSynthesizeRequiresOwnerReviewForPromotionLevel(t *testing.
 		t.Fatalf("decode acceptance: %v", err)
 	}
 	if rec.AcceptanceLevel != types.RunAcceptanceExportLevel {
-		t.Fatalf("acceptance level without owner review = %q, want export-level", rec.AcceptanceLevel)
+		t.Fatalf("acceptance level before app adoption promotion = %q, want export-level", rec.AcceptanceLevel)
 	}
-	if !acceptanceHasCheckpoint(rec, "verification_passed") {
-		t.Fatalf("verified candidate should create verification checkpoint: %+v", rec.Checkpoints)
+	if !acceptanceHasCheckpoint(rec, "app_adoption_verified") {
+		t.Fatalf("verified app adoption should create verifier checkpoint: %+v", rec.Checkpoints)
 	}
-	if acceptanceHasCheckpoint(rec, "owner_reviewed") {
-		t.Fatalf("owner review checkpoint should not be present before durable review: %+v", rec.Checkpoints)
+	if acceptanceHasCheckpoint(rec, "app_adoption_promoted") {
+		t.Fatalf("promotion checkpoint should not be present before durable adoption promotion: %+v", rec.Checkpoints)
 	}
 
-	candidate.ReportJSON = json.RawMessage(`{"status":"verified","promotion_approved":true,"promotion_decision_at":"2026-05-14T00:00:00Z"}`)
-	if _, err := rt.store.UpdatePromotionCandidate(ctx, candidate); err != nil {
-		t.Fatalf("update reviewed candidate: %v", err)
-	}
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-app-adoption-promoted-acceptance",
+		RunID:        "run-worker-acceptance",
+		AgentID:      "agent-super-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    time.Now().UTC(),
+		Kind:         types.EventAppAdoptionPromoted,
+		Payload:      json.RawMessage(`{"adoption_id":"adoption-acceptance","package_id":"pkg-acceptance","target_computer_id":"computer-b","candidate_source_ref":"refs/computers/computer-b/candidates/adoption-acceptance","runtime_artifact_digest":"runtime-recipient-digest-b","ui_artifact_digest":"ui-recipient-digest-b","route_profile":"primary","default_base_profile":"primary","rollback_source_ref":"refs/computers/computer-b/active-before-adoption"}`),
+	})
 	w = registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
-		t.Fatalf("synthesize reviewed status = %d, body=%s", w.Code, w.Body.String())
+		t.Fatalf("synthesize promoted status = %d, body=%s", w.Code, w.Body.String())
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
-		t.Fatalf("decode reviewed acceptance: %v", err)
+		t.Fatalf("decode promoted acceptance: %v", err)
 	}
 	if rec.AcceptanceLevel != types.RunAcceptancePromotionLevel {
-		t.Fatalf("acceptance level with owner review = %q, want promotion-level; checkpoints=%+v", rec.AcceptanceLevel, rec.Checkpoints)
+		t.Fatalf("acceptance level with adoption promotion = %q, want promotion-level; checkpoints=%+v", rec.AcceptanceLevel, rec.Checkpoints)
 	}
-	if !acceptanceHasCheckpoint(rec, "owner_reviewed") {
-		t.Fatalf("reviewed candidate missing owner_reviewed checkpoint: %+v", rec.Checkpoints)
+	if !acceptanceHasCheckpoint(rec, "app_adoption_promoted") {
+		t.Fatalf("promoted adoption missing app_adoption_promoted checkpoint: %+v", rec.Checkpoints)
 	}
 }
 
@@ -556,7 +549,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and export a patchset.",
+			Prompt:       "Delegate a worker and publish an AppChangePackage.",
 			CreatedAt:    now.Add(5 * time.Second),
 			UpdatedAt:    now.Add(12 * time.Second),
 			FinishedAt:   &finishedAt,
@@ -620,7 +613,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 		"worker_sandbox_url":           "http://127.0.0.1:8085",
 		"loop_id":                      "run-worker-acceptance",
 		"terminal_error":               terminalError,
-		"completion_blocker":           map[bool]string{true: "vsuper_timed_out_after_reviewable_export", false: ""}[delegateStatus != "worker_run_completed"],
+		"completion_blocker":           map[bool]string{true: "vsuper_timed_out_after_reviewable_package", false: ""}[delegateStatus != "worker_run_completed"],
 		"event_count":                  22,
 		"worker_root_event_count":      9,
 		"worker_child_run_ids":         []string{"run-implementation-acceptance", "run-verifier-acceptance"},
@@ -638,53 +631,48 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 				"role":            "result",
 				"from_agent_id":   "agent-verifier-acceptance",
 				"to_agent_id":     "agent-vsuper-acceptance",
-				"content_excerpt": "Verifier observed the export manifest and rollback refs.",
+				"content_excerpt": "Verifier observed the AppChangePackage manifest and rollback refs.",
 			},
 		},
-		"export_patchsets": []map[string]any{{
-			"status":          "exported",
-			"manifest_path":   "/tmp/acceptance-manifest.json",
-			"patchset_path":   "/tmp/acceptance.patch",
-			"base_sha":        "base-acceptance",
-			"worker_head":     "worker-head-acceptance",
-			"worker_head_sha": "worker-head-acceptance",
-			"patchset_sha256": "sha256-acceptance",
-			"github_push":     false,
-		}},
-		"promotion_queue": []map[string]any{{
-			"candidate_id":       "candidate-acceptance",
-			"status":             "queued",
-			"source_loop_id":     "run-super-acceptance",
-			"candidate_loop_id":  "run-worker-acceptance",
-			"trace_id":           "traj-acceptance",
-			"vm_id":              "vm-acceptance",
-			"base_sha":           "base-acceptance",
-			"worker_head":        "worker-head-acceptance",
-			"manifest_path":      "/tmp/acceptance-manifest.json",
-			"patchset_path":      "/tmp/acceptance.patch",
-			"integration_branch": "agent/run-worker-acceptance/candidate",
-			"destination_branch": "main",
-			"patchset_sha256":    "sha256-acceptance",
+		"app_change_packages": []map[string]any{{
+			"status":                         "published_unlisted",
+			"package_id":                     "pkg-acceptance",
+			"app_id":                         "podcast",
+			"base_sha":                       "base-acceptance",
+			"candidate_head_sha":             "worker-head-acceptance",
+			"source_computer_id":             "computer-a",
+			"source_candidate_id":            "candidate-a",
+			"candidate_source_ref":           "refs/computers/computer-a/candidates/candidate-a",
+			"package_manifest_sha256":        "sha256-manifest-acceptance",
+			"runtime_source_delta_sha256":    "sha256-runtime-delta-acceptance",
+			"ui_source_delta_sha256":         "sha256-ui-delta-acceptance",
+			"recipient_build_required":       true,
+			"source_runtime_artifact_digest": "runtime-source-digest-a",
+			"source_ui_artifact_digest":      "ui-source-digest-a",
 		}},
 	})
-	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:       "candidate-acceptance",
-		OwnerID:           "user-alice",
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       "run-super-acceptance",
-		TraceID:           "traj-acceptance",
-		VMID:              "vm-acceptance",
-		BaseSHA:           "base-acceptance",
-		WorkerHeadSHA:     "worker-head-acceptance",
-		ManifestPath:      "/tmp/acceptance-manifest.json",
-		PatchsetPath:      "/tmp/acceptance.patch",
-		IntegrationBranch: "agent/run-worker-acceptance/candidate",
-		DestinationBranch: "main",
-		Summary:           "Acceptance verifier test candidate",
-		CandidateJSON:     json.RawMessage(`{"objective_fingerprint":"fp-acceptance","patchset_sha256":"sha256-acceptance"}`),
-	}); err != nil {
-		t.Fatalf("queue promotion candidate: %v", err)
-	}
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-app-package-acceptance",
+		RunID:        "run-worker-acceptance",
+		AgentID:      "agent-super-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now.Add(11 * time.Second),
+		Kind:         types.EventAppChangePackagePublished,
+		Payload:      json.RawMessage(`{"package_id":"pkg-acceptance","app_id":"podcast","source_computer_id":"computer-a","source_candidate_id":"candidate-a","candidate_source_ref":"refs/computers/computer-a/candidates/candidate-a","package_manifest_sha":"sha256-manifest-acceptance"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-app-adoption-verify-acceptance",
+		RunID:        "run-worker-acceptance",
+		AgentID:      "agent-super-acceptance",
+		ChannelID:    "channel-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now.Add(12 * time.Second),
+		Kind:         types.EventAppAdoptionVerified,
+		Payload:      json.RawMessage(`{"adoption_id":"adoption-acceptance","package_id":"pkg-acceptance","target_computer_id":"computer-b","runtime_artifact_digest":"runtime-recipient-digest-b","ui_artifact_digest":"ui-recipient-digest-b","foreground_tail_merge_result":"no-conflict","recipient_build_required":true,"recipient_build_status":"passed"}`),
+	})
 }
 
 func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
@@ -746,7 +734,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and export a patchset.",
+			Prompt:       "Delegate a worker and publish an AppChangePackage.",
 			CreatedAt:    now.Add(5 * time.Second),
 			UpdatedAt:    now.Add(12 * time.Second),
 			FinishedAt:   &finishedAt,
@@ -865,7 +853,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunRunning,
-			Prompt:       "Delegate a worker and export a patchset.",
+			Prompt:       "Delegate a worker and publish an AppChangePackage.",
 			CreatedAt:    now.Add(5 * time.Second),
 			UpdatedAt:    now.Add(8 * time.Second),
 			Metadata: map[string]any{
@@ -1249,66 +1237,16 @@ fi
 	}
 }
 
-func TestBrowserSessionBindsToOwnerScopedPromotionCandidateWorld(t *testing.T) {
-	rt, handler := testAPISetup(t)
-	ctx := context.Background()
-	candidate, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:   "candidate-browser-world",
-		OwnerID:       "user-alice",
-		Status:        types.PromotionCandidateQueued,
-		SourceRunID:   "source-browser-world",
-		TraceID:       "trace-browser-world",
-		VMID:          "vm-browser-world",
-		SnapshotID:    "snapshot-browser-world",
-		BaseSHA:       "base-browser-world",
-		WorkerHeadSHA: "head-browser-world",
-		ManifestPath:  "/tmp/browser-world-manifest.json",
-		PatchsetPath:  "/tmp/browser-world.patch",
-		Summary:       "Candidate world with browser identity",
-	})
-	if err != nil {
-		t.Fatalf("queue candidate: %v", err)
-	}
-
+func TestBrowserSessionRejectsLegacyPromotionCandidateBinding(t *testing.T) {
+	_, handler := testAPISetup(t)
 	forged := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
 	if forged.Code != http.StatusBadRequest {
 		t.Fatalf("forged vm_id status = %d, want 400; body=%s", forged.Code, forged.Body.String())
 	}
 
-	other := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"`+candidate.CandidateID+`"}`, "user-bob")
-	if other.Code != http.StatusNotFound {
-		t.Fatalf("other owner candidate status = %d, want 404; body=%s", other.Code, other.Body.String())
-	}
-
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"`+candidate.CandidateID+`"}`, "user-alice")
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("create status = %d, want %d; body=%s", createW.Code, http.StatusCreated, createW.Body.String())
-	}
-	var created types.BrowserSessionRecord
-	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create: %v", err)
-	}
-	if created.WorldKind != "candidate_world" || created.CandidateID != candidate.CandidateID || created.VMID != candidate.VMID || created.SnapshotID != candidate.SnapshotID {
-		t.Fatalf("created session missing candidate-world identity: %+v", created)
-	}
-	if created.SourceRunID != candidate.SourceRunID || created.CandidateTraceID != candidate.TraceID {
-		t.Fatalf("created session missing candidate provenance: %+v", created)
-	}
-
-	traceID := browserSessionTraceID(created.SessionID)
-	events, err := rt.Store().ListEventsByTrajectory(ctx, "user-alice", traceID, 10)
-	if err != nil {
-		t.Fatalf("list browser trace events: %v", err)
-	}
-	if len(events) != 1 || events[0].Kind != types.EventBrowserSessionCreated {
-		t.Fatalf("browser trace events = %+v, want one create event", events)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
-		t.Fatalf("decode browser create payload: %v", err)
-	}
-	if payload["world_kind"] != "candidate_world" || payload["vm_id"] != candidate.VMID || payload["promotion_candidate_id"] != candidate.CandidateID {
-		t.Fatalf("browser create payload missing candidate-world identity: %+v", payload)
+	legacy := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"candidate-browser-world"}`, "user-alice")
+	if legacy.Code != http.StatusBadRequest {
+		t.Fatalf("legacy promotion_candidate_id status = %d, want 400; body=%s", legacy.Code, legacy.Body.String())
 	}
 }
 
@@ -1459,232 +1397,6 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 	}
 }
 
-func TestPromotionCandidatePublicListAndDetailAreOwnerScoped(t *testing.T) {
-	rt, handler := testAPISetup(t)
-	ctx := context.Background()
-
-	queued, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID: "candidate-api-read",
-		OwnerID:     "user-alice",
-		Status:      types.PromotionCandidateQueued,
-		Summary:     "Review launcher/uploads/themes candidate",
-	})
-	if err != nil {
-		t.Fatalf("queue candidate: %v", err)
-	}
-
-	listReq := authenticatedRequest(http.MethodGet, "/api/promotions", "", "user-alice")
-	listW := httptest.NewRecorder()
-	handler.HandlePromotionCandidatesRoot(listW, listReq)
-	if listW.Code != http.StatusOK {
-		t.Fatalf("list status = %d; body=%s", listW.Code, listW.Body.String())
-	}
-	var list promotionCandidateListResponse
-	if err := json.NewDecoder(listW.Body).Decode(&list); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if len(list.Candidates) != 1 || list.Candidates[0].CandidateID != queued.CandidateID {
-		t.Fatalf("list candidates = %+v, want %q", list.Candidates, queued.CandidateID)
-	}
-
-	detailReq := authenticatedRequest(http.MethodGet, "/api/promotions/"+queued.CandidateID, "", "user-alice")
-	detailW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(detailW, detailReq)
-	if detailW.Code != http.StatusOK {
-		t.Fatalf("detail status = %d; body=%s", detailW.Code, detailW.Body.String())
-	}
-	var detail types.PromotionCandidateRecord
-	if err := json.NewDecoder(detailW.Body).Decode(&detail); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
-	if detail.CandidateID != queued.CandidateID || detail.OwnerID != "user-alice" {
-		t.Fatalf("detail = %+v", detail)
-	}
-
-	otherUserReq := authenticatedRequest(http.MethodGet, "/api/promotions/"+queued.CandidateID, "", "user-bob")
-	otherUserW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
-	if otherUserW.Code != http.StatusNotFound {
-		t.Fatalf("other user detail status = %d, want 404", otherUserW.Code)
-	}
-}
-
-func TestPromotionCandidatePublicReviewIsOwnerScopedAndNonPromoting(t *testing.T) {
-	rt, handler := testAPISetup(t)
-	ctx := context.Background()
-
-	reportJSON := json.RawMessage(`{"status":"verified","promotion_approved":false}`)
-	verified, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID: "candidate-api-review",
-		OwnerID:     "user-alice",
-		Status:      types.PromotionCandidateVerified,
-		Summary:     "Review verified candidate",
-		ReportJSON:  reportJSON,
-	})
-	if err != nil {
-		t.Fatalf("queue verified candidate: %v", err)
-	}
-
-	otherUserReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/approve", "", "user-bob")
-	otherUserW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
-	if otherUserW.Code != http.StatusBadRequest && otherUserW.Code != http.StatusNotFound {
-		t.Fatalf("other user approve status = %d, want 400/404", otherUserW.Code)
-	}
-
-	approveReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/approve", "", "user-alice")
-	approveW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(approveW, approveReq)
-	if approveW.Code != http.StatusOK {
-		t.Fatalf("approve status = %d; body=%s", approveW.Code, approveW.Body.String())
-	}
-	var approved types.PromotionCandidateRecord
-	if err := json.NewDecoder(approveW.Body).Decode(&approved); err != nil {
-		t.Fatalf("decode approved: %v", err)
-	}
-	if approved.Status != types.PromotionCandidateVerified {
-		t.Fatalf("approved status = %s, want verified", approved.Status)
-	}
-	var approvedReport struct {
-		PromotionApproved bool `json:"promotion_approved"`
-	}
-	if err := json.Unmarshal(approved.ReportJSON, &approvedReport); err != nil {
-		t.Fatalf("decode approved report: %v", err)
-	}
-	if !approvedReport.PromotionApproved {
-		t.Fatalf("expected promotion_approved in report_json: %s", approved.ReportJSON)
-	}
-
-	rejectReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+verified.CandidateID+"/reject", "", "user-alice")
-	rejectW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(rejectW, rejectReq)
-	if rejectW.Code != http.StatusOK {
-		t.Fatalf("reject status = %d; body=%s", rejectW.Code, rejectW.Body.String())
-	}
-	var rejected types.PromotionCandidateRecord
-	if err := json.NewDecoder(rejectW.Body).Decode(&rejected); err != nil {
-		t.Fatalf("decode rejected: %v", err)
-	}
-	if rejected.Status != types.PromotionCandidateRejected {
-		t.Fatalf("rejected status = %s, want rejected", rejected.Status)
-	}
-}
-
-func TestPromotionCandidatePublicVerifyUsesServerOwnedWorkspace(t *testing.T) {
-	rt, handler := testAPISetup(t)
-	ctx := context.Background()
-
-	source, err := rt.StartRunWithMetadata(ctx, "public promotion verify source", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
-	})
-	if err != nil {
-		t.Fatalf("start source run: %v", err)
-	}
-	sourceDone := waitForRunTerminalState(t, rt, source.RunID, "user-alice", 5*time.Second)
-
-	baseRepo, _, base, workerHead, exportReport := prepareRuntimeLauncherCandidate(t)
-	rt.cfg.PromotionSourceRepo = baseRepo
-	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
-
-	candidateID := "candidate-api-public-verify"
-	manifestPath, patchsetPath := runtimeCopyPromotionArtifacts(t, rt, candidateID, exportReport.ManifestPath, exportReport.PatchsetPath)
-	queued, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:       candidateID,
-		OwnerID:           "user-alice",
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       sourceDone.RunID,
-		TraceID:           "trace-api-public-verify",
-		VMID:              "vm-api-public-verify",
-		BaseSHA:           base,
-		WorkerHeadSHA:     workerHead,
-		ManifestPath:      manifestPath,
-		PatchsetPath:      patchsetPath,
-		IntegrationBranch: "agent/run-api-public-verify/candidate",
-		DestinationBranch: "main",
-		Summary:           "public promotion verifier proof",
-		ContractsJSON:     json.RawMessage(`[]`),
-	})
-	if err != nil {
-		t.Fatalf("queue candidate: %v", err)
-	}
-
-	repoPathReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{"repo_path":"/tmp/evil"}`, "user-alice")
-	repoPathW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(repoPathW, repoPathReq)
-	if repoPathW.Code != http.StatusBadRequest {
-		t.Fatalf("repo_path verify status = %d, want 400; body=%s", repoPathW.Code, repoPathW.Body.String())
-	}
-
-	otherUserReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{}`, "user-bob")
-	otherUserW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(otherUserW, otherUserReq)
-	if otherUserW.Code != http.StatusBadRequest && otherUserW.Code != http.StatusNotFound {
-		t.Fatalf("other user verify status = %d, want 400/404; body=%s", otherUserW.Code, otherUserW.Body.String())
-	}
-
-	verifyReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/verify", `{}`, "user-alice")
-	verifyW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(verifyW, verifyReq)
-	if verifyW.Code != http.StatusOK {
-		t.Fatalf("verify status = %d; body=%s", verifyW.Code, verifyW.Body.String())
-	}
-	var verified types.PromotionCandidateRecord
-	if err := json.NewDecoder(verifyW.Body).Decode(&verified); err != nil {
-		t.Fatalf("decode verified: %v", err)
-	}
-	if verified.Status != types.PromotionCandidateVerified {
-		t.Fatalf("verified status = %s, want verified", verified.Status)
-	}
-	if strings.Contains(string(verified.ReportJSON), "/tmp/evil") {
-		t.Fatalf("public verify report used caller repo_path: %s", verified.ReportJSON)
-	}
-	if !strings.Contains(string(verified.ReportJSON), "product-safe-patch-import") {
-		t.Fatalf("public verify report missing safe verifier contract: %s", verified.ReportJSON)
-	}
-
-	repoPathPromoteReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{"repo_path":"/tmp/evil"}`, "user-alice")
-	repoPathPromoteW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(repoPathPromoteW, repoPathPromoteReq)
-	if repoPathPromoteW.Code != http.StatusBadRequest {
-		t.Fatalf("repo_path promote status = %d, want 400; body=%s", repoPathPromoteW.Code, repoPathPromoteW.Body.String())
-	}
-
-	promoteBeforeReviewReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{}`, "user-alice")
-	promoteBeforeReviewW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(promoteBeforeReviewW, promoteBeforeReviewReq)
-	if promoteBeforeReviewW.Code != http.StatusBadRequest {
-		t.Fatalf("promote before review status = %d, want 400; body=%s", promoteBeforeReviewW.Code, promoteBeforeReviewW.Body.String())
-	}
-
-	approveReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/approve", "", "user-alice")
-	approveW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(approveW, approveReq)
-	if approveW.Code != http.StatusOK {
-		t.Fatalf("approve status = %d; body=%s", approveW.Code, approveW.Body.String())
-	}
-
-	promoteReq := authenticatedRequest(http.MethodPost, "/api/promotions/"+queued.CandidateID+"/promote", `{}`, "user-alice")
-	promoteW := httptest.NewRecorder()
-	handler.HandlePromotionCandidateDetail(promoteW, promoteReq)
-	if promoteW.Code != http.StatusOK {
-		t.Fatalf("promote status = %d; body=%s", promoteW.Code, promoteW.Body.String())
-	}
-	var promoted types.PromotionCandidateRecord
-	if err := json.NewDecoder(promoteW.Body).Decode(&promoted); err != nil {
-		t.Fatalf("decode promoted: %v", err)
-	}
-	if promoted.Status != types.PromotionCandidatePromoted {
-		t.Fatalf("promoted status = %s, want promoted", promoted.Status)
-	}
-	if strings.Contains(string(promoted.ReportJSON), "/tmp/evil") {
-		t.Fatalf("public promote report used caller repo_path: %s", promoted.ReportJSON)
-	}
-	if !strings.Contains(string(promoted.ReportJSON), `"canonical_mutated":true`) {
-		t.Fatalf("public promote report missing workspace promotion evidence: %s", promoted.ReportJSON)
-	}
-}
-
 func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	source, err := rt.StartRunWithMetadata(context.Background(), "finish controller API source", "user-alice", map[string]any{
@@ -1698,21 +1410,20 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	if done.State != types.RunCompleted {
 		t.Fatalf("source state = %s", done.State)
 	}
-	if _, err := rt.QueuePromotionCandidate(context.Background(), types.PromotionCandidateRecord{
-		CandidateID:       "candidate-continuation-api",
-		OwnerID:           "user-alice",
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       done.RunID,
-		VMID:              "vm-continuation-api",
-		BaseSHA:           "base-continuation-api",
-		WorkerHeadSHA:     "worker-continuation-api",
-		ManifestPath:      "/tmp/continuation-api-manifest.json",
-		PatchsetPath:      "/tmp/continuation-api.patch",
-		IntegrationBranch: "agent/continuation-api/candidate",
-		DestinationBranch: "main",
-		Summary:           "Continuation API selected patchset",
+	adoptionID := "adoption-" + done.RunID
+	if _, err := rt.store.UpsertAppAdoption(context.Background(), types.AppAdoptionRecord{
+		AdoptionID:         adoptionID,
+		OwnerID:            "user-alice",
+		PackageID:          "pkg-continuation-api",
+		AppID:              "podcast",
+		TargetComputerID:   "computer-continuation-api",
+		TargetComputerKind: "user",
+		TargetCandidateID:  "candidate-continuation-api",
+		Status:             types.AppAdoptionCandidateApplied,
+		CandidateSourceRef: "refs/computers/computer-continuation-api/candidates/candidate-continuation-api",
+		TraceID:            traceTrajectoryIDForRun(done),
 	}); err != nil {
-		t.Fatalf("queue candidate: %v", err)
+		t.Fatalf("upsert app adoption: %v", err)
 	}
 
 	unauth := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/continuations", `{"source_loop_id":"`+done.RunID+`"}`, "")
@@ -1728,7 +1439,7 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	if err := json.NewDecoder(selectW.Body).Decode(&selected); err != nil {
 		t.Fatalf("decode selected: %v", err)
 	}
-	if selected.Status != types.RunContinuationSelected || selected.Details["candidate_id"] != "candidate-continuation-api" {
+	if selected.Status != types.RunContinuationSelected || selected.Details["adoption_id"] != adoptionID {
 		t.Fatalf("unexpected selected continuation: %+v", selected)
 	}
 	sourceEvents, err := rt.store.ListEvents(context.Background(), done.RunID, 100)
@@ -1741,13 +1452,14 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		if payloadString(payload, "compaction_status") != "" && payloadString(payload, "candidate_id") == "candidate-continuation-api" {
+		details, _ := payload["details"].(map[string]any)
+		if payloadString(payload, "compaction_status") != "" && payloadString(details, "adoption_id") == adoptionID {
 			foundContinuationEvidence = true
 			break
 		}
 	}
 	if !foundContinuationEvidence {
-		t.Fatalf("continuation selected event missing compaction/candidate evidence: %+v", sourceEvents)
+		t.Fatalf("continuation selected event missing compaction/adoption evidence: %+v", sourceEvents)
 	}
 
 	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/continuations?source_loop_id="+done.RunID, "", "user-alice")
@@ -1781,40 +1493,6 @@ func TestRunContinuationPublicSynthesizeListAndStartAreOwnerScoped(t *testing.T)
 	child := waitForRunTerminalState(t, rt, started.NextRunID, "user-alice", 5*time.Second)
 	if child.AgentProfile != AgentProfileVSuper {
 		t.Fatalf("child agent profile = %q, want %q", child.AgentProfile, AgentProfileVSuper)
-	}
-}
-
-func TestInternalPromotionRoutesRequireInternalCallerAndQueueCandidate(t *testing.T) {
-	_, handler := testAPISetup(t)
-	body := `{"candidate_id":"candidate-api-queue","owner_id":"user-alice","summary":"queued via internal API"}`
-
-	publicReq := httptest.NewRequest(http.MethodPost, "/internal/promotions", strings.NewReader(body))
-	publicW := httptest.NewRecorder()
-	handler.HandleInternalPromotionCandidatesRoot(publicW, publicReq)
-	if publicW.Code != http.StatusForbidden {
-		t.Fatalf("public internal queue status = %d, want 403", publicW.Code)
-	}
-
-	internalReq := httptest.NewRequest(http.MethodPost, "/internal/promotions", strings.NewReader(body))
-	internalReq.Header.Set("X-Internal-Caller", "true")
-	internalW := httptest.NewRecorder()
-	handler.HandleInternalPromotionCandidatesRoot(internalW, internalReq)
-	if internalW.Code != http.StatusAccepted {
-		t.Fatalf("internal queue status = %d; body=%s", internalW.Code, internalW.Body.String())
-	}
-	var queued types.PromotionCandidateRecord
-	if err := json.NewDecoder(internalW.Body).Decode(&queued); err != nil {
-		t.Fatalf("decode queued: %v", err)
-	}
-	if queued.CandidateID != "candidate-api-queue" || queued.Status != types.PromotionCandidateQueued {
-		t.Fatalf("queued = %+v", queued)
-	}
-
-	verifyReq := httptest.NewRequest(http.MethodPost, "/internal/promotions/"+queued.CandidateID+"/verify", strings.NewReader(`{"owner_id":"user-alice","repo_path":"/tmp/repo"}`))
-	verifyW := httptest.NewRecorder()
-	handler.HandleInternalPromotionCandidateRouter(verifyW, verifyReq)
-	if verifyW.Code != http.StatusForbidden {
-		t.Fatalf("public verify status = %d, want 403", verifyW.Code)
 	}
 }
 

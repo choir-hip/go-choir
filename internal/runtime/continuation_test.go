@@ -106,7 +106,7 @@ func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
 	}
 }
 
-func TestRunControlSynthesizesContinuationFromQueuedPromotionCandidate(t *testing.T) {
+func TestRunControlSynthesizesContinuationFromAppAdoption(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	rt.cfg.RunMemoryKeepRecentTokens = 1
@@ -128,22 +128,19 @@ func TestRunControlSynthesizesContinuationFromQueuedPromotionCandidate(t *testin
 		t.Fatalf("source state = %s", done.State)
 	}
 
-	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:       "candidate-run-control",
-		OwnerID:           "user-alice",
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       done.RunID,
-		TraceID:           "trace-run-control",
-		VMID:              "vm-run-control",
-		BaseSHA:           "base-run-control",
-		WorkerHeadSHA:     "worker-run-control",
-		ManifestPath:      "/tmp/run-control-manifest.json",
-		PatchsetPath:      "/tmp/run-control.patch",
-		IntegrationBranch: "agent/run-control/candidate",
-		DestinationBranch: "main",
-		Summary:           "Run-control selected patchset",
+	if _, err := rt.store.UpsertAppAdoption(ctx, types.AppAdoptionRecord{
+		AdoptionID:         "adoption-" + done.RunID,
+		OwnerID:            "user-alice",
+		PackageID:          "pkg-run-control",
+		AppID:              "podcast",
+		TargetComputerID:   "computer-run-control",
+		TargetComputerKind: "user",
+		TargetCandidateID:  "candidate-run-control",
+		Status:             types.AppAdoptionCandidateApplied,
+		CandidateSourceRef: "refs/computers/computer-run-control/candidates/candidate-run-control",
+		TraceID:            "trace-run-control",
 	}); err != nil {
-		t.Fatalf("queue promotion candidate: %v", err)
+		t.Fatalf("upsert app adoption: %v", err)
 	}
 
 	selected, err := rt.SelectSynthesizedRunContinuation(ctx, done.RunID, "user-alice")
@@ -153,11 +150,11 @@ func TestRunControlSynthesizesContinuationFromQueuedPromotionCandidate(t *testin
 	if selected.AuthorityProfile != AgentProfileVSuper {
 		t.Fatalf("authority profile = %q, want %q", selected.AuthorityProfile, AgentProfileVSuper)
 	}
-	if !strings.Contains(selected.Objective, "candidate-run-control") || !strings.Contains(selected.Objective, "Verify queued promotion candidate") {
-		t.Fatalf("objective = %q, want queued candidate verification objective", selected.Objective)
+	if !strings.Contains(selected.Objective, "adoption-"+done.RunID) || !strings.Contains(selected.Objective, "Verify app adoption") {
+		t.Fatalf("objective = %q, want app adoption verification objective", selected.Objective)
 	}
-	if selected.Details["signal"] != "promotion_candidate" || selected.Details["candidate_id"] != "candidate-run-control" {
-		t.Fatalf("details missing promotion signal: %+v", selected.Details)
+	if selected.Details["signal"] != "app_adoption" || selected.Details["adoption_id"] != "adoption-"+done.RunID {
+		t.Fatalf("details missing app adoption signal: %+v", selected.Details)
 	}
 	if selected.Details["compaction_status"] != "completed" {
 		t.Fatalf("synthesized continuation did not compact first: %+v", selected.Details)
@@ -209,22 +206,19 @@ func TestRunControlCompactsEventLedgerWhenSourceHasNoProviderMemory(t *testing.T
 	rt.emitEvent(ctx, &source, types.EventRunSubmitted, events.CauseTaskLifecycle, json.RawMessage(`{"prompt_length":46}`))
 	rt.emitEvent(ctx, &source, types.EventRunCompleted, events.CauseTaskLifecycle, json.RawMessage(`{"result_length":57}`))
 
-	if _, err := rt.QueuePromotionCandidate(ctx, types.PromotionCandidateRecord{
-		CandidateID:       "candidate-no-provider-memory",
-		OwnerID:           "user-alice",
-		Status:            types.PromotionCandidateQueued,
-		SourceRunID:       source.RunID,
-		TraceID:           "trace-no-provider-memory",
-		VMID:              "vm-no-provider-memory",
-		BaseSHA:           "base-no-provider-memory",
-		WorkerHeadSHA:     "worker-no-provider-memory",
-		ManifestPath:      "/tmp/no-provider-memory-manifest.json",
-		PatchsetPath:      "/tmp/no-provider-memory.patch",
-		IntegrationBranch: "agent/no-provider-memory/candidate",
-		DestinationBranch: "main",
-		Summary:           "Control-plane candidate selected for continuation",
+	if _, err := rt.store.UpsertAppAdoption(ctx, types.AppAdoptionRecord{
+		AdoptionID:         "adoption-" + source.RunID,
+		OwnerID:            "user-alice",
+		PackageID:          "pkg-no-provider-memory",
+		AppID:              "podcast",
+		TargetComputerID:   "computer-no-provider-memory",
+		TargetComputerKind: "user",
+		TargetCandidateID:  "candidate-no-provider-memory",
+		Status:             types.AppAdoptionCandidateApplied,
+		CandidateSourceRef: "refs/computers/computer-no-provider-memory/candidates/candidate-no-provider-memory",
+		TraceID:            "trace-no-provider-memory",
 	}); err != nil {
-		t.Fatalf("queue promotion candidate: %v", err)
+		t.Fatalf("upsert app adoption: %v", err)
 	}
 
 	selected, err := rt.SelectSynthesizedRunContinuation(ctx, source.RunID, "user-alice")

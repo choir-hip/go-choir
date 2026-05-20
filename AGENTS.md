@@ -57,7 +57,10 @@ Browser or Playwright acceptance may use public authenticated product APIs such 
 - `/api/prompt-bar/submissions/{id}`
 - `/api/vtext/*`
 - `/api/trace/*`
-- `/api/promotions/*`
+- `/api/app-change-packages/*`
+- `/api/computers/*/source-lineage`
+- `/api/computers/*/adoptions`
+- `/api/adoptions/*`
 - `/api/continuations/*`
 - `/api/run-acceptances/*`
 
@@ -79,9 +82,9 @@ For long-running self-development proof, synthesize a durable `RunAcceptanceReco
 POST /api/run-acceptances/synthesize
 ```
 
-Required evidence should include trajectory/run ids, authority profile, build/deploy identity, vmctl worker lease, worker export or promotion candidate, verifier contracts, rollback refs, and residual risks. Use explicit levels: `docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, `continuation-level`.
+Required evidence should include trajectory/run ids, authority profile, build/deploy identity, vmctl worker lease, AppChangePackage/adoption evidence or a precise blocker, verifier contracts, rollback refs, and residual risks. Use explicit levels: `docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, `continuation-level`.
 
-Do not claim `promotion-level` without verifier contract evidence plus owner review and promotion/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
+Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
 
 ## Git And Staging
 

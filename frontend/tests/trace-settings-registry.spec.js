@@ -33,28 +33,53 @@ async function attachScreenshot(page, testInfo, name) {
   await testInfo.attach(name, { path, contentType: 'image/png' });
 }
 
-async function fetchJSON(page, path) {
-  return page.evaluate(async (requestPath) => {
-    const res = await fetch(requestPath, { credentials: 'include' });
+async function postJSON(page, path, data) {
+  return page.evaluate(async ({ requestPath, requestBody }) => {
+    const res = await fetch(requestPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(requestBody),
+    });
     const body = await res.text();
     if (!res.ok) {
       throw new Error(`${requestPath} failed: ${res.status} ${body}`);
     }
     return body ? JSON.parse(body) : null;
-  }, path);
+  }, { requestPath: path, requestBody: data });
 }
 
-async function waitForPromptDecision(page, submissionId, timeout = 30_000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const status = await fetchJSON(page, `/api/prompt-bar/submissions/${encodeURIComponent(submissionId)}`);
-    if (status.decision) return status.decision;
-    if (['failed', 'blocked', 'cancelled'].includes(status.state)) {
-      throw new Error(`prompt submission ${submissionId} ended as ${status.state}: ${status.error || ''}`);
-    }
-    await page.waitForTimeout(500);
-  }
-  throw new Error(`prompt submission ${submissionId} did not produce a decision`);
+async function createAppPackageAndAdoption(page, label, overrides = {}) {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const packageID = overrides.packageID || `package-${label}-${stamp}`;
+  const targetComputerID = overrides.targetComputerID || `target-computer-${label}`;
+  const targetCandidateID = overrides.targetCandidateID || `target-candidate-${label}-${stamp}`;
+  const appID = overrides.appID || `${label}-app`;
+  const pkg = await postJSON(page, '/api/app-change-packages', {
+    package_id: packageID,
+    app_id: appID,
+    visibility: 'unlisted',
+    source_computer_id: `source-computer-${label}`,
+    source_candidate_id: `source-candidate-${label}-${stamp}`,
+    candidate_source_ref: `refs/computers/source-${label}/candidates/${stamp}`,
+    source_ledger_base_ref: `base-${label}`,
+    source_ledger_candidate_ref: `refs/computers/source-${label}/candidates/${stamp}`,
+    source_ledger_commit_sha: `commit-${label}-${stamp}`,
+    runtime_source_delta: `diff --git a/${label}-runtime.txt b/${label}-runtime.txt\nnew file mode 100644\n--- /dev/null\n+++ b/${label}-runtime.txt\n@@ -0,0 +1 @@\n+${label} runtime\n`,
+    ui_source_delta: `diff --git a/frontend/${label}-ui.txt b/frontend/${label}-ui.txt\nnew file mode 100644\n--- /dev/null\n+++ b/frontend/${label}-ui.txt\n@@ -0,0 +1 @@\n+${label} ui\n`,
+    app_protocol_contract: `${label} protocol contract requires recipient runtime/ui build`,
+    trace_id: overrides.traceID || '',
+  });
+  const adoption = await postJSON(page, `/api/computers/${encodeURIComponent(targetComputerID)}/adoptions`, {
+    adoption_id: overrides.adoptionID || `adoption-${label}-${stamp}`,
+    package_id: packageID,
+    target_candidate_id: targetCandidateID,
+    candidate_source_ref: `refs/computers/${targetComputerID}/candidates/${targetCandidateID}`,
+    foreground_tail_merge_result: 'not_tested_product_ui_fixture',
+    merge_strategy: 'fixture-no-conflict',
+    trace_id: overrides.traceID || '',
+  });
+  return { pkg, adoption, packageID, targetComputerID, targetCandidateID, appID };
 }
 
 test('Trace and Settings stay product-safe while app and theme metadata come from product config', async ({ page, authenticator }, testInfo) => {
@@ -82,7 +107,8 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
     }
     if (
       (url.pathname === '/health' ||
-        url.pathname === '/api/promotions' ||
+        url.pathname === '/api/app-change-packages' ||
+        url.pathname === '/api/adoptions' ||
         url.pathname.startsWith('/api/shell/') ||
         url.pathname.startsWith('/api/desktop/') ||
         url.pathname.startsWith('/api/vtext/')) &&
@@ -146,7 +172,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   expect(editorValue).toContain('"id": "frutiger-aero"');
   await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
   await expect(settings.locator('[data-settings-promotions]')).toBeVisible();
-  await expect(settings.locator('[data-settings-promotions-empty]')).toContainText('No candidate patchsets queued.');
+  await expect(settings.locator('[data-settings-promotions-empty]')).toContainText('No AppChangePackages or recipient adoptions yet.');
   await expect(settings).not.toContainText('Editable role prompt');
   await expect(settings).not.toContainText('/api/prompts');
 
@@ -164,7 +190,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   await attachScreenshot(page, testInfo, 'trace-settings-registry');
 });
 
-test('Settings renders queued promotion candidates without browser-internal routes', async ({ page, authenticator, request }) => {
+test('Settings renders AppChangePackages and adoptions without browser-internal routes', async ({ page, authenticator }) => {
   const forbiddenRequests = [];
   page.on('request', (browserRequest) => {
     const url = new URL(browserRequest.url());
@@ -173,49 +199,29 @@ test('Settings renders queued promotion candidates without browser-internal rout
     }
   });
 
-  const email = uniqueEmail('promotion-queue');
+  const email = uniqueEmail('app-package-settings');
   await registerAndLoadDesktop(page, email);
   const session = await getSession(page, BASE_URL);
   expect(session.authenticated).toBe(true);
   expect(session.user?.id).toBeTruthy();
 
-  const candidateID = `candidate-ui-${Date.now()}`;
-  const seed = await request.post('http://127.0.0.1:8085/internal/promotions', {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Caller': 'true',
-    },
-    data: {
-      candidate_id: candidateID,
-      owner_id: session.user.id,
-      status: 'queued',
-      source_loop_id: 'seeded-product-test',
-      trace_id: 'trace-seeded-product-test',
-      vm_id: 'vm-product-test',
-      snapshot_id: 'snapshot-product-test',
-      base_sha: 'base-product-test',
-      worker_head_sha: 'worker-product-test',
-      manifest_path: '/tmp/manifest.json',
-      patchset_path: '/tmp/patch.diff',
-      integration_branch: 'agent/seeded-product-test/candidate',
-      destination_branch: 'main',
-      summary: 'Seeded promotion queue candidate',
-    },
-  });
-  expect(seed.status()).toBe(202);
+  const seeded = await createAppPackageAndAdoption(page, 'settings');
 
   await openApp(page, 'settings');
   const settings = page.locator('[data-settings-app]').last();
   await expect(settings.locator('[data-settings-promotions-list]')).toBeVisible({ timeout: 10000 });
-  const candidate = settings.locator(`[data-settings-promotion-id="${candidateID}"]`);
-  await expect(candidate).toContainText('Seeded promotion queue candidate');
-  await expect(candidate).toContainText('vm-product-test');
-  await expect(candidate.locator('[data-settings-promotion-status]')).toContainText('queued');
-  await expect(candidate.locator('[data-settings-promotion-verify]')).toBeVisible();
+  const pkg = settings.locator(`[data-settings-package-id="${seeded.packageID}"]`);
+  await expect(pkg).toContainText(seeded.appID);
+  await expect(pkg).toContainText('unlisted');
+  const adoption = settings.locator(`[data-settings-adoption-id="${seeded.adoption.adoption_id}"]`);
+  await expect(adoption).toContainText(seeded.appID);
+  await expect(adoption).toContainText(seeded.targetComputerID);
+  await expect(adoption.locator('[data-settings-promotion-status]')).toContainText('proposed');
+  await expect(adoption.locator('[data-settings-adoption-verify]')).toBeVisible();
   expect(forbiddenRequests).toHaveLength(0);
 });
 
-test('Candidate desktop viewer opens queued promotion candidates without manual IDs', async ({ page, authenticator, request }) => {
+test('Candidate desktop viewer opens app adoption candidates without manual IDs', async ({ page, authenticator }) => {
   const forbiddenRequests = [];
   page.on('request', (browserRequest) => {
     const url = new URL(browserRequest.url());
@@ -230,40 +236,21 @@ test('Candidate desktop viewer opens queued promotion candidates without manual 
   expect(session.authenticated).toBe(true);
   expect(session.user?.id).toBeTruthy();
 
-  const candidateID = `candidate-viewer-${Date.now()}`;
-  const seed = await request.post('http://127.0.0.1:8085/internal/promotions', {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Caller': 'true',
-    },
-    data: {
-      candidate_id: candidateID,
-      owner_id: session.user.id,
-      status: 'queued',
-      source_loop_id: 'seeded-candidate-viewer-test',
-      trace_id: 'trace-seeded-candidate-viewer-test',
-      vm_id: 'vm-candidate-viewer-test',
-      snapshot_id: 'snapshot-candidate-viewer-test',
-      base_sha: 'base-candidate-viewer-test',
-      worker_head_sha: 'worker-candidate-viewer-test',
-      manifest_path: '/tmp/candidate-viewer-manifest.json',
-      patchset_path: '/tmp/candidate-viewer.patch',
-      integration_branch: 'agent/seeded-candidate-viewer/candidate',
-      destination_branch: 'main',
-      summary: 'Candidate desktop contextual viewer test',
-    },
+  const seeded = await createAppPackageAndAdoption(page, 'candidate-viewer', {
+    targetComputerID: 'target-computer-candidate-viewer',
+    targetCandidateID: 'vm-candidate-viewer-test',
+    appID: 'Candidate viewer package',
   });
-  expect(seed.status()).toBe(202);
 
   await openStartApp(page, 'candidate-desktop');
   const viewer = page.locator('[data-candidate-desktop-viewer]');
   await expect(viewer).toBeVisible({ timeout: 10_000 });
   await expect(viewer.locator('[data-candidate-desktop-list]')).toBeVisible({ timeout: 10_000 });
 
-  const candidate = viewer.locator(`[data-candidate-desktop-candidate-id="${candidateID}"]`);
-  await expect(candidate).toContainText('Candidate desktop contextual viewer test');
-  await expect(candidate).toContainText('vm-candidate-viewer-test');
-  await expect(candidate.locator('[data-candidate-desktop-status]')).toContainText('queued');
+  const candidate = viewer.locator(`[data-candidate-desktop-candidate-id="${seeded.adoption.adoption_id}"]`);
+  await expect(candidate).toContainText('Candidate viewer package');
+  await expect(candidate).toContainText('target-computer-candidate-viewer');
+  await expect(candidate.locator('[data-candidate-desktop-status]')).toContainText('proposed');
   await candidate.locator('[data-candidate-desktop-open-candidate]').click();
 
   await expect(viewer).toHaveAttribute('data-candidate-desktop-id', 'vm-candidate-viewer-test');
@@ -271,147 +258,5 @@ test('Candidate desktop viewer opens queued promotion candidates without manual 
   await expect(frame).toBeVisible({ timeout: 10_000 });
   await expect(frame).toHaveAttribute('src', /desktop_id=vm-candidate-viewer-test/);
   await expect(frame).toHaveAttribute('src', /embedded=1/);
-  expect(forbiddenRequests).toHaveLength(0);
-});
-
-test('Trace selects a synthesized next objective from a queued promotion candidate without internal browser routes', async ({ page, authenticator, request }) => {
-  const forbiddenRequests = [];
-  const failedContinuationRequests = [];
-
-  page.on('request', (browserRequest) => {
-    const url = new URL(browserRequest.url());
-    if (url.pathname.startsWith('/internal')) {
-      forbiddenRequests.push(`${browserRequest.method()} ${url.pathname}`);
-    }
-  });
-
-  page.on('response', (response) => {
-    const url = new URL(response.url());
-    if (url.pathname.startsWith('/api/continuations') && response.status() >= 400) {
-      failedContinuationRequests.push(`${url.pathname}:${response.status()}`);
-    }
-  });
-
-  const email = uniqueEmail('trace-continuation');
-  await registerAndLoadDesktop(page, email);
-  const session = await getSession(page, BASE_URL);
-  expect(session.authenticated).toBe(true);
-  expect(session.user?.id).toBeTruthy();
-
-  const promptURL = `https://example.com/trace-continuation-${Date.now()}.pdf`;
-  const promptBarResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
-  );
-  await page.locator('[data-prompt-input]').fill(promptURL);
-  await page.locator('[data-prompt-input]').press('Enter');
-  const submitted = await (await promptBarResponse).json();
-  const decision = await waitForPromptDecision(page, submitted.submission_id);
-  expect(decision.action).toBe('open_app');
-  expect(decision.app).toBe('pdf');
-
-  const candidateID = `candidate-trace-continuation-${Date.now()}`;
-  const seed = await request.post('http://127.0.0.1:8085/internal/promotions', {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Caller': 'true',
-    },
-    data: {
-      candidate_id: candidateID,
-      owner_id: session.user.id,
-      status: 'queued',
-      source_loop_id: submitted.submission_id,
-      trace_id: submitted.submission_id,
-      vm_id: 'vm-trace-continuation',
-      snapshot_id: 'snapshot-trace-continuation',
-      base_sha: 'base-trace-continuation',
-      worker_head_sha: 'worker-trace-continuation',
-      manifest_path: '/tmp/trace-continuation-manifest.json',
-      patchset_path: '/tmp/trace-continuation.patch',
-      integration_branch: 'agent/trace-continuation/candidate',
-      destination_branch: 'main',
-      summary: 'Trace selected continuation candidate',
-    },
-  });
-  expect(seed.status()).toBe(202);
-
-  await openApp(page, 'trace');
-  const trace = page.locator('[data-trace-app]').last();
-  await expect(trace).toBeVisible({ timeout: 10_000 });
-  const trajectory = trace.locator(`[data-trace-trajectory-id="${submitted.submission_id}"]`);
-  await expect(trajectory).toBeVisible({ timeout: 20_000 });
-  await trajectory.click();
-
-  await expect(trace.locator('[data-trace-select-continuation]')).toBeVisible({ timeout: 10_000 });
-  const continuationResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/continuations' && response.request().method() === 'POST'
-  );
-  await trace.locator('[data-trace-select-continuation]').click();
-  const continuation = await (await continuationResponse).json();
-  expect(continuation.status).toBe('selected');
-  expect(continuation.details?.candidate_id).toBe(candidateID);
-
-  const proposal = trace.locator('[data-trace-continuation-proposal]');
-  await expect(proposal).toBeVisible({ timeout: 10_000 });
-  await expect(proposal).toContainText('Verify queued promotion candidate');
-  await expect(proposal).toContainText(candidateID);
-  await expect(proposal.locator('[data-trace-start-continuation]')).toBeVisible();
-
-  expect(forbiddenRequests).toHaveLength(0);
-  expect(failedContinuationRequests).toHaveLength(0);
-});
-
-test('Settings records owner approval for verified promotion candidates without internal browser routes', async ({ page, authenticator, request }) => {
-  const forbiddenRequests = [];
-  page.on('request', (browserRequest) => {
-    const url = new URL(browserRequest.url());
-    if (url.pathname.startsWith('/internal')) {
-      forbiddenRequests.push(`${browserRequest.method()} ${url.pathname}`);
-    }
-  });
-
-  const email = uniqueEmail('promotion-approve');
-  await registerAndLoadDesktop(page, email);
-  const session = await getSession(page, BASE_URL);
-  expect(session.authenticated).toBe(true);
-  expect(session.user?.id).toBeTruthy();
-
-  const candidateID = `candidate-approve-${Date.now()}`;
-  const seed = await request.post('http://127.0.0.1:8085/internal/promotions', {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Caller': 'true',
-    },
-    data: {
-      candidate_id: candidateID,
-      owner_id: session.user.id,
-      status: 'verified',
-      source_loop_id: 'seeded-approval-test',
-      trace_id: 'trace-seeded-approval-test',
-      vm_id: 'vm-approval-test',
-      snapshot_id: 'snapshot-approval-test',
-      base_sha: 'base-approval-test',
-      worker_head_sha: 'worker-approval-test',
-      manifest_path: '/tmp/approval-manifest.json',
-      patchset_path: '/tmp/approval.patch',
-      integration_branch: 'agent/seeded-approval-test/candidate',
-      destination_branch: 'main',
-      summary: 'Verified candidate awaiting owner approval',
-      report_json: {
-        status: 'verified',
-        promotion_approved: false,
-      },
-    },
-  });
-  expect(seed.status()).toBe(202);
-
-  await openApp(page, 'settings');
-  const settings = page.locator('[data-settings-app]').last();
-  await expect(settings.locator('[data-settings-promotions-list]')).toBeVisible({ timeout: 10000 });
-  const candidate = settings.locator(`[data-settings-promotion-id="${candidateID}"]`);
-  await expect(candidate).toContainText('Verified candidate awaiting owner approval');
-  await expect(candidate.locator('[data-settings-promotion-status]')).toContainText('verified');
-  await candidate.locator('[data-settings-promotion-approve]').click();
-  await expect(candidate.locator('[data-settings-promotion-approved]')).toContainText('Owner approved');
-  await expect(candidate.locator('[data-settings-promotion-approve]')).toHaveCount(0);
   expect(forbiddenRequests).toHaveLength(0);
 });

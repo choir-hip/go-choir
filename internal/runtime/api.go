@@ -59,10 +59,6 @@ type promptBarSubmissionStatusResponse struct {
 	Error        string             `json:"error,omitempty"`
 }
 
-type promotionCandidateListResponse struct {
-	Candidates []types.PromotionCandidateRecord `json:"candidates"`
-}
-
 type runContinuationListResponse struct {
 	Continuations []types.RunContinuationRecord `json:"continuations"`
 }
@@ -84,12 +80,6 @@ type runAcceptanceSynthesizeRequest struct {
 
 type runAcceptanceListResponse struct {
 	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
-}
-
-type internalPromotionActionRequest struct {
-	OwnerID  string `json:"owner_id"`
-	RepoPath string `json:"repo_path"`
-	Approved bool   `json:"approved,omitempty"`
 }
 
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
@@ -435,118 +425,6 @@ func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Re
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-func (h *APIHandler) HandlePromotionCandidatesRoot(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	limit := 100
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid limit"})
-			return
-		}
-		limit = parsed
-	}
-	candidates, err := h.rt.store.ListPromotionCandidates(r.Context(), ownerID, limit)
-	if err != nil {
-		log.Printf("runtime api: list promotion candidates: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list promotion candidates"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, promotionCandidateListResponse{Candidates: candidates})
-}
-
-func (h *APIHandler) HandlePromotionCandidateDetail(w http.ResponseWriter, r *http.Request) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	const prefix = "/api/promotions/"
-	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
-		return
-	}
-	candidateID := strings.TrimSpace(parts[0])
-	if len(parts) == 1 {
-		if r.Method != http.MethodGet {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.rt.store.GetPromotionCandidate(r.Context(), ownerID, candidateID)
-		if err != nil {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-		return
-	}
-	if len(parts) != 2 || r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
-		return
-	}
-	action := strings.TrimSpace(parts[1])
-	switch action {
-	case "verify":
-		var req struct{}
-		if r.Body != nil && r.ContentLength != 0 {
-			decoder := json.NewDecoder(r.Body)
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&req); err != nil {
-				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion verify request"})
-				return
-			}
-		}
-		rec, err := h.rt.VerifyPromotionCandidateInWorkspace(r.Context(), ownerID, candidateID)
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	case "approve":
-		rec, err := h.rt.ReviewPromotionCandidate(r.Context(), ownerID, candidateID, "approve")
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	case "promote":
-		var req struct{}
-		if r.Body != nil && r.ContentLength != 0 {
-			decoder := json.NewDecoder(r.Body)
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&req); err != nil {
-				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion promote request"})
-				return
-			}
-		}
-		rec, err := h.rt.PromotePromotionCandidateInWorkspace(r.Context(), ownerID, candidateID)
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	case "reject":
-		rec, err := h.rt.ReviewPromotionCandidate(r.Context(), ownerID, candidateID, "reject")
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	default:
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
-	}
-}
-
 func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -741,86 +619,6 @@ func (h *APIHandler) HandleRunAcceptanceDetail(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, rec)
-}
-
-func (h *APIHandler) HandleInternalPromotionCandidatesRoot(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
-	}
-	var rec types.PromotionCandidateRecord
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&rec); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion candidate request"})
-		return
-	}
-	queued, err := h.rt.QueuePromotionCandidate(r.Context(), rec)
-	if err != nil {
-		log.Printf("runtime api: queue promotion candidate: %v", err)
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusAccepted, queued)
-}
-
-func (h *APIHandler) HandleInternalPromotionCandidateRouter(w http.ResponseWriter, r *http.Request) {
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
-	}
-	const prefix = "/internal/promotions/"
-	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion candidate not found"})
-		return
-	}
-	candidateID := strings.TrimSpace(parts[0])
-	action := strings.TrimSpace(parts[1])
-	var req internalPromotionActionRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid promotion action request"})
-		return
-	}
-	ownerID := strings.TrimSpace(req.OwnerID)
-	repoPath := strings.TrimSpace(req.RepoPath)
-	if ownerID == "" || repoPath == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and repo_path are required"})
-		return
-	}
-	switch action {
-	case "verify":
-		if r.Method != http.MethodPost {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.rt.VerifyPromotionCandidate(r.Context(), ownerID, candidateID, repoPath)
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	case "promote":
-		if r.Method != http.MethodPost {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.rt.PromotePromotionCandidate(r.Context(), ownerID, candidateID, repoPath, req.Approved)
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-	default:
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "promotion action not found"})
-	}
 }
 
 // HandleRunSubmission handles POST /api/agent/loop.
@@ -1584,8 +1382,6 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/app-change-packages/", h.HandleAppChangePackageDetail)
 	s.HandleFunc("/api/adoptions", h.HandleAppAdoptionsRoot)
 	s.HandleFunc("/api/adoptions/", h.HandleAppAdoptionDetail)
-	s.HandleFunc("/api/promotions", h.HandlePromotionCandidatesRoot)
-	s.HandleFunc("/api/promotions/", h.HandlePromotionCandidateDetail)
 	s.HandleFunc("/api/continuations", h.HandleRunContinuationsRoot)
 	s.HandleFunc("/api/continuations/", h.HandleRunContinuationDetail)
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
@@ -1594,8 +1390,6 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/vtext/proposals", h.HandleInternalVTextProposalDelivery)
-	s.HandleFunc("/internal/promotions", h.HandleInternalPromotionCandidatesRoot)
-	s.HandleFunc("/internal/promotions/", h.HandleInternalPromotionCandidateRouter)
 	if h.rt.cfg.EnableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)

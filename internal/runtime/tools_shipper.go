@@ -2,22 +2,14 @@ package runtime
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/yusefmosiah/go-choir/internal/shipper"
 )
-
-const maxInlinePatchsetBytes = 2 * 1024 * 1024
 
 func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
-		newExportPatchsetTool(rt, cwd),
+		newPublishAppChangePackageTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -26,40 +18,63 @@ func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error
 	return nil
 }
 
-func newExportPatchsetTool(rt *Runtime, cwd string) Tool {
+func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 	type args struct {
-		RepoPath   string   `json:"repo_path"`
-		OutputDir  string   `json:"output_dir,omitempty"`
-		BaseSHA    string   `json:"base_sha"`
-		SnapshotID string   `json:"snapshot_id,omitempty"`
-		Summary    string   `json:"summary,omitempty"`
-		Checks     []string `json:"checks,omitempty"`
+		RepoPath                 string `json:"repo_path"`
+		BaseSHA                  string `json:"base_sha"`
+		AppID                    string `json:"app_id,omitempty"`
+		Visibility               string `json:"visibility,omitempty"`
+		SourceComputerID         string `json:"source_computer_id,omitempty"`
+		SourceCandidateID        string `json:"source_candidate_id,omitempty"`
+		SourceActiveRef          string `json:"source_active_ref,omitempty"`
+		CandidateSourceRef       string `json:"candidate_source_ref,omitempty"`
+		SourceLedgerRepo         string `json:"source_ledger_repo,omitempty"`
+		SourceLedgerBaseRef      string `json:"source_ledger_base_ref,omitempty"`
+		SourceLedgerCandidateRef string `json:"source_ledger_candidate_ref,omitempty"`
+		AppProtocolContract      string `json:"app_protocol_contract,omitempty"`
+		TraceID                  string `json:"trace_id,omitempty"`
+		Summary                  string `json:"summary,omitempty"`
 	}
 	return Tool{
-		Name:        "export_patchset",
-		Description: "Export committed worker repo changes as a patchset plus manifest. This tool cannot push to GitHub.",
+		Name:        "publish_app_change_package",
+		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. This tool cannot push to GitHub or promote active state.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"repo_path":   map[string]any{"type": "string"},
-			"output_dir":  map[string]any{"type": "string"},
-			"base_sha":    map[string]any{"type": "string"},
-			"snapshot_id": map[string]any{"type": "string"},
-			"summary":     map[string]any{"type": "string"},
-			"checks": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string"},
-			},
+			"repo_path":                   map[string]any{"type": "string"},
+			"base_sha":                    map[string]any{"type": "string"},
+			"app_id":                      map[string]any{"type": "string"},
+			"visibility":                  map[string]any{"type": "string", "enum": []string{"private", "unlisted", "public"}},
+			"source_computer_id":          map[string]any{"type": "string"},
+			"source_candidate_id":         map[string]any{"type": "string"},
+			"source_active_ref":           map[string]any{"type": "string"},
+			"candidate_source_ref":        map[string]any{"type": "string"},
+			"source_ledger_repo":          map[string]any{"type": "string"},
+			"source_ledger_base_ref":      map[string]any{"type": "string"},
+			"source_ledger_candidate_ref": map[string]any{"type": "string"},
+			"app_protocol_contract":       map[string]any{"type": "string"},
+			"trace_id":                    map[string]any{"type": "string"},
+			"summary":                     map[string]any{"type": "string"},
 		}, []string{"repo_path", "base_sha"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			profile := stringFromToolContext(ctx, toolCtxProfile)
 			if profile != AgentProfileSuper && profile != AgentProfileCoSuper && profile != AgentProfileVSuper {
-				return "", fmt.Errorf("export_patchset is only available to super, co-super, and vsuper agents")
+				return "", fmt.Errorf("publish_app_change_package is only available to super, co-super, and vsuper agents")
 			}
-			if err := guardForegroundSuperMutation(ctx, "export_patchset"); err != nil {
+			if err := guardForegroundSuperMutation(ctx, "publish_app_change_package"); err != nil {
 				return "", err
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode export_patchset args: %w", err)
+				return "", fmt.Errorf("decode publish_app_change_package args: %w", err)
+			}
+			runID := stringFromToolContext(ctx, toolCtxRunID)
+			if profile == AgentProfileVSuper && rt != nil && runID != "" {
+				if childPackage, found, err := rt.latestChildAppChangePackage(ctx, runID); err != nil {
+					return "", err
+				} else if found {
+					childPackage["parent_loop_id"] = runID
+					childPackage["reused_child_package"] = true
+					return toolResultJSON(childPackage)
+				}
 			}
 			baseCWD := effectiveToolCWD(ctx, cwd)
 			repoPath, err := resolveToolPath(baseCWD, in.RepoPath)
@@ -70,113 +85,102 @@ func newExportPatchsetTool(rt *Runtime, cwd string) Tool {
 			if baseSHA == "" {
 				return "", fmt.Errorf("base_sha is required")
 			}
-
-			runID := stringFromToolContext(ctx, toolCtxRunID)
 			traceID := runID
 			if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
 				if id, _ := rec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
 					traceID = strings.TrimSpace(id)
 				}
 			}
-			vmID := stringFromToolContext(ctx, toolCtxSandboxID)
-			if vmID == "" {
-				vmID = "unknown-sandbox"
+			if strings.TrimSpace(in.TraceID) != "" {
+				traceID = strings.TrimSpace(in.TraceID)
 			}
-			if profile == AgentProfileVSuper && rt != nil && rt.store != nil {
-				if childExport, found, err := rt.latestChildExportPatchset(ctx, runID); err != nil {
-					return "", err
-				} else if found {
-					childExport["reused_child_export"] = true
-					childExport["parent_loop_id"] = runID
-					childExport["trace_id"] = traceID
-					if vmID != "" {
-						childExport["vm_id"] = vmID
-					}
-					return toolResultJSON(childExport)
-				}
-			}
-
-			outputDir := strings.TrimSpace(in.OutputDir)
-			if outputDir == "" {
-				outputDir = filepath.Join(".choir", "exports", sanitizeExportPart(runID))
-			}
-			outputPath, err := resolveToolPath(baseCWD, outputDir)
+			headSHA, err := gitOutputInDir(ctx, repoPath, "rev-parse", "HEAD")
 			if err != nil {
-				return "", fmt.Errorf("output_dir: %w", err)
+				return "", fmt.Errorf("resolve candidate head: %w", err)
 			}
-
-			report, err := shipper.ExportPatchset(ctx, shipper.ExportOptions{
-				RepoPath:   repoPath,
-				OutputDir:  outputPath,
-				BaseSHA:    baseSHA,
-				RunID:      runID,
-				TraceID:    traceID,
-				VMID:       vmID,
-				SnapshotID: strings.TrimSpace(in.SnapshotID),
-				Summary:    strings.TrimSpace(in.Summary),
-				Checks:     in.Checks,
+			runtimeDelta, err := gitDiffInDir(ctx, repoPath, baseSHA, "HEAD", ".", ":(exclude)frontend")
+			if err != nil {
+				return "", fmt.Errorf("runtime source delta: %w", err)
+			}
+			uiDelta, err := gitDiffInDir(ctx, repoPath, baseSHA, "HEAD", "frontend")
+			if err != nil {
+				return "", fmt.Errorf("ui source delta: %w", err)
+			}
+			if strings.TrimSpace(runtimeDelta) == "" && strings.TrimSpace(uiDelta) == "" {
+				return "", fmt.Errorf("no source delta found between %s and HEAD", baseSHA)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("publish_app_change_package requires owner context")
+			}
+			if rt == nil {
+				return "", fmt.Errorf("publish_app_change_package requires runtime")
+			}
+			sourceComputerID := firstNonEmpty(
+				strings.TrimSpace(in.SourceComputerID),
+				stringFromToolContext(ctx, toolCtxDesktopID),
+				stringFromToolContext(ctx, toolCtxSandboxID),
+				"candidate-computer",
+			)
+			sourceCandidateID := firstNonEmpty(strings.TrimSpace(in.SourceCandidateID), runID, sanitizeExportPart(headSHA))
+			appID := firstNonEmpty(strings.TrimSpace(in.AppID), "computer-change")
+			visibility := firstNonEmpty(strings.TrimSpace(in.Visibility), "unlisted")
+			contract := strings.TrimSpace(in.AppProtocolContract)
+			if contract == "" {
+				contract = "recipient_build_required: " + firstNonEmpty(strings.TrimSpace(in.Summary), "candidate source change requires recipient Go/Svelte rebuild")
+			}
+			rec, err := rt.PublishAppChangePackage(ctx, ownerID, publishAppChangePackageInput{
+				AppID:                       appID,
+				Visibility:                  visibility,
+				SourceComputerID:            sourceComputerID,
+				SourceCandidateID:           sourceCandidateID,
+				SourceActiveRef:             strings.TrimSpace(in.SourceActiveRef),
+				CandidateSourceRef:          strings.TrimSpace(in.CandidateSourceRef),
+				SourceLedgerRepo:            strings.TrimSpace(in.SourceLedgerRepo),
+				SourceLedgerBaseRef:         firstNonEmpty(strings.TrimSpace(in.SourceLedgerBaseRef), baseSHA),
+				SourceLedgerCandidateRef:    strings.TrimSpace(in.SourceLedgerCandidateRef),
+				SourceLedgerCommitSHA:       strings.TrimSpace(headSHA),
+				RuntimeSourceDelta:          runtimeDelta,
+				UISourceDelta:               uiDelta,
+				AppProtocolContract:         contract,
+				SourceRuntimeArtifactDigest: "sha256:" + digestParts("source-runtime", ownerID, sourceComputerID, sourceCandidateID, sha256Hex(runtimeDelta), headSHA),
+				SourceUIArtifactDigest:      "sha256:" + digestParts("source-ui", ownerID, sourceComputerID, sourceCandidateID, sha256Hex(uiDelta), headSHA),
+				TraceID:                     traceID,
 			})
 			if err != nil {
 				return "", err
 			}
 
-			result := map[string]any{
-				"status":          report.Status,
-				"run_id":          runID,
-				"trace_id":        traceID,
-				"vm_id":           vmID,
-				"snapshot_id":     strings.TrimSpace(in.SnapshotID),
-				"base_sha":        report.BaseSHA,
-				"worker_head":     report.HeadSHA,
-				"worker_head_sha": report.HeadSHA,
-				"manifest_path":   report.ManifestPath,
-				"patchset_path":   report.PatchsetPath,
-				"checks":          report.Checks,
-				"exported_at":     report.ExportedAt,
-				"github_push":     false,
-			}
-			if manifestContent, ok, truncated, err := readInlineArtifact(report.ManifestPath); err != nil {
-				return "", err
-			} else if ok {
-				result["manifest_json"] = manifestContent
-			} else if truncated {
-				result["manifest_inline_truncated"] = true
-			}
-			if patchsetContent, ok, truncated, err := readInlineArtifact(report.PatchsetPath); err != nil {
-				return "", err
-			} else if ok {
-				sum := sha256.Sum256([]byte(patchsetContent))
-				result["patchset_content"] = patchsetContent
-				result["patchset_sha256"] = hex.EncodeToString(sum[:])
-			} else if truncated {
-				result["patchset_inline_truncated"] = true
-			}
-
-			return toolResultJSON(result)
+			return toolResultJSON(map[string]any{
+				"status":                         rec.Status,
+				"package_id":                     rec.PackageID,
+				"app_id":                         rec.AppID,
+				"visibility":                     rec.Visibility,
+				"run_id":                         runID,
+				"trace_id":                       traceID,
+				"base_sha":                       baseSHA,
+				"candidate_head_sha":             headSHA,
+				"source_computer_id":             rec.SourceComputerID,
+				"source_candidate_id":            rec.SourceCandidateID,
+				"candidate_source_ref":           rec.CandidateSourceRef,
+				"package_manifest_sha256":        rec.PackageManifestSHA256,
+				"runtime_source_delta_sha256":    rec.RuntimeSourceDeltaSHA256,
+				"ui_source_delta_sha256":         rec.UISourceDeltaSHA256,
+				"runtime_source_delta_present":   strings.TrimSpace(rec.RuntimeSourceDelta) != "",
+				"ui_source_delta_present":        strings.TrimSpace(rec.UISourceDelta) != "",
+				"recipient_build_required":       true,
+				"source_runtime_artifact_digest": rec.SourceRuntimeArtifactDigest,
+				"source_ui_artifact_digest":      rec.SourceUIArtifactDigest,
+				"github_push":                    false,
+			})
 		},
 	}
 }
 
-func readInlineArtifact(path string) (string, bool, bool, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", false, false, nil
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", false, false, fmt.Errorf("stat export artifact: %w", err)
-	}
-	if info.IsDir() {
-		return "", false, false, nil
-	}
-	if info.Size() > maxInlinePatchsetBytes {
-		return "", false, true, nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", false, false, fmt.Errorf("read export artifact: %w", err)
-	}
-	return string(data), true, false, nil
+func gitDiffInDir(ctx context.Context, dir, base, head string, paths ...string) (string, error) {
+	args := []string{"diff", "--binary", strings.TrimSpace(base) + ".." + strings.TrimSpace(head), "--"}
+	args = append(args, paths...)
+	return gitOutputInDir(ctx, dir, args...)
 }
 
 func sanitizeExportPart(raw string) string {

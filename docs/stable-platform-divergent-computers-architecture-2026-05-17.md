@@ -144,22 +144,26 @@ rollbackable, and promotable to the platform computer.
 
 ## Codebase Anchors
 
-This design should extend the product surfaces that already exist:
+This design now extends the current AppChangePackage/adoption product surfaces:
 
-- [internal/runtime/promotion_queue.go](../internal/runtime/promotion_queue.go)
-  owns queued worker patchset verification and promotion workspace logic.
-- [internal/promotion/promotion.go](../internal/promotion/promotion.go) imports
-  patchsets, runs verifier contracts, and records rollback.
-- [internal/shipper/shipper.go](../internal/shipper/shipper.go) exports and
-  imports patchset manifests.
+- [internal/runtime/app_promotion.go](../internal/runtime/app_promotion.go)
+  owns package publication, recipient adoption, mandatory recipient builds,
+  promote/rollback records, and product-visible events.
+- [internal/runtime/tools_shipper.go](../internal/runtime/tools_shipper.go)
+  exposes `publish_app_change_package` for worker/candidate source deltas.
+- [internal/runtime/api_app_promotion.go](../internal/runtime/api_app_promotion.go)
+  registers `/api/app-change-packages`, `/api/computers/*/source-lineage`,
+  `/api/computers/*/adoptions`, and `/api/adoptions/*`.
 - [internal/runtime/api.go](../internal/runtime/api.go) registers
-  `/api/promotions`, `/api/trace/*`, and `/api/run-acceptances/*`.
+  `/api/trace/*` and `/api/run-acceptances/*`.
 - [internal/platform/service.go](../internal/platform/service.go) already
   demonstrates artifact manifests, provenance, consent/review, route, and
   rollback records for VText publication.
 
-The v0 source-lineage control plane should be additive to these surfaces. It
-should not prove itself through internal-only routes or a detached registry.
+The old `/api/promotions` patchset queue is no longer a current product proof
+path. Historical records may remain readable through Trace/storage for audit,
+but new source movement should use AppChangePackage -> adoption -> recipient
+build -> promote/rollback.
 
 ## Core Objects
 
@@ -627,18 +631,8 @@ marketplace/security review. They are the right v0 floor.
 
 ## Product API Sketch
 
-The current codebase already exposes product paths for promotion review,
-Trace, and run acceptance:
-
-- `/api/promotions`
-- `/api/promotions/{candidate_id}/verify`
-- `/api/promotions/{candidate_id}/approve`
-- `/api/promotions/{candidate_id}/promote`
-- `/api/trace/*`
-- `/api/run-acceptances/*`
-
-V0 should extend that family rather than creating an internal-only proof path.
-Minimal additive API shape:
+The current codebase exposes product paths for source-lineage adoption, Trace,
+and run acceptance:
 
 ```text
 GET  /api/computers/{computer_id}/source-lineage
@@ -649,12 +643,13 @@ GET  /api/adoptions/{adoption_id}
 POST /api/adoptions/{adoption_id}/verify
 POST /api/adoptions/{adoption_id}/promote
 POST /api/adoptions/{adoption_id}/rollback
-GET  /api/promotions/{promotion_id}
+GET  /api/trace/*
+POST /api/run-acceptances/synthesize
 ```
 
-If this is too large for v0, keep the read/inspect endpoints plus one command
-path. The invariant is product-visible source refs, package manifests, verifier
-results, artifact digests, adoption records, and rollback profiles.
+The invariant is product-visible source refs, package manifests, verifier
+results, artifact digests, adoption records, and rollback profiles. Do not
+restore `/api/promotions` as a compatibility success path.
 
 ## Role Separation
 
@@ -802,8 +797,8 @@ matched-runtime/UI adoption without forcing a premature full app registry?
 
 Next observation:
 
-Inspect current promotion candidate records, platform publication records, and
-runtime source/build assumptions, then implement the smallest additive record
+Inspect AppChangePackage/adoption records, platform publication records, and
+runtime source/build assumptions, then improve the smallest current record
 shape that can represent one app change package and one computer adoption.
 
 ### Investigation And Cognitive Reframing

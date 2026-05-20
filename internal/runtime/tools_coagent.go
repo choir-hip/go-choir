@@ -531,12 +531,12 @@ func newCancelAgentTool(rt *Runtime) Tool {
 				if err != nil {
 					return "", fmt.Errorf("check child export evidence before cancel: %w", err)
 				}
-				if hasSuccessfulToolResult(eventsForRun, "export_patchset") {
+				if hasSuccessfulToolResult(eventsForRun, "publish_app_change_package") {
 					return toolResultJSON(map[string]any{
 						"agent_id": in.AgentID,
 						"loop_id":  target.RunID,
 						"status":   "not_cancelled",
-						"reason":   "child already produced export_patchset evidence; incorporate the child export instead of cancelling it",
+						"reason":   "child already produced publish_app_change_package evidence; incorporate the child package instead of cancelling it",
 					})
 				}
 			}
