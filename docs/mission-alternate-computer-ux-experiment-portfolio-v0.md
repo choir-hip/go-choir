@@ -1,6 +1,6 @@
 # MissionGradient: Alternate Computer UX Experiment Portfolio v0
 
-**Status:** draft; preflight gate complete
+**Status:** draft; Wave 0 package/adoption checkpoint proven
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -11,15 +11,23 @@ candidate/background computers where healthy
 [mission-promotion-substrate-preflight-hard-cutover-v0.md](mission-promotion-substrate-preflight-hard-cutover-v0.md)
 
 > Preflight is complete as of `52e0612`, with deployed substrate proof at
-> `98b73c5`. The experiment portfolio must use the current
+> `98b73c5`. Wave 0 was reproven on deployed staging at `d1f3bb5`.
+> The experiment portfolio must use the current
 > AppChangePackage -> adoption -> recipient build -> promote/rollback path.
 > It must not use `export_patchset`, `/api/promotions`, or synthetic recipient
 > digests as acceptable evidence.
+>
+> Direct owner login to alternate experiment accounts is optional, not the
+> review invariant. The current intended review path is: experiment computer
+> publishes an AppChangePackage, the owner inspects the evidence, then pulls or
+> adopts the package into an owner-controlled computer for manual QA or
+> promotion. Do not add auth handoff machinery merely to make Playwright-created
+> accounts directly loginable.
 
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create a loginable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence/account isolation degrades. First prove the current AppChangePackage -> adoption -> recipient build substrate with an owner-reviewable Wave 0 account/computer path, then produce four reviewable experiment computers: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake loginable accounts, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect tomorrow. If a substrate blocker prevents loginable alternate computers or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Use Choir-in-Choir with two-lane concurrency where the substrate is healthy, regressing to sequential only when evidence or computer isolation degrades. Start from the Wave 0 AppChangePackage -> adoption -> recipient build checkpoint, then produce four reviewable experiment computers/packages: Chiron Shelf observability, process/window/agent animation language, custom Choir Liquid Material Engine, and Python code mode A/B. Keep each experiment in a user/candidate computer with product-path Trace/VText/run-acceptance evidence, screenshots or Playwright video, benchmarks where relevant, rollback/package/adoption refs, and a promotion recommendation. The owner review path is package publish -> owner pull/adoption into an owner-controlled computer; direct login to alternate experiment accounts is optional, not required. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash instead of replacing it in the candidate profile family, or claim completion without durable evidence the owner can inspect, pull, or adopt tomorrow. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -27,8 +35,11 @@ candidate/background computers where healthy
 Choir needs a research mode where ambitious UI/runtime ideas can be expressed in
 real user computers before platform promotion. The target is not one merged
 feature. The target is an experiment portfolio the owner can inspect the next
-day by logging into distinct computers/accounts, comparing evidence, and
-choosing what should move toward promotion.
+day by reviewing package/adoption evidence, pulling promising packages into an
+owner-controlled computer when useful, comparing results, and choosing what
+should move toward promotion. Direct login to distinct experiment accounts is a
+useful bonus when the auth surface supports it, but it is no longer the mission
+invariant.
 
 The four experiments are:
 
@@ -72,10 +83,11 @@ that chain could not be reached.
 The artifact is:
 
 ```text
-experiment account/computer portfolio
+experiment computer/package portfolio
 -> four candidate/user-computer lanes
 -> product-visible state and evidence for each lane
 -> AppChangePackage/adoption/build evidence where code changed
+-> owner pull/adoption path into an owner-controlled computer
 -> owner-reviewable screenshots/video/benchmarks
 -> Trace/VText/run-acceptance/certificate records
 -> promotion recommendations and rollback/package/adoption refs
@@ -85,9 +97,10 @@ The artifact is not:
 
 - a single platform UX branch with four half-finished features;
 - a local-only prototype;
-- screenshots without a loginable computer or product evidence;
+- screenshots without an owner-pullable package or product evidence;
 - a library bake-off detached from Choir's shell;
-- fake account labels with no way for the owner to inspect the result;
+- fake computer/package labels with no way for the owner to inspect or adopt
+  the result;
 - a platform-default promotion without owner review.
 
 ## Invariants
@@ -95,9 +108,11 @@ The artifact is not:
 - Experiments are isolated by user/candidate computer. One experiment must not
   silently contaminate another experiment's source, state, files, prompts, or
   artifacts.
-- The owner must be able to inspect each successful experiment after the run.
-  If current auth/passkey/account mechanics make this impossible, the run must
-  precisely isolate that blocker rather than fake loginability.
+- The owner must be able to inspect each successful experiment after the run by
+  product evidence and, for code-changing lanes, by an AppChangePackage that
+  can be pulled or adopted into an owner-controlled computer. Direct account
+  login is optional and must not become auth-surface scope unless it is needed
+  for the package/adoption path itself.
 - Platform deploys are allowed for substrate repairs, but not as proof that a
   user-computer experiment succeeded.
 - Patch movement uses the current hard-cut path: AppChangePackage -> adoption
@@ -112,7 +127,7 @@ The artifact is not:
   recovery.
 - All proof uses product paths: visible staging desktop, Trace, VText,
   run-acceptance, screenshots/video, product APIs, and owner-inspectable
-  experiment computers.
+  experiment packages/computers.
 - Do not expose host/global telemetry in browser UI. Performance evidence must
   be product-safe and scoped to the user's computer/experiment.
 - Incomplete work must be reported as `checkpoint_incomplete` or
@@ -160,7 +175,7 @@ honesty**.
 
 Solid means:
 
-- each experiment has a clear computer/account identity and review path;
+- each experiment has a clear computer/package identity and owner review path;
 - evidence is preserved in VText/Trace/run-acceptance, not only chat logs;
 - screenshots/video are captured for visual lanes;
 - benchmark numbers are captured for liquid and Python lanes;
@@ -182,25 +197,27 @@ Substandard work:
 ## Wave 0: Substrate And Review-Path Gate
 
 Before starting visual/runtime experiments, prove the experiment portfolio can
-produce owner-reviewable alternate-computer evidence without falling back to the
-old promotion substrate.
+produce owner-reviewable alternate-computer package/adoption evidence without
+falling back to the old promotion substrate.
 
 Wave 0 must establish:
 
 - current staging identity and preflight semantics are visible;
-- each intended experiment has a distinct owner-reviewable account/computer or
-  a precise blocker to loginability;
+- the current package/adoption path can preserve distinct source and target
+  computer identity without relying on direct login to the experiment account;
 - candidate work will occur in candidate computers, not by mutating active
   computers directly;
 - at least one tiny no-op or label-level AppChangePackage/adoption/rebuild path
   is observed if the product path supports it;
 - if the package/adoption path cannot be exercised before the experiments, the
-  blocker is recorded before any lane claims `loginable_experiment`.
+  blocker is recorded before any lane claims owner-reviewable package evidence.
 
 Wave 0 is allowed to patch substrate through git/CI/deploy only when the missing
 piece is a platform primitive required to create reviewable experiment
 computers or package/adoption evidence. It must not use a platform deploy to
-simulate the result of a user-computer experiment.
+simulate the result of a user-computer experiment. It should not add auth
+handoff complexity just to make virtual Playwright passkey accounts manually
+loginable.
 
 ## Experiment Lanes
 
@@ -386,28 +403,34 @@ then regress to sequential lanes and record the concurrency blocker.
 Concurrency itself is part of the experiment, but not at the cost of evidence
 integrity.
 
-## Account And Review Path
+## Package And Review Path
 
 The mission must produce one of these outcomes for each lane:
 
 ```text
-loginable_experiment
+owner_pullable_experiment
 checkpoint_package
 blocked_incomplete
 ```
 
-`loginable_experiment` means:
+`owner_pullable_experiment` means:
 
-- the owner can log into the experiment account/computer tomorrow;
-- the experiment UI/runtime state is present there;
-- evidence docs name the account/computer identity without leaking secrets;
-- rollback/package/adoption refs are recorded.
+- the experiment was built in an isolated user/candidate computer;
+- an AppChangePackage exists with source deltas/contracts/provenance;
+- an owner-controlled recipient computer can import, build, verify, adopt, or
+  reject it through product APIs;
+- evidence docs name the source computer, package, adoption/build, verifier,
+  and rollback refs without leaking secrets.
+
+`loginable_experiment` is an optional stronger form of
+`owner_pullable_experiment`, not a required outcome. It means the owner can also
+log into the experiment account/computer directly tomorrow.
 
 `checkpoint_package` means:
 
-- loginability was not achieved, but an AppChangePackage/adoption candidate and
-  evidence are preserved for review;
-- the blocker to loginability is precise and has a next probe.
+- a package/adoption candidate and evidence are preserved for review, but the
+  full owner-pull/adoption path has not been proven for that lane;
+- the blocker to full owner pull/adoption is precise and has a next probe.
 
 `blocked_incomplete` means:
 
@@ -416,8 +439,9 @@ blocked_incomplete
 - no fake screenshots or labels substitute for the missing artifact.
 
 Do not store or print reusable credentials in the mission doc. If current auth
-requires passkeys or operator-mediated setup, record the approved review path
-or the exact missing capability.
+requires passkeys or operator-mediated setup, do not widen auth solely for this
+mission. Prefer package publish -> owner pull/adoption. Record the exact missing
+capability only when that package path itself is blocked.
 
 ## Dense Feedback
 
@@ -479,7 +503,10 @@ portfolio reaches reviewable evidence or a precise blocker.
 
 - Platform deploy as proof of user-computer divergence.
 - Local-only screenshots as final evidence.
-- Fake account/computer labels that the owner cannot inspect.
+- Fake account/computer/package labels that the owner cannot inspect, pull, or
+  adopt.
+- Auth handoff or credential machinery added only to make virtual experiment
+  accounts manually loginable.
 - `export_patchset`, `/api/promotions`, or synthetic recipient digest evidence.
 - Fake Chiron text disconnected from product events.
 - Decorative animation that hides state or breaks controls.
@@ -489,7 +516,7 @@ portfolio reaches reviewable evidence or a precise blocker.
 - Python added beside bash instead of replacing bash in a candidate profile
   family.
 - Test/internal route shortcuts for acceptance records.
-- Claiming `complete` when any lane lacks `loginable_experiment` or
+- Claiming `complete` when any lane lacks `owner_pullable_experiment` or
   `checkpoint_package` evidence.
 
 ## Stopping Condition
@@ -498,16 +525,17 @@ The mission is `complete` only when all four lanes reach one of these reviewable
 outcomes and the portfolio report is durable:
 
 ```text
-Lane A: loginable_experiment or checkpoint_package with evidence
-Lane B: loginable_experiment or checkpoint_package with evidence
-Lane C: loginable_experiment or checkpoint_package with evidence
-Lane D: loginable_experiment or checkpoint_package with evidence
+Lane A: owner_pullable_experiment or checkpoint_package with evidence
+Lane B: owner_pullable_experiment or checkpoint_package with evidence
+Lane C: owner_pullable_experiment or checkpoint_package with evidence
+Lane D: owner_pullable_experiment or checkpoint_package with evidence
 portfolio report: VText/docs/Trace/run-acceptance refs, recommendations, rollback refs
 learning log: concise MissionGradient observations and future simplification notes
 ```
 
 This is intentionally not "all four promoted." The mission is research through
-real computers. Completion means the owner can review and decide.
+real computers and movable source packages. Completion means the owner can
+review, pull/adopt where appropriate, and decide.
 
 Use `checkpoint_incomplete` if meaningful progress exists but one or more lanes
 still lack reviewable evidence and further safe probes remain.
@@ -522,63 +550,70 @@ Latest checkpoint:
 ```text
 status: checkpoint_incomplete
 last checkpoint: Wave 0 package/adoption proof reached product-path recipient
-  build and promotion evidence, but not owner-loginable experiment accounts
+  build and promotion evidence on deployed staging at d1f3bb5. User clarified
+  that direct owner login to alternate accounts is not required because patches
+  can be promoted/pulled into an owner-controlled account/computer.
 current artifact state: four-lane experiment portfolio defined; Wave 0 proved
   AppChangePackage -> adoption -> actual recipient Go/Svelte build -> promote
-  through staging product APIs
+  through staging product APIs. The review invariant is now owner-pullable
+  packages, not loginable Playwright-created accounts.
 what shipped: preflight substrate hard-cut landed before this mission; during
   Wave 0, a run-acceptance false-success edge was identified and patched so
-  records with blocked invariant checks cannot still claim accepted state
+  records with blocked invariant checks cannot still claim accepted state.
+  No auth handoff code should be added for this mission.
 what was proven:
   - old export_patchset and /api/promotions paths are invalid acceptance paths
   - current acceptance path is AppChangePackage/adoption/recipient build
-  - staging package/adoption proof at deployed commit 98b73c5 produced:
-    package-alt-portfolio-wave0-1779268905976
-    adoption-alt-portfolio-wave0-1779268905976
+  - staging package/adoption proof at deployed commit d1f3bb5 produced:
+    package-alt-portfolio-wave0-1779270395944
+    adoption-alt-portfolio-wave0-1779270395944
     target recipient runtime digest
-      sha256:60b5479f7b1adf6bb9ecb61b0b9b3707dc917b66141fc4cb532c313be294f0ee
+      sha256:0ea79e13b92a4562392e514e53e170f3505c23d2bfb88666b6ebe06d155dda51
     target recipient UI digest
       sha256:b5cc68456c76598faa7d267f546ded558531cbd114e0a94cde2f3c445aa81519
-    trace traj-alt-portfolio-wave0-1779268905976
-    run acceptance runacc-48e62a7bac080d7da68a
+    trace traj-alt-portfolio-wave0-1779270395944
+    run acceptance runacc-19c10e4b57c2f0828c5b
+    VText evidence doc ab093136-d504-4745-8f42-d9d30a008bdc
   - session renewal is required across long recipient builds because access
     cookies are intentionally short-lived and refresh cookies are scoped to
     /auth
+  - virtual-authenticator passkeys are not manually transferable, but that is
+    no longer a mission blocker when package pull/adoption evidence is durable
 unproven or partial claims:
-  - account/loginable experiment creation path
+  - owner-pull/adoption into ymnath@choir-ip.com or another owner-controlled
+    active computer for a real experiment package
   - Choir-in-Choir two-lane concurrency under current substrate
   - mobile Safari liquid material feasibility
   - Python mode A/B implementation and benchmark
-  - run acceptance after the invariant-state patch must be redeployed and
-    reproven on staging; the previous acceptance record exposed the false edge
-    by returning accepted while product_path_observed and
-    worker_mutation_bounded were blocked
+  - run acceptance remains promotion-level/blocked for Wave 0 because
+    product_path_observed and worker_mutation_bounded are intentionally strict
+    for this synthetic package checkpoint
 remaining error field:
-  - experiment account/passkey review path
+  - owner pull/adoption UX and evidence path for tomorrow's manual QA
   - worker/candidate throughput under concurrent lanes
   - evidence synthesis across alternate computers
-  - owner-reviewable account enrollment or package-pull flow for tomorrow's
-    manual QA accounts
 highest-impact remaining uncertainty:
-  - Can Choir create owner-reviewable alternate experiment computers without
-    falling back to platform-default deploys?
+  - Can Choir produce multiple useful experiment AppChangePackages and let the
+    owner inspect/pull/adopt them without falling back to platform-default
+    deploys or direct alternate-account login?
 next executable probe:
-  - Land and deploy the run-acceptance invariant-state patch, rerun Wave 0, and
-    require status checkpoint_package until a true owner-loginable alternate
-    account/computer review path exists. Then launch Wave 1 lanes in two-lane
-    concurrency only if account isolation evidence remains clear.
+  - Launch Wave 1 lanes in two-lane concurrency only if package/adoption
+    evidence remains isolated. For each lane, produce an AppChangePackage and
+    owner-pull/adoption recommendation before considering promotion.
 suggested resume goal string:
   - Use the One-Line Goal String in this document.
 evidence artifact refs:
-  - test-results/alternate-portfolio-wave0/alternate-portfolio-wave0-evidence.json
+  - test-results/alternate-portfolio-wave0-deployed/alternate-portfolio-wave0-evidence.json
   - frontend/test-results/alternate-computer-portfol-682da--or-records-precise-blocker-chromium/alternate-portfolio-wave0-desktop.png
 rollback refs:
   - previous_active_source_ref
-    refs/computers/target-computer-alt-portfolio-wave0-1779268905976/active-foreground-tail-alt-portfolio-wave0-1779268905976
+    refs/computers/target-computer-alt-portfolio-wave0-1779270395944/active-foreground-tail-alt-portfolio-wave0-1779270395944
 learning log:
-  - Evidence gates prevented a fake loginable_experiment claim: Playwright
-    passkey accounts are real product accounts but their credentials are trapped
-    in the virtual authenticator.
+  - Evidence gates prevented a fake direct-login claim: Playwright passkey
+    accounts are real product accounts but their credentials are trapped in the
+    virtual authenticator.
+  - User clarified the better architecture: review experiments by package
+    publish -> owner pull/adoption, not by adding temporary auth handoff code.
   - Evidence gates also found a run-acceptance false-success edge: promotion
     checkpoints alone were enough to claim accepted even when invariant checks
     were blocked.
