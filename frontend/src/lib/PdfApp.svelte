@@ -3,11 +3,15 @@
   import {
     appTitle,
     clampNumber,
+    loadRecentMedia,
     loadContextContentItem,
+    recentMediaAppContext,
+    rememberRecentMedia,
     resolveMediaSource,
   } from './media-utils.js';
 
   export let appContext = {};
+  export let windowId = '';
 
   const kind = 'pdf';
   const dispatch = createEventDispatcher();
@@ -36,10 +40,16 @@
   let pinchZoomFrame = 0;
   let loadedSourceKey = '';
   let resizeObserver = null;
+  let selectedContext = null;
+  let recentFiles = [];
 
-  $: source = resolveMediaSource(appContext, item, kind);
+  $: effectiveContext = selectedContext || appContext || {};
+  $: source = resolveMediaSource(effectiveContext, item, kind);
   $: sourceKey = source.displayUrl || '';
   $: pageLabel = pageCount ? `${pdfPage} / ${pageCount}` : String(pdfPage);
+  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
+    recentFiles = loadRecentMedia(kind);
+  }
 
   function sourceFetchOptions(url) {
     return String(url || '').startsWith('/') ? { credentials: 'include' } : { credentials: 'omit' };
@@ -246,7 +256,7 @@
   async function loadContentItem() {
     loading = true;
     error = '';
-    const result = await loadContextContentItem(appContext, item, appTitle(kind));
+    const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
       dispatch('authexpired');
@@ -261,7 +271,24 @@
     await loadPdf();
   }
 
+  async function openRecentFile(entry) {
+    selectedContext = recentMediaAppContext(entry);
+    item = null;
+    error = '';
+    pdfDoc = null;
+    pdfPage = 1;
+    pageCount = 0;
+    pdfTextByPage = [];
+    pdfSearchMatches = [];
+    loadedSourceKey = '';
+    rendered = false;
+    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    await tick();
+    await loadContentItem();
+  }
+
   onMount(() => {
+    recentFiles = loadRecentMedia(kind);
     void loadContentItem();
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
@@ -285,7 +312,20 @@
       <span>{error}</span>
     </div>
   {:else if !source.displayUrl}
-    <p class="pdf-status">No readable PDF source is attached to this window.</p>
+    <div class="pdf-empty" data-media-empty data-media-recent-empty>
+      <p class="pdf-status">No readable PDF source is attached to this window.</p>
+      {#if recentFiles.length}
+        <div class="pdf-recent" data-media-recent-list>
+          <span>Recently opened</span>
+          {#each recentFiles as recent}
+            <button type="button" data-media-recent-item on:click={() => openRecentFile(recent)}>
+              <strong>{recent.title}</strong>
+              <small>{recent.filePath || recent.sourceUrl}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {:else}
     <div
       class="pdf-stage"
@@ -692,6 +732,63 @@
     display: grid;
     gap: 6px;
     color: #dce6ff;
+  }
+
+  .pdf-empty {
+    display: grid;
+    width: min(100% - 24px, 520px);
+    height: 100%;
+    place-content: center;
+    justify-self: center;
+    gap: 12px;
+  }
+
+  .pdf-recent {
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgba(126, 180, 255, 0.2);
+    border-radius: 16px;
+    background: rgba(8, 14, 28, 0.74);
+    padding: 12px;
+  }
+
+  .pdf-recent > span {
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .pdf-recent button {
+    display: grid;
+    gap: 2px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.055);
+    color: #e5eefc;
+    cursor: pointer;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  .pdf-recent button:hover,
+  .pdf-recent button:focus-visible {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.12);
+  }
+
+  .pdf-recent strong,
+  .pdf-recent small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pdf-recent small {
+    color: #94a3b8;
+    font-size: 0.74rem;
   }
 
   @media (max-width: 720px) {

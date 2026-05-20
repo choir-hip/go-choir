@@ -1,13 +1,17 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
+    loadRecentMedia,
     loadContextContentItem,
+    recentMediaAppContext,
+    rememberRecentMedia,
     resolveMediaSource,
   } from './media-utils.js';
 
   export let appContext = {};
+  export let windowId = '';
 
   const kind = 'image';
   const dispatch = createEventDispatcher();
@@ -18,10 +22,16 @@
   let zoom = 1;
   let imageFitMode = 'fit';
   let rotation = 0;
+  let selectedContext = null;
+  let recentFiles = [];
 
-  $: source = resolveMediaSource(appContext, item, kind);
+  $: effectiveContext = selectedContext || appContext || {};
+  $: source = resolveMediaSource(effectiveContext, item, kind);
   $: imageZoomLabel = `${Math.round(zoom * 100)}%`;
   $: imageWidth = imageFitMode === 'original' ? 'auto' : `${Math.round(zoom * 100)}%`;
+  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
+    recentFiles = loadRecentMedia(kind);
+  }
 
   function setImageFit(mode) {
     imageFitMode = mode;
@@ -46,7 +56,7 @@
   async function loadContentItem() {
     loading = true;
     error = '';
-    const result = await loadContextContentItem(appContext, item, appTitle(kind));
+    const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
       dispatch('authexpired');
@@ -59,7 +69,19 @@
     if (result.item) item = result.item;
   }
 
-  onMount(loadContentItem);
+  async function openRecentFile(entry) {
+    selectedContext = recentMediaAppContext(entry);
+    item = null;
+    error = '';
+    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    await tick();
+    await loadContentItem();
+  }
+
+  onMount(() => {
+    recentFiles = loadRecentMedia(kind);
+    void loadContentItem();
+  });
 </script>
 
 <section class="image-app" data-media-app data-media-kind="image" data-image-app>
@@ -68,7 +90,20 @@
   {:else if error}
     <p class="image-error" role="alert">{error}</p>
   {:else if !source.displayUrl}
-    <p class="image-status">No readable image source is attached to this window.</p>
+    <div class="image-empty" data-media-empty data-media-recent-empty>
+      <p class="image-status">No readable image source is attached to this window.</p>
+      {#if recentFiles.length}
+        <div class="image-recent" data-media-recent-list>
+          <span>Recently opened</span>
+          {#each recentFiles as recent}
+            <button type="button" data-media-recent-item on:click={() => openRecentFile(recent)}>
+              <strong>{recent.title}</strong>
+              <small>{recent.filePath || recent.sourceUrl}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {:else}
     <div class="image-canvas {imageFitMode}" data-media-stage data-image-stage>
       <img src={source.displayUrl} alt={source.title} data-image-viewer style={`width: ${imageWidth}; transform: rotate(${rotation}deg);`} />
@@ -305,5 +340,60 @@
 
   .image-error {
     color: #ffd6d6;
+  }
+
+  .image-empty {
+    display: grid;
+    width: min(100% - 24px, 520px);
+    place-self: center;
+    gap: 12px;
+  }
+
+  .image-recent {
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgba(126, 180, 255, 0.18);
+    border-radius: 14px;
+    background: rgba(5, 10, 22, 0.68);
+    padding: 12px;
+  }
+
+  .image-recent > span {
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .image-recent button {
+    display: grid;
+    gap: 2px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.055);
+    color: #e5eefc;
+    cursor: pointer;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  .image-recent button:hover,
+  .image-recent button:focus-visible {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.12);
+  }
+
+  .image-recent strong,
+  .image-recent small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .image-recent small {
+    color: #94a3b8;
+    font-size: 0.74rem;
   }
 </style>

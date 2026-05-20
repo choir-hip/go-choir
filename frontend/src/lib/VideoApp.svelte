@@ -1,17 +1,21 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
     formatTime,
+    loadRecentMedia,
     loadMediaPosition,
     loadContextContentItem,
+    recentMediaAppContext,
+    rememberRecentMedia,
     resolveMediaSource,
     saveMediaPosition,
     youtubeEmbedURL,
   } from './media-utils.js';
 
   export let appContext = {};
+  export let windowId = '';
 
   const kind = 'video';
   const dispatch = createEventDispatcher();
@@ -25,12 +29,18 @@
   let mediaDuration = 0;
   let mediaPlaying = false;
   let restoredPosition = false;
+  let selectedContext = null;
+  let recentFiles = [];
 
-  $: source = resolveMediaSource(appContext, item, kind);
+  $: effectiveContext = selectedContext || appContext || {};
+  $: source = resolveMediaSource(effectiveContext, item, kind);
   $: embedUrl = source.mediaType === 'video/youtube' || /youtube\.com|youtu\.be/.test(source.sourceUrl)
     ? youtubeEmbedURL(source.sourceUrl)
     : '';
   $: mediaSeekPercent = mediaDuration > 0 ? Math.min(100, Math.max(0, (mediaCurrentTime / mediaDuration) * 100)) : 0;
+  $: if ((source.displayUrl || embedUrl) && rememberRecentMedia(kind, source)) {
+    recentFiles = loadRecentMedia(kind);
+  }
 
   function setPlaybackSpeed() {
     if (mediaEl) mediaEl.playbackRate = Number(playbackSpeed) || 1;
@@ -87,7 +97,7 @@
   async function loadContentItem() {
     loading = true;
     error = '';
-    const result = await loadContextContentItem(appContext, item, appTitle(kind));
+    const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
       dispatch('authexpired');
@@ -100,7 +110,23 @@
     if (result.item) item = result.item;
   }
 
-  onMount(loadContentItem);
+  async function openRecentFile(entry) {
+    selectedContext = recentMediaAppContext(entry);
+    item = null;
+    error = '';
+    mediaCurrentTime = 0;
+    mediaDuration = 0;
+    mediaPlaying = false;
+    restoredPosition = false;
+    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    await tick();
+    await loadContentItem();
+  }
+
+  onMount(() => {
+    recentFiles = loadRecentMedia(kind);
+    void loadContentItem();
+  });
 </script>
 
 <section class="video-app" data-media-app data-media-kind="video" data-video-app>
@@ -109,7 +135,20 @@
   {:else if error}
     <p class="video-error" role="alert">{error}</p>
   {:else if !source.displayUrl && !embedUrl}
-    <p class="video-status">No playable video source is attached to this window.</p>
+    <div class="video-empty" data-media-empty data-media-recent-empty>
+      <p class="video-status">No playable video source is attached to this window.</p>
+      {#if recentFiles.length}
+        <div class="video-recent" data-media-recent-list>
+          <span>Recently opened</span>
+          {#each recentFiles as recent}
+            <button type="button" data-media-recent-item on:click={() => openRecentFile(recent)}>
+              <strong>{recent.title}</strong>
+              <small>{recent.filePath || recent.sourceUrl}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {:else if embedUrl}
     <div class="video-theater video-embed-stage" data-media-stage data-video-embed-stage>
       <details class="video-embed-controls" data-media-toolbar data-video-toolbar data-media-controls>
@@ -363,6 +402,63 @@
 
   .video-error {
     color: #fecaca;
+  }
+
+  .video-empty {
+    display: grid;
+    width: min(100% - 24px, 520px);
+    height: 100%;
+    place-content: center;
+    justify-self: center;
+    gap: 12px;
+  }
+
+  .video-recent {
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgba(126, 180, 255, 0.2);
+    border-radius: 16px;
+    background: rgba(4, 9, 21, 0.74);
+    padding: 12px;
+  }
+
+  .video-recent > span {
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .video-recent button {
+    display: grid;
+    gap: 2px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.055);
+    color: #e5eefc;
+    cursor: pointer;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  .video-recent button:hover,
+  .video-recent button:focus-visible {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.12);
+  }
+
+  .video-recent strong,
+  .video-recent small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .video-recent small {
+    color: #94a3b8;
+    font-size: 0.74rem;
   }
 
   .video-info {

@@ -412,9 +412,9 @@
   }
 
   .desktop-menu {
-    position: absolute;
-    left: 0;
-    bottom: calc(100% + 10px);
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    bottom: calc(var(--choir-bottom-bar-height, 56px) + 10px);
     min-width: min(21rem, calc(100vw - 24px));
     border: 1px solid rgba(148, 163, 184, 0.18);
     border-radius: var(--choir-radius-lg, 18px);
@@ -423,8 +423,8 @@
       rgba(15, 23, 42, 0.96);
     box-shadow: var(--choir-shadow-soft, 0 18px 48px rgba(0, 0, 0, 0.4));
     padding: 0.8rem;
-    z-index: 1;
-    max-height: min(76dvh, 40rem);
+    z-index: 10001;
+    max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 24px - env(safe-area-inset-top, 0px));
     overflow-y: auto;
     backdrop-filter: blur(18px);
   }
@@ -561,14 +561,15 @@
     color: #e2e8f0;
     font-size: 0.84rem;
     font-weight: 800;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.14;
+    overflow-wrap: anywhere;
   }
 
   .start-app-desc {
     overflow: hidden;
     color: #94a3b8;
     font-size: 0.68rem;
+    line-height: 1.18;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -789,7 +790,8 @@
   /* Responsive: Tablet */
   @media (max-width: 1024px) {
     .desktop-menu {
-      min-width: min(18rem, calc(100vw - 16px));
+      left: max(8px, env(safe-area-inset-left, 0px));
+      min-width: min(21rem, calc(100vw - 16px));
     }
   }
 
@@ -821,6 +823,21 @@
 
     .window-switcher {
       max-width: 29vw;
+    }
+
+    .start-app {
+      grid-template-columns: 1.8rem minmax(0, 1fr);
+      min-height: 3.35rem;
+      gap: 0.45rem;
+      padding: 0.46rem;
+    }
+
+    .start-app-name {
+      font-size: 0.8rem;
+    }
+
+    .start-app-desc {
+      font-size: 0.64rem;
     }
 
     .indicator-name {

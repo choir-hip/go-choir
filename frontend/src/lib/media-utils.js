@@ -35,6 +35,7 @@ export function resolveMediaSource(appContext = {}, item = null, fallbackKind = 
   const sourceUrl = item?.source_url || appContext.sourceUrl || '';
   const filePath = item?.file_path || appContext.filePath || appContext.sourcePath || '';
   const mediaType = item?.media_type || appContext.mediaType || '';
+  const contentId = item?.content_id || appContext.contentId || appContext.content_id || '';
   const title =
     item?.title ||
     appContext.windowTitle ||
@@ -45,6 +46,7 @@ export function resolveMediaSource(appContext = {}, item = null, fallbackKind = 
     sourceUrl,
     filePath,
     mediaType,
+    contentId,
     title,
     displayUrl: filePath ? apiFileURL(filePath) : sourceUrl,
   };
@@ -135,4 +137,74 @@ export function saveMediaPosition(kind, source = {}, currentTime = 0, duration =
   } catch (_err) {
     // Local playback state is best-effort.
   }
+}
+
+const MEDIA_RECENT_LIMIT = 10;
+
+export function mediaRecentStorageKey(kind) {
+  return `choir-media-recent:${kind}`;
+}
+
+function mediaSourceIdentity(source = {}) {
+  return source.filePath || source.sourceUrl || source.contentId || '';
+}
+
+function displayFileName(source = {}) {
+  const raw = source.filePath || source.sourceUrl || source.title || '';
+  try {
+    const url = new URL(raw);
+    const pathname = decodeURIComponent(url.pathname || '');
+    return pathname.split('/').filter(Boolean).pop() || url.hostname || source.title || raw;
+  } catch (_err) {
+    return String(raw).split('/').filter(Boolean).pop() || source.title || raw;
+  }
+}
+
+export function loadRecentMedia(kind) {
+  try {
+    const raw = window.localStorage.getItem(mediaRecentStorageKey(kind));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry?.identity).slice(0, MEDIA_RECENT_LIMIT) : [];
+  } catch (_err) {
+    return [];
+  }
+}
+
+export function rememberRecentMedia(kind, source = {}) {
+  const identity = mediaSourceIdentity(source);
+  if (!kind || !identity) return false;
+  try {
+    const entry = {
+      identity,
+      kind,
+      title: source.title || displayFileName(source) || appTitle(kind),
+      fileName: displayFileName(source),
+      filePath: source.filePath || '',
+      sourceUrl: source.sourceUrl || '',
+      mediaType: source.mediaType || '',
+      contentId: source.contentId || '',
+      openedAt: new Date().toISOString(),
+    };
+    const next = [
+      entry,
+      ...loadRecentMedia(kind).filter((candidate) => candidate.identity !== identity),
+    ].slice(0, MEDIA_RECENT_LIMIT);
+    window.localStorage.setItem(mediaRecentStorageKey(kind), JSON.stringify(next));
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+export function recentMediaAppContext(entry = {}) {
+  return {
+    windowTitle: entry.title || entry.fileName || appTitle(entry.kind),
+    title: entry.title || entry.fileName || '',
+    fileName: entry.fileName || entry.title || '',
+    filePath: entry.filePath || '',
+    sourcePath: entry.filePath || '',
+    sourceUrl: entry.sourceUrl || '',
+    mediaType: entry.mediaType || '',
+    contentId: entry.contentId || '',
+  };
 }

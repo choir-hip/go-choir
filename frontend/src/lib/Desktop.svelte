@@ -1492,23 +1492,48 @@
               </div>
             {:else if win.appId === 'image'}
               <div class="app-content image-content" data-image-window>
-                <ImageApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <ImageApp
+                  windowId={win.windowId}
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:contextchange={handleWindowAppContextChange}
+                />
               </div>
             {:else if win.appId === 'audio'}
               <div class="app-content audio-content" data-audio-window>
-                <AudioApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <AudioApp
+                  windowId={win.windowId}
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:contextchange={handleWindowAppContextChange}
+                />
               </div>
             {:else if win.appId === 'video'}
               <div class="app-content video-content" data-video-window>
-                <VideoApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <VideoApp
+                  windowId={win.windowId}
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:contextchange={handleWindowAppContextChange}
+                />
               </div>
             {:else if win.appId === 'pdf'}
               <div class="app-content pdf-content" data-pdf-window>
-                <PdfApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <PdfApp
+                  windowId={win.windowId}
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:contextchange={handleWindowAppContextChange}
+                />
               </div>
             {:else if win.appId === 'epub'}
               <div class="app-content epub-content" data-epub-window>
-                <EpubApp appContext={{ ...win.appContext, appId: win.appId }} on:authexpired={() => dispatch('authexpired')} />
+                <EpubApp
+                  windowId={win.windowId}
+                  appContext={{ ...win.appContext, appId: win.appId }}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:contextchange={handleWindowAppContextChange}
+                />
               </div>
             {:else}
               <div class="app-content">

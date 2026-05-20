@@ -1,16 +1,20 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import {
     appTitle,
     clampNumber,
     formatTime,
+    loadRecentMedia,
     loadMediaPosition,
     loadContextContentItem,
+    recentMediaAppContext,
+    rememberRecentMedia,
     resolveMediaSource,
     saveMediaPosition,
   } from './media-utils.js';
 
   export let appContext = {};
+  export let windowId = '';
 
   const kind = 'audio';
   const dispatch = createEventDispatcher();
@@ -24,9 +28,15 @@
   let mediaDuration = 0;
   let mediaPlaying = false;
   let restoredPosition = false;
+  let selectedContext = null;
+  let recentFiles = [];
 
-  $: source = resolveMediaSource(appContext, item, kind);
+  $: effectiveContext = selectedContext || appContext || {};
+  $: source = resolveMediaSource(effectiveContext, item, kind);
   $: mediaSeekPercent = mediaDuration > 0 ? Math.min(100, Math.max(0, (mediaCurrentTime / mediaDuration) * 100)) : 0;
+  $: if (source.displayUrl && rememberRecentMedia(kind, source)) {
+    recentFiles = loadRecentMedia(kind);
+  }
 
   function setPlaybackSpeed() {
     if (mediaEl) mediaEl.playbackRate = Number(playbackSpeed) || 1;
@@ -83,7 +93,7 @@
   async function loadContentItem() {
     loading = true;
     error = '';
-    const result = await loadContextContentItem(appContext, item, appTitle(kind));
+    const result = await loadContextContentItem(effectiveContext, item, appTitle(kind));
     loading = false;
     if (result.authRequired) {
       dispatch('authexpired');
@@ -96,7 +106,23 @@
     if (result.item) item = result.item;
   }
 
-  onMount(loadContentItem);
+  async function openRecentFile(entry) {
+    selectedContext = recentMediaAppContext(entry);
+    item = null;
+    error = '';
+    mediaCurrentTime = 0;
+    mediaDuration = 0;
+    mediaPlaying = false;
+    restoredPosition = false;
+    dispatch('contextchange', { windowId, appContext: selectedContext, title: selectedContext.windowTitle });
+    await tick();
+    await loadContentItem();
+  }
+
+  onMount(() => {
+    recentFiles = loadRecentMedia(kind);
+    void loadContentItem();
+  });
 </script>
 
 <section class="audio-app" data-media-app data-media-kind="audio" data-audio-app>
@@ -105,7 +131,20 @@
   {:else if error}
     <p class="audio-error" role="alert">{error}</p>
   {:else if !source.displayUrl}
-    <p class="audio-status">No playable audio source is attached to this window.</p>
+    <div class="audio-empty" data-media-empty data-media-recent-empty>
+      <p class="audio-status">No playable audio source is attached to this window.</p>
+      {#if recentFiles.length}
+        <div class="audio-recent" data-media-recent-list>
+          <span>Recently opened</span>
+          {#each recentFiles as recent}
+            <button type="button" data-media-recent-item on:click={() => openRecentFile(recent)}>
+              <strong>{recent.title}</strong>
+              <small>{recent.filePath || recent.sourceUrl}</small>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {:else}
     <div class="audio-stage" data-media-stage data-audio-stage>
       <div class="audio-player" data-media-player data-audio-player>
@@ -295,6 +334,63 @@
 
   .audio-error {
     color: #fecaca;
+  }
+
+  .audio-empty {
+    display: grid;
+    width: min(100% - 24px, 520px);
+    height: 100%;
+    place-content: center;
+    justify-self: center;
+    gap: 12px;
+  }
+
+  .audio-recent {
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgba(126, 180, 255, 0.2);
+    border-radius: 16px;
+    background: rgba(4, 9, 21, 0.7);
+    padding: 12px;
+  }
+
+  .audio-recent > span {
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .audio-recent button {
+    display: grid;
+    gap: 2px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.055);
+    color: #e5eefc;
+    cursor: pointer;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  .audio-recent button:hover,
+  .audio-recent button:focus-visible {
+    border-color: rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.12);
+  }
+
+  .audio-recent strong,
+  .audio-recent small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .audio-recent small {
+    color: #94a3b8;
+    font-size: 0.74rem;
   }
 
   .audio-info {

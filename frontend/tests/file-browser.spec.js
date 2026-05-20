@@ -359,6 +359,25 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   await epubControls.locator('[data-epub-toc]').selectOption('1');
   await expect(epubViewer.locator('[data-epub-chapter-title]')).toContainText('Mobile Chapter');
 
+  await page.locator('[data-window]').filter({ has: epubViewer }).last().locator('[data-window-close]').click();
+
+  await page.locator('[data-desk-button]').click();
+  await page.locator('[data-desk-app-id="pdf"]').click();
+  const emptyPdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
+  await expect(emptyPdfViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
+  await emptyPdfViewer.locator('[data-media-recent-item]').filter({ hasText: 'mission-report.pdf' }).click();
+  await expect(emptyPdfViewer.locator('[data-pdf-reader]')).toHaveAttribute('data-pdf-rendered', 'true', { timeout: 15_000 });
+
+  await page.locator('[data-window]').filter({ has: emptyPdfViewer }).last().locator('[data-window-close]').click();
+
+  await page.locator('[data-desk-button]').click();
+  await page.locator('[data-desk-app-id="epub"]').click();
+  const emptyEpubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
+  await expect(emptyEpubViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
+  await emptyEpubViewer.locator('[data-media-recent-item]').filter({ hasText: 'field-guide.epub' }).click();
+  await expect(emptyEpubViewer.locator('[data-epub-reader]')).toBeVisible({ timeout: 15_000 });
+  await expect(emptyEpubViewer.locator('[data-epub-chapter-title]')).toContainText('Reader Proof');
+
   expect(downloads).toEqual([]);
 });
 

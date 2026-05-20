@@ -63,7 +63,9 @@ async function expectDeskMenuTopLayer(page, testInfo, label) {
     const shelf = document.querySelector('[data-shelf]');
     const menuElement = document.querySelector('[data-desk-menu]');
     const button = document.querySelector('[data-desk-button]');
+    const appNames = Array.from(document.querySelectorAll('[data-start-app] .start-app-name'));
     const menuBox = menuElement?.getBoundingClientRect();
+    const shelfBox = shelf?.getBoundingClientRect();
     const buttonBox = button?.getBoundingClientRect();
     const menuProbe = menuBox
       ? document.elementFromPoint(menuBox.left + 24, menuBox.top + 24)
@@ -75,10 +77,15 @@ async function expectDeskMenuTopLayer(page, testInfo, label) {
       shelfMenuOpen: shelf?.getAttribute('data-desk-menu-open') || '',
       shelfZIndex: Number.parseInt(getComputedStyle(shelf).zIndex || '0', 10) || 0,
       menuZIndex: Number.parseInt(getComputedStyle(menuElement).zIndex || '0', 10) || 0,
+      menuBottom: Math.round(menuBox?.bottom || 0),
+      shelfTop: Math.round(shelfBox?.top || 0),
       menuProbeInside: Boolean(menuElement?.contains(menuProbe)),
       buttonProbeInside: Boolean(button?.contains(buttonProbe)),
       menuProbeWindow: menuProbe?.closest?.('[data-window]')?.getAttribute('data-window-app-id') || '',
       buttonProbeWindow: buttonProbe?.closest?.('[data-window]')?.getAttribute('data-window-app-id') || '',
+      clippedAppNames: appNames
+        .filter((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
+        .map((el) => el.textContent.trim()),
     };
   });
 
@@ -88,6 +95,8 @@ async function expectDeskMenuTopLayer(page, testInfo, label) {
   expect(layering.buttonProbeInside).toBe(true);
   expect(layering.menuProbeWindow).toBe('');
   expect(layering.buttonProbeWindow).toBe('');
+  expect(layering.menuBottom).toBeLessThanOrEqual(layering.shelfTop - 8);
+  expect(layering.clippedAppNames).toEqual([]);
 }
 
 async function readDesktopMetrics(page) {
