@@ -74,6 +74,10 @@ Use these buckets when reading or editing docs:
   MissionGradient for turning Desktop Overview into a bounded live spatial
   preview/control surface without WebGPU, fake thumbnails, duplicate app
   mounts, preview privacy leaks, or memory-regression shortcuts.
+- `docs/mission-desktop-overview-app-owned-spatial-previews-v0.md` - proposed
+  MissionGradient for app-owned Overview preview descriptors, app-specific
+  redacted/summary cards, premium spatial polish, and returning-session-style
+  staging proof without fake thumbnails or duplicated app mounts.
 - `docs/mission-choir-in-choir-controller-v0.md` - staging-first MissionGradient for promotion-level and continuation-level self-development acceptance.
 - `docs/mission-sweep-substrate-v0.md` - proposed staging-first MissionGradient for the first real sweep substrate: Codex bootstrap, Choir prompt-bar run, vsuper orchestration, worker/verifier cosuper channel iteration, candidate/export evidence, and UX sweep proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
@@ -105,6 +109,10 @@ Use these buckets when reading or editing docs:
 - `docs/mission-desktop-overview-live-spatial-previews-v0.md` - completed
   shell mission for live spatial Overview previews, bounded preview policy,
   suspended/redacted cards, and premium motion without memory/privacy regressions.
+- `docs/mission-desktop-overview-app-owned-spatial-previews-v0.md` - proposed
+  next shell mission for replacing hard-coded preview heuristics with app-owned
+  descriptors and proving a quieter, more spatial Overview under real-session
+  clutter.
 - `docs/mission-choir-in-choir-controller-v0.md` - active/stopped controller mission and latest invariant-level blocker.
 - `docs/mission-sweep-substrate-v0.md` - proposed next substrate mission for making sweeps real through outer Codex orchestration and inner Choir staging proof.
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
