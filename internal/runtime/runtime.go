@@ -969,6 +969,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	ctx = WithToolExecutionContext(ctx, rec)
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, 4096, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
+		if isPersistentSuperInboxRun(rec) {
+			return nil, nil
+		}
 		return rt.injectPendingInboxTurns(context.Background(), rec, finalCheckpoint)
 	}, WithToolLoopMemoryHooks(memory.hooks()))
 	if err != nil {
@@ -1020,6 +1023,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
 	rt.notifyParent(persistCtx, rec)
@@ -1152,6 +1156,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	rt.reconcileCompletedVTextRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 	// Notify parent channel of child run completion (VAL-CHOIR-006, VAL-CHOIR-008).
 	rt.notifyParent(persistCtx, rec)

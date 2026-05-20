@@ -3,8 +3,9 @@
 **Status:** checkpoint_incomplete; Wave 0 package/adoption checkpoint proven,
 Wave 1 Chiron/animation owner-pullable package/adoption checkpoint proven,
 Wave 2 Liquid/Python owner-pullable package/adoption checkpoint proven,
-recipient run-acceptance bridge deployed/proven, source-run acceptance and
-duplicate-package quality gaps remain
+recipient run-acceptance bridge deployed/proven, source-package acceptance
+bridge deployed/proven for Liquid at `09a95ad`, latest Wave 2 rerun has a
+Python no-package blocker and still needs a concise owner review certificate
 **Date:** 2026-05-20
 **Operator:** Codex-operated MissionGradient supervisor using Choir-in-Choir
 candidate/background computers where healthy
@@ -22,8 +23,9 @@ candidate/background computers where healthy
 > digests as acceptable evidence.
 >
 > Direct owner login to alternate experiment accounts is out of scope. It is
-> not an acceptance path for this portfolio. The review invariant is package
-> mobility: an experiment computer publishes a product-visible
+> not an acceptance path for this portfolio. This is not a workaround for
+> temporary auth friction; it is the architecture. The review invariant is
+> package mobility: an experiment computer publishes a product-visible
 > AppChangePackage, the owner inspects the evidence, then pulls, adopts, or
 > promotes the package into an owner-controlled computer for manual QA,
 > iteration, promotion, or rejection. Do not add auth handoff machinery merely
@@ -45,7 +47,7 @@ candidate/background computers where healthy
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-reviewable alternate-computer experiment portfolio, not a platform-default UX merge. Start from the deployed 65956c4 package-mobility and recipient-run-acceptance substrate plus the Wave 1/Wave 2 checkpoints where Chiron Shelf, process/window animation, Choir Liquid Material Engine, and Python code mode A/B all produced product-visible AppChangePackages that were pulled, verified, promoted in recipient computers, and in the latest Wave 2 rerun produced promotion-level accepted recipient run-acceptance records. Continue with the quality/evidence pass required before calling the portfolio complete: deploy and reprove the source-run package-publication acceptance patch, eliminate or precisely explain duplicate package identities caused by repeated parent delegation, and produce a concise owner review certificate for all four packages with Trace/VText/run-acceptance refs, screenshots or Playwright video refs, benchmarks where relevant, rollback refs, residual risks, and promotion recommendations. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; direct login to alternate experiment accounts is out of scope and is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion while source-run acceptance, recipient-run acceptance, or duplicate-package evidence contradicts clean success. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
+/goal Run docs/mission-alternate-computer-ux-experiment-portfolio-v0.md as a Codex-operated MissionGradient mission: create an owner-pullable AppChangePackage experiment portfolio, not a platform-default UX merge and not a loginable-alt-account demo. Start from the deployed 65956c4 package-mobility and recipient-run-acceptance substrate plus the Wave 1/Wave 2 checkpoints where Chiron Shelf, process/window animation, Choir Liquid Material Engine, and Python code mode A/B all produced product-visible AppChangePackages that were pulled, verified, promoted in recipient computers, and in the latest Wave 2 rerun produced promotion-level accepted recipient run-acceptance records. Continue with the quality/evidence pass required before calling the portfolio complete: deploy and reprove the source-run package-publication acceptance patch, eliminate or precisely explain duplicate package identities caused by repeated parent delegation, and produce a concise owner review certificate for all four packages with Trace/VText/run-acceptance refs, screenshots or Playwright video refs, benchmarks where relevant, rollback refs, residual risks, and promotion recommendations. The owner review path is product-visible package publish -> owner pull/adoption/promotion into an existing owner-controlled account/computer, including one of the owner's current accounts; this is the canonical auth/review path, not a fallback, and direct login to alternate experiment accounts is out of scope and is not an auth work item. Maintain a concise learning log about MissionGradient behavior during the run: where persistence helped, where it overreached, where evidence gates prevented false success, where concurrency changed outcomes, and what should be simplified later. Do not use the learning log as permission to stop early. Do not copy binaries between computers, fake reviewability with labels, use platform deploy as proof of user-computer divergence, use export_patchset or /api/promotions, add auth-handoff machinery just for experiment QA, capture private DOM into liquid materials, hide prompt/Shelf controls behind animation, add Python beside bash within the same candidate profile, or claim completion while source-run acceptance, recipient-run acceptance, or duplicate-package evidence contradicts clean success. If a substrate blocker prevents owner-pullable packages or real package/adoption evidence, root-cause it, patch through git/CI/deploy when authorized, then continue; otherwise report blocked_incomplete with exact evidence and the next executable probe.
 ```
 
 ## Mission Frame
@@ -85,7 +87,10 @@ into.
 ### Auth And Review Decision
 
 The auth solution for this portfolio is package mobility, not alternate-account
-login. The owner does not need to log into the source experiment accounts. A
+login. The owner does not need to log into the source experiment accounts. This
+is the primary design, not an escape hatch: alternate computers are source
+lineages that publish movable patches, and review happens by pulling those
+patches into an account/computer the owner already controls. A
 successful experiment publishes a product-visible AppChangePackage that can be
 inspected, pulled, adopted, promoted, or rejected from an owner-controlled
 computer such as `ymnath@choir-ip.com`.
@@ -840,6 +845,43 @@ what was proven:
     `node --check frontend/tests/alternate-computer-portfolio-wave1.spec.js`;
     `nix develop .# --command go test -count=1 ./internal/runtime -run 'TestRunAcceptanceSynthesize|TestAppPromotion|TestPrivateAppChangePackage|TestAppAdoption'`;
     and focused RunAcceptance source/adoption cases inside `./internal/runtime`.
+  - commit `09a95ad` deployed the source-package acceptance bridge and
+    duplicate-package blocker harness. GitHub Actions run `26180208331`
+    succeeded, staging health reported deployed commit
+    `09a95ad0a2c8e321cdd99c176fb7e11c1b4d06a5`, built at
+    `20260520175347`, deployed at `2026-05-20T17:55:49Z`.
+  - deployed Wave 2 proof at `09a95ad` ran for 45.9 minutes and passed the
+    Playwright test while correctly reporting mission status
+    `checkpoint_incomplete`:
+    `test-results/alternate-portfolio-wave2-deployed-09a95ad-runacc-20260520T180144/alternate-portfolio-wave2-evidence.json`.
+    Liquid now has a single product-visible package
+    `c548e806-e712-4b8d-99cf-0c8d28bdb239` with manifest hash
+    `38f60f556b9f9dca5ca3fc78e4128bff2d5694613a4f4036dc005951acebc208`,
+    source run acceptance `runacc-e089dd5d255558301448`
+    (`export-level`, accepted), and recipient run acceptance
+    `runacc-811626e054da75f2f8e9` (`promotion-level`, accepted). Recipient
+    promotion succeeded through
+    `adoption-owner-review-liquid-alt-portfolio-wave2-1779300106196`.
+  - the same `09a95ad` proof blocked Python cleanly rather than laundering a
+    missing package into success: no matching AppChangePackage for
+    `portfolio-python-code-mode-alt-portfolio-wave2-1779300106196` appeared
+    after `2400000ms`; source run acceptance
+    `runacc-6248c4bfc8033d11a21a` remained `staging-smoke-level`, blocked.
+  - root-cause investigation of that Python no-package blocker found a
+    persistent-super inbox loss mode. Liquid and Python were submitted
+    concurrently. Liquid was the first pending delivery and started the active
+    persistent super run. Python was enqueued while that super run was busy.
+    The runtime's generic inbox injection path could mark pending deliveries
+    delivered before the model actually handled them, so the Python request
+    could be swallowed under the long Liquid worker result instead of becoming
+    its own follow-up super run.
+  - local patch prepared after root cause: persistent super inbox runs now own
+    only the delivery batch included in their initial prompt, skip live inbox
+    injection during the run, and start a follow-up persistent-super run after
+    completion when more deliveries are pending. Focused tests pass:
+    `nix develop .# --command go test -count=1 ./internal/runtime -run 'TestRequestSuperExecution|TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun'`
+    and
+    `nix develop .# --command go test -count=1 ./internal/runtime -run 'TestRunAcceptanceSynthesize|TestAppPromotion|TestPrivateAppChangePackage|TestAppAdoption|TestDelegateWorkerVM'`.
   - focused local regression tests pass inside the repo Nix dev shell:
     nix develop .# --command go test -count=1 ./internal/runtime -run
     'TestDelegateWorkerVM(FollowsCompletedVSuperChildrenBeforeReturning|MarksCompletedVSuperWithoutExportOrUpdateIncomplete|MarksPackageRequiredVSuperWithoutPackageIncomplete|ReturnsFailedRunEvidence|ReturnsTimeoutRunEvidence)'
@@ -859,28 +901,28 @@ unproven or partial claims:
     acceptable substrate evidence when the final certificate also gives exact
     package refs and pull/adopt/promote instructions for an owner-controlled
     account.
-  - exactly one migrating AppChangePackage identity per lane; animation
-    produced a duplicate product-visible package during Wave 1, and Liquid
-    produced three package identities during the latest Wave 2 rerun. Python
-    was single-package in the latest 65956c4 rerun.
+  - exactly one migrating AppChangePackage identity per lane across repeated
+    runs. Animation produced a duplicate product-visible package during Wave 1,
+    Liquid produced three package identities during the 65956c4 Wave 2 rerun,
+    and Liquid was cleanly single-package in the 09a95ad Wave 2 rerun. Python
+    was single-package in the 65956c4 rerun but failed to publish a package in
+    the latest 09a95ad rerun.
   - Choir-in-Choir two-lane concurrency reached owner-pull/adoption for all four
-    lanes, and recipient-run acceptance now reaches promotion-level accepted.
-    Source-run acceptance remains blocked/too strict for source-account package
-    publication until the local source-package acceptance patch is deployed and
-    reproven.
+    lanes across prior runs, and recipient-run acceptance now reaches
+    promotion-level accepted when package/adoption evidence exists. Source-run
+    package-publication acceptance is now deployed/proven for Liquid but not
+    for a fresh Python package in the latest rerun because Python did not
+    publish a package.
   - mobile Safari liquid material feasibility; the package contains a
     WebGL-first prototype and benchmark hooks, not a real mobile Safari manual
     review
   - Python mode A/B contains candidate implementation and benchmark
     scaffolding, but not yet a completed measured A/B table across real runs
-  - deployed proof that source-side package-publication acceptance reaches
-    export-level accepted; the local source-package patch must still be
-    committed, deployed, and reproven on staging
 remaining error field:
-  - duplicate package publication/export behavior remains for Liquid in the
-    latest rerun. Current evidence points to repeated parent `delegate_worker_vm`
-    calls for the same lane/objective, not duplicate publish behavior inside a
-    single child vsuper.
+  - duplicate package publication/export behavior remains a historical quality
+    risk for multi-lane runs. Liquid was deduplicated in the 09a95ad rerun, but
+    animation and the earlier Liquid rerun showed repeated parent
+    `delegate_worker_vm` behavior for the same lane/objective.
   - persistent super serializes concurrent lane work enough that animation can
     lag behind Chiron under bounded proof windows
   - persistent super/source trajectory attribution can place package evidence
@@ -890,23 +932,30 @@ remaining error field:
     concise package handoff packet for ymnath@choir-ip.com or another
     owner-controlled account, though the underlying product path is proven
     through fresh recipient product accounts
-  - source-run acceptance synthesis has a local patch but no deployed staging
-    proof yet
+  - Python package publication regressed or timed out in the 09a95ad rerun: the
+    lane produced Trace activity but no matching product-visible
+    AppChangePackage within the 40-minute wait. Current root cause is the
+    persistent-super concurrent inbox delivery handling described above; this
+    still needs deployed proof after the local patch lands.
+  - Liquid's package-trace run-acceptance field was still odd in the 09a95ad
+    report (`docs-level`, blocked, no useful acceptance id) even though the
+    source run and recipient run acceptance records were accepted. Do not use
+    package-trace acceptance as the terminal signal until this field is cleaned
+    up or removed.
 highest-impact remaining uncertainty:
-  - Can a fresh deployed run produce a clean owner-review certificate where the
-    four package lanes are deduplicated, source-run package publication and
-    recipient-run adoption are both accepted at the right levels, and the owner
-    can decide iterate/abandon/promote without reading raw traces?
+  - Can a fresh deployed run produce a clean owner-review certificate where all
+    four package lanes have one package identity, source-run package
+    publication and recipient-run adoption are both accepted at the right
+    levels, and the owner can decide iterate/abandon/promote without reading
+    raw traces?
 next executable probe:
-  - Commit/push/deploy the source-package acceptance plus duplicate-blocker
-    harness patch, verify staging identity, and rerun the product-path portfolio
-    proof. Expected result: recipient run-acceptance stays promotion-level
-    accepted; source package-publication records become export-level accepted;
-    Python remains owner-pullable; Liquid is either deduplicated or honestly
-    reported as `checkpoint_package` with duplicate parent delegation evidence.
-    If Liquid duplicates recur, fix parent duplicate delegation/source
-    trajectory attribution or report a precise blocker. Finish with a concise
-    owner review certificate covering all four packages, their Trace, VText,
+  - Commit/push/deploy the persistent-super inbox batch-drain patch, verify
+    staging identity, then rerun Wave 2 or a focused Python lane proof. Expected
+    result: when Liquid/Python are submitted concurrently, Python remains a
+    pending super delivery until Liquid's super run completes, then starts as a
+    follow-up super run that can lease/delegate a worker VM and publish exactly
+    one AppChangePackage. Finish by writing the concise owner review
+    certificate covering all four packages, their Trace, VText,
     source/recipient run-acceptance, adoption, rollback, screenshot/video,
     benchmark, and promotion recommendation refs.
 suggested resume goal string:
@@ -921,6 +970,7 @@ evidence artifact refs:
   - test-results/alternate-portfolio-wave2-deployed-74230a3-20260520T1525/alternate-portfolio-wave2-evidence.json
   - test-results/alternate-portfolio-wave2-deployed-74230a3-runacc-20260520T1558/alternate-portfolio-wave2-evidence.json
   - test-results/alternate-portfolio-wave2-deployed-65956c4-runacc-20260520T170222/alternate-portfolio-wave2-evidence.json
+  - test-results/alternate-portfolio-wave2-deployed-09a95ad-runacc-20260520T180144/alternate-portfolio-wave2-evidence.json
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/alternate-portfolio-wave1-source-desktop.png
   - frontend/test-results/alternate-computer-portfol-9bf24-s-package-adoption-evidence-chromium/trace.zip
 rollback refs:
@@ -950,6 +1000,10 @@ rollback refs:
     adoption-owner-review-python-alt-portfolio-wave2-1779296543431
     previous_active_source_ref
     refs/computers/owner-review-python-alt-portfolio-wave2-1779296543431/active-foreground-tail-alt-portfolio-wave2-1779296543431
+  - Wave 2 09a95ad Liquid rollback refs:
+    adoption-owner-review-liquid-alt-portfolio-wave2-1779300106196
+    previous_active_source_ref
+    refs/computers/owner-review-liquid-alt-portfolio-wave2-1779300106196/active-foreground-tail-alt-portfolio-wave2-1779300106196
 learning log:
   - Evidence gates prevented a fake direct-login claim: Playwright passkey
     accounts are real product accounts but their credentials are trapped in the

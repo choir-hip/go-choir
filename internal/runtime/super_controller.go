@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -68,7 +69,54 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.markSuperInboxDeliveriesStarted(ctx, deliveries, rec.RunID); err != nil {
+		return nil, err
+	}
 	return rec, nil
+}
+
+func (rt *Runtime) markSuperInboxDeliveriesStarted(ctx context.Context, deliveries []types.InboxDelivery, runID string) error {
+	if len(deliveries) == 0 || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	deliveryIDs := make([]string, 0, len(deliveries))
+	for _, delivery := range deliveries {
+		if strings.TrimSpace(delivery.DeliveryID) != "" {
+			deliveryIDs = append(deliveryIDs, delivery.DeliveryID)
+		}
+	}
+	if len(deliveryIDs) == 0 {
+		return nil
+	}
+	if err := rt.store.MarkInboxDeliveriesDelivered(ctx, deliveryIDs, runID); err != nil {
+		return fmt.Errorf("mark super inbox deliveries started: %w", err)
+	}
+	return nil
+}
+
+func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
+	if !isPersistentSuperInboxRun(rec) {
+		return
+	}
+	if _, err := rt.reconcilePersistentSuperActor(ctx, rec.OwnerID, rec.AgentID); err != nil {
+		log.Printf("runtime: continue persistent super inbox after %s: %v", rec.RunID, err)
+	}
+}
+
+func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	if agentProfileForRun(rec) != AgentProfileSuper {
+		return false
+	}
+	if metadataStringValue(rec.Metadata, "request_source") != "super_inbox" {
+		return false
+	}
+	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.AgentID) == "" {
+		return false
+	}
+	return rec.AgentID == persistentSuperAgentID(rec.OwnerID)
 }
 
 func buildPersistentSuperInboxPrompt(deliveries []types.InboxDelivery) string {

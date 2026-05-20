@@ -595,8 +595,8 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list pending deliveries: %v", err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("pending super deliveries = %d, want one: %+v", len(deliveries), deliveries)
+	if len(deliveries) != 0 {
+		t.Fatalf("pending super deliveries = %d, want none after run ownership: %+v", len(deliveries), deliveries)
 	}
 }
 
@@ -667,6 +667,114 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testin
 	}
 	if len(deliveries) > 1 {
 		t.Fatalf("pending deliveries = %d, want at most one deduped delivery: %+v", len(deliveries), deliveries)
+	}
+}
+
+func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "go-choir-m3-agent-tools-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	_ = os.Remove(dbPath)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	provider := newBlockingExecuteProvider()
+	rt := New(Config{
+		SandboxID:           "sandbox-test",
+		StorePath:           dbPath,
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), provider)
+	t.Cleanup(func() {
+		provider.releaseAll()
+		rt.Stop()
+		_ = s.Close()
+		_ = os.Remove(dbPath)
+	})
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install default tools: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	firstVText, err := rt.StartRunWithMetadata(context.Background(), "request liquid lane", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-liquid",
+		runMetadataChannelID:    "doc-liquid",
+		runMetadataTrajectoryID: "trace-liquid",
+	})
+	if err != nil {
+		t.Fatalf("start first vtext run: %v", err)
+	}
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), firstVText), "request_super_execution", json.RawMessage(`{
+		"objective":"Process the liquid package lane.",
+		"channel_id":"doc-liquid"
+	}`))
+	if err != nil {
+		t.Fatalf("first request_super_execution: %v", err)
+	}
+	var firstResp struct {
+		AgentID string `json:"agent_id"`
+		LoopID  string `json:"loop_id"`
+	}
+	if err := json.Unmarshal([]byte(firstRaw), &firstResp); err != nil {
+		t.Fatalf("decode first response: %v\n%s", err, firstRaw)
+	}
+	_ = provider.waitForRun(t, "Process the liquid package lane.")
+	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 0 {
+		t.Fatalf("initial super delivery should be owned by first run, still pending: %+v", pending)
+	}
+
+	secondVText, err := rt.StartRunWithMetadata(context.Background(), "request python lane", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-python",
+		runMetadataChannelID:    "doc-python",
+		runMetadataTrajectoryID: "trace-python",
+	})
+	if err != nil {
+		t.Fatalf("start second vtext run: %v", err)
+	}
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondVText), "request_super_execution", json.RawMessage(`{
+		"objective":"Process the python package lane.",
+		"channel_id":"doc-python"
+	}`))
+	if err != nil {
+		t.Fatalf("second request_super_execution: %v", err)
+	}
+	var secondResp struct {
+		AgentID string `json:"agent_id"`
+		LoopID  string `json:"loop_id"`
+		State   string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(secondRaw), &secondResp); err != nil {
+		t.Fatalf("decode second response: %v\n%s", err, secondRaw)
+	}
+	if secondResp.AgentID != firstResp.AgentID || secondResp.LoopID != firstResp.LoopID {
+		t.Fatalf("second request should attach to active persistent super: first=%+v second=%+v", firstResp, secondResp)
+	}
+	pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID)
+	if len(pending) != 1 || !strings.Contains(pending[0].Content, "python package lane") {
+		t.Fatalf("python delivery should remain pending for follow-up run, got %+v", pending)
+	}
+
+	provider.releaseOne()
+	secondSuperRun := provider.waitForRun(t, "Process the python package lane.")
+	active, err := s.GetLatestActiveRunByAgent(context.Background(), "user-alice", firstResp.AgentID)
+	if err != nil {
+		t.Fatalf("lookup follow-up active super run: %v", err)
+	}
+	if active.RunID == firstResp.LoopID {
+		t.Fatalf("python delivery reused first super run %s; want follow-up run", firstResp.LoopID)
+	}
+	if !strings.Contains(secondSuperRun.Prompt, "Process the python package lane.") || strings.Contains(secondSuperRun.Prompt, "Process the liquid package lane.") {
+		t.Fatalf("follow-up prompt did not isolate python delivery:\n%s", secondSuperRun.Prompt)
+	}
+	if pending := pendingDeliveriesForAgent(t, s, "user-alice", firstResp.AgentID); len(pending) != 0 {
+		t.Fatalf("follow-up super delivery should be owned by second run, still pending: %+v", pending)
 	}
 }
 
@@ -4438,6 +4546,82 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 	})
 
 	return rt, s, cwd
+}
+
+type blockingExecuteProvider struct {
+	started chan types.RunRecord
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingExecuteProvider() *blockingExecuteProvider {
+	return &blockingExecuteProvider{
+		started: make(chan types.RunRecord, 10),
+		release: make(chan struct{}),
+	}
+}
+
+func (p *blockingExecuteProvider) ProviderName() string { return "blocking-test" }
+
+func (p *blockingExecuteProvider) RuntimeProviderPolicy() ProviderPolicy {
+	return ProviderPolicy{ActiveProvider: "blocking-test"}
+}
+
+func (p *blockingExecuteProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"blocking-test"}`))
+	if !strings.Contains(task.Prompt, "Process the pending inbox deliveries addressed to you as the user's persistent super actor.") {
+		task.Result = "non-super test run completed"
+		return nil
+	}
+	select {
+	case p.started <- *task:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-p.release:
+		task.Result = "super test run completed"
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *blockingExecuteProvider) waitForRun(t *testing.T, promptContains string) types.RunRecord {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case rec := <-p.started:
+			if strings.Contains(rec.Prompt, promptContains) {
+				return rec
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for super run containing %q", promptContains)
+		}
+	}
+}
+
+func (p *blockingExecuteProvider) releaseOne() {
+	select {
+	case p.release <- struct{}{}:
+	case <-time.After(3 * time.Second):
+	}
+}
+
+func (p *blockingExecuteProvider) releaseAll() {
+	p.once.Do(func() {
+		close(p.release)
+	})
+}
+
+func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID string) []types.InboxDelivery {
+	t.Helper()
+	deliveries, err := s.ListPendingInboxDeliveries(context.Background(), ownerID, agentID, 20)
+	if err != nil {
+		t.Fatalf("list pending deliveries for %s: %v", agentID, err)
+	}
+	return deliveries
 }
 
 func runGit(t *testing.T, repo string, args ...string) string {
