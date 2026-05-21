@@ -176,7 +176,7 @@ until the breadth substrate exists.
 | Product model | User-facing terms and lifecycle are encoded in docs/UI/API names. | checkpoint: UI and platform-state docs use Change/Apps & Changes; deeper API names remain AppChangePackage/adoption. |
 | Catalog | Four seed Changes appear without package ids in ordinary UI. | deployed-verified: four cards render on desktop and 390x844 mobile; package/source refs are hidden in collapsed technical details. |
 | Apps & Changes UI | Replaces Candidate Desktop in launcher/Desk. | deployed-verified: `apps-changes` replaces `candidate-desktop`; launcher absence is tested and proven on staging. |
-| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | partial deployed proof: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, collapsed technical refs, and all-four artifact/benchmark links exist; media links remain path text, and Trace surfacing is still thin. |
+| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | partial deployed proof: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, collapsed technical refs, all-four artifact/benchmark links, and selected Chiron Trace/run-acceptance surfacing exist; media links remain path text. |
 | Try flow | Creates candidate/review adoption without mutating active computer. | deployed-verified for Chiron: product UI created adoption `adoption-chiron-shelf-62e544c3-4d3c-484a-9638-317fe964f554` and candidate `candidate-chiron-shelf-c0ec9010-bf57-45a0-bfb9-954050dd6638`. |
 | Preview | Opens candidate/review desktop from the selected Change. | deployed-verified structurally through internal `ChangePreviewFrame`; preview iframe is created from the selected Change, not from a launcher-facing manual candidate id. |
 | Install | Promotes verified candidate into active computer with rollback refs. | deployed-verified for Chiron: verify -> adopted -> rolled_back through product APIs with recipient runtime/UI artifact digests and rollback profile. |
@@ -190,7 +190,7 @@ until the breadth substrate exists.
 | Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | local benchmark complete and deployed-report linked: 5 matched repo tasks showed bash 807.19ms avg wall time vs Python 129.28ms, estimated payload tokens bash 128 vs Python 221. Live LLM loop benchmark remains residual risk. |
 | Chiron proof | First end-to-end inspect -> Try -> preview -> install -> uninstall/rollback proof. | deployed-verified through Try -> Verify -> Install -> Rollback on staging commit `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`. |
 | Dead-code cleanup | Candidate Desktop removed or refactored into used internal component; no dead island remains. | deployed-verified: `CandidateDesktopViewer.svelte` deleted; remaining `candidate-desktop` matches are mission docs or absence assertions. |
-| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, Liquid/Python benchmark links, rollback-only removal honesty, and Chiron promotion-level run acceptance are deployed-proofed; Trace surfacing, inline media, and true uninstall/disable remain incomplete. |
+| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, Liquid/Python benchmark links, rollback-only removal honesty, Chiron promotion-level run acceptance, and Apps & Changes -> Trace handoff are deployed-proofed; inline media, all-four acceptance aggregation, and true uninstall/disable remain incomplete. |
 
 ## Invariants
 
@@ -400,13 +400,16 @@ status: checkpoint_incomplete
 last checkpoint: deployed Apps & Changes plus first Chiron product-path
   adoption proof, all-four VText report surface, Liquid/Python benchmark links,
   a compact/mobile catalog overlap fix, an honest rollback-only removal
-  model, and a Chiron promotion-level run-acceptance record.
+  model, a Chiron promotion-level run-acceptance record, and selected
+  Chiron Trace/run-acceptance surfacing from the owner-facing Change detail.
 current artifact state: Apps & Changes exists as the launcher-facing Change
   catalog; Candidate Desktop app code is deleted; candidate preview survives
   only as internal ChangePreviewFrame used by Apps & Changes. Four seeded
   experiment Changes are visible as ordinary catalog cards, with package/source
   refs hidden under Technical refs. Apps & Changes can open/create the mission
-  VText dashboard and per-change VText reports through product VText APIs.
+  VText dashboard and per-change VText reports through product VText APIs. The
+  selected Chiron Change now shows a Trace & acceptance panel and can open
+  Trace focused to the relevant trajectory/run acceptance.
 what shipped:
   - `e0a8f76954cb01a983c6d980b3e558fae45e06a0` Add Apps and Changes store surface.
   - `75c80cd4b17e5403bf5f20ef835b4d42a0aea859` Preserve Apps and Changes adoption state.
@@ -414,6 +417,7 @@ what shipped:
   - `efeb5d8fc926099ddbebf731d916f6dd83b54245` Link Apps and Changes benchmark evidence.
   - `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e` Fix Apps and Changes compact layout.
   - `a6767cf1436d18d2f144faad4ccb300ec8707b21` Expose Apps and Changes removal model.
+  - `9bb9446b55588beabb63a750f8d25e93a692e074` Surface Apps and Changes trace acceptance evidence.
 what was proven:
   - GitHub Actions run `26197219323` passed and deployed to staging.
   - staging `/health` showed proxy and sandbox commit/deployed_commit
@@ -518,34 +522,71 @@ what was proven:
     `apps-changes-chiron-shelf`. Invariant checks passed for product-path
     observation, bounded worker mutation, non-overclaiming promotion, and
     checkpoint causal order.
+  - commit `9bb9446b55588beabb63a750f8d25e93a692e074` added owner-facing
+    Trace/run-acceptance surfacing to Apps & Changes and an Apps & Changes
+    -> Trace handoff that opens Trace focused to the selected Change's
+    trajectory and acceptance.
+  - local checks passed after that fix:
+    `npm --prefix frontend run build`,
+    `cd frontend && npx playwright test tests/web-surface-rationalization.spec.js --project=chromium -g "rollback-only removal"`,
+    `cd frontend && npx playwright test tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`,
+    and `git diff --check`.
+  - GitHub Actions run `26202379885` passed and deployed commit
+    `9bb9446b55588beabb63a750f8d25e93a692e074`.
+  - staging `/health` showed proxy and sandbox commit/deployed_commit
+    `9bb9446b55588beabb63a750f8d25e93a692e074`, built at
+    `20260521024542`, deployed at `2026-05-21T02:47:25Z`.
+  - deployed product proof
+    `test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/apps-changes-trace-surfacing-proof.json`
+    passed on desktop and `390x844` mobile. It recorded account
+    `apps-changes-trace-trace-surfacing-mpexedqq@example.com`, package
+    `28433c19-5d02-416f-9368-de56390e1927`, adoption
+    `adoption-chiron-trace-trace-surfacing-mpexedqq`, candidate
+    `candidate-chiron-trace-trace-surfacing-mpexedqq`, trajectory
+    `apps-changes-chiron-shelf-trace-surfacing-mpexedqq`, and accepted
+    `promotion-level` run acceptance `runacc-2ec3b0a57b8ac4f0bc05`.
+  - the same proof recorded a real recipient build with runtime digest
+    `sha256:d764e5a1f56f1f781d0d453619d55370228e9ecc2463241f242dc7072fca0c84`,
+    UI digest
+    `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`,
+    base source SHA `575ff3014a85524da4233e60ce44345804d46807`,
+    head source SHA `5f46838346e861a2e3f0265f380f5f8a60ff8437`,
+    runtime build duration `5m21.378980548s`, and UI build duration
+    `7.999625224s`.
+  - the same proof captured desktop and mobile screenshots of Apps & Changes
+    trace surfacing and the focused Trace handoff:
+    `desktop-apps-changes-trace-panel.png`,
+    `desktop-trace-opened-from-change.png`,
+    `mobile-390x844-apps-changes-trace-panel.png`, and
+    `mobile-390x844-trace-opened-from-change.png`.
   - proof-harness learning: the first mobile follow-up reused storage captured
     before a long recipient build; Install later renewed and rotated the
     refresh cookie, making that saved storage stale. The passing proof captures
     storage after Install and clears only saved window state before the mobile
     check.
-unproven or partial claims: Trace-first review surface; broader all-four
-  run-acceptance/report aggregation; polished installed history; true
-  uninstall/disable beyond rollback-only labeling; inline media embedding in
-  VText; owner hands-on QA for the four experiments.
+unproven or partial claims: broader all-four run-acceptance/report aggregation;
+  polished installed history; true uninstall/disable beyond rollback-only
+  labeling; inline media embedding in VText; owner hands-on QA for the four
+  experiments; continuation-level acceptance.
 belief-state changes: package ids are implementation details; user-facing
   object is Change; Candidate Desktop should be removed, not preserved as a
   public island; Settings is low-level evidence, not the ordinary install
   surface; product proof can now cross the AppChangePackage -> recipient build
   -> adoption -> rollback boundary without a package-id paste UI.
 remaining error field: the store/review substrate, first Chiron adoption proof,
-  Chiron promotion-level run acceptance, all-four VText reports, and
-  Liquid/Python benchmark references are real, but the mission has not yet
-  completed Trace surfacing, inline report media, all-four acceptance/report
-  aggregation, or actual source-level uninstall/feature-disable semantics.
+  Chiron promotion-level run acceptance, Apps & Changes -> Trace handoff,
+  all-four VText reports, and Liquid/Python benchmark references are real, but
+  the mission has not yet completed inline report media, all-four
+  acceptance/report aggregation, continuation-level evidence, or actual
+  source-level uninstall/feature-disable semantics.
 highest-impact remaining uncertainty: can Apps & Changes become a durable
   owner review surface instead of a thin seeded catalog, with VText/Trace/report
   media integrated for all four experiments and honest disable/uninstall
   semantics?
-next executable probe: deepen Trace review surfacing for Apps & Changes by
-  linking the Chiron adoption, run acceptance, VText reports, benchmark
-  artifacts, and rollback evidence from the owner-facing Change detail; then
-  either add actual source-level uninstall/disable capability records or
-  generate an all-four portfolio acceptance/report aggregation.
+next executable probe: generate all-four portfolio acceptance/report
+  aggregation in Apps & Changes and Trace, then either add actual source-level
+  uninstall/disable capability records or make run-acceptance synthesis carry
+  adoption rollback refs into the Trace panel.
 suggested resume goal string: use the One-Line Goal String in this document.
 evidence artifact refs:
   - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
@@ -577,10 +618,16 @@ evidence artifact refs:
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@a557298aa1e00a37ee63b7880179a5fd.webm
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@fc3398eae4f24d97dc856c05a69cfef0.webm
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-run-acceptance-proof.json
+  - test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/apps-changes-trace-surfacing-proof.json
+  - test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/desktop-apps-changes-trace-panel.png
+  - test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/desktop-trace-opened-from-change.png
+  - test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/mobile-390x844-apps-changes-trace-panel.png
+  - test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/mobile-390x844-trace-opened-from-change.png
   - frontend tests:
     `cd frontend && npx playwright test tests/computer-live-sync-hard-cutover.spec.js tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
   - build: `npm --prefix frontend run build`
-rollback refs: code rollback by reverting `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`,
+rollback refs: code rollback by reverting `9bb9446b55588beabb63a750f8d25e93a692e074`,
+  `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`,
   `a6767cf1436d18d2f144faad4ccb300ec8707b21`,
   `efeb5d8fc926099ddbebf731d916f6dd83b54245`,
   `a73affbc5c58121ceead49b8a8580b4247627fe6`,
