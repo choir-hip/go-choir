@@ -190,7 +190,7 @@ until the breadth substrate exists.
 | Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | local benchmark complete and deployed-report linked: 5 matched repo tasks showed bash 807.19ms avg wall time vs Python 129.28ms, estimated payload tokens bash 128 vs Python 221. Live LLM loop benchmark remains residual risk. |
 | Chiron proof | First end-to-end inspect -> Try -> preview -> install -> uninstall/rollback proof. | deployed-verified through Try -> Verify -> Install -> Rollback on staging commit `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`. |
 | Dead-code cleanup | Candidate Desktop removed or refactored into used internal component; no dead island remains. | deployed-verified: `CandidateDesktopViewer.svelte` deleted; remaining `candidate-desktop` matches are mission docs or absence assertions. |
-| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, Liquid/Python benchmark links, and rollback-only removal honesty are deployed-proofed; Trace surfacing, run-acceptance synthesis, inline media, and true uninstall/disable remain incomplete. |
+| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, Liquid/Python benchmark links, rollback-only removal honesty, and Chiron promotion-level run acceptance are deployed-proofed; Trace surfacing, inline media, and true uninstall/disable remain incomplete. |
 
 ## Invariants
 
@@ -399,8 +399,8 @@ authority before stopping.
 status: checkpoint_incomplete
 last checkpoint: deployed Apps & Changes plus first Chiron product-path
   adoption proof, all-four VText report surface, Liquid/Python benchmark links,
-  a compact/mobile catalog overlap fix, and an honest rollback-only removal
-  model.
+  a compact/mobile catalog overlap fix, an honest rollback-only removal
+  model, and a Chiron promotion-level run-acceptance record.
 current artifact state: Apps & Changes exists as the launcher-facing Change
   catalog; Candidate Desktop app code is deleted; candidate preview survives
   only as internal ChangePreviewFrame used by Apps & Changes. Four seeded
@@ -511,32 +511,41 @@ what was proven:
     verified inverse source patch, keeps Disable disabled because there is no
     declared feature flag/capability toggle, and still hides package IDs from
     ordinary UI before Technical refs.
+  - product run-acceptance synthesis
+    `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-run-acceptance-proof.json`
+    returned HTTP 202 with accepted `promotion-level` record
+    `runacc-e89094a0f29869807b09` for trajectory
+    `apps-changes-chiron-shelf`. Invariant checks passed for product-path
+    observation, bounded worker mutation, non-overclaiming promotion, and
+    checkpoint causal order.
   - proof-harness learning: the first mobile follow-up reused storage captured
     before a long recipient build; Install later renewed and rotated the
     refresh cookie, making that saved storage stale. The passing proof captures
     storage after Install and clears only saved window state before the mobile
     check.
-unproven or partial claims: Trace-first review surface; run-acceptance
-  synthesis; polished installed history; true uninstall/disable beyond rollback-only labeling;
-  inline media embedding in VText; owner hands-on QA for the four experiments.
+unproven or partial claims: Trace-first review surface; broader all-four
+  run-acceptance/report aggregation; polished installed history; true
+  uninstall/disable beyond rollback-only labeling; inline media embedding in
+  VText; owner hands-on QA for the four experiments.
 belief-state changes: package ids are implementation details; user-facing
   object is Change; Candidate Desktop should be removed, not preserved as a
   public island; Settings is low-level evidence, not the ordinary install
   surface; product proof can now cross the AppChangePackage -> recipient build
   -> adoption -> rollback boundary without a package-id paste UI.
 remaining error field: the store/review substrate, first Chiron adoption proof,
-  all-four VText reports, and Liquid/Python benchmark references are real, but
-  the mission has not yet completed Trace surfacing, run-acceptance synthesis,
-  inline report media, or actual source-level uninstall/feature-disable
-  semantics.
+  Chiron promotion-level run acceptance, all-four VText reports, and
+  Liquid/Python benchmark references are real, but the mission has not yet
+  completed Trace surfacing, inline report media, all-four acceptance/report
+  aggregation, or actual source-level uninstall/feature-disable semantics.
 highest-impact remaining uncertainty: can Apps & Changes become a durable
   owner review surface instead of a thin seeded catalog, with VText/Trace/report
   media integrated for all four experiments and honest disable/uninstall
   semantics?
-next executable probe: synthesize a run-acceptance record from the Chiron
-  adoption, all-four VText reports, benchmark artifacts, and staging proof;
-  then either add honest disable/uninstall capability records or deepen Trace
-  review surfacing for Apps & Changes.
+next executable probe: deepen Trace review surfacing for Apps & Changes by
+  linking the Chiron adoption, run acceptance, VText reports, benchmark
+  artifacts, and rollback evidence from the owner-facing Change detail; then
+  either add actual source-level uninstall/disable capability records or
+  generate an all-four portfolio acceptance/report aggregation.
 suggested resume goal string: use the One-Line Goal String in this document.
 evidence artifact refs:
   - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
@@ -567,6 +576,7 @@ evidence artifact refs:
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/mobile-390x844-chiron-removal-model.png
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@a557298aa1e00a37ee63b7880179a5fd.webm
   - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@fc3398eae4f24d97dc856c05a69cfef0.webm
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-run-acceptance-proof.json
   - frontend tests:
     `cd frontend && npx playwright test tests/computer-live-sync-hard-cutover.spec.js tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
   - build: `npm --prefix frontend run build`
