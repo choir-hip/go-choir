@@ -1,9 +1,9 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-20
-**Baseline checked:** live-spatial Desktop Overview baseline
-`2f8ad7adc2697d6faff00dbc90991057c19781e9`
+**Last updated:** 2026-05-21
+**Baseline checked:** Apps & Changes VText reporting checkpoint
+`a73affbc5c58121ceead49b8a8580b4247627fe6`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -143,7 +143,7 @@ Known gaps:
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Apps & Changes owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, and rollback through product APIs. | Needs deployed proof against the four experiment packages, richer per-change VText reports, stronger uninstall/disable semantics beyond rollback, and owner-review visual polish. |
+| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. | Needs all-four experiment report media, real Liquid/Python benchmarks, Trace/run-acceptance synthesis, stronger uninstall/disable semantics beyond rollback, and owner-review visual polish. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
@@ -185,6 +185,26 @@ Known gaps:
   they preserve stronger revision/trajectory catch-up semantics.
 
 ## Current Proof Anchors
+
+Recent deployed platform proof for Apps & Changes and VText reports:
+
+- behavior commits:
+  `e0a8f76954cb01a983c6d980b3e558fae45e06a0`,
+  `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`, and
+  `a73affbc5c58121ceead49b8a8580b4247627fe6`;
+- CI/deploy run for the VText-report checkpoint:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26198364649`;
+- staging health reported proxy and sandbox commit
+  `a73affbc5c58121ceead49b8a8580b4247627fe6`;
+- deployed product proof artifact:
+  `test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/apps-changes-vtext-report-proof.json`;
+- proof covered Apps & Changes opening from the Desk on desktop and `390x844`
+  mobile, four ordinary Change cards without package ids, collapsed Technical
+  refs, mission VText dashboard creation/opening, and Chiron per-change VText
+  report creation/opening;
+- earlier Chiron proof through the same app covered Try, recipient build
+  verification, Install, and Rollback with rollback profile
+  `refs/computers/primary/active` plus `route:primary`.
 
 Computer recovery and Compute Monitor proof follows the deployed desktop
 restore recovery baseline:
