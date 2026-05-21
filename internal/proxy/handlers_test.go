@@ -282,6 +282,90 @@ func TestAppChangePackagePullImportsPackageIntoTargetComputer(t *testing.T) {
 	}
 }
 
+func TestAppChangePackageReviewEvidenceFetchesSourceComputerSummary(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	var gotPath string
+	var gotUser string
+	var gotQuery string
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/app-change-packages/package-review-test/review-evidence", func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		gotUser = r.Header.Get("X-Authenticated-User")
+		if r.URL.Query().Get("source_owner_id") != "" || r.URL.Query().Get("source_desktop_id") != "" {
+			t.Fatalf("source routing query leaked to sandbox: %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"package_id": "package-review-test",
+			"acceptances": []map[string]any{
+				{
+					"acceptance_id":      "runacc-source-review",
+					"acceptance_level":   "promotion-level",
+					"state":              "accepted",
+					"review_scope":       "package-referenced",
+					"trace_visible":      false,
+					"evidence_ref_count": 3,
+					"rollback_ref_count": 1,
+				},
+			},
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandbox.Close() })
+
+	handler, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/app-change-packages/package-review-test/review-evidence?source_owner_id=source-user&source_desktop_id=primary&acceptance_id=runacc-source-review",
+		nil,
+	)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "recipient-user")})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("review evidence status = %d body=%s", w.Code, w.Body.String())
+	}
+	if gotPath != "/api/app-change-packages/package-review-test/review-evidence" {
+		t.Fatalf("source path = %q", gotPath)
+	}
+	if gotUser != "recipient-user" {
+		t.Fatalf("forwarded user = %q, want recipient-user", gotUser)
+	}
+	if !strings.Contains(gotQuery, "acceptance_id=runacc-source-review") {
+		t.Fatalf("acceptance query missing: %s", gotQuery)
+	}
+	var resp struct {
+		PackageID   string `json:"package_id"`
+		Acceptances []struct {
+			AcceptanceID string `json:"acceptance_id"`
+			ReviewScope  string `json:"review_scope"`
+			TraceVisible bool   `json:"trace_visible"`
+		} `json:"acceptances"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode review evidence response: %v", err)
+	}
+	if resp.PackageID != "package-review-test" || len(resp.Acceptances) != 1 || resp.Acceptances[0].ReviewScope != "package-referenced" || resp.Acceptances[0].TraceVisible {
+		t.Fatalf("unexpected review evidence response: %+v", resp)
+	}
+}
+
 // --- VAL-PROXY-001: Missing or invalid auth fails closed ---
 
 func TestBootstrapDeniesMissingAuth(t *testing.T) {

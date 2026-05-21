@@ -657,7 +657,11 @@
         nextEvidence[change.id] = [];
         return;
       }
-      const query = ids.map((id) => `acceptance_id=${encodeURIComponent(id)}`).join('&');
+      const query = [
+        `source_owner_id=${encodeURIComponent(change.sourceOwnerId)}`,
+        `source_desktop_id=${encodeURIComponent(change.sourceComputerId || TARGET_COMPUTER_ID)}`,
+        ...ids.map((id) => `acceptance_id=${encodeURIComponent(id)}`),
+      ].join('&');
       try {
         const body = await fetchJSON(`/api/app-change-packages/${encodeURIComponent(change.packageId)}/review-evidence?${query}`, {
           method: 'GET',
