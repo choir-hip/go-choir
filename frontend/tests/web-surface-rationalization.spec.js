@@ -34,6 +34,85 @@ test('Apps & Changes replaces manual candidate desktop entry points', async ({ d
   expect(forbiddenRemoteDisplayRequests).toEqual([]);
 });
 
+test('Apps & Changes preserves a just-created adoption when the catalog read is stale', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const adoption = {
+    adoption_id: 'adoption-stale-read-preserved',
+    package_id: '28433c19-5d02-416f-9368-de56390e1927',
+    app_id: 'Chiron Shelf Observability',
+    target_computer_id: 'primary',
+    target_candidate_id: 'candidate-stale-read-preserved',
+    status: 'candidate_applied',
+    target_active_source_ref_at_candidate_start: 'refs/computers/primary/active',
+    candidate_source_ref: 'refs/computers/primary/candidates/candidate-stale-read-preserved',
+    foreground_tail_merge_result: 'pending-recipient-review',
+    merge_strategy: 'rebase',
+    merge_conflicts_json: [],
+    verifier_results_json: [],
+    rollback_profile_json: {},
+  };
+
+  await page.route('**/api/app-change-packages**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/app-change-packages/pull' && route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          package_id: adoption.package_id,
+          app_id: adoption.app_id,
+          visibility: 'unlisted',
+          source_computer_id: 'primary',
+        }),
+      });
+      return;
+    }
+    if (url.pathname === '/api/app-change-packages' && route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected package route' }) });
+  });
+  await page.route('**/api/adoptions**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/adoptions' && route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected adoption route' }) });
+  });
+  await page.route('**/api/computers/primary/source-lineage**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        owner_id: 'test-owner',
+        computer_id: 'primary',
+        computer_kind: 'primary',
+        active_source_ref: 'refs/computers/primary/active',
+        route_profile: 'route:primary',
+      }),
+    });
+  });
+  await page.route('**/api/computers/primary/adoptions**', async (route) => {
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(adoption) });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  await store.locator('[data-change-card][data-change-id="chiron-shelf"]').click();
+  await store.locator('[data-change-try]').click();
+
+  await expect(store.locator('[data-change-preview-iframe]')).toHaveAttribute(
+    'src',
+    /desktop_id=candidate-stale-read-preserved/,
+    { timeout: 10_000 }
+  );
+  await expect(store.locator('[data-change-verify]')).toBeEnabled();
+  await expect(store.locator('[data-review-adoption-id="adoption-stale-read-preserved"]')).toBeVisible();
+});
+
 test('Web Lens API calls preserve candidate desktop selector', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const capabilityRequests = [];

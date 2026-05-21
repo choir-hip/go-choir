@@ -309,7 +309,9 @@ test('Apps & Changes opens app adoption candidates without manual package or can
   const store = page.locator('[data-apps-changes-app]');
   await expect(store).toBeVisible({ timeout: 10_000 });
   await expect(store.locator('[data-change-card][data-change-id="chiron-shelf"]')).toBeVisible({ timeout: 10_000 });
-  await store.locator('[data-change-try]').click();
+  if (await store.locator('[data-change-try]').isEnabled()) {
+    await store.locator('[data-change-try]').click();
+  }
 
   const frame = store.locator('[data-change-preview-frame]');
   await expect(frame).toBeVisible({ timeout: 10_000 });

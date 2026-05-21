@@ -72,8 +72,12 @@
   let removeLiveListener = () => {};
 
   $: selectedChange = SEED_CHANGES.find((change) => change.id === selectedChangeId) || SEED_CHANGES[0];
-  $: selectedPackage = packageForChange(selectedChange);
-  $: selectedAdoption = latestAdoptionForPackage(selectedChange?.packageId);
+  $: selectedPackage = selectedChange?.packageId
+    ? packages.find((pkg) => pkg.package_id === selectedChange.packageId) || null
+    : null;
+  $: selectedAdoption = selectedChange?.packageId
+    ? adoptions.find((adoption) => adoption.package_id === selectedChange.packageId) || null
+    : null;
   $: selectedPreviewId = previewCandidateId || selectedAdoption?.target_candidate_id || '';
   $: installedAdoptions = adoptions.filter((adoption) => adoption.status === 'adopted');
   $: reviewAdoptions = adoptions.filter((adoption) => adoption.status !== 'adopted');
@@ -144,7 +148,18 @@
     return body;
   }
 
-  async function refreshCatalog() {
+  function mergePreservedAdoptions(nextAdoptions, preservedAdoptions = []) {
+    const merged = Array.isArray(nextAdoptions) ? [...nextAdoptions] : [];
+    for (const adoption of preservedAdoptions) {
+      if (!adoption?.adoption_id) continue;
+      if (!merged.some((item) => item.adoption_id === adoption.adoption_id)) {
+        merged.unshift(adoption);
+      }
+    }
+    return merged;
+  }
+
+  async function refreshCatalog(preservedAdoptions = []) {
     loading = true;
     error = '';
     try {
@@ -153,7 +168,8 @@
         fetchJSON('/api/adoptions?limit=100', { method: 'GET' }),
       ]);
       packages = Array.isArray(packageBody?.packages) ? packageBody.packages : [];
-      adoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
+      const nextAdoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
+      adoptions = mergePreservedAdoptions(nextAdoptions, preservedAdoptions);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -217,7 +233,7 @@
       adoptions = [adoption, ...adoptions.filter((item) => item.adoption_id !== adoption.adoption_id)];
       previewCandidateId = adoption.target_candidate_id || targetCandidateId;
       actionStatus = `Candidate preview is ready from ${shortRef(lineage.active_source_ref)}`;
-      await refreshCatalog();
+      await refreshCatalog([adoption]);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
