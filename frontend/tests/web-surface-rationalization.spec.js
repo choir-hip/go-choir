@@ -28,10 +28,194 @@ test('Apps & Changes replaces manual candidate desktop entry points', async ({ d
   const store = page.locator('[data-apps-changes-app]');
   await expect(store).toBeVisible({ timeout: 10_000 });
   await expect(store.locator('[data-change-card]')).toHaveCount(4);
-  await expect(store.locator('[data-change-evidence]')).toContainText('VText report pending');
+  await expect(store.locator('[data-change-open-vtext-report]')).toBeVisible();
+  await expect(store.locator('[data-open-mission-vtext]')).toBeVisible();
   await expect(store.locator('[data-change-preview-empty]')).toBeVisible();
   await expect(store.locator('[data-candidate-desktop-input]')).toHaveCount(0);
   expect(forbiddenRemoteDisplayRequests).toEqual([]);
+});
+
+test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const docs = new Map();
+  const revisions = new Map();
+  const reportContents = new Map();
+  const now = '2026-05-21T00:00:00.000Z';
+
+  function docIdForTitle(title) {
+    return `doc-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
+  }
+
+  function createMockDocument(title) {
+    const doc = {
+      doc_id: docIdForTitle(title),
+      owner_id: 'test-owner',
+      title,
+      current_revision_id: '',
+      created_at: now,
+      updated_at: now,
+      revision_count: 0,
+    };
+    docs.set(doc.doc_id, doc);
+    return doc;
+  }
+
+  function revisionBody(revision) {
+    return {
+      revision_id: revision.revision_id,
+      doc_id: revision.doc_id,
+      owner_id: 'test-owner',
+      author_kind: 'user',
+      author_label: 'Apps & Changes',
+      content: revision.content,
+      citations: [],
+      metadata: revision.metadata || {},
+      parent_revision_id: revision.parent_revision_id || '',
+      created_at: now,
+    };
+  }
+
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+  });
+  await page.route('**/api/vtext/**', async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+
+    if (url.pathname === '/api/vtext/documents' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ documents: Array.from(docs.values()) }),
+      });
+      return;
+    }
+    if (url.pathname === '/api/vtext/documents' && method === 'POST') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      const doc = createMockDocument(body.title || 'Untitled VText');
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(doc) });
+      return;
+    }
+    const documentRevisionMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/revisions$/);
+    if (documentRevisionMatch && method === 'POST') {
+      const docId = decodeURIComponent(documentRevisionMatch[1]);
+      const doc = docs.get(docId);
+      if (!doc) {
+        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unknown doc' }) });
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || '{}');
+      const revision = {
+        revision_id: `rev-${docId}-${doc.revision_count + 1}`,
+        doc_id: docId,
+        content: body.content || '',
+        metadata: body.metadata || {},
+        parent_revision_id: body.parent_revision_id || '',
+      };
+      revisions.set(revision.revision_id, revision);
+      reportContents.set(doc.title, revision.content);
+      doc.current_revision_id = revision.revision_id;
+      doc.revision_count += 1;
+      doc.updated_at = now;
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(revisionBody(revision)),
+      });
+      return;
+    }
+    const documentMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)$/);
+    if (documentMatch && method === 'GET') {
+      const doc = docs.get(decodeURIComponent(documentMatch[1]));
+      await route.fulfill({
+        status: doc ? 200 : 404,
+        contentType: 'application/json',
+        body: JSON.stringify(doc || { error: 'unknown doc' }),
+      });
+      return;
+    }
+    if (documentRevisionMatch && method === 'GET') {
+      const docId = decodeURIComponent(documentRevisionMatch[1]);
+      const docRevisions = Array.from(revisions.values()).filter((revision) => revision.doc_id === docId);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ revisions: docRevisions.map(revisionBody) }),
+      });
+      return;
+    }
+    const revisionMatch = url.pathname.match(/^\/api\/vtext\/revisions\/([^/]+)$/);
+    if (revisionMatch && method === 'GET') {
+      const revision = revisions.get(decodeURIComponent(revisionMatch[1]));
+      await route.fulfill({
+        status: revision ? 200 : 404,
+        contentType: 'application/json',
+        body: JSON.stringify(revision ? revisionBody(revision) : { error: 'unknown revision' }),
+      });
+      return;
+    }
+    const manifestMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/manifest$/);
+    if (manifestMatch && method === 'POST') {
+      const docId = decodeURIComponent(manifestMatch[1]);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ doc_id: docId, source_path: 'apps-changes-report.vtext' }),
+      });
+      return;
+    }
+    const streamMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/stream$/);
+    if (streamMatch) {
+      const docId = decodeURIComponent(streamMatch[1]);
+      const doc = docs.get(docId);
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: `data: ${JSON.stringify({ kind: 'snapshot', doc_id: docId, current_revision_id: doc?.current_revision_id || '' })}\n\n`,
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected vtext route' }) });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  await store.locator('[data-open-mission-vtext]').click();
+  await expect(store.locator('[data-apps-changes-report-status]')).toContainText('Mission VText dashboard ready', {
+    timeout: 10_000,
+  });
+
+  let vtext = page.locator('[data-vtext-editor]').last();
+  await expect(vtext).toBeVisible({ timeout: 10_000 });
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Apps & Changes Store Sweep v0', {
+    timeout: 20_000,
+  });
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Current Checkpoint', {
+    timeout: 20_000,
+  });
+  expect(reportContents.get('Apps & Changes Store Sweep v0')).toContain('Chiron proof');
+
+  await page.locator('[data-window-app-id="vtext"]').last().locator('[data-window-close]').click();
+  await store.locator('[data-change-card][data-change-id="chiron-shelf"]').click();
+  await store.locator('[data-change-open-vtext-report]').click();
+  await expect(store.locator('[data-apps-changes-report-status]')).toContainText('VText report ready', {
+    timeout: 10_000,
+  });
+
+  vtext = page.locator('[data-vtext-editor]').last();
+  await expect(vtext).toBeVisible({ timeout: 10_000 });
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Chiron Shelf Observability', {
+    timeout: 20_000,
+  });
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Technical Refs', {
+    timeout: 20_000,
+  });
+  expect(reportContents.get('Apps & Changes report: Chiron Shelf Observability')).toContain('Source acceptance');
+  expect(reportContents.get('Apps & Changes report: Chiron Shelf Observability')).toContain('Package: `28433c19-5d02-416f-9368-de56390e1927`');
 });
 
 test('Apps & Changes preserves a just-created adoption when the catalog read is stale', async ({ desktopSession }) => {

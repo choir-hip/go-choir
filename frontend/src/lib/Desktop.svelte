@@ -1133,11 +1133,13 @@
       return;
     }
     const detail = event.detail || {};
+    const docId = detail.docId || '';
     openApp('vtext', 'VText', '📝', {
       windowTitle: detail.title || 'Radio Brief',
+      docId,
       initialContent: detail.initialContent || '',
       seedPrompt: detail.seedPrompt || '',
-      createInitialVersion: true,
+      createInitialVersion: docId ? false : detail.createInitialVersion !== false,
       allowMultiple: true,
       sourceUrl: detail.sourceUrl || '',
       sourceContentId: detail.sourceContentId || '',
@@ -1441,7 +1443,11 @@
               </div>
             {:else if win.appId === 'apps-changes'}
               <div class="app-content apps-changes-content" data-apps-changes-window>
-                <AppsChangesApp appContext={win.appContext} on:authexpired={() => dispatch('authexpired')} />
+                <AppsChangesApp
+                  appContext={win.appContext}
+                  on:authexpired={() => dispatch('authexpired')}
+                  on:openvtext={handleOpenVTextFromContent}
+                />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>

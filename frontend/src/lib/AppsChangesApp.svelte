@@ -3,6 +3,13 @@
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import ChangePreviewFrame from './ChangePreviewFrame.svelte';
+  import {
+    createDocument,
+    createRevision,
+    ensureDocumentManifest,
+    getRevision,
+    listDocuments,
+  } from './vtext.js';
 
   export let appContext = {};
 
@@ -21,6 +28,12 @@
       summary: 'Streams tool calls and interim agent progress through the Shelf without blocking Desk controls.',
       proof: 'First end-to-end payload for Apps & Changes install, rollback, and review evidence.',
       evidence: ['Wave 1 trace clip', 'Shelf interaction screenshots', 'Run acceptance refs'],
+      sourceVTextDocId: '1d74a744-23be-4c07-8357-54beea5010ab',
+      sourceVTextRevisionId: '08456a8d-9ca3-48b8-bd9d-7f98c4d1cdfc',
+      sourceAcceptance: 'runacc-a352091712fdd96aa00d',
+      recipientAcceptance: 'runacc-c3d70f753b81fd591442',
+      recommendation: 'iterate; first product payload proved recipient build/adoption/rollback through Apps & Changes.',
+      benchmarkStatus: 'Product-path recipient runtime/UI build measured during Chiron proof; richer Shelf usability benchmark remains a follow-up.',
     },
     {
       id: 'motion-language',
@@ -33,6 +46,12 @@
       summary: 'Adds expressive loading and process motion patterns for agent work without hiding state.',
       proof: 'Requires Playwright video evidence before promotion recommendation.',
       evidence: ['Wave 1 source desktop screenshot', 'Trace-derived video clip'],
+      sourceVTextDocId: '1d74a744-23be-4c07-8357-54beea5010ab',
+      sourceVTextRevisionId: '08456a8d-9ca3-48b8-bd9d-7f98c4d1cdfc',
+      sourceAcceptance: 'runacc-5784f0028b01753ad0ca',
+      recipientAcceptance: 'runacc-3b54c9ae8dac2337184a',
+      recommendation: 'iterate; package is owner-pullable, but motion taste and video review still need hands-on QA.',
+      benchmarkStatus: 'Package/adoption proof exists; Playwright video review still needs a focused measurement pass.',
     },
     {
       id: 'liquid-material',
@@ -45,6 +64,12 @@
       summary: 'Explores bounded liquid glass materials with explicit privacy and resource constraints.',
       proof: 'Needs real GPU/resource benchmark before any platform recommendation.',
       evidence: ['Wave 2 source desktop screenshot', 'Liquid resource benchmark pending'],
+      sourceVTextDocId: '12bf4059-5036-47fd-9209-053729d80055',
+      sourceVTextRevisionId: 'c5b9ed96-83e6-4d01-acd0-763917d35e2a',
+      sourceAcceptance: 'runacc-0194bfce2cdecffea784',
+      recipientAcceptance: 'runacc-d144087c5ffacad2e147',
+      recommendation: 'benchmark before promotion; resource/privacy cost is the main risk.',
+      benchmarkStatus: 'Benchmark incomplete: mobile Safari/WebKit support, frame time, and resource-pressure numbers are still required.',
     },
     {
       id: 'python-code-mode',
@@ -57,8 +82,16 @@
       summary: 'Tests replacing bash-style coding loops with a Python-oriented mode for code work.',
       proof: 'Needs token and latency A/B against the current bash tool path.',
       evidence: ['Wave 2 source desktop screenshot', 'Python mode benchmark pending'],
+      sourceVTextDocId: '12bf4059-5036-47fd-9209-053729d80055',
+      sourceVTextRevisionId: 'c5b9ed96-83e6-4d01-acd0-763917d35e2a',
+      sourceAcceptance: 'runacc-a7e993d7c4f56d4420d9',
+      recipientAcceptance: 'runacc-45495b8caebc3e1b82c5',
+      recommendation: 'benchmark before promotion; the mode should replace a profile family, not sit beside bash.',
+      benchmarkStatus: 'Benchmark incomplete: matched bash-vs-Python token/time/tool-loop task set is still required.',
     },
   ];
+  const MISSION_DASHBOARD_TITLE = 'Apps & Changes Store Sweep v0';
+  const PROOF_EVIDENCE_DIR = 'test-results/apps-changes-store-staging-2026-05-21T00-16-29-145Z';
 
   let selectedChangeId = appContext?.changeId || SEED_CHANGES[0].id;
   let packages = [];
@@ -68,6 +101,9 @@
   let actionError = '';
   let actionStatus = '';
   let acting = '';
+  let reportAction = '';
+  let reportError = '';
+  let reportStatus = '';
   let previewCandidateId = '';
   let removeLiveListener = () => {};
 
@@ -137,6 +173,204 @@
       return `${prefix}-${safeID(change?.id)}-${globalThis.crypto.randomUUID()}`;
     }
     return `${prefix}-${safeID(change?.id)}-${Date.now()}`;
+  }
+
+  function reportKey(kind, id = 'mission') {
+    return `report:${kind}:${id}`;
+  }
+
+  function reportTitle(change) {
+    return `Apps & Changes report: ${change.name}`;
+  }
+
+  function artifactLine(label, value) {
+    return value ? `- ${label}: \`${value}\`` : '';
+  }
+
+  function adoptionDigestSection(adoption) {
+    if (!adoption) {
+      return [
+        '## Recipient Adoption',
+        '',
+        'No recipient adoption has been created in this computer yet.',
+      ].join('\n');
+    }
+    return [
+      '## Recipient Adoption',
+      '',
+      artifactLine('Adoption', adoption.adoption_id),
+      artifactLine('Status', adoption.status),
+      artifactLine('Candidate', adoption.target_candidate_id),
+      artifactLine('Runtime digest', adoption.runtime_artifact_digest),
+      artifactLine('UI digest', adoption.ui_artifact_digest),
+      artifactLine('Rollback profile', adoption.rollback_profile_json ? 'recorded' : 'pending'),
+      artifactLine('Trace', adoption.trace_id),
+    ].filter(Boolean).join('\n');
+  }
+
+  function buildMissionDashboardContent() {
+    const lines = [
+      '# Apps & Changes Store Sweep v0',
+      '',
+      'This VText is the owner-readable dashboard for the Apps & Changes Store Sweep.',
+      '',
+      '## Current Checkpoint',
+      '',
+      '- Status: `checkpoint_incomplete`',
+      '- Store substrate: deployed and product-path verified.',
+      '- Candidate Desktop: removed from ordinary launcher UI.',
+      '- Chiron proof: Try -> Verify -> Install -> Rollback passed on staging.',
+      '- Remaining work: per-change report polish, Liquid/Python benchmarks, Trace/run-acceptance synthesis, and honest disable/uninstall semantics beyond rollback.',
+      '',
+      '## Seed Changes',
+      '',
+      ...SEED_CHANGES.flatMap((change) => [
+        `### ${change.name}`,
+        '',
+        `- Family: ${change.family}`,
+        `- Product status: ${statusLabel(change)}`,
+        `- Source acceptance: \`${change.sourceAcceptance}\``,
+        `- Recipient acceptance: \`${change.recipientAcceptance}\``,
+        `- Benchmark status: ${change.benchmarkStatus}`,
+        `- Recommendation: ${change.recommendation}`,
+        '',
+      ]),
+      '## Latest Deployed Chiron Evidence',
+      '',
+      `- Proof bundle: \`${PROOF_EVIDENCE_DIR}/apps-changes-staging-proof.json\``,
+      `- Desktop screenshot: \`${PROOF_EVIDENCE_DIR}/desktop-apps-changes-open.png\``,
+      `- Mobile screenshot: \`${PROOF_EVIDENCE_DIR}/mobile-apps-changes-open-390x844.png\``,
+      `- Chiron rollback screenshot: \`${PROOF_EVIDENCE_DIR}/desktop-chiron-after-rollback.png\``,
+      `- Playwright video: \`${PROOF_EVIDENCE_DIR}/page@77114092c565b67b41926d6d58479761.webm\``,
+    ];
+    return lines.join('\n');
+  }
+
+  function buildChangeReportContent(change, adoption) {
+    return [
+      `# ${change.name}`,
+      '',
+      change.summary,
+      '',
+      '## Recommendation',
+      '',
+      change.recommendation,
+      '',
+      '## Evidence',
+      '',
+      ...change.evidence.map((item) => `- ${item}`),
+      `- Source acceptance: \`${change.sourceAcceptance}\``,
+      `- Recipient acceptance: \`${change.recipientAcceptance}\``,
+      `- Source VText doc: \`${change.sourceVTextDocId}\``,
+      `- Source VText revision: \`${change.sourceVTextRevisionId}\``,
+      '',
+      '## Benchmark Status',
+      '',
+      change.benchmarkStatus,
+      '',
+      adoptionDigestSection(adoption),
+      '',
+      '## Technical Refs',
+      '',
+      `- Package: \`${change.packageId}\``,
+      `- Source owner: \`${change.sourceOwnerId}\``,
+      `- Source computer: \`${change.sourceComputerId}\``,
+      `- Pulled manifest hash: \`${packageForChange(change)?.package_manifest_sha256 || 'not pulled in this computer yet'}\``,
+      '',
+      '## Review Notes',
+      '',
+      'This report is generated through the product VText API from Apps & Changes. Images and video are linked as artifact paths because embedded media in VText reports is still a product gap.',
+    ].join('\n');
+  }
+
+  async function ensureReportDocument(title, content, metadata = {}) {
+    const listBody = await listDocuments();
+    const docs = Array.isArray(listBody?.documents) ? listBody.documents : [];
+    let doc = docs.find((item) => item.title === title) || null;
+    if (!doc) {
+      doc = await createDocument(title);
+    }
+
+    let parentRevisionId = doc.current_revision_id || '';
+    let shouldWriteRevision = true;
+    if (parentRevisionId) {
+      try {
+        const current = await getRevision(parentRevisionId);
+        shouldWriteRevision = current?.content !== content;
+      } catch {
+        shouldWriteRevision = true;
+      }
+    }
+
+    if (shouldWriteRevision) {
+      const revision = await createRevision(doc.doc_id, {
+        content,
+        authorKind: 'user',
+        authorLabel: 'Apps & Changes',
+        metadata: {
+          created_from: 'apps_changes_report',
+          report_version: 'v0',
+          ...metadata,
+        },
+        parentRevisionId,
+      });
+      parentRevisionId = revision.revision_id;
+    }
+
+    try {
+      await ensureDocumentManifest(doc.doc_id);
+    } catch {
+      // Reports remain durable VTexts even if optional file manifestation fails.
+    }
+
+    return { ...doc, current_revision_id: parentRevisionId };
+  }
+
+  async function openMissionDashboard() {
+    reportError = '';
+    reportStatus = 'Preparing mission VText dashboard';
+    reportAction = reportKey('dashboard');
+    try {
+      const doc = await ensureReportDocument(MISSION_DASHBOARD_TITLE, buildMissionDashboardContent(), {
+        report_kind: 'mission_dashboard',
+      });
+      reportStatus = 'Mission VText dashboard ready';
+      dispatch('openvtext', { docId: doc.doc_id, title: MISSION_DASHBOARD_TITLE });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      reportError = err.message || 'Could not create mission VText dashboard';
+    } finally {
+      reportAction = '';
+    }
+  }
+
+  async function openChangeReport(change) {
+    if (!change) return;
+    reportError = '';
+    reportStatus = `Preparing VText report for ${change.name}`;
+    reportAction = reportKey('change', change.id);
+    try {
+      const adoption = latestAdoptionForPackage(change.packageId);
+      const title = reportTitle(change);
+      const doc = await ensureReportDocument(title, buildChangeReportContent(change, adoption), {
+        report_kind: 'change_report',
+        change_id: change.id,
+        package_id: change.packageId,
+      });
+      reportStatus = `VText report ready for ${change.name}`;
+      dispatch('openvtext', { docId: doc.doc_id, title });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      reportError = err.message || 'Could not create VText report';
+    } finally {
+      reportAction = '';
+    }
   }
 
   async function fetchJSON(path, options = {}) {
@@ -314,9 +548,19 @@
       <h2>Pull useful changes into this computer</h2>
       <p>Review source-level changes, try them in a candidate, then install only after recipient build verification.</p>
     </div>
-    <div class="hero-meter" data-apps-changes-count>
-      <strong>{SEED_CHANGES.length}</strong>
-      <span>reviewable changes</span>
+    <div class="hero-side">
+      <button
+        class="dashboard-action"
+        data-open-mission-vtext
+        disabled={!!reportAction}
+        on:click={openMissionDashboard}
+      >
+        {reportAction === reportKey('dashboard') ? 'Preparing…' : 'Mission VText'}
+      </button>
+      <div class="hero-meter" data-apps-changes-count>
+        <strong>{SEED_CHANGES.length}</strong>
+        <span>reviewable changes</span>
+      </div>
     </div>
   </header>
 
@@ -324,8 +568,12 @@
     <div class="state-banner error" data-apps-changes-error role="alert">{error}</div>
   {:else if actionError}
     <div class="state-banner error" data-apps-changes-action-error role="alert">{actionError}</div>
+  {:else if reportError}
+    <div class="state-banner error" data-apps-changes-report-error role="alert">{reportError}</div>
   {:else if actionStatus}
     <div class="state-banner" data-apps-changes-action-status>{actionStatus}</div>
+  {:else if reportStatus}
+    <div class="state-banner" data-apps-changes-report-status>{reportStatus}</div>
   {/if}
 
   <div class="store-layout">
@@ -386,7 +634,19 @@
           {#each selectedChange.evidence as item}
             <span>{item}</span>
           {/each}
-          <span>VText report pending</span>
+          <span>VText report</span>
+        </div>
+
+        <div class="report-actions" data-change-report-actions>
+          <button
+            class="report-action"
+            data-change-open-vtext-report
+            on:click={() => openChangeReport(selectedChange)}
+            disabled={!!reportAction}
+          >
+            {reportAction === reportKey('change', selectedChange.id) ? 'Preparing report…' : 'Open VText report'}
+          </button>
+          <span>{selectedChange.benchmarkStatus}</span>
         </div>
 
         <div class="change-actions" data-change-actions>
@@ -513,6 +773,12 @@
     gap: 18px;
     padding: 18px 20px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .hero-side {
+    display: grid;
+    justify-items: end;
+    gap: 10px;
   }
 
   .eyebrow {
@@ -719,6 +985,16 @@
     font-size: 0.78rem;
   }
 
+  .report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    color: #9fb1c9;
+    font-size: 0.86rem;
+  }
+
   .change-actions {
     display: flex;
     flex-wrap: wrap;
@@ -733,7 +1009,9 @@
   .primary-action,
   .secondary-action,
   .install-action,
-  .danger-action {
+  .danger-action,
+  .dashboard-action,
+  .report-action {
     min-height: 40px;
     padding: 0 13px;
     border: 1px solid rgba(96, 165, 250, 0.28);
@@ -741,6 +1019,12 @@
     color: #e0f2fe;
     background: rgba(30, 64, 175, 0.34);
     cursor: pointer;
+  }
+
+  .dashboard-action,
+  .report-action {
+    border-color: rgba(34, 211, 238, 0.3);
+    background: rgba(8, 47, 73, 0.52);
   }
 
   .install-action {
@@ -859,6 +1143,10 @@
 
     .hero-meter {
       display: none;
+    }
+
+    .hero-side {
+      justify-items: start;
     }
   }
 </style>
