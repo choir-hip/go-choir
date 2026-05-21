@@ -2,8 +2,8 @@
 
 **Status:** canonical platform-level state ledger
 **Last updated:** 2026-05-21
-**Baseline checked:** Apps & Changes trace/run-acceptance surfacing checkpoint
-`9bb9446b55588beabb63a750f8d25e93a692e074`
+**Baseline checked:** Apps & Changes portfolio aggregation checkpoint
+`22410dafff91cdc4edcddfa65ffa609c2973e928`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -143,7 +143,7 @@ Known gaps:
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Apps & Changes owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. All four alternate-computer experiments now have product-openable VText reports with screenshot/video/benchmark artifact links; Liquid and Python benchmark artifacts are linked from those reports. The selected Change now exposes an honest removal/recovery model: Chiron is rollback-only, Uninstall is disabled without a verified inverse source patch, Disable is disabled without a declared feature flag/capability toggle, and empty rollback-profile JSON is not accepted as evidence. Chiron has accepted promotion-level run acceptance from product adoption evidence, and the owner-facing Chiron detail can surface that Trace/run-acceptance evidence and open Trace focused to the relevant trajectory. | Needs all-four portfolio acceptance/report aggregation, actual source-level uninstall and feature-disable semantics beyond rollback-only labeling, inline media embedding in VText, run-acceptance rollback-ref synthesis, continuation-level evidence, and owner-review visual polish. |
+| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. All four alternate-computer experiments now have product-openable VText reports with screenshot/video/benchmark artifact links; Liquid and Python benchmark artifacts are linked from those reports. The selected Change now exposes an honest removal/recovery model: Chiron is rollback-only, Uninstall is disabled without a verified inverse source patch, Disable is disabled without a declared feature flag/capability toggle, and empty rollback-profile JSON is not accepted as evidence. Chiron has accepted promotion-level run acceptance from product adoption evidence, and the owner-facing Chiron detail can surface that Trace/run-acceptance evidence and open Trace focused to the relevant trajectory. The portfolio review panel aggregates all four experiment Changes with report/benchmark coverage, shows Chiron's accepted promotion-level row, and run-acceptance synthesis now carries adoption rollback refs into the accepted record. | Needs actual source-level uninstall and feature-disable semantics beyond rollback-only labeling, inline media embedding in VText, continuation-level evidence, a loaded accepted-record path for non-Chiron source experiments inside the recipient computer, and owner-review visual polish. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
@@ -196,21 +196,24 @@ evidence:
   `efeb5d8fc926099ddbebf731d916f6dd83b54245`, and
   `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`, and
   `a6767cf1436d18d2f144faad4ccb300ec8707b21`, and
-  `9bb9446b55588beabb63a750f8d25e93a692e074`;
+  `9bb9446b55588beabb63a750f8d25e93a692e074`, and
+  `22410dafff91cdc4edcddfa65ffa609c2973e928`;
 - CI/deploy runs:
   `https://github.com/yusefmosiah/go-choir/actions/runs/26198364649`,
   `https://github.com/yusefmosiah/go-choir/actions/runs/26199378174`,
   `https://github.com/yusefmosiah/go-choir/actions/runs/26199796372`, and
   `https://github.com/yusefmosiah/go-choir/actions/runs/26200571636`, and
-  `https://github.com/yusefmosiah/go-choir/actions/runs/26202379885`;
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26202379885`, and
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26204257440`;
 - staging health reported proxy and sandbox commit
-  `9bb9446b55588beabb63a750f8d25e93a692e074`;
+  `22410dafff91cdc4edcddfa65ffa609c2973e928`;
 - deployed product proof artifacts:
   `test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/apps-changes-vtext-report-proof.json`;
   `test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json`;
   `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-model-proof.json`;
   `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-run-acceptance-proof.json`;
   `test-results/apps-changes-trace-surfacing-staging-2026-05-21T02-58-41-000Z/apps-changes-trace-surfacing-proof.json`;
+  `test-results/apps-changes-portfolio-aggregation-staging-2026-05-21T03-55-47-000Z/apps-changes-portfolio-aggregation-proof.json`;
 - proof covered Apps & Changes opening from the Desk on desktop and `390x844`
   mobile, four ordinary Change cards without package ids, collapsed Technical
   refs, mission VText dashboard creation/opening, and Chiron per-change VText
@@ -259,6 +262,29 @@ evidence:
   `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`,
   base source SHA `575ff3014a85524da4233e60ce44345804d46807`,
   and head source SHA `5f46838346e861a2e3f0265f380f5f8a60ff8437`.
+- latest portfolio aggregation proof covered Apps & Changes on desktop and
+  `390x844` mobile after a fresh product-path Chiron pull -> adoption ->
+  recipient build -> promote flow. It recorded account
+  `apps-changes-portfolio-portfolio-aggregation-mpezvpo8@example.com`,
+  adoption `adoption-chiron-portfolio-portfolio-aggregation-mpezvpo8`,
+  candidate `candidate-chiron-portfolio-portfolio-aggregation-mpezvpo8`,
+  trajectory `apps-changes-chiron-shelf-portfolio-aggregation-mpezvpo8`,
+  and accepted `promotion-level` run acceptance
+  `runacc-fa74b7932d330ba7f04d` with rollback ref
+  `refs/computers/primary/active`.
+- that proof recorded a real recipient build with runtime digest
+  `sha256:28353f90b25e4c9092180f24e080aa8d55dc87beae8740811a5ecf944284300d`,
+  UI digest
+  `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`,
+  base source SHA `575ff3014a85524da4233e60ce44345804d46807`,
+  head source SHA `90db78e095f9487c4ebb1efe73580a3e8b4c5edc`,
+  runtime build duration `5m22.71091975s`, and UI build duration
+  `7.927733702s`.
+- that proof captured `desktop-apps-changes-portfolio.png`,
+  `desktop-portfolio-vtext.png`, `desktop-trace-from-portfolio.png`, and
+  `mobile-390x844-apps-changes-portfolio.png`, with DOM metrics showing four
+  portfolio Changes, four reports, four benchmark/media links, one accepted
+  record, and no visible Chiron package id in ordinary portfolio UI.
 
 Computer recovery and Compute Monitor proof follows the deployed desktop
 restore recovery baseline:
@@ -392,3 +418,5 @@ The highest-gradient UX gaps are:
 7. Shelf/Desk/Desktop Overview behavior needs richer mobile desktop proof,
    live thumbnails, and configurable Shelf placement.
 8. Candidate/promotion surfaces should become contextual product surfaces.
+9. Apps & Changes needs honest source-level uninstall/disable capability
+   records and non-Chiron accepted-record loading across source computers.
