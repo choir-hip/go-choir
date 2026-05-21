@@ -13,6 +13,7 @@
   const dispatch = createEventDispatcher();
 
   export let authenticated = false;
+  export let appContext = {};
 
   let loadingIndex = true;
   let snapshotLoading = false;
@@ -20,7 +21,7 @@
   let error = '';
   let trajectories = [];
   let snapshot = null;
-  let selectedTrajectoryId = '';
+  let selectedTrajectoryId = appContext?.trajectoryId || appContext?.traceId || '';
   let selectedAgentId = '';
   let selectedMomentId = '';
   let momentDetails = {};
@@ -31,8 +32,9 @@
   let continuationBusy = false;
   let continuationError = '';
   let selectedContinuation = null;
-  let selectedAcceptanceId = '';
+  let selectedAcceptanceId = appContext?.acceptanceId || '';
   let mobilePanel = 'summary';
+  let lastAppContextTarget = '';
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -390,6 +392,24 @@
     await loadTrajectorySnapshot(trajectoryId);
   }
 
+  async function selectAppContextTrajectory() {
+    if (!authenticated) return;
+    const trajectoryId = appContext?.trajectoryId || appContext?.traceId || '';
+    const acceptanceId = appContext?.acceptanceId || '';
+    const targetKey = `${trajectoryId}:${acceptanceId}`;
+    if (!trajectoryId || targetKey === lastAppContextTarget) return;
+    lastAppContextTarget = targetKey;
+    selectedTrajectoryId = trajectoryId;
+    selectedAcceptanceId = acceptanceId;
+    selectedAgentId = '';
+    selectedMomentId = '';
+    momentDetails = {};
+    selectedContinuation = null;
+    continuationError = '';
+    mobilePanel = 'summary';
+    await loadTrajectorySnapshot(trajectoryId);
+  }
+
   async function selectMoment(momentId) {
     if (!authenticated) return;
     if (!momentId) return;
@@ -477,6 +497,10 @@
 
   $: if (authenticated && streamStatus === 'guest') {
     loadTrajectoryIndex();
+  }
+
+  $: if (authenticated && (appContext?.trajectoryId || appContext?.traceId)) {
+    selectAppContextTrajectory();
   }
 
   $: if (!authenticated && streamStatus !== 'guest') {

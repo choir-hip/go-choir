@@ -117,10 +117,12 @@
   let selectedChangeId = appContext?.changeId || SEED_CHANGES[0].id;
   let packages = [];
   let adoptions = [];
+  let runAcceptances = [];
   let loading = true;
   let error = '';
   let actionError = '';
   let actionStatus = '';
+  let acceptanceStatus = '';
   let acting = '';
   let reportAction = '';
   let reportError = '';
@@ -137,6 +139,7 @@
     : null;
   $: selectedPreviewId = previewCandidateId || selectedAdoption?.target_candidate_id || '';
   $: selectedRemoval = removalProfile(selectedAdoption);
+  $: selectedAcceptance = runAcceptances && latestAcceptanceForTrace(selectedAdoption?.trace_id);
   $: installedAdoptions = adoptions.filter((adoption) => adoption.status === 'adopted');
   $: reviewAdoptions = adoptions.filter((adoption) => adoption.status !== 'adopted');
 
@@ -148,6 +151,11 @@
   function latestAdoptionForPackage(packageId) {
     if (!packageId) return null;
     return adoptions.find((adoption) => adoption.package_id === packageId) || null;
+  }
+
+  function latestAcceptanceForTrace(traceId) {
+    if (!traceId) return null;
+    return runAcceptances.find((acceptance) => acceptance.trajectory_id === traceId) || null;
   }
 
   function shortRef(value) {
@@ -289,6 +297,35 @@
     ].filter(Boolean).join('\n');
   }
 
+  function acceptanceDigestSection(adoption) {
+    if (!adoption?.trace_id) {
+      return [
+        '## Trace & Run Acceptance',
+        '',
+        'No Trace trajectory is attached to this recipient adoption yet.',
+      ].join('\n');
+    }
+    const acceptance = latestAcceptanceForTrace(adoption.trace_id);
+    if (!acceptance) {
+      return [
+        '## Trace & Run Acceptance',
+        '',
+        artifactLine('Trace', adoption.trace_id),
+        'No run acceptance record has been synthesized for this Trace yet.',
+      ].filter(Boolean).join('\n');
+    }
+    return [
+      '## Trace & Run Acceptance',
+      '',
+      artifactLine('Trace', adoption.trace_id),
+      artifactLine('Acceptance', acceptance.acceptance_id),
+      artifactLine('Level', acceptance.acceptance_level),
+      artifactLine('State', acceptance.state),
+      artifactLine('Evidence refs', String(acceptance.evidence_refs?.length || 0)),
+      artifactLine('Rollback refs', String(acceptance.rollback_refs?.length || 0)),
+    ].filter(Boolean).join('\n');
+  }
+
   function buildMissionDashboardContent() {
     const lines = [
       '# Apps & Changes Store Sweep v0',
@@ -302,7 +339,8 @@
       '- Candidate Desktop: removed from ordinary launcher UI.',
       '- Chiron proof: Try -> Verify -> Install -> Rollback passed on staging.',
       '- Removal model: rollback-only is exposed honestly for packages without a verified inverse uninstall or disable flag.',
-      '- Remaining work: Trace/run-acceptance synthesis, report media embedding, source-level uninstall/feature-flag disable implementations, and hands-on owner QA.',
+      '- Run acceptance: Chiron has product-path promotion-level acceptance; Apps & Changes surfaces acceptance summaries from the Change detail.',
+      '- Remaining work: Trace deep-link polish, report media embedding, source-level uninstall/feature-flag disable implementations, and hands-on owner QA.',
       '',
       '## Seed Changes',
       '',
@@ -352,6 +390,8 @@
       change.benchmarkStatus,
       '',
       adoptionDigestSection(adoption),
+      '',
+      acceptanceDigestSection(adoption),
       '',
       '## Technical Refs',
       '',
@@ -465,6 +505,21 @@
     return body;
   }
 
+  async function loadRunAcceptances() {
+    acceptanceStatus = '';
+    try {
+      const body = await fetchJSON('/api/run-acceptances?limit=100', { method: 'GET' });
+      runAcceptances = Array.isArray(body?.acceptances) ? body.acceptances : [];
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      runAcceptances = [];
+      acceptanceStatus = err.message || 'Run acceptance evidence is unavailable';
+    }
+  }
+
   function mergePreservedAdoptions(nextAdoptions, preservedAdoptions = []) {
     const merged = Array.isArray(nextAdoptions) ? [...nextAdoptions] : [];
     for (const adoption of preservedAdoptions) {
@@ -487,6 +542,7 @@
       packages = Array.isArray(packageBody?.packages) ? packageBody.packages : [];
       const nextAdoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
       adoptions = mergePreservedAdoptions(nextAdoptions, preservedAdoptions);
+      await loadRunAcceptances();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -495,6 +551,7 @@
       error = err.message || 'Apps & Changes is unavailable';
       packages = [];
       adoptions = [];
+      runAcceptances = [];
     } finally {
       loading = false;
     }
@@ -601,6 +658,16 @@
     }
   }
 
+  function openTraceForAdoption(adoption, acceptance = null) {
+    if (!adoption?.trace_id) return;
+    dispatch('opentrace', {
+      trajectoryId: adoption.trace_id,
+      acceptanceId: acceptance?.acceptance_id || '',
+      title: `${selectedChange.name} Trace`,
+      toastMessage: `Opened Trace for ${selectedChange.name}`,
+    });
+  }
+
   onMount(() => {
     void refreshCatalog();
     removeLiveListener = addLiveEventListener((message) => {
@@ -612,7 +679,9 @@
         kind === 'app_adoption.verified' ||
         kind === 'app_adoption.blocked' ||
         kind === 'app_adoption.promoted' ||
-        kind === 'app_adoption.rolled_back'
+        kind === 'app_adoption.rolled_back' ||
+        kind === 'run_acceptance.synthesized' ||
+        kind === 'run_acceptance.accepted'
       ) {
         void refreshCatalog();
       }
@@ -785,6 +854,63 @@
             <strong>{rollbackProfileLabel(selectedAdoption)}</strong>
           </div>
         </div>
+
+        <section
+          class="trace-review-panel"
+          data-change-trace-review
+          data-change-trace-ready={selectedAcceptance ? 'accepted' : selectedAdoption?.trace_id ? 'trace-only' : 'none'}
+          data-change-trace-id={selectedAdoption?.trace_id || ''}
+          data-change-acceptance-id={selectedAcceptance?.acceptance_id || ''}
+          data-change-acceptance-count={runAcceptances.length}
+        >
+          <div class="section-heading">
+            <strong>Trace & acceptance</strong>
+            <span>{selectedAcceptance?.acceptance_level || (selectedAdoption?.trace_id ? 'trace linked' : 'not tried')}</span>
+          </div>
+          <div class="trace-review-grid">
+            <div>
+              <span>trajectory</span>
+              <strong>{selectedAdoption?.trace_id ? shortRef(selectedAdoption.trace_id) : 'not created'}</strong>
+            </div>
+            <div>
+              <span>acceptance</span>
+              <strong>{selectedAcceptance?.acceptance_level || 'not synthesized'}</strong>
+            </div>
+            <div>
+              <span>state</span>
+              <strong>{selectedAcceptance?.state || selectedAdoption?.status || 'available'}</strong>
+            </div>
+            <div>
+              <span>evidence</span>
+              <strong>{selectedAcceptance ? `${selectedAcceptance.evidence_refs?.length || 0} refs · ${selectedAcceptance.rollback_refs?.length || 0} rollback` : 'pending'}</strong>
+            </div>
+          </div>
+          {#if acceptanceStatus}
+            <p class="trace-review-note" data-change-acceptance-status>{acceptanceStatus}</p>
+          {:else if selectedAcceptance}
+            <p class="trace-review-note" data-change-acceptance-summary>
+              {selectedAcceptance.target_mission_id || selectedAcceptance.source_prompt_or_objective || selectedAcceptance.acceptance_id}
+            </p>
+          {:else if selectedAdoption?.trace_id}
+            <p class="trace-review-note" data-change-acceptance-summary>
+              Trace is linked, but no run-acceptance record is available for this trajectory yet.
+            </p>
+          {:else}
+            <p class="trace-review-note" data-change-acceptance-summary>
+              Try this Change before Trace and run-acceptance evidence can be opened.
+            </p>
+          {/if}
+          <div class="trace-review-actions">
+            <button
+              class="report-action"
+              data-change-open-trace
+              on:click={() => openTraceForAdoption(selectedAdoption, selectedAcceptance)}
+              disabled={!selectedAdoption?.trace_id}
+            >
+              Open Trace evidence
+            </button>
+          </div>
+        </section>
 
         <section class="removal-panel" data-change-removal-model data-removal-mode={selectedRemoval.mode}>
           <div class="section-heading">
@@ -1183,6 +1309,64 @@
     background: rgba(69, 26, 3, 0.18);
   }
 
+  .trace-review-panel {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: 8px;
+    background: rgba(8, 47, 73, 0.2);
+  }
+
+  .trace-review-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .trace-review-grid div {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(125, 211, 252, 0.14);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.44);
+  }
+
+  .trace-review-grid span,
+  .trace-review-grid strong {
+    display: block;
+  }
+
+  .trace-review-grid span {
+    color: #67e8f9;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .trace-review-grid strong {
+    margin-top: 5px;
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 0.86rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trace-review-note {
+    color: #bfdbfe;
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+
+  .trace-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .removal-status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1324,6 +1508,10 @@
 
     .removal-status-grid {
       grid-template-columns: 1fr;
+    }
+
+    .trace-review-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .hero-meter {

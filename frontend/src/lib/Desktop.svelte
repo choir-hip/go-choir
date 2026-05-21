@@ -1149,6 +1149,41 @@
     showToast(detail.toastMessage || 'Opened in VText');
   }
 
+  function handleOpenTraceFromContent(event) {
+    if (!authenticated) {
+      requestAuth({ kind: 'open_trace', title: event.detail?.title || 'Trace evidence' });
+      return;
+    }
+    if (!desktopReady) {
+      showToast('Desktop is still connecting');
+      return;
+    }
+
+    const detail = event.detail || {};
+    const appContext = {
+      windowTitle: detail.title || 'Trace',
+      trajectoryId: detail.trajectoryId || detail.traceId || '',
+      acceptanceId: detail.acceptanceId || '',
+    };
+    const existing = windowsSnapshot().find((win) =>
+      win.appId === 'trace' &&
+      win.mode !== 'closed' &&
+      win.mode !== 'hidden'
+    );
+    if (existing) {
+      updateWindowAppContext(existing.windowId, appContext, appContext.windowTitle);
+      if (existing.mode === 'minimized') {
+        restoreWindow(existing.windowId);
+      } else {
+        focusWindow(existing.windowId);
+      }
+    } else {
+      openApp('trace', 'Trace', getAppIcon('trace'), appContext);
+    }
+    showToast(detail.toastMessage || 'Opened Trace evidence');
+    scheduleSave();
+  }
+
   function handleIconPositionsChanged() {
     scheduleSave();
   }
@@ -1447,6 +1482,7 @@
                   appContext={win.appContext}
                   on:authexpired={() => dispatch('authexpired')}
                   on:openvtext={handleOpenVTextFromContent}
+                  on:opentrace={handleOpenTraceFromContent}
                 />
               </div>
             {:else if win.appId === 'terminal'}
@@ -1488,6 +1524,7 @@
               <div class="app-content trace-content" data-trace-window>
                 <TraceApp
                   {authenticated}
+                  appContext={win.appContext}
                   on:authexpired={() => dispatch('authexpired')}
                   on:authrequired={(event) => requestAuth(event.detail || {})}
                 />

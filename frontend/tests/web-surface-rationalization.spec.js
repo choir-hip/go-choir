@@ -76,10 +76,28 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
     runtime_artifact_digest: 'sha256:recipient-runtime',
     ui_artifact_digest: 'sha256:recipient-ui',
     verifier_results_json: [],
+    trace_id: 'apps-changes-chiron-shelf',
     rollback_profile_json: {
       previous_active_source_ref: 'refs/computers/primary/active',
       previous_route_profile: 'route:primary',
     },
+  };
+  const acceptance = {
+    acceptance_id: 'runacc-chiron-removal-test',
+    target_mission_id: 'mission-apps-and-changes-store-sweep-v0',
+    trajectory_id: adoption.trace_id,
+    state: 'accepted',
+    acceptance_level: 'promotion-level',
+    authority_profile: 'product-path',
+    evidence_refs: [
+      { ref_id: 'adoption-proof', kind: 'app_adoption', summary: 'recipient build and promote evidence' },
+    ],
+    rollback_refs: [
+      { kind: 'source_ref', ref: 'refs/computers/primary/active', summary: 'previous active ref' },
+    ],
+    checkpoints: [],
+    verifier_contracts: [],
+    invariant_checks: [],
   };
 
   await page.route('**/api/app-change-packages*', async (route) => {
@@ -87,6 +105,81 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
   });
   await page.route('**/api/adoptions*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [adoption] }) });
+  });
+  let acceptanceRouteHits = 0;
+  await page.route('**/api/run-acceptances**', async (route) => {
+    acceptanceRouteHits += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceptances: [acceptance] }) });
+  });
+  await page.route('**/api/trace/trajectories**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/trace/trajectories') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          trajectories: [{
+            trajectory_id: adoption.trace_id,
+            title: 'Apps & Changes Chiron Shelf',
+            subtitle: 'Product-path adoption evidence',
+            state: 'completed',
+            live: false,
+            agent_count: 1,
+            delegation_count: 0,
+            moment_count: 1,
+            message_count: 0,
+            finding_count: 0,
+            search_attempt_count: 0,
+            latest_activity_at: '2026-05-21T02:17:21.563Z',
+          }],
+        }),
+      });
+      return;
+    }
+    if (url.pathname === `/api/trace/trajectories/${adoption.trace_id}`) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          trajectory: {
+            trajectory_id: adoption.trace_id,
+            title: 'Apps & Changes Chiron Shelf',
+            subtitle: 'Product-path adoption evidence',
+            state: 'completed',
+            latest_stream_seq: 1,
+            agent_count: 1,
+            delegation_count: 0,
+            moment_count: 1,
+            message_count: 0,
+            finding_count: 0,
+            search_attempt_count: 0,
+            latest_activity_at: '2026-05-21T02:17:21.563Z',
+          },
+          agents: [],
+          edges: [],
+          moments: [],
+          search: { attempts: 0, providers: [] },
+          mobile_summary: {
+            headline: 'promotion-level · accepted · Apps & Changes',
+            acceptance_state: 'accepted',
+            acceptance_level: 'promotion-level',
+            readable_evidence: ['recipient build and promote evidence'],
+            rollback_refs: ['refs/computers/primary/active'],
+          },
+          acceptances: [acceptance],
+        }),
+      });
+      return;
+    }
+    if (url.pathname === `/api/trace/trajectories/${adoption.trace_id}/events`) {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: '',
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected trace route' }) });
   });
 
   await openStartApp(page, 'apps-changes');
@@ -100,6 +193,13 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
   await expect(store.locator('[data-change-disable]')).toBeDisabled();
   await expect(store.locator('[data-change-rollback]')).toBeEnabled();
   await expect(store.locator('[data-change-candidate-summary]')).toContainText('recorded');
+  await expect.poll(() => acceptanceRouteHits).toBeGreaterThan(0);
+  await expect(store.locator('[data-change-trace-review]')).toHaveAttribute('data-change-trace-ready', 'accepted');
+  await expect(store.locator('[data-change-trace-review]')).toContainText('promotion-level');
+  await store.locator('[data-change-open-trace]').click();
+  const trace = page.locator('[data-trace-window]').last();
+  await expect(trace.locator(`[data-trace-trajectory-id="${adoption.trace_id}"]`)).toBeVisible({ timeout: 10_000 });
+  await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('promotion-level', { timeout: 10_000 });
 });
 
 test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
