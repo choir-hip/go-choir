@@ -16,6 +16,7 @@
   const dispatch = createEventDispatcher();
 
   const TARGET_COMPUTER_ID = 'primary';
+  const REVIEW_EVIDENCE_ATTEMPTS = 4;
   const SEED_CHANGES = [
     {
       id: 'chiron-shelf',
@@ -633,6 +634,19 @@
     return body;
   }
 
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function reviewEvidenceQuery(change) {
+    const ids = [change.recipientAcceptance, change.sourceAcceptance].filter(Boolean);
+    return [
+      `source_owner_id=${encodeURIComponent(change.sourceOwnerId)}`,
+      `source_desktop_id=${encodeURIComponent(change.sourceComputerId || TARGET_COMPUTER_ID)}`,
+      ...ids.map((id) => `acceptance_id=${encodeURIComponent(id)}`),
+    ].join('&');
+  }
+
   async function loadRunAcceptances() {
     acceptanceStatus = '';
     try {
@@ -650,28 +664,42 @@
 
   async function loadPackageReviewEvidence() {
     const nextEvidence = {};
+    let pending = [...SEED_CHANGES];
     let failures = 0;
-    await Promise.all(SEED_CHANGES.map(async (change) => {
-      const ids = [change.recipientAcceptance, change.sourceAcceptance].filter(Boolean);
-      if (!change.packageId || ids.length === 0) {
-        nextEvidence[change.id] = [];
-        return;
+
+    for (let attempt = 0; attempt < REVIEW_EVIDENCE_ATTEMPTS && pending.length > 0; attempt += 1) {
+      const results = await Promise.all(pending.map(async (change) => {
+        const ids = [change.recipientAcceptance, change.sourceAcceptance].filter(Boolean);
+        if (!change.packageId || ids.length === 0) {
+          return { change, done: true, acceptances: [] };
+        }
+        try {
+          const body = await fetchJSON(`/api/app-change-packages/${encodeURIComponent(change.packageId)}/review-evidence?${reviewEvidenceQuery(change)}`, {
+            method: 'GET',
+          });
+          const acceptances = Array.isArray(body?.acceptances) ? body.acceptances : [];
+          return { change, done: acceptances.length > 0 || attempt === REVIEW_EVIDENCE_ATTEMPTS - 1, acceptances };
+        } catch {
+          return { change, done: attempt === REVIEW_EVIDENCE_ATTEMPTS - 1, acceptances: [] };
+        }
+      }));
+
+      pending = [];
+      for (const result of results) {
+        if (result.done) {
+          nextEvidence[result.change.id] = result.acceptances;
+          if (result.acceptances.length === 0) failures += 1;
+        } else {
+          pending.push(result.change);
+        }
       }
-      const query = [
-        `source_owner_id=${encodeURIComponent(change.sourceOwnerId)}`,
-        `source_desktop_id=${encodeURIComponent(change.sourceComputerId || TARGET_COMPUTER_ID)}`,
-        ...ids.map((id) => `acceptance_id=${encodeURIComponent(id)}`),
-      ].join('&');
-      try {
-        const body = await fetchJSON(`/api/app-change-packages/${encodeURIComponent(change.packageId)}/review-evidence?${query}`, {
-          method: 'GET',
-        });
-        nextEvidence[change.id] = Array.isArray(body?.acceptances) ? body.acceptances : [];
-      } catch {
-        failures += 1;
-        nextEvidence[change.id] = [];
+
+      reviewEvidence = { ...nextEvidence };
+      if (pending.length > 0 && attempt < REVIEW_EVIDENCE_ATTEMPTS - 1) {
+        await delay(1200 * (attempt + 1));
       }
-    }));
+    }
+
     reviewEvidence = nextEvidence;
     if (!acceptanceStatus && failures === SEED_CHANGES.length && runAcceptances.length === 0) {
       acceptanceStatus = 'Package-scoped review evidence is not readable yet.';
