@@ -1140,22 +1140,36 @@
   }
 
   @media (max-width: 760px) {
+    .apps-changes {
+      overflow: auto;
+    }
+
     .store-hero {
       padding: 14px;
     }
 
     .store-layout {
-      grid-template-columns: 1fr;
+      display: flex;
+      flex: 1 0 auto;
+      flex-direction: column;
       padding: 12px;
-      overflow: auto;
+      overflow: visible;
     }
 
     .change-catalog,
     .change-detail {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
       overflow: visible;
     }
 
+    .change-catalog {
+      z-index: 1;
+    }
+
     .change-detail {
+      z-index: 0;
       grid-template-rows: auto minmax(300px, 58vh) auto;
     }
 

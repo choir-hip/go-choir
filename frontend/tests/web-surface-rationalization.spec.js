@@ -35,6 +35,25 @@ test('Apps & Changes replaces manual candidate desktop entry points', async ({ d
   expect(forbiddenRemoteDisplayRequests).toEqual([]);
 });
 
+test('Apps & Changes compact catalog remains clickable beside the detail pane', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  await store.locator('[data-change-card][data-change-id="motion-language"]').click();
+  await expect(store.locator('[data-change-detail] h3')).toContainText('Process Animation Language');
+  await store.locator('[data-change-card][data-change-id="python-code-mode"]').click();
+  await expect(store.locator('[data-change-detail] h3')).toContainText('Python Code Mode');
+});
+
 test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const docs = new Map();
