@@ -176,7 +176,7 @@ until the breadth substrate exists.
 | Product model | User-facing terms and lifecycle are encoded in docs/UI/API names. | checkpoint: UI and platform-state docs use Change/Apps & Changes; deeper API names remain AppChangePackage/adoption. |
 | Catalog | Four seed Changes appear without package ids in ordinary UI. | deployed-verified: four cards render on desktop and 390x844 mobile; package/source refs are hidden in collapsed technical details. |
 | Apps & Changes UI | Replaces Candidate Desktop in launcher/Desk. | deployed-verified: `apps-changes` replaces `candidate-desktop`; launcher absence is tested and proven on staging. |
-| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | partial deployed proof: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, and collapsed technical refs exist; media links remain path text, Trace surfacing is still thin, and benchmark links need real evidence for Liquid/Python. |
+| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | partial deployed proof: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, collapsed technical refs, and all-four artifact/benchmark links exist; media links remain path text, and Trace surfacing is still thin. |
 | Try flow | Creates candidate/review adoption without mutating active computer. | deployed-verified for Chiron: product UI created adoption `adoption-chiron-shelf-62e544c3-4d3c-484a-9638-317fe964f554` and candidate `candidate-chiron-shelf-c0ec9010-bf57-45a0-bfb9-954050dd6638`. |
 | Preview | Opens candidate/review desktop from the selected Change. | deployed-verified structurally through internal `ChangePreviewFrame`; preview iframe is created from the selected Change, not from a launcher-facing manual candidate id. |
 | Install | Promotes verified candidate into active computer with rollback refs. | deployed-verified for Chiron: verify -> adopted -> rolled_back through product APIs with recipient runtime/UI artifact digests and rollback profile. |
@@ -184,13 +184,13 @@ until the breadth substrate exists.
 | Disable | Represents feature-flag/capability-disable only when supported. | pending: no disable support claimed. |
 | Installed ledger | Shows installed Changes and action availability. | partial deployed proof: install and rollback states are product-visible during the Chiron flow; richer installed history/action availability needs polish. |
 | VText dashboard | Live mission VText updated on substantive changes. | deployed-verified: Apps & Changes opens/creates `Apps & Changes Store Sweep v0` through product VText APIs on desktop and 390x844 mobile. |
-| Per-change VTexts | Chiron, Motion, Liquid, Python each get owner-readable reports. | partial deployed proof: report generation/opening is wired for each seeded Change; Chiron report was product-proofed on desktop and mobile. Motion, Liquid, and Python reports still need individual evidence/benchmark polish before completion. |
-| Screenshots/video | All four Changes have review media linked from detail/VText. | partial: Playwright screenshots/video exist for Apps & Changes, Chiron proof, and Chiron VText report; all four experiment reports still need curated screenshot/video/benchmark links. |
-| Liquid benchmarks | WebGL/WebKit/mobile/desktop resource/frame evidence. | pending |
-| Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | pending |
+| Per-change VTexts | Chiron, Motion, Liquid, Python each get owner-readable reports. | deployed-verified: all four reports were generated/opened through product VText APIs on desktop and 390x844 mobile with package refs, acceptance refs, manifest hashes, benchmark status, and artifact links. |
+| Screenshots/video | All four Changes have review media linked from detail/VText. | deployed-verified as linked artifacts: all four reports link screenshots/video/benchmark paths. VText still cannot embed image/video inline. |
+| Liquid benchmarks | WebGL/WebKit/mobile/desktop resource/frame evidence. | local benchmark complete and deployed-report linked: isolated package worktree rendered WebGL in Chromium and WebKit at desktop and 390x844, avg 16.66-16.67ms and p95 <= 18.1ms. Manual real mobile Safari plus heavy-session battery/thermal review remain residual risks. |
+| Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | local benchmark complete and deployed-report linked: 5 matched repo tasks showed bash 807.19ms avg wall time vs Python 129.28ms, estimated payload tokens bash 128 vs Python 221. Live LLM loop benchmark remains residual risk. |
 | Chiron proof | First end-to-end inspect -> Try -> preview -> install -> uninstall/rollback proof. | deployed-verified through Try -> Verify -> Install -> Rollback on staging commit `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`. |
 | Dead-code cleanup | Candidate Desktop removed or refactored into used internal component; no dead island remains. | deployed-verified: `CandidateDesktopViewer.svelte` deleted; remaining `candidate-desktop` matches are mission docs or absence assertions. |
-| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, and Chiron VText report are deployed-proofed; Trace surfacing, run-acceptance synthesis, all-four report media, and Liquid/Python benchmarks remain incomplete. |
+| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, and Liquid/Python benchmark links are deployed-proofed; Trace surfacing, run-acceptance synthesis, and honest uninstall/disable beyond rollback remain incomplete. |
 
 ## Invariants
 
@@ -398,7 +398,8 @@ authority before stopping.
 ```text
 status: checkpoint_incomplete
 last checkpoint: deployed Apps & Changes plus first Chiron product-path
-  adoption proof and VText dashboard/report surface.
+  adoption proof, all-four VText report surface, Liquid/Python benchmark links,
+  and a compact/mobile catalog overlap fix.
 current artifact state: Apps & Changes exists as the launcher-facing Change
   catalog; Candidate Desktop app code is deleted; candidate preview survives
   only as internal ChangePreviewFrame used by Apps & Changes. Four seeded
@@ -409,6 +410,8 @@ what shipped:
   - `e0a8f76954cb01a983c6d980b3e558fae45e06a0` Add Apps and Changes store surface.
   - `75c80cd4b17e5403bf5f20ef835b4d42a0aea859` Preserve Apps and Changes adoption state.
   - `a73affbc5c58121ceead49b8a8580b4247627fe6` Add Apps and Changes VText reports.
+  - `efeb5d8fc926099ddbebf731d916f6dd83b54245` Link Apps and Changes benchmark evidence.
+  - `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e` Fix Apps and Changes compact layout.
 what was proven:
   - GitHub Actions run `26197219323` passed and deployed to staging.
   - staging `/health` showed proxy and sandbox commit/deployed_commit
@@ -450,27 +453,53 @@ what was proven:
     (`6932829f-d017-492b-be5a-69307a4cbee2`), containing Chiron summary,
     recommendation, source/recipient acceptance ids, benchmark status,
     package technical ref, and product-gap note for embedded media.
-unproven or partial claims: Motion/Liquid/Python per-change reports need
-  individual proof and real report media; Liquid/Python benchmarks remain
-  unrun in this checkpoint; Trace-first review surface; run-acceptance
-  synthesis; polished installed history; true uninstall/disable beyond rollback.
+  - isolated package benchmark evidence was created under
+    `test-results/apps-changes-benchmarks-2026-05-21T01-00-45-3NZ/`.
+    Liquid rendered through WebGL in Chromium/WebKit at desktop and 390x844
+    with avg frame time 16.66-16.67ms and p95 <= 18.1ms. Python code-mode
+    primitive A/B across 5 matched repo tasks measured bash 807.19ms average
+    wall time vs Python 129.28ms, with estimated input payload tokens bash 128
+    vs Python 221; focused runtime tests passed in the repo dev shell.
+  - GitHub Actions run `26199378174` passed and deployed commit
+    `efeb5d8fc926099ddbebf731d916f6dd83b54245`.
+  - the first deployed all-four report proof at `efeb5d8` found a real mobile
+    Apps & Changes bug: in the compact layout, the selected detail pane
+    intercepted clicks on visible catalog cards.
+  - commit `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e` fixed the compact layout
+    by making it an explicit vertical flow and added a focused 390x844
+    regression test.
+  - local checks passed after that fix:
+    `npm --prefix frontend run build` and
+    `cd frontend && npx playwright test tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
+    with 9 passing tests.
+  - GitHub Actions run `26199796372` passed and deployed commit
+    `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`.
+  - deployed proof
+    `test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json`
+    passed on desktop and 390x844 mobile: four catalog cards, no visible
+    package ids in ordinary UI, all four reports opened through product VText,
+    package refs and manifest hashes present inside reports, and Liquid/Python
+    benchmark artifact links present in the owner-readable reports.
+unproven or partial claims: Trace-first review surface; run-acceptance
+  synthesis; polished installed history; true uninstall/disable beyond rollback;
+  inline media embedding in VText; owner hands-on QA for the four experiments.
 belief-state changes: package ids are implementation details; user-facing
   object is Change; Candidate Desktop should be removed, not preserved as a
   public island; Settings is low-level evidence, not the ordinary install
   surface; product proof can now cross the AppChangePackage -> recipient build
   -> adoption -> rollback boundary without a package-id paste UI.
 remaining error field: the store/review substrate, first Chiron adoption proof,
-  and VText dashboard/report mechanism are real, but the mission has not yet
-  completed all-four experiment report media, Liquid/Python benchmarks, Trace
-  surfacing, run-acceptance synthesis, or stronger uninstall/disable semantics.
+  all-four VText reports, and Liquid/Python benchmark references are real, but
+  the mission has not yet completed Trace surfacing, run-acceptance synthesis,
+  inline report media, or stronger uninstall/disable semantics.
 highest-impact remaining uncertainty: can Apps & Changes become a durable
   owner review surface instead of a thin seeded catalog, with VText/Trace/report
   media integrated for all four experiments and honest disable/uninstall
   semantics?
-next executable probe: generate/prove Motion, Liquid, and Python reports with
-  real screenshot/video/benchmark links, run Liquid and Python benchmarks,
-  expose stronger report/media links from Apps & Changes, then synthesize run
-  acceptance from the Chiron adoption and VText evidence.
+next executable probe: synthesize a run-acceptance record from the Chiron
+  adoption, all-four VText reports, benchmark artifacts, and staging proof;
+  then either add honest disable/uninstall capability records or deepen Trace
+  review surfacing for Apps & Changes.
 suggested resume goal string: use the One-Line Goal String in this document.
 evidence artifact refs:
   - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
@@ -492,10 +521,16 @@ evidence artifact refs:
   - test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/mobile-chiron-vtext-report-390x844.png
   - test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/page@e01984cda35c79689a657542692805ba.webm
   - test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/page@c8b0812f9cb8b4edb0d08d3d96384cfb.webm
+  - test-results/apps-changes-all-reports-staging-2026-05-21T00-58-41-312Z/apps-changes-all-reports-proof.json
+  - test-results/apps-changes-benchmarks-2026-05-21T01-00-45-3NZ/liquid-material-benchmark.json
+  - test-results/apps-changes-benchmarks-2026-05-21T01-00-45-3NZ/python-code-mode-ab-benchmark.json
+  - test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json
   - frontend tests:
     `cd frontend && npx playwright test tests/computer-live-sync-hard-cutover.spec.js tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
   - build: `npm --prefix frontend run build`
-rollback refs: code rollback by reverting `a73affbc5c58121ceead49b8a8580b4247627fe6`,
+rollback refs: code rollback by reverting `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`,
+  `efeb5d8fc926099ddbebf731d916f6dd83b54245`,
+  `a73affbc5c58121ceead49b8a8580b4247627fe6`,
   `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`, and
   `e0a8f76954cb01a983c6d980b3e558fae45e06a0`; Chiron adoption rollback profile
   recorded previous active source ref `refs/computers/primary/active` and
