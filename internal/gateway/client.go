@@ -45,6 +45,15 @@ func (c *GatewayClient) Name() string { return "gateway" }
 // IsReal returns true because the gateway routes to real upstream providers.
 func (c *GatewayClient) IsReal() bool { return true }
 
+func (c *GatewayClient) setAuthorization(req *http.Request) error {
+	token := strings.TrimSpace(c.token)
+	if token == "" {
+		return fmt.Errorf("gateway client: missing sandbox credential")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
 // Call sends the LLM request through the gateway. The gateway authenticates
 // the sandbox caller, injects host-side credentials, calls the upstream
 // provider, and returns the response with sanitized errors.
@@ -73,7 +82,9 @@ func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*pro
 		return nil, fmt.Errorf("gateway client: create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	if err := c.setAuthorization(httpReq); err != nil {
+		return nil, err
+	}
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -149,7 +160,9 @@ func (c *GatewayClient) Stream(ctx context.Context, req provider.LLMRequest, onC
 		return nil, fmt.Errorf("gateway client: create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	if err := c.setAuthorization(httpReq); err != nil {
+		return nil, err
+	}
 	httpReq.Header.Set("Accept", "text/event-stream")
 
 	resp, err := c.httpClient.Do(httpReq)

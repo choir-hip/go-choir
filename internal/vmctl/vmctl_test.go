@@ -2581,6 +2581,75 @@ func TestHandler_HibernateAndResume(t *testing.T) {
 	}
 }
 
+func TestHandler_ResumeBootsPersistedVMWhenManagerLostInstance(t *testing.T) {
+	srv, reg := newTestServer(t)
+	mock := &mockVMManager{
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9100",
+			Epoch:   1,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg.SetVMManager(mock)
+
+	body := `{"user_id":"user-resume-orphan"}`
+	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-Internal-Caller", "true")
+	resp1, _ := http.DefaultClient.Do(req1)
+	var result1 resolveResponse
+	if err := json.NewDecoder(resp1.Body).Decode(&result1); err != nil {
+		t.Fatalf("decode result1: %v", err)
+	}
+	_ = resp1.Body.Close()
+
+	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Internal-Caller", "true")
+	resp2, _ := http.DefaultClient.Do(req2)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on hibernate, got %d", resp2.StatusCode)
+	}
+
+	mock.boots = nil
+	mock.resumes = nil
+	mock.resumeError = fmt.Errorf("vm not found after vmctl restart")
+	mock.bootResponse = &VMInstanceInfo{
+		HostURL: "http://127.0.0.1:9101",
+		Epoch:   2,
+		Healthy: true,
+		State:   "running",
+	}
+
+	req3, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resume", strings.NewReader(body))
+	req3.Header.Set("Content-Type", "application/json")
+	req3.Header.Set("X-Internal-Caller", "true")
+	resp3, _ := http.DefaultClient.Do(req3)
+	defer func() { _ = resp3.Body.Close() }()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on resume boot fallback, got %d", resp3.StatusCode)
+	}
+
+	var result3 resolveResponse
+	if err := json.NewDecoder(resp3.Body).Decode(&result3); err != nil {
+		t.Fatalf("decode result3: %v", err)
+	}
+	if result3.VMID != result1.VMID {
+		t.Fatalf("resumed VMID = %s, want %s", result3.VMID, result1.VMID)
+	}
+	if result3.SandboxURL != "http://127.0.0.1:9101" {
+		t.Fatalf("SandboxURL = %s, want boot fallback URL", result3.SandboxURL)
+	}
+	if len(mock.resumes) != 1 {
+		t.Fatalf("expected one resume attempt, got %d", len(mock.resumes))
+	}
+	if len(mock.boots) != 1 || mock.boots[0].VMID != result1.VMID {
+		t.Fatalf("boot fallback = %+v, want one boot for %s", mock.boots, result1.VMID)
+	}
+}
+
 func TestHandler_RecoverRequiresUnhealthyState(t *testing.T) {
 	srv, reg := newTestServer(t)
 

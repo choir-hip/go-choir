@@ -99,6 +99,9 @@ func main() {
 
 	if gatewayURL != "" {
 		gatewayToken := os.Getenv("RUNTIME_GATEWAY_TOKEN")
+		if strings.TrimSpace(gatewayToken) == "" {
+			log.Printf("sandbox: gateway provider configured without RUNTIME_GATEWAY_TOKEN; LLM calls will fail until the VM receives a sandbox credential")
+		}
 		client := gateway.NewGatewayClient(gatewayURL, gatewayToken)
 		bridge := provider.NewGatewayBridgeProvider(client)
 		bridge.SetRuntimeLLMConfig(rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)

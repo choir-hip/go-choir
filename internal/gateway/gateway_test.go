@@ -925,6 +925,52 @@ func TestGatewayClientCall(t *testing.T) {
 	}
 }
 
+func TestGatewayClientCall_MissingTokenFailsBeforeHTTP(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	client := NewGatewayClient(server.URL, "  ")
+	_, err := client.Call(context.Background(), provider.LLMRequest{
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
+	})
+	if err == nil {
+		t.Fatal("expected missing credential error")
+	}
+	if !strings.Contains(err.Error(), "missing sandbox credential") {
+		t.Fatalf("error = %q, want missing sandbox credential", err.Error())
+	}
+	if called {
+		t.Fatal("gateway server was called despite missing token")
+	}
+}
+
+func TestGatewayClientStream_MissingTokenFailsBeforeHTTP(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	client := NewGatewayClient(server.URL, "")
+	_, err := client.Stream(context.Background(), provider.LLMRequest{
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
+	}, func(provider.StreamChunk) {})
+	if err == nil {
+		t.Fatal("expected missing credential error")
+	}
+	if !strings.Contains(err.Error(), "missing sandbox credential") {
+		t.Fatalf("error = %q, want missing sandbox credential", err.Error())
+	}
+	if called {
+		t.Fatal("gateway server was called despite missing token")
+	}
+}
+
 func TestGatewayClientCall_InvalidToken(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 	mp := &mockProvider{name: "bedrock", real: true}

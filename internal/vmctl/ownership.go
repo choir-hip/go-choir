@@ -2003,10 +2003,11 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 		}
 	}()
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	own, ok := r.ownerships[key]
 	if !ok {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 
@@ -2016,19 +2017,33 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 			if own.IsReady() {
 				ensureVMID = own.VMID
 			}
+			r.mu.Unlock()
 			return own, nil
 		}
+		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s cannot be resumed (state=%s)", own.VMID, own.State)
 	}
 
 	// Delegate to the real VM manager if available.
-	if r.vmManager != nil {
-		info, err := r.vmManager.ResumeVM(own.VMID)
+	mgr := r.vmManager
+	vmID := own.VMID
+	if mgr != nil {
+		snapshot := *own
+		r.mu.Unlock()
+		info, err := r.startExistingVM(&snapshot, mgr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resume VM %s: %w", own.VMID, err)
+			return nil, fmt.Errorf("failed to resume VM %s: %w", vmID, err)
 		}
-		own.SandboxURL = info.HostURL
-		// Epoch stays the same for resume (VAL-CROSS-117).
+		r.mu.Lock()
+		own = r.ownerships[key]
+		if own == nil || own.VMID != vmID {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("VM %s ownership changed during resume", vmID)
+		}
+		if info != nil {
+			own.SandboxURL = info.HostURL
+			own.Epoch = info.Epoch
+		}
 	}
 
 	// Transition to active. Epoch stays the same for resume (VAL-CROSS-117).
@@ -2039,6 +2054,7 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	r.saveLocked()
 	log.Printf("vmctl: resumed VM %s for user %s desktop %s (epoch=%d, same-epoch=resume)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
+	r.mu.Unlock()
 	return own, nil
 }
 
