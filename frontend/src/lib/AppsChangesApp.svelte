@@ -112,6 +112,7 @@
     },
   ];
   const MISSION_DASHBOARD_TITLE = 'Apps & Changes Store Sweep v0';
+  const PORTFOLIO_REPORT_TITLE = 'Apps & Changes portfolio review';
   const PROOF_EVIDENCE_DIR = 'test-results/apps-changes-store-staging-2026-05-21T00-16-29-145Z';
 
   let selectedChangeId = appContext?.changeId || SEED_CHANGES[0].id;
@@ -142,6 +143,10 @@
   $: selectedAcceptance = runAcceptances && latestAcceptanceForTrace(selectedAdoption?.trace_id);
   $: installedAdoptions = adoptions.filter((adoption) => adoption.status === 'adopted');
   $: reviewAdoptions = adoptions.filter((adoption) => adoption.status !== 'adopted');
+  $: portfolioRows = runAcceptances && adoptions && packages && SEED_CHANGES.map((change) => portfolioRow(change));
+  $: portfolioLoadedAcceptanceCount = portfolioRows.filter((row) => row.acceptance?.state === 'accepted').length;
+  $: portfolioReportCount = portfolioRows.filter((row) => row.reportReady).length;
+  $: portfolioBenchmarkCount = portfolioRows.filter((row) => row.benchmarkReady).length;
 
   function packageForChange(change) {
     if (!change?.packageId) return null;
@@ -156,6 +161,40 @@
   function latestAcceptanceForTrace(traceId) {
     if (!traceId) return null;
     return runAcceptances.find((acceptance) => acceptance.trajectory_id === traceId) || null;
+  }
+
+  function acceptanceByID(acceptanceID) {
+    if (!acceptanceID) return null;
+    return runAcceptances.find((acceptance) => acceptance.acceptance_id === acceptanceID) || null;
+  }
+
+  function acceptanceForChange(change) {
+    const adoption = latestAdoptionForPackage(change?.packageId);
+    const traceAcceptance = latestAcceptanceForTrace(adoption?.trace_id);
+    return (
+      traceAcceptance ||
+      acceptanceByID(change?.recipientAcceptance) ||
+      acceptanceByID(change?.sourceAcceptance) ||
+      null
+    );
+  }
+
+  function benchmarkReady(change) {
+    const status = String(change?.benchmarkStatus || '').toLowerCase();
+    return !status.includes('pending') && !status.includes('needs real');
+  }
+
+  function portfolioRow(change) {
+    const adoption = latestAdoptionForPackage(change.packageId);
+    const acceptance = acceptanceForChange(change);
+    return {
+      change,
+      adoption,
+      acceptance,
+      reportReady: !!(change.sourceVTextDocId && change.sourceVTextRevisionId && change.artifacts?.length),
+      benchmarkReady: benchmarkReady(change),
+      status: statusLabel(change),
+    };
   }
 
   function shortRef(value) {
@@ -340,7 +379,8 @@
       '- Chiron proof: Try -> Verify -> Install -> Rollback passed on staging.',
       '- Removal model: rollback-only is exposed honestly for packages without a verified inverse uninstall or disable flag.',
       '- Run acceptance: Chiron has product-path promotion-level acceptance; Apps & Changes surfaces acceptance summaries from the Change detail.',
-      '- Remaining work: Trace deep-link polish, report media embedding, source-level uninstall/feature-flag disable implementations, and hands-on owner QA.',
+      '- Portfolio review: all four experiment Changes are aggregated with report, benchmark, and loaded acceptance coverage.',
+      '- Remaining work: report media embedding, source-level uninstall/feature-flag disable implementations, continuation-level proof, and hands-on owner QA.',
       '',
       '## Seed Changes',
       '',
@@ -364,6 +404,43 @@
       `- Playwright video: \`${PROOF_EVIDENCE_DIR}/page@77114092c565b67b41926d6d58479761.webm\``,
     ];
     return lines.join('\n');
+  }
+
+  function buildPortfolioReportContent() {
+    const rows = SEED_CHANGES.map((change) => portfolioRow(change));
+    return [
+      '# Apps & Changes portfolio review',
+      '',
+      'This VText summarizes the four alternate-computer experiment Changes as one owner-review portfolio. It is generated from Apps & Changes without requiring package IDs in ordinary UI.',
+      '',
+      '## Coverage',
+      '',
+      `- Changes: ${rows.length}`,
+      `- VText/source reports linked: ${rows.filter((row) => row.reportReady).length}/${rows.length}`,
+      `- Benchmarks or review media linked: ${rows.filter((row) => row.benchmarkReady).length}/${rows.length}`,
+      `- Loaded accepted run-acceptance records: ${rows.filter((row) => row.acceptance?.state === 'accepted').length}/${rows.length}`,
+      '',
+      '## Changes',
+      '',
+      ...rows.flatMap((row) => [
+        `### ${row.change.name}`,
+        '',
+        `- Family: ${row.change.family}`,
+        `- Product status: ${row.status}`,
+        `- Report source VText: \`${row.change.sourceVTextDocId}\` / \`${row.change.sourceVTextRevisionId}\``,
+        `- Acceptance coverage: ${row.acceptance ? `${row.acceptance.acceptance_level || 'unknown-level'} / ${row.acceptance.state || 'unknown-state'}` : 'acceptance refs listed, record not loaded in this computer'}`,
+        `- Source acceptance ref: \`${row.change.sourceAcceptance}\``,
+        `- Recipient acceptance ref: \`${row.change.recipientAcceptance}\``,
+        `- Benchmark status: ${row.change.benchmarkStatus}`,
+        `- Recommendation: ${row.change.recommendation}`,
+        '',
+      ]),
+      '## Residual Risks',
+      '',
+      '- Source-level uninstall and feature-disable semantics are still rollback-only for Chiron.',
+      '- VText links media artifacts as paths; inline screenshots/video are still a product gap.',
+      '- Acceptance records from source computers may not be readable in every recipient computer until cross-owner publication records are richer.',
+    ].join('\n');
   }
 
   function buildChangeReportContent(change, adoption) {
@@ -465,6 +542,27 @@
         return;
       }
       reportError = err.message || 'Could not create mission VText dashboard';
+    } finally {
+      reportAction = '';
+    }
+  }
+
+  async function openPortfolioReport() {
+    reportError = '';
+    reportStatus = 'Preparing portfolio VText review';
+    reportAction = reportKey('portfolio');
+    try {
+      const doc = await ensureReportDocument(PORTFOLIO_REPORT_TITLE, buildPortfolioReportContent(), {
+        report_kind: 'portfolio_review',
+      });
+      reportStatus = 'Portfolio VText review ready';
+      dispatch('openvtext', { docId: doc.doc_id, title: PORTFOLIO_REPORT_TITLE });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      reportError = err.message || 'Could not create portfolio VText review';
     } finally {
       reportAction = '';
     }
@@ -668,6 +766,16 @@
     });
   }
 
+  function openTraceForPortfolioRow(row) {
+    if (!row?.acceptance?.trajectory_id) return;
+    dispatch('opentrace', {
+      trajectoryId: row.acceptance.trajectory_id,
+      acceptanceId: row.acceptance.acceptance_id || '',
+      title: `${row.change.name} Trace`,
+      toastMessage: `Opened Trace for ${row.change.name}`,
+    });
+  }
+
   onMount(() => {
     void refreshCatalog();
     removeLiveListener = addLiveEventListener((message) => {
@@ -727,6 +835,82 @@
   {:else if reportStatus}
     <div class="state-banner" data-apps-changes-report-status>{reportStatus}</div>
   {/if}
+
+  <section
+    class="portfolio-review"
+    data-portfolio-review
+    data-portfolio-change-count={SEED_CHANGES.length}
+    data-portfolio-report-count={portfolioReportCount}
+    data-portfolio-accepted-count={portfolioLoadedAcceptanceCount}
+  >
+    <div class="section-heading">
+      <div>
+        <strong>Portfolio review</strong>
+        <span>All four alternate-computer experiments in one owner surface.</span>
+      </div>
+      <button
+        class="report-action"
+        data-open-portfolio-vtext
+        disabled={!!reportAction}
+        on:click={openPortfolioReport}
+      >
+        {reportAction === reportKey('portfolio') ? 'Preparing review…' : 'Open portfolio VText'}
+      </button>
+    </div>
+    <div class="portfolio-stats">
+      <div data-portfolio-stat="changes">
+        <span>changes</span>
+        <strong>{SEED_CHANGES.length}</strong>
+      </div>
+      <div data-portfolio-stat="reports">
+        <span>reports</span>
+        <strong>{portfolioReportCount}/{SEED_CHANGES.length}</strong>
+      </div>
+      <div data-portfolio-stat="benchmarks">
+        <span>benchmarks/media</span>
+        <strong>{portfolioBenchmarkCount}/{SEED_CHANGES.length}</strong>
+      </div>
+      <div data-portfolio-stat="acceptances">
+        <span>accepted records</span>
+        <strong>{portfolioLoadedAcceptanceCount}/{SEED_CHANGES.length}</strong>
+      </div>
+    </div>
+    <div class="portfolio-rows">
+      {#each portfolioRows as row (row.change.id)}
+        <article
+          class="portfolio-row"
+          data-portfolio-change
+          data-change-id={row.change.id}
+          data-portfolio-acceptance-state={row.acceptance?.state || 'not-loaded'}
+        >
+          <button class="portfolio-main" on:click={() => selectChange(row.change)}>
+            <span>{row.change.family}</span>
+            <strong>{row.change.name}</strong>
+          </button>
+          <div>
+            <span>report</span>
+            <strong>{row.reportReady ? 'linked' : 'missing'}</strong>
+          </div>
+          <div>
+            <span>acceptance</span>
+            <strong>{row.acceptance ? `${row.acceptance.acceptance_level} · ${row.acceptance.state}` : 'ref listed'}</strong>
+          </div>
+          <div>
+            <span>recommendation</span>
+            <strong>{row.change.recommendation}</strong>
+          </div>
+          <button
+            class="portfolio-trace-action"
+            data-portfolio-open-trace
+            disabled={!row.acceptance?.trajectory_id}
+            on:click={() => openTraceForPortfolioRow(row)}
+          >
+            Trace
+          </button>
+        </article>
+      {/each}
+    </div>
+  </section>
 
   <div class="store-layout">
     <aside class="change-catalog" data-change-catalog>
@@ -1096,6 +1280,100 @@
     min-height: 0;
     padding: 16px;
     overflow: hidden;
+  }
+
+  .portfolio-review {
+    display: grid;
+    gap: 12px;
+    margin: 14px 16px 0;
+    padding: 14px;
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: 8px;
+    background: rgba(8, 47, 73, 0.22);
+  }
+
+  .portfolio-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .portfolio-stats div,
+  .portfolio-row {
+    border: 1px solid rgba(125, 211, 252, 0.14);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.44);
+  }
+
+  .portfolio-stats div {
+    padding: 10px;
+  }
+
+  .portfolio-stats span,
+  .portfolio-row span {
+    color: #67e8f9;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .portfolio-stats strong {
+    display: block;
+    margin-top: 4px;
+    color: #f8fafc;
+    font-size: 1.2rem;
+  }
+
+  .portfolio-rows {
+    display: grid;
+    gap: 8px;
+  }
+
+  .portfolio-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) minmax(82px, 0.5fr) minmax(120px, 0.7fr) minmax(180px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 10px;
+  }
+
+  .portfolio-row div,
+  .portfolio-main {
+    min-width: 0;
+  }
+
+  .portfolio-row strong {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 0.84rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+  }
+
+  .portfolio-main {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .portfolio-main:hover strong {
+    color: #bae6fd;
+  }
+
+  .portfolio-trace-action {
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid rgba(34, 211, 238, 0.26);
+    border-radius: 8px;
+    color: #e0f2fe;
+    background: rgba(8, 47, 73, 0.5);
+    cursor: pointer;
   }
 
   .change-catalog,
@@ -1483,6 +1761,18 @@
       flex-direction: column;
       padding: 12px;
       overflow: visible;
+    }
+
+    .portfolio-review {
+      margin: 12px 12px 0;
+    }
+
+    .portfolio-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .portfolio-row {
+      grid-template-columns: 1fr;
     }
 
     .change-catalog,

@@ -202,6 +202,134 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
   await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('promotion-level', { timeout: 10_000 });
 });
 
+test('Apps & Changes aggregates portfolio reports and acceptance coverage', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const acceptanceIDs = {
+    'chiron-shelf': 'runacc-c3d70f753b81fd591442',
+    'motion-language': 'runacc-3b54c9ae8dac2337184a',
+    'liquid-material': 'runacc-d144087c5ffacad2e147',
+    'python-code-mode': 'runacc-45495b8caebc3e1b82c5',
+  };
+  const acceptances = Object.entries(acceptanceIDs).map(([changeID, acceptanceID]) => ({
+    acceptance_id: acceptanceID,
+    target_mission_id: `mission-${changeID}`,
+    trajectory_id: `trajectory-${changeID}`,
+    state: 'accepted',
+    acceptance_level: changeID === 'chiron-shelf' ? 'promotion-level' : 'export-level',
+    authority_profile: 'product-path',
+    evidence_refs: [
+      { ref_id: `${changeID}-report`, kind: 'vtext', summary: 'owner-readable change report' },
+    ],
+    rollback_refs: changeID === 'chiron-shelf'
+      ? [{ kind: 'source_ref', ref: 'refs/computers/primary/active', summary: 'previous active ref' }]
+      : [],
+    checkpoints: [],
+    verifier_contracts: [],
+    invariant_checks: [],
+  }));
+
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+  });
+  await page.route('**/api/run-acceptances**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceptances }) });
+  });
+  await page.route('**/api/trace/trajectories**', async (route) => {
+    const url = new URL(route.request().url());
+    const target = acceptances.find((acceptance) => url.pathname.endsWith(`/${acceptance.trajectory_id}`));
+    if (url.pathname === '/api/trace/trajectories') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          trajectories: acceptances.map((acceptance) => ({
+            trajectory_id: acceptance.trajectory_id,
+            title: acceptance.target_mission_id,
+            subtitle: 'Portfolio acceptance evidence',
+            state: 'completed',
+            live: false,
+            agent_count: 1,
+            delegation_count: 0,
+            moment_count: 1,
+            message_count: 0,
+            finding_count: 0,
+            search_attempt_count: 0,
+            latest_activity_at: '2026-05-21T02:58:41.000Z',
+          })),
+        }),
+      });
+      return;
+    }
+    if (target) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          trajectory: {
+            trajectory_id: target.trajectory_id,
+            title: target.target_mission_id,
+            subtitle: 'Portfolio acceptance evidence',
+            state: 'completed',
+            latest_stream_seq: 1,
+            agent_count: 1,
+            delegation_count: 0,
+            moment_count: 1,
+            message_count: 0,
+            finding_count: 0,
+            search_attempt_count: 0,
+            latest_activity_at: '2026-05-21T02:58:41.000Z',
+          },
+          agents: [],
+          edges: [],
+          moments: [],
+          search: { attempts: 0, providers: [] },
+          mobile_summary: {
+            headline: `${target.acceptance_level} · ${target.state}`,
+            acceptance_state: target.state,
+            acceptance_level: target.acceptance_level,
+            readable_evidence: target.evidence_refs.map((ref) => ref.summary),
+            rollback_refs: target.rollback_refs.map((ref) => ref.ref),
+          },
+          acceptances: [target],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith('/events')) {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: '',
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected trace route' }) });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  const portfolio = store.locator('[data-portfolio-review]');
+  await expect(portfolio).toHaveAttribute('data-portfolio-change-count', '4');
+  await expect(portfolio).toHaveAttribute('data-portfolio-report-count', '4');
+  await expect(portfolio).toHaveAttribute('data-portfolio-accepted-count', '4');
+  await expect(portfolio.locator('[data-portfolio-change]')).toHaveCount(4);
+  await expect(portfolio).toContainText('Choir Liquid Material Engine');
+  await expect(portfolio).not.toContainText('28433c19-5d02-416f-9368-de56390e1927');
+
+  const liquidRow = portfolio.locator('[data-portfolio-change][data-change-id="liquid-material"]');
+  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-state', 'accepted');
+  await liquidRow.locator('[data-portfolio-open-trace]').click();
+  const trace = page.locator('[data-trace-window]').last();
+  await expect(trace.locator('[data-trace-trajectory-id="trajectory-liquid-material"]')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('export-level', { timeout: 10_000 });
+});
+
 test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const docs = new Map();

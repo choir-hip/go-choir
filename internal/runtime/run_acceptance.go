@@ -754,6 +754,24 @@ func (b *acceptanceBuilder) addEvidence(ref types.RunAcceptanceEvidenceRef) {
 	b.evidence = append(b.evidence, ref)
 }
 
+func (b *acceptanceBuilder) addRollbackRef(kind, ref, summary string) {
+	kind = strings.TrimSpace(kind)
+	ref = strings.TrimSpace(ref)
+	if kind == "" || ref == "" {
+		return
+	}
+	for _, existing := range b.record.RollbackRefs {
+		if existing.Kind == kind && existing.Ref == ref {
+			return
+		}
+	}
+	b.record.RollbackRefs = append(b.record.RollbackRefs, types.RunAcceptanceRollbackRef{
+		Kind:    kind,
+		Ref:     ref,
+		Summary: strings.TrimSpace(summary),
+	})
+}
+
 func (b *acceptanceBuilder) addCheckpoint(kind, state string, at time.Time, streamSeq int64, refs []string, details map[string]any) {
 	b.record.Checkpoints = append(b.record.Checkpoints, types.RunAcceptanceCheckpoint{
 		Kind:           kind,
@@ -842,6 +860,7 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 			blockedRefs = append(blockedRefs, ref)
 			lastBlocked = ev
 		case types.EventAppAdoptionPromoted:
+			rollbackSourceRef := payloadString(payload, "rollback_source_ref")
 			ref := builder.addEventEvidence(ev, "target computer source lineage advanced to adopted app candidate", map[string]any{
 				"adoption_id":             payloadString(payload, "adoption_id"),
 				"package_id":              payloadString(payload, "package_id"),
@@ -851,18 +870,21 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 				"ui_artifact_digest":      payloadString(payload, "ui_artifact_digest"),
 				"route_profile":           payloadString(payload, "route_profile"),
 				"default_base_profile":    payloadString(payload, "default_base_profile"),
-				"rollback_source_ref":     payloadString(payload, "rollback_source_ref"),
+				"rollback_source_ref":     rollbackSourceRef,
 			})
+			builder.addRollbackRef("source_ref", rollbackSourceRef, "previous active source ref before app adoption promotion")
 			promotedRefs = append(promotedRefs, ref)
 			lastPromoted = ev
 			rollbackRefs = append(rollbackRefs, ref)
 		case types.EventAppAdoptionRolledBack:
+			rollbackSourceRef := payloadString(payload, "rollback_source_ref")
 			ref := builder.addEventEvidence(ev, "app adoption rollback recorded", map[string]any{
 				"adoption_id":         payloadString(payload, "adoption_id"),
 				"package_id":          payloadString(payload, "package_id"),
 				"target_computer_id":  payloadString(payload, "target_computer_id"),
-				"rollback_source_ref": payloadString(payload, "rollback_source_ref"),
+				"rollback_source_ref": rollbackSourceRef,
 			})
+			builder.addRollbackRef("source_ref", rollbackSourceRef, "active source ref restored by app adoption rollback")
 			rollbackRefs = append(rollbackRefs, ref)
 			lastRollback = ev
 		}

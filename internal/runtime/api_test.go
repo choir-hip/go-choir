@@ -511,6 +511,12 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 	if !acceptanceHasCheckpoint(rec, "app_adoption_promoted") {
 		t.Fatalf("promoted adoption missing app_adoption_promoted checkpoint: %+v", rec.Checkpoints)
 	}
+	if len(rec.RollbackRefs) != 1 {
+		t.Fatalf("promoted adoption rollback refs = %+v, want one source ref", rec.RollbackRefs)
+	}
+	if rec.RollbackRefs[0].Kind != "source_ref" || rec.RollbackRefs[0].Ref != "refs/computers/computer-b/active-before-adoption" {
+		t.Fatalf("promoted adoption rollback ref = %+v", rec.RollbackRefs[0])
+	}
 }
 
 func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.T) {
@@ -577,6 +583,12 @@ func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.
 	}
 	if strings.Contains(strings.Join(rec.FailureResidualRisks, "\n"), "acceptance invariant product_path_observed is blocked") {
 		t.Fatalf("unexpected product path residual risk: %+v", rec.FailureResidualRisks)
+	}
+	if len(rec.RollbackRefs) != 1 {
+		t.Fatalf("direct product adoption rollback refs = %+v, want one source ref", rec.RollbackRefs)
+	}
+	if rec.RollbackRefs[0].Kind != "source_ref" || rec.RollbackRefs[0].Ref != "refs/computers/computer-b/active-before-adoption" {
+		t.Fatalf("direct product adoption rollback ref = %+v", rec.RollbackRefs[0])
 	}
 }
 
