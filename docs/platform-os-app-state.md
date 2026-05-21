@@ -143,7 +143,7 @@ Known gaps:
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Apps & Changes owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. All four alternate-computer experiments now have product-openable VText reports with screenshot/video/benchmark artifact links; Liquid and Python benchmark artifacts are linked from those reports. | Needs Trace/run-acceptance synthesis, stronger uninstall/disable semantics beyond rollback, inline media embedding in VText, and owner-review visual polish. |
+| **Apps & Changes** | Launcher-facing change store replacing Candidate Desktop. It presents reviewable changes by name, hides package/candidate refs inside technical details, can pull an AppChangePackage, create a candidate adoption for the current computer, preview that candidate through an internal frame, verify recipient builds, install/promote, rollback through product APIs, and open/create a mission VText dashboard plus owner-readable per-change VText reports. All four alternate-computer experiments now have product-openable VText reports with screenshot/video/benchmark artifact links; Liquid and Python benchmark artifacts are linked from those reports. The selected Change now exposes an honest removal/recovery model: Chiron is rollback-only, Uninstall is disabled without a verified inverse source patch, Disable is disabled without a declared feature flag/capability toggle, and empty rollback-profile JSON is not accepted as evidence. | Needs Trace/run-acceptance synthesis, actual source-level uninstall and feature-disable semantics beyond rollback-only labeling, inline media embedding in VText, and owner-review visual polish. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and VText radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/VText hook, and keyboard controls. |
@@ -194,16 +194,19 @@ evidence:
   `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`, and
   `a73affbc5c58121ceead49b8a8580b4247627fe6`,
   `efeb5d8fc926099ddbebf731d916f6dd83b54245`, and
-  `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`;
+  `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`, and
+  `a6767cf1436d18d2f144faad4ccb300ec8707b21`;
 - CI/deploy runs:
   `https://github.com/yusefmosiah/go-choir/actions/runs/26198364649`,
-  `https://github.com/yusefmosiah/go-choir/actions/runs/26199378174`, and
-  `https://github.com/yusefmosiah/go-choir/actions/runs/26199796372`;
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26199378174`,
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26199796372`, and
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26200571636`;
 - staging health reported proxy and sandbox commit
-  `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`;
+  `a6767cf1436d18d2f144faad4ccb300ec8707b21`;
 - deployed product proof artifacts:
   `test-results/apps-changes-vtext-report-staging-2026-05-21T00-50-49-966Z/apps-changes-vtext-report-proof.json`;
   `test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json`;
+  `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-model-proof.json`;
 - proof covered Apps & Changes opening from the Desk on desktop and `390x844`
   mobile, four ordinary Change cards without package ids, collapsed Technical
   refs, mission VText dashboard creation/opening, and Chiron per-change VText
@@ -227,6 +230,15 @@ evidence:
 - earlier Chiron proof through the same app covered Try, recipient build
   verification, Install, and Rollback with rollback profile
   `refs/computers/primary/active` plus `route:primary`.
+- latest Chiron removal proof covered the deployed rollback-only model on
+  desktop and `390x844` mobile after a real pull -> Try -> recipient build
+  Verify -> Install flow. It recorded adoption
+  `adoption-chiron-shelf-b8d4c4d9-c787-4fe0-9f2b-c26bacb57efb`, candidate
+  `candidate-chiron-shelf-c732c878-35fc-4026-acde-a379bf6f4794`, runtime digest
+  `sha256:194a0b412998a1a373e9c489717181578012ed3edd7a9a1f71cd9f4e68a8879f`,
+  UI digest
+  `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`,
+  and rollback profile `refs/computers/primary/active` plus `route:primary`.
 
 Computer recovery and Compute Monitor proof follows the deployed desktop
 restore recovery baseline:

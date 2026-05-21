@@ -180,9 +180,9 @@ until the breadth substrate exists.
 | Try flow | Creates candidate/review adoption without mutating active computer. | deployed-verified for Chiron: product UI created adoption `adoption-chiron-shelf-62e544c3-4d3c-484a-9638-317fe964f554` and candidate `candidate-chiron-shelf-c0ec9010-bf57-45a0-bfb9-954050dd6638`. |
 | Preview | Opens candidate/review desktop from the selected Change. | deployed-verified structurally through internal `ChangePreviewFrame`; preview iframe is created from the selected Change, not from a launcher-facing manual candidate id. |
 | Install | Promotes verified candidate into active computer with rollback refs. | deployed-verified for Chiron: verify -> adopted -> rolled_back through product APIs with recipient runtime/UI artifact digests and rollback profile. |
-| Uninstall | Honestly supports inverse/remove flow when safe or marks rollback-only/disable-only. | partial: rollback is exposed and works for Chiron; separate uninstall/disable semantics are intentionally not faked. |
-| Disable | Represents feature-flag/capability-disable only when supported. | pending: no disable support claimed. |
-| Installed ledger | Shows installed Changes and action availability. | partial deployed proof: install and rollback states are product-visible during the Chiron flow; richer installed history/action availability needs polish. |
+| Uninstall | Honestly supports inverse/remove flow when safe or marks rollback-only/disable-only. | deployed-verified honesty: Apps & Changes now marks Chiron as rollback-only, keeps Uninstall disabled with "no verified inverse source patch", and no longer treats empty rollback JSON as evidence. Real inverse uninstall remains pending. |
+| Disable | Represents feature-flag/capability-disable only when supported. | deployed-verified honesty: Apps & Changes keeps Disable disabled with "no declared feature flag"; no disable support is claimed. |
+| Installed ledger | Shows installed Changes and action availability. | partial deployed proof: install and rollback states are product-visible during the Chiron flow, and the selected Change now exposes a removal/recovery panel; richer installed history/action availability needs polish. |
 | VText dashboard | Live mission VText updated on substantive changes. | deployed-verified: Apps & Changes opens/creates `Apps & Changes Store Sweep v0` through product VText APIs on desktop and 390x844 mobile. |
 | Per-change VTexts | Chiron, Motion, Liquid, Python each get owner-readable reports. | deployed-verified: all four reports were generated/opened through product VText APIs on desktop and 390x844 mobile with package refs, acceptance refs, manifest hashes, benchmark status, and artifact links. |
 | Screenshots/video | All four Changes have review media linked from detail/VText. | deployed-verified as linked artifacts: all four reports link screenshots/video/benchmark paths. VText still cannot embed image/video inline. |
@@ -190,7 +190,7 @@ until the breadth substrate exists.
 | Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | local benchmark complete and deployed-report linked: 5 matched repo tasks showed bash 807.19ms avg wall time vs Python 129.28ms, estimated payload tokens bash 128 vs Python 221. Live LLM loop benchmark remains residual risk. |
 | Chiron proof | First end-to-end inspect -> Try -> preview -> install -> uninstall/rollback proof. | deployed-verified through Try -> Verify -> Install -> Rollback on staging commit `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`. |
 | Dead-code cleanup | Candidate Desktop removed or refactored into used internal component; no dead island remains. | deployed-verified: `CandidateDesktopViewer.svelte` deleted; remaining `candidate-desktop` matches are mission docs or absence assertions. |
-| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, and Liquid/Python benchmark links are deployed-proofed; Trace surfacing, run-acceptance synthesis, and honest uninstall/disable beyond rollback remain incomplete. |
+| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, Liquid/Python benchmark links, and rollback-only removal honesty are deployed-proofed; Trace surfacing, run-acceptance synthesis, inline media, and true uninstall/disable remain incomplete. |
 
 ## Invariants
 
@@ -399,7 +399,8 @@ authority before stopping.
 status: checkpoint_incomplete
 last checkpoint: deployed Apps & Changes plus first Chiron product-path
   adoption proof, all-four VText report surface, Liquid/Python benchmark links,
-  and a compact/mobile catalog overlap fix.
+  a compact/mobile catalog overlap fix, and an honest rollback-only removal
+  model.
 current artifact state: Apps & Changes exists as the launcher-facing Change
   catalog; Candidate Desktop app code is deleted; candidate preview survives
   only as internal ChangePreviewFrame used by Apps & Changes. Four seeded
@@ -412,6 +413,7 @@ what shipped:
   - `a73affbc5c58121ceead49b8a8580b4247627fe6` Add Apps and Changes VText reports.
   - `efeb5d8fc926099ddbebf731d916f6dd83b54245` Link Apps and Changes benchmark evidence.
   - `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e` Fix Apps and Changes compact layout.
+  - `a6767cf1436d18d2f144faad4ccb300ec8707b21` Expose Apps and Changes removal model.
 what was proven:
   - GitHub Actions run `26197219323` passed and deployed to staging.
   - staging `/health` showed proxy and sandbox commit/deployed_commit
@@ -480,8 +482,42 @@ what was proven:
     package ids in ordinary UI, all four reports opened through product VText,
     package refs and manifest hashes present inside reports, and Liquid/Python
     benchmark artifact links present in the owner-readable reports.
+  - commit `a6767cf1436d18d2f144faad4ccb300ec8707b21` fixed a false-evidence
+    edge: empty rollback-profile JSON no longer counts as rollback evidence,
+    and Apps & Changes now exposes a selected Change's removal model instead
+    of implying uninstall/disable support.
+  - local checks passed after that fix:
+    `npm --prefix frontend run build` and
+    `cd frontend && npx playwright test tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
+    with 10 passing tests.
+  - GitHub Actions run `26200571636` passed and deployed commit
+    `a6767cf1436d18d2f144faad4ccb300ec8707b21`.
+  - staging `/health` showed proxy and sandbox commit/deployed_commit
+    `a6767cf1436d18d2f144faad4ccb300ec8707b21`.
+  - deployed product proof
+    `test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-model-proof.json`
+    passed on desktop and 390x844 mobile after a real Chiron pull -> Try ->
+    recipient build Verify -> Install flow. It recorded adoption
+    `adoption-chiron-shelf-b8d4c4d9-c787-4fe0-9f2b-c26bacb57efb`,
+    candidate `candidate-chiron-shelf-c732c878-35fc-4026-acde-a379bf6f4794`,
+    recipient runtime digest
+    `sha256:194a0b412998a1a373e9c489717181578012ed3edd7a9a1f71cd9f4e68a8879f`,
+    recipient UI digest
+    `sha256:b2367c43c9e0b2d31eb51894237b3bdfef3fe9bfae040bb8e6f2e27972209024`,
+    rollback profile previous active source ref `refs/computers/primary/active`,
+    and previous route profile `route:primary`.
+  - the same proof confirmed the ordinary removal UI says `Rollback-only`,
+    keeps Rollback enabled, keeps Uninstall disabled because there is no
+    verified inverse source patch, keeps Disable disabled because there is no
+    declared feature flag/capability toggle, and still hides package IDs from
+    ordinary UI before Technical refs.
+  - proof-harness learning: the first mobile follow-up reused storage captured
+    before a long recipient build; Install later renewed and rotated the
+    refresh cookie, making that saved storage stale. The passing proof captures
+    storage after Install and clears only saved window state before the mobile
+    check.
 unproven or partial claims: Trace-first review surface; run-acceptance
-  synthesis; polished installed history; true uninstall/disable beyond rollback;
+  synthesis; polished installed history; true uninstall/disable beyond rollback-only labeling;
   inline media embedding in VText; owner hands-on QA for the four experiments.
 belief-state changes: package ids are implementation details; user-facing
   object is Change; Candidate Desktop should be removed, not preserved as a
@@ -491,7 +527,8 @@ belief-state changes: package ids are implementation details; user-facing
 remaining error field: the store/review substrate, first Chiron adoption proof,
   all-four VText reports, and Liquid/Python benchmark references are real, but
   the mission has not yet completed Trace surfacing, run-acceptance synthesis,
-  inline report media, or stronger uninstall/disable semantics.
+  inline report media, or actual source-level uninstall/feature-disable
+  semantics.
 highest-impact remaining uncertainty: can Apps & Changes become a durable
   owner review surface instead of a thin seeded catalog, with VText/Trace/report
   media integrated for all four experiments and honest disable/uninstall
@@ -525,10 +562,16 @@ evidence artifact refs:
   - test-results/apps-changes-benchmarks-2026-05-21T01-00-45-3NZ/liquid-material-benchmark.json
   - test-results/apps-changes-benchmarks-2026-05-21T01-00-45-3NZ/python-code-mode-ab-benchmark.json
   - test-results/apps-changes-benchmark-reports-staging-2026-05-21T01-33-57-228Z/apps-changes-benchmark-reports-proof.json
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/apps-changes-removal-model-proof.json
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/desktop-chiron-removal-model.png
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/mobile-390x844-chiron-removal-model.png
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@a557298aa1e00a37ee63b7880179a5fd.webm
+  - test-results/apps-changes-removal-model-staging-2026-05-21T02-17-21-563Z/page@fc3398eae4f24d97dc856c05a69cfef0.webm
   - frontend tests:
     `cd frontend && npx playwright test tests/computer-live-sync-hard-cutover.spec.js tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
   - build: `npm --prefix frontend run build`
 rollback refs: code rollback by reverting `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`,
+  `a6767cf1436d18d2f144faad4ccb300ec8707b21`,
   `efeb5d8fc926099ddbebf731d916f6dd83b54245`,
   `a73affbc5c58121ceead49b8a8580b4247627fe6`,
   `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`, and
