@@ -146,6 +146,14 @@ func (s *Store) GetRunAcceptance(ctx context.Context, ownerID, acceptanceID stri
 	return scanRunAcceptance(row)
 }
 
+func (s *Store) GetRunAcceptanceByID(ctx context.Context, acceptanceID string) (types.RunAcceptanceRecord, error) {
+	if acceptanceID == "" {
+		return types.RunAcceptanceRecord{}, fmt.Errorf("get run acceptance by id: acceptance_id is required")
+	}
+	row := s.db.QueryRowContext(ctx, runAcceptanceSelectSQL()+` WHERE acceptance_id = ?`, acceptanceID)
+	return scanRunAcceptance(row)
+}
+
 func (s *Store) ListRunAcceptances(ctx context.Context, ownerID string, limit int) ([]types.RunAcceptanceRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("list run acceptances: user_id is required")

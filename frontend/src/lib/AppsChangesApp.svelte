@@ -119,6 +119,7 @@
   let packages = [];
   let adoptions = [];
   let runAcceptances = [];
+  let reviewEvidence = {};
   let loading = true;
   let error = '';
   let actionError = '';
@@ -140,10 +141,10 @@
     : null;
   $: selectedPreviewId = previewCandidateId || selectedAdoption?.target_candidate_id || '';
   $: selectedRemoval = removalProfile(selectedAdoption);
-  $: selectedAcceptance = runAcceptances && latestAcceptanceForTrace(selectedAdoption?.trace_id);
+  $: selectedAcceptance = runAcceptances && reviewEvidence && (latestAcceptanceForTrace(selectedAdoption?.trace_id) || reviewAcceptanceForChange(selectedChange));
   $: installedAdoptions = adoptions.filter((adoption) => adoption.status === 'adopted');
   $: reviewAdoptions = adoptions.filter((adoption) => adoption.status !== 'adopted');
-  $: portfolioRows = runAcceptances && adoptions && packages && SEED_CHANGES.map((change) => portfolioRow(change));
+  $: portfolioRows = runAcceptances && adoptions && packages && reviewEvidence && SEED_CHANGES.map((change) => portfolioRow(change));
   $: portfolioLoadedAcceptanceCount = portfolioRows.filter((row) => row.acceptance?.state === 'accepted').length;
   $: portfolioReportCount = portfolioRows.filter((row) => row.reportReady).length;
   $: portfolioBenchmarkCount = portfolioRows.filter((row) => row.benchmarkReady).length;
@@ -168,6 +169,17 @@
     return runAcceptances.find((acceptance) => acceptance.acceptance_id === acceptanceID) || null;
   }
 
+  function reviewAcceptanceForChange(change) {
+    const evidence = reviewEvidence?.[change?.id] || [];
+    return (
+      evidence.find((acceptance) => acceptance.acceptance_id === change?.recipientAcceptance) ||
+      evidence.find((acceptance) => acceptance.acceptance_id === change?.sourceAcceptance) ||
+      evidence.find((acceptance) => acceptance.state === 'accepted') ||
+      evidence[0] ||
+      null
+    );
+  }
+
   function acceptanceForChange(change) {
     const adoption = latestAdoptionForPackage(change?.packageId);
     const traceAcceptance = latestAcceptanceForTrace(adoption?.trace_id);
@@ -175,8 +187,25 @@
       traceAcceptance ||
       acceptanceByID(change?.recipientAcceptance) ||
       acceptanceByID(change?.sourceAcceptance) ||
+      reviewAcceptanceForChange(change) ||
       null
     );
+  }
+
+  function acceptanceEvidenceCount(acceptance) {
+    if (!acceptance) return 0;
+    if (Array.isArray(acceptance.evidence_refs)) return acceptance.evidence_refs.length;
+    return Number(acceptance.evidence_ref_count || 0);
+  }
+
+  function acceptanceRollbackCount(acceptance) {
+    if (!acceptance) return 0;
+    if (Array.isArray(acceptance.rollback_refs)) return acceptance.rollback_refs.length;
+    return Number(acceptance.rollback_ref_count || 0);
+  }
+
+  function canOpenAcceptanceTrace(acceptance) {
+    return !!(acceptance?.trajectory_id && acceptance.trace_visible !== false);
   }
 
   function benchmarkReady(change) {
@@ -360,8 +389,9 @@
       artifactLine('Acceptance', acceptance.acceptance_id),
       artifactLine('Level', acceptance.acceptance_level),
       artifactLine('State', acceptance.state),
-      artifactLine('Evidence refs', String(acceptance.evidence_refs?.length || 0)),
-      artifactLine('Rollback refs', String(acceptance.rollback_refs?.length || 0)),
+      artifactLine('Evidence refs', String(acceptanceEvidenceCount(acceptance))),
+      artifactLine('Rollback refs', String(acceptanceRollbackCount(acceptance))),
+      acceptance.review_scope ? artifactLine('Review scope', acceptance.review_scope) : '',
     ].filter(Boolean).join('\n');
   }
 
@@ -428,7 +458,7 @@
         `- Family: ${row.change.family}`,
         `- Product status: ${row.status}`,
         `- Report source VText: \`${row.change.sourceVTextDocId}\` / \`${row.change.sourceVTextRevisionId}\``,
-        `- Acceptance coverage: ${row.acceptance ? `${row.acceptance.acceptance_level || 'unknown-level'} / ${row.acceptance.state || 'unknown-state'}` : 'acceptance refs listed, record not loaded in this computer'}`,
+        `- Acceptance coverage: ${row.acceptance ? `${row.acceptance.acceptance_level || 'unknown-level'} / ${row.acceptance.state || 'unknown-state'}${row.acceptance.review_scope ? ` (${row.acceptance.review_scope})` : ''}` : 'acceptance refs listed, record not loaded in this computer'}`,
         `- Source acceptance ref: \`${row.change.sourceAcceptance}\``,
         `- Recipient acceptance ref: \`${row.change.recipientAcceptance}\``,
         `- Benchmark status: ${row.change.benchmarkStatus}`,
@@ -618,6 +648,32 @@
     }
   }
 
+  async function loadPackageReviewEvidence() {
+    const nextEvidence = {};
+    let failures = 0;
+    await Promise.all(SEED_CHANGES.map(async (change) => {
+      const ids = [change.recipientAcceptance, change.sourceAcceptance].filter(Boolean);
+      if (!change.packageId || ids.length === 0) {
+        nextEvidence[change.id] = [];
+        return;
+      }
+      const query = ids.map((id) => `acceptance_id=${encodeURIComponent(id)}`).join('&');
+      try {
+        const body = await fetchJSON(`/api/app-change-packages/${encodeURIComponent(change.packageId)}/review-evidence?${query}`, {
+          method: 'GET',
+        });
+        nextEvidence[change.id] = Array.isArray(body?.acceptances) ? body.acceptances : [];
+      } catch {
+        failures += 1;
+        nextEvidence[change.id] = [];
+      }
+    }));
+    reviewEvidence = nextEvidence;
+    if (!acceptanceStatus && failures === SEED_CHANGES.length && runAcceptances.length === 0) {
+      acceptanceStatus = 'Package-scoped review evidence is not readable yet.';
+    }
+  }
+
   function mergePreservedAdoptions(nextAdoptions, preservedAdoptions = []) {
     const merged = Array.isArray(nextAdoptions) ? [...nextAdoptions] : [];
     for (const adoption of preservedAdoptions) {
@@ -641,6 +697,7 @@
       const nextAdoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
       adoptions = mergePreservedAdoptions(nextAdoptions, preservedAdoptions);
       await loadRunAcceptances();
+      await loadPackageReviewEvidence();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -650,6 +707,7 @@
       packages = [];
       adoptions = [];
       runAcceptances = [];
+      reviewEvidence = {};
     } finally {
       loading = false;
     }
@@ -757,9 +815,10 @@
   }
 
   function openTraceForAdoption(adoption, acceptance = null) {
-    if (!adoption?.trace_id) return;
+    const trajectoryId = adoption?.trace_id || (canOpenAcceptanceTrace(acceptance) ? acceptance.trajectory_id : '');
+    if (!trajectoryId) return;
     dispatch('opentrace', {
-      trajectoryId: adoption.trace_id,
+      trajectoryId,
       acceptanceId: acceptance?.acceptance_id || '',
       title: `${selectedChange.name} Trace`,
       toastMessage: `Opened Trace for ${selectedChange.name}`,
@@ -767,7 +826,7 @@
   }
 
   function openTraceForPortfolioRow(row) {
-    if (!row?.acceptance?.trajectory_id) return;
+    if (!canOpenAcceptanceTrace(row?.acceptance)) return;
     dispatch('opentrace', {
       trajectoryId: row.acceptance.trajectory_id,
       acceptanceId: row.acceptance.acceptance_id || '',
@@ -882,6 +941,7 @@
           data-portfolio-change
           data-change-id={row.change.id}
           data-portfolio-acceptance-state={row.acceptance?.state || 'not-loaded'}
+          data-portfolio-acceptance-scope={row.acceptance?.review_scope || 'local'}
         >
           <button class="portfolio-main" on:click={() => selectChange(row.change)}>
             <span>{row.change.family}</span>
@@ -902,10 +962,10 @@
           <button
             class="portfolio-trace-action"
             data-portfolio-open-trace
-            disabled={!row.acceptance?.trajectory_id}
+            disabled={!canOpenAcceptanceTrace(row.acceptance)}
             on:click={() => openTraceForPortfolioRow(row)}
           >
-            Trace
+            {canOpenAcceptanceTrace(row.acceptance) ? 'Trace' : row.acceptance ? 'Summary' : 'Trace'}
           </button>
         </article>
       {/each}
@@ -1043,9 +1103,9 @@
           class="trace-review-panel"
           data-change-trace-review
           data-change-trace-ready={selectedAcceptance ? 'accepted' : selectedAdoption?.trace_id ? 'trace-only' : 'none'}
-          data-change-trace-id={selectedAdoption?.trace_id || ''}
+          data-change-trace-id={selectedAdoption?.trace_id || (canOpenAcceptanceTrace(selectedAcceptance) ? selectedAcceptance?.trajectory_id : '') || ''}
           data-change-acceptance-id={selectedAcceptance?.acceptance_id || ''}
-          data-change-acceptance-count={runAcceptances.length}
+          data-change-acceptance-count={runAcceptances.length + Object.values(reviewEvidence).flat().length}
         >
           <div class="section-heading">
             <strong>Trace & acceptance</strong>
@@ -1054,7 +1114,7 @@
           <div class="trace-review-grid">
             <div>
               <span>trajectory</span>
-              <strong>{selectedAdoption?.trace_id ? shortRef(selectedAdoption.trace_id) : 'not created'}</strong>
+              <strong>{selectedAdoption?.trace_id ? shortRef(selectedAdoption.trace_id) : canOpenAcceptanceTrace(selectedAcceptance) ? shortRef(selectedAcceptance.trajectory_id) : selectedAcceptance ? 'external summary' : 'not created'}</strong>
             </div>
             <div>
               <span>acceptance</span>
@@ -1066,7 +1126,7 @@
             </div>
             <div>
               <span>evidence</span>
-              <strong>{selectedAcceptance ? `${selectedAcceptance.evidence_refs?.length || 0} refs · ${selectedAcceptance.rollback_refs?.length || 0} rollback` : 'pending'}</strong>
+              <strong>{selectedAcceptance ? `${acceptanceEvidenceCount(selectedAcceptance)} refs · ${acceptanceRollbackCount(selectedAcceptance)} rollback` : 'pending'}</strong>
             </div>
           </div>
           {#if acceptanceStatus}
@@ -1074,6 +1134,7 @@
           {:else if selectedAcceptance}
             <p class="trace-review-note" data-change-acceptance-summary>
               {selectedAcceptance.target_mission_id || selectedAcceptance.source_prompt_or_objective || selectedAcceptance.acceptance_id}
+              {selectedAcceptance.review_scope ? ` · ${selectedAcceptance.review_scope}` : ''}
             </p>
           {:else if selectedAdoption?.trace_id}
             <p class="trace-review-note" data-change-acceptance-summary>
@@ -1089,9 +1150,9 @@
               class="report-action"
               data-change-open-trace
               on:click={() => openTraceForAdoption(selectedAdoption, selectedAcceptance)}
-              disabled={!selectedAdoption?.trace_id}
+              disabled={!selectedAdoption?.trace_id && !canOpenAcceptanceTrace(selectedAcceptance)}
             >
-              Open Trace evidence
+              {selectedAdoption?.trace_id || canOpenAcceptanceTrace(selectedAcceptance) ? 'Open Trace evidence' : 'Trace not shared'}
             </button>
           </div>
         </section>

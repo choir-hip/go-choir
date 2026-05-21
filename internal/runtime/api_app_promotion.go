@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -16,6 +17,33 @@ type appChangePackageListResponse struct {
 
 type appAdoptionListResponse struct {
 	Adoptions []types.AppAdoptionRecord `json:"adoptions"`
+}
+
+type appChangePackageReviewEvidenceResponse struct {
+	PackageID   string                              `json:"package_id"`
+	Acceptances []appChangePackageAcceptanceSummary `json:"acceptances"`
+}
+
+type appChangePackageAcceptanceSummary struct {
+	AcceptanceID          string                    `json:"acceptance_id"`
+	TargetMissionID       string                    `json:"target_mission_id,omitempty"`
+	SourcePromptObjective string                    `json:"source_prompt_or_objective,omitempty"`
+	TrajectoryID          string                    `json:"trajectory_id"`
+	AcceptanceLevel       types.RunAcceptanceLevel  `json:"acceptance_level"`
+	State                 types.RunAcceptanceState  `json:"state"`
+	AuthorityProfile      string                    `json:"authority_profile,omitempty"`
+	EvidenceRefCount      int                       `json:"evidence_ref_count"`
+	RollbackRefCount      int                       `json:"rollback_ref_count"`
+	CheckpointKinds       []string                  `json:"checkpoint_kinds,omitempty"`
+	VerifierContracts     []acceptanceContractState `json:"verifier_contracts,omitempty"`
+	ReviewScope           string                    `json:"review_scope"`
+	TraceVisible          bool                      `json:"trace_visible"`
+	UpdatedAt             time.Time                 `json:"updated_at"`
+}
+
+type acceptanceContractState struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
 }
 
 func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Request) {
@@ -133,22 +161,77 @@ func (h *APIHandler) HandleAppChangePackageDetail(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	const prefix = "/api/app-change-packages/"
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	parts := strings.Split(rest, "/")
+	if len(parts) == 2 && parts[1] == "review-evidence" {
+		h.handleAppChangePackageReviewEvidence(w, r, ownerID, strings.TrimSpace(parts[0]))
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	const prefix = "/api/app-change-packages/"
-	packageID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	if packageID == "" || strings.Contains(packageID, "/") {
+	if len(parts) != 1 || strings.TrimSpace(parts[0]) == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
 		return
 	}
+	packageID := strings.TrimSpace(parts[0])
 	rec, err := h.rt.store.GetAppChangePackageForViewer(r.Context(), ownerID, packageID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, rec)
+}
+
+func (h *APIHandler) handleAppChangePackageReviewEvidence(w http.ResponseWriter, r *http.Request, viewerID, packageID string) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if packageID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
+		return
+	}
+	pkg, err := h.rt.store.GetAppChangePackageForViewer(r.Context(), viewerID, packageID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app change package not found"})
+		return
+	}
+	rawIDs := r.URL.Query()["acceptance_id"]
+	if len(rawIDs) == 0 {
+		writeAPIJSON(w, http.StatusOK, appChangePackageReviewEvidenceResponse{
+			PackageID:   pkg.PackageID,
+			Acceptances: []appChangePackageAcceptanceSummary{},
+		})
+		return
+	}
+	seen := map[string]bool{}
+	summaries := []appChangePackageAcceptanceSummary{}
+	for _, rawID := range rawIDs {
+		acceptanceID := strings.TrimSpace(rawID)
+		if acceptanceID == "" || seen[acceptanceID] {
+			continue
+		}
+		seen[acceptanceID] = true
+		if len(seen) > 8 {
+			break
+		}
+		rec, err := h.rt.store.GetRunAcceptanceByID(r.Context(), acceptanceID)
+		if err != nil {
+			continue
+		}
+		scope, ok := reviewEvidenceScope(viewerID, pkg, rec)
+		if !ok {
+			continue
+		}
+		summaries = append(summaries, summarizePackageReviewAcceptance(viewerID, rec, scope))
+	}
+	writeAPIJSON(w, http.StatusOK, appChangePackageReviewEvidenceResponse{
+		PackageID:   pkg.PackageID,
+		Acceptances: summaries,
+	})
 }
 
 func (h *APIHandler) HandleInternalAppChangePackageDetail(w http.ResponseWriter, r *http.Request) {
@@ -287,4 +370,95 @@ func apiLimit(r *http.Request, fallback int) int {
 		}
 	}
 	return limit
+}
+
+func reviewEvidenceScope(viewerID string, pkg types.AppChangePackageRecord, rec types.RunAcceptanceRecord) (string, bool) {
+	if rec.OwnerID == viewerID {
+		return "viewer", true
+	}
+	if packageProvenanceNamesAcceptance(pkg, rec.AcceptanceID) {
+		return "package-provenance", true
+	}
+	if acceptanceRecordReferencesPackage(rec, pkg.PackageID) {
+		return "package-referenced", true
+	}
+	if pkg.TraceID != "" && rec.TrajectoryID == pkg.TraceID {
+		return "package-trace", true
+	}
+	return "", false
+}
+
+func summarizePackageReviewAcceptance(viewerID string, rec types.RunAcceptanceRecord, scope string) appChangePackageAcceptanceSummary {
+	checkpoints := make([]string, 0, len(rec.Checkpoints))
+	for _, checkpoint := range rec.Checkpoints {
+		if checkpoint.Kind == "" {
+			continue
+		}
+		checkpoints = append(checkpoints, checkpoint.Kind)
+		if len(checkpoints) >= 8 {
+			break
+		}
+	}
+	contracts := make([]acceptanceContractState, 0, len(rec.VerifierContracts))
+	for _, contract := range rec.VerifierContracts {
+		if contract.Name == "" {
+			continue
+		}
+		contracts = append(contracts, acceptanceContractState{Name: contract.Name, State: contract.State})
+		if len(contracts) >= 8 {
+			break
+		}
+	}
+	return appChangePackageAcceptanceSummary{
+		AcceptanceID:          rec.AcceptanceID,
+		TargetMissionID:       rec.TargetMissionID,
+		SourcePromptObjective: rec.SourcePromptObjective,
+		TrajectoryID:          rec.TrajectoryID,
+		AcceptanceLevel:       rec.AcceptanceLevel,
+		State:                 rec.State,
+		AuthorityProfile:      rec.AuthorityProfile,
+		EvidenceRefCount:      len(rec.EvidenceRefs),
+		RollbackRefCount:      len(rec.RollbackRefs),
+		CheckpointKinds:       checkpoints,
+		VerifierContracts:     contracts,
+		ReviewScope:           scope,
+		TraceVisible:          rec.OwnerID == viewerID,
+		UpdatedAt:             rec.UpdatedAt,
+	}
+}
+
+func packageProvenanceNamesAcceptance(pkg types.AppChangePackageRecord, acceptanceID string) bool {
+	if acceptanceID == "" || len(pkg.ProvenanceRefsJSON) == 0 {
+		return false
+	}
+	return strings.Contains(string(pkg.ProvenanceRefsJSON), acceptanceID)
+}
+
+func acceptanceRecordReferencesPackage(rec types.RunAcceptanceRecord, packageID string) bool {
+	if packageID == "" {
+		return false
+	}
+	for _, text := range []string{
+		rec.TargetMissionID,
+		rec.SourcePromptObjective,
+		rec.TrajectoryID,
+		string(mustMarshalAcceptanceSurface(rec.Checkpoints)),
+		string(mustMarshalAcceptanceSurface(rec.EvidenceRefs)),
+		string(mustMarshalAcceptanceSurface(rec.RollbackRefs)),
+		string(mustMarshalAcceptanceSurface(rec.VerifierContracts)),
+		string(mustMarshalAcceptanceSurface(rec.InvariantChecks)),
+	} {
+		if strings.Contains(text, packageID) {
+			return true
+		}
+	}
+	return false
+}
+
+func mustMarshalAcceptanceSurface(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return data
 }

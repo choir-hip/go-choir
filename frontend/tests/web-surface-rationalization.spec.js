@@ -330,6 +330,73 @@ test('Apps & Changes aggregates portfolio reports and acceptance coverage', asyn
   await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('export-level', { timeout: 10_000 });
 });
 
+test('Apps & Changes loads package-scoped review evidence without current-computer installs', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const changes = [
+    ['chiron-shelf', '28433c19-5d02-416f-9368-de56390e1927', 'runacc-c3d70f753b81fd591442', 'promotion-level'],
+    ['motion-language', '98b98c73-eef0-4a88-a6f5-b7dfe695be09', 'runacc-3b54c9ae8dac2337184a', 'export-level'],
+    ['liquid-material', '1dad3dfc-7f83-4b22-bfb5-7f1714159f66', 'runacc-d144087c5ffacad2e147', 'export-level'],
+    ['python-code-mode', 'f31edbc8-1b43-44f5-82a1-834dce4833ca', 'runacc-45495b8caebc3e1b82c5', 'export-level'],
+  ];
+  const byPackage = new Map(changes.map(([changeID, packageID, acceptanceID, level]) => [packageID, {
+    changeID,
+    acceptance_id: acceptanceID,
+    target_mission_id: `mission-${changeID}`,
+    trajectory_id: `trajectory-${changeID}`,
+    state: 'accepted',
+    acceptance_level: level,
+    authority_profile: 'product-path',
+    review_scope: changeID === 'chiron-shelf' ? 'viewer' : 'package-referenced',
+    trace_visible: changeID === 'chiron-shelf',
+    evidence_ref_count: 3,
+    rollback_ref_count: changeID === 'chiron-shelf' ? 1 : 0,
+    checkpoint_kinds: ['app_change_package_published'],
+  }]));
+  const localAcceptance = byPackage.get('28433c19-5d02-416f-9368-de56390e1927');
+
+  await page.route('**/api/app-change-packages**', async (route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/^\/api\/app-change-packages\/([^/]+)\/review-evidence$/);
+    if (match) {
+      const packageID = decodeURIComponent(match[1]);
+      const acceptance = byPackage.get(packageID);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ package_id: packageID, acceptances: acceptance ? [acceptance] : [] }),
+      });
+      return;
+    }
+    if (url.pathname === '/api/app-change-packages' && route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected package route' }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
+  });
+  await page.route('**/api/run-acceptances**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ acceptances: [localAcceptance] }),
+    });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  const portfolio = store.locator('[data-portfolio-review]');
+  await expect(portfolio).toHaveAttribute('data-portfolio-accepted-count', '4');
+  const liquidRow = portfolio.locator('[data-portfolio-change][data-change-id="liquid-material"]');
+  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-state', 'accepted');
+  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-scope', 'package-referenced');
+  await expect(liquidRow.locator('[data-portfolio-open-trace]')).toBeDisabled();
+  await expect(liquidRow.locator('[data-portfolio-open-trace]')).toContainText('Summary');
+  await liquidRow.locator('.portfolio-main').click();
+  await expect(store.locator('[data-change-acceptance-summary]')).toContainText('package-referenced');
+});
+
 test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const docs = new Map();

@@ -225,6 +225,96 @@ func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
 	}
 }
 
+func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	body := `{
+		"app_id":"portfolio-experiment",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-review",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract"
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+
+	_, err := rt.store.UpsertRunAcceptance(context.Background(), types.RunAcceptanceRecord{
+		AcceptanceID:          "runacc-package-visible",
+		OwnerID:               "user-bob",
+		TargetMissionID:       "mission-review-evidence",
+		TrajectoryID:          "traj-review-evidence",
+		AcceptanceLevel:       types.RunAcceptancePromotionLevel,
+		State:                 types.RunAcceptanceAccepted,
+		SourcePromptObjective: "review package " + pkg.PackageID,
+		EvidenceRefs: []types.RunAcceptanceEvidenceRef{{
+			RefID:   "package-proof",
+			Kind:    "app_change_package",
+			Summary: "recipient build references package",
+			Details: map[string]any{"package_id": pkg.PackageID},
+		}},
+		RollbackRefs: []types.RunAcceptanceRollbackRef{{
+			Kind:    "source_ref",
+			Ref:     "refs/computers/primary/active-before",
+			Summary: "previous active source ref",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("seed package acceptance: %v", err)
+	}
+	_, err = rt.store.UpsertRunAcceptance(context.Background(), types.RunAcceptanceRecord{
+		AcceptanceID:    "runacc-unrelated",
+		OwnerID:         "user-bob",
+		TargetMissionID: "mission-unrelated",
+		TrajectoryID:    "traj-unrelated",
+		AcceptanceLevel: types.RunAcceptanceExportLevel,
+		State:           types.RunAcceptanceAccepted,
+		EvidenceRefs: []types.RunAcceptanceEvidenceRef{{
+			RefID:   "other-proof",
+			Kind:    "app_change_package",
+			Summary: "different package",
+			Details: map[string]any{"package_id": "pkg-other"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("seed unrelated acceptance: %v", err)
+	}
+
+	detailW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances/runacc-package-visible", "", "user-charlie")
+	if detailW.Code != http.StatusNotFound {
+		t.Fatalf("cross-owner full acceptance detail visible: status=%d body=%s", detailW.Code, detailW.Body.String())
+	}
+
+	reviewPath := "/api/app-change-packages/" + pkg.PackageID + "/review-evidence?acceptance_id=runacc-package-visible&acceptance_id=runacc-unrelated"
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodGet, reviewPath, "", "user-charlie")
+	if reviewW.Code != http.StatusOK {
+		t.Fatalf("review evidence status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	var review appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(reviewW.Body.Bytes(), &review); err != nil {
+		t.Fatalf("decode review evidence: %v", err)
+	}
+	if len(review.Acceptances) != 1 {
+		t.Fatalf("review acceptances = %+v, want one package-scoped summary", review.Acceptances)
+	}
+	got := review.Acceptances[0]
+	if got.AcceptanceID != "runacc-package-visible" || got.State != types.RunAcceptanceAccepted || got.AcceptanceLevel != types.RunAcceptancePromotionLevel {
+		t.Fatalf("review acceptance summary = %+v", got)
+	}
+	if got.TraceVisible {
+		t.Fatalf("cross-owner package evidence should not claim Trace visibility: %+v", got)
+	}
+	if strings.Contains(reviewW.Body.String(), "user-bob") {
+		t.Fatalf("review evidence leaked source owner id: %s", reviewW.Body.String())
+	}
+}
+
 func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
 	_, handler := testAPISetup(t)
 	body := `{
