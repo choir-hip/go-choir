@@ -437,6 +437,24 @@ func (m *Manager) ReadGatewayToken(vmID string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+func (m *Manager) resolveGatewayToken(cfg VMConfig) string {
+	if token := strings.TrimSpace(cfg.GatewayToken); token != "" {
+		return token
+	}
+	if strings.TrimSpace(cfg.VMID) == "" {
+		return ""
+	}
+	persistDir := strings.TrimSpace(cfg.PersistentDir)
+	if persistDir == "" {
+		persistDir = filepath.Join(m.cfg.StateDir, cfg.VMID, "persist")
+	}
+	data, err := os.ReadFile(filepath.Join(persistDir, "gateway-token"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
 func (m *Manager) stop(stopVMs bool) {
 	m.mu.Lock()
 	cancel := m.healthCancel
@@ -541,6 +559,7 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: warning: could not write gateway token for VM %s: %v", cfg.VMID, err)
 		}
 	}
+	cfg.GatewayToken = m.resolveGatewayToken(cfg)
 
 	// Load or initialize the epoch counter for this VM.
 	epoch, err := m.loadEpoch(cfg.VMID)
@@ -766,6 +785,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	// This preserves the VM identity across stop/resume so callers
 	// can detect duplicate canonical effects (VAL-CROSS-117).
 	epoch := inst.Config.Epoch
+	inst.Config.GatewayToken = m.resolveGatewayToken(inst.Config)
 
 	fcConfig := m.buildFirecrackerConfig(inst.Config, hostPort)
 
@@ -830,19 +850,21 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 			epoch = loaded
 		}
 	}
+	cfg := VMConfig{
+		VMID:              vmID,
+		KernelImagePath:   m.cfg.KernelImagePath,
+		InitrdPath:        m.cfg.InitrdPath,
+		RootfsPath:        m.cfg.RootfsPath,
+		StoreDiskPath:     m.cfg.StoreDiskPath,
+		GuestPort:         m.cfg.GuestPort,
+		MachineCPUCount:   m.cfg.MachineCPUCount,
+		MachineMemSizeMib: m.cfg.MachineMemSizeMib,
+		PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
+		Epoch:             epoch,
+	}
+	cfg.GatewayToken = m.resolveGatewayToken(cfg)
 	inst := &VMInstance{
-		Config: VMConfig{
-			VMID:              vmID,
-			KernelImagePath:   m.cfg.KernelImagePath,
-			InitrdPath:        m.cfg.InitrdPath,
-			RootfsPath:        m.cfg.RootfsPath,
-			StoreDiskPath:     m.cfg.StoreDiskPath,
-			GuestPort:         m.cfg.GuestPort,
-			MachineCPUCount:   m.cfg.MachineCPUCount,
-			MachineMemSizeMib: m.cfg.MachineMemSizeMib,
-			PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
-			Epoch:             epoch,
-		},
+		Config:          cfg,
 		State:           StateRunning,
 		HostURL:         hostURL,
 		PID:             pid,
@@ -1043,6 +1065,8 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 // this configuration. The guest environment, boot_args, and drives
 // contain only the minimum bootstrap material (VAL-VM-011).
 func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]interface{} {
+	cfg.GatewayToken = m.resolveGatewayToken(cfg)
+
 	// Calculate the /30 subnet for this VM based on host port. The ordinal
 	// wraps through a bounded private 10.200.0.0-10.215.255.255 pool so
 	// long-lived staging allocators cannot generate invalid IPv4 octets.

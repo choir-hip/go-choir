@@ -61,6 +61,41 @@ Focused tests:
 nix develop -c go test -count=1 ./internal/gateway ./internal/vmctl
 ```
 
+## Follow-Up: Reattached VM Lost Bootstrap Token
+
+The first repair exposed a second lifecycle bug on a different active primary
+computer, `vm-71d5fdd182930f6d1f94526005094f17` for owner
+`d871c6cc-ec06-4d54-87d7-accaad406afd`.
+
+Evidence at 2026-05-21 21:03-21:08 UTC:
+
+- vmctl reattached the surviving Firecracker process after deploy because
+  `/health` was ready.
+- The gateway token persisted on the host and could be validated from Node B.
+- After an operational hibernate/resume, the guest rebooted on the current
+  sandbox build but reported `gateway client: missing sandbox credential`.
+
+Root cause: `ReattachVM` reconstructed an in-memory `VMConfig` without
+`GatewayToken`. Later resume/recover rebuilt kernel args from that config and
+omitted `choir.gateway_token`, so the guest init script never populated
+`RUNTIME_GATEWAY_TOKEN`. The token file under
+`/var/lib/go-choir/vm-state/<vm>/persist/gateway-token` is host-side bootstrap
+material; it is not itself enough unless vmmanager reloads it into boot args.
+
+Follow-up hardening:
+
+- vmmanager now reloads a persisted gateway token into `VMConfig` on boot,
+  resume, reattach, recover, and Firecracker config construction.
+- A regression test asserts that a persisted token is included as
+  `choir.gateway_token=...` even when the in-memory config was reconstructed
+  without `GatewayToken`.
+
+Focused tests:
+
+```text
+nix develop -c go test -count=1 ./internal/vmmanager ./internal/vmctl ./internal/gateway
+```
+
 ## Mission Learnings
 
 The alternate-computer experiment portfolio produced useful artifacts, but the

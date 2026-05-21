@@ -1282,6 +1282,44 @@ func TestBuildFirecrackerConfig_IncludesGatewayTokenBootstrapParam(t *testing.T)
 	}
 }
 
+func TestBuildFirecrackerConfig_LoadsPersistedGatewayTokenBootstrapParam(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+	cfg.InitrdPath = "/opt/go-choir/guest/initrd"
+	cfg.StoreDiskPath = "/opt/go-choir/guest/storedisk.erofs"
+	cfg.KernelParams = "root=fstab init=/nix/store/example-init regInfo=/nix/store/example-reginfo"
+
+	mgr := NewManager(cfg)
+
+	persistDir := filepath.Join(cfg.StateDir, "vm-persisted-token-test", "persist")
+	if err := os.MkdirAll(persistDir, 0o755); err != nil {
+		t.Fatalf("create persist dir: %v", err)
+	}
+	token := "vm-persisted-token-test:abcdef123456"
+	if err := os.WriteFile(filepath.Join(persistDir, "gateway-token"), []byte(token), 0o600); err != nil {
+		t.Fatalf("write gateway token: %v", err)
+	}
+
+	vmCfg := VMConfig{
+		VMID:              "vm-persisted-token-test",
+		KernelImagePath:   cfg.KernelImagePath,
+		InitrdPath:        cfg.InitrdPath,
+		StoreDiskPath:     cfg.StoreDiskPath,
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 512,
+		PersistentDir:     persistDir,
+		Epoch:             1,
+	}
+
+	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
+	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if !containsStr(bootArgs, "choir.gateway_token="+token) {
+		t.Fatalf("expected persisted gateway token bootstrap arg in %q", bootArgs)
+	}
+}
+
 func TestBuildFirecrackerConfig_SubnetIsolation(t *testing.T) {
 	// Verify that different host ports get different /30 subnets,
 	// ensuring VM network isolation (VAL-VM-005).
