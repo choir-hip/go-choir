@@ -136,6 +136,7 @@
     ? adoptions.find((adoption) => adoption.package_id === selectedChange.packageId) || null
     : null;
   $: selectedPreviewId = previewCandidateId || selectedAdoption?.target_candidate_id || '';
+  $: selectedRemoval = removalProfile(selectedAdoption);
   $: installedAdoptions = adoptions.filter((adoption) => adoption.status === 'adopted');
   $: reviewAdoptions = adoptions.filter((adoption) => adoption.status !== 'adopted');
 
@@ -174,7 +175,63 @@
   }
 
   function canRollback(adoption) {
-    return adoption && ['verified', 'adopted', 'blocked'].includes(adoption.status);
+    return adoption && ['verified', 'adopted', 'blocked'].includes(adoption.status) && hasRollbackProfile(adoption);
+  }
+
+  function parseRecordJSON(value) {
+    if (!value) return {};
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+    if (typeof value === 'object') return value;
+    return {};
+  }
+
+  function hasRollbackProfile(adoption) {
+    const profile = parseRecordJSON(adoption?.rollback_profile_json);
+    return !!profile.previous_active_source_ref;
+  }
+
+  function rollbackProfileLabel(adoption) {
+    if (!adoption) return 'pending';
+    return hasRollbackProfile(adoption) ? 'recorded' : 'pending';
+  }
+
+  function removalProfile(adoption) {
+    if (!adoption) {
+      return {
+        mode: 'Not tried',
+        rollback: 'Try and verify this Change before recovery actions are available.',
+        uninstall: 'Unavailable until a recipient adoption exists.',
+        disable: 'Unavailable until a recipient adoption exists.',
+      };
+    }
+    if (adoption.status === 'rolled_back') {
+      return {
+        mode: 'Rolled back',
+        rollback: 'This adoption has already been rolled back to the recorded source ref.',
+        uninstall: 'Not needed after rollback.',
+        disable: 'Not applicable after rollback.',
+      };
+    }
+    if (hasRollbackProfile(adoption)) {
+      return {
+        mode: 'Rollback-only',
+        rollback: 'Available: restore the previous active source ref and route profile.',
+        uninstall: 'Unavailable: this package has no verified inverse source patch.',
+        disable: 'Unavailable: this package has no declared feature flag or capability toggle.',
+      };
+    }
+    return {
+      mode: 'Recovery pending',
+      rollback: 'Pending: verify the recipient build to record rollback refs.',
+      uninstall: 'Unavailable: source-level inverse removal has not been verified.',
+      disable: 'Unavailable: no feature flag or capability toggle is declared.',
+    };
   }
 
   function actionKey(id, action) {
@@ -224,8 +281,11 @@
       artifactLine('Candidate', adoption.target_candidate_id),
       artifactLine('Runtime digest', adoption.runtime_artifact_digest),
       artifactLine('UI digest', adoption.ui_artifact_digest),
-      artifactLine('Rollback profile', adoption.rollback_profile_json ? 'recorded' : 'pending'),
+      artifactLine('Rollback profile', rollbackProfileLabel(adoption)),
       artifactLine('Trace', adoption.trace_id),
+      artifactLine('Removal mode', removalProfile(adoption).mode),
+      artifactLine('Uninstall', removalProfile(adoption).uninstall),
+      artifactLine('Disable', removalProfile(adoption).disable),
     ].filter(Boolean).join('\n');
   }
 
@@ -241,7 +301,8 @@
       '- Store substrate: deployed and product-path verified.',
       '- Candidate Desktop: removed from ordinary launcher UI.',
       '- Chiron proof: Try -> Verify -> Install -> Rollback passed on staging.',
-      '- Remaining work: Trace/run-acceptance synthesis, report media embedding, honest disable/uninstall semantics beyond rollback, and hands-on owner QA.',
+      '- Removal model: rollback-only is exposed honestly for packages without a verified inverse uninstall or disable flag.',
+      '- Remaining work: Trace/run-acceptance synthesis, report media embedding, source-level uninstall/feature-flag disable implementations, and hands-on owner QA.',
       '',
       '## Seed Changes',
       '',
@@ -721,9 +782,34 @@
           </div>
           <div>
             <span>rollback</span>
-            <strong>{selectedAdoption?.rollback_profile_json ? 'recorded' : 'pending'}</strong>
+            <strong>{rollbackProfileLabel(selectedAdoption)}</strong>
           </div>
         </div>
+
+        <section class="removal-panel" data-change-removal-model data-removal-mode={selectedRemoval.mode}>
+          <div class="section-heading">
+            <strong>Removal & recovery</strong>
+            <span>{selectedRemoval.mode}</span>
+          </div>
+          <div class="removal-status-grid">
+            <div>
+              <span>rollback</span>
+              <strong>{selectedRemoval.rollback}</strong>
+            </div>
+            <div>
+              <span>uninstall</span>
+              <strong>{selectedRemoval.uninstall}</strong>
+            </div>
+            <div>
+              <span>disable</span>
+              <strong>{selectedRemoval.disable}</strong>
+            </div>
+          </div>
+          <div class="removal-actions">
+            <button class="unavailable-action" data-change-uninstall disabled>Uninstall unavailable</button>
+            <button class="unavailable-action" data-change-disable disabled>Disable unavailable</button>
+          </div>
+        </section>
 
         <details class="technical-details" data-change-technical-details>
           <summary>Technical refs</summary>
@@ -1059,6 +1145,15 @@
     background: rgba(136, 19, 55, 0.26);
   }
 
+  .unavailable-action {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    color: #cbd5e1;
+    background: rgba(15, 23, 42, 0.62);
+  }
+
   button:disabled {
     cursor: not-allowed;
     opacity: 0.48;
@@ -1076,6 +1171,56 @@
     border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 8px;
     background: rgba(2, 6, 23, 0.46);
+  }
+
+  .removal-panel {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid rgba(251, 191, 36, 0.18);
+    border-radius: 8px;
+    background: rgba(69, 26, 3, 0.18);
+  }
+
+  .removal-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .removal-status-grid div {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(251, 191, 36, 0.14);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.42);
+  }
+
+  .removal-status-grid span,
+  .removal-status-grid strong {
+    display: block;
+  }
+
+  .removal-status-grid span {
+    color: #fcd34d;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .removal-status-grid strong {
+    margin-top: 5px;
+    color: #f8fafc;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .removal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .candidate-summary span,
@@ -1175,6 +1320,10 @@
 
     .candidate-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .removal-status-grid {
+      grid-template-columns: 1fr;
     }
 
     .hero-meter {

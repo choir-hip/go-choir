@@ -1,6 +1,10 @@
 import { test, expect } from './helpers/fixtures.js';
 
 async function openStartApp(page, appId) {
+  const existing = page.locator(`[data-window-app-id="${appId}"]`);
+  for (let count = await existing.count(); count > 0; count -= 1) {
+    await existing.last().locator('[data-window-close]').click();
+  }
   await page.locator('[data-start-button]').click();
   await page.locator(`[data-start-app-id="${appId}"]`).click();
 }
@@ -52,6 +56,50 @@ test('Apps & Changes compact catalog remains clickable beside the detail pane', 
   await expect(store.locator('[data-change-detail] h3')).toContainText('Process Animation Language');
   await store.locator('[data-change-card][data-change-id="python-code-mode"]').click();
   await expect(store.locator('[data-change-detail] h3')).toContainText('Python Code Mode');
+});
+
+test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const adoption = {
+    adoption_id: 'adoption-chiron-rollback-only',
+    package_id: '28433c19-5d02-416f-9368-de56390e1927',
+    app_id: 'Chiron Shelf Observability',
+    target_computer_id: 'primary',
+    target_candidate_id: 'candidate-chiron-rollback-only',
+    status: 'adopted',
+    target_active_source_ref_at_candidate_start: 'refs/computers/primary/active',
+    target_active_source_ref_at_cutover: 'refs/computers/primary/active',
+    candidate_source_ref: 'refs/computers/primary/candidates/candidate-chiron-rollback-only',
+    foreground_tail_merge_result: 'no-conflict',
+    merge_strategy: 'rebase',
+    merge_conflicts_json: [],
+    runtime_artifact_digest: 'sha256:recipient-runtime',
+    ui_artifact_digest: 'sha256:recipient-ui',
+    verifier_results_json: [],
+    rollback_profile_json: {
+      previous_active_source_ref: 'refs/computers/primary/active',
+      previous_route_profile: 'route:primary',
+    },
+  };
+
+  await page.route('**/api/app-change-packages*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  });
+  await page.route('**/api/adoptions*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [adoption] }) });
+  });
+
+  await openStartApp(page, 'apps-changes');
+  const store = page.locator('[data-apps-changes-app]');
+  await expect(store).toBeVisible({ timeout: 10_000 });
+  const removal = store.locator('[data-change-removal-model]');
+  await expect(removal).toHaveAttribute('data-removal-mode', 'Rollback-only');
+  await expect(removal).toContainText('no verified inverse source patch');
+  await expect(removal).toContainText('no declared feature flag');
+  await expect(store.locator('[data-change-uninstall]')).toBeDisabled();
+  await expect(store.locator('[data-change-disable]')).toBeDisabled();
+  await expect(store.locator('[data-change-rollback]')).toBeEnabled();
+  await expect(store.locator('[data-change-candidate-summary]')).toContainText('recorded');
 });
 
 test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
