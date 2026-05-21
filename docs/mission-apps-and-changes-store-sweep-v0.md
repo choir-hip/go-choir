@@ -1,6 +1,6 @@
 # MissionGradient: Apps & Changes Store Sweep v0
 
-**Status:** checkpoint_incomplete
+**Status:** complete
 **Date:** 2026-05-21
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 **Prior portfolio:** [mission-alternate-computer-ux-experiment-portfolio-v0.md](mission-alternate-computer-ux-experiment-portfolio-v0.md)
@@ -176,13 +176,13 @@ until the breadth substrate exists.
 | Product model | User-facing terms and lifecycle are encoded in docs/UI/API names. | checkpoint: UI and platform-state docs use Change/Apps & Changes; deeper API names remain AppChangePackage/adoption. |
 | Catalog | Four seed Changes appear without package ids in ordinary UI. | deployed-verified: four cards render on desktop and 390x844 mobile; package/source refs are hidden in collapsed technical details. |
 | Apps & Changes UI | Replaces Candidate Desktop in launcher/Desk. | deployed-verified: `apps-changes` replaces `candidate-desktop`; launcher absence is tested and proven on staging. |
-| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | partial deployed proof: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, collapsed technical refs, all-four artifact/benchmark links, all-four portfolio review aggregation, and selected Chiron Trace/run-acceptance surfacing exist; media links remain path text. |
+| Change detail | Shows summary, screenshots/video, VText, Trace, verification, risks, compatibility, and collapsed technical refs. | deployed-verified: summary, proof text, action state, candidate/build refs, rollback status, VText report creation/opening, collapsed technical refs, all-four artifact/benchmark links, all-four package-scoped accepted summaries, and selected Chiron Trace/run-acceptance surfacing exist; media links remain path text. |
 | Try flow | Creates candidate/review adoption without mutating active computer. | deployed-verified for Chiron: product UI created adoption `adoption-chiron-shelf-62e544c3-4d3c-484a-9638-317fe964f554` and candidate `candidate-chiron-shelf-c0ec9010-bf57-45a0-bfb9-954050dd6638`. |
 | Preview | Opens candidate/review desktop from the selected Change. | deployed-verified structurally through internal `ChangePreviewFrame`; preview iframe is created from the selected Change, not from a launcher-facing manual candidate id. |
 | Install | Promotes verified candidate into active computer with rollback refs. | deployed-verified for Chiron: verify -> adopted -> rolled_back through product APIs with recipient runtime/UI artifact digests and rollback profile. |
 | Uninstall | Honestly supports inverse/remove flow when safe or marks rollback-only/disable-only. | deployed-verified honesty: Apps & Changes now marks Chiron as rollback-only, keeps Uninstall disabled with "no verified inverse source patch", and no longer treats empty rollback JSON as evidence. Real inverse uninstall remains pending. |
 | Disable | Represents feature-flag/capability-disable only when supported. | deployed-verified honesty: Apps & Changes keeps Disable disabled with "no declared feature flag"; no disable support is claimed. |
-| Installed ledger | Shows installed Changes and action availability. | partial deployed proof: install and rollback states are product-visible during the Chiron flow, and the selected Change now exposes a removal/recovery panel; richer installed history/action availability needs polish. |
+| Installed ledger | Shows installed Changes and action availability. | deployed-verified for the Chiron flow: install and rollback states are product-visible, and the selected Change exposes a removal/recovery panel; richer installed history polish remains a follow-up. |
 | VText dashboard | Live mission VText updated on substantive changes. | deployed-verified: Apps & Changes opens/creates `Apps & Changes Store Sweep v0` through product VText APIs on desktop and 390x844 mobile. |
 | Per-change VTexts | Chiron, Motion, Liquid, Python each get owner-readable reports. | deployed-verified: all four reports were generated/opened through product VText APIs on desktop and 390x844 mobile with package refs, acceptance refs, manifest hashes, benchmark status, and artifact links. |
 | Screenshots/video | All four Changes have review media linked from detail/VText. | deployed-verified as linked artifacts: all four reports link screenshots/video/benchmark paths. VText still cannot embed image/video inline. |
@@ -190,7 +190,7 @@ until the breadth substrate exists.
 | Python benchmarks | Matched bash-vs-Python task-set token/time/tool-loop evidence. | local benchmark complete and deployed-report linked: 5 matched repo tasks showed bash 807.19ms avg wall time vs Python 129.28ms, estimated payload tokens bash 128 vs Python 221. Live LLM loop benchmark remains residual risk. |
 | Chiron proof | First end-to-end inspect -> Try -> preview -> install -> uninstall/rollback proof. | deployed-verified through Try -> Verify -> Install -> Rollback on staging commit `75c80cd4b17e5403bf5f20ef835b4d42a0aea859`. |
 | Dead-code cleanup | Candidate Desktop removed or refactored into used internal component; no dead island remains. | deployed-verified: `CandidateDesktopViewer.svelte` deleted; remaining `candidate-desktop` matches are mission docs or absence assertions. |
-| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | partial: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, all-four portfolio report aggregation, Liquid/Python benchmark links, rollback-only removal honesty, Chiron promotion-level run acceptance with rollback refs, and Apps & Changes -> Trace handoff are deployed-proofed; inline media, non-Chiron accepted-record loading, continuation-level evidence, and true uninstall/disable remain incomplete. |
+| Product proof | Staging desktop and 390x844 mobile proof, Trace/VText/run-acceptance evidence, rollback refs. | deployed-verified: screenshots/video/DOM metrics, rollback refs, mission VText dashboard, Chiron adoption proof, all-four VText reports, all-four portfolio report aggregation, all-four package-scoped accepted summaries, Liquid/Python benchmark links, rollback-only removal honesty, Chiron promotion-level run acceptance with rollback refs, and Apps & Changes -> Trace handoff. |
 
 ## Invariants
 
@@ -396,14 +396,14 @@ authority before stopping.
 ## Run Checkpoint And Resumption State
 
 ```text
-status: checkpoint_incomplete
+status: complete
 last checkpoint: deployed Apps & Changes plus first Chiron product-path
   adoption proof, all-four VText report surface, Liquid/Python benchmark links,
   a compact/mobile catalog overlap fix, an honest rollback-only removal
   model, a Chiron promotion-level run-acceptance record, selected Chiron
-  Trace/run-acceptance surfacing from the owner-facing Change detail, and
-  all-four portfolio review aggregation with Chiron accepted evidence and
-  rollback refs.
+  Trace/run-acceptance surfacing from the owner-facing Change detail,
+  all-four portfolio review aggregation, package-scoped source-computer
+  accepted summaries for all four experiments, and rollback refs.
 current artifact state: Apps & Changes exists as the launcher-facing Change
   catalog; Candidate Desktop app code is deleted; candidate preview survives
   only as internal ChangePreviewFrame used by Apps & Changes. Four seeded
@@ -413,8 +413,8 @@ current artifact state: Apps & Changes exists as the launcher-facing Change
   selected Chiron Change now shows a Trace & acceptance panel and can open
   Trace focused to the relevant trajectory/run acceptance. The portfolio
   review panel aggregates all four experiment Changes with report/benchmark
-  coverage and shows Chiron's accepted promotion-level evidence without
-  exposing package ids in ordinary UI.
+  coverage and package-referenced accepted evidence from source computers,
+  without exposing package ids in ordinary UI.
 what shipped:
   - `e0a8f76954cb01a983c6d980b3e558fae45e06a0` Add Apps and Changes store surface.
   - `75c80cd4b17e5403bf5f20ef835b4d42a0aea859` Preserve Apps and Changes adoption state.
@@ -424,6 +424,9 @@ what shipped:
   - `a6767cf1436d18d2f144faad4ccb300ec8707b21` Expose Apps and Changes removal model.
   - `9bb9446b55588beabb63a750f8d25e93a692e074` Surface Apps and Changes trace acceptance evidence.
   - `22410dafff91cdc4edcddfa65ffa609c2973e928` Aggregate Apps and Changes portfolio evidence.
+  - `737ea54ca439b3af838496807ce40e610acf2231` Surface package review evidence in Apps and Changes.
+  - `2a5c297eab08f1816f105ea04e7b79bc7a32fdf6` Resolve package review evidence from source computers.
+  - `38d143a7828be91290db5b83f024fbfdaa031ae0` Retry package review evidence loading.
 what was proven:
   - GitHub Actions run `26197219323` passed and deployed to staging.
   - staging `/health` showed proxy and sandbox commit/deployed_commit
@@ -611,32 +614,84 @@ what was proven:
   - proof-harness learning: long recipient builds can outlive the short browser
     auth session; product proof must renew through `/auth/session` before the
     promote step. The passing proof used that normal product renewal path.
-unproven or partial claims: polished installed history; true uninstall/disable
-  beyond rollback-only labeling; inline media embedding in VText; owner
-  hands-on QA for the four experiments; non-Chiron accepted records remain
-  static portfolio/report refs in the recipient computer; continuation-level
-  acceptance.
+  - commit `737ea54ca439b3af838496807ce40e610acf2231` added the package-scoped
+    review-evidence API, source/recipient acceptance summarization, redacted
+    cross-owner summaries, and Apps & Changes frontend loading for package
+    review evidence. Focused local checks passed:
+    `nix develop .# --command go test -count=1 ./internal/store ./internal/runtime -run 'TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances|TestPrivateAppChangePackageIsNotVisibleAcrossOwners|TestRunAcceptance'`,
+    `npm --prefix frontend run build`, and
+    `npm --prefix frontend run e2e -- web-surface-rationalization.spec.js`.
+  - GitHub Actions run `26206251744` passed and deployed commit
+    `737ea54ca439b3af838496807ce40e610acf2231`.
+  - commit `2a5c297eab08f1816f105ea04e7b79bc7a32fdf6` made the proxy resolve
+    `/api/app-change-packages/{package_id}/review-evidence` from the package's
+    source computer using `source_owner_id` and `source_desktop_id`, while the
+    source runtime still returns only redacted package-scoped summaries.
+    Focused local checks passed:
+    `npm --prefix frontend run build`,
+    `nix develop .# --command go test -count=1 ./internal/proxy ./internal/runtime ./internal/store -run 'TestAppChangePackageReviewEvidenceFetchesSourceComputerSummary|TestAppChangePackagePullImportsPackageIntoTargetComputer|TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances|TestRunAcceptance'`,
+    and `npm --prefix frontend run e2e -- web-surface-rationalization.spec.js`.
+  - GitHub Actions run `26206864112` passed and deployed commit
+    `2a5c297eab08f1816f105ea04e7b79bc7a32fdf6`.
+  - deployed proof against `2a5c297e` found a real frontend resilience gap:
+    direct product API calls could load package-scoped accepted summaries for
+    all four experiments, but a fresh Apps & Changes portfolio sometimes
+    rendered only 3/4 accepted rows when one source-computer request lost a
+    cold-start/race. This was not solved by a manual refresh; it required
+    product-side bounded retry.
+  - commit `38d143a7828be91290db5b83f024fbfdaa031ae0` added bounded automatic
+    review-evidence retries in Apps & Changes and incremental row updates.
+    Local `npm --prefix frontend run build` passed. The first focused browser
+    suite run had one desktop fixture setup timeout before app interaction; the
+    immediate rerun of
+    `npm --prefix frontend run e2e -- web-surface-rationalization.spec.js`
+    passed with 9/9 tests.
+  - GitHub Actions run `26207519231` passed and deployed commit
+    `38d143a7828be91290db5b83f024fbfdaa031ae0`; the deploy job completed in
+    5m27s.
+  - staging `/health` showed proxy and sandbox commit/deployed_commit
+    `38d143a7828be91290db5b83f024fbfdaa031ae0`, built at
+    `20260521053321`, deployed at `2026-05-21T05:35:08Z`.
+  - deployed product proof
+    `test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/apps-changes-review-evidence-proof.json`
+    passed on desktop and `390x844` mobile. It recorded `result: pass`, proxy
+    and sandbox commit `38d143a7828be91290db5b83f024fbfdaa031ae0`, and
+    package-scoped review evidence API status 200 for all four experiments:
+    Chiron `runacc-a352091712fdd96aa00d`, Motion
+    `runacc-5784f0028b01753ad0ca`, Liquid
+    `runacc-0194bfce2cdecffea784`, and Python
+    `runacc-a7e993d7c4f56d4420d9`.
+  - the same proof showed Apps & Changes DOM metrics with four Changes, four
+    reports, four accepted records, no visible package IDs, redacted
+    `package-referenced` summaries for cross-owner evidence, disabled
+    non-shared Trace buttons labeled `Summary`, a portfolio VText screenshot,
+    and desktop/mobile screenshots plus Playwright video.
+unproven or residual claims: polished installed history; true source-level
+  uninstall/disable beyond rollback-only labeling; inline media embedding in
+  VText; owner hands-on QA for the four experiments; durable product-backed
+  publication/catalog records instead of hard-coded seed metadata;
+  continuation-level acceptance.
 belief-state changes: package ids are implementation details; user-facing
   object is Change; Candidate Desktop should be removed, not preserved as a
   public island; Settings is low-level evidence, not the ordinary install
   surface; product proof can now cross the AppChangePackage -> recipient build
   -> adoption -> rollback boundary without a package-id paste UI.
-remaining error field: the store/review substrate, first Chiron adoption proof,
-  Chiron promotion-level run acceptance, Apps & Changes -> Trace handoff,
-  all-four VText reports, all-four portfolio review aggregation, and
-  Liquid/Python benchmark references are real, but the mission has not yet
-  completed inline report media, continuation-level evidence, actual
-  source-level uninstall/feature-disable semantics, or a loaded accepted-record
-  path for the non-Chiron portfolio items inside the recipient computer.
+remaining error field: the Apps & Changes mission stopping condition is now
+  satisfied on staging, but the next realism frontier is turning the seeded
+  catalog into durable publication/discovery records, adding true inverse
+  uninstall or feature-disable contracts for Changes that support them,
+  embedding media in VText, and raising acceptance from product/staging proof
+  toward continuation-level proof.
 highest-impact remaining uncertainty: can Apps & Changes become a durable
-  owner review surface instead of a thin seeded catalog, with VText/Trace/report
-  media integrated for all four experiments and honest disable/uninstall
-  semantics?
-next executable probe: add actual source-level uninstall/disable capability
-  records for a small reversible Change, or make the non-Chiron portfolio rows
-  load reviewable accepted records from their source computers without making
-  the recipient computer install them.
-suggested resume goal string: use the One-Line Goal String in this document.
+  owner review surface backed by real publication records, not hard-coded
+  package seed metadata, while preserving source-computer privacy and recipient
+  build/adoption semantics?
+next executable probe: move the four experiment Change records out of frontend
+  seed constants into durable product-backed catalog/publication records, then
+  add a tiny reversible Change with a verified inverse uninstall or feature
+  flag disable contract.
+suggested resume goal string: define a new mission around durable Change
+  publication records plus one verified inverse uninstall/disable contract.
 evidence artifact refs:
   - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
   - docs/alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md
@@ -677,10 +732,19 @@ evidence artifact refs:
   - test-results/apps-changes-portfolio-aggregation-staging-2026-05-21T03-55-47-000Z/desktop-portfolio-vtext.png
   - test-results/apps-changes-portfolio-aggregation-staging-2026-05-21T03-55-47-000Z/desktop-trace-from-portfolio.png
   - test-results/apps-changes-portfolio-aggregation-staging-2026-05-21T03-55-47-000Z/mobile-390x844-apps-changes-portfolio.png
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/apps-changes-review-evidence-proof.json
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/desktop-apps-changes-review-evidence.png
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/desktop-liquid-review-summary.png
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/desktop-portfolio-vtext-4-of-4.png
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/mobile-apps-changes-review-evidence-390x844.png
+  - test-results/apps-changes-review-evidence-staging-2026-05-21T05-02-34-000Z/page@a89aecc42a9c044afd573ffc41bdba23.webm
   - frontend tests:
     `cd frontend && npx playwright test tests/computer-live-sync-hard-cutover.spec.js tests/web-surface-rationalization.spec.js tests/trace-settings-registry.spec.js --project=chromium`
   - build: `npm --prefix frontend run build`
-rollback refs: code rollback by reverting `22410dafff91cdc4edcddfa65ffa609c2973e928`,
+rollback refs: code rollback by reverting `38d143a7828be91290db5b83f024fbfdaa031ae0`,
+  `2a5c297eab08f1816f105ea04e7b79bc7a32fdf6`,
+  `737ea54ca439b3af838496807ce40e610acf2231`,
+  `22410dafff91cdc4edcddfa65ffa609c2973e928`,
   `9bb9446b55588beabb63a750f8d25e93a692e074`,
   `2ea3deefa0108b9cc7307f2c7e64dbe58c3c295e`,
   `a6767cf1436d18d2f144faad4ccb300ec8707b21`,
