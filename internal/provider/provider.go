@@ -1657,14 +1657,18 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 type ChatGPTAuthOptions struct {
 	Path          string
 	RefreshURL    string
+	ClientID      string
 	RefreshBefore time.Duration
 	HTTPClient    *http.Client
 	Now           func() time.Time
 }
 
+const defaultChatGPTOAuthClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
+
 type ChatGPTAuth struct {
 	path          string
 	refreshURL    string
+	clientID      string
 	refreshBefore time.Duration
 	httpClient    *http.Client
 	now           func() time.Time
@@ -1674,6 +1678,7 @@ type ChatGPTAuth struct {
 type codexAuthFile struct {
 	AuthMode     string          `json:"auth_mode"`
 	OpenAIAPIKey string          `json:"OPENAI_API_KEY"`
+	ClientID     string          `json:"client_id,omitempty"`
 	Tokens       codexAuthTokens `json:"tokens"`
 	LastRefresh  string          `json:"last_refresh"`
 }
@@ -1683,6 +1688,7 @@ type codexAuthTokens struct {
 	RefreshToken string `json:"refresh_token"`
 	IDToken      string `json:"id_token"`
 	AccountID    string `json:"account_id"`
+	ClientID     string `json:"client_id,omitempty"`
 }
 
 type oauthRefreshResponse struct {
@@ -1695,6 +1701,7 @@ func NewChatGPTAuth(opts ChatGPTAuthOptions) *ChatGPTAuth {
 	auth := &ChatGPTAuth{
 		path:          opts.Path,
 		refreshURL:    opts.RefreshURL,
+		clientID:      strings.TrimSpace(opts.ClientID),
 		refreshBefore: opts.RefreshBefore,
 		httpClient:    opts.HTTPClient,
 		now:           opts.Now,
@@ -1704,6 +1711,12 @@ func NewChatGPTAuth(opts ChatGPTAuthOptions) *ChatGPTAuth {
 	}
 	if auth.refreshURL == "" {
 		auth.refreshURL = "https://auth.openai.com/oauth/token"
+	}
+	if auth.clientID == "" {
+		auth.clientID = strings.TrimSpace(os.Getenv("CHATGPT_CLIENT_ID"))
+	}
+	if auth.clientID == "" {
+		auth.clientID = defaultChatGPTOAuthClientID
 	}
 	if auth.refreshBefore == 0 {
 		auth.refreshBefore = 45 * time.Minute
@@ -1812,6 +1825,7 @@ func (a *ChatGPTAuth) refreshViaHTTP(ctx context.Context, record *codexAuthFile)
 	values := url.Values{}
 	values.Set("grant_type", "refresh_token")
 	values.Set("refresh_token", record.Tokens.RefreshToken)
+	values.Set("client_id", a.refreshClientID(record))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.refreshURL, strings.NewReader(values.Encode()))
 	if err != nil {
@@ -1850,6 +1864,18 @@ func (a *ChatGPTAuth) refreshViaHTTP(ctx context.Context, record *codexAuthFile)
 		return nil, err
 	}
 	return record, nil
+}
+
+func (a *ChatGPTAuth) refreshClientID(record *codexAuthFile) string {
+	if record != nil {
+		if clientID := strings.TrimSpace(record.ClientID); clientID != "" {
+			return clientID
+		}
+		if clientID := strings.TrimSpace(record.Tokens.ClientID); clientID != "" {
+			return clientID
+		}
+	}
+	return a.clientID
 }
 
 func (a *ChatGPTAuth) refreshViaCodexCLI(ctx context.Context) error {

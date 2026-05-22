@@ -565,6 +565,9 @@ func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 		if !strings.Contains(body, "grant_type=refresh_token") || !strings.Contains(body, "refresh_token=refresh-123") {
 			t.Fatalf("unexpected refresh body: %s", body)
 		}
+		if !strings.Contains(body, "client_id=test-client") {
+			t.Fatalf("refresh body must send client_id: %s", body)
+		}
 		if strings.Contains(body, "account_id") {
 			t.Fatalf("refresh body must not send account_id: %s", body)
 		}
@@ -579,6 +582,7 @@ func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 	auth := NewChatGPTAuth(ChatGPTAuthOptions{
 		Path:          authPath,
 		RefreshURL:    refreshServer.URL,
+		ClientID:      "test-client",
 		RefreshBefore: 30 * time.Minute,
 		HTTPClient:    refreshServer.Client(),
 		Now:           func() time.Time { return now },
