@@ -908,11 +908,13 @@
       const baseUrl = `${protocol}//${window.location.host}/api/ws`;
       const wsUrl = withDesktopSelector(lastLiveStreamSeq > 0 ? `${baseUrl}?after_seq=${lastLiveStreamSeq}` : baseUrl);
       ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
+      const markConnected = () => {
         liveStatus.set('connected');
         wsReconnectAttempt = 0;
       };
+      ws.onopen = markConnected;
       ws.onmessage = (event) => {
+        markConnected();
         handleLiveMessage(event.data);
       };
       ws.onerror = () => {
@@ -926,6 +928,11 @@
         liveStatus.update((s) => s === 'error' ? s : 'disconnected');
         attemptWsReconnection();
       };
+      for (const delayMs of [0, 100, 500, 1000]) {
+        setTimeout(() => {
+          if (ws?.readyState === WebSocket.OPEN) markConnected();
+        }, delayMs);
+      }
     } catch (_err) {
       liveStatus.set('error');
     }
