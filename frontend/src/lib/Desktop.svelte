@@ -938,6 +938,10 @@
     } catch (_err) {
       return;
     }
+    if (message?.type === 'connected') {
+      liveStatus.set('connected');
+      return;
+    }
     if (message?.type === 'event') {
       if (Number.isFinite(Number(message.stream_seq))) {
         lastLiveStreamSeq = Math.max(lastLiveStreamSeq, Number(message.stream_seq));

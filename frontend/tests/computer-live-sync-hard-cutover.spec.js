@@ -58,6 +58,8 @@ test('desktop live state cannot seize the visible foreground window stack', asyn
   expect(source).toContain('mergeRemoteDesktopSharedState();');
   expect(source).toContain('observeRemoteDriverSession');
   expect(source).toContain('handleRemoteDesktopStateUpdate(message);');
+  expect(source).toContain("message?.type === 'connected'");
+  expect(source).toContain("liveStatus.set('connected')");
   expect(source).not.toMatch(
     /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
   );
