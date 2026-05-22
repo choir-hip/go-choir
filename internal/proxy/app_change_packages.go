@@ -112,9 +112,181 @@ func (h *Handler) HandleAppChangePackageReviewEvidence(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read package review evidence"})
 		return
 	}
+	body = sanitizeAppChangePackageReviewEvidence(body)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(body)
+}
+
+func sanitizeAppChangePackageReviewEvidence(body []byte) []byte {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	rawProof, ok := payload["human_proof"].(map[string]any)
+	if !ok {
+		return body
+	}
+	proof := normalizeProxyHumanProof(rawProof)
+	payload["human_proof"] = proof
+	sanitized, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return sanitized
+}
+
+// The source computer may be a warm user VM running older runtime code. Keep
+// browser-visible review evidence conservative at the proxy trust boundary.
+func normalizeProxyHumanProof(raw map[string]any) map[string]any {
+	proof := make(map[string]any, len(raw)+2)
+	for key, value := range raw {
+		proof[key] = value
+	}
+	narrativeRefs := proxyStringList(raw["narrative_refs"])
+	screenshotRefs := proxyStringList(raw["screenshot_refs"])
+	videoRefs := proxyStringList(raw["video_refs"])
+	benchmarkRefs := proxyStringList(raw["benchmark_refs"])
+	if summary, _ := raw["summary"].(string); strings.TrimSpace(summary) != "" {
+		narrativeRefs = append(narrativeRefs, "human_summary")
+	}
+	narrativeRefs = compactProxyStringRefs(narrativeRefs)
+	screenshotRefs = compactProxyStringRefs(screenshotRefs)
+	videoRefs = compactProxyStringRefs(videoRefs)
+	benchmarkRefs = compactProxyStringRefs(benchmarkRefs)
+	proof["narrative_refs"] = narrativeRefs
+	proof["screenshot_refs"] = screenshotRefs
+	proof["video_refs"] = videoRefs
+	proof["benchmark_refs"] = benchmarkRefs
+
+	hasNarrative := len(narrativeRefs) > 0
+	hasHumanEvidence := len(screenshotRefs) > 0 || len(videoRefs) > 0 || hasCredibleProxyBenchmarkRefs(benchmarkRefs)
+	if hasNarrative && hasHumanEvidence {
+		proof["state"] = "human_reviewable"
+		delete(proof, "missing")
+		return proof
+	}
+	missing := []string{}
+	if !hasNarrative {
+		missing = append(missing, "narrative VText")
+	}
+	if !hasHumanEvidence {
+		missing = append(missing, "successful screenshots, video, or benchmark evidence")
+	}
+	proof["state"] = "evidence_pending"
+	proof["missing"] = missing
+	return proof
+}
+
+func proxyStringList(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := strings.TrimSpace(fmt.Sprint(item)); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	case string:
+		if text := strings.TrimSpace(typed); text != "" {
+			return []string{text}
+		}
+	}
+	return nil
+}
+
+func compactProxyStringRefs(refs []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" || seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		out = append(out, ref)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func hasCredibleProxyBenchmarkRefs(refs []string) bool {
+	for _, ref := range refs {
+		if credibleProxyBenchmarkRef(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func credibleProxyBenchmarkRef(ref string) bool {
+	text := strings.ToLower(strings.TrimSpace(ref))
+	if text == "" {
+		return false
+	}
+	for _, blocked := range []string{
+		"blocked",
+		"failed",
+		"failure",
+		"error",
+		"unavailable",
+		"not available",
+		"pending",
+		"not run",
+		"not captured",
+		"cannot run",
+		"could not",
+	} {
+		if strings.Contains(text, blocked) {
+			return false
+		}
+	}
+	for _, receiptOnly := range []string{
+		"npm --prefix frontend run build",
+		"npm --prefix frontend ci",
+		"npm ci",
+		"npm install",
+		"pnpm build",
+		"go build",
+		"vite build",
+		"build proof",
+		"build receipt",
+		"build passed",
+		"build pass",
+		"frontend production build",
+		"chunk-size warning",
+		"npm audit",
+	} {
+		if strings.Contains(text, receiptOnly) {
+			return false
+		}
+	}
+	if !strings.ContainsAny(text, "0123456789") {
+		return false
+	}
+	for _, signal := range []string{
+		"benchmark",
+		"latency",
+		"duration",
+		"tokens",
+		"fps",
+		"memory",
+		"cpu",
+		"resource",
+		"wall time",
+		"p95",
+		"median",
+	} {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleAppChangePackagePull imports a public/unlisted AppChangePackage from a

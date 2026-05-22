@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -363,6 +364,72 @@ func TestAppChangePackageReviewEvidenceFetchesSourceComputerSummary(t *testing.T
 	}
 	if resp.PackageID != "package-review-test" || len(resp.Acceptances) != 1 || resp.Acceptances[0].ReviewScope != "package-referenced" || resp.Acceptances[0].TraceVisible {
 		t.Fatalf("unexpected review evidence response: %+v", resp)
+	}
+}
+
+func TestAppChangePackageReviewEvidenceSanitizesStaleSourceHumanProof(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate ed25519 key: %v", err)
+	}
+
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/app-change-packages/package-stale-proof/review-evidence", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"package_id": "package-stale-proof",
+			"human_proof": map[string]any{
+				"state":          "human_reviewable",
+				"summary":        "Causal narrative exists.",
+				"recommendation": "reviewable_with_build_proof; media screenshot not available in this worker VM, but causal narrative and build benchmark are attached",
+				"narrative_refs": []string{"doc-stale", "rev-stale"},
+				"benchmark_refs": []string{
+					"reviewable_with_build_proof; media screenshot not available in this worker VM, but causal narrative and build benchmark are attached",
+					"npm --prefix frontend ci && npm --prefix frontend run build (passed; standard chunk-size warnings; npm audit reported 8 moderate vulnerabilities)",
+				},
+			},
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox := httptest.NewServer(sandboxMux)
+	t.Cleanup(func() { sandbox.Close() })
+
+	handler, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/app-change-packages/package-stale-proof/review-evidence?source_owner_id=source-user", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "recipient-user")})
+	w := httptest.NewRecorder()
+	handler.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("review evidence status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		HumanProof struct {
+			State         string   `json:"state"`
+			Missing       []string `json:"missing"`
+			BenchmarkRefs []string `json:"benchmark_refs"`
+		} `json:"human_proof"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode review evidence response: %v", err)
+	}
+	if resp.HumanProof.State != "evidence_pending" {
+		t.Fatalf("human proof state = %q, want evidence_pending; body=%s", resp.HumanProof.State, w.Body.String())
+	}
+	if !slices.Contains(resp.HumanProof.Missing, "successful screenshots, video, or benchmark evidence") {
+		t.Fatalf("missing human evidence was not recorded: %+v", resp.HumanProof.Missing)
+	}
+	if len(resp.HumanProof.BenchmarkRefs) != 2 {
+		t.Fatalf("benchmark refs should be preserved for diagnosis, got %+v", resp.HumanProof.BenchmarkRefs)
 	}
 }
 
