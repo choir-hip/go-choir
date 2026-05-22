@@ -100,6 +100,18 @@ type WindowState struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// DesktopSessionContext identifies the browser session presenting a desktop.
+// Shared app/window identity belongs to the computer, but focus and geometry
+// belong to the session that is actively driving the presentation.
+type DesktopSessionContext struct {
+	SessionID       string
+	DeviceID        string
+	ViewportProfile string
+	IsDriver        bool
+	DriverUntil     time.Time
+	UpdatedAt       time.Time
+}
+
 // DesktopState represents the full persisted desktop state for a user.
 // This is what gets saved and restored for VAL-DESKTOP-007.
 type DesktopState struct {

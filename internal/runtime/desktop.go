@@ -19,6 +19,7 @@ import (
 type desktopStateGetResponse struct {
 	OwnerID        string              `json:"owner_id"`
 	DesktopID      string              `json:"desktop_id"`
+	SessionID      string              `json:"session_id,omitempty"`
 	Windows        []types.WindowState `json:"windows"`
 	ActiveWindowID string              `json:"active_window_id,omitempty"`
 	UpdatedAt      string              `json:"updated_at"`
@@ -28,6 +29,7 @@ type desktopStateGetResponse struct {
 type desktopStateSaveRequest struct {
 	Windows        []types.WindowState `json:"windows"`
 	ActiveWindowID string              `json:"active_window_id,omitempty"`
+	Driver         bool                `json:"driver,omitempty"`
 }
 
 // desktopStateSaveResponse is the JSON response for PUT /api/desktop/state.
@@ -48,6 +50,26 @@ func requestDesktopID(r *http.Request) string {
 		return desktopID
 	}
 	return types.PrimaryDesktopID
+}
+
+func requestDesktopSessionContext(r *http.Request, driver bool) types.DesktopSessionContext {
+	now := time.Now().UTC()
+	sessionID := strings.TrimSpace(r.Header.Get("X-Choir-Session"))
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(r.URL.Query().Get("session_id"))
+	}
+	if sessionID == "" {
+		sessionID = "legacy"
+		driver = true
+	}
+	return types.DesktopSessionContext{
+		SessionID:       sessionID,
+		DeviceID:        strings.TrimSpace(r.Header.Get("X-Choir-Device")),
+		ViewportProfile: strings.TrimSpace(r.Header.Get("X-Choir-Viewport")),
+		IsDriver:        driver,
+		DriverUntil:     now.Add(60 * time.Second),
+		UpdatedAt:       now,
+	}
 }
 
 func sanitizeDesktopState(state types.DesktopState) types.DesktopState {
@@ -116,7 +138,8 @@ func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Reques
 	}
 	desktopID := requestDesktopID(r)
 
-	state, err := h.rt.Store().GetDesktopStateForDesktop(r.Context(), ownerID, desktopID)
+	session := requestDesktopSessionContext(r, false)
+	state, err := h.rt.Store().GetDesktopStateForSession(r.Context(), ownerID, desktopID, session.SessionID)
 	if err != nil {
 		log.Printf("runtime api: get desktop state: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get desktop state"})
@@ -127,6 +150,7 @@ func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Reques
 	writeAPIJSON(w, http.StatusOK, desktopStateGetResponse{
 		OwnerID:        state.OwnerID,
 		DesktopID:      state.DesktopID,
+		SessionID:      session.SessionID,
 		Windows:        state.Windows,
 		ActiveWindowID: state.ActiveWindowID,
 		UpdatedAt:      state.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
@@ -159,6 +183,7 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 
 	now := time.Now().UTC()
 	windows, activeWindowID := sanitizeWindowStates(req.Windows, req.ActiveWindowID)
+	session := requestDesktopSessionContext(r, req.Driver)
 
 	state := types.DesktopState{
 		OwnerID:        ownerID,
@@ -168,18 +193,27 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 		UpdatedAt:      now,
 	}
 
-	if err := h.rt.Store().SaveDesktopState(r.Context(), state); err != nil {
+	if err := h.rt.Store().SaveDesktopStateForSession(r.Context(), state, session); err != nil {
 		log.Printf("runtime api: save desktop state: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save desktop state"})
 		return
 	}
-	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopStateUpdated, map[string]any{
-		"desktop_id":       desktopID,
-		"active_window_id": activeWindowID,
-		"window_count":     len(windows),
-		"updated_at":       now.Format(time.RFC3339Nano),
-		"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
-	})
+	eventPayload := map[string]any{
+		"desktop_id":        desktopID,
+		"session_id":        session.SessionID,
+		"active_window_id":  activeWindowID,
+		"window_count":      len(windows),
+		"updated_at":        now.Format(time.RFC3339Nano),
+		"source_device_id":  session.DeviceID,
+		"source_session_id": session.SessionID,
+		"viewport_profile":  session.ViewportProfile,
+		"driver":            session.IsDriver,
+	}
+	if session.IsDriver {
+		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopDriverLeaseUpdated, eventPayload)
+		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopAppInstancesUpdated, eventPayload)
+		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopWindowPlacementUpdated, eventPayload)
+	}
 
 	writeAPIJSON(w, http.StatusOK, desktopStateSaveResponse{
 		OK:        true,

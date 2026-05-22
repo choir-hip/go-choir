@@ -299,6 +299,18 @@ const (
 	// workspace changes.
 	EventDesktopStateUpdated EventKind = "desktop.state.updated"
 
+	// EventDesktopDriverLeaseUpdated is emitted when a browser session becomes
+	// the current interaction driver for a desktop.
+	EventDesktopDriverLeaseUpdated EventKind = "desktop.driver_lease.updated"
+
+	// EventDesktopAppInstancesUpdated is emitted when the shared open app
+	// instance roster or semantic stack order changes.
+	EventDesktopAppInstancesUpdated EventKind = "desktop.app_instances.updated"
+
+	// EventDesktopWindowPlacementUpdated is emitted when a session-local
+	// placement/focus record changes.
+	EventDesktopWindowPlacementUpdated EventKind = "desktop.window_placement.updated"
+
 	// EventContentItemCreated is emitted when a durable content item is created.
 	EventContentItemCreated EventKind = "content.item.created"
 

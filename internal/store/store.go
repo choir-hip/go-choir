@@ -458,7 +458,57 @@ CREATE TABLE IF NOT EXISTS desktop_workspaces (
 	PRIMARY KEY (owner_id, desktop_id)
 );
 
+CREATE TABLE IF NOT EXISTS desktop_sessions (
+	owner_id          VARCHAR(255) NOT NULL,
+	desktop_id        VARCHAR(255) NOT NULL,
+	session_id        VARCHAR(255) NOT NULL,
+	device_id         VARCHAR(255) NOT NULL DEFAULT '',
+	viewport_profile  VARCHAR(64) NOT NULL DEFAULT '',
+	visibility_state  VARCHAR(64) NOT NULL DEFAULT '',
+	last_input_at     DATETIME NULL,
+	driver_until      DATETIME NULL,
+	created_at        DATETIME NOT NULL,
+	updated_at        DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, desktop_id, session_id)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_app_instances (
+	owner_id              VARCHAR(255) NOT NULL,
+	desktop_id            VARCHAR(255) NOT NULL,
+	app_instance_id       VARCHAR(255) NOT NULL,
+	app_id                VARCHAR(255) NOT NULL,
+	title                 LONGTEXT NOT NULL DEFAULT '',
+	app_context_json      LONGTEXT NOT NULL DEFAULT '{}',
+	lifecycle             VARCHAR(64) NOT NULL DEFAULT 'open',
+	shared_stack_rank     BIGINT NOT NULL DEFAULT 0,
+	last_used_at          DATETIME NOT NULL,
+	created_by_session_id VARCHAR(255) NOT NULL DEFAULT '',
+	created_at            DATETIME NOT NULL,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, desktop_id, app_instance_id)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_window_placements (
+	owner_id               VARCHAR(255) NOT NULL,
+	desktop_id             VARCHAR(255) NOT NULL,
+	session_id             VARCHAR(255) NOT NULL,
+	app_instance_id        VARCHAR(255) NOT NULL,
+	x                      INT NOT NULL DEFAULT 100,
+	y                      INT NOT NULL DEFAULT 100,
+	width                  INT NOT NULL DEFAULT 600,
+	height                 INT NOT NULL DEFAULT 400,
+	mode                   VARCHAR(64) NOT NULL DEFAULT 'normal',
+	local_z_index          BIGINT NOT NULL DEFAULT 0,
+	local_focused          BOOLEAN NOT NULL DEFAULT FALSE,
+	restored_geometry_json LONGTEXT NOT NULL DEFAULT '',
+	updated_at             DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, desktop_id, session_id, app_instance_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_owner_id ON desktop_workspaces(owner_id);
+CREATE INDEX IF NOT EXISTS idx_desktop_sessions_driver ON desktop_sessions(owner_id, desktop_id, driver_until);
+CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instances(owner_id, desktop_id, shared_stack_rank);
+CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_window_placements(owner_id, desktop_id, app_instance_id, updated_at);
 `
 
 // Open opens (or creates) the unified embedded Dolt workspace derived from
@@ -2158,49 +2208,7 @@ func (s *Store) GetDesktopState(ctx context.Context, ownerID string) (types.Desk
 // GetDesktopStateForDesktop returns the persisted desktop state for the given
 // owner/desktop pair. If no state exists, it returns a default empty state.
 func (s *Store) GetDesktopStateForDesktop(ctx context.Context, ownerID, desktopID string) (types.DesktopState, error) {
-	desktopID = normalizeDesktopID(desktopID)
-	var windowsJSON, updatedAt string
-	var activeWindow string
-
-	row := s.db.QueryRowContext(ctx,
-		`SELECT windows_json, active_window, updated_at
-		   FROM desktop_workspaces
-		  WHERE owner_id = ? AND desktop_id = ?`,
-		ownerID, desktopID,
-	)
-
-	err := row.Scan(&windowsJSON, &activeWindow, &updatedAt)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// No persisted state yet — return default empty state.
-			return types.DesktopState{
-				OwnerID:        ownerID,
-				DesktopID:      desktopID,
-				Windows:        []types.WindowState{},
-				ActiveWindowID: "",
-				UpdatedAt:      time.Now().UTC(),
-			}, nil
-		}
-		return types.DesktopState{}, fmt.Errorf("query desktop state: %w", err)
-	}
-
-	var windows []types.WindowState
-	if err := json.Unmarshal([]byte(windowsJSON), &windows); err != nil {
-		return types.DesktopState{}, fmt.Errorf("unmarshal desktop windows: %w", err)
-	}
-
-	parsedTime, err := time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		parsedTime = time.Now().UTC()
-	}
-
-	return types.DesktopState{
-		OwnerID:        ownerID,
-		DesktopID:      desktopID,
-		Windows:        windows,
-		ActiveWindowID: activeWindow,
-		UpdatedAt:      parsedTime,
-	}, nil
+	return s.GetDesktopStateForSession(ctx, ownerID, desktopID, "")
 }
 
 // SaveDesktopState persists the desktop state for the given owner's primary
@@ -2212,28 +2220,5 @@ func (s *Store) SaveDesktopState(ctx context.Context, state types.DesktopState) 
 // SaveDesktopStateForDesktop persists the desktop state for the given
 // owner/desktop pair using UPSERT.
 func (s *Store) SaveDesktopStateForDesktop(ctx context.Context, state types.DesktopState) error {
-	windowsJSON, err := json.Marshal(state.Windows)
-	if err != nil {
-		return fmt.Errorf("marshal desktop windows: %w", err)
-	}
-	desktopID := normalizeDesktopID(state.DesktopID)
-
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO desktop_workspaces (owner_id, desktop_id, windows_json, active_window, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   windows_json = VALUES(windows_json),
-		   active_window = VALUES(active_window),
-		   updated_at = VALUES(updated_at)`,
-		state.OwnerID,
-		desktopID,
-		string(windowsJSON),
-		state.ActiveWindowID,
-		state.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("save desktop state: %w", err)
-	}
-
-	return nil
+	return s.SaveDesktopStateForSession(ctx, state, types.DesktopSessionContext{SessionID: "legacy", IsDriver: true})
 }

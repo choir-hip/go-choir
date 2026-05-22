@@ -380,3 +380,137 @@ func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 		t.Fatalf("expected empty primary desktop state, got %+v", primaryResp.Windows)
 	}
 }
+
+func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
+	_, h := testAPISetup(t)
+
+	driverReq := desktopStateSaveRequest{
+		Windows: []types.WindowState{
+			{
+				WindowID: "win-a",
+				AppID:    "vtext",
+				Title:    "Driver document",
+				Geometry: types.WindowGeometry{X: 10, Y: 20, Width: 600, Height: 400},
+				Mode:     types.WindowNormal,
+				ZIndex:   2,
+			},
+		},
+		ActiveWindowID: "win-a",
+		Driver:         true,
+	}
+	body, _ := json.Marshal(driverReq)
+	saveA := httptest.NewRequest(http.MethodPut, "/api/desktop/state", bytesReader(body))
+	saveA.Header.Set("X-Authenticated-User", "user-1")
+	saveA.Header.Set("Content-Type", "application/json")
+	saveA.Header.Set("X-Choir-Session", "session-a")
+	saveA.Header.Set("X-Choir-Device", "device-a")
+	wA := httptest.NewRecorder()
+	h.HandleDesktopStateSave(wA, saveA)
+	if wA.Code != http.StatusOK {
+		t.Fatalf("driver save status = %d, want %d", wA.Code, http.StatusOK)
+	}
+
+	passiveReq := desktopStateSaveRequest{
+		Windows: []types.WindowState{
+			{
+				WindowID: "win-b",
+				AppID:    "terminal",
+				Title:    "Stale passive terminal",
+				Geometry: types.WindowGeometry{X: 300, Y: 320, Width: 500, Height: 300},
+				Mode:     types.WindowNormal,
+				ZIndex:   99,
+			},
+		},
+		ActiveWindowID: "win-b",
+		Driver:         false,
+	}
+	passiveBody, _ := json.Marshal(passiveReq)
+	saveB := httptest.NewRequest(http.MethodPut, "/api/desktop/state", bytesReader(passiveBody))
+	saveB.Header.Set("X-Authenticated-User", "user-1")
+	saveB.Header.Set("Content-Type", "application/json")
+	saveB.Header.Set("X-Choir-Session", "session-b")
+	saveB.Header.Set("X-Choir-Device", "device-b")
+	wB := httptest.NewRecorder()
+	h.HandleDesktopStateSave(wB, saveB)
+	if wB.Code != http.StatusOK {
+		t.Fatalf("passive save status = %d, want %d", wB.Code, http.StatusOK)
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
+	get.Header.Set("X-Authenticated-User", "user-1")
+	get.Header.Set("X-Choir-Session", "session-a")
+	getW := httptest.NewRecorder()
+	h.HandleDesktopStateGet(getW, get)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d", getW.Code, http.StatusOK)
+	}
+	var resp desktopStateGetResponse
+	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Windows) != 1 || resp.Windows[0].AppID != "vtext" || resp.Windows[0].WindowID != "win-a" {
+		t.Fatalf("passive session replaced shared state: %+v", resp.Windows)
+	}
+}
+
+func TestDesktopStateSessionPlacementDoesNotCrossDevices(t *testing.T) {
+	_, h := testAPISetup(t)
+
+	saveForSession := func(sessionID string, x int) {
+		t.Helper()
+		saveReq := desktopStateSaveRequest{
+			Windows: []types.WindowState{
+				{
+					WindowID: "win-shared",
+					AppID:    "vtext",
+					Title:    "Shared document",
+					Geometry: types.WindowGeometry{X: x, Y: 40, Width: 600, Height: 400},
+					Mode:     types.WindowNormal,
+					ZIndex:   4,
+				},
+			},
+			ActiveWindowID: "win-shared",
+			Driver:         true,
+		}
+		body, _ := json.Marshal(saveReq)
+		req := httptest.NewRequest(http.MethodPut, "/api/desktop/state", bytesReader(body))
+		req.Header.Set("X-Authenticated-User", "user-1")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Choir-Session", sessionID)
+		w := httptest.NewRecorder()
+		h.HandleDesktopStateSave(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s save status = %d, want %d", sessionID, w.Code, http.StatusOK)
+		}
+	}
+
+	saveForSession("desktop-session", 20)
+	saveForSession("mobile-session", 360)
+
+	getX := func(sessionID string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
+		req.Header.Set("X-Authenticated-User", "user-1")
+		req.Header.Set("X-Choir-Session", sessionID)
+		w := httptest.NewRecorder()
+		h.HandleDesktopStateGet(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s get status = %d, want %d", sessionID, w.Code, http.StatusOK)
+		}
+		var resp desktopStateGetResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode %s response: %v", sessionID, err)
+		}
+		if len(resp.Windows) != 1 {
+			t.Fatalf("%s windows = %+v, want one", sessionID, resp.Windows)
+		}
+		return resp.Windows[0].Geometry.X
+	}
+
+	if got := getX("desktop-session"); got != 20 {
+		t.Fatalf("desktop session x = %d, want 20", got)
+	}
+	if got := getX("mobile-session"); got != 360 {
+		t.Fatalf("mobile session x = %d, want 360", got)
+	}
+}

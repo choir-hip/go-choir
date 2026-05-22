@@ -26,7 +26,16 @@
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
-  import { dispatchLiveEvent, isOwnLiveEvent } from './live-events.js';
+  import {
+    currentSessionId,
+    dispatchLiveEvent,
+    isDrivingSession,
+    isOwnLiveEvent,
+    liveEventKind,
+    liveEventPayload,
+    observeRemoteDriverSession,
+    renewDriverLease,
+  } from './live-events.js';
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
   import BottomBar from './BottomBar.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
@@ -282,12 +291,107 @@
     return document.visibilityState === 'hidden';
   }
 
-  function handleRemoteDesktopStateUpdate() {
-    // Desktop layout is viewport- and interaction-sensitive. A visible tab owns
-    // its own focus/stack while the user is using it; remote desktop saves are
-    // picked up on reload or while this tab is backgrounded.
-    if (!shouldApplyRemoteDesktopStateUpdate()) return;
-    void loadDesktopState();
+  function desktopLiveEventAffectsSharedState(message) {
+    const kind = liveEventKind(message);
+    return kind === 'desktop.app_instances.updated' ||
+      kind === 'desktop.window_placement.updated' ||
+      kind === 'desktop.driver_lease.updated';
+  }
+
+  function currentActiveWindowIdSnapshot() {
+    let current = '';
+    activeWindowId.subscribe((id) => { current = id || ''; })();
+    return current;
+  }
+
+  function mergeRemoteDesktopWindows(remoteWindows = []) {
+    const localWindows = windowsSnapshot();
+    const localById = new Map(localWindows.map((win) => [win.windowId, win]));
+    const remoteIds = new Set(remoteWindows.map((win) => win.windowId));
+    const activeId = currentActiveWindowIdSnapshot();
+    const activeStillExists = activeId && remoteIds.has(activeId);
+    const localMaxZ = localWindows.reduce((max, win) => Math.max(max, win.zIndex || 0), 0);
+
+    let addedZ = Math.max(1, localMaxZ - remoteWindows.length - 1);
+    const merged = remoteWindows.map((remoteWin) => {
+      const localWin = localById.get(remoteWin.windowId);
+      if (!localWin) {
+        // New remote app instances should become visible, but passive sessions
+        // must not let them cover the window the local user is touching.
+        return {
+          ...remoteWin,
+          icon: getAppIcon(remoteWin.appId),
+          zIndex: activeStillExists ? Math.max(1, addedZ++) : (remoteWin.zIndex || 1),
+        };
+      }
+      return {
+        ...localWin,
+        title: remoteWin.title || localWin.title,
+        icon: getAppIcon(remoteWin.appId || localWin.appId),
+        appContext: remoteWin.appContext || localWin.appContext,
+        restoreSuspended: localWin.restoreSuspended,
+      };
+    });
+
+    if (activeStillExists) {
+      const nextMax = merged.reduce((max, win) => Math.max(max, win.zIndex || 0), 0);
+      return {
+        windows: merged.map((win) =>
+          win.windowId === activeId ? { ...win, zIndex: Math.max(nextMax + 1, win.zIndex || 1) } : win
+        ),
+        activeWindowId: activeId,
+      };
+    }
+
+    const visible = merged.filter((win) => win.mode !== 'closed' && win.mode !== 'hidden' && win.mode !== 'minimized');
+    const nextActive = visible.length > 0
+      ? visible.reduce((best, win) => ((win.zIndex || 0) > (best.zIndex || 0) ? win : best)).windowId
+      : '';
+    return { windows: merged, activeWindowId: nextActive };
+  }
+
+  async function mergeRemoteDesktopSharedState() {
+    try {
+      const state = await fetchDesktopState();
+      if (!state?.windows) return;
+      applyPersistedDesktopState(() => {
+        const merged = mergeRemoteDesktopWindows(state.windows.map((w) => ({
+          windowId: w.window_id,
+          appId: w.app_id,
+          title: w.title,
+          icon: getAppIcon(w.app_id),
+          x: w.geometry?.x ?? 100,
+          y: w.geometry?.y ?? 100,
+          width: w.geometry?.width ?? 600,
+          height: w.geometry?.height ?? 400,
+          mode: w.mode ?? 'normal',
+          zIndex: w.z_index ?? 1,
+          restoredGeometry: w.restored_geometry
+            ? { x: w.restored_geometry.x, y: w.restored_geometry.y, width: w.restored_geometry.width, height: w.restored_geometry.height }
+            : null,
+          appContext: w.app_context ?? {},
+        })));
+        setWindows(merged.windows, merged.activeWindowId);
+      });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+      }
+    }
+  }
+
+  function handleRemoteDesktopStateUpdate(message = {}) {
+    const payload = liveEventPayload(message);
+    observeRemoteDriverSession(payload.source_session_id || '');
+    if (!desktopLiveEventAffectsSharedState(message)) return;
+    // Desktop layout is viewport- and interaction-sensitive. A visible tab may
+    // merge shared app identity/order, but remote saves must not seize local
+    // focus or geometry. Hidden tabs can safely reload their full snapshot.
+    if (shouldApplyRemoteDesktopStateUpdate()) {
+      void loadDesktopState();
+    } else {
+      void mergeRemoteDesktopSharedState();
+    }
   }
 
   async function loadDesktopState() {
@@ -662,6 +766,7 @@
 
   function scheduleSave() {
     if (!authenticated || !stateLoaded) return;
+    if (!isDrivingSession()) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(persistDesktopState, SAVE_DEBOUNCE_MS);
   }
@@ -676,6 +781,7 @@
 
   async function persistDesktopState(options = {}) {
     if ((!authenticated && !options.allowSignedOutTransition) || !stateLoaded) return;
+    if (!isDrivingSession()) return;
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -704,6 +810,24 @@
   function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
       void flushDesktopState({ keepalive: true });
+    }
+  }
+
+  function handleLocalDriverInput() {
+    renewDriverLease();
+  }
+
+  const DRIVER_INPUT_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+
+  function installDriverInputListeners() {
+    for (const eventName of DRIVER_INPUT_EVENTS) {
+      window.addEventListener(eventName, handleLocalDriverInput, { capture: true, passive: true });
+    }
+  }
+
+  function removeDriverInputListeners() {
+    for (const eventName of DRIVER_INPUT_EVENTS) {
+      window.removeEventListener(eventName, handleLocalDriverInput, { capture: true });
     }
   }
 
@@ -819,8 +943,8 @@
         lastLiveStreamSeq = Math.max(lastLiveStreamSeq, Number(message.stream_seq));
       }
       dispatchLiveEvent(message);
-      if (message.kind === 'desktop.state.updated' && !isOwnLiveEvent(message)) {
-        handleRemoteDesktopStateUpdate();
+      if (desktopLiveEventAffectsSharedState(message) && !isOwnLiveEvent(message)) {
+        handleRemoteDesktopStateUpdate(message);
       }
       return;
     }
@@ -1345,6 +1469,8 @@
 
   onMount(() => {
     mounted = true;
+    currentSessionId();
+    installDriverInputListeners();
     refreshOverviewViewport();
     window.addEventListener('resize', refreshOverviewViewport);
     window.addEventListener('pagehide', handlePageHide);
@@ -1374,6 +1500,7 @@
     window.removeEventListener('resize', refreshOverviewViewport);
     window.removeEventListener('pagehide', handlePageHide);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    removeDriverInputListeners();
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (unsubscribeWindows) unsubscribeWindows();

@@ -1,10 +1,43 @@
 let deviceId = '';
+let sessionId = '';
+let driverLeaseUntil = 0;
+const DRIVER_LEASE_MS = 60_000;
 
 export function currentDeviceId() {
   if (!deviceId) {
     deviceId = globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
   return deviceId;
+}
+
+export function currentSessionId() {
+  if (!sessionId) {
+    sessionId = globalThis.crypto?.randomUUID?.() || `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  return sessionId;
+}
+
+export function currentViewportProfile() {
+  if (typeof window === 'undefined') return 'server';
+  const width = Number(window.innerWidth || 0);
+  if (width > 0 && width < 768) return 'compact';
+  return 'desktop';
+}
+
+export function renewDriverLease() {
+  currentSessionId();
+  driverLeaseUntil = Date.now() + DRIVER_LEASE_MS;
+}
+
+export function isDrivingSession() {
+  return Date.now() < driverLeaseUntil;
+}
+
+export function observeRemoteDriverSession(remoteSessionId = '') {
+  const normalized = String(remoteSessionId || '').trim();
+  if (normalized && normalized !== currentSessionId()) {
+    driverLeaseUntil = 0;
+  }
 }
 
 export function dispatchLiveEvent(message) {
@@ -28,5 +61,9 @@ export function liveEventPayload(message) {
 }
 
 export function isOwnLiveEvent(message) {
-  return liveEventPayload(message).source_device_id === currentDeviceId();
+  const payload = liveEventPayload(message);
+  if (payload.source_session_id) {
+    return payload.source_session_id === currentSessionId();
+  }
+  return payload.source_device_id === currentDeviceId();
 }

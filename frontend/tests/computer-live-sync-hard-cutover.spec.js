@@ -53,12 +53,15 @@ test('covered product apps do not expose manual refresh or reload sync controls'
 test('desktop live state cannot seize the visible foreground window stack', async () => {
   const source = await readRelative('src/lib/Desktop.svelte');
 
-  expect(source).toContain('function handleRemoteDesktopStateUpdate()');
+  expect(source).toContain('function handleRemoteDesktopStateUpdate(message = {})');
   expect(source).toContain("document.visibilityState === 'hidden'");
-  expect(source).toContain('handleRemoteDesktopStateUpdate();');
+  expect(source).toContain('mergeRemoteDesktopSharedState();');
+  expect(source).toContain('observeRemoteDriverSession');
+  expect(source).toContain('handleRemoteDesktopStateUpdate(message);');
   expect(source).not.toMatch(
     /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
   );
+  expect(source).not.toContain("message.kind === 'desktop.state.updated'");
 });
 
 test('server-applied desktop state does not echo-save from store subscriptions', async () => {
@@ -67,4 +70,18 @@ test('server-applied desktop state does not echo-save from store subscriptions',
   expect(source).toContain('applyingPersistedDesktopState = true');
   expect(source).toContain('applyPersistedDesktopState(() =>');
   expect(source).toContain('stateLoaded && !applyingPersistedDesktopState');
+});
+
+test('desktop saves are gated by the local driver lease', async () => {
+  const desktopSource = await readRelative('src/lib/Desktop.svelte');
+  const apiSource = await readRelative('src/lib/desktop.js');
+  const liveSource = await readRelative('src/lib/live-events.js');
+
+  expect(liveSource).toContain('currentSessionId');
+  expect(liveSource).toContain('renewDriverLease');
+  expect(liveSource).toContain('observeRemoteDriverSession');
+  expect(apiSource).toContain('X-Choir-Session');
+  expect(apiSource).toContain('X-Choir-Viewport');
+  expect(apiSource).toContain('driver: isDrivingSession()');
+  expect(desktopSource).toContain('if (!isDrivingSession()) return;');
 });

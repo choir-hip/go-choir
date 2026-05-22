@@ -15,7 +15,7 @@
  */
 
 import { fetchWithRenewal, AuthRequiredError } from './auth.js';
-import { currentDeviceId } from './live-events.js';
+import { currentDeviceId, currentSessionId, currentViewportProfile, isDrivingSession } from './live-events.js';
 
 // ---------------------------------------------------------------------------
 // Desktop state fetch
@@ -34,6 +34,11 @@ import { currentDeviceId } from './live-events.js';
 export async function fetchDesktopState() {
   const res = await fetchWithRenewal('/api/desktop/state', {
     method: 'GET',
+    headers: {
+      'X-Choir-Device': currentDeviceId(),
+      'X-Choir-Session': currentSessionId(),
+      'X-Choir-Viewport': currentViewportProfile(),
+    },
   });
 
   if (!res.ok) {
@@ -67,12 +72,16 @@ export async function saveDesktopState(state, options = {}) {
   const body = JSON.stringify({
     windows: state.windows,
     active_window_id: state.active_window_id || '',
+    driver: isDrivingSession(),
   });
   const res = await fetchWithRenewal('/api/desktop/state', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-Choir-Device': currentDeviceId(),
+      'X-Choir-Session': currentSessionId(),
+      'X-Choir-Viewport': currentViewportProfile(),
+      'X-Choir-Driver': isDrivingSession() ? 'true' : 'false',
     },
     keepalive: options.keepalive === true && body.length < 60_000,
     body,
