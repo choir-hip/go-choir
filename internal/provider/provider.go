@@ -1812,9 +1812,6 @@ func (a *ChatGPTAuth) refreshViaHTTP(ctx context.Context, record *codexAuthFile)
 	values := url.Values{}
 	values.Set("grant_type", "refresh_token")
 	values.Set("refresh_token", record.Tokens.RefreshToken)
-	if record.Tokens.AccountID != "" {
-		values.Set("account_id", record.Tokens.AccountID)
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.refreshURL, strings.NewReader(values.Encode()))
 	if err != nil {

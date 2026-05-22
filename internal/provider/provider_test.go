@@ -565,6 +565,9 @@ func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 		if !strings.Contains(body, "grant_type=refresh_token") || !strings.Contains(body, "refresh_token=refresh-123") {
 			t.Fatalf("unexpected refresh body: %s", body)
 		}
+		if strings.Contains(body, "account_id") {
+			t.Fatalf("refresh body must not send account_id: %s", body)
+		}
 		_ = json.NewEncoder(w).Encode(oauthRefreshResponse{
 			AccessToken:  "new-access",
 			RefreshToken: "new-refresh",
