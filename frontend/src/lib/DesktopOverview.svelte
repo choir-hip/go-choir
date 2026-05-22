@@ -22,7 +22,7 @@
   // windows. Spatial overlap still uses local zIndex in mapStyle().
   $: openWindows = (windows || [])
     .filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
-  $: layeredWindows = [...openWindows].reverse();
+  $: layeredWindows = openWindows;
   $: visibleCount = openWindows.filter((win) => win.mode !== 'minimized').length;
   $: suspendedCount = openWindows.filter((win) => win.restoreSuspended).length;
   $: heavyCount = openWindows.filter((win) => isHeavyAppId(win.appId)).length;
