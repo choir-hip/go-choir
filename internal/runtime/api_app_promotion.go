@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -21,6 +22,7 @@ type appAdoptionListResponse struct {
 
 type appChangePackageReviewEvidenceResponse struct {
 	PackageID   string                              `json:"package_id"`
+	HumanProof  appChangePackageHumanProof          `json:"human_proof"`
 	Acceptances []appChangePackageAcceptanceSummary `json:"acceptances"`
 }
 
@@ -38,12 +40,27 @@ type appChangePackageAcceptanceSummary struct {
 	VerifierContracts     []acceptanceContractState `json:"verifier_contracts,omitempty"`
 	ReviewScope           string                    `json:"review_scope"`
 	TraceVisible          bool                      `json:"trace_visible"`
+	HumanProofState       string                    `json:"human_proof_state"`
+	SupportsHumanReview   bool                      `json:"supports_human_review"`
+	MachineReceiptOnly    bool                      `json:"machine_receipt_only"`
 	UpdatedAt             time.Time                 `json:"updated_at"`
 }
 
 type acceptanceContractState struct {
 	Name  string `json:"name"`
 	State string `json:"state"`
+}
+
+type appChangePackageHumanProof struct {
+	State          string   `json:"state"`
+	Summary        string   `json:"summary,omitempty"`
+	Recommendation string   `json:"recommendation,omitempty"`
+	NarrativeRefs  []string `json:"narrative_refs,omitempty"`
+	ScreenshotRefs []string `json:"screenshot_refs,omitempty"`
+	VideoRefs      []string `json:"video_refs,omitempty"`
+	BenchmarkRefs  []string `json:"benchmark_refs,omitempty"`
+	ArtifactRefs   []string `json:"artifact_refs,omitempty"`
+	Missing        []string `json:"missing,omitempty"`
 }
 
 func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +220,7 @@ func (h *APIHandler) handleAppChangePackageReviewEvidence(w http.ResponseWriter,
 	if len(rawIDs) == 0 {
 		writeAPIJSON(w, http.StatusOK, appChangePackageReviewEvidenceResponse{
 			PackageID:   pkg.PackageID,
+			HumanProof:  humanProofForAppChangePackage(pkg),
 			Acceptances: []appChangePackageAcceptanceSummary{},
 		})
 		return
@@ -230,6 +248,7 @@ func (h *APIHandler) handleAppChangePackageReviewEvidence(w http.ResponseWriter,
 	}
 	writeAPIJSON(w, http.StatusOK, appChangePackageReviewEvidenceResponse{
 		PackageID:   pkg.PackageID,
+		HumanProof:  humanProofForAppChangePackage(pkg),
 		Acceptances: summaries,
 	})
 }
@@ -409,6 +428,7 @@ func summarizePackageReviewAcceptance(viewerID string, rec types.RunAcceptanceRe
 			break
 		}
 	}
+	humanState, supportsHumanReview := runAcceptanceHumanProofState(rec)
 	return appChangePackageAcceptanceSummary{
 		AcceptanceID:          rec.AcceptanceID,
 		TargetMissionID:       rec.TargetMissionID,
@@ -423,7 +443,126 @@ func summarizePackageReviewAcceptance(viewerID string, rec types.RunAcceptanceRe
 		VerifierContracts:     contracts,
 		ReviewScope:           scope,
 		TraceVisible:          rec.OwnerID == viewerID,
+		HumanProofState:       humanState,
+		SupportsHumanReview:   supportsHumanReview,
+		MachineReceiptOnly:    !supportsHumanReview,
 		UpdatedAt:             rec.UpdatedAt,
+	}
+}
+
+func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) {
+	hasNarrative := false
+	hasMediaOrBenchmark := false
+	for _, ref := range rec.EvidenceRefs {
+		kind := strings.ToLower(strings.TrimSpace(ref.Kind))
+		summary := strings.ToLower(ref.Summary + " " + ref.URL)
+		if strings.Contains(kind, "vtext") || strings.Contains(summary, "vtext") || strings.Contains(summary, "narrative") {
+			hasNarrative = true
+		}
+		if strings.Contains(kind, "screenshot") ||
+			strings.Contains(kind, "video") ||
+			strings.Contains(kind, "benchmark") ||
+			strings.Contains(summary, ".png") ||
+			strings.Contains(summary, ".jpg") ||
+			strings.Contains(summary, ".jpeg") ||
+			strings.Contains(summary, ".webm") ||
+			strings.Contains(summary, ".mp4") ||
+			strings.Contains(summary, "benchmark") {
+			hasMediaOrBenchmark = true
+		}
+		for _, value := range ref.Details {
+			text := strings.ToLower(fmt.Sprint(value))
+			if strings.Contains(text, "vtext") || strings.Contains(text, "narrative") {
+				hasNarrative = true
+			}
+			if strings.Contains(text, ".png") || strings.Contains(text, ".jpg") || strings.Contains(text, ".jpeg") || strings.Contains(text, ".webm") || strings.Contains(text, ".mp4") || strings.Contains(text, "benchmark") {
+				hasMediaOrBenchmark = true
+			}
+		}
+	}
+	if hasNarrative && hasMediaOrBenchmark {
+		return "human_reviewable", true
+	}
+	if rec.AcceptanceLevel == types.RunAcceptanceExportLevel || rec.AcceptanceLevel == types.RunAcceptancePromotionLevel || rec.AcceptanceLevel == types.RunAcceptanceContinuationLevel {
+		return "machine_receipt_only", false
+	}
+	return "evidence_pending", false
+}
+
+func humanProofForAppChangePackage(pkg types.AppChangePackageRecord) appChangePackageHumanProof {
+	var provenance any
+	_ = json.Unmarshal(pkg.ProvenanceRefsJSON, &provenance)
+	proof := appChangePackageHumanProof{
+		State: "evidence_pending",
+	}
+	collectHumanProofValue(&proof, provenance, "")
+	if strings.TrimSpace(proof.Summary) != "" {
+		proof.NarrativeRefs = append(proof.NarrativeRefs, "human_summary")
+	}
+	proof.NarrativeRefs = compactStringRefs(proof.NarrativeRefs)
+	proof.ScreenshotRefs = compactStringRefs(proof.ScreenshotRefs)
+	proof.VideoRefs = compactStringRefs(proof.VideoRefs)
+	proof.BenchmarkRefs = compactStringRefs(proof.BenchmarkRefs)
+	proof.ArtifactRefs = compactStringRefs(proof.ArtifactRefs)
+	if len(proof.NarrativeRefs) > 0 && (len(proof.ScreenshotRefs) > 0 || len(proof.VideoRefs) > 0 || len(proof.BenchmarkRefs) > 0) {
+		proof.State = "human_reviewable"
+		return proof
+	}
+	if len(proof.NarrativeRefs) == 0 {
+		proof.Missing = append(proof.Missing, "narrative VText")
+	}
+	if len(proof.ScreenshotRefs) == 0 && len(proof.VideoRefs) == 0 && len(proof.BenchmarkRefs) == 0 {
+		proof.Missing = append(proof.Missing, "screenshots, video, or benchmark")
+	}
+	return proof
+}
+
+func collectHumanProofValue(proof *appChangePackageHumanProof, value any, key string) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for k, v := range typed {
+			lowerKey := strings.ToLower(strings.TrimSpace(k))
+			if lowerKey == "summary" || lowerKey == "human_summary" || lowerKey == "narrative_summary" {
+				if proof.Summary == "" {
+					proof.Summary = strings.TrimSpace(fmt.Sprint(v))
+				}
+			}
+			if lowerKey == "recommendation" && proof.Recommendation == "" {
+				proof.Recommendation = strings.TrimSpace(fmt.Sprint(v))
+			}
+			collectHumanProofValue(proof, v, lowerKey)
+		}
+	case []any:
+		for _, item := range typed {
+			collectHumanProofValue(proof, item, key)
+		}
+	case []string:
+		for _, item := range typed {
+			collectHumanProofString(proof, key, item)
+		}
+	case string:
+		collectHumanProofString(proof, key, typed)
+	}
+}
+
+func collectHumanProofString(proof *appChangePackageHumanProof, key, raw string) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return
+	}
+	lowerKey := strings.ToLower(key)
+	lowerText := strings.ToLower(text)
+	switch {
+	case strings.Contains(lowerKey, "vtext") || strings.Contains(lowerKey, "narrative") || strings.Contains(lowerText, "vtext:"):
+		proof.NarrativeRefs = append(proof.NarrativeRefs, text)
+	case strings.Contains(lowerKey, "screenshot") || strings.Contains(lowerKey, "image") || strings.HasSuffix(lowerText, ".png") || strings.HasSuffix(lowerText, ".jpg") || strings.HasSuffix(lowerText, ".jpeg"):
+		proof.ScreenshotRefs = append(proof.ScreenshotRefs, text)
+	case strings.Contains(lowerKey, "video") || strings.HasSuffix(lowerText, ".webm") || strings.HasSuffix(lowerText, ".mp4"):
+		proof.VideoRefs = append(proof.VideoRefs, text)
+	case strings.Contains(lowerKey, "benchmark") || strings.Contains(lowerText, "benchmark"):
+		proof.BenchmarkRefs = append(proof.BenchmarkRefs, text)
+	case strings.Contains(lowerKey, "artifact") || strings.Contains(lowerKey, "evidence"):
+		proof.ArtifactRefs = append(proof.ArtifactRefs, text)
 	}
 }
 

@@ -9,6 +9,129 @@ async function openStartApp(page, appId) {
   await page.locator(`[data-start-app-id="${appId}"]`).click();
 }
 
+function packageRecord(overrides = {}) {
+  const packageId = overrides.package_id || `pkg-${Math.random().toString(36).slice(2)}`;
+  const title = overrides.title || 'Chiron Shelf Observability';
+  return {
+    package_id: packageId,
+    owner_id: overrides.owner_id || 'source-owner',
+    app_id: overrides.app_id || title,
+    status: overrides.status || 'published_unlisted',
+    visibility: overrides.visibility || 'unlisted',
+    source_computer_id: overrides.source_computer_id || 'primary',
+    source_candidate_id: overrides.source_candidate_id || `candidate-${packageId}`,
+    source_active_ref: 'refs/computers/primary/active',
+    candidate_source_ref: `refs/computers/primary/candidates/candidate-${packageId}`,
+    runtime_source_delta_sha256: 'runtime-delta-sha',
+    ui_source_delta_sha256: 'ui-delta-sha',
+    package_manifest_sha256: `manifest-${packageId}`,
+    app_protocol_contract: 'recipient rebuild required',
+    manifest_json: {
+      title,
+      family: overrides.family || 'Shell',
+      summary: overrides.summary || 'Streams live agent progress through the Shelf while controls keep working.',
+    },
+    provenance_refs_json: overrides.provenance_refs_json ?? {
+      human_summary: 'Owner-readable narrative describing what changed and what was verified.',
+      recommendation: 'Try in a candidate before install.',
+      vtext_doc_id: 'doc-chiron',
+      vtext_revision_id: 'rev-chiron',
+      screenshot_refs: ['test-results/chiron-shelf.png'],
+      video_refs: ['test-results/chiron-shelf.webm'],
+      artifact_refs: ['runacc-chiron'],
+    },
+    trace_id: overrides.trace_id || 'trace-chiron',
+    created_at: '2026-05-22T12:00:00Z',
+    updated_at: '2026-05-22T12:00:00Z',
+    ...overrides,
+  };
+}
+
+function humanProofBody(pkg) {
+  const refs = pkg?.provenance_refs_json || {};
+  const hasNarrative = Boolean(refs.human_summary || refs.vtext_doc_id || refs.vtext_revision_id);
+  const hasMedia = Boolean(refs.screenshot_refs?.length || refs.video_refs?.length || refs.benchmark_refs?.length);
+  return {
+    state: hasNarrative && hasMedia ? 'human_reviewable' : refs.artifact_refs?.length ? 'machine_receipt_only' : 'evidence_pending',
+    summary: refs.human_summary || '',
+    recommendation: refs.recommendation || '',
+    narrative_refs: refs.vtext_doc_id ? [refs.vtext_doc_id] : [],
+    screenshot_refs: refs.screenshot_refs || [],
+    video_refs: refs.video_refs || [],
+    benchmark_refs: refs.benchmark_refs || [],
+    artifact_refs: refs.artifact_refs || [],
+    missing: [
+      ...(hasNarrative ? [] : ['causal VText narrative']),
+      ...(hasMedia ? [] : ['screenshot, video, or benchmark evidence']),
+    ],
+  };
+}
+
+async function routeAppsChanges(page, { packages = [], adoptions = [], acceptances = [], packageEvidence = {} } = {}) {
+  await page.route(/\/api\/app-change-packages(?:\/.*)?(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    const reviewMatch = url.pathname.match(/^\/api\/app-change-packages\/([^/]+)\/review-evidence$/);
+    if (reviewMatch) {
+      const packageId = decodeURIComponent(reviewMatch[1]);
+      const pkg = packages.find((item) => item.package_id === packageId);
+      const body = packageEvidence[packageId] || {
+        package_id: packageId,
+        human_proof: pkg ? humanProofBody(pkg) : { state: 'evidence_pending', missing: ['human proof'] },
+        acceptances: acceptances.filter((acceptance) => JSON.stringify(acceptance).includes(packageId)),
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      return;
+    }
+    if (url.pathname === '/api/app-change-packages' && method === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages }) });
+      return;
+    }
+    if (url.pathname === '/api/app-change-packages/pull' && method === 'POST') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      const pkg = packages.find((item) => item.package_id === body.package_id) || packages[0] || {};
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pkg) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected package route' }) });
+  });
+
+  await page.route(/\/api\/adoptions(?:\/.*)?(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    if (url.pathname === '/api/adoptions' && method === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions }) });
+      return;
+    }
+    const actionMatch = url.pathname.match(/^\/api\/adoptions\/([^/]+)\/(verify|promote|rollback)$/);
+    if (actionMatch) {
+      const adoption = adoptions.find((item) => item.adoption_id === decodeURIComponent(actionMatch[1]));
+      if (!adoption) {
+        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unknown adoption' }) });
+        return;
+      }
+      const action = actionMatch[2];
+      const next = {
+        ...adoption,
+        status: action === 'verify' ? 'verified' : action === 'promote' ? 'adopted' : 'rolled_back',
+        runtime_artifact_digest: adoption.runtime_artifact_digest || 'sha256:recipient-runtime',
+        ui_artifact_digest: adoption.ui_artifact_digest || 'sha256:recipient-ui',
+        rollback_profile_json: adoption.rollback_profile_json || {
+          previous_active_source_ref: 'refs/computers/primary/active',
+          previous_route_profile: 'route:primary',
+        },
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(next) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected adoption route' }) });
+  });
+
+  await page.route(/\/api\/run-acceptances(?:\/.*)?(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceptances }) });
+  });
+}
+
 test('Apps & Changes replaces manual candidate desktop entry points', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const forbiddenRemoteDisplayRequests = [];
@@ -18,51 +141,50 @@ test('Apps & Changes replaces manual candidate desktop entry points', async ({ d
       forbiddenRemoteDisplayRequests.push(url);
     }
   });
-
-  await page.route('**/api/app-change-packages*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
+  const humanPackage = packageRecord({ package_id: 'pkg-human-proof' });
+  const pendingPackage = packageRecord({
+    package_id: 'pkg-machine-only',
+    title: 'Machine Receipt Only',
+    provenance_refs_json: { artifact_refs: ['runacc-machine-only'] },
   });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-  });
 
-  await page.locator('[data-start-button]').click();
+  await routeAppsChanges(page, { packages: [humanPackage, pendingPackage] });
+
+  await openStartApp(page, 'apps-changes');
   await expect(page.locator('[data-start-app-id="candidate-desktop"]')).toHaveCount(0);
-  await page.locator('[data-start-app-id="apps-changes"]').click();
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  await expect(store.locator('[data-change-card]')).toHaveCount(4);
+  await expect(store.locator('[data-change-card]')).toHaveCount(2);
   await expect(store.locator('[data-change-open-vtext-report]')).toBeVisible();
-  await expect(store.locator('[data-open-mission-vtext]')).toBeVisible();
   await expect(store.locator('[data-change-preview-empty]')).toBeVisible();
   await expect(store.locator('[data-candidate-desktop-input]')).toHaveCount(0);
+  await expect(store.locator('[data-change-card][data-change-id="pkg-human-proof"]')).toHaveAttribute('data-human-proof-state', 'human_reviewable');
+  await expect(store.locator('[data-change-card][data-change-id="pkg-machine-only"]')).toHaveAttribute('data-human-proof-state', 'machine_receipt_only');
   expect(forbiddenRemoteDisplayRequests).toEqual([]);
 });
 
 test('Apps & Changes compact catalog remains clickable beside the detail pane', async ({ desktopSession }) => {
   const { page } = desktopSession;
+  const motionPackage = packageRecord({ package_id: 'pkg-motion', title: 'Process Animation Language', family: 'Motion' });
+  const pythonPackage = packageRecord({ package_id: 'pkg-python', title: 'Python Code Mode', family: 'Code Execution' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/api/app-change-packages*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-  });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-  });
+  await routeAppsChanges(page, { packages: [motionPackage, pythonPackage] });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  await store.locator('[data-change-card][data-change-id="motion-language"]').click();
+  await store.locator('[data-change-card][data-change-id="pkg-motion"]').click();
   await expect(store.locator('[data-change-detail] h3')).toContainText('Process Animation Language');
-  await store.locator('[data-change-card][data-change-id="python-code-mode"]').click();
+  await store.locator('[data-change-card][data-change-id="pkg-python"]').click();
   await expect(store.locator('[data-change-detail] h3')).toContainText('Python Code Mode');
 });
 
 test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSession }) => {
   const { page } = desktopSession;
+  const pkg = packageRecord({ package_id: 'pkg-chiron-rollback-only' });
   const adoption = {
     adoption_id: 'adoption-chiron-rollback-only',
-    package_id: '28433c19-5d02-416f-9368-de56390e1927',
+    package_id: pkg.package_id,
     app_id: 'Chiron Shelf Observability',
     target_computer_id: 'primary',
     target_candidate_id: 'candidate-chiron-rollback-only',
@@ -89,8 +211,11 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
     state: 'accepted',
     acceptance_level: 'promotion-level',
     authority_profile: 'product-path',
+    package_id: pkg.package_id,
+    supports_human_review: true,
     evidence_refs: [
-      { ref_id: 'adoption-proof', kind: 'app_adoption', summary: 'recipient build and promote evidence' },
+      { ref_id: 'narrative-proof', kind: 'vtext', summary: 'owner-readable narrative' },
+      { ref_id: 'screenshot-proof', kind: 'screenshot', summary: 'candidate behavior screenshot.png' },
     ],
     rollback_refs: [
       { kind: 'source_ref', ref: 'refs/computers/primary/active', summary: 'previous active ref' },
@@ -100,17 +225,7 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
     invariant_checks: [],
   };
 
-  await page.route('**/api/app-change-packages*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-  });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [adoption] }) });
-  });
-  let acceptanceRouteHits = 0;
-  await page.route('**/api/run-acceptances**', async (route) => {
-    acceptanceRouteHits += 1;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceptances: [acceptance] }) });
-  });
+  await routeAppsChanges(page, { packages: [pkg], adoptions: [adoption], acceptances: [acceptance] });
   await page.route('**/api/trace/trajectories**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/trace/trajectories') {
@@ -160,10 +275,10 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
           moments: [],
           search: { attempts: 0, providers: [] },
           mobile_summary: {
-            headline: 'promotion-level · accepted · Apps & Changes',
+            headline: 'promotion-level / accepted / Apps & Changes',
             acceptance_state: 'accepted',
             acceptance_level: 'promotion-level',
-            readable_evidence: ['recipient build and promote evidence'],
+            readable_evidence: ['owner-readable narrative', 'candidate behavior screenshot'],
             rollback_refs: ['refs/computers/primary/active'],
           },
           acceptances: [acceptance],
@@ -172,18 +287,14 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
       return;
     }
     if (url.pathname === `/api/trace/trajectories/${adoption.trace_id}/events`) {
-      await route.fulfill({
-        status: 200,
-        headers: { 'Content-Type': 'text/event-stream' },
-        body: '',
-      });
+      await route.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body: '' });
       return;
     }
     await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected trace route' }) });
   });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
   const removal = store.locator('[data-change-removal-model]');
   await expect(removal).toHaveAttribute('data-removal-mode', 'Rollback-only');
@@ -193,350 +304,149 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
   await expect(store.locator('[data-change-disable]')).toBeDisabled();
   await expect(store.locator('[data-change-rollback]')).toBeEnabled();
   await expect(store.locator('[data-change-candidate-summary]')).toContainText('recorded');
-  await expect.poll(() => acceptanceRouteHits).toBeGreaterThan(0);
-  await expect(store.locator('[data-change-trace-review]')).toHaveAttribute('data-change-trace-ready', 'accepted');
-  await expect(store.locator('[data-change-trace-review]')).toContainText('promotion-level');
-  await store.locator('[data-change-open-trace]').click();
-  const trace = page.locator('[data-trace-window]').last();
-  await expect(trace.locator(`[data-trace-trajectory-id="${adoption.trace_id}"]`)).toBeVisible({ timeout: 10_000 });
-  await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('promotion-level', { timeout: 10_000 });
+  await expect(store.locator('[data-change-trace-review]')).toHaveAttribute('data-change-trace-ready', 'trace-only');
+  await expect(store.locator('[data-change-open-trace]')).toBeEnabled();
 });
 
-test('Apps & Changes aggregates portfolio reports and acceptance coverage', async ({ desktopSession }) => {
+test('Apps & Changes does not invent a static experiment portfolio', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const acceptanceIDs = {
-    'chiron-shelf': 'runacc-c3d70f753b81fd591442',
-    'motion-language': 'runacc-3b54c9ae8dac2337184a',
-    'liquid-material': 'runacc-d144087c5ffacad2e147',
-    'python-code-mode': 'runacc-45495b8caebc3e1b82c5',
-  };
-  const acceptances = Object.entries(acceptanceIDs).map(([changeID, acceptanceID]) => ({
-    acceptance_id: acceptanceID,
-    target_mission_id: `mission-${changeID}`,
-    trajectory_id: `trajectory-${changeID}`,
-    state: 'accepted',
-    acceptance_level: changeID === 'chiron-shelf' ? 'promotion-level' : 'export-level',
-    authority_profile: 'product-path',
-    evidence_refs: [
-      { ref_id: `${changeID}-report`, kind: 'vtext', summary: 'owner-readable change report' },
-    ],
-    rollback_refs: changeID === 'chiron-shelf'
-      ? [{ kind: 'source_ref', ref: 'refs/computers/primary/active', summary: 'previous active ref' }]
-      : [],
-    checkpoints: [],
-    verifier_contracts: [],
-    invariant_checks: [],
-  }));
-
-  await page.route('**/api/app-change-packages*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-  });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-  });
-  await page.route('**/api/run-acceptances**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceptances }) });
-  });
-  await page.route('**/api/trace/trajectories**', async (route) => {
-    const url = new URL(route.request().url());
-    const target = acceptances.find((acceptance) => url.pathname.endsWith(`/${acceptance.trajectory_id}`));
-    if (url.pathname === '/api/trace/trajectories') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          trajectories: acceptances.map((acceptance) => ({
-            trajectory_id: acceptance.trajectory_id,
-            title: acceptance.target_mission_id,
-            subtitle: 'Portfolio acceptance evidence',
-            state: 'completed',
-            live: false,
-            agent_count: 1,
-            delegation_count: 0,
-            moment_count: 1,
-            message_count: 0,
-            finding_count: 0,
-            search_attempt_count: 0,
-            latest_activity_at: '2026-05-21T02:58:41.000Z',
-          })),
-        }),
-      });
-      return;
-    }
-    if (target) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          trajectory: {
-            trajectory_id: target.trajectory_id,
-            title: target.target_mission_id,
-            subtitle: 'Portfolio acceptance evidence',
-            state: 'completed',
-            latest_stream_seq: 1,
-            agent_count: 1,
-            delegation_count: 0,
-            moment_count: 1,
-            message_count: 0,
-            finding_count: 0,
-            search_attempt_count: 0,
-            latest_activity_at: '2026-05-21T02:58:41.000Z',
-          },
-          agents: [],
-          edges: [],
-          moments: [],
-          search: { attempts: 0, providers: [] },
-          mobile_summary: {
-            headline: `${target.acceptance_level} · ${target.state}`,
-            acceptance_state: target.state,
-            acceptance_level: target.acceptance_level,
-            readable_evidence: target.evidence_refs.map((ref) => ref.summary),
-            rollback_refs: target.rollback_refs.map((ref) => ref.ref),
-          },
-          acceptances: [target],
-        }),
-      });
-      return;
-    }
-    if (url.pathname.endsWith('/events')) {
-      await route.fulfill({
-        status: 200,
-        headers: { 'Content-Type': 'text/event-stream' },
-        body: '',
-      });
-      return;
-    }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected trace route' }) });
-  });
+  await routeAppsChanges(page, { packages: [] });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  const portfolio = store.locator('[data-portfolio-review]');
-  await expect(portfolio).toHaveAttribute('data-portfolio-change-count', '4');
-  await expect(portfolio).toHaveAttribute('data-portfolio-report-count', '4');
-  await expect(portfolio).toHaveAttribute('data-portfolio-accepted-count', '4');
-  await expect(portfolio.locator('[data-portfolio-change]')).toHaveCount(4);
-  await expect(portfolio).toContainText('Choir Liquid Material Engine');
-  await expect(portfolio).not.toContainText('28433c19-5d02-416f-9368-de56390e1927');
-
-  const liquidRow = portfolio.locator('[data-portfolio-change][data-change-id="liquid-material"]');
-  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-state', 'accepted');
-  await liquidRow.locator('[data-portfolio-open-trace]').click();
-  const trace = page.locator('[data-trace-window]').last();
-  await expect(trace.locator('[data-trace-trajectory-id="trajectory-liquid-material"]')).toBeVisible({
-    timeout: 10_000,
-  });
-  await expect(trace.locator('[data-trace-run-acceptance]')).toContainText('export-level', { timeout: 10_000 });
+  await expect(store.locator('[data-portfolio-review]')).toHaveCount(0);
+  await expect(store.locator('[data-change-card]')).toHaveCount(0);
+  await expect(store.locator('[data-apps-changes-empty]')).toContainText('No reviewable changes');
+  await expect(store).not.toContainText('Choir Liquid Material Engine');
 });
 
-test('Apps & Changes loads package-scoped review evidence without current-computer installs', async ({ desktopSession }) => {
+test('Apps & Changes marks package-scoped machine receipts as insufficient for human review', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const changes = [
-    ['chiron-shelf', '28433c19-5d02-416f-9368-de56390e1927', 'runacc-c3d70f753b81fd591442', 'promotion-level'],
-    ['motion-language', '98b98c73-eef0-4a88-a6f5-b7dfe695be09', 'runacc-3b54c9ae8dac2337184a', 'export-level'],
-    ['liquid-material', '1dad3dfc-7f83-4b22-bfb5-7f1714159f66', 'runacc-d144087c5ffacad2e147', 'export-level'],
-    ['python-code-mode', 'f31edbc8-1b43-44f5-82a1-834dce4833ca', 'runacc-45495b8caebc3e1b82c5', 'export-level'],
-  ];
-  const byPackage = new Map(changes.map(([changeID, packageID, acceptanceID, level]) => [packageID, {
-    changeID,
-    acceptance_id: acceptanceID,
-    target_mission_id: `mission-${changeID}`,
-    trajectory_id: `trajectory-${changeID}`,
+  const pkg = packageRecord({
+    package_id: 'pkg-machine-receipt',
+    title: 'Liquid Material Receipt',
+    provenance_refs_json: { artifact_refs: ['runacc-machine-receipt'] },
+  });
+  const acceptance = {
+    acceptance_id: 'runacc-machine-receipt',
+    target_mission_id: 'mission-machine-receipt',
+    trajectory_id: 'trajectory-machine-receipt',
     state: 'accepted',
-    acceptance_level: level,
+    acceptance_level: 'export-level',
     authority_profile: 'product-path',
-    review_scope: changeID === 'chiron-shelf' ? 'viewer' : 'package-referenced',
-    trace_visible: changeID === 'chiron-shelf',
+    package_id: pkg.package_id,
+    review_scope: 'package-referenced',
+    trace_visible: false,
     evidence_ref_count: 3,
-    rollback_ref_count: changeID === 'chiron-shelf' ? 1 : 0,
+    rollback_ref_count: 0,
+    human_proof_state: 'machine_receipt_only',
+    supports_human_review: false,
+    machine_receipt_only: true,
     checkpoint_kinds: ['app_change_package_published'],
-  }]));
-  const localAcceptance = byPackage.get('28433c19-5d02-416f-9368-de56390e1927');
-
-  await page.route('**/api/app-change-packages**', async (route) => {
-    const url = new URL(route.request().url());
-    const match = url.pathname.match(/^\/api\/app-change-packages\/([^/]+)\/review-evidence$/);
-    if (match) {
-      const packageID = decodeURIComponent(match[1]);
-      const acceptance = byPackage.get(packageID);
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ package_id: packageID, acceptances: acceptance ? [acceptance] : [] }),
-      });
-      return;
-    }
-    if (url.pathname === '/api/app-change-packages' && route.request().method() === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-      return;
-    }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected package route' }) });
-  });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-  });
-  await page.route('**/api/run-acceptances**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ acceptances: [localAcceptance] }),
-    });
+  };
+  await routeAppsChanges(page, {
+    packages: [pkg],
+    acceptances: [acceptance],
+    packageEvidence: {
+      [pkg.package_id]: {
+        package_id: pkg.package_id,
+        human_proof: {
+          state: 'machine_receipt_only',
+          artifact_refs: ['runacc-machine-receipt'],
+          missing: ['causal VText narrative', 'screenshot, video, or benchmark evidence'],
+        },
+        acceptances: [acceptance],
+      },
+    },
   });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
-  const portfolio = store.locator('[data-portfolio-review]');
-  await expect(portfolio).toHaveAttribute('data-portfolio-accepted-count', '4');
-  const liquidRow = portfolio.locator('[data-portfolio-change][data-change-id="liquid-material"]');
-  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-state', 'accepted');
-  await expect(liquidRow).toHaveAttribute('data-portfolio-acceptance-scope', 'package-referenced');
-  await expect(liquidRow.locator('[data-portfolio-open-trace]')).toBeDisabled();
-  await expect(liquidRow.locator('[data-portfolio-open-trace]')).toContainText('Summary');
-  await liquidRow.locator('.portfolio-main').click();
-  await expect(store.locator('[data-change-acceptance-summary]')).toContainText('package-referenced');
+  const store = page.locator('[data-apps-changes-app]').last();
+  await expect(store.locator('[data-change-card][data-change-id="pkg-machine-receipt"]')).toHaveAttribute('data-human-proof-state', 'machine_receipt_only');
+  await expect(store.locator('[data-human-proof-panel]')).toHaveAttribute('data-human-proof-state', 'machine_receipt_only');
+  await expect(store.locator('[data-human-proof-missing]')).toContainText('causal VText narrative');
+  await expect(store.locator('[data-change-try]')).toBeDisabled();
+  await expect(store.locator('[data-change-acceptance-summary]')).toContainText('Try this change before Trace');
 });
 
-test('Apps & Changes creates owner-readable VText reports', async ({ desktopSession }) => {
+test('Apps & Changes opens existing VText narratives instead of generating claim reports', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const docs = new Map();
-  const revisions = new Map();
-  const reportContents = new Map();
+  const pkg = packageRecord({ package_id: 'pkg-vtext-open' });
   const now = '2026-05-21T00:00:00.000Z';
-
-  function docIdForTitle(title) {
-    return `doc-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
-  }
-
-  function createMockDocument(title) {
-    const doc = {
-      doc_id: docIdForTitle(title),
-      owner_id: 'test-owner',
-      title,
-      current_revision_id: '',
-      created_at: now,
-      updated_at: now,
-      revision_count: 0,
-    };
-    docs.set(doc.doc_id, doc);
-    return doc;
-  }
-
-  function revisionBody(revision) {
-    return {
-      revision_id: revision.revision_id,
-      doc_id: revision.doc_id,
-      owner_id: 'test-owner',
-      author_kind: 'user',
-      author_label: 'Apps & Changes',
-      content: revision.content,
-      citations: [],
-      metadata: revision.metadata || {},
-      parent_revision_id: revision.parent_revision_id || '',
-      created_at: now,
-    };
-  }
-
-  await page.route('**/api/app-change-packages*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-  });
-  await page.route('**/api/adoptions*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-  });
+  let createdRevision = false;
+  await routeAppsChanges(page, { packages: [pkg] });
   await page.route('**/api/vtext/**', async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
-
-    if (url.pathname === '/api/vtext/documents' && method === 'GET') {
+    if (method === 'POST' && (url.pathname === '/api/vtext/documents' || url.pathname.includes('/revisions'))) {
+      createdRevision = true;
+    }
+    if (url.pathname === '/api/vtext/documents/doc-chiron') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ documents: Array.from(docs.values()) }),
+        body: JSON.stringify({
+          doc_id: 'doc-chiron',
+          owner_id: 'test-owner',
+          title: 'Chiron Shelf narrative',
+          current_revision_id: 'rev-chiron',
+          created_at: now,
+          updated_at: now,
+          revision_count: 1,
+        }),
       });
       return;
     }
-    if (url.pathname === '/api/vtext/documents' && method === 'POST') {
-      const body = JSON.parse(route.request().postData() || '{}');
-      const doc = createMockDocument(body.title || 'Untitled VText');
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(doc) });
-      return;
-    }
-    const documentRevisionMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/revisions$/);
-    if (documentRevisionMatch && method === 'POST') {
-      const docId = decodeURIComponent(documentRevisionMatch[1]);
-      const doc = docs.get(docId);
-      if (!doc) {
-        await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unknown doc' }) });
-        return;
-      }
-      const body = JSON.parse(route.request().postData() || '{}');
-      const revision = {
-        revision_id: `rev-${docId}-${doc.revision_count + 1}`,
-        doc_id: docId,
-        content: body.content || '',
-        metadata: body.metadata || {},
-        parent_revision_id: body.parent_revision_id || '',
-      };
-      revisions.set(revision.revision_id, revision);
-      reportContents.set(doc.title, revision.content);
-      doc.current_revision_id = revision.revision_id;
-      doc.revision_count += 1;
-      doc.updated_at = now;
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify(revisionBody(revision)),
-      });
-      return;
-    }
-    const documentMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)$/);
-    if (documentMatch && method === 'GET') {
-      const doc = docs.get(decodeURIComponent(documentMatch[1]));
-      await route.fulfill({
-        status: doc ? 200 : 404,
-        contentType: 'application/json',
-        body: JSON.stringify(doc || { error: 'unknown doc' }),
-      });
-      return;
-    }
-    if (documentRevisionMatch && method === 'GET') {
-      const docId = decodeURIComponent(documentRevisionMatch[1]);
-      const docRevisions = Array.from(revisions.values()).filter((revision) => revision.doc_id === docId);
+    if (url.pathname === '/api/vtext/revisions/rev-chiron') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ revisions: docRevisions.map(revisionBody) }),
+        body: JSON.stringify({
+          revision_id: 'rev-chiron',
+          doc_id: 'doc-chiron',
+          owner_id: 'test-owner',
+          author_kind: 'agent',
+          author_label: 'Choir experiment worker',
+          content: '# Chiron Shelf Observability\n\nReal narrative, not generated from static seed data.',
+          citations: [],
+          metadata: {},
+          parent_revision_id: '',
+          created_at: now,
+        }),
       });
       return;
     }
-    const revisionMatch = url.pathname.match(/^\/api\/vtext\/revisions\/([^/]+)$/);
-    if (revisionMatch && method === 'GET') {
-      const revision = revisions.get(decodeURIComponent(revisionMatch[1]));
-      await route.fulfill({
-        status: revision ? 200 : 404,
-        contentType: 'application/json',
-        body: JSON.stringify(revision ? revisionBody(revision) : { error: 'unknown revision' }),
-      });
-      return;
-    }
-    const manifestMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/manifest$/);
-    if (manifestMatch && method === 'POST') {
-      const docId = decodeURIComponent(manifestMatch[1]);
+    if (url.pathname === '/api/vtext/documents/doc-chiron/revisions') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ doc_id: docId, source_path: 'apps-changes-report.vtext' }),
+        body: JSON.stringify({
+          revisions: [{
+            revision_id: 'rev-chiron',
+            doc_id: 'doc-chiron',
+            author_kind: 'agent',
+            author_label: 'Choir experiment worker',
+            content_excerpt: 'Real narrative',
+            created_at: now,
+          }],
+        }),
       });
       return;
     }
-    const streamMatch = url.pathname.match(/^\/api\/vtext\/documents\/([^/]+)\/stream$/);
-    if (streamMatch) {
-      const docId = decodeURIComponent(streamMatch[1]);
-      const doc = docs.get(docId);
+    if (url.pathname === '/api/vtext/documents/doc-chiron/stream') {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
-        body: `data: ${JSON.stringify({ kind: 'snapshot', doc_id: docId, current_revision_id: doc?.current_revision_id || '' })}\n\n`,
+        body: `data: ${JSON.stringify({ kind: 'snapshot', doc_id: 'doc-chiron', current_revision_id: 'rev-chiron' })}\n\n`,
+      });
+      return;
+    }
+    if (url.pathname === '/api/vtext/documents/doc-chiron/manifest' && method === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ doc_id: 'doc-chiron', source_path: 'chiron-report.vtext' }),
       });
       return;
     }
@@ -544,47 +454,22 @@ test('Apps & Changes creates owner-readable VText reports', async ({ desktopSess
   });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  await store.locator('[data-open-mission-vtext]').click();
-  await expect(store.locator('[data-apps-changes-report-status]')).toContainText('Mission VText dashboard ready', {
-    timeout: 10_000,
-  });
-
-  let vtext = page.locator('[data-vtext-editor]').last();
-  await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Apps & Changes Store Sweep v0', {
-    timeout: 20_000,
-  });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Current Checkpoint', {
-    timeout: 20_000,
-  });
-  expect(reportContents.get('Apps & Changes Store Sweep v0')).toContain('Chiron proof');
-
-  await page.locator('[data-window-app-id="vtext"]').last().locator('[data-window-close]').click();
-  await store.locator('[data-change-card][data-change-id="chiron-shelf"]').click();
   await store.locator('[data-change-open-vtext-report]').click();
-  await expect(store.locator('[data-apps-changes-report-status]')).toContainText('VText report ready', {
-    timeout: 10_000,
-  });
 
-  vtext = page.locator('[data-vtext-editor]').last();
+  const vtext = page.locator('[data-vtext-editor]').last();
   await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Chiron Shelf Observability', {
-    timeout: 20_000,
-  });
-  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Technical Refs', {
-    timeout: 20_000,
-  });
-  expect(reportContents.get('Apps & Changes report: Chiron Shelf Observability')).toContain('Source acceptance');
-  expect(reportContents.get('Apps & Changes report: Chiron Shelf Observability')).toContain('Package: `28433c19-5d02-416f-9368-de56390e1927`');
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Real narrative', { timeout: 20_000 });
+  expect(createdRevision).toBe(false);
 });
 
-test('Apps & Changes preserves a just-created adoption when the catalog read is stale', async ({ desktopSession }) => {
+test('Apps & Changes preserves a just-created adoption but waits for healthy preview before verification', async ({ desktopSession }) => {
   const { page } = desktopSession;
+  const pkg = packageRecord({ package_id: 'pkg-stale-read-preserved' });
   const adoption = {
     adoption_id: 'adoption-stale-read-preserved',
-    package_id: '28433c19-5d02-416f-9368-de56390e1927',
+    package_id: pkg.package_id,
     app_id: 'Chiron Shelf Observability',
     target_computer_id: 'primary',
     target_candidate_id: 'candidate-stale-read-preserved',
@@ -598,35 +483,7 @@ test('Apps & Changes preserves a just-created adoption when the catalog read is 
     rollback_profile_json: {},
   };
 
-  await page.route('**/api/app-change-packages**', async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname === '/api/app-change-packages/pull' && route.request().method() === 'POST') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          package_id: adoption.package_id,
-          app_id: adoption.app_id,
-          visibility: 'unlisted',
-          source_computer_id: 'primary',
-        }),
-      });
-      return;
-    }
-    if (url.pathname === '/api/app-change-packages' && route.request().method() === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packages: [] }) });
-      return;
-    }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected package route' }) });
-  });
-  await page.route('**/api/adoptions**', async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname === '/api/adoptions' && route.request().method() === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adoptions: [] }) });
-      return;
-    }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected adoption route' }) });
-  });
+  await routeAppsChanges(page, { packages: [pkg], adoptions: [] });
   await page.route('**/api/computers/primary/source-lineage**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -645,9 +502,9 @@ test('Apps & Changes preserves a just-created adoption when the catalog read is 
   });
 
   await openStartApp(page, 'apps-changes');
-  const store = page.locator('[data-apps-changes-app]');
+  const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  await store.locator('[data-change-card][data-change-id="chiron-shelf"]').click();
+  await store.locator('[data-change-card][data-change-id="pkg-stale-read-preserved"]').click();
   await store.locator('[data-change-try]').click();
 
   await expect(store.locator('[data-change-preview-iframe]')).toHaveAttribute(
@@ -655,7 +512,7 @@ test('Apps & Changes preserves a just-created adoption when the catalog read is 
     /desktop_id=candidate-stale-read-preserved/,
     { timeout: 10_000 }
   );
-  await expect(store.locator('[data-change-verify]')).toBeEnabled();
+  await expect(store.locator('[data-change-verify]')).toBeDisabled();
   await expect(store.locator('[data-review-adoption-id="adoption-stale-read-preserved"]')).toBeVisible();
 });
 

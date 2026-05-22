@@ -3014,6 +3014,12 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 			"candidate_source_ref": "refs/heads/candidate/package-proof",
 			"snapshot_id": "snapshot-tool",
 			"summary": "worker package proof",
+			"human_summary": "Owner-readable narrative for the worker package proof.",
+			"recommendation": "review with the attached screenshot before install",
+			"vtext_doc_id": "doc-tool-proof",
+			"vtext_revision_id": "rev-tool-proof",
+			"screenshot_refs": ["test-results/tool-proof.png"],
+			"behavior_contract": "screenshot shows the changed README proof path",
 			"checks": ["grep -q worker README.md"]
 		}`, base)))
 	if err != nil {
@@ -3027,6 +3033,7 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 		RuntimeSourceDeltaSHA256 string `json:"runtime_source_delta_sha256"`
 		CandidateHeadSHA         string `json:"candidate_head_sha"`
 		CandidateSourceRef       string `json:"candidate_source_ref"`
+		HumanProofState          string `json:"human_proof_state"`
 		GitHubPush               bool   `json:"github_push"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
@@ -3038,6 +3045,9 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	if strings.Contains(result.CandidateSourceRef, "refs/heads/candidate/") || !strings.Contains(result.CandidateSourceRef, "/candidates/") {
 		t.Fatalf("candidate_source_ref = %q, want canonical product candidate ref", result.CandidateSourceRef)
 	}
+	if result.HumanProofState != "human_reviewable" {
+		t.Fatalf("human_proof_state = %q, want human_reviewable", result.HumanProofState)
+	}
 	pkg, err := rt.store.GetAppChangePackage(context.Background(), result.PackageID)
 	if err != nil {
 		t.Fatalf("get app change package: %v", err)
@@ -3048,6 +3058,20 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	}
 	if manifest["source_ledger_candidate_ref"] != "refs/heads/candidate/package-proof" {
 		t.Fatalf("source_ledger_candidate_ref = %q, want worker git branch", manifest["source_ledger_candidate_ref"])
+	}
+	var provenance map[string]any
+	if err := json.Unmarshal(pkg.ProvenanceRefsJSON, &provenance); err != nil {
+		t.Fatalf("decode package provenance refs: %v", err)
+	}
+	if provenance["vtext_doc_id"] != "doc-tool-proof" {
+		t.Fatalf("vtext_doc_id = %q, want doc-tool-proof", provenance["vtext_doc_id"])
+	}
+	shots, _ := provenance["screenshot_refs"].([]any)
+	if len(shots) != 1 || shots[0] != "test-results/tool-proof.png" {
+		t.Fatalf("screenshot_refs = %+v", provenance["screenshot_refs"])
+	}
+	if !strings.Contains(string(pkg.VerifierContractsJSON), "human-behavior-proof") {
+		t.Fatalf("verifier contracts missing human-behavior-proof: %s", string(pkg.VerifierContractsJSON))
 	}
 }
 

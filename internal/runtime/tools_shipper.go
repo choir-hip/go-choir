@@ -7,6 +7,19 @@ import (
 	"strings"
 )
 
+type publishPackageHumanProofInput struct {
+	Summary          string
+	HumanSummary     string
+	Recommendation   string
+	VTextDocID       string
+	VTextRevisionID  string
+	ScreenshotRefs   []string
+	VideoRefs        []string
+	BenchmarkRefs    []string
+	ArtifactRefs     []string
+	BehaviorContract string
+}
+
 func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
 		newPublishAppChangePackageTool(rt, cwd),
@@ -20,24 +33,33 @@ func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error
 
 func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 	type args struct {
-		RepoPath                 string `json:"repo_path"`
-		BaseSHA                  string `json:"base_sha"`
-		AppID                    string `json:"app_id,omitempty"`
-		Visibility               string `json:"visibility,omitempty"`
-		SourceComputerID         string `json:"source_computer_id,omitempty"`
-		SourceCandidateID        string `json:"source_candidate_id,omitempty"`
-		SourceActiveRef          string `json:"source_active_ref,omitempty"`
-		CandidateSourceRef       string `json:"candidate_source_ref,omitempty"`
-		SourceLedgerRepo         string `json:"source_ledger_repo,omitempty"`
-		SourceLedgerBaseRef      string `json:"source_ledger_base_ref,omitempty"`
-		SourceLedgerCandidateRef string `json:"source_ledger_candidate_ref,omitempty"`
-		AppProtocolContract      string `json:"app_protocol_contract,omitempty"`
-		TraceID                  string `json:"trace_id,omitempty"`
-		Summary                  string `json:"summary,omitempty"`
+		RepoPath                 string   `json:"repo_path"`
+		BaseSHA                  string   `json:"base_sha"`
+		AppID                    string   `json:"app_id,omitempty"`
+		Visibility               string   `json:"visibility,omitempty"`
+		SourceComputerID         string   `json:"source_computer_id,omitempty"`
+		SourceCandidateID        string   `json:"source_candidate_id,omitempty"`
+		SourceActiveRef          string   `json:"source_active_ref,omitempty"`
+		CandidateSourceRef       string   `json:"candidate_source_ref,omitempty"`
+		SourceLedgerRepo         string   `json:"source_ledger_repo,omitempty"`
+		SourceLedgerBaseRef      string   `json:"source_ledger_base_ref,omitempty"`
+		SourceLedgerCandidateRef string   `json:"source_ledger_candidate_ref,omitempty"`
+		AppProtocolContract      string   `json:"app_protocol_contract,omitempty"`
+		TraceID                  string   `json:"trace_id,omitempty"`
+		Summary                  string   `json:"summary,omitempty"`
+		HumanSummary             string   `json:"human_summary,omitempty"`
+		Recommendation           string   `json:"recommendation,omitempty"`
+		VTextDocID               string   `json:"vtext_doc_id,omitempty"`
+		VTextRevisionID          string   `json:"vtext_revision_id,omitempty"`
+		ScreenshotRefs           []string `json:"screenshot_refs,omitempty"`
+		VideoRefs                []string `json:"video_refs,omitempty"`
+		BenchmarkRefs            []string `json:"benchmark_refs,omitempty"`
+		ArtifactRefs             []string `json:"artifact_refs,omitempty"`
+		BehaviorContract         string   `json:"behavior_contract,omitempty"`
 	}
 	return Tool{
 		Name:        "publish_app_change_package",
-		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. This tool cannot push to GitHub or promote active state.",
+		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus VText/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. This tool cannot push to GitHub or promote active state.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"repo_path":                   map[string]any{"type": "string"},
 			"base_sha":                    map[string]any{"type": "string"},
@@ -53,6 +75,15 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			"app_protocol_contract":       map[string]any{"type": "string"},
 			"trace_id":                    map[string]any{"type": "string"},
 			"summary":                     map[string]any{"type": "string"},
+			"human_summary":               map[string]any{"type": "string"},
+			"recommendation":              map[string]any{"type": "string"},
+			"vtext_doc_id":                map[string]any{"type": "string"},
+			"vtext_revision_id":           map[string]any{"type": "string"},
+			"screenshot_refs":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"video_refs":                  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"benchmark_refs":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"artifact_refs":               map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"behavior_contract":           map[string]any{"type": "string"},
 		}, []string{"repo_path", "base_sha"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			profile := stringFromToolContext(ctx, toolCtxProfile)
@@ -137,6 +168,20 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			if contract == "" {
 				contract = "recipient_build_required: " + firstNonEmpty(strings.TrimSpace(in.Summary), "candidate source change requires recipient Go/Svelte rebuild")
 			}
+			proofInput := publishPackageHumanProofInput{
+				Summary:          in.Summary,
+				HumanSummary:     in.HumanSummary,
+				Recommendation:   in.Recommendation,
+				VTextDocID:       in.VTextDocID,
+				VTextRevisionID:  in.VTextRevisionID,
+				ScreenshotRefs:   in.ScreenshotRefs,
+				VideoRefs:        in.VideoRefs,
+				BenchmarkRefs:    in.BenchmarkRefs,
+				ArtifactRefs:     in.ArtifactRefs,
+				BehaviorContract: in.BehaviorContract,
+			}
+			provenanceRefs := humanProofProvenanceRefs(proofInput)
+			verifierContracts := humanProofVerifierContracts(proofInput)
 			rec, err := rt.PublishAppChangePackage(ctx, ownerID, publishAppChangePackageInput{
 				AppID:                       appID,
 				Visibility:                  visibility,
@@ -153,6 +198,8 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				AppProtocolContract:         contract,
 				SourceRuntimeArtifactDigest: "sha256:" + digestParts("source-runtime", ownerID, sourceComputerID, sourceCandidateID, sha256Hex(runtimeDelta), headSHA),
 				SourceUIArtifactDigest:      "sha256:" + digestParts("source-ui", ownerID, sourceComputerID, sourceCandidateID, sha256Hex(uiDelta), headSHA),
+				VerifierContracts:           verifierContracts,
+				ProvenanceRefs:              provenanceRefs,
 				TraceID:                     traceID,
 			})
 			if err != nil {
@@ -179,10 +226,48 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				"recipient_build_required":       true,
 				"source_runtime_artifact_digest": rec.SourceRuntimeArtifactDigest,
 				"source_ui_artifact_digest":      rec.SourceUIArtifactDigest,
+				"human_proof_state":              humanProofForAppChangePackage(rec).State,
 				"github_push":                    false,
 			})
 		},
 	}
+}
+
+func humanProofProvenanceRefs(in publishPackageHumanProofInput) json.RawMessage {
+	payload := map[string]any{
+		"summary":             strings.TrimSpace(firstNonEmpty(in.HumanSummary, in.Summary)),
+		"recommendation":      strings.TrimSpace(in.Recommendation),
+		"vtext_doc_id":        strings.TrimSpace(in.VTextDocID),
+		"vtext_revision_id":   strings.TrimSpace(in.VTextRevisionID),
+		"screenshot_refs":     compactStringRefs(in.ScreenshotRefs),
+		"video_refs":          compactStringRefs(in.VideoRefs),
+		"benchmark_refs":      compactStringRefs(in.BenchmarkRefs),
+		"artifact_refs":       compactStringRefs(in.ArtifactRefs),
+		"behavior_contract":   strings.TrimSpace(in.BehaviorContract),
+		"generated_by_tool":   "publish_app_change_package",
+		"human_proof_version": "v1",
+	}
+	data, _ := json.Marshal(payload)
+	return data
+}
+
+func humanProofVerifierContracts(in publishPackageHumanProofInput) json.RawMessage {
+	contracts := []map[string]any{
+		{
+			"name":     "recipient-build-required",
+			"state":    "required",
+			"evidence": "AppChangePackage must be rebuilt inside the recipient computer before install.",
+		},
+	}
+	if strings.TrimSpace(in.BehaviorContract) != "" {
+		contracts = append(contracts, map[string]any{
+			"name":     "human-behavior-proof",
+			"state":    "required",
+			"evidence": strings.TrimSpace(in.BehaviorContract),
+		})
+	}
+	data, _ := json.Marshal(contracts)
+	return data
 }
 
 func isProductCandidateSourceRef(ref string) bool {

@@ -310,8 +310,56 @@ func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t
 	if got.TraceVisible {
 		t.Fatalf("cross-owner package evidence should not claim Trace visibility: %+v", got)
 	}
+	if got.HumanProofState != "machine_receipt_only" || got.SupportsHumanReview || !got.MachineReceiptOnly {
+		t.Fatalf("package-scoped acceptance should be machine receipt only: %+v", got)
+	}
+	if review.HumanProof.State != "evidence_pending" || len(review.HumanProof.Missing) == 0 {
+		t.Fatalf("package without human proof should not be reviewable: %+v", review.HumanProof)
+	}
 	if strings.Contains(reviewW.Body.String(), "user-bob") {
 		t.Fatalf("review evidence leaked source owner id: %s", reviewW.Body.String())
+	}
+}
+
+func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body := `{
+		"app_id":"human-proof-experiment",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-review",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract",
+		"provenance_refs":{
+			"human_summary":"Owner-readable narrative for the whole candidate trajectory.",
+			"recommendation":"try before install",
+			"vtext_doc_id":"doc-human-proof",
+			"vtext_revision_id":"rev-human-proof",
+			"screenshot_refs":["test-results/human-proof.png"]
+		}
+	}`
+	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	if pkgW.Code != http.StatusCreated {
+		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
+	}
+	var pkg types.AppChangePackageRecord
+	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
+		t.Fatalf("decode package: %v", err)
+	}
+	reviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID+"/review-evidence", "", "user-alice")
+	if reviewW.Code != http.StatusOK {
+		t.Fatalf("review evidence status = %d body=%s", reviewW.Code, reviewW.Body.String())
+	}
+	var review appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(reviewW.Body.Bytes(), &review); err != nil {
+		t.Fatalf("decode review evidence: %v", err)
+	}
+	if review.HumanProof.State != "human_reviewable" {
+		t.Fatalf("human proof state = %+v, want human_reviewable", review.HumanProof)
+	}
+	if len(review.HumanProof.NarrativeRefs) == 0 || len(review.HumanProof.ScreenshotRefs) != 1 {
+		t.Fatalf("human proof refs = %+v", review.HumanProof)
 	}
 }
 
