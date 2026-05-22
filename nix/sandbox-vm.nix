@@ -194,6 +194,7 @@ EOF
         icu
         nodejs
         perl
+        playwright-driver
         pkg-config
         systemd
         procps
@@ -235,6 +236,12 @@ EOF
       GOMODCACHE = "/mnt/persistent/go/pkg/mod";
       GOCACHE = "/mnt/persistent/go-build-cache";
       GOTOOLCHAIN = "local";
+      # Worker VMs need browser-backed human evidence capture. The frontend
+      # Nix build skips Playwright browser downloads, so point npm-installed
+      # Playwright at the immutable browser bundle shipped in the guest image.
+      PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";

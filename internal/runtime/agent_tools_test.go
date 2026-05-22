@@ -46,6 +46,21 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
+func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testing.T) {
+	prompt := remoteWorkerRepoBootstrapPrompt("https://github.com/yusefmosiah/go-choir.git", "abc123")
+	for _, want := range []string{
+		"node, npm",
+		"Playwright browser binaries",
+		"node/npm, Playwright",
+		"mount the actual app/component or use the product path",
+		"static fixture that hand-creates expected markup is diagnostic only",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("worker bootstrap prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
