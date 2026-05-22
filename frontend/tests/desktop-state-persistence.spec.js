@@ -162,7 +162,7 @@ test('mobile restore recovery pauses too many heavyweight saved windows', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'trace', 'vtext'];
+  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'trace', 'vtext', 'browser', 'terminal'];
   const windows = appIds.map((appId, index) => ({
     window_id: `recovery-window-${index + 1}`,
     app_id: appId,
@@ -192,7 +192,7 @@ test('mobile restore recovery pauses too many heavyweight saved windows', async 
   const recovery = page.locator('[data-desktop-recovery]');
   await expect(recovery).toBeVisible({ timeout: 10000 });
   await expect(recovery).toContainText('Saved windows are paused');
-  await expect(recovery).toContainText('7 visible windows');
+  await expect(recovery).toContainText('9 visible windows');
   await expect(page.locator('[data-window]')).toHaveCount(0);
 
   await page.locator('[data-desktop-recovery-clear]').click();

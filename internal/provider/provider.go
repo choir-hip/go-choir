@@ -770,6 +770,65 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
 	body := p.buildRequestBody(req, modelID)
+
+	log.Printf("provider: chatgpt call model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
+
+	resp, err := p.doStreamRequestWithAuthRetry(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return parseOpenAIStream(resp.Body, modelID, "chatgpt", func(StreamChunk) {})
+}
+
+func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	req.Stream = true
+	modelID := effectiveModel(req.Model, p.modelID)
+	body := p.buildRequestBody(req, modelID)
+	body.Stream = true
+
+	log.Printf("provider: chatgpt stream model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
+
+	resp, err := p.doStreamRequestWithAuthRetry(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return parseOpenAIStream(resp.Body, modelID, "chatgpt", onChunk)
+}
+
+func (p *ChatGPTProvider) doStreamRequestWithAuthRetry(ctx context.Context, body openAIRequest) (*http.Response, error) {
+	resp, err := p.doStreamRequest(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_, _ = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("chatgpt: status %s (sanitized)", resp.Status)
+		}
+		return resp, nil
+	}
+
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if _, err := p.auth.ForceRefresh(ctx); err != nil {
+		return nil, fmt.Errorf("chatgpt: auth refresh after unauthorized response: %w", err)
+	}
+	resp, err = p.doStreamRequest(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("chatgpt: status %s after auth refresh (sanitized)", resp.Status)
+	}
+	return resp, nil
+}
+
+func (p *ChatGPTProvider) doStreamRequest(ctx context.Context, body openAIRequest) (*http.Response, error) {
 	httpReq, err := newJSONRequest(ctx, http.MethodPost, p.baseURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt: build request: %w", err)
@@ -780,52 +839,11 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 	}
 	httpReq.Header.Set("Authorization", authHeader)
 	httpReq.Header.Set("Accept", "text/event-stream")
-
-	log.Printf("provider: chatgpt call model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
-
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt: http call: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("chatgpt: status %s (sanitized)", resp.Status)
-	}
-	return parseOpenAIStream(resp.Body, modelID, "chatgpt", func(StreamChunk) {})
-}
-
-func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	req.Stream = true
-	modelID := effectiveModel(req.Model, p.modelID)
-	body := p.buildRequestBody(req, modelID)
-	body.Stream = true
-
-	httpReq, err := newJSONRequest(ctx, http.MethodPost, p.baseURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("chatgpt: build stream request: %w", err)
-	}
-	authHeader, err := p.auth.Header(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("chatgpt: auth: %w", err)
-	}
-	httpReq.Header.Set("Authorization", authHeader)
-	httpReq.Header.Set("Accept", "text/event-stream")
-
-	log.Printf("provider: chatgpt stream model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("chatgpt: stream http call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("chatgpt: status %s (sanitized)", resp.Status)
-	}
-	return parseOpenAIStream(resp.Body, modelID, "chatgpt", onChunk)
+	return resp, nil
 }
 
 func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openAIRequest {
@@ -1726,10 +1744,18 @@ func (a *ChatGPTAuth) AccessToken(ctx context.Context) (*codexAuthFile, error) {
 	if err == nil {
 		return refreshed, nil
 	}
-	if strings.TrimSpace(record.Tokens.AccessToken) != "" {
-		return record, nil
-	}
 	return nil, err
+}
+
+func (a *ChatGPTAuth) ForceRefresh(ctx context.Context) (*codexAuthFile, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	record, err := a.Read()
+	if err != nil {
+		return nil, err
+	}
+	return a.refresh(ctx, record)
 }
 
 func (a *ChatGPTAuth) Read() (*codexAuthFile, error) {
@@ -1769,10 +1795,17 @@ func (a *ChatGPTAuth) refresh(ctx context.Context, record *codexAuthFile) (*code
 	if err == nil {
 		return refreshed, nil
 	}
-	if cliErr := a.refreshViaCodexCLI(ctx); cliErr == nil {
+	if a.usesDefaultAuthPath() {
+		if cliErr := a.refreshViaCodexCLI(ctx); cliErr != nil {
+			return nil, err
+		}
 		return a.Read()
 	}
 	return nil, err
+}
+
+func (a *ChatGPTAuth) usesDefaultAuthPath() bool {
+	return filepath.Clean(a.path) == filepath.Clean(filepath.Join(userHomeDir(), ".codex", "auth.json"))
 }
 
 func (a *ChatGPTAuth) refreshViaHTTP(ctx context.Context, record *codexAuthFile) (*codexAuthFile, error) {

@@ -132,8 +132,8 @@
   let overviewBottomBarHeight = 56;
 
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
-  const RESTORE_RECOVERY_WINDOW_LIMIT = 6;
-  const RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT = 3;
+  const RESTORE_RECOVERY_WINDOW_LIMIT = 12;
+  const RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT = 8;
   const OVERVIEW_STAGE_TOP_MOBILE = 76;
   const OVERVIEW_STAGE_TOP_DESKTOP = 96;
   const OVERVIEW_STAGE_BOTTOM_RAIL_MOBILE = 190;
@@ -345,11 +345,7 @@
   function shouldLazyHydrateRestoredWindows(restoredWindows) {
     const visibleWindows = visibleRestoredWindows(restoredWindows);
     const heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
-    const compactViewport = typeof window !== 'undefined'
-      ? window.innerWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT
-      : false;
-    return compactViewport ||
-      visibleWindows.length > RESTORE_RECOVERY_WINDOW_LIMIT ||
+    return visibleWindows.length > RESTORE_RECOVERY_WINDOW_LIMIT ||
       heavyWindows.length >= RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT;
   }
 
@@ -516,18 +512,15 @@
   function shouldEnterRestoreRecovery(restoredWindows, activeId = '') {
     const visibleWindows = visibleRestoredWindows(restoredWindows);
     const heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
-    const compactViewport = typeof window !== 'undefined'
-      ? window.innerWidth < RESTORE_RECOVERY_COMPACT_BREAKPOINT
-      : false;
     const urlRequested = restoreRecoveryRequestedByURL();
 
-    if (!urlRequested && (!compactViewport || (visibleWindows.length <= RESTORE_RECOVERY_WINDOW_LIMIT && heavyWindows.length < RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT))) {
+    if (!urlRequested && visibleWindows.length <= RESTORE_RECOVERY_WINDOW_LIMIT && heavyWindows.length < RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT) {
       return null;
     }
 
     const topWindow = pickTopRestoredWindow(restoredWindows, activeId);
     return {
-      reason: urlRequested ? 'url' : 'mobile-heavy-restore',
+      reason: urlRequested ? 'url' : 'heavy-restore',
       totalCount: restoredWindows.length,
       visibleCount: visibleWindows.length,
       heavyCount: heavyWindows.length,

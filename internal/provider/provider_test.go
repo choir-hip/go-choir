@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -487,6 +488,72 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 	}
 }
 
+func TestChatGPTProviderRetriesUnauthorizedAfterForceRefresh(t *testing.T) {
+	authPath := writeTestCodexAuth(t, "old-access", "refresh-123", time.Now().UTC())
+	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected refresh method: %s", r.Method)
+		}
+		_ = json.NewEncoder(w).Encode(oauthRefreshResponse{
+			AccessToken:  "new-access",
+			RefreshToken: "new-refresh",
+		})
+	}))
+	defer refreshServer.Close()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		switch call {
+		case 1:
+			if got := r.Header.Get("Authorization"); got != "Bearer old-access" {
+				t.Fatalf("first auth header = %q, want old access token", got)
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"expired"}`))
+			return
+		case 2:
+			if got := r.Header.Get("Authorization"); got != "Bearer new-access" {
+				t.Fatalf("retry auth header = %q, want refreshed access token", got)
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_retry\",\"model\":\"gpt-5.5\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Recovered\"}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_retry\",\"model\":\"gpt-5.5\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n")
+			return
+		default:
+			t.Fatalf("unexpected extra call %d", call)
+		}
+	}))
+	defer server.Close()
+
+	p, err := NewChatGPTProvider(ChatGPTConfig{
+		ModelID:  "gpt-5.5",
+		BaseURL:  server.URL + "/responses",
+		AuthPath: authPath,
+	})
+	if err != nil {
+		t.Fatalf("create chatgpt provider: %v", err)
+	}
+	p.httpClient = server.Client()
+	p.auth.refreshURL = refreshServer.URL
+	p.auth.httpClient = refreshServer.Client()
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Hi"}}}},
+		MaxTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("chatgpt call: %v", err)
+	}
+	if resp.Text != "Recovered" {
+		t.Fatalf("text = %q, want Recovered", resp.Text)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
+	}
+}
+
 func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 	authPath := writeTestCodexAuth(t, "old-access", "refresh-123", time.Now().UTC().Add(-2*time.Hour))
 	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -532,6 +599,32 @@ func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 	}
 	if updated.Tokens.AccessToken != "new-access" || updated.Tokens.RefreshToken != "new-refresh" {
 		t.Fatalf("unexpected updated tokens: %+v", updated.Tokens)
+	}
+}
+
+func TestChatGPTAuthRefreshFailureDoesNotReturnStaleToken(t *testing.T) {
+	authPath := writeTestCodexAuth(t, "old-access", "refresh-123", time.Now().UTC().Add(-2*time.Hour))
+	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	}))
+	defer refreshServer.Close()
+
+	now := time.Now().UTC()
+	auth := NewChatGPTAuth(ChatGPTAuthOptions{
+		Path:          authPath,
+		RefreshURL:    refreshServer.URL,
+		RefreshBefore: 30 * time.Minute,
+		HTTPClient:    refreshServer.Client(),
+		Now:           func() time.Time { return now },
+	})
+
+	header, err := auth.Header(context.Background())
+	if err == nil {
+		t.Fatalf("expected refresh error, got header %q", header)
+	}
+	if strings.Contains(header, "old-access") {
+		t.Fatalf("stale access token leaked into header after refresh failure")
 	}
 }
 
