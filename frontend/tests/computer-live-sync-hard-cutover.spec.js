@@ -49,3 +49,22 @@ test('covered product apps do not expose manual refresh or reload sync controls'
     );
   }
 });
+
+test('desktop live state cannot seize the visible foreground window stack', async () => {
+  const source = await readRelative('src/lib/Desktop.svelte');
+
+  expect(source).toContain('function handleRemoteDesktopStateUpdate()');
+  expect(source).toContain("document.visibilityState === 'hidden'");
+  expect(source).toContain('handleRemoteDesktopStateUpdate();');
+  expect(source).not.toMatch(
+    /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
+  );
+});
+
+test('server-applied desktop state does not echo-save from store subscriptions', async () => {
+  const source = await readRelative('src/lib/Desktop.svelte');
+
+  expect(source).toContain('applyingPersistedDesktopState = true');
+  expect(source).toContain('applyPersistedDesktopState(() =>');
+  expect(source).toContain('stateLoaded && !applyingPersistedDesktopState');
+});

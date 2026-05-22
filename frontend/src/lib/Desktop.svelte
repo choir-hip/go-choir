@@ -111,6 +111,7 @@
 
   // ---- Desktop state persistence ----
   let stateLoaded = false;
+  let applyingPersistedDesktopState = false;
   let saveTimer = null;
   const SAVE_DEBOUNCE_MS = 500;
   const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
@@ -267,6 +268,28 @@
     }
   }
 
+  function applyPersistedDesktopState(fn) {
+    applyingPersistedDesktopState = true;
+    try {
+      fn();
+    } finally {
+      applyingPersistedDesktopState = false;
+    }
+  }
+
+  function shouldApplyRemoteDesktopStateUpdate() {
+    if (typeof document === 'undefined') return true;
+    return document.visibilityState === 'hidden';
+  }
+
+  function handleRemoteDesktopStateUpdate() {
+    // Desktop layout is viewport- and interaction-sensitive. A visible tab owns
+    // its own focus/stack while the user is using it; remote desktop saves are
+    // picked up on reload or while this tab is backgrounded.
+    if (!shouldApplyRemoteDesktopStateUpdate()) return;
+    void loadDesktopState();
+  }
+
   async function loadDesktopState() {
     if (!authenticated) {
       stateLoaded = true;
@@ -276,55 +299,57 @@
     try {
       const state = await fetchDesktopState();
       if (state) {
-        // Restore icon positions
-        if (state.icon_positions && Object.keys(state.icon_positions).length > 0) {
-          setIconPositions(state.icon_positions);
-        }
-        // Restore windows
-        if (state.windows && state.windows.length > 0) {
-          const restoredWindowsRaw = state.windows.map((w) => ({
-            windowId: w.window_id,
-            appId: w.app_id,
-            title: w.title,
-            icon: getAppIcon(w.app_id),
-            x: w.geometry?.x ?? 100,
-            y: w.geometry?.y ?? 100,
-            width: w.geometry?.width ?? 600,
-            height: w.geometry?.height ?? 400,
-            mode: w.mode ?? 'normal',
-            zIndex: w.z_index ?? 1,
-            restoredGeometry: w.restored_geometry
-              ? { x: w.restored_geometry.x, y: w.restored_geometry.y, width: w.restored_geometry.width, height: w.restored_geometry.height }
-              : null,
-            appContext: w.app_context ?? {},
-          }));
-          const hydrationActiveId = state.active_window_id || pickTopRestoredWindow(restoredWindowsRaw, '')?.windowId || '';
-          const lazyHydration = shouldLazyHydrateRestoredWindows(restoredWindowsRaw);
-          const restoredWindows = restoredWindowsRaw.map((win) => ({
-            ...win,
-            restoreSuspended: shouldSuspendRestoredWindow(win, hydrationActiveId, lazyHydration),
-          }));
-          const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '');
-          if (recovery) {
-            restoreRecovery = recovery;
-            restoreRecoveryWindows = restoredWindows;
-            restoreRecoveryActiveId = state.active_window_id || '';
-            restoreRecoveryStatus = '';
-            setWindows([], '');
+        applyPersistedDesktopState(() => {
+          // Restore icon positions
+          if (state.icon_positions && Object.keys(state.icon_positions).length > 0) {
+            setIconPositions(state.icon_positions);
+          }
+          // Restore windows
+          if (state.windows && state.windows.length > 0) {
+            const restoredWindowsRaw = state.windows.map((w) => ({
+              windowId: w.window_id,
+              appId: w.app_id,
+              title: w.title,
+              icon: getAppIcon(w.app_id),
+              x: w.geometry?.x ?? 100,
+              y: w.geometry?.y ?? 100,
+              width: w.geometry?.width ?? 600,
+              height: w.geometry?.height ?? 400,
+              mode: w.mode ?? 'normal',
+              zIndex: w.z_index ?? 1,
+              restoredGeometry: w.restored_geometry
+                ? { x: w.restored_geometry.x, y: w.restored_geometry.y, width: w.restored_geometry.width, height: w.restored_geometry.height }
+                : null,
+              appContext: w.app_context ?? {},
+            }));
+            const hydrationActiveId = state.active_window_id || pickTopRestoredWindow(restoredWindowsRaw, '')?.windowId || '';
+            const lazyHydration = shouldLazyHydrateRestoredWindows(restoredWindowsRaw);
+            const restoredWindows = restoredWindowsRaw.map((win) => ({
+              ...win,
+              restoreSuspended: shouldSuspendRestoredWindow(win, hydrationActiveId, lazyHydration),
+            }));
+            const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '');
+            if (recovery) {
+              restoreRecovery = recovery;
+              restoreRecoveryWindows = restoredWindows;
+              restoreRecoveryActiveId = state.active_window_id || '';
+              restoreRecoveryStatus = '';
+              setWindows([], '');
+            } else {
+              restoreRecovery = null;
+              restoreRecoveryWindows = [];
+              restoreRecoveryActiveId = '';
+              restoreRecoveryStatus = '';
+              setWindows(restoredWindows, state.active_window_id || '');
+            }
           } else {
             restoreRecovery = null;
             restoreRecoveryWindows = [];
             restoreRecoveryActiveId = '';
             restoreRecoveryStatus = '';
-            setWindows(restoredWindows, state.active_window_id || '');
+            setWindows([], '');
           }
-        } else {
-          restoreRecovery = null;
-          restoreRecoveryWindows = [];
-          restoreRecoveryActiveId = '';
-          restoreRecoveryStatus = '';
-          setWindows([], '');
-        }
+        });
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -795,7 +820,7 @@
       }
       dispatchLiveEvent(message);
       if (message.kind === 'desktop.state.updated' && !isOwnLiveEvent(message)) {
-        void loadDesktopState();
+        handleRemoteDesktopStateUpdate();
       }
       return;
     }
@@ -1333,13 +1358,13 @@
 
     // Subscribe to store changes for auto-save
     unsubscribeWindows = windows.subscribe(() => {
-      if (stateLoaded) scheduleSave();
+      if (stateLoaded && !applyingPersistedDesktopState) scheduleSave();
     });
     unsubscribeActive = activeWindowId.subscribe(() => {
-      if (stateLoaded) scheduleSave();
+      if (stateLoaded && !applyingPersistedDesktopState) scheduleSave();
     });
     unsubscribeIconPositions = iconPositions.subscribe(() => {
-      if (stateLoaded) scheduleSave();
+      if (stateLoaded && !applyingPersistedDesktopState) scheduleSave();
     });
   });
 
