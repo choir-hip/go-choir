@@ -1804,7 +1804,6 @@
   <BottomBar
     {currentUser}
     {authenticated}
-    liveStatus={$liveStatus}
     promptDisabled={!desktopReady}
     {promptPlaceholder}
     {promptStatus}

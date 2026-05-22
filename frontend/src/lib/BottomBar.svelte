@@ -25,11 +25,11 @@
     focusWindow,
     toggleShowDesktop,
     APP_REGISTRY,
+    liveStatus as desktopLiveStatus,
   } from './stores/desktop.js';
 
   export let currentUser = null;
   export let authenticated = false;
-  export let liveStatus = 'disconnected';
   export let promptDisabled = false;
   export let promptPlaceholder = 'Ask anything...';
   export let promptStatus = '';
@@ -141,16 +141,16 @@
   }
 
   function getStatusColor() {
-    if (liveStatus === 'connected') return '#4ade80';
-    if (liveStatus === 'connecting') return '#fbbf24';
-    if (liveStatus === 'error') return '#f87171';
+    if ($desktopLiveStatus === 'connected') return '#4ade80';
+    if ($desktopLiveStatus === 'connecting') return '#fbbf24';
+    if ($desktopLiveStatus === 'error') return '#f87171';
     return '#444';
   }
 
   function getStatusText() {
-    if (liveStatus === 'connected') return 'Connected';
-    if (liveStatus === 'connecting') return 'Connecting';
-    if (liveStatus === 'error') return 'Error';
+    if ($desktopLiveStatus === 'connected') return 'Connected';
+    if ($desktopLiveStatus === 'connecting') return 'Connecting';
+    if ($desktopLiveStatus === 'error') return 'Error';
     return 'Disconnected';
   }
 
@@ -329,7 +329,7 @@
     >
       <span
         class="status-dot"
-        style="background: {getStatusColor()}; {liveStatus === 'connecting' ? 'animation: pulse 1.5s infinite;' : ''}"
+        style="background: {getStatusColor()}; {$desktopLiveStatus === 'connecting' ? 'animation: pulse 1.5s infinite;' : ''}"
       ></span>
       <span class="status-text">{getStatusText()}</span>
     </div>

@@ -52,6 +52,7 @@ test('covered product apps do not expose manual refresh or reload sync controls'
 
 test('desktop live state cannot seize the visible foreground window stack', async () => {
   const source = await readRelative('src/lib/Desktop.svelte');
+  const bottomBarSource = await readRelative('src/lib/BottomBar.svelte');
 
   expect(source).toContain('function handleRemoteDesktopStateUpdate(message = {})');
   expect(source).toContain("document.visibilityState === 'hidden'");
@@ -62,6 +63,8 @@ test('desktop live state cannot seize the visible foreground window stack', asyn
   expect(source).toContain("liveStatus.set('connected')");
   expect(source).toContain('markConnected();');
   expect(source).toContain('ws?.readyState === WebSocket.OPEN');
+  expect(bottomBarSource).toContain('liveStatus as desktopLiveStatus');
+  expect(bottomBarSource).toContain('$desktopLiveStatus');
   expect(source).not.toMatch(
     /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
   );
