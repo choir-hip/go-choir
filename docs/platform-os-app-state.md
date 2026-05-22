@@ -1,9 +1,9 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-21
-**Baseline checked:** Apps & Changes portfolio aggregation checkpoint
-`22410dafff91cdc4edcddfa65ffa609c2973e928`
+**Last updated:** 2026-05-22
+**Baseline checked:** Live computer sync driver-lease checkpoint
+`615fbd74d518cd7c857d407326d06231ddc68228`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -91,9 +91,11 @@ platform docs record the common baseline and the desired divergence semantics.
 
 The shell is a web desktop with floating windows, freely placed desktop icons,
 Shelf/Desk menu, prompt bar, live status, and persisted desktop state for
-signed-in users. Mobile is intended to use the same overlapping desktop model
-as desktop, with tighter geometry and better overview controls rather than a
-separate phone-mode navigation stack.
+signed-in users. Desktop state is now session-aware: app instances and semantic
+order are shared user-computer state, while focus and window placement are
+session/viewport presentation state. Mobile is intended to use the same
+overlapping desktop model as desktop, with tighter geometry and better overview
+controls rather than a separate phone-mode navigation stack.
 
 Current capabilities:
 
@@ -107,7 +109,12 @@ Current capabilities:
 - the Shelf exposes app switching, the Desk menu, and app launching;
 - Desktop Overview is the intended shell mode for seeing and managing all open
   windows at once;
-- desktop state persists windows and icon positions for authenticated sessions;
+- desktop state persists shared app instances, semantic order, icon positions,
+  and per-session window placements for authenticated sessions;
+- real local input renews a driver lease; only the driving session should save
+  visible focus, foreground window, and local geometry;
+- passive sessions receive shared app roster/order updates without stealing
+  active focus or moving local windows;
 - restore recovery can avoid hydrating every saved heavy app at once, and heavy
   restored background apps may stay suspended until raised;
 - Compute Monitor is the product surface for the signed-in user's current
@@ -121,6 +128,9 @@ Known gaps:
   recovery sequences;
 - app switching and window raise/restore need continued long-session mobile
   proof across more real user accounts;
+- app-level live sync still needs product-path proof for media progress/recents,
+  VText/Trace content convergence, Files changes, and reconnect/catch-up on top
+  of the driver-lease state model;
 - the Shelf/prompt bar must keep shrinking when input is empty and only grow
   for real prompt content;
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
@@ -175,6 +185,13 @@ Known gaps:
   product APIs backed by embedded Dolt, not browser storage.
 - `/api/ws` is the owner/computer-scoped notification and catch-up fabric for
   product events. It is not canonical storage.
+- Desktop live sync is canonicalized through Dolt-backed product APIs:
+  `desktop_sessions`, `desktop_app_instances`, and
+  `desktop_window_placements` split presence/driver state, shared app identity,
+  semantic order, and session-local placement/focus.
+- WebSocket desktop events are typed notifications that tell clients to
+  refetch or merge scoped durable state. They must not become reload-the-whole
+  desktop commands.
 - Browser localStorage/sessionStorage must not be used for synced media
   progress, media recents, desktop/window state, theme state, Files listings,
   or candidate/promotion queues.

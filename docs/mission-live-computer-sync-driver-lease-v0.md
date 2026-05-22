@@ -1,6 +1,6 @@
 # MissionGradient: Live Computer Sync Driver Lease v0
 
-**Status:** proposed
+**Status:** checkpoint_incomplete
 **Date:** 2026-05-22
 **Operator:** Codex-operated MissionGradient mission
 **Related prior mission:** [mission-computer-live-sync-hard-cutover-v0.md](mission-computer-live-sync-hard-cutover-v0.md)
@@ -369,34 +369,62 @@ If the stopping condition is not reached, report:
 ## Run Checkpoint & Resumption State
 
 ```text
-status: proposed
-last checkpoint: mission authored from live-sync research and recent focus-stealing fix
+status: checkpoint_incomplete
+last checkpoint: deployed 615fbd74d518cd7c857d407326d06231ddc68228 and strict two-context staging proof passed
 current artifact state:
-- /api/ws streams product events with stream_seq, but desktop live semantics are still coarse
-- desktop persistence is server-side Dolt-backed desktop_workspaces with windows_json and active_window
-- current deployed guard ignores remote desktop saves in visible tabs to prevent focus stealing
-what shipped: nothing yet for this mission
-what was proven: design/research only
+- desktop live state is split across desktop_sessions, desktop_app_instances, and desktop_window_placements
+- /api/desktop/state accepts X-Choir-Session, X-Choir-Device, and X-Choir-Viewport and returns shared app identity/order plus session-local placements
+- driver lease is renewed from real local input; only the driving session writes visible focus, foreground, and local geometry
+- passive sessions merge shared app roster/order without taking active focus or local geometry
+- /api/ws emits typed desktop events including desktop.driver_lease.updated, desktop.app_instances.updated, and desktop.window_placement.updated
+- the Shelf reads the shared liveStatus store directly and exposes reactive Connected/Disconnected status
+what shipped:
+- 484d2d6 Add session-aware desktop live sync
+- 664df41 Mark live channel connected from server frame
+- 93b530c Stabilize live channel status detection
+- 68eb684 Read live status directly from shelf store
+- 615fbd7 Make Shelf live status reactive
+what was proven:
+- GitHub Actions run 26302420377 passed and deployed
+- staging /health reports proxy and sandbox commit 615fbd74d518cd7c857d407326d06231ddc68228
+- deployed Playwright proof passed against https://draft.choir-ip.com with one desktop context at 1440x920 and one mobile context at 390x844
+- both sessions showed exact live status Connected and opened one websocket to /api/ws
+- desktop opened Files; mobile received Files; mobile opened Podcast; desktop received Podcast
+- desktop active app remained files while mobile active app became podcast
+- desktop Files geometry stayed stable while the mobile session drove Podcast
+- websocket evidence recorded 6 desktop event frames in each session
 unproven or partial claims:
-- driver lease schema/API not implemented
-- app instance vs placement split not implemented
-- two-device active/passive proof not implemented
+- synced media progress/recents were not product-path tested across two live sessions
+- VText, Trace, and Files content-level convergence were not product-path tested in this proof
+- websocket reconnect/catch-up after one session misses events was not tested
+- proof metrics do not yet expose session ids, so source_session/source_device evidence is inferred from websocket frame counts and visible behavior
+- broader app-level live updates likely continue through existing app listeners, but this checkpoint does not prove the full mission stopping condition
 belief-state changes:
 - z-order should be semantic shared order, not raw cross-device CSS z-index
 - focus and geometry must be session-local unless explicit follow/mirror mode exists
 - WebSocket/SSE should wake/refetch/merge durable state, not become volatile truth
+- live-status assertions must check exact visible/data status; a loose /connected/i assertion matched Disconnected during proof hardening
+- Svelte store updates that cross component boundaries should be wired directly enough for the Shelf to prove status changes, not hidden behind stale prop/helper paths
 remaining error field:
-- stale desktop blob can still encode cross-device assumptions
-- app-level live sync remains uneven
+- app-level live sync coverage remains uneven and under-proven
+- reconnect/catch-up is still an explicit acceptance gap
+- session id observability for product proof needs a safe browser-visible test hook or DOM data point
 highest-impact remaining uncertainty:
-- exact minimal schema/API cutover that removes windows_json blob semantics without overbuilding a sync engine
+- whether the same driver-lease merge law holds while VText, Trace, media progress, Files changes, and reconnect/catch-up all mutate during an active two-device session
 next executable probe:
-- implement session_id/source_session_id plumbing and schema split for desktop_app_instances + desktop_window_placements + driver lease
+- extend the deployed two-context proof to cover one media progress/recent update, one VText or Trace content update, one Files content update, and one reconnect/catch-up path while asserting focus and geometry remain stable
 suggested resume goal string:
-- use the One-Line Goal String in this document
+- continue this mission from checkpoint_incomplete: prove app-level live convergence and reconnect/catch-up on top of deployed commit 615fbd7 without changing the driver-lease topology
 evidence artifact refs:
-- docs/mission-computer-live-sync-hard-cutover-v0.md
+- GitHub Actions run https://github.com/yusefmosiah/go-choir/actions/runs/26302420377
+- staging proof command:
+  LIVE_SYNC_EVIDENCE_DIR=/Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T173632Z CHOIR_AUTH_STATE=/Users/wiz/go-choir/test-results/live-sync-driver-lease-auth-20260522T173632Z/storage.json PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com BASE_URL=https://draft.choir-ip.com npx playwright test tests/live-sync-driver-lease-deployed.tmp.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=list
+- proof screenshots and metrics:
+  /Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T173632Z/
 - commit 0de237f9fb5dd7e972bd12e6a79e3a576527bc6f stopped remote desktop state stealing visible focus as a temporary guard
 rollback refs:
-- rollback to 0de237f for the last safe focus-stealing guard if new session-aware sync regresses
+- revert 615fbd7 if only Shelf live-status rendering regresses
+- revert 68eb684, 93b530c, and 664df41 if the live status connection path regresses
+- revert 484d2d6 to return to the previous desktop persistence path, with the caveat that the new Dolt tables may contain checkpoint data
+- rollback to 0de237f for the last safe pre-mission focus-stealing guard if the session-aware path regresses broadly
 ```
