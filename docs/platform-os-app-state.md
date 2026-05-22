@@ -2,8 +2,8 @@
 
 **Status:** canonical platform-level state ledger
 **Last updated:** 2026-05-22
-**Baseline checked:** Live computer sync driver-lease checkpoint
-`615fbd74d518cd7c857d407326d06231ddc68228`
+**Baseline checked:** Live computer sync driver-lease completion
+`8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -115,6 +115,8 @@ Current capabilities:
   visible focus, foreground window, and local geometry;
 - passive sessions receive shared app roster/order updates without stealing
   active focus or moving local windows;
+- Desktop Overview uses shared semantic app/window order for its cards and
+  spatial map identity, not session-local CSS z-index;
 - restore recovery can avoid hydrating every saved heavy app at once, and heavy
   restored background apps may stay suspended until raised;
 - Compute Monitor is the product surface for the signed-in user's current
@@ -128,9 +130,11 @@ Known gaps:
   recovery sequences;
 - app switching and window raise/restore need continued long-session mobile
   proof across more real user accounts;
-- app-level live sync still needs product-path proof for media progress/recents,
-  VText/Trace content convergence, Files changes, and reconnect/catch-up on top
-  of the driver-lease state model;
+- Trace-specific content live sync and long-lived real-account multi-device
+  sessions still need broader product-path proof; deployed live-sync proof now
+  covers media recents/progress, Files changes, VText recent updates, shared
+  app roster/order, session-local focus/geometry, and `/api/ws?after_seq=`
+  catch-up on top of the driver-lease state model;
 - the Shelf/prompt bar must keep shrinking when input is empty and only grow
   for real prompt content;
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
@@ -202,6 +206,50 @@ Known gaps:
   they preserve stronger revision/trajectory catch-up semantics.
 
 ## Current Proof Anchors
+
+Recent deployed platform proof for live multi-device computer sync:
+
+- behavior commits:
+  `484d2d6c8ee11a333b48a9a33b132c4ecb54a3b8`,
+  `664df41f93f6c39a6e1409573b28e1606137b41c`,
+  `93b530c3e68b29211142fe63be50bce8cb686a80`,
+  `68eb6849db40e7edc703a550164271ed78bbd1a1`,
+  `615fbd74d518cd7c857d407326d06231ddc68228`,
+  `1b1fabde480dbb8d9bb643fc4589abb2d816fb52`, and
+  `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`;
+- CI/deploy run:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26304651141`;
+- staging health reported proxy and sandbox commit
+  `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`, built at
+  `20260522181828`, deployed at `2026-05-22T18:20:17Z`;
+- deployed Playwright:
+  `LIVE_SYNC_EVIDENCE_DIR=/Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T182540Z CHOIR_AUTH_STATE=/Users/wiz/go-choir/test-results/live-sync-driver-lease-auth-20260522T182540Z/storage.json PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com BASE_URL=https://draft.choir-ip.com npx playwright test tests/live-sync-driver-lease-deployed.tmp.spec.js --project=chromium --workers=1 --timeout=420000 --reporter=list`;
+- result: `1 passed`;
+- proof used one desktop context at `1440x920` and one mobile context at
+  `390x844` for the same fresh authenticated user computer;
+- proof covered shared app instance convergence for Files, Audio, and VText;
+  desktop focus stayed on Files while mobile focus stayed on VText; desktop
+  Files geometry remained stable while mobile drove Audio/VText;
+- proof covered media recents/progress without localStorage or manual refresh:
+  the mobile Audio app showed the proof audio and `0:42 / 6:00`, while the
+  mobile product API returned `current_time: 42`;
+- proof covered Files and VText content updates: mobile Files showed
+  `live-sync-proof-1779474356092.txt`, and mobile VText recent showed
+  `Live sync VText proof 1779474356092`;
+- proof covered websocket catch-up from `/api/ws?after_seq=6`, returning missed
+  `media.recent.updated`, `media.progress.updated`,
+  `desktop.driver_lease.updated`, `desktop.app_instances.updated`,
+  `desktop.window_placement.updated`, `file.changed`, and
+  `vtext.document_revision.created` events;
+- proof covered Desktop Overview convergence: desktop and mobile card/map app
+  ids all matched `files`, `audio`, `vtext` while local focus/z-index and
+  placement remained session-specific;
+- artifacts:
+  `test-results/live-sync-driver-lease-staging-20260522T182540Z/metrics.json`,
+  `desktop-driver-files.png`, `mobile-passive-files-synced.png`,
+  `desktop-overview-order.png`, `mobile-overview-order.png`,
+  `desktop-after-app-content-sync.png`, and
+  `mobile-driver-vtext-content-sync.png`.
 
 Recent deployed platform proof for Apps & Changes, VText reports, and benchmark
 evidence:

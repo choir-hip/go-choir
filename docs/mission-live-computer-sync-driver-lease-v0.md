@@ -1,6 +1,6 @@
 # MissionGradient: Live Computer Sync Driver Lease v0
 
-**Status:** checkpoint_incomplete
+**Status:** complete
 **Date:** 2026-05-22
 **Operator:** Codex-operated MissionGradient mission
 **Related prior mission:** [mission-computer-live-sync-hard-cutover-v0.md](mission-computer-live-sync-hard-cutover-v0.md)
@@ -366,11 +366,12 @@ If the stopping condition is not reached, report:
   cognitive transforms identify an invariant-level or external blocker;
 - never call a checkpoint complete.
 
-## Run Checkpoint & Resumption State
+## Run Completion & Evidence
 
 ```text
-status: checkpoint_incomplete
-last checkpoint: deployed 615fbd74d518cd7c857d407326d06231ddc68228 and strict two-context staging proof passed
+status: complete
+completed: 2026-05-22
+last checkpoint: deployed 8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65 and full two-context staging proof passed
 current artifact state:
 - desktop live state is split across desktop_sessions, desktop_app_instances, and desktop_window_placements
 - /api/desktop/state accepts X-Choir-Session, X-Choir-Device, and X-Choir-Viewport and returns shared app identity/order plus session-local placements
@@ -378,51 +379,71 @@ current artifact state:
 - passive sessions merge shared app roster/order without taking active focus or local geometry
 - /api/ws emits typed desktop events including desktop.driver_lease.updated, desktop.app_instances.updated, and desktop.window_placement.updated
 - the Shelf reads the shared liveStatus store directly and exposes reactive Connected/Disconnected status
+- Desktop Overview preserves shared semantic window order for both card and map identity, rather than sorting or reversing by session-local z-index
+- media progress/recents, Files changes, and VText recent/document revision updates are delivered through product APIs plus /api/ws notifications/catch-up
 what shipped:
 - 484d2d6 Add session-aware desktop live sync
 - 664df41 Mark live channel connected from server frame
 - 93b530c Stabilize live channel status detection
 - 68eb684 Read live status directly from shelf store
 - 615fbd7 Make Shelf live status reactive
+- 1b1fabd Keep overview order session neutral
+- 8c0b941 Align overview card and map order
 what was proven:
-- GitHub Actions run 26302420377 passed and deployed
-- staging /health reports proxy and sandbox commit 615fbd74d518cd7c857d407326d06231ddc68228
+- GitHub Actions run 26304651141 passed and deployed
+- staging /health reports proxy and sandbox commit 8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65
+- local frontend build passed
+- local focused Playwright passed: tests/mobile-real-desktop-overview.spec.js and tests/computer-live-sync-hard-cutover.spec.js, 8 passed
 - deployed Playwright proof passed against https://draft.choir-ip.com with one desktop context at 1440x920 and one mobile context at 390x844
-- both sessions showed exact live status Connected and opened one websocket to /api/ws
-- desktop opened Files; mobile received Files; mobile opened Podcast; desktop received Podcast
-- desktop active app remained files while mobile active app became podcast
-- desktop Files geometry stayed stable while the mobile session drove Podcast
-- websocket evidence recorded 6 desktop event frames in each session
-unproven or partial claims:
-- synced media progress/recents were not product-path tested across two live sessions
-- VText, Trace, and Files content-level convergence were not product-path tested in this proof
-- websocket reconnect/catch-up after one session misses events was not tested
-- proof metrics do not yet expose session ids, so source_session/source_device evidence is inferred from websocket frame counts and visible behavior
-- broader app-level live updates likely continue through existing app listeners, but this checkpoint does not prove the full mission stopping condition
+- both sessions showed exact live status Connected
+- desktop opened Files; mobile received Files; mobile opened Audio; desktop received Audio; mobile opened VText; desktop received VText
+- desktop active app remained files while mobile active app became vtext
+- desktop Files geometry stayed stable while the mobile session drove Audio and VText
+- media recents propagated: desktop PUT /api/media/recents made the proof audio visible in mobile Audio
+- media progress propagated: desktop PUT /api/media/progress displayed 0:42 / 6:00 in mobile Audio, and mobile GET /api/media/progress returned current_time 42
+- Files convergence propagated: desktop wrote live-sync-proof-1779474356092.txt and mobile Files showed it without manual refresh
+- VText convergence propagated: desktop created doc 0868c421-3817-4dbf-aaad-f4a45dda1763 and revision fbc0b3ff-940c-4048-b9f6-64f897a7850a; mobile VText recent showed "Live sync VText proof 1779474356092"
+- raw websocket catch-up proved /api/ws?after_seq=6 returned missed media.recent.updated, media.progress.updated, desktop.driver_lease.updated, desktop.app_instances.updated, desktop.window_placement.updated, file.changed, and vtext.document_revision.created events
+- shared Overview identity converged on both sessions: cardAppIds and mapAppIds were files, audio, vtext on desktop and mobile
+- session-local focus/geometry stayed distinct: desktop Files had zIndex 3 and active=true while mobile VText had zIndex 3 and active=true; Files rectangle was desktop-sized on desktop and compact/mobile-sized on mobile
+- websocket evidence recorded desktop count 1 and mobile count 2, including wss://draft.choir-ip.com/api/ws?after_seq=6 catch-up
+remaining unproven or partial claims:
+- Trace-specific trajectory live updates were not separately exercised in the final proof; VText and Files covered the "at least one VText/Trace/Files update" stopping condition
+- long-lived real-user heavy sessions and simultaneous human edits remain a realism axis
+- proof metrics still report sessionId as null from DOM extraction, but browser-visible websocket catch-up payloads include source_session_id/source_device_id for desktop events
 belief-state changes:
 - z-order should be semantic shared order, not raw cross-device CSS z-index
 - focus and geometry must be session-local unless explicit follow/mirror mode exists
 - WebSocket/SSE should wake/refetch/merge durable state, not become volatile truth
 - live-status assertions must check exact visible/data status; a loose /connected/i assertion matched Disconnected during proof hardening
 - Svelte store updates that cross component boundaries should be wired directly enough for the Shelf to prove status changes, not hidden behind stale prop/helper paths
+- Desktop Overview must not sort or reverse by session-local z-index; the first deployed proof after 1b1fabd exposed that cards and map could still disagree, so 8c0b941 made both use the same shared semantic order
+- launcher proof should use the Desk menu for non-desktop-icon apps such as Audio
+- websocket catch-up should be asserted as "contains required event kinds" because the correct behavior is to replay all missed scoped events, not only the few events a proof cares about
 remaining error field:
-- app-level live sync coverage remains uneven and under-proven
-- reconnect/catch-up is still an explicit acceptance gap
-- session id observability for product proof needs a safe browser-visible test hook or DOM data point
-highest-impact remaining uncertainty:
-- whether the same driver-lease merge law holds while VText, Trace, media progress, Files changes, and reconnect/catch-up all mutate during an active two-device session
-next executable probe:
-- extend the deployed two-context proof to cover one media progress/recent update, one VText or Trace content update, one Files content update, and one reconnect/catch-up path while asserting focus and geometry remain stable
-suggested resume goal string:
-- continue this mission from checkpoint_incomplete: prove app-level live convergence and reconnect/catch-up on top of deployed commit 615fbd7 without changing the driver-lease topology
+- Trace-specific live content needs the same product-path treatment as VText and Files
+- session id observability for product proof needs a safe browser-visible DOM data point if future proofs should assert it without parsing websocket payloads
+next realism axis:
+- exercise the same driver-lease merge law in a long-lived real-user session with Trace live trajectory updates, media playback, VText editing, hidden/offline reconnect, and heavier restored window state
 evidence artifact refs:
-- GitHub Actions run https://github.com/yusefmosiah/go-choir/actions/runs/26302420377
+- GitHub Actions run https://github.com/yusefmosiah/go-choir/actions/runs/26304651141
+- staging /health identity:
+  proxy and sandbox commit 8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65, built_at 20260522181828, deployed_at 2026-05-22T18:20:17Z
 - staging proof command:
-  LIVE_SYNC_EVIDENCE_DIR=/Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T173632Z CHOIR_AUTH_STATE=/Users/wiz/go-choir/test-results/live-sync-driver-lease-auth-20260522T173632Z/storage.json PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com BASE_URL=https://draft.choir-ip.com npx playwright test tests/live-sync-driver-lease-deployed.tmp.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=list
+  LIVE_SYNC_EVIDENCE_DIR=/Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T182540Z CHOIR_AUTH_STATE=/Users/wiz/go-choir/test-results/live-sync-driver-lease-auth-20260522T182540Z/storage.json PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com BASE_URL=https://draft.choir-ip.com npx playwright test tests/live-sync-driver-lease-deployed.tmp.spec.js --project=chromium --workers=1 --timeout=420000 --reporter=list
 - proof screenshots and metrics:
-  /Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T173632Z/
+  /Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T182540Z/
+  desktop-driver-files.png
+  mobile-passive-files-synced.png
+  desktop-overview-order.png
+  mobile-overview-order.png
+  desktop-after-app-content-sync.png
+  mobile-driver-vtext-content-sync.png
+  metrics.json
 - commit 0de237f9fb5dd7e972bd12e6a79e3a576527bc6f stopped remote desktop state stealing visible focus as a temporary guard
 rollback refs:
+- revert 8c0b941 if only Overview card/map order alignment regresses
+- revert 1b1fabd if only Overview shared semantic order regresses
 - revert 615fbd7 if only Shelf live-status rendering regresses
 - revert 68eb684, 93b530c, and 664df41 if the live status connection path regresses
 - revert 484d2d6 to return to the previous desktop persistence path, with the caveat that the new Dolt tables may contain checkpoint data
