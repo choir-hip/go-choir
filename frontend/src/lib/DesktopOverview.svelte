@@ -16,9 +16,12 @@
   let viewportWidth = 1280;
   let viewportHeight = 800;
 
+  // Preserve the shared semantic window order supplied by the desktop store.
+  // zIndex is session-local presentation state, so sorting the Overview by
+  // zIndex makes two devices disagree whenever they have different active
+  // windows. Spatial overlap still uses local zIndex in mapStyle().
   $: openWindows = (windows || [])
-    .filter((win) => win.mode !== 'closed' && win.mode !== 'hidden')
-    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+    .filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
   $: layeredWindows = [...openWindows].reverse();
   $: visibleCount = openWindows.filter((win) => win.mode !== 'minimized').length;
   $: suspendedCount = openWindows.filter((win) => win.restoreSuspended).length;
