@@ -140,19 +140,19 @@
     dispatch('authrequest');
   }
 
-  function getStatusColor() {
+  $: statusColor = (() => {
     if ($desktopLiveStatus === 'connected') return '#4ade80';
     if ($desktopLiveStatus === 'connecting') return '#fbbf24';
     if ($desktopLiveStatus === 'error') return '#f87171';
     return '#444';
-  }
+  })();
 
-  function getStatusText() {
+  $: statusText = (() => {
     if ($desktopLiveStatus === 'connected') return 'Connected';
     if ($desktopLiveStatus === 'connecting') return 'Connecting';
     if ($desktopLiveStatus === 'error') return 'Error';
     return 'Disconnected';
-  }
+  })();
 
   onMount(() => {
     publishBottomBarHeight();
@@ -323,15 +323,16 @@
       class="connection-status"
       data-connection-status
       data-desktop-live-status
+      data-live-status={$desktopLiveStatus}
       data-shell-live-status
       aria-live="polite"
-      aria-label="Connection status: {getStatusText()}"
+      aria-label="Connection status: {statusText}"
     >
       <span
         class="status-dot"
-        style="background: {getStatusColor()}; {$desktopLiveStatus === 'connecting' ? 'animation: pulse 1.5s infinite;' : ''}"
+        style="background: {statusColor}; {$desktopLiveStatus === 'connecting' ? 'animation: pulse 1.5s infinite;' : ''}"
       ></span>
-      <span class="status-text">{getStatusText()}</span>
+      <span class="status-text">{statusText}</span>
     </div>
   </div>
 </div>

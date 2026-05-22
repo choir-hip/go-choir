@@ -65,6 +65,8 @@ test('desktop live state cannot seize the visible foreground window stack', asyn
   expect(source).toContain('ws?.readyState === WebSocket.OPEN');
   expect(bottomBarSource).toContain('liveStatus as desktopLiveStatus');
   expect(bottomBarSource).toContain('$desktopLiveStatus');
+  expect(bottomBarSource).toContain('statusText');
+  expect(bottomBarSource).toContain('data-live-status={$desktopLiveStatus}');
   expect(source).not.toMatch(
     /message\.kind === 'desktop\.state\.updated'[\s\S]{0,120}void loadDesktopState\(\);/,
   );
