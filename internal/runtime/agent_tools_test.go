@@ -4380,7 +4380,7 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 		"git config user.email \"worker@choir.local\"",
 		"git checkout " + base,
 		"Use set -euo pipefail for multi-step bash commands",
-		"Run gofmt, go test, node, and scripts directly from the checkout",
+		"Run gofmt, go test, node/npm, Playwright, and scripts directly from the checkout",
 		"Do not run nix develop, nix build, or nix-store inside the worker VM",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
 	} {
