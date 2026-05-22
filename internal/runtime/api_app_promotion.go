@@ -455,27 +455,28 @@ func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) 
 	hasMediaOrBenchmark := false
 	for _, ref := range rec.EvidenceRefs {
 		kind := strings.ToLower(strings.TrimSpace(ref.Kind))
-		summary := strings.ToLower(ref.Summary + " " + ref.URL)
-		if strings.Contains(kind, "vtext") || strings.Contains(summary, "vtext") || strings.Contains(summary, "narrative") {
+		summary := ref.Summary + " " + ref.URL
+		lowerSummary := strings.ToLower(summary)
+		if strings.Contains(kind, "vtext") || strings.Contains(lowerSummary, "vtext") || strings.Contains(lowerSummary, "narrative") {
 			hasNarrative = true
 		}
 		if strings.Contains(kind, "screenshot") ||
 			strings.Contains(kind, "video") ||
-			strings.Contains(kind, "benchmark") ||
-			strings.Contains(summary, ".png") ||
-			strings.Contains(summary, ".jpg") ||
-			strings.Contains(summary, ".jpeg") ||
-			strings.Contains(summary, ".webm") ||
-			strings.Contains(summary, ".mp4") ||
-			strings.Contains(summary, "benchmark") {
+			strings.Contains(lowerSummary, ".png") ||
+			strings.Contains(lowerSummary, ".jpg") ||
+			strings.Contains(lowerSummary, ".jpeg") ||
+			strings.Contains(lowerSummary, ".webm") ||
+			strings.Contains(lowerSummary, ".mp4") ||
+			((strings.Contains(kind, "benchmark") || strings.Contains(lowerSummary, "benchmark")) && credibleHumanBenchmarkRef(summary)) {
 			hasMediaOrBenchmark = true
 		}
 		for _, value := range ref.Details {
-			text := strings.ToLower(fmt.Sprint(value))
-			if strings.Contains(text, "vtext") || strings.Contains(text, "narrative") {
+			text := fmt.Sprint(value)
+			lowerText := strings.ToLower(text)
+			if strings.Contains(lowerText, "vtext") || strings.Contains(lowerText, "narrative") {
 				hasNarrative = true
 			}
-			if strings.Contains(text, ".png") || strings.Contains(text, ".jpg") || strings.Contains(text, ".jpeg") || strings.Contains(text, ".webm") || strings.Contains(text, ".mp4") || strings.Contains(text, "benchmark") {
+			if strings.Contains(lowerText, ".png") || strings.Contains(lowerText, ".jpg") || strings.Contains(lowerText, ".jpeg") || strings.Contains(lowerText, ".webm") || strings.Contains(lowerText, ".mp4") || (strings.Contains(lowerText, "benchmark") && credibleHumanBenchmarkRef(text)) {
 				hasMediaOrBenchmark = true
 			}
 		}
@@ -504,17 +505,78 @@ func humanProofForAppChangePackage(pkg types.AppChangePackageRecord) appChangePa
 	proof.VideoRefs = compactStringRefs(proof.VideoRefs)
 	proof.BenchmarkRefs = compactStringRefs(proof.BenchmarkRefs)
 	proof.ArtifactRefs = compactStringRefs(proof.ArtifactRefs)
-	if len(proof.NarrativeRefs) > 0 && (len(proof.ScreenshotRefs) > 0 || len(proof.VideoRefs) > 0 || len(proof.BenchmarkRefs) > 0) {
+	hasHumanEvidence := len(proof.ScreenshotRefs) > 0 || len(proof.VideoRefs) > 0 || hasCredibleHumanBenchmarkRefs(proof.BenchmarkRefs)
+	if len(proof.NarrativeRefs) > 0 && hasHumanEvidence {
 		proof.State = "human_reviewable"
 		return proof
 	}
 	if len(proof.NarrativeRefs) == 0 {
 		proof.Missing = append(proof.Missing, "narrative VText")
 	}
-	if len(proof.ScreenshotRefs) == 0 && len(proof.VideoRefs) == 0 && len(proof.BenchmarkRefs) == 0 {
-		proof.Missing = append(proof.Missing, "screenshots, video, or benchmark")
+	if !hasHumanEvidence {
+		proof.Missing = append(proof.Missing, "successful screenshots, video, or benchmark evidence")
 	}
 	return proof
+}
+
+func hasCredibleHumanBenchmarkRefs(refs []string) bool {
+	for _, ref := range refs {
+		if credibleHumanBenchmarkRef(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func credibleHumanBenchmarkRef(ref string) bool {
+	text := strings.ToLower(strings.TrimSpace(ref))
+	if text == "" {
+		return false
+	}
+	for _, blocked := range []string{
+		"blocked",
+		"failed",
+		"failure",
+		"error",
+		"unavailable",
+		"pending",
+		"not run",
+		"not captured",
+		"cannot run",
+		"could not",
+	} {
+		if strings.Contains(text, blocked) {
+			return false
+		}
+	}
+	for _, receiptOnly := range []string{
+		"npm --prefix frontend run build",
+		"pnpm build",
+		"go build",
+		"vite build",
+	} {
+		if strings.Contains(text, receiptOnly) {
+			return false
+		}
+	}
+	for _, signal := range []string{
+		"benchmark",
+		"latency",
+		"duration",
+		"tokens",
+		"fps",
+		"memory",
+		"cpu",
+		"resource",
+		"wall time",
+		"p95",
+		"median",
+	} {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
 }
 
 func collectHumanProofValue(proof *appChangePackageHumanProof, value any, key string) {

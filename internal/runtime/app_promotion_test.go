@@ -361,6 +361,47 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if len(review.HumanProof.NarrativeRefs) == 0 || len(review.HumanProof.ScreenshotRefs) != 1 {
 		t.Fatalf("human proof refs = %+v", review.HumanProof)
 	}
+
+	blockedBenchmarkOnly := `{
+		"app_id":"human-proof-blocked-benchmark",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-blocked-benchmark",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract",
+		"provenance_refs":{
+			"human_summary":"Owner-readable narrative, but media capture is blocked.",
+			"vtext_doc_id":"doc-blocked-benchmark",
+			"vtext_revision_id":"rev-blocked-benchmark",
+			"benchmark_refs":[
+				"npm --prefix frontend run build: PASS",
+				"npm --prefix frontend exec playwright test shelf-live-observability.spec.js: BLOCKED by worker VM dynamic-loader incompatibility"
+			]
+		}
+	}`
+	blockedW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", blockedBenchmarkOnly, "user-alice")
+	if blockedW.Code != http.StatusCreated {
+		t.Fatalf("blocked benchmark package status = %d body=%s", blockedW.Code, blockedW.Body.String())
+	}
+	var blockedPkg types.AppChangePackageRecord
+	if err := json.Unmarshal(blockedW.Body.Bytes(), &blockedPkg); err != nil {
+		t.Fatalf("decode blocked benchmark package: %v", err)
+	}
+	blockedReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+blockedPkg.PackageID+"/review-evidence", "", "user-alice")
+	if blockedReviewW.Code != http.StatusOK {
+		t.Fatalf("blocked benchmark review evidence status = %d body=%s", blockedReviewW.Code, blockedReviewW.Body.String())
+	}
+	var blockedReview appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(blockedReviewW.Body.Bytes(), &blockedReview); err != nil {
+		t.Fatalf("decode blocked benchmark review evidence: %v", err)
+	}
+	if blockedReview.HumanProof.State == "human_reviewable" {
+		t.Fatalf("blocked benchmark refs must not count as human proof: %+v", blockedReview.HumanProof)
+	}
+	if !containsString(blockedReview.HumanProof.Missing, "successful screenshots, video, or benchmark evidence") {
+		t.Fatalf("blocked benchmark missing evidence should be explicit: %+v", blockedReview.HumanProof)
+	}
 }
 
 func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
