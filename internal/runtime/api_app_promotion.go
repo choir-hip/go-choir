@@ -539,6 +539,7 @@ func credibleHumanBenchmarkRef(ref string) bool {
 		"failure",
 		"error",
 		"unavailable",
+		"not available",
 		"pending",
 		"not run",
 		"not captured",
@@ -551,13 +552,27 @@ func credibleHumanBenchmarkRef(ref string) bool {
 	}
 	for _, receiptOnly := range []string{
 		"npm --prefix frontend run build",
+		"npm --prefix frontend ci",
+		"npm ci",
+		"npm install",
 		"pnpm build",
 		"go build",
 		"vite build",
+		"build proof",
+		"build receipt",
+		"build passed",
+		"build pass",
+		"frontend production build",
+		"chunk-size warning",
+		"npm audit",
 	} {
 		if strings.Contains(text, receiptOnly) {
 			return false
 		}
+	}
+	hasMeasurement := strings.ContainsAny(text, "0123456789")
+	if !hasMeasurement {
+		return false
 	}
 	for _, signal := range []string{
 		"benchmark",
@@ -621,7 +636,7 @@ func collectHumanProofString(proof *appChangePackageHumanProof, key, raw string)
 		proof.ScreenshotRefs = append(proof.ScreenshotRefs, text)
 	case strings.Contains(lowerKey, "video") || strings.HasSuffix(lowerText, ".webm") || strings.HasSuffix(lowerText, ".mp4"):
 		proof.VideoRefs = append(proof.VideoRefs, text)
-	case strings.Contains(lowerKey, "benchmark") || strings.Contains(lowerText, "benchmark"):
+	case strings.Contains(lowerKey, "benchmark"):
 		proof.BenchmarkRefs = append(proof.BenchmarkRefs, text)
 	case strings.Contains(lowerKey, "artifact") || strings.Contains(lowerKey, "evidence"):
 		proof.ArtifactRefs = append(proof.ArtifactRefs, text)

@@ -59,7 +59,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 	}
 	return Tool{
 		Name:        "publish_app_change_package",
-		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus VText/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. This tool cannot push to GitHub or promote active state.",
+		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus VText/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. Build receipts, npm/go build success, unavailable screenshots/videos, and recommendation prose are not human proof; if real screenshots/video or measured behavior benchmarks are missing, publish honestly as evidence_pending. This tool cannot push to GitHub or promote active state.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"repo_path":                   map[string]any{"type": "string"},
 			"base_sha":                    map[string]any{"type": "string"},

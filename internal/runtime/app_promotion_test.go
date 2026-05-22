@@ -402,6 +402,50 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if !containsString(blockedReview.HumanProof.Missing, "successful screenshots, video, or benchmark evidence") {
 		t.Fatalf("blocked benchmark missing evidence should be explicit: %+v", blockedReview.HumanProof)
 	}
+
+	launderedBuildProof := `{
+		"app_id":"human-proof-laundered-build-proof",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-laundered-build",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract",
+		"provenance_refs":{
+			"human_summary":"Owner-readable narrative, but no screenshots, video, or measured behavior benchmark exists.",
+			"recommendation":"reviewable_with_build_proof; media screenshot not available in this worker VM, but causal narrative and build benchmark are attached",
+			"vtext_doc_id":"doc-laundered-build",
+			"vtext_revision_id":"rev-laundered-build",
+			"benchmark_refs":[
+				"npm --prefix frontend ci && npm --prefix frontend run build (passed; standard chunk-size warnings; npm audit reported 8 moderate vulnerabilities)"
+			]
+		}
+	}`
+	launderedW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", launderedBuildProof, "user-alice")
+	if launderedW.Code != http.StatusCreated {
+		t.Fatalf("laundered build proof package status = %d body=%s", launderedW.Code, launderedW.Body.String())
+	}
+	var launderedPkg types.AppChangePackageRecord
+	if err := json.Unmarshal(launderedW.Body.Bytes(), &launderedPkg); err != nil {
+		t.Fatalf("decode laundered build proof package: %v", err)
+	}
+	launderedReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+launderedPkg.PackageID+"/review-evidence", "", "user-alice")
+	if launderedReviewW.Code != http.StatusOK {
+		t.Fatalf("laundered build proof review evidence status = %d body=%s", launderedReviewW.Code, launderedReviewW.Body.String())
+	}
+	var launderedReview appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(launderedReviewW.Body.Bytes(), &launderedReview); err != nil {
+		t.Fatalf("decode laundered build proof review evidence: %v", err)
+	}
+	if launderedReview.HumanProof.State == "human_reviewable" {
+		t.Fatalf("build-proof recommendation and build-only refs must not count as human proof: %+v", launderedReview.HumanProof)
+	}
+	if len(launderedReview.HumanProof.BenchmarkRefs) != 1 {
+		t.Fatalf("expected only explicit benchmark_refs to be collected, not recommendation prose: %+v", launderedReview.HumanProof)
+	}
+	if !containsString(launderedReview.HumanProof.Missing, "successful screenshots, video, or benchmark evidence") {
+		t.Fatalf("laundered build proof missing evidence should be explicit: %+v", launderedReview.HumanProof)
+	}
 }
 
 func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
