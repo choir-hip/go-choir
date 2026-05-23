@@ -211,6 +211,11 @@ func appPromotionCheckoutRef(value string) string {
 		}
 		return strings.TrimSpace(strings.TrimPrefix(value, "git:"))
 	}
+	if strings.HasPrefix(value, "base:") || strings.HasPrefix(value, "candidate:") {
+		if _, suffix, ok := strings.Cut(value, ":"); ok {
+			return strings.TrimSpace(suffix)
+		}
+	}
 	return value
 }
 
