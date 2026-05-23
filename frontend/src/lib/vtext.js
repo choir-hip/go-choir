@@ -244,6 +244,18 @@ export async function submitAgentRevision(docId, payload = {}) {
   return createAgentRevision(docId, payload);
 }
 
+export async function cancelAgentRevision(docId) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/cancel`), {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Cancel VText revision failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export function openDocumentStream(docId, { onEvent, onError } = {}) {
   const source = new EventSource(withDesktopSelector(vtextPath(`/documents/${encodeURIComponent(docId)}/stream`)));
 

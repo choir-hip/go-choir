@@ -10,6 +10,7 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
+    cancelAgentRevision,
     createDocument,
     createRevision,
     ensureDocumentManifest,
@@ -65,6 +66,7 @@
   let publishedProposal = null;
   let publishedActionPending = false;
   let publishResult = null;
+  let cancelPending = false;
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
@@ -995,6 +997,28 @@
     }
   }
 
+  async function handleCancelRevision() {
+    if (!currentDoc || !agentPending || cancelPending) return;
+    cancelPending = true;
+    error = '';
+    saveStatus = 'Cancelling revision…';
+    try {
+      await cancelAgentRevision(currentDoc.doc_id);
+      agentPending = false;
+      pendingHeadRevisionId = '';
+      saveStatus = 'Revision cancelled. You can revise again from the current version.';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to cancel revision';
+      saveStatus = 'Cancel failed';
+    } finally {
+      cancelPending = false;
+    }
+  }
+
   async function handlePublishCurrent() {
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
     publishedActionPending = true;
@@ -1253,6 +1277,16 @@
           >
             {promptLabel}
           </button>
+          {#if agentPending}
+            <button
+              class="secondary-action danger"
+              data-vtext-cancel-revision
+              on:click={handleCancelRevision}
+              disabled={cancelPending}
+            >
+              {cancelPending ? 'Cancelling…' : 'Cancel'}
+            </button>
+          {/if}
           {#if isPublishedMode}
             <button
               class="secondary-action"
@@ -1477,6 +1511,11 @@
     font-size: 0.78rem;
     font-weight: 720;
     color: #c7d2fe;
+  }
+
+  .secondary-action.danger {
+    border-color: rgba(248, 113, 113, 0.34);
+    color: #fecaca;
   }
 
   .rendered-doc {

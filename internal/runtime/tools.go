@@ -328,65 +328,14 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	return results
 }
 
-// Some tool results carry a mandatory next tool as structured control data.
-// Execute those state transitions here so critical handoffs do not depend on
-// the model noticing a prose instruction in the returned JSON.
+// Historical versions executed a hidden request_worker_vm -> delegate_worker_vm
+// transition here. That made super block inside one tool loop while the worker
+// ran, which prevented supervision, VText clarification, cancellation, and
+// concurrent observation. Worker delegation is now explicit and asynchronous:
+// request_worker_vm leases, start_worker_delegation starts, and observe/finish
+// collect evidence. This hook intentionally does no worker handoff.
 func executeRequiredToolTransitions(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, results []types.ToolResult, emit EventEmitFunc) {
-	if registry == nil || len(calls) == 0 || len(results) != len(calls) {
-		return
-	}
-	for _, call := range calls {
-		if call.Name == "delegate_worker_vm" {
-			return
-		}
-	}
-	for i, call := range calls {
-		if call.Name != "request_worker_vm" || results[i].IsError {
-			continue
-		}
-		chained, ok := buildRequiredWorkerDelegation(ctx, results[i].Output)
-		if !ok {
-			continue
-		}
-		callID := strings.TrimSpace(call.ID)
-		if callID == "" {
-			callID = "request_worker_vm"
-		}
-		chainedCallID := callID + ":delegate_worker_vm"
-		invokedPayload, _ := json.Marshal(map[string]any{
-			"tool":      "delegate_worker_vm",
-			"call_id":   chainedCallID,
-			"arguments": chained.Args,
-			"chained_from": map[string]string{
-				"tool":    call.Name,
-				"call_id": callID,
-			},
-		})
-		emit(types.EventToolInvoked, "tool_call", invokedPayload)
-
-		output, err := registry.Execute(ctx, "delegate_worker_vm", chained.Args)
-		isError := false
-		if err != nil {
-			output = fmt.Sprintf("tool_error: %v", err)
-			isError = true
-		}
-		output = capToolOutput(output)
-		resultPayload, _ := json.Marshal(map[string]any{
-			"tool":       "delegate_worker_vm",
-			"call_id":    chainedCallID,
-			"is_error":   isError,
-			"output_len": len(output),
-			"output":     output,
-			"chained_from": map[string]string{
-				"tool":    call.Name,
-				"call_id": callID,
-			},
-		})
-		emit(types.EventToolResult, "tool_call", resultPayload)
-
-		results[i].Output = capToolOutput(augmentWorkerRequestWithDelegation(results[i].Output, output, isError))
-		return
-	}
+	return
 }
 
 func capToolOutput(output string) string {

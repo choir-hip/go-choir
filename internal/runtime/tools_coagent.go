@@ -3,9 +3,12 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -14,6 +17,7 @@ import (
 func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
 	tools := []Tool{
 		newCastAgentTool(rt),
+		newCastAgentUpdateTool(rt),
 		newWaitAgentTool(rt),
 		newCancelAgentTool(rt),
 	}
@@ -223,6 +227,9 @@ func newCastAgentTool(rt *Runtime) Tool {
 			if channelID == "" {
 				return "", fmt.Errorf("cast_agent target %s has no channel_id", targetAgentID)
 			}
+			if err := enforceSkipLevelCastRule(ctx, rt, targetAgentID, nil); err != nil {
+				return "", err
+			}
 			from := strings.TrimSpace(in.From)
 			if from == "" {
 				from = stringFromToolContext(ctx, toolCtxRunID)
@@ -243,6 +250,151 @@ func newCastAgentTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func newCastAgentUpdateTool(rt *Runtime) Tool {
+	type recipient struct {
+		AgentID string `json:"agent_id"`
+		RunID   string `json:"loop_id,omitempty"`
+	}
+	type args struct {
+		MessageClass string      `json:"message_class,omitempty"`
+		ChannelID    string      `json:"channel_id,omitempty"`
+		From         string      `json:"from,omitempty"`
+		Role         string      `json:"role,omitempty"`
+		Content      string      `json:"content"`
+		Recipients   []recipient `json:"recipients"`
+	}
+	return Tool{
+		Name:        "cast_agent_update",
+		Description: "Send one typed update to multiple agents with copy-aware delivery. Super-to-co-super directives must include the supervising vsuper in the same recipients list.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"message_class": map[string]any{"type": "string", "enum": []string{"phase_checkpoint", "evidence_ready", "blocker", "clarification_request", "directive", "cancel", "narrative_revision"}},
+			"channel_id":    map[string]any{"type": "string"},
+			"from":          map[string]any{"type": "string"},
+			"role":          map[string]any{"type": "string"},
+			"content":       map[string]any{"type": "string"},
+			"recipients": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"agent_id": map[string]any{"type": "string"},
+						"loop_id":  map[string]any{"type": "string"},
+					},
+					"required": []string{"agent_id"},
+				},
+			},
+		}, []string{"content", "recipients"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode cast_agent_update args: %w", err)
+			}
+			if len(in.Recipients) == 0 {
+				return "", fmt.Errorf("recipients must not be empty")
+			}
+			copyGroupID := uuid.NewString()
+			recipientIDs := make([]string, 0, len(in.Recipients))
+			for _, rec := range in.Recipients {
+				agentID := strings.TrimSpace(rec.AgentID)
+				if agentID == "" {
+					return "", fmt.Errorf("recipient agent_id must not be empty")
+				}
+				recipientIDs = append(recipientIDs, agentID)
+			}
+			for _, agentID := range recipientIDs {
+				if err := enforceSkipLevelCastRule(ctx, rt, agentID, recipientIDs); err != nil {
+					return "", err
+				}
+			}
+			from := strings.TrimSpace(in.From)
+			if from == "" {
+				from = stringFromToolContext(ctx, toolCtxRunID)
+			}
+			role := strings.TrimSpace(in.Role)
+			if role == "" {
+				role = stringFromToolContext(ctx, toolCtxRole)
+			}
+			messageClass := strings.TrimSpace(in.MessageClass)
+			if messageClass == "" {
+				messageClass = "phase_checkpoint"
+			}
+			content := fmt.Sprintf("[message_class=%s copy_group_id=%s]\n%s", messageClass, copyGroupID, strings.TrimSpace(in.Content))
+			cursors := make(map[string]uint64, len(in.Recipients))
+			for _, rec := range in.Recipients {
+				targetAgentID := strings.TrimSpace(rec.AgentID)
+				target, err := rt.store.GetAgent(ctx, targetAgentID)
+				if err != nil {
+					return "", fmt.Errorf("cast_agent_update target lookup %s: %w", targetAgentID, err)
+				}
+				channelID := strings.TrimSpace(in.ChannelID)
+				if channelID == "" {
+					channelID = strings.TrimSpace(target.ChannelID)
+				}
+				if channelID == "" {
+					return "", fmt.Errorf("cast_agent_update target %s has no channel_id", targetAgentID)
+				}
+				cursor, err := rt.ChannelCast(ctx, channelID, targetAgentID, strings.TrimSpace(rec.RunID), from, role, content)
+				if err != nil {
+					return "", err
+				}
+				cursors[targetAgentID] = cursor
+			}
+			return toolResultJSON(map[string]any{
+				"status":        "cast",
+				"copy_group_id": copyGroupID,
+				"message_class": messageClass,
+				"recipients":    recipientIDs,
+				"cursors":       cursors,
+			})
+		},
+	}
+}
+
+func enforceSkipLevelCastRule(ctx context.Context, rt *Runtime, targetAgentID string, copiedAgentIDs []string) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileSuper {
+		return nil
+	}
+	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	if ownerID == "" {
+		return nil
+	}
+	target, err := rt.store.GetAgent(ctx, targetAgentID)
+	if err != nil {
+		return fmt.Errorf("cast target lookup: %w", err)
+	}
+	if canonicalAgentProfile(target.Profile) != AgentProfileCoSuper {
+		return nil
+	}
+	run, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, targetAgentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("lookup co-super active run: %w", err)
+	}
+	parentRunID := strings.TrimSpace(run.ParentRunID)
+	if parentRunID == "" {
+		return nil
+	}
+	parent, err := rt.store.GetRun(ctx, parentRunID)
+	if err != nil {
+		return fmt.Errorf("lookup co-super supervisor run: %w", err)
+	}
+	if agentProfileForRun(&parent) != AgentProfileVSuper {
+		return nil
+	}
+	supervisorAgentID := agentIDForRun(&parent)
+	for _, copied := range copiedAgentIDs {
+		if strings.TrimSpace(copied) == supervisorAgentID {
+			return nil
+		}
+	}
+	return fmt.Errorf("private skip-level directive rejected: super -> co-super messages must copy supervising vsuper %s in the same cast_agent_update recipients", supervisorAgentID)
 }
 
 func newWaitAgentTool(rt *Runtime) Tool {

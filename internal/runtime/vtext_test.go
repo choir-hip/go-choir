@@ -372,6 +372,100 @@ func TestVTextAPICreateDocumentAuth(t *testing.T) {
 	}
 }
 
+func TestVTextCancelAgentRevisionCancelsRunGraphAndLeavesMutationResumable(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-cancel-agent",
+		OwnerID:   "user-1",
+		Title:     "Cancel Agent",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	parent := types.RunRecord{
+		RunID:        "run-cancel-parent",
+		AgentID:      "agent-super-cancel",
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunRunning,
+		Prompt:       "Revise document.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+		},
+	}
+	child := types.RunRecord{
+		RunID:        "run-cancel-child",
+		AgentID:      "agent-vsuper-cancel",
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunRunning,
+		Prompt:       "Background candidate.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+	}
+	for _, run := range []types.RunRecord{parent, child} {
+		if err := s.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:               doc.DocID,
+		RunID:               parent.RunID,
+		OwnerID:             "user-1",
+		State:               "pending",
+		ScheduledMessageSeq: 7,
+		CreatedAt:           now,
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+doc.DocID+"/cancel", nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextCancelAgentRevision(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var resp vtextCancelRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode cancel response: %v", err)
+	}
+	if resp.Status != "cancelled" || !resp.Resumable || !containsString(resp.CancelledRunIDs, parent.RunID) || !containsString(resp.CancelledRunIDs, child.RunID) {
+		t.Fatalf("unexpected cancel response: %+v", resp)
+	}
+	mutation, err := s.GetAgentMutationByRun(ctx, parent.RunID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation.State != "cancelled" {
+		t.Fatalf("mutation state = %q, want cancelled", mutation.State)
+	}
+	for _, runID := range []string{parent.RunID, child.RunID} {
+		run, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("get run %s: %v", runID, err)
+		}
+		if run.State != types.RunCancelled {
+			t.Fatalf("run %s state = %s, want cancelled", runID, run.State)
+		}
+	}
+}
+
 // ----- Document list -----
 
 func TestVTextAPIListDocuments(t *testing.T) {

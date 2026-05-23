@@ -90,6 +90,13 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			if profile != AgentProfileSuper && profile != AgentProfileCoSuper && profile != AgentProfileVSuper {
 				return "", fmt.Errorf("publish_app_change_package is only available to super, co-super, and vsuper agents")
 			}
+			if profile == AgentProfileCoSuper {
+				if rec := ctxRunRecord(ctx); rec != nil {
+					if slot := normalizeVSuperCoSuperSlot(metadataStringValue(rec.Metadata, runMetadataCoSuperSlot)); slot == "verifier" {
+						return "", fmt.Errorf("verifier co-super cannot publish_app_change_package; verifiers may write scratch tests/evidence and must report pass/fail to the implementation worker or vsuper")
+					}
+				}
+			}
 			if err := guardForegroundSuperMutation(ctx, "publish_app_change_package"); err != nil {
 				return "", err
 			}

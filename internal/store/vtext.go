@@ -1378,6 +1378,25 @@ func (s *Store) FailAgentMutation(ctx context.Context, runID string) error {
 	return nil
 }
 
+// CancelAgentMutation marks an agent mutation as cancelled by the owner while
+// preserving the current document head so the user can resume with a later
+// revision request.
+func (s *Store) CancelAgentMutation(ctx context.Context, runID string) error {
+	now := time.Now().UTC()
+	_, err := s.vtextHandle().ExecContext(ctx,
+		`UPDATE vtext_agent_mutations
+		    SET state = 'cancelled',
+		        completed_at = ?
+		  WHERE loop_id = ? AND state = 'pending'`,
+		now.Format(time.RFC3339Nano),
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("cancel vtext agent mutation: %w", err)
+	}
+	return nil
+}
+
 // CreateEvidence inserts a durable evidence record into the embedded Dolt
 // workspace. Evidence is owner-scoped and associated with the capturing agent.
 func (s *Store) CreateEvidence(ctx context.Context, rec types.EvidenceRecord) error {

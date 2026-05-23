@@ -758,6 +758,52 @@ func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) err
 	return rt.CancelRun(ctx, rec.RunID, ownerID)
 }
 
+// CancelRunGraph cancels a run and its direct/indirect child runs. It skips
+// terminal runs and preserves all existing event/package/evidence records.
+func (rt *Runtime) CancelRunGraph(ctx context.Context, runID, ownerID string) ([]string, error) {
+	seen := map[string]bool{}
+	var cancelled []string
+	var cancelOne func(string) error
+	cancelOne = func(id string) error {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			return nil
+		}
+		seen[id] = true
+		rec, err := rt.store.GetRun(ctx, id)
+		if err != nil {
+			return err
+		}
+		if rec.OwnerID != ownerID {
+			return store.ErrNotFound
+		}
+		children, err := rt.store.ListChildRuns(ctx, id, 200)
+		if err != nil {
+			return err
+		}
+		for _, child := range children {
+			if err := cancelOne(child.RunID); err != nil {
+				return err
+			}
+		}
+		if rec.State.Terminal() {
+			return nil
+		}
+		if err := rt.CancelRun(ctx, id, ownerID); err != nil {
+			if strings.Contains(err.Error(), "cannot cancel run in") {
+				return nil
+			}
+			return err
+		}
+		cancelled = append(cancelled, id)
+		return nil
+	}
+	if err := cancelOne(runID); err != nil {
+		return cancelled, err
+	}
+	return cancelled, nil
+}
+
 // ListRunsByOwner returns recent runs for the given owner, ordered by
 // creation time descending.
 func (rt *Runtime) ListRunsByOwner(ctx context.Context, ownerID string, limit int) ([]types.RunRecord, error) {
@@ -1791,7 +1837,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 			return
 		}
 		switch agentProfileForRun(&sourceRun) {
-		case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+		case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
 		default:
 			return
 		}

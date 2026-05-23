@@ -812,6 +812,81 @@ func (h *APIHandler) HandleInternalRunStatus(w http.ResponseWriter, r *http.Requ
 	writeAPIJSON(w, http.StatusOK, runStatusFromRecord(rec))
 }
 
+// HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
+// This is the service-to-service cancellation path used by async worker
+// delegation. It is not browser-public and requires the internal caller header.
+func (h *APIHandler) HandleInternalRunCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	if ownerID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
+		return
+	}
+	runID := internalRuntimeRunIDFromPath(strings.TrimSuffix(r.URL.Path, "/cancel"))
+	if runID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	if err := h.rt.CancelRun(r.Context(), runID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, runStatusResponse{RunID: runID, State: types.RunCancelled})
+}
+
+// HandleInternalChannelCast handles POST /internal/runtime/channel-casts.
+// It lets a supervising runtime redirect a worker-vsuper through the worker
+// runtime's durable inbox without exposing browser-public mutation routes.
+func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	var req internalChannelCastRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	req.OwnerID = strings.TrimSpace(req.OwnerID)
+	req.ChannelID = strings.TrimSpace(req.ChannelID)
+	req.Content = strings.TrimSpace(req.Content)
+	if req.OwnerID == "" || req.ChannelID == "" || req.Content == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id, channel_id, and content are required"})
+		return
+	}
+	runCtx := WithToolExecutionContext(r.Context(), &types.RunRecord{
+		RunID:        strings.TrimSpace(req.FromRunID),
+		AgentID:      firstNonEmpty(strings.TrimSpace(req.FromAgentID), strings.TrimSpace(req.From)),
+		ChannelID:    req.ChannelID,
+		AgentProfile: strings.TrimSpace(req.Role),
+		AgentRole:    strings.TrimSpace(req.Role),
+		OwnerID:      req.OwnerID,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: strings.TrimSpace(req.Role),
+			runMetadataAgentRole:    strings.TrimSpace(req.Role),
+		},
+	})
+	cursor, err := h.rt.ChannelCast(runCtx, req.ChannelID, strings.TrimSpace(req.ToAgentID), strings.TrimSpace(req.ToRunID), strings.TrimSpace(req.From), strings.TrimSpace(req.Role), req.Content)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, internalChannelCastResponse{Status: "cast", Cursor: cursor})
+}
+
 // HandleInternalRunEvents handles GET /internal/runtime/runs/{id}/events.
 func (h *APIHandler) HandleInternalRunEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1389,6 +1464,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
 	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
 	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
+	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/vtext/proposals", h.HandleInternalVTextProposalDelivery)
@@ -1411,6 +1487,10 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(r.URL.Path, "/events") {
 		h.HandleInternalRunEvents(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/cancel") {
+		h.HandleInternalRunCancel(w, r)
 		return
 	}
 	h.HandleInternalRunStatus(w, r)
@@ -1494,6 +1574,11 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(rest, "/revise") {
 			// /api/vtext/documents/{id}/revise
 			h.HandleVTextAgentRevision(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/cancel") {
+			// /api/vtext/documents/{id}/cancel
+			h.HandleVTextCancelAgentRevision(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/agent-revision") {

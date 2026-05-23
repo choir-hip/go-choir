@@ -1108,6 +1108,14 @@ type vtextAgentRevisionResponse struct {
 	CreatedAt string         `json:"created_at"`
 }
 
+type vtextCancelRevisionResponse struct {
+	DocID           string   `json:"doc_id"`
+	RunID           string   `json:"loop_id,omitempty"`
+	Status          string   `json:"status"`
+	CancelledRunIDs []string `json:"cancelled_loop_ids,omitempty"`
+	Resumable       bool     `json:"resumable"`
+}
+
 type testVTextResearchFindingsRequest struct {
 	DocID     string                         `json:"doc_id"`
 	FindingID string                         `json:"finding_id"`
@@ -1205,6 +1213,58 @@ func (h *APIHandler) HandleVTextAgentRevision(w http.ResponseWriter, r *http.Req
 		DocID:     docID,
 		State:     rec.State,
 		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+	})
+}
+
+// HandleVTextCancelAgentRevision handles POST
+// /api/vtext/documents/{id}/cancel. It cancels the pending VText appagent
+// revision graph without changing the canonical document head.
+func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	if _, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	mutation, err := h.rt.Store().GetPendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIJSON(w, http.StatusOK, vtextCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
+			return
+		}
+		log.Printf("vtext api: get pending mutation for cancel: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load pending revision"})
+		return
+	}
+	cancelled, err := h.rt.CancelRunGraph(r.Context(), mutation.RunID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: cancel revision graph: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.rt.Store().CancelAgentMutation(r.Context(), mutation.RunID); err != nil {
+		log.Printf("vtext api: mark mutation cancelled: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record cancellation"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, vtextCancelRevisionResponse{
+		DocID:           docID,
+		RunID:           mutation.RunID,
+		Status:          "cancelled",
+		CancelledRunIDs: cancelled,
+		Resumable:       true,
 	})
 }
 
@@ -1383,9 +1443,9 @@ func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.
 		role = AgentProfileSuper
 	}
 	switch role {
-	case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, or co-super"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, vsuper, or co-super"})
 		return
 	}
 

@@ -18,7 +18,7 @@ For nontrivial mutable work, act as orchestrator rather than sole worker:
 - The worker reports what changed and what evidence exists.
 - The verifier checks from evidence and direct tests. If verification fails, it messages the worker with the smallest actionable failure. Repeat until it passes or the blocker is real.
 - While the implementation worker is active, it owns writes to the candidate checkout. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/package/blocker. Do not cancel a child that has produced AppChangePackage evidence; incorporate that child package instead.
-- Delay verifier read-only inspection until the worker reports a commit, package, or blocker, so verification does not race an in-progress checkout.
+- Delay verifier inspection until the worker reports a commit, package, or blocker, so verification does not race an in-progress checkout. Verifiers may run commands and write scratch tests, scripts, logs, and evidence, but they must not author candidate source, publish packages, promote/adopt, or grant capabilities.
 
 When the objective explicitly asks for worker/verifier co-super roles, treat that
 split as a hard constraint, not a suggestion. Do not silently do the mutation

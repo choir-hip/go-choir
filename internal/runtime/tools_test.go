@@ -824,33 +824,25 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
+func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 	registry := NewToolRegistry()
-	var delegatedArgs struct {
-		WorkerSandboxURL string `json:"worker_sandbox_url"`
-		WorkerID         string `json:"worker_id"`
-		VMID             string `json:"vm_id"`
-		Profile          string `json:"profile"`
-		Objective        string `json:"objective"`
-	}
+	delegated := false
 	if err := registry.Register(Tool{
 		Name: "request_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"worker_requested","handle":{"purpose":"tiny UX copy edit","worker_id":"worker-1","vm_id":"vm-1","sandbox_url":"http://worker"},"next_required_tool":"delegate_worker_vm","next_required_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
+			return `{"status":"worker_requested","handle":{"purpose":"tiny UX copy edit","worker_id":"worker-1","vm_id":"vm-1","sandbox_url":"http://worker"},"next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
 		},
 	}); err != nil {
 		t.Fatalf("register request_worker_vm: %v", err)
 	}
 	if err := registry.Register(Tool{
-		Name: "delegate_worker_vm",
+		Name: "start_worker_delegation",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			if err := json.Unmarshal(args, &delegatedArgs); err != nil {
-				return "", err
-			}
+			delegated = true
 			return `{"status":"worker_run_completed","app_change_packages":[{"package_id":"package-worker-1","package_manifest_sha256":"manifest-sha"}]}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register delegate_worker_vm: %v", err)
+		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
@@ -879,41 +871,38 @@ func TestExecuteToolsChainsRequiredWorkerDelegation(t *testing.T) {
 	if len(results) != 1 || results[0].IsError {
 		t.Fatalf("results = %#v, want one successful request result", results)
 	}
-	if delegatedArgs.WorkerSandboxURL != "http://worker" || delegatedArgs.WorkerID != "worker-1" || delegatedArgs.VMID != "vm-1" {
-		t.Fatalf("delegated args = %#v, want worker handle args", delegatedArgs)
+	if delegated {
+		t.Fatalf("start_worker_delegation was hidden-chained; super must regain a model turn before starting worker work")
 	}
-	if delegatedArgs.Profile != AgentProfileVSuper {
-		t.Fatalf("delegated profile = %q, want %q", delegatedArgs.Profile, AgentProfileVSuper)
+	if !strings.Contains(results[0].Output, `"next_tool":"start_worker_delegation"`) ||
+		strings.Contains(results[0].Output, `"delegation_status"`) ||
+		strings.Contains(results[0].Output, `"package-worker-1"`) {
+		t.Fatalf("request output = %s, want lease-only async guidance", results[0].Output)
 	}
-	if !strings.Contains(delegatedArgs.Objective, "Full sweep objective goes here.") {
-		t.Fatalf("delegated objective = %q, want parent prompt", delegatedArgs.Objective)
-	}
-	if !strings.Contains(results[0].Output, `"delegation_status":"worker_run_completed"`) ||
-		!strings.Contains(results[0].Output, `"package-worker-1"`) {
-		t.Fatalf("request output = %s, want chained delegation evidence", results[0].Output)
-	}
-	if strings.Join(emitted, ",") != "request_worker_vm,delegate_worker_vm" {
-		t.Fatalf("emitted tool results = %#v, want request then delegate", emitted)
+	if strings.Join(emitted, ",") != "request_worker_vm" {
+		t.Fatalf("emitted tool results = %#v, want request only", emitted)
 	}
 }
 
-func TestExecuteToolsPropagatesChainedWorkerDelegationBlocker(t *testing.T) {
+func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T) {
 	registry := NewToolRegistry()
+	delegated := false
 	if err := registry.Register(Tool{
 		Name: "request_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"worker_requested","next_required_tool":"delegate_worker_vm","next_required_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
+			return `{"status":"worker_requested","next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
 		},
 	}); err != nil {
 		t.Fatalf("register request_worker_vm: %v", err)
 	}
 	if err := registry.Register(Tool{
-		Name: "delegate_worker_vm",
+		Name: "start_worker_delegation",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			delegated = true
 			return `{"status":"worker_run_incomplete","completion_blocker":"vsuper_completed_without_required_app_change_package","terminal_error":"worker vsuper completed without publish_app_change_package evidence","app_change_packages":[],"worker_event_summary":["tool.result delegate_worker_vm returned no package"]}`, nil
 		},
 	}); err != nil {
-		t.Fatalf("register delegate_worker_vm: %v", err)
+		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
 	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
@@ -932,17 +921,16 @@ func TestExecuteToolsPropagatesChainedWorkerDelegationBlocker(t *testing.T) {
 	if err := json.Unmarshal([]byte(results[0].Output), &output); err != nil {
 		t.Fatalf("decode request output: %v\n%s", err, results[0].Output)
 	}
-	if output["delegation_status"] != "worker_run_incomplete" {
-		t.Fatalf("delegation_status = %v, want worker_run_incomplete\noutput=%s", output["delegation_status"], results[0].Output)
+	if delegated {
+		t.Fatalf("start_worker_delegation was hidden-chained; blockers must come from explicit observe/finish calls")
 	}
-	if output["completion_blocker"] != "vsuper_completed_without_required_app_change_package" {
-		t.Fatalf("completion_blocker = %v, want required package blocker\noutput=%s", output["completion_blocker"], results[0].Output)
+	if output["next_tool"] != "start_worker_delegation" {
+		t.Fatalf("next_tool = %v, want start_worker_delegation\noutput=%s", output["next_tool"], results[0].Output)
 	}
-	if output["delegation_incomplete"] != true {
-		t.Fatalf("delegation_incomplete = %v, want true\noutput=%s", output["delegation_incomplete"], results[0].Output)
-	}
-	if _, ok := output["chained_delegation_output"].(map[string]any); !ok {
-		t.Fatalf("missing chained_delegation_output map\noutput=%s", results[0].Output)
+	for _, forbidden := range []string{"delegation_status", "completion_blocker", "delegation_incomplete", "chained_delegation_output"} {
+		if _, ok := output[forbidden]; ok {
+			t.Fatalf("hidden delegation field %q present in request output: %s", forbidden, results[0].Output)
+		}
 	}
 }
 

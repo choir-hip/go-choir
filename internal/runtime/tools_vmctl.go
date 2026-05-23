@@ -33,6 +33,11 @@ func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) err
 		newForkDesktopTool(rt),
 		newPublishDesktopTool(rt),
 		newRequestWorkerVMTool(rt),
+		newStartWorkerDelegationTool(rt, cwd),
+		newObserveWorkerDelegationTool(rt),
+		newRedirectWorkerDelegationTool(rt),
+		newFinishWorkerDelegationTool(rt),
+		newCancelWorkerDelegationTool(rt),
 		newDelegateWorkerVMTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
@@ -162,7 +167,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call delegate_worker_vm next using next_required_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
 			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large", "worker-playwright"}},
@@ -286,18 +291,19 @@ func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
 	result := map[string]any{
 		"status":              "worker_requested",
 		"handle":              handle,
-		"delegation_required": true,
-		"next_required_tool":  "delegate_worker_vm",
-		"next_instruction":    "Call delegate_worker_vm next with next_required_args plus the full execution objective; do not stop after leasing the worker VM.",
+		"delegation_required": false,
+		"next_tool":           "start_worker_delegation",
+		"next_instruction":    "Call start_worker_delegation next with start_args plus the full execution objective. It starts the worker run and returns immediately; use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
 	}
 	if handle != nil {
-		result["next_required_args"] = map[string]any{
+		result["start_args"] = map[string]any{
 			"worker_sandbox_url": handle.SandboxURL,
 			"worker_id":          handle.WorkerID,
 			"vm_id":              handle.VMID,
 			"profile":            AgentProfileVSuper,
 			"timeout_seconds":    int(defaultDelegateWorkerVMTimeout.Seconds()),
 		}
+		result["next_required_args"] = result["start_args"]
 	}
 	return result
 }
@@ -393,7 +399,7 @@ func (rt *Runtime) workerVMRequestInvalidatedByRunEvents(ctx context.Context, ru
 			IsError bool   `json:"is_error"`
 			Output  string `json:"output"`
 		}
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "delegate_worker_vm" {
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || (payload.Tool != "delegate_worker_vm" && payload.Tool != "start_worker_delegation") {
 			continue
 		}
 		output, ok := decodeWorkerToolOutput(payload.Output)
@@ -434,7 +440,7 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 			IsError bool   `json:"is_error"`
 			Output  string `json:"output"`
 		}
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "delegate_worker_vm" {
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || (payload.Tool != "delegate_worker_vm" && payload.Tool != "start_worker_delegation") {
 			continue
 		}
 		output, ok := decodeWorkerToolOutput(payload.Output)
@@ -458,6 +464,10 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 func delegateWorkerVMResultReusable(output map[string]any) bool {
 	status := stringMapValue(output, "status")
 	switch status {
+	case "worker_run_started",
+		"worker_observed",
+		"worker_run_active":
+		return true
 	case "worker_run_completed",
 		"worker_run_incomplete",
 		"worker_run_failed",
@@ -608,10 +618,548 @@ func normalizeRuntimeWorkerMachineClass(raw string) string {
 	}
 }
 
+func newStartWorkerDelegationTool(rt *Runtime, cwd string) Tool {
+	return newStartWorkerDelegationToolNamed(
+		"start_worker_delegation",
+		"Start a vsuper, co-super, or researcher run inside a leased worker VM and return immediately with an async worker run handle. Use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
+		rt,
+		cwd,
+	)
+}
+
 func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
+	return newStartWorkerDelegationToolNamed(
+		"delegate_worker_vm",
+		"Deprecated compatibility alias for start_worker_delegation. It no longer waits for terminal completion; it starts the worker run and returns immediately.",
+		rt,
+		cwd,
+	)
+}
+
+func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cwd string) Tool {
 	return Tool{
-		Name:        "delegate_worker_vm",
-		Description: "Start and monitor a vsuper, co-super, or researcher run inside a requested worker VM through internal runtime endpoints.",
+		Name:        name,
+		Description: description,
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_id":          map[string]any{"type": "string"},
+			"vm_id":              map[string]any{"type": "string"},
+			"objective":          map[string]any{"type": "string"},
+			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+			"timeout_seconds":    map[string]any{"type": "integer"},
+		}, []string{"worker_sandbox_url", "objective"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			return rt.startWorkerDelegation(ctx, cwd, raw)
+		},
+	}
+}
+
+func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw json.RawMessage) (string, error) {
+	if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+		return "", fmt.Errorf("start_worker_delegation is only available to super agents")
+	}
+	if rt == nil {
+		return "", fmt.Errorf("start_worker_delegation missing runtime")
+	}
+	var in delegateWorkerVMArgs
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return "", fmt.Errorf("decode start_worker_delegation args: %w", err)
+	}
+	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	if ownerID == "" {
+		return "", fmt.Errorf("start_worker_delegation missing owner context")
+	}
+	objective := strings.TrimSpace(in.Objective)
+	if objective == "" {
+		return "", fmt.Errorf("objective must not be empty")
+	}
+	delegatedObjective := objective
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = AgentProfileVSuper
+	}
+	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper && profile != AgentProfileResearcher {
+		return "", fmt.Errorf("profile must be %s, %s, or %s", AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher)
+	}
+	timeout := time.Duration(in.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = defaultDelegateWorkerVMTimeout
+	}
+	if timeout > maxDelegateWorkerVMTimeout {
+		timeout = maxDelegateWorkerVMTimeout
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	runID := stringFromToolContext(ctx, toolCtxRunID)
+	agentID := stringFromToolContext(ctx, toolCtxAgentID)
+	if cached, ok, err := rt.findExistingWorkerVMDelegation(ctx, runID, in, profile); err != nil {
+		return "", err
+	} else if ok {
+		return markToolResultDeduped(cached, "super_run_already_started_worker_delegation")
+	}
+	trajectoryID := ""
+	if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+		trajectoryID = metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
+	}
+	metadata := map[string]any{
+		runMetadataAgentProfile: profile,
+		runMetadataAgentRole:    profile,
+		"request_source":        "worker_vm_delegation",
+		"delegated_by_run_id":   runID,
+		"delegated_by_agent_id": agentID,
+		"delegated_by_profile":  AgentProfileSuper,
+		"worker_id":             strings.TrimSpace(in.WorkerID),
+		"worker_vm_id":          strings.TrimSpace(in.VMID),
+		"parent_sandbox_id":     stringFromToolContext(ctx, toolCtxSandboxID),
+	}
+	if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+		for _, key := range []string{"requested_by_profile", "requested_by_agent_id", "requested_by_run_id", runMetadataDesktopID} {
+			if value := metadataStringValue(rec.Metadata, key); value != "" {
+				metadata[key] = value
+			}
+		}
+	}
+	if channelID := stringFromToolContext(ctx, toolCtxChannelID); channelID != "" {
+		metadata[runMetadataChannelID] = channelID
+	}
+	if desktopID := stringFromToolContext(ctx, toolCtxDesktopID); desktopID != "" {
+		metadata[runMetadataDesktopID] = desktopID
+	}
+	if trajectoryID != "" {
+		metadata[runMetadataTrajectoryID] = trajectoryID
+	}
+
+	isolation, err := prepareSameRuntimeWorkerIsolation(ctx, cwd, in.WorkerSandboxURL, in.WorkerID, in.VMID, runID)
+	if err != nil {
+		return "", err
+	}
+	if isolation.Enabled {
+		metadata[runMetadataToolCWD] = isolation.WorktreePath
+		metadata[runMetadataWorkerIsolation] = isolation.Kind
+		metadata[runMetadataWorkerBaseSHA] = isolation.BaseSHA
+		metadata[runMetadataWorkerBranch] = isolation.Branch
+		metadata[runMetadataWorkerWorktree] = isolation.WorktreePath
+		objective = isolation.WorkerPrompt + "\n\n" + delegatedObjective
+	} else if bootstrap, err := prepareRemoteWorkerRepoBootstrap(ctx, cwd, in.WorkerSandboxURL, profile); err != nil {
+		return "", err
+	} else if bootstrap.Enabled {
+		metadata[runMetadataWorkerRepoBootstrap] = bootstrap.Kind
+		metadata[runMetadataWorkerRepoRemote] = bootstrap.RemoteURL
+		metadata[runMetadataWorkerRepoBaseSHA] = bootstrap.BaseSHA
+		objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
+	}
+	if profile == AgentProfileVSuper {
+		objective = workerVSuperDelegateContract(timeout) + "\n\n" + objective
+	}
+
+	startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
+		OwnerID:  ownerID,
+		Prompt:   objective,
+		Metadata: metadata,
+	})
+	if err != nil {
+		result := map[string]any{
+			"status":              "worker_run_submit_failed",
+			"worker_id":           strings.TrimSpace(in.WorkerID),
+			"worker_vm_id":        strings.TrimSpace(in.VMID),
+			"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+			"app_change_packages": []map[string]any{},
+			"event_count":         0,
+			"error":               err.Error(),
+			"terminal_error":      err.Error(),
+		}
+		result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
+		return toolResultJSON(result)
+	}
+	result := map[string]any{
+		"status":              "worker_run_started",
+		"worker_id":           strings.TrimSpace(in.WorkerID),
+		"worker_vm_id":        strings.TrimSpace(in.VMID),
+		"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+		"loop_id":             startResp.RunID,
+		"worker_run_id":       startResp.RunID,
+		"agent_id":            startResp.AgentID,
+		"channel_id":          startResp.ChannelID,
+		"profile":             firstNonEmpty(startResp.AgentProfile, profile),
+		"state":               startResp.State,
+		"result":              startResp.Result,
+		"error":               startResp.Error,
+		"timeout_seconds":     int(timeout.Seconds()),
+		"app_change_packages": []map[string]any{},
+		"next_tools":          []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
+	}
+	if isolation.Enabled {
+		result["worker_isolation"] = isolation.Kind
+		result["worker_worktree_path"] = isolation.WorktreePath
+		result["worker_branch"] = isolation.Branch
+		result["worker_base_sha"] = isolation.BaseSHA
+	}
+	if bootstrap := metadataStringValue(metadata, runMetadataWorkerRepoBootstrap); bootstrap != "" {
+		result["worker_repo_bootstrap"] = bootstrap
+		result["worker_repo_remote_url"] = metadataStringValue(metadata, runMetadataWorkerRepoRemote)
+		result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
+	}
+	return toolResultJSON(result)
+}
+
+func newObserveWorkerDelegationTool(rt *Runtime) Tool {
+	type args struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerID         string `json:"worker_id,omitempty"`
+		VMID             string `json:"vm_id,omitempty"`
+		WorkerRunID      string `json:"worker_run_id,omitempty"`
+		LoopID           string `json:"loop_id,omitempty"`
+		Profile          string `json:"profile,omitempty"`
+	}
+	return Tool{
+		Name:        "observe_worker_delegation",
+		Description: "Read bounded state and evidence for an async worker delegation without waiting for terminal completion.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_id":          map[string]any{"type": "string"},
+			"vm_id":              map[string]any{"type": "string"},
+			"worker_run_id":      map[string]any{"type": "string"},
+			"loop_id":            map[string]any{"type": "string"},
+			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+		}, []string{"worker_sandbox_url"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+				return "", fmt.Errorf("observe_worker_delegation is only available to super agents")
+			}
+			if rt == nil {
+				return "", fmt.Errorf("observe_worker_delegation missing runtime")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode observe_worker_delegation args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("observe_worker_delegation missing owner context")
+			}
+			workerRunID := firstNonEmpty(strings.TrimSpace(in.WorkerRunID), strings.TrimSpace(in.LoopID))
+			if workerRunID == "" {
+				return "", fmt.Errorf("worker_run_id or loop_id is required")
+			}
+			client := &http.Client{Timeout: 10 * time.Second}
+			status, statusErr := fetchInternalWorkerRunStatus(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+			result := map[string]any{
+				"status":              "worker_observed",
+				"worker_id":           strings.TrimSpace(in.WorkerID),
+				"worker_vm_id":        strings.TrimSpace(in.VMID),
+				"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+				"loop_id":             workerRunID,
+				"worker_run_id":       workerRunID,
+				"app_change_packages": []map[string]any{},
+			}
+			if profile := canonicalAgentProfile(in.Profile); profile != "" {
+				result["profile"] = profile
+			}
+			if statusErr != nil {
+				result["status"] = "worker_observe_status_failed"
+				result["error"] = statusErr.Error()
+				return toolResultJSON(result)
+			}
+			result["agent_id"] = status.AgentID
+			result["profile"] = firstNonEmpty(status.AgentProfile, stringMapValue(result, "profile"))
+			result["state"] = status.State
+			result["result"] = status.Result
+			result["error"] = status.Error
+			rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, status.State.Terminal() || status.State == types.RunBlocked, result)
+			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_observe"); err != nil {
+				result["worker_update_error"] = err.Error()
+			} else {
+				result["worker_update_checkpoint"] = "submitted_or_existing"
+			}
+			return toolResultJSON(result)
+		},
+	}
+}
+
+func newFinishWorkerDelegationTool(rt *Runtime) Tool {
+	type args struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerID         string `json:"worker_id,omitempty"`
+		VMID             string `json:"vm_id,omitempty"`
+		WorkerRunID      string `json:"worker_run_id,omitempty"`
+		LoopID           string `json:"loop_id,omitempty"`
+		Profile          string `json:"profile,omitempty"`
+		Objective        string `json:"objective,omitempty"`
+		TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
+	}
+	return Tool{
+		Name:        "finish_worker_delegation",
+		Description: "Collect terminal evidence for an async worker delegation. If the worker is still active, returns active state instead of blocking.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_id":          map[string]any{"type": "string"},
+			"vm_id":              map[string]any{"type": "string"},
+			"worker_run_id":      map[string]any{"type": "string"},
+			"loop_id":            map[string]any{"type": "string"},
+			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+			"objective":          map[string]any{"type": "string"},
+			"timeout_seconds":    map[string]any{"type": "integer"},
+		}, []string{"worker_sandbox_url"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+				return "", fmt.Errorf("finish_worker_delegation is only available to super agents")
+			}
+			if rt == nil {
+				return "", fmt.Errorf("finish_worker_delegation missing runtime")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode finish_worker_delegation args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("finish_worker_delegation missing owner context")
+			}
+			workerRunID := firstNonEmpty(strings.TrimSpace(in.WorkerRunID), strings.TrimSpace(in.LoopID))
+			if workerRunID == "" {
+				return "", fmt.Errorf("worker_run_id or loop_id is required")
+			}
+			client := &http.Client{Timeout: 15 * time.Second}
+			status, err := fetchInternalWorkerRunStatus(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+			if err != nil {
+				return toolResultJSON(map[string]any{
+					"status":              "worker_finish_status_failed",
+					"worker_id":           strings.TrimSpace(in.WorkerID),
+					"worker_vm_id":        strings.TrimSpace(in.VMID),
+					"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+					"loop_id":             workerRunID,
+					"worker_run_id":       workerRunID,
+					"app_change_packages": []map[string]any{},
+					"error":               err.Error(),
+					"terminal_error":      err.Error(),
+				})
+			}
+			result := map[string]any{
+				"status":              delegateWorkerRunStatus(status.State),
+				"worker_id":           firstNonEmpty(strings.TrimSpace(in.WorkerID), metadataStringValue(status.Metadata, "worker_id")),
+				"worker_vm_id":        firstNonEmpty(strings.TrimSpace(in.VMID), metadataStringValue(status.Metadata, "worker_vm_id")),
+				"worker_sandbox_url":  strings.TrimSpace(in.WorkerSandboxURL),
+				"loop_id":             workerRunID,
+				"worker_run_id":       workerRunID,
+				"agent_id":            status.AgentID,
+				"profile":             firstNonEmpty(status.AgentProfile, canonicalAgentProfile(in.Profile)),
+				"state":               status.State,
+				"result":              status.Result,
+				"error":               status.Error,
+				"app_change_packages": []map[string]any{},
+			}
+			if isolation := metadataStringValue(status.Metadata, runMetadataWorkerIsolation); isolation != "" {
+				result["worker_isolation"] = isolation
+				result["worker_worktree_path"] = metadataStringValue(status.Metadata, runMetadataWorkerWorktree)
+				result["worker_branch"] = metadataStringValue(status.Metadata, runMetadataWorkerBranch)
+				result["worker_base_sha"] = metadataStringValue(status.Metadata, runMetadataWorkerBaseSHA)
+			}
+			if bootstrap := metadataStringValue(status.Metadata, runMetadataWorkerRepoBootstrap); bootstrap != "" {
+				result["worker_repo_bootstrap"] = bootstrap
+				result["worker_repo_remote_url"] = metadataStringValue(status.Metadata, runMetadataWorkerRepoRemote)
+				result["worker_repo_base_sha"] = metadataStringValue(status.Metadata, runMetadataWorkerRepoBaseSHA)
+			}
+			if !status.State.Terminal() && status.State != types.RunBlocked {
+				result["status"] = "worker_run_active"
+				result["finish_ready"] = false
+				return toolResultJSON(result)
+			}
+			evidence, evidenceErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
+			if evidenceErr != nil {
+				result["worker_event_error"] = evidenceErr.Error()
+			} else {
+				profile := firstNonEmpty(stringMapValue(result, "profile"), canonicalAgentProfile(in.Profile))
+				timeout := time.Duration(in.TimeoutSeconds) * time.Second
+				if timeout <= 0 {
+					timeout = defaultDelegateWorkerVMTimeout
+				}
+				if timeout > maxDelegateWorkerVMTimeout {
+					timeout = maxDelegateWorkerVMTimeout
+				}
+				if profile == AgentProfileVSuper && status.State == types.RunCompleted {
+					evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, evidence, timeout)
+				}
+				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, result)
+			}
+			if status.State != types.RunCompleted {
+				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", workerRunID, status.State, strings.TrimSpace(status.Error)))
+			}
+			if status.State == types.RunCompleted && delegateRequiresAppChangePackage(stringMapValue(result, "profile"), in.Objective) && len(result["app_change_packages"].([]map[string]any)) == 0 {
+				result["status"] = "worker_run_incomplete"
+				result["completion_blocker"] = "vsuper_completed_without_required_app_change_package"
+				result["terminal_error"] = "worker vsuper completed a package-required objective without publish_app_change_package evidence"
+			}
+			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish"); err != nil {
+				result["worker_update_error"] = err.Error()
+			} else {
+				result["worker_update_checkpoint"] = "submitted_or_existing"
+			}
+			return toolResultJSON(result)
+		},
+	}
+}
+
+func newRedirectWorkerDelegationTool(rt *Runtime) Tool {
+	type args struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerRunID      string `json:"worker_run_id,omitempty"`
+		LoopID           string `json:"loop_id,omitempty"`
+		ChannelID        string `json:"channel_id"`
+		TargetAgentID    string `json:"target_agent_id"`
+		Message          string `json:"message"`
+		MessageClass     string `json:"message_class,omitempty"`
+	}
+	return Tool{
+		Name:        "redirect_worker_delegation",
+		Description: "Send a super-authored redirect directive to the worker vsuper's coordination channel without blocking. Direct worker control should target vsuper; vsuper remains responsible for coordinating its co-supers.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_run_id":      map[string]any{"type": "string"},
+			"loop_id":            map[string]any{"type": "string"},
+			"channel_id":         map[string]any{"type": "string"},
+			"target_agent_id":    map[string]any{"type": "string"},
+			"message":            map[string]any{"type": "string"},
+			"message_class":      map[string]any{"type": "string"},
+		}, []string{"worker_sandbox_url", "channel_id", "target_agent_id", "message"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+				return "", fmt.Errorf("redirect_worker_delegation is only available to super agents")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode redirect_worker_delegation args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("redirect_worker_delegation missing owner context")
+			}
+			workerRunID := firstNonEmpty(strings.TrimSpace(in.WorkerRunID), strings.TrimSpace(in.LoopID))
+			messageClass := strings.TrimSpace(in.MessageClass)
+			if messageClass == "" {
+				messageClass = "directive"
+			}
+			content := fmt.Sprintf("[message_class=%s]\n%s", messageClass, strings.TrimSpace(in.Message))
+			client := &http.Client{Timeout: 10 * time.Second}
+			cursor, err := postInternalWorkerChannelCast(ctx, client, in.WorkerSandboxURL, internalChannelCastRequest{
+				OwnerID:     ownerID,
+				ChannelID:   strings.TrimSpace(in.ChannelID),
+				ToAgentID:   strings.TrimSpace(in.TargetAgentID),
+				ToRunID:     workerRunID,
+				FromAgentID: firstNonEmpty(stringFromToolContext(ctx, toolCtxAgentID), AgentProfileSuper),
+				FromRunID:   stringFromToolContext(ctx, toolCtxRunID),
+				From:        firstNonEmpty(stringFromToolContext(ctx, toolCtxAgentID), AgentProfileSuper),
+				Role:        AgentProfileSuper,
+				Content:     content,
+			})
+			if err != nil {
+				return "", err
+			}
+			return toolResultJSON(map[string]any{
+				"status":          "worker_redirect_sent",
+				"worker_run_id":   workerRunID,
+				"loop_id":         workerRunID,
+				"target_agent_id": strings.TrimSpace(in.TargetAgentID),
+				"channel_id":      strings.TrimSpace(in.ChannelID),
+				"cursor":          cursor,
+				"message_class":   messageClass,
+			})
+		},
+	}
+}
+
+func (rt *Runtime) applyAsyncWorkerEvidence(ctx context.Context, client *http.Client, workerSandboxURL, ownerID, workerRunID string, mirrorTerminalPackages bool, result map[string]any) {
+	evidence, evidenceErr := fetchWorkerRunEvidence(ctx, client, workerSandboxURL, ownerID, workerRunID)
+	if evidenceErr != nil {
+		result["worker_event_error"] = evidenceErr.Error()
+		return
+	}
+	rt.applyWorkerEvidenceToResult(ctx, client, workerSandboxURL, ownerID, evidence, mirrorTerminalPackages, result)
+}
+
+func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http.Client, workerSandboxURL, ownerID string, evidence workerRunEvidence, mirrorTerminalPackages bool, result map[string]any) {
+	applyWorkerRunEvidence(result, evidence)
+	if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
+		result["worker_event_summary"] = summary
+	}
+	if profiles := collectWorkerSpawnProfiles(evidence.Events); len(profiles) > 0 {
+		result["worker_spawned_profiles"] = profiles
+	}
+	if count := countWorkerChannelMessages(evidence.Events); count > 0 {
+		result["worker_channel_message_count"] = count
+	}
+	packages := collectAppChangePackageResults(evidence.Events)
+	if len(packages) > 0 {
+		if mirrorTerminalPackages && rt != nil {
+			var mirrorErrors []string
+			packages, mirrorErrors = rt.mirrorWorkerAppChangePackages(ctx, client, workerSandboxURL, ownerID, packages)
+			annotateWorkerPackageMirrorResult(result, packages, mirrorErrors)
+		} else {
+			result["reviewable_package_observed"] = true
+		}
+		result["app_change_packages"] = packages
+	}
+	if mirrorTerminalPackages && rt != nil {
+		if stringMapValue(result, "profile") == AgentProfileVSuper && vSuperDelegateIncomplete(evidence, packages) {
+			result["status"] = "worker_run_incomplete"
+			result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
+			result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_worker_update evidence"
+		}
+	}
+}
+
+func newCancelWorkerDelegationTool(rt *Runtime) Tool {
+	type args struct {
+		WorkerSandboxURL string `json:"worker_sandbox_url"`
+		WorkerRunID      string `json:"worker_run_id,omitempty"`
+		LoopID           string `json:"loop_id,omitempty"`
+		Reason           string `json:"reason,omitempty"`
+	}
+	return Tool{
+		Name:        "cancel_worker_delegation",
+		Description: "Request cancellation of an async worker delegation. The worker runtime records cancellation and preserves durable evidence already produced.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"worker_sandbox_url": map[string]any{"type": "string"},
+			"worker_run_id":      map[string]any{"type": "string"},
+			"loop_id":            map[string]any{"type": "string"},
+			"reason":             map[string]any{"type": "string"},
+		}, []string{"worker_sandbox_url"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+				return "", fmt.Errorf("cancel_worker_delegation is only available to super agents")
+			}
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode cancel_worker_delegation args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("cancel_worker_delegation missing owner context")
+			}
+			workerRunID := firstNonEmpty(strings.TrimSpace(in.WorkerRunID), strings.TrimSpace(in.LoopID))
+			if workerRunID == "" {
+				return "", fmt.Errorf("worker_run_id or loop_id is required")
+			}
+			client := &http.Client{Timeout: 10 * time.Second}
+			if err := cancelInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID); err != nil {
+				return "", err
+			}
+			return toolResultJSON(map[string]any{
+				"status":  "cancel_requested",
+				"loop_id": workerRunID,
+				"reason":  strings.TrimSpace(in.Reason),
+			})
+		},
+	}
+}
+
+func newLegacySynchronousDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
+	return Tool{
+		Name:        "delegate_worker_vm_sync_legacy_disabled",
+		Description: "Disabled legacy synchronous worker delegation implementation retained only for rollback reference; do not register.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},
@@ -1551,6 +2099,83 @@ func fetchInternalWorkerRunStatus(ctx context.Context, client *http.Client, base
 		return nil, fmt.Errorf("decode worker run status response: %w", err)
 	}
 	return &out, nil
+}
+
+func cancelInternalWorkerRun(ctx context.Context, client *http.Client, baseURL, ownerID, runID string) error {
+	values := url.Values{"owner_id": []string{ownerID}}
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/runs/"+url.PathEscape(runID)+"/cancel", values)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("cancel_worker_delegation: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		return fmt.Errorf("cancel_worker_delegation failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+	return nil
+}
+
+type internalChannelCastRequest struct {
+	OwnerID     string `json:"owner_id"`
+	ChannelID   string `json:"channel_id"`
+	ToAgentID   string `json:"to_agent_id,omitempty"`
+	ToRunID     string `json:"to_loop_id,omitempty"`
+	FromAgentID string `json:"from_agent_id,omitempty"`
+	FromRunID   string `json:"from_loop_id,omitempty"`
+	From        string `json:"from,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Content     string `json:"content"`
+}
+
+type internalChannelCastResponse struct {
+	Status string `json:"status"`
+	Cursor uint64 `json:"cursor"`
+}
+
+func postInternalWorkerChannelCast(ctx context.Context, client *http.Client, baseURL string, reqBody internalChannelCastRequest) (uint64, error) {
+	endpoint, err := workerRuntimeURL(baseURL, "/internal/runtime/channel-casts", nil)
+	if err != nil {
+		return 0, err
+	}
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("redirect_worker_delegation channel cast: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("redirect_worker_delegation channel cast failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var out internalChannelCastResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, fmt.Errorf("decode redirect_worker_delegation response: %w", err)
+	}
+	return out.Cursor, nil
 }
 
 func followWorkerChildRuns(ctx context.Context, client *http.Client, baseURL, ownerID, rootRunID string, evidence workerRunEvidence, timeout time.Duration) workerRunEvidence {

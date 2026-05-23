@@ -75,12 +75,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -97,7 +97,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -314,6 +314,123 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	}
 	if len(deliveries) == 1 && deliveries[0].Content != "please inspect the runtime tool wiring" {
 		t.Fatalf("unexpected delivery content: %+v", deliveries[0])
+	}
+}
+
+func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	superRun := types.RunRecord{
+		RunID:        "super-skip-level",
+		AgentID:      "agent-super",
+		ChannelID:    "skip-level-channel",
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate without private skip-level directives.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+		},
+	}
+	vsuperRun := types.RunRecord{
+		RunID:        "vsuper-skip-level",
+		AgentID:      "agent-vsuper-skip",
+		ChannelID:    "skip-level-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Supervise co-super.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+	}
+	coRun := types.RunRecord{
+		RunID:        "cosuper-skip-level",
+		AgentID:      "agent-cosuper-skip",
+		ChannelID:    "skip-level-channel",
+		ParentRunID:  vsuperRun.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Implement under vsuper.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+		},
+	}
+	for _, agent := range []types.AgentRecord{
+		{AgentID: vsuperRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: AgentProfileVSuper, Role: AgentProfileVSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
+		{AgentID: coRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: AgentProfileCoSuper, Role: AgentProfileCoSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := s.UpsertAgent(ctx, agent); err != nil {
+			t.Fatalf("upsert agent: %v", err)
+		}
+	}
+	for _, run := range []types.RunRecord{superRun, vsuperRun, coRun} {
+		if err := s.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	toolCtx := WithToolExecutionContext(ctx, &superRun)
+	_, err := registry.Execute(toolCtx, "cast_agent", json.RawMessage(`{
+		"agent_id":"agent-cosuper-skip",
+		"content":"change direction privately"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "skip-level directive") {
+		t.Fatalf("cast_agent error = %v, want skip-level directive rejection", err)
+	}
+
+	raw, err := registry.Execute(toolCtx, "cast_agent_update", json.RawMessage(`{
+		"message_class":"directive",
+		"content":"adjust the verifier scope with vsuper copied",
+		"recipients":[
+			{"agent_id":"agent-cosuper-skip","loop_id":"cosuper-skip-level"},
+			{"agent_id":"agent-vsuper-skip","loop_id":"vsuper-skip-level"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("cast_agent_update copied directive: %v", err)
+	}
+	var resp struct {
+		CopyGroupID string   `json:"copy_group_id"`
+		Recipients  []string `json:"recipients"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode cast_agent_update: %v\n%s", err, raw)
+	}
+	if resp.CopyGroupID == "" || len(resp.Recipients) != 2 {
+		t.Fatalf("copy-aware response incomplete: %+v", resp)
+	}
+	messages, _, err := rt.ChannelRead("skip-level-channel", 0)
+	if err != nil {
+		t.Fatalf("read channel: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("messages = %d, want copied directive to both agents: %+v", len(messages), messages)
+	}
+	for _, msg := range messages {
+		if !strings.Contains(msg.Content, "copy_group_id="+resp.CopyGroupID) {
+			t.Fatalf("message missing copy group %q: %+v", resp.CopyGroupID, msg)
+		}
 	}
 }
 
@@ -549,6 +666,102 @@ func TestChannelCastDedupesPendingAddressedDelivery(t *testing.T) {
 	}
 	if len(messages) != 2 {
 		t.Fatalf("channel messages = %d, want audit log to retain both casts", len(messages))
+	}
+}
+
+func TestRedirectWorkerDelegationPostsSuperAuthoredWorkerInbox(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	workerDir := t.TempDir()
+	workerDB := filepath.Join(workerDir, "worker.db")
+	workerStore, err := store.Open(workerDB)
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerRT := New(Config{
+		SandboxID:           "sandbox-worker-redirect",
+		StorePath:           workerDB,
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerStore, events.NewEventBus(), NewStubProvider(10*time.Millisecond))
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerStore.Close()
+	})
+	workerHandler := NewAPIHandler(workerRT)
+	workerMux := http.NewServeMux()
+	workerMux.HandleFunc("/internal/runtime/channel-casts", workerHandler.HandleInternalChannelCast)
+	workerSrv := httptest.NewServer(workerMux)
+	t.Cleanup(workerSrv.Close)
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "supervise worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      "super:primary",
+		runMetadataChannelID:    "doc-super",
+		runMetadataTrajectoryID: "trajectory-super",
+	})
+	if err != nil {
+		t.Fatalf("start super run: %v", err)
+	}
+
+	args, err := json.Marshal(map[string]any{
+		"worker_sandbox_url": workerSrv.URL,
+		"worker_run_id":      "worker-run-redirect",
+		"channel_id":         "worker-doc",
+		"target_agent_id":    "vsuper:worker",
+		"message_class":      "redirection",
+		"message":            "Narrow scope to one human-readable VText checkpoint before continuing.",
+	})
+	if err != nil {
+		t.Fatalf("marshal redirect args: %v", err)
+	}
+	raw, err := activeRT.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "redirect_worker_delegation", args)
+	if err != nil {
+		t.Fatalf("redirect_worker_delegation: %v", err)
+	}
+	var result struct {
+		Status        string `json:"status"`
+		WorkerRunID   string `json:"worker_run_id"`
+		TargetAgentID string `json:"target_agent_id"`
+		Cursor        uint64 `json:"cursor"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode redirect result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_redirect_sent" || result.WorkerRunID != "worker-run-redirect" || result.TargetAgentID != "vsuper:worker" || result.Cursor == 0 {
+		t.Fatalf("unexpected redirect result: %+v\nraw=%s", result, raw)
+	}
+
+	messages, err := workerStore.ListChannelMessages(context.Background(), "user-alice", "worker-doc", 0, 10)
+	if err != nil {
+		t.Fatalf("list worker channel messages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("worker channel messages = %d, want 1: %+v", len(messages), messages)
+	}
+	msg := messages[0]
+	if msg.FromAgentID != "super:primary" || msg.FromRunID != superRun.RunID {
+		t.Fatalf("message source = (%q,%q), want super source (%q,%q)", msg.FromAgentID, msg.FromRunID, "super:primary", superRun.RunID)
+	}
+	if msg.ToAgentID != "vsuper:worker" || msg.ToRunID != "worker-run-redirect" {
+		t.Fatalf("message target = (%q,%q), want worker vsuper target", msg.ToAgentID, msg.ToRunID)
+	}
+	if msg.Role != AgentProfileSuper || !strings.Contains(msg.Content, "[message_class=redirection]") {
+		t.Fatalf("message content/role not typed super redirect: %+v", msg)
+	}
+
+	deliveries, err := workerStore.ListPendingInboxDeliveries(context.Background(), "user-alice", "vsuper:worker", 10)
+	if err != nil {
+		t.Fatalf("list worker inbox deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("pending deliveries = %d, want 1: %+v", len(deliveries), deliveries)
+	}
+	if deliveries[0].FromAgentID != "super:primary" || deliveries[0].FromRunID != superRun.RunID {
+		t.Fatalf("delivery source = (%q,%q), want super source", deliveries[0].FromAgentID, deliveries[0].FromRunID)
 	}
 }
 
@@ -1109,7 +1322,8 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	var resp struct {
 		Status             string         `json:"status"`
 		DelegationRequired bool           `json:"delegation_required"`
-		NextRequiredTool   string         `json:"next_required_tool"`
+		NextTool           string         `json:"next_tool"`
+		StartArgs          map[string]any `json:"start_args"`
 		NextRequiredArgs   map[string]any `json:"next_required_args"`
 		Handle             struct {
 			Kind          string `json:"kind"`
@@ -1131,8 +1345,8 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	if resp.Status != "worker_requested" {
 		t.Fatalf("status = %q, want worker_requested", resp.Status)
 	}
-	if !resp.DelegationRequired || resp.NextRequiredTool != "delegate_worker_vm" {
-		t.Fatalf("delegation guidance missing: %+v", resp)
+	if resp.DelegationRequired || resp.NextTool != "start_worker_delegation" {
+		t.Fatalf("async delegation guidance missing: %+v", resp)
 	}
 	if resp.Handle.Kind != "worker" {
 		t.Fatalf("kind = %q, want worker", resp.Handle.Kind)
@@ -1161,11 +1375,16 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	if resp.Handle.SandboxURL != "http://sandbox.test" {
 		t.Fatalf("sandbox_url = %q, want %q", resp.Handle.SandboxURL, "http://sandbox.test")
 	}
-	if resp.NextRequiredArgs["worker_sandbox_url"] != resp.Handle.SandboxURL || resp.NextRequiredArgs["worker_id"] != resp.Handle.WorkerID || resp.NextRequiredArgs["vm_id"] != resp.Handle.VMID {
-		t.Fatalf("next_required_args do not match handle: args=%+v handle=%+v", resp.NextRequiredArgs, resp.Handle)
+	if resp.StartArgs["worker_sandbox_url"] != resp.Handle.SandboxURL || resp.StartArgs["worker_id"] != resp.Handle.WorkerID || resp.StartArgs["vm_id"] != resp.Handle.VMID {
+		t.Fatalf("start_args do not match handle: args=%+v handle=%+v", resp.StartArgs, resp.Handle)
 	}
-	if timeout, _ := resp.NextRequiredArgs["timeout_seconds"].(float64); int(timeout) != int(defaultDelegateWorkerVMTimeout.Seconds()) {
-		t.Fatalf("timeout_seconds = %v, want %d", resp.NextRequiredArgs["timeout_seconds"], int(defaultDelegateWorkerVMTimeout.Seconds()))
+	if timeout, _ := resp.StartArgs["timeout_seconds"].(float64); int(timeout) != int(defaultDelegateWorkerVMTimeout.Seconds()) {
+		t.Fatalf("timeout_seconds = %v, want %d", resp.StartArgs["timeout_seconds"], int(defaultDelegateWorkerVMTimeout.Seconds()))
+	}
+	if resp.NextRequiredArgs["worker_sandbox_url"] != resp.StartArgs["worker_sandbox_url"] ||
+		resp.NextRequiredArgs["worker_id"] != resp.StartArgs["worker_id"] ||
+		resp.NextRequiredArgs["vm_id"] != resp.StartArgs["vm_id"] {
+		t.Fatalf("compat next_required_args should mirror start_args: next=%+v start=%+v", resp.NextRequiredArgs, resp.StartArgs)
 	}
 	if resp.Handle.State != "active" {
 		t.Fatalf("state = %q, want active", resp.Handle.State)
@@ -1398,7 +1617,7 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 		t.Fatalf("first worker handle incomplete: %s", firstRaw)
 	}
 
-	delegateRaw, err := superRegistry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	delegateRaw, err := executeWorkerDelegationUntilSettled(t, superRegistry, toolCtx, json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": %q,
 		"vm_id": %q,
@@ -1495,7 +1714,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("decode delegate_worker_vm dedupe: %v\n%s", err, raw)
 	}
-	if !got.Deduped || got.DedupeReason != "super_run_already_delegated_worker_vm" {
+	if !got.Deduped || got.DedupeReason != "super_run_already_started_worker_delegation" {
 		t.Fatalf("dedupe fields = %+v, raw=%s", got, raw)
 	}
 	if got.Status != "worker_run_completed" || got.LoopID != "worker-run-existing" {
@@ -2123,6 +2342,38 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 	}
 }
 
+func TestVerifierCoSuperCannotPublishAppChangePackage(t *testing.T) {
+	rt, _, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	run := &types.RunRecord{
+		RunID:        "verifier-publish-run",
+		AgentID:      "agent-verifier",
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Verify candidate evidence.",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "verifier",
+		},
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	_, err := registry.Execute(WithToolExecutionContext(context.Background(), run), "publish_app_change_package", json.RawMessage(`{
+		"repo_path":".",
+		"base_sha":"base"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "verifier co-super cannot publish_app_change_package") {
+		t.Fatalf("publish_app_change_package error = %v, want verifier authority guard", err)
+	}
+}
+
 func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, tool string, output map[string]any) {
 	t.Helper()
 	outputJSON, _ := json.Marshal(output)
@@ -2145,6 +2396,63 @@ func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, 
 	}); err != nil {
 		t.Fatalf("append %s result: %v", tool, err)
 	}
+}
+
+func executeWorkerDelegationUntilSettled(t *testing.T, registry *ToolRegistry, ctx context.Context, raw json.RawMessage) (string, error) {
+	t.Helper()
+	startRaw, err := registry.Execute(ctx, "delegate_worker_vm", raw)
+	if err != nil {
+		return "", err
+	}
+	var start map[string]any
+	if err := json.Unmarshal([]byte(startRaw), &start); err != nil {
+		t.Fatalf("decode async worker start: %v\n%s", err, startRaw)
+	}
+	if stringMapValue(start, "status") != "worker_run_started" {
+		return startRaw, nil
+	}
+	var original delegateWorkerVMArgs
+	_ = json.Unmarshal(raw, &original)
+	workerRunID := firstNonEmpty(stringMapValue(start, "worker_run_id"), stringMapValue(start, "loop_id"))
+	workerSandboxURL := firstNonEmpty(stringMapValue(start, "worker_sandbox_url"), original.WorkerSandboxURL)
+	finishArgs := map[string]any{
+		"worker_sandbox_url": workerSandboxURL,
+		"worker_run_id":      workerRunID,
+		"worker_id":          firstNonEmpty(stringMapValue(start, "worker_id"), original.WorkerID),
+		"vm_id":              firstNonEmpty(stringMapValue(start, "worker_vm_id"), original.VMID),
+		"profile":            firstNonEmpty(stringMapValue(start, "profile"), original.Profile),
+		"objective":          original.Objective,
+		"timeout_seconds":    original.TimeoutSeconds,
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	var lastRaw string
+	for {
+		finishRaw, err := registry.Execute(ctx, "finish_worker_delegation", mustJSON(t, finishArgs))
+		if err != nil {
+			return "", err
+		}
+		lastRaw = finishRaw
+		var finish map[string]any
+		if err := json.Unmarshal([]byte(finishRaw), &finish); err != nil {
+			t.Fatalf("decode async worker finish: %v\n%s", err, finishRaw)
+		}
+		if stringMapValue(finish, "status") != "worker_run_active" {
+			return finishRaw, nil
+		}
+		if time.Now().After(deadline) {
+			return lastRaw, nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func mustJSON(t *testing.T, value any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal JSON: %v", err)
+	}
+	return raw
 }
 
 func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T) {
@@ -3185,7 +3493,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-proof",
 		"vm_id": "vm-worker-proof",
@@ -3345,7 +3653,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-follow",
 		"vm_id": "vm-child-follow",
@@ -3468,7 +3776,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-incomplete",
 		"vm_id": "vm-child-incomplete",
@@ -3565,7 +3873,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-package-required-no-package",
 		"vm_id": "vm-package-required-no-package",
@@ -3669,7 +3977,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-bootstrap",
 		"vm_id": "vm-worker-bootstrap",
@@ -3945,6 +4253,8 @@ func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
 				OwnerID:      "user-alice",
 				Error:        "runtime restarted, run interrupted",
 			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-1/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: nil})
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-2":
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-2",
@@ -3970,7 +4280,7 @@ func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-retry",
 		"vm_id": "vm-worker-retry",
@@ -3988,20 +4298,20 @@ func TestDelegateWorkerVMRetriesInterruptedWorkerRunOnce(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
 	}
-	if result.RunID != "worker-run-2" || result.State != types.RunCompleted {
+	if result.RunID != "worker-run-1" || result.State != types.RunFailed {
 		t.Fatalf("unexpected delegate result: %+v\nraw=%s", result, raw)
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	if submitted != 2 {
-		t.Fatalf("submitted worker runs = %d, want 2", submitted)
+	if submitted != 1 {
+		t.Fatalf("submitted worker runs = %d, want one async start; super should choose any retry", submitted)
 	}
-	if !strings.Contains(prompts[1], "Previous delegated worker run was interrupted") {
-		t.Fatalf("retry prompt missing interruption context: %q", prompts[1])
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "export after retry") {
+		t.Fatalf("first prompt missing objective: %q", prompts)
 	}
-	if got, _ := metadata[1]["retry_of_run_id"].(string); got != "worker-run-1" {
-		t.Fatalf("retry metadata retry_of_run_id = %q, want worker-run-1; metadata=%+v", got, metadata[1])
+	if _, ok := metadata[0]["retry_of_run_id"]; ok {
+		t.Fatalf("async start must not auto-submit a retry metadata=%+v", metadata[0])
 	}
 }
 
@@ -4081,7 +4391,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-failed",
 		"vm_id": "vm-worker-failed",
@@ -4218,7 +4528,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	toolCtx := WithToolExecutionContext(context.Background(), superRun)
+	startRaw, err := registry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-timeout",
 		"vm_id": "vm-worker-timeout",
@@ -4227,7 +4538,21 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		"timeout_seconds": 1
 	}`, srv.URL)))
 	if err != nil {
-		t.Fatalf("delegate_worker_vm should return structured timeout evidence, got error: %v", err)
+		t.Fatalf("delegate_worker_vm start: %v", err)
+	}
+	var start map[string]any
+	if err := json.Unmarshal([]byte(startRaw), &start); err != nil {
+		t.Fatalf("decode async worker start: %v\n%s", err, startRaw)
+	}
+	raw, err := registry.Execute(toolCtx, "observe_worker_delegation", mustJSON(t, map[string]any{
+		"worker_sandbox_url": stringMapValue(start, "worker_sandbox_url"),
+		"worker_run_id":      stringMapValue(start, "worker_run_id"),
+		"worker_id":          stringMapValue(start, "worker_id"),
+		"vm_id":              stringMapValue(start, "worker_vm_id"),
+		"profile":            AgentProfileVSuper,
+	}))
+	if err != nil {
+		t.Fatalf("observe_worker_delegation should return structured active evidence, got error: %v", err)
 	}
 
 	var result struct {
@@ -4250,11 +4575,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode delegate result: %v\n%s", err, raw)
 	}
-	if result.Status != "worker_run_timeout" || result.RunID != "worker-run-timeout" || result.State != types.RunRunning {
-		t.Fatalf("unexpected timeout worker result: %+v\nraw=%s", result, raw)
-	}
-	if !strings.Contains(result.Error, "did not finish within") || !strings.Contains(result.TerminalError, "worker-run-timeout") {
-		t.Fatalf("missing timeout details: %+v\nraw=%s", result, raw)
+	if result.Status != "worker_observed" || result.RunID != "worker-run-timeout" || result.State != types.RunRunning {
+		t.Fatalf("unexpected active worker observation: %+v\nraw=%s", result, raw)
 	}
 	if result.EventCount != len(workerEvents)+len(childEvents) || len(result.WorkerEventSummary) != len(workerEvents)+len(childEvents) {
 		t.Fatalf("worker event evidence missing: %+v\nraw=%s", result, raw)
@@ -4267,8 +4589,8 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		result.AppChangePackages[0]["loop_id"] != "child-export-run" {
 		t.Fatalf("child package evidence missing: %+v\nraw=%s", result.AppChangePackages, raw)
 	}
-	if !result.ReviewablePackageObserved || result.CompletionBlocker != "vsuper_timed_out_after_reviewable_package" {
-		t.Fatalf("timeout export should remain reviewable with blocker: %+v\nraw=%s", result, raw)
+	if !result.ReviewablePackageObserved || result.CompletionBlocker != "" {
+		t.Fatalf("active export evidence should be reviewable without terminal blocker: %+v\nraw=%s", result, raw)
 	}
 	if result.WorkerChildRunStates["child-export-run"] != string(types.RunCompleted) {
 		t.Fatalf("child status evidence missing: %+v\nraw=%s", result.WorkerChildRunStates, raw)
@@ -4289,7 +4611,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
 	}
-	if !strings.Contains(strings.Join(updates[0].Findings, "\n"), "worker_run_timeout") ||
+	if !strings.Contains(strings.Join(updates[0].Findings, "\n"), "worker_observed") ||
 		!containsString(updates[0].Refs, "worker_vm:vm-worker-timeout") ||
 		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-timeout") {
 		t.Fatalf("worker update checkpoint missing delegate evidence: %+v", updates[0])
@@ -4325,7 +4647,7 @@ func TestDelegateWorkerVMReturnsSubmitFailureEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-failed",
 		"vm_id": "vm-worker-submit-failed",
@@ -4577,7 +4899,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-local-worktree",
 		"vm_id": "vm-local-worktree",

@@ -31,16 +31,19 @@ type acceptanceBuilder struct {
 }
 
 type acceptanceToolResult struct {
+	tool   string
 	event  types.EventRecord
 	output map[string]any
 }
 
 type acceptanceToolError struct {
+	tool   string
 	event  types.EventRecord
 	output string
 }
 
 type acceptanceToolInvocation struct {
+	tool      string
 	event     types.EventRecord
 	callID    string
 	arguments map[string]any
@@ -189,7 +192,8 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		})
 	}
 
-	delegateResults := collectAcceptanceToolResults(events, "delegate_worker_vm")
+	workerDelegationTools := []string{"delegate_worker_vm", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation"}
+	delegateResults := collectAcceptanceToolResultsAny(events, workerDelegationTools...)
 	var packageRefs []string
 	var nonPackageDelegateResults []acceptanceToolResult
 	packageCount := 0
@@ -209,7 +213,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 				builder.record.BaseSHA = payloadString(pkg, "base_sha")
 			}
 		}
-		delegateDetails := acceptanceDelegateWorkerDetails(item.output, packages)
+		delegateDetails := acceptanceDelegateWorkerDetails(item.tool, item.output, packages)
 		evidenceSummary := "worker run published concrete AppChangePackage evidence"
 		if status != "" && status != "worker_run_completed" {
 			delegateDetails["non_clean_delegate_status"] = status
@@ -220,8 +224,8 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, delegateDetails)
 	}
 	if packageCount == 0 {
-		delegateErrors := collectAcceptanceToolErrors(events, "delegate_worker_vm")
-		pendingDelegates := collectAcceptancePendingToolInvocations(events, "delegate_worker_vm")
+		delegateErrors := collectAcceptanceToolErrorsAny(events, workerDelegationTools...)
+		pendingDelegates := collectAcceptancePendingToolInvocationsAny(events, workerDelegationTools...)
 		var refs []string
 		details := map[string]any{}
 		var blockedAt time.Time
@@ -234,7 +238,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		}
 		if len(nonPackageDelegateResults) > 0 {
 			for _, item := range nonPackageDelegateResults {
-				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without AppChangePackage evidence", acceptanceDelegateWorkerDetails(item.output, nil))
+				ref := builder.addEventEvidence(item.event, "worker VM delegation returned without AppChangePackage evidence", acceptanceDelegateWorkerDetails(item.tool, item.output, nil))
 				refs = append(refs, ref)
 				rememberLatest(item.event)
 			}
@@ -289,7 +293,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		if len(delegateErrors) > 0 {
 			for _, item := range delegateErrors {
 				ref := builder.addEventEvidence(item.event, "worker VM delegation failed before AppChangePackage publication", map[string]any{
-					"tool":  "delegate_worker_vm",
+					"tool":  item.tool,
 					"error": item.output,
 				})
 				refs = append(refs, ref)
@@ -302,7 +306,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		if len(pendingDelegates) > 0 {
 			for _, item := range pendingDelegates {
 				ref := builder.addEventEvidence(item.event, "worker VM delegation was invoked without a terminal tool result", map[string]any{
-					"tool":               "delegate_worker_vm",
+					"tool":               item.tool,
 					"call_id":            item.callID,
 					"worker_id":          payloadString(item.arguments, "worker_id"),
 					"worker_vm_id":       payloadString(item.arguments, "vm_id"),
@@ -431,13 +435,22 @@ func acceptanceDocumentEvidence(builder *acceptanceBuilder, root types.RunRecord
 }
 
 func collectAcceptanceToolResults(events []types.EventRecord, tool string) []acceptanceToolResult {
+	return collectAcceptanceToolResultsAny(events, tool)
+}
+
+func collectAcceptanceToolResultsAny(events []types.EventRecord, tools ...string) []acceptanceToolResult {
+	wanted := map[string]bool{}
+	for _, tool := range tools {
+		wanted[tool] = true
+	}
 	var results []acceptanceToolResult
 	for _, ev := range events {
 		if ev.Kind != types.EventToolResult {
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		if payloadString(payload, "tool") != tool {
+		tool := payloadString(payload, "tool")
+		if !wanted[tool] {
 			continue
 		}
 		if isError, _ := payload["is_error"].(bool); isError {
@@ -447,7 +460,7 @@ func collectAcceptanceToolResults(events []types.EventRecord, tool string) []acc
 		if len(output) == 0 {
 			continue
 		}
-		results = append(results, acceptanceToolResult{event: ev, output: output})
+		results = append(results, acceptanceToolResult{tool: tool, event: ev, output: output})
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].event.StreamSeq < results[j].event.StreamSeq
@@ -456,13 +469,22 @@ func collectAcceptanceToolResults(events []types.EventRecord, tool string) []acc
 }
 
 func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acceptanceToolError {
+	return collectAcceptanceToolErrorsAny(events, tool)
+}
+
+func collectAcceptanceToolErrorsAny(events []types.EventRecord, tools ...string) []acceptanceToolError {
+	wanted := map[string]bool{}
+	for _, tool := range tools {
+		wanted[tool] = true
+	}
 	var results []acceptanceToolError
 	for _, ev := range events {
 		if ev.Kind != types.EventToolResult {
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		if payloadString(payload, "tool") != tool {
+		tool := payloadString(payload, "tool")
+		if !wanted[tool] {
 			continue
 		}
 		if isError, _ := payload["is_error"].(bool); !isError {
@@ -472,7 +494,7 @@ func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acce
 		if output == "" {
 			continue
 		}
-		results = append(results, acceptanceToolError{event: ev, output: output})
+		results = append(results, acceptanceToolError{tool: tool, event: ev, output: output})
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].event.StreamSeq < results[j].event.StreamSeq
@@ -481,13 +503,22 @@ func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acce
 }
 
 func collectAcceptancePendingToolInvocations(events []types.EventRecord, tool string) []acceptanceToolInvocation {
+	return collectAcceptancePendingToolInvocationsAny(events, tool)
+}
+
+func collectAcceptancePendingToolInvocationsAny(events []types.EventRecord, tools ...string) []acceptanceToolInvocation {
+	wanted := map[string]bool{}
+	for _, tool := range tools {
+		wanted[tool] = true
+	}
 	completedCallIDs := map[string]bool{}
 	for _, ev := range events {
 		if ev.Kind != types.EventToolResult {
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		if payloadString(payload, "tool") != tool {
+		tool := payloadString(payload, "tool")
+		if !wanted[tool] {
 			continue
 		}
 		callID := payloadString(payload, "call_id")
@@ -503,7 +534,8 @@ func collectAcceptancePendingToolInvocations(events []types.EventRecord, tool st
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
-		if payloadString(payload, "tool") != tool {
+		tool := payloadString(payload, "tool")
+		if !wanted[tool] {
 			continue
 		}
 		callID := payloadString(payload, "call_id")
@@ -518,6 +550,7 @@ func collectAcceptancePendingToolInvocations(events []types.EventRecord, tool st
 		}
 		args, _ := payload["arguments"].(map[string]any)
 		invocations = append(invocations, acceptanceToolInvocation{
+			tool:      tool,
 			event:     ev,
 			callID:    callID,
 			arguments: args,
@@ -581,12 +614,15 @@ func acceptanceOutputSlice(output map[string]any, key string) []map[string]any {
 	}
 }
 
-func acceptanceDelegateWorkerDetails(output map[string]any, packages []map[string]any) map[string]any {
+func acceptanceDelegateWorkerDetails(tool string, output map[string]any, packages []map[string]any) map[string]any {
 	if packages == nil {
 		packages = acceptanceOutputSlice(output, "app_change_packages")
 	}
+	if tool == "" {
+		tool = "delegate_worker_vm"
+	}
 	details := map[string]any{
-		"tool":          "delegate_worker_vm",
+		"tool":          tool,
 		"package_count": len(packages),
 	}
 	for _, key := range []string{
