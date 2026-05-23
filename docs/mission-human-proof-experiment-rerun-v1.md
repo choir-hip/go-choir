@@ -1,6 +1,6 @@
 # MissionGradient: Human-Proof Experiment Rerun v1
 
-**Status:** ready resume mission after `b11ed4f` staging verification
+**Status:** checkpoint incomplete after `81d29d2` staging proof
 **Date:** 2026-05-23
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Depends on:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
@@ -324,10 +324,12 @@ AppChangePackage
 status: checkpoint_incomplete
 last checkpoint:
   Chyron source-transfer/adoption proof reached on staging after iterative
-  runtime fixes. The remaining blocker is human-visible proof: the separate
-  browser proof worker could not inspect the package-derived candidate route
-  because it looked in its own local runtime/Git clone instead of receiving the
-  product-visible AppChangePackage context.
+  runtime fixes. The proof worker now sees the product-visible AppChangePackage
+  after the worker-delegation preload fix, but the run still does not produce
+  reviewable human proof. The remaining blocker is a real package-derived
+  preview/app-run path for the proof worker: it can inspect the package record
+  and source delta, but it cannot yet materialize and open the changed app in a
+  candidate/product route to capture screenshots or video.
 current artifact state:
   Runtime has async worker supervision, distinct worker classes, package
   publication mirroring, recipient AppChangePackage pull/adoption/build/verify,
@@ -337,45 +339,53 @@ current artifact state:
 what shipped:
   a28a7a added this mission. 8ad20d8 normalized ledger role refs for adoption
   builds. b222079 made duplicate worker starts idempotent. aee2b81 honored
-  explicit package app_id/visibility constraints. The current unshipped patch
-  preloads referenced AppChangePackages into proof workers and tightens the
-  super proof-worker prompt.
+  explicit package app_id/visibility constraints. 81d29d2 preloads referenced
+  AppChangePackages into proof workers and tightens the super proof-worker
+  prompt. CI and Node B staging deploy passed for 81d29d2.
 what was proven:
-  Staging Chyron package 37a05b90-1c85-483f-9cfc-6d4c4c129c1a was published
-  as unlisted with app_id human-proof-chyron-chyron-seq-1779562652687, pulled
-  into a recipient computer, built with recipient-specific Go/Svelte artifact
-  hashes, verified, promoted, and rolled back. Runtime tests now prove that a
-  worker objective containing a visible package id preloads that package into
-  the worker runtime and gives explicit inspection guidance.
+  On staging 81d29d2, Chyron package 466c8786-4bc1-4b8c-8be9-7aeb45226707 was
+  published as unlisted with app_id
+  human-proof-chyron-chyron-seq-1779565124843. It was pulled into recipient
+  computer owner-review-chyron-chyron-seq-1779565124843, applied to a
+  recipient candidate, built with recipient-specific Go/Svelte artifact hashes,
+  verified, promoted, and rolled back. The proof worker's observe output showed
+  one product-visible preloaded AppChangePackage, proving the package-context
+  preload path itself works.
 unproven or partial claims:
   Chyron still lacks actual screenshot/video/benchmark human proof of the
-  feature behavior. Motion, Liquid, and Python have not been rerun.
+  feature behavior. The VText narrative remains too technical and does not yet
+  function as an owner-readable live dashboard. Motion, Liquid, and Python have
+  not been rerun.
 belief-state changes:
   Human proof must come after transferable source packaging in multi-worker
   evidence paths. A package can be evidence_pending; reviewability cannot.
-  Passing only a package id is too weak unless the worker can inspect a
-  materialized package record/source delta or a real candidate/adoption route.
+  Passing only a package id is no longer enough even after preload; the proof
+  worker also needs a durable package-derived candidate/adoption preview route
+  or an equivalent materialized workspace/app URL that can be opened by browser
+  evidence tooling.
 remaining error field:
-  Whether the proof worker can now use the preloaded package record/source delta
-  to build or open a real candidate/product path and attach screenshots/video
-  without Codex hand-coding the experiment feature.
+  How to create the proof-worker preview route without copying binaries,
+  mutating active computers, or letting a package/build receipt masquerade as
+  behavior proof.
 highest-impact remaining uncertainty:
   Can Choir itself produce the first useful self-development change without
   Codex hand-coding it?
 next executable probe:
-  Commit/push/deploy the AppChangePackage preload fix, verify staging identity,
-  then rerun Chyron through the visible staging prompt bar. If package/adoption
-  still succeeds but screenshot/video proof fails, inspect the proof worker's
-  package-local preview/build route rather than retrying broad orchestration.
+  Implement the smallest real AppChangePackage preview/materialization path for
+  evidence workers or Apps & Changes Try: apply the package in a candidate
+  workspace, build/run the recipient UI/runtime or a bounded app route, expose
+  a product-visible preview URL, and let worker-playwright capture screenshots
+  or video. Then rerun Chyron through the visible staging prompt bar.
 suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
   docs/mission-async-supervision-runtime-hardening-v0.md;
-  /Users/wiz/go-choir/test-results/chyron-sequential-aee2b81-20260523T185730Z
+  /Users/wiz/go-choir/test-results/chyron-sequential-aee2b81-20260523T185730Z;
+  /Users/wiz/go-choir/test-results/chyron-sequential-81d29d2-20260523T193842Z
 rollback refs:
-  Revert aee2b81 for package constraint regressions. Revert the next preload
-  commit if worker delegation starts failing before worker run submission or
-  if package preloading exposes packages outside normal visibility rules.
+  Revert aee2b81 for package constraint regressions. Revert 81d29d2 if worker
+  delegation starts failing before worker run submission or if package
+  preloading exposes packages outside normal visibility rules.
 ```
 
 ## Stopping Condition
