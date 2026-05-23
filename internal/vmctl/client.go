@@ -346,6 +346,35 @@ func (c *Client) RemoveDesktop(userID, desktopID string) error {
 	return c.postAction(RemoveEndpoint(c.baseURL), userID, desktopID)
 }
 
+// HibernateWorker requests vmctl to hibernate a typed worker VM without
+// touching the parent user desktop.
+func (c *Client) HibernateWorker(workerID string) error {
+	reqBody := workerActionRequest{WorkerID: strings.TrimSpace(workerID)}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("vmctl client: marshal hibernate-worker request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, HibernateWorkerEndpoint(c.baseURL), bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("vmctl client: create hibernate-worker request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("vmctl client: hibernate-worker call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("vmctl client: hibernate-worker failed with status %s", resp.Status)
+	}
+	return nil
+}
+
 // postAction sends a POST request with a user_id/desktop_id body to the given
 // endpoint.
 func (c *Client) postAction(endpoint, userID, desktopID string) error {

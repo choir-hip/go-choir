@@ -652,6 +652,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	mux.HandleFunc("/internal/vmctl/fork-desktop", handler.HandleForkDesktop)
 	mux.HandleFunc("/internal/vmctl/publish-desktop", handler.HandlePublishDesktop)
 	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	mux.HandleFunc("/internal/vmctl/hibernate-worker", handler.HandleHibernateWorker)
 	mux.HandleFunc("/internal/vmctl/lookup", handler.HandleLookup)
 	mux.HandleFunc("/internal/vmctl/stop", handler.HandleStop)
 	mux.HandleFunc("/internal/vmctl/remove", handler.HandleRemove)
@@ -1706,6 +1707,59 @@ func TestHandler_RequestWorker(t *testing.T) {
 	}
 }
 
+func TestHandler_HibernateWorker(t *testing.T) {
+	srv, reg := newTestServer(t)
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
+	}
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		Purpose:       "Run background proof task",
+		MachineClass:  "worker-small",
+		AllowParallel: true,
+	})
+	if err != nil {
+		t.Fatalf("RequestWorker: %v", err)
+	}
+
+	body := fmt.Sprintf(`{"worker_id":%q}`, worker.WorkerID)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate-worker", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("hibernate-worker request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result["status"] != "hibernated" {
+		t.Fatalf("status = %q, want hibernated", result["status"])
+	}
+	if result["worker_id"] != worker.WorkerID {
+		t.Fatalf("worker_id = %q, want %q", result["worker_id"], worker.WorkerID)
+	}
+	own := reg.GetOwnershipByVMID(worker.VMID)
+	if own == nil {
+		t.Fatalf("worker ownership missing after hibernate")
+	}
+	if own.State != VMStateHibernated {
+		t.Fatalf("worker state = %q, want %q", own.State, VMStateHibernated)
+	}
+	if own.StoppedBy != "idle" {
+		t.Fatalf("stopped_by = %q, want idle", own.StoppedBy)
+	}
+}
+
 func TestHandler_Stop(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -2155,6 +2209,9 @@ func TestEndpointURLs(t *testing.T) {
 	}
 	if got := RequestWorkerEndpoint(base); got != "http://localhost:8083/internal/vmctl/request-worker" {
 		t.Errorf("RequestWorkerEndpoint = %s", got)
+	}
+	if got := HibernateWorkerEndpoint(base); got != "http://localhost:8083/internal/vmctl/hibernate-worker" {
+		t.Errorf("HibernateWorkerEndpoint = %s", got)
 	}
 	if got := StopEndpoint(base); got != "http://localhost:8083/internal/vmctl/stop" {
 		t.Errorf("StopEndpoint = %s", got)

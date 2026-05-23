@@ -92,6 +92,10 @@ type requestWorkerRequest struct {
 	AllowParallel        bool   `json:"allow_parallel,omitempty"`
 }
 
+type workerActionRequest struct {
+	WorkerID string `json:"worker_id"`
+}
+
 // Handler provides HTTP handlers for the vmctl service.
 type Handler struct {
 	registry *OwnershipRegistry
@@ -331,6 +335,51 @@ func (h *Handler) HandleRequestWorker(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, workerHandleFromOwnership(own))
+}
+
+// HandleHibernateWorker handles POST /internal/vmctl/hibernate-worker.
+// It suspends a typed worker VM without touching the parent user desktop.
+func (h *Handler) HandleHibernateWorker(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+
+	var req workerActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	req.WorkerID = strings.TrimSpace(req.WorkerID)
+	if req.WorkerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "worker_id is required"})
+		return
+	}
+	if err := h.registry.HibernateWorker(req.WorkerID); err != nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	for _, own := range h.registry.ListOwnerships() {
+		if own.WorkerID == req.WorkerID {
+			writeVMCTLJSON(w, http.StatusOK, map[string]any{
+				"status":        "hibernated",
+				"worker_id":     own.WorkerID,
+				"vm_id":         own.VMID,
+				"user_id":       own.UserID,
+				"desktop_id":    own.DesktopID,
+				"state":         string(own.State),
+				"stopped_by":    own.StoppedBy,
+				"sandbox_url":   own.SandboxURL,
+				"machine_class": own.MachineClass,
+			})
+			return
+		}
+	}
+	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "hibernated", "worker_id": req.WorkerID})
 }
 
 // HandleLookup handles GET /internal/vmctl/lookup?user_id=...
@@ -751,6 +800,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/fork-desktop", h.HandleForkDesktop)
 	s.HandleFunc("/internal/vmctl/publish-desktop", h.HandlePublishDesktop)
 	s.HandleFunc("/internal/vmctl/request-worker", h.HandleRequestWorker)
+	s.HandleFunc("/internal/vmctl/hibernate-worker", h.HandleHibernateWorker)
 	s.HandleFunc("/internal/vmctl/lookup", h.HandleLookup)
 	s.HandleFunc("/internal/vmctl/stop", h.HandleStop)
 	s.HandleFunc("/internal/vmctl/remove", h.HandleRemove)
@@ -796,6 +846,12 @@ func PublishDesktopEndpoint(baseURL string) string {
 // vmctl service at the given base URL.
 func RequestWorkerEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/request-worker"
+}
+
+// HibernateWorkerEndpoint returns the full hibernate-worker endpoint URL for
+// the vmctl service at the given base URL.
+func HibernateWorkerEndpoint(baseURL string) string {
+	return baseURL + "/internal/vmctl/hibernate-worker"
 }
 
 // StopEndpoint returns the full stop endpoint URL for the vmctl
