@@ -835,6 +835,59 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 	}
 }
 
+func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
+	provider := newMockToolLoopProvider(&ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "done",
+		Usage:      TokenUsage{InputTokens: 10, OutputTokens: 2},
+		Model:      "provider-resolved-model",
+	})
+	var progressPayloads []map[string]any
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		NewToolRegistry(),
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		4096,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind != types.EventRunProgress || phase != "tool_loop" {
+				return
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err == nil {
+				progressPayloads = append(progressPayloads, decoded)
+			}
+		},
+		nil,
+		WithToolLoopLLMConfig(LLMSelection{
+			Provider:        "fireworks",
+			Model:           "accounts/fireworks/models/deepseek-v4-flash",
+			ReasoningEffort: "low",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if len(progressPayloads) == 0 {
+		t.Fatal("expected tool_loop progress payload")
+	}
+	payload := progressPayloads[0]
+	if payload["llm_provider"] != "fireworks" {
+		t.Fatalf("llm_provider = %v, want fireworks", payload["llm_provider"])
+	}
+	if payload["llm_model"] != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("llm_model = %v", payload["llm_model"])
+	}
+	if payload["llm_reasoning_effort"] != "low" {
+		t.Fatalf("llm_reasoning_effort = %v, want low", payload["llm_reasoning_effort"])
+	}
+	if payload["model_policy"] != "run_metadata" {
+		t.Fatalf("model_policy = %v, want run_metadata", payload["model_policy"])
+	}
+}
+
 // --- Helper types ---
 
 // messageCapturingProvider is a mock ToolLoopProvider that captures all

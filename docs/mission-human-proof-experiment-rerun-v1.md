@@ -462,7 +462,12 @@ deferred adjacent work:
   first. Do not treat ad hoc `rm` of old images as the solution; define a
   retention controller/report that inventories largest consumers, proves which
   artifacts are disposable, preserves rollback/product evidence, and gives the
-  operator an explicit emergency reclaim path.
+  operator an explicit emergency reclaim path. A follow-up check during the
+  c0ca8fe deploy found the sharper starting point: `/var/lib/go-choir` was about
+  265G, `/var/lib/go-choir/vm-state` about 261G, and there were 3,231 `vm-*`
+  directories with only 15 running Firecracker processes. Current base guest
+  images were only about 1.5G and 2.3G, so the largest safe target is stale
+  per-VM state after active/rollback/evidence classification.
 ```
 
 ## Stopping Condition

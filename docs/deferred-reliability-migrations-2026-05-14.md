@@ -74,6 +74,23 @@ hibernated worker/candidate VM-state directories, but that is only one class of
 disk growth. A dedicated reliability mission should inventory and bound all
 large substrate artifacts:
 
+Observed during the `c0ca8fe` deploy on 2026-05-23:
+
+- `/` was 420G used on a 476G filesystem, leaving about 54G free;
+- `/var/lib/go-choir` was about 265G, with `/var/lib/go-choir/vm-state` about
+  261G;
+- `/nix/store` was about 146G;
+- `/var/lib/go-choir/vm-state` contained 3,231 `vm-*` directories while only
+  15 Firecracker processes were running;
+- the installed base guest images were comparatively small:
+  `/var/lib/go-choir/guest` about 1.5G and
+  `/var/lib/go-choir/guest-playwright` about 2.3G.
+
+That means the first reclaim target is stale per-VM state, not the current base
+guest images. The retention controller must still prove a VM directory is not an
+active primary computer, active candidate, rollback ref, or owner-reviewable
+evidence artifact before deleting it.
+
 - guest and guest-playwright image build outputs;
 - stale worker and candidate VM disks under `/var/lib/go-choir/vm-state`;
 - Nix generations, old store paths, and build caches;

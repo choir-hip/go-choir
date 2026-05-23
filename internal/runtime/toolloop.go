@@ -240,10 +240,14 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 
 		// Emit progress event for this iteration.
 		progressPayload, _ := json.Marshal(map[string]any{
-			"iteration":   i + 1,
-			"stop_reason": resp.StopReason,
-			"tool_calls":  len(resp.ToolCalls),
-			"model":       resp.Model,
+			"iteration":            i + 1,
+			"stop_reason":          resp.StopReason,
+			"tool_calls":           len(resp.ToolCalls),
+			"model":                resp.Model,
+			"llm_provider":         options.llmConfig.Provider,
+			"llm_model":            options.llmConfig.Model,
+			"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
+			"model_policy":         "run_metadata",
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
 
