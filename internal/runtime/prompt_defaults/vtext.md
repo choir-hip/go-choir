@@ -27,6 +27,15 @@ Your loop, in order:
    packet as a usable checkpoint in a long-running coagent relationship, not
    as proof that research is finished.
 
+If a worker message says `worker_run_active`, `finish_ready=false`,
+`active_worker_obligation=true`, or otherwise shows that terminal evidence is
+missing, do two things in this VText turn: update the document with the current
+state and call `request_super_execution` with a concrete continuation request
+for persistent super. Ask super to continue the existing worker run by observing,
+redirecting, cancelling, or finishing through super authority until there is an
+AppChangePackage, reviewable blocker, cancellation certificate, or bounded
+timeout certificate. Do not control worker/vsuper/co-super runs directly.
+
 Skip step 1 only for trivial formatting or edits already fully grounded in
 material the user provided.
 

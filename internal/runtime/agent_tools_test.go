@@ -5036,9 +5036,36 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 	joinedFindings := strings.Join(updates[0].Findings, "\n")
 	if !strings.Contains(joinedFindings, "worker event summary was preserved with 2 event") ||
 		!strings.Contains(strings.Join(updates[0].Notes, "\n"), "checkpoint_source=async_finish_active") ||
+		!strings.Contains(strings.Join(updates[0].Notes, "\n"), "active_worker_obligation=true") ||
 		!containsString(updates[0].Refs, "worker_vm:vm-worker-active") ||
 		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-active") {
 		t.Fatalf("worker update checkpoint missing active finish evidence: %+v", updates[0])
+	}
+
+	messages, err := s.ListChannelMessages(context.Background(), "user-alice", "doc-finish-active", 0, 10)
+	if err != nil {
+		t.Fatalf("list channel messages: %v", err)
+	}
+	var continuation string
+	for _, message := range messages {
+		if message.ToAgentID == persistentSuperAgentID("user-alice") {
+			continuation = message.Content
+			break
+		}
+	}
+	if continuation == "" {
+		t.Fatalf("active worker checkpoint should post a super continuation message, got %+v", messages)
+	}
+	for _, want := range []string{
+		"Runtime supervision continuation required",
+		"worker_run_id: worker-run-active",
+		"worker_sandbox_url: " + srv.URL,
+		"do not start a duplicate worker run",
+		"observe_worker_delegation",
+	} {
+		if !strings.Contains(continuation, want) {
+			t.Fatalf("super continuation missing %q:\n%s", want, continuation)
+		}
 	}
 }
 

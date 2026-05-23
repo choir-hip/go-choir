@@ -1687,6 +1687,12 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(truncatePromptSnippet(message.Content, 800))
 			b.WriteString("\n")
 		}
+		if workerMessagesContainActiveDelegation(recentWorkerMessages) {
+			b.WriteString("\nAt least one recent worker message says a delegated worker is still active or lacks terminal evidence.")
+			b.WriteString("\nFor this case, write the next dashboard revision from the evidence and call request_super_execution with a concrete continuation objective for persistent super.")
+			b.WriteString("\nThe objective must tell super to continue the existing worker_run_id, not start a duplicate worker, and to observe, redirect, cancel, or finish only through super authority until there is an AppChangePackage, reviewable blocker, cancellation certificate, or bounded timeout certificate.")
+			b.WriteString("\nVText may ask for clarification or continuation; VText must not directly control worker/vsuper/co-super runs.")
+		}
 	}
 	if len(userRevisionDiffs) > 0 {
 		b.WriteString("\nUser-authored revision diffs (oldest to newest):\n")
@@ -1747,6 +1753,25 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\",\"operation\":\"replace_all\",\"content\":\"complete current-state document\"}.")
 	b.WriteString("\nIf you end the run without edit_vtext, no canonical document revision will be created.")
 	return b.String()
+}
+
+func workerMessagesContainActiveDelegation(messages []ChannelMessage) bool {
+	for _, message := range messages {
+		content := strings.ToLower(message.Content)
+		for _, marker := range []string{
+			"worker_run_active",
+			"finish_ready=false",
+			"finish_ready: false",
+			"active_worker_obligation=true",
+			"runtime supervision continuation required",
+			"missing_terminal_evidence",
+		} {
+			if strings.Contains(content, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (rt *Runtime) recentWorkerMessages(ctx context.Context, ownerID, channelID string, limit int) ([]ChannelMessage, error) {

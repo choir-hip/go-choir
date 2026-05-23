@@ -1,10 +1,19 @@
 # MissionGradient: Supervision Runtime Repair And Experiment Rerun v0
 
-**Status:** checkpoint_incomplete — runtime gate passed, first Chiron rerun isolated an active-finish evidence gap
+**Status:** superseded by [mission-supervision-continuation-experiment-rerun-v0.md](mission-supervision-continuation-experiment-rerun-v0.md)
 **Date:** 2026-05-23
 **Supersedes immediate continuation of:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
 **Resumes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+
+## Supersession Note
+
+This mission records the earlier runtime repair trajectory. Its immediate
+continuation has moved to
+[mission-supervision-continuation-experiment-rerun-v0.md](mission-supervision-continuation-experiment-rerun-v0.md),
+which starts from deployed checkpoint `0d321ac` and the Chiron proof showing
+that active finish evidence is now preserved but supervision continuation still
+stops too early at `worker_run_active`.
 
 ## One-Line Goal String
 

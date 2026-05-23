@@ -37,7 +37,14 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 
 	now := time.Now().UTC()
 	update := delegateWorkerFallbackUpdate(rec, runErr, delegateEvent, delegateOutput, targetAgentID, channelID, now)
-	return rt.dispatchDelegateWorkerUpdate(ctx, rec, update)
+	stored, created, err := rt.dispatchDelegateWorkerUpdate(ctx, rec, update)
+	if err != nil {
+		return err
+	}
+	if created && delegateWorkerContinuationRequired(delegateOutput) {
+		return rt.enqueueDelegateWorkerSuperContinuation(ctx, rec, stored, delegateOutput, "super_failure")
+	}
+	return nil
 }
 
 func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context, rec *types.RunRecord, output map[string]any, source string) error {
@@ -57,7 +64,14 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context,
 	}
 	now := time.Now().UTC()
 	update := delegateWorkerCheckpointUpdate(rec, output, targetAgentID, channelID, strings.TrimSpace(source), now)
-	return rt.dispatchDelegateWorkerUpdate(ctx, rec, update)
+	stored, created, err := rt.dispatchDelegateWorkerUpdate(ctx, rec, update)
+	if err != nil {
+		return err
+	}
+	if created && delegateWorkerContinuationRequired(output) {
+		return rt.enqueueDelegateWorkerSuperContinuation(ctx, rec, stored, output, source)
+	}
+	return nil
 }
 
 func delegateWorkerUpdateTarget(rec *types.RunRecord) (string, string, bool) {
@@ -78,7 +92,7 @@ func delegateWorkerUpdateTarget(rec *types.RunRecord) (string, string, bool) {
 	return channelID, targetAgentID, true
 }
 
-func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.RunRecord, update types.WorkerUpdateRecord) error {
+func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.RunRecord, update types.WorkerUpdateRecord) (types.WorkerUpdateRecord, bool, error) {
 	update.Content = buildWorkerUpdateMessage(update)
 	message := &types.ChannelMessage{
 		ChannelID:    update.ChannelID,
@@ -105,13 +119,138 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 	}
 	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message, delivery)
 	if err != nil {
-		return err
+		return types.WorkerUpdateRecord{}, false, err
 	}
 	if created {
 		message.Seq = stored.MessageSeq
 		rt.emitChannelMessageEvent(ctx, *message, rec.OwnerID)
 	}
+	return stored, created, nil
+}
+
+func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, rec *types.RunRecord, update types.WorkerUpdateRecord, output map[string]any, source string) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	channelID := strings.TrimSpace(update.ChannelID)
+	if ownerID == "" || channelID == "" {
+		return nil
+	}
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		return fmt.Errorf("ensure persistent super for active worker continuation: %w", err)
+	}
+	content := buildDelegateWorkerSuperContinuationMessage(update, output, source)
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	castCtx := WithToolExecutionContext(ctx, rec)
+	if _, err := rt.ChannelCast(castCtx, channelID, superAgent.AgentID, "", agentIDForRun(rec), "runtime-supervision", content); err != nil {
+		return fmt.Errorf("enqueue active worker continuation: %w", err)
+	}
+	if _, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID); err != nil {
+		return fmt.Errorf("start active worker continuation super: %w", err)
+	}
 	return nil
+}
+
+func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord, output map[string]any, source string) string {
+	workerRunID := firstNonEmpty(stringMapValue(output, "worker_run_id"), stringMapValue(output, "loop_id"))
+	if workerRunID == "" {
+		return ""
+	}
+	workerSandboxURL := stringMapValue(output, "worker_sandbox_url")
+	var b strings.Builder
+	b.WriteString("Runtime supervision continuation required for an active worker delegation.\n")
+	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, redirect, cancel, or finish this worker.\n\n")
+	b.WriteString("Continue the existing worker; do not start a duplicate worker run.\n")
+	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with submit_worker_update.\n\n")
+	b.WriteString("Worker refs:\n")
+	b.WriteString("- worker_run_id: ")
+	b.WriteString(workerRunID)
+	b.WriteString("\n")
+	if workerSandboxURL != "" {
+		b.WriteString("- worker_sandbox_url: ")
+		b.WriteString(workerSandboxURL)
+		b.WriteString("\n")
+	}
+	for _, kv := range []struct {
+		label string
+		key   string
+	}{
+		{"worker_id", "worker_id"},
+		{"worker_vm_id", "worker_vm_id"},
+		{"status", "status"},
+		{"state", "state"},
+		{"profile", "profile"},
+	} {
+		if value := stringMapValue(output, kv.key); value != "" {
+			b.WriteString("- ")
+			b.WriteString(kv.label)
+			b.WriteString(": ")
+			b.WriteString(value)
+			b.WriteString("\n")
+		}
+	}
+	if update.UpdateID != "" {
+		b.WriteString("- worker_update_id: ")
+		b.WriteString(update.UpdateID)
+		b.WriteString("\n")
+	}
+	if update.MessageSeq > 0 {
+		b.WriteString("- vtext_channel_seq: ")
+		b.WriteString(fmt.Sprintf("%d", update.MessageSeq))
+		b.WriteString("\n")
+	}
+	if update.TrajectoryID != "" {
+		b.WriteString("- trajectory_id: ")
+		b.WriteString(update.TrajectoryID)
+		b.WriteString("\n")
+	}
+	if source = strings.TrimSpace(source); source != "" {
+		b.WriteString("- checkpoint_source: ")
+		b.WriteString(source)
+		b.WriteString("\n")
+	}
+	if children := stringSliceMapValue(output, "worker_child_run_ids"); len(children) > 0 {
+		b.WriteString("- child_run_ids: ")
+		b.WriteString(strings.Join(children, ", "))
+		b.WriteString("\n")
+	}
+	if eventCount := intMapValue(output, "event_count"); eventCount > 0 {
+		b.WriteString("- worker_event_count: ")
+		b.WriteString(fmt.Sprintf("%d", eventCount))
+		b.WriteString("\n")
+	}
+	if len(mapSliceValue(output, "app_change_packages")) == 0 {
+		b.WriteString("- missing_terminal_evidence: no AppChangePackage or terminal blocker is present yet.\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func delegateWorkerContinuationRequired(output map[string]any) bool {
+	if output == nil {
+		return false
+	}
+	if len(mapSliceValue(output, "app_change_packages")) > 0 ||
+		strings.TrimSpace(stringMapValue(output, "completion_blocker")) != "" ||
+		strings.TrimSpace(stringMapValue(output, "terminal_error")) != "" {
+		return false
+	}
+	if strings.EqualFold(stringMapValue(output, "status"), "worker_run_active") {
+		return true
+	}
+	if value, ok := boolMapValue(output, "finish_ready"); ok && !value {
+		return true
+	}
+	switch strings.ToLower(stringMapValue(output, "state")) {
+	case strings.ToLower(string(types.RunPending)), strings.ToLower(string(types.RunRunning)):
+		if stringMapValue(output, "terminal_error") == "" && stringMapValue(output, "completion_blocker") == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.EventRecord, output map[string]any, targetAgentID, channelID string, now time.Time) types.WorkerUpdateRecord {
@@ -243,13 +382,19 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	if terminalError != "" {
 		notes = append(notes, "delegate_terminal_error="+terminalError)
 	}
+	if delegateWorkerContinuationRequired(output) {
+		notes = append(notes, "active_worker_obligation=true")
+		if workerLoopID != "" {
+			notes = append(notes, "continuation_worker_run_id="+workerLoopID)
+		}
+	}
 	if eventCount > 0 {
 		notes = append(notes, fmt.Sprintf("worker_event_count=%d", eventCount))
 	}
 	notes = append(notes, provenance.Notes...)
-	updateKey := firstNonEmpty(workerLoopID, status, "result")
+	updateKey := delegateWorkerCheckpointUpdateKey(output, source)
 	return types.WorkerUpdateRecord{
-		UpdateID:      "delegate-worker-vm-checkpoint-" + sanitizeExportPart(rec.RunID) + "-" + sanitizeExportPart(updateKey),
+		UpdateID:      delegateWorkerCheckpointUpdateID(rec, output, updateKey),
 		OwnerID:       rec.OwnerID,
 		AgentID:       agentIDForRun(rec),
 		TargetAgentID: targetAgentID,
@@ -266,6 +411,44 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
 	}
+}
+
+func delegateWorkerCheckpointUpdateID(rec *types.RunRecord, output map[string]any, updateKey string) string {
+	prefix := "delegate-worker-vm-checkpoint-"
+	if delegateWorkerContinuationRequired(output) {
+		return prefix + sanitizeExportPart(updateKey)
+	}
+	runPart := ""
+	if rec != nil {
+		runPart = sanitizeExportPart(rec.RunID)
+	}
+	if runPart == "" {
+		return prefix + sanitizeExportPart(updateKey)
+	}
+	return prefix + runPart + "-" + sanitizeExportPart(updateKey)
+}
+
+func delegateWorkerCheckpointUpdateKey(output map[string]any, source string) string {
+	workerLoopID := firstNonEmpty(stringMapValue(output, "worker_run_id"), stringMapValue(output, "loop_id"))
+	status := stringMapValue(output, "status")
+	parts := []string{
+		firstNonEmpty(workerLoopID, status, "result"),
+	}
+	if delegateWorkerContinuationRequired(output) {
+		if source = strings.TrimSpace(source); source != "" {
+			parts = append(parts, source)
+		}
+		if eventCount := intMapValue(output, "event_count"); eventCount > 0 {
+			parts = append(parts, fmt.Sprintf("events-%d", eventCount))
+		}
+		if channelMessages := intMapValue(output, "worker_channel_message_count"); channelMessages > 0 {
+			parts = append(parts, fmt.Sprintf("messages-%d", channelMessages))
+		}
+		if children := stringSliceMapValue(output, "worker_child_run_ids"); len(children) > 0 {
+			parts = append(parts, fmt.Sprintf("children-%d", len(children)))
+		}
+	}
+	return strings.Join(trimDedupeNonEmpty(parts), "-")
 }
 
 func latestSuccessfulToolResultOutput(eventsForRun []types.EventRecord, tool string) (types.EventRecord, map[string]any, bool) {
@@ -345,6 +528,25 @@ func intMapValue(m map[string]any, key string) int {
 	default:
 		return 0
 	}
+}
+
+func boolMapValue(m map[string]any, key string) (bool, bool) {
+	value, ok := m[key]
+	if !ok {
+		return false, false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		}
+	}
+	return false, false
 }
 
 func mapSliceValue(m map[string]any, key string) []map[string]any {

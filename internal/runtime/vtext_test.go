@@ -2752,6 +2752,36 @@ func TestVTextWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testing.
 	}
 }
 
+func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-active-worker-dashboard",
+		RevisionID: "rev-active-worker-dashboard",
+		Content:    "Current dashboard.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	recent := []ChannelMessage{{
+		Role:    AgentProfileSuper,
+		From:    "super:active-worker",
+		Content: "Worker update ready.\n\nFindings:\n- delegate_worker_vm returned status \"worker_run_active\" with worker state \"running\".\n\nNotes:\n- active_worker_obligation=true\n- finish_ready=false\n\nRefs:\n- worker_run:worker-run-active",
+	}}
+
+	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "integrate_worker_findings",
+	}, "", true, recent, nil)
+
+	for _, want := range []string{
+		"At least one recent worker message says a delegated worker is still active",
+		"call request_super_execution",
+		"continue the existing worker_run_id",
+		"not start a duplicate worker",
+		"VText must not directly control worker/vsuper/co-super runs",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("active-worker vtext prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func TestRestartRecoveryClearsInterruptedVTextMutationAndRelaunches(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-vtext-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
