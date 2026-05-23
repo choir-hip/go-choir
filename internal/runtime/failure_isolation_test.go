@@ -452,7 +452,7 @@ func TestFailureIsolation_APIStatusReturnsFailedState(t *testing.T) {
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("api status test failure"),
 	}
-	_, handler, parentID := failureIsolationSetup(t, provider)
+	rt, handler, parentID := failureIsolationSetup(t, provider)
 
 	// Spawn a child that will fail.
 	body := fmt.Sprintf(`{"parent_id":"%s","objective":"execute invalid command"}`, parentID)
@@ -465,8 +465,10 @@ func TestFailureIsolation_APIStatusReturnsFailedState(t *testing.T) {
 		t.Fatalf("decode spawn response: %v", err)
 	}
 
-	// Wait for the task to complete (fail).
-	time.Sleep(200 * time.Millisecond)
+	// Wait for the async child run to reach a terminal state before checking
+	// the status API. CI can be slow enough that a fixed short sleep leaves the
+	// run visible as "running" even though failure propagation is working.
+	waitForTaskState(t, rt, spawnResp.RunID, 2*time.Second)
 
 	// Check status via API.
 	req = authenticatedRequest(http.MethodGet, "/api/agent/status?loop_id="+spawnResp.RunID, "", "user-alice")
