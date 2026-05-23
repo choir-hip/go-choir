@@ -167,7 +167,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small. A different requested machine_class receives a distinct lease instead of reusing the current run's ordinary worker.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
 			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large", "worker-playwright"}},
@@ -209,7 +209,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			client := vmctl.NewClient(rt.cfg.VmctlURL)
 			requestedMachineClass := strings.TrimSpace(in.MachineClass)
 			machineClass := normalizeRuntimeWorkerMachineClass(requestedMachineClass)
-			cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID)
+			cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID, machineClass)
 			forceFreshWorker := false
 			if !in.AllowParallel && cacheKey != "" {
 				rt.workerRequestMu.Lock()
@@ -226,7 +226,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					delete(rt.workerRequests, cacheKey)
 					forceFreshWorker = true
 				}
-				if cached, ok, invalidated, err := rt.findExistingWorkerVMRequest(ctx, parentRunID); err != nil {
+				if cached, ok, invalidated, err := rt.findExistingWorkerVMRequest(ctx, parentRunID, machineClass); err != nil {
 					rt.workerRequestMu.Unlock()
 					return "", err
 				} else if ok {
@@ -308,7 +308,19 @@ func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
 	return result
 }
 
-func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID string) string {
+func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID, machineClass string) string {
+	ownerID = strings.TrimSpace(ownerID)
+	desktopID = strings.TrimSpace(desktopID)
+	parentAgentID = strings.TrimSpace(parentAgentID)
+	parentRunID = strings.TrimSpace(parentRunID)
+	machineClass = normalizeRuntimeWorkerMachineClass(machineClass)
+	if ownerID == "" || desktopID == "" || parentAgentID == "" || parentRunID == "" {
+		return ""
+	}
+	return ownerID + "\x00" + desktopID + "\x00" + parentAgentID + "\x00" + parentRunID + "\x00" + machineClass
+}
+
+func workerVMRequestCachePrefix(ownerID, desktopID, parentAgentID, parentRunID string) string {
 	ownerID = strings.TrimSpace(ownerID)
 	desktopID = strings.TrimSpace(desktopID)
 	parentAgentID = strings.TrimSpace(parentAgentID)
@@ -316,13 +328,14 @@ func workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID stri
 	if ownerID == "" || desktopID == "" || parentAgentID == "" || parentRunID == "" {
 		return ""
 	}
-	return ownerID + "\x00" + desktopID + "\x00" + parentAgentID + "\x00" + parentRunID
+	return ownerID + "\x00" + desktopID + "\x00" + parentAgentID + "\x00" + parentRunID + "\x00"
 }
 
-func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string) (string, bool, bool, error) {
+func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID, machineClass string) (string, bool, bool, error) {
 	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
 		return "", false, false, nil
 	}
+	machineClass = normalizeRuntimeWorkerMachineClass(machineClass)
 	eventsForRun, err := rt.listWorkerToolEventsForCurrentScope(ctx, runID, 500)
 	if err != nil {
 		return "", false, false, fmt.Errorf("request_worker_vm dedupe scan: %w", err)
@@ -362,6 +375,9 @@ func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string
 		}
 		status, _ := output["status"].(string)
 		if strings.TrimSpace(status) == "worker_requested" && output["handle"] != nil {
+			if requested := workerMachineClassFromRequestOutput(output); machineClass != "" && requested != "" && requested != machineClass {
+				continue
+			}
 			key := workerVMLeaseKeyFromRequestOutput(output)
 			if workerVMLeaseKeyInvalidated(key, invalidated) {
 				invalidatedAny = true
@@ -556,6 +572,14 @@ func workerVMLeaseKeyFromRequestOutput(output map[string]any) workerVMLeaseKey {
 	}
 }
 
+func workerMachineClassFromRequestOutput(output map[string]any) string {
+	handle, _ := output["handle"].(map[string]any)
+	return normalizeRuntimeWorkerMachineClass(firstNonEmpty(
+		stringMapValue(handle, "machine_class"),
+		stringMapValue(output, "machine_class"),
+	))
+}
+
 func workerVMLeaseKeyFromDelegateOutput(output map[string]any) workerVMLeaseKey {
 	return workerVMLeaseKey{
 		WorkerID:   stringMapValue(output, "worker_id"),
@@ -602,13 +626,19 @@ func (rt *Runtime) invalidateWorkerVMRequestCacheForDelegateResult(ctx context.C
 	}
 	parentAgentID := stringFromToolContext(ctx, toolCtxAgentID)
 	parentRunID := stringFromToolContext(ctx, toolCtxRunID)
-	cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID)
-	if cacheKey == "" {
+	cachePrefix := workerVMRequestCachePrefix(ownerID, desktopID, parentAgentID, parentRunID)
+	if cachePrefix == "" {
 		return result
 	}
 	rt.workerRequestMu.Lock()
-	if _, ok := rt.workerRequests[cacheKey]; ok {
-		delete(rt.workerRequests, cacheKey)
+	invalidated := false
+	for key := range rt.workerRequests {
+		if strings.HasPrefix(key, cachePrefix) {
+			delete(rt.workerRequests, key)
+			invalidated = true
+		}
+	}
+	if invalidated {
 		result["worker_request_cache_invalidated"] = true
 		result["worker_request_cache_invalidation_reason"] = "worker_runtime_unreachable"
 	}

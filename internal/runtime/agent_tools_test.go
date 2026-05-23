@@ -1507,7 +1507,7 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 	}
 }
 
-func TestSuperRequestWorkerVMDedupesSameRunDifferentPurposes(t *testing.T) {
+func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
@@ -1558,8 +1558,12 @@ func TestSuperRequestWorkerVMDedupesSameRunDifferentPurposes(t *testing.T) {
 	if firstDeduped {
 		t.Fatal("first worker request should not be deduped")
 	}
-	if second != first || !secondDeduped {
-		t.Fatalf("second worker = %s deduped=%v, want reused %s with dedupe marker", second, secondDeduped, first)
+	if second == first || secondDeduped {
+		t.Fatalf("second worker = %s deduped=%v, want distinct worker from %s for different machine class", second, secondDeduped, first)
+	}
+	third, thirdDeduped := request(json.RawMessage(`{"purpose":"Run another small candidate","machine_class":"worker-small"}`))
+	if third != first || !thirdDeduped {
+		t.Fatalf("third worker = %s deduped=%v, want reused %s with dedupe marker for same machine class", third, thirdDeduped, first)
 	}
 }
 

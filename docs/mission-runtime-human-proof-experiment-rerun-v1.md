@@ -263,55 +263,74 @@ last checkpoint:
   false success. A local continuation patch now removes the prompt/runtime
   ambiguity that let verifier co-super inspect before implementation evidence.
 current artifact state:
-  runtime can preserve active worker evidence and VText can narrate the run,
-  and local runtime now blocks vsuper verifier spawning until an implementation
+  runtime can preserve active worker evidence and VText can narrate the run.
+  Deployed runtime now blocks vsuper verifier spawning until an implementation
   co-super has reached terminal commit/package/blocker evidence. Worker shell
-  tool environments now append configured Obscura/Playwright binary dirs to
-  PATH, and prompts require PATH/CHOIR_OBSCURA_BIN/OBSCURA_BIN diagnostics
-  before treating browser proof as unavailable.
+  tool environments append configured Obscura/Playwright binary dirs to PATH,
+  and prompts require PATH/CHOIR_OBSCURA_BIN/OBSCURA_BIN diagnostics before
+  treating browser proof as unavailable. A follow-on local patch has now
+  isolated a second runtime blocker: super's worker-VM lease dedupe was scoped
+  only to owner/desktop/super-run, so a later request for worker-playwright in
+  the same run could silently reuse the existing worker-small lease.
 what shipped:
   e53cf1910a20780cf726f32c35cc8121bc2acfd2 normalizes source-ledger git tokens
-  before recipient build checkout. The verifier/PATH patch is local and not
-  yet committed, pushed, deployed, or proven on staging.
+  before recipient build checkout. 915bb74eb3b0f71ebc71f73560060d9173ebb3a1
+  shipped the verifier sequencing guard plus worker browser-tool PATH
+  hardening; GitHub Actions run 26333349912 passed and deployed to staging, and
+  /health reported proxy and sandbox deployed_commit 915bb74eb3b0f71ebc71f73560060d9173ebb3a1.
+  The worker-lease machine-class dedupe patch is local and not yet committed,
+  pushed, deployed, or proven on staging.
 what was proven:
   staging Chiron proof reached VText dashboard and worker/vsuper evidence, and
   correctly withheld AppChangePackage publication when fresh verifier and
   screenshot/video evidence were missing.
+  The 915bb74 staging rerun reached a better VText dashboard with marker
+  chiron-seq-1779541877681 and leased worker-small
+  worker-6984208e295e75bd / vm-fe8392c7000649bb0b987a70d837859f, but no
+  worker-playwright lease was created. Independent vmctl ownership inspection
+  showed only the worker-small lease for that trajectory, proving the browser
+  evidence handoff remained blocked before package review.
 
-  Local tests for the new patch:
+  Local tests for the shipped 915bb74 patch:
   - nix develop -c go test ./internal/runtime -run 'TestVSuperSpawnAgentEnforcesActiveChildBudget|TestVSuperVerifierSpawnRequiresCompletedImplementation|TestWorkerVSuperDelegateContractPreventsCheckoutRaces|TestToolCommandEnvUsesPersistentScratchRoot|TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath' -count=1
   - nix develop -c go test ./internal/runtime -count=1
+  Local tests for the worker-lease dedupe patch:
+  - nix develop -c go test ./internal/runtime -run 'TestSuperRequestWorkerVMDedupesSameRunByMachineClass|TestSuperRequestWorkerVMDedupesSameRunSamePurpose|TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure|TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath|TestVSuperVerifierSpawnRequiresCompletedImplementation' -count=1
+  - nix develop -c go test ./internal/runtime -count=1
 unproven or partial claims:
-  staging deploy identity for the verifier/PATH patch; product-path proof that
-  vsuper waits to spawn verifier until implementation evidence; Obscura
-  availability inside a fresh deployed worker-small; worker-playwright handoff
-  for media proof; reviewable Chiron; Motion, Liquid, and Python experiments;
-  recipient adoption; rollback.
+  staging deploy identity for the worker-lease dedupe patch; product-path proof
+  that super can request a distinct worker-playwright after worker-small
+  implementation evidence; reviewable Chiron; Motion, Liquid, and Python
+  experiments; recipient adoption; rollback.
 belief-state changes:
   the runtime is now failing at a narrower evidence gate rather than losing
-  worker state entirely. The positive path needs deployed sequencing and
-  browser-proof capability, not another broad async rewrite. The prior
-  `obscura: command not found` is likely either stale/warm worker image, PATH
-  propagation, or use of worker-small for a proof that should route to
-  worker-playwright.
+  worker state entirely. The positive path needs deployed sequencing and a
+  super-managed browser-proof worker handoff, not another broad async rewrite.
+  The prior `obscura: command not found` was narrowed by PATH hardening; the
+  current proof failure is the lease-dedupe/product-supervision path that kept
+  browser evidence on worker-small instead of creating worker-playwright.
 remaining error field:
-  staging verification of the early-verifier guard; worker image/PATH freshness;
-  unclear worker-playwright handoff for candidate evidence; no experiment media
-  proof.
+  staging verification of machine-class-specific worker leases; proof prompt
+  may still need to make the second super-managed browser evidence delegation
+  explicit enough; no experiment media proof.
 highest-impact remaining uncertainty:
   can a product-path Choir worker produce implementation evidence, then a fresh
   verifier and real browser-proof media, then publish exactly one reviewable
   AppChangePackage without Codex hand-coding the feature?
 next executable probe:
-  commit the verifier sequencing and browser-tool PATH patch, push main,
-  monitor CI/deploy, verify staging identity, then rerun Chiron through visible
-  product path until it publishes one reviewable AppChangePackage or records a
-  precise blocker with media-capability evidence.
+  commit the worker-lease machine-class dedupe patch, push main, monitor
+  CI/deploy, verify staging identity, then rerun Chiron through visible product
+  path with an explicit two-stage implementation/proof-worker objective until
+  it publishes one reviewable AppChangePackage or records a precise blocker
+  with media-capability evidence.
 suggested resume goal string:
   use the One-Line Goal String in this file.
 evidence artifact refs:
   test-results/chiron-sequential-e53cf19-20260523T114634Z
+  test-results/chiron-sequential-915bb74-20260523T131116Z
 rollback refs:
   git revert e53cf1910a20780cf726f32c35cc8121bc2acfd2 for the latest recipient
   build normalization patch if it causes regression.
+  git revert 915bb74eb3b0f71ebc71f73560060d9173ebb3a1 for the verifier/PATH
+  runtime patch if it causes regression.
 ```
