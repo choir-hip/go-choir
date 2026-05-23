@@ -192,6 +192,21 @@ func TestAppPromotionBaseRefNormalizesLedgerGitToken(t *testing.T) {
 	}
 }
 
+func TestAppPromotionBaseRefNormalizesPlainGitSHARef(t *testing.T) {
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
+	const deployedSHA = "f3bcd44d6ac651e73138a53d636af47da0c5a606"
+	pkg := types.AppChangePackageRecord{
+		ManifestJSON:    json.RawMessage(`{"source_ledger_base_ref":"git:f3bcd44d6ac651e73138a53d636af47da0c5a606"}`),
+		SourceActiveRef: "source-active",
+	}
+	rec := types.AppAdoptionRecord{
+		TargetActiveSourceRefAtCandidateStart: "target-start",
+	}
+	if got := appPromotionBaseRef(pkg, rec, "target-cutover"); got != deployedSHA {
+		t.Fatalf("base ref = %q, want checkoutable sha %q", got, deployedSHA)
+	}
+}
+
 func TestAppPromotionBaseRefSkipsProductOnlyComputerRefs(t *testing.T) {
 	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
 	pkg := types.AppChangePackageRecord{

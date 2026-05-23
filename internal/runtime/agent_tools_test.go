@@ -1345,7 +1345,7 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	if resp.Status != "worker_requested" {
 		t.Fatalf("status = %q, want worker_requested", resp.Status)
 	}
-	if resp.DelegationRequired || resp.NextTool != "start_worker_delegation" {
+	if !resp.DelegationRequired || resp.NextTool != "start_worker_delegation" {
 		t.Fatalf("async delegation guidance missing: %+v", resp)
 	}
 	if resp.Handle.Kind != "worker" {

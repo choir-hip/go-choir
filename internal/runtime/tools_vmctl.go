@@ -291,7 +291,7 @@ func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
 	result := map[string]any{
 		"status":              "worker_requested",
 		"handle":              handle,
-		"delegation_required": false,
+		"delegation_required": true,
 		"next_tool":           "start_worker_delegation",
 		"next_instruction":    "Call start_worker_delegation next with start_args plus the full execution objective. It starts the worker run and returns immediately; use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
 	}

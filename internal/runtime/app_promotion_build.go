@@ -209,6 +209,7 @@ func appPromotionCheckoutRef(value string) string {
 		if at := strings.LastIndex(value, "@"); at >= 0 && at+1 < len(value) {
 			return strings.TrimSpace(value[at+1:])
 		}
+		return strings.TrimSpace(strings.TrimPrefix(value, "git:"))
 	}
 	return value
 }

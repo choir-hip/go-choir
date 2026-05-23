@@ -258,28 +258,36 @@ If runtime fixes worsen worker supervision, rollback the platform patch before r
 ```text
 status: checkpoint_incomplete
 last checkpoint:
-  e53cf19 deployed. Recipient-build ref normalization landed and staging
-  health verified. Chiron rerun produced an owner-readable blocker instead of
-  false success. A local continuation patch now removes the prompt/runtime
-  ambiguity that let verifier co-super inspect before implementation evidence.
+  f3bcd44 deployed. Machine-class-specific worker leasing landed and staging
+  health verified. Chiron rerun marker chiron-seq-1779544151357 proved super
+  can lease worker-small for implementation and a distinct worker-playwright
+  for browser proof, but it still ended at verify_blocked rather than
+  reviewable/installable feature proof.
 current artifact state:
   runtime can preserve active worker evidence and VText can narrate the run.
   Deployed runtime now blocks vsuper verifier spawning until an implementation
   co-super has reached terminal commit/package/blocker evidence. Worker shell
   tool environments append configured Obscura/Playwright binary dirs to PATH,
-  and prompts require PATH/CHOIR_OBSCURA_BIN/OBSCURA_BIN diagnostics before
-  treating browser proof as unavailable. A follow-on local patch has now
-  isolated a second runtime blocker: super's worker-VM lease dedupe was scoped
-  only to owner/desktop/super-run, so a later request for worker-playwright in
-  the same run could silently reuse the existing worker-small lease.
+  prompts require PATH/CHOIR_OBSCURA_BIN/OBSCURA_BIN diagnostics before
+  treating browser proof as unavailable, and worker-VM lease dedupe is now
+  scoped by machine class. A follow-on local patch now fixes the next two
+  discovered blockers: recipient builds could still try to checkout a plain
+  `git:<sha>` source-ledger token, and `request_worker_vm` returned the
+  contradictory structured field `delegation_required:false`, which can leave
+  a freshly leased proof worker idle.
 what shipped:
   e53cf1910a20780cf726f32c35cc8121bc2acfd2 normalizes source-ledger git tokens
   before recipient build checkout. 915bb74eb3b0f71ebc71f73560060d9173ebb3a1
   shipped the verifier sequencing guard plus worker browser-tool PATH
   hardening; GitHub Actions run 26333349912 passed and deployed to staging, and
   /health reported proxy and sandbox deployed_commit 915bb74eb3b0f71ebc71f73560060d9173ebb3a1.
-  The worker-lease machine-class dedupe patch is local and not yet committed,
-  pushed, deployed, or proven on staging.
+  f3bcd44d6ac651e73138a53d636af47da0c5a606 shipped machine-class-specific
+  worker lease dedupe; GitHub Actions run 26334078335 passed and deployed to
+  staging, and /health reported proxy and sandbox deployed_commit
+  f3bcd44d6ac651e73138a53d636af47da0c5a606.
+  The plain `git:<sha>` checkout normalization plus corrected
+  `delegation_required:true` worker-lease result are local and not yet
+  committed, pushed, deployed, or proven on staging.
 what was proven:
   staging Chiron proof reached VText dashboard and worker/vsuper evidence, and
   correctly withheld AppChangePackage publication when fresh verifier and
@@ -290,6 +298,16 @@ what was proven:
   worker-playwright lease was created. Independent vmctl ownership inspection
   showed only the worker-small lease for that trajectory, proving the browser
   evidence handoff remained blocked before package review.
+  The f3bcd44 staging rerun reached VText dashboard marker
+  chiron-seq-1779544151357, published one unlisted AppChangePackage
+  b1bb631c-d62c-4068-83b5-a32d2c78bb68 from worker-small
+  worker-1c002d3c7927affe / vm-a95e605106a8f4d8e38258375418c016, and then
+  leased distinct worker-playwright worker-bccfd4c00ef57907 /
+  vm-508ae6c617cad8cf1b9cd704da200ac9. The proof still ended
+  verify_blocked because recipient build checkout tried base ref
+  `git:f3bcd44d6ac651e73138a53d636af47da0c5a606` and failed with git exit
+  128. The proof worker was leased but had no running worker run, indicating
+  the request_worker_vm result/prompt still allowed lease-without-delegate.
 
   Local tests for the shipped 915bb74 patch:
   - nix develop -c go test ./internal/runtime -run 'TestVSuperSpawnAgentEnforcesActiveChildBudget|TestVSuperVerifierSpawnRequiresCompletedImplementation|TestWorkerVSuperDelegateContractPreventsCheckoutRaces|TestToolCommandEnvUsesPersistentScratchRoot|TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath' -count=1
@@ -297,40 +315,46 @@ what was proven:
   Local tests for the worker-lease dedupe patch:
   - nix develop -c go test ./internal/runtime -run 'TestSuperRequestWorkerVMDedupesSameRunByMachineClass|TestSuperRequestWorkerVMDedupesSameRunSamePurpose|TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure|TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath|TestVSuperVerifierSpawnRequiresCompletedImplementation' -count=1
   - nix develop -c go test ./internal/runtime -count=1
+  Local tests for the current plain-git-ref/delegation-required patch:
+  - nix develop -c go test ./internal/runtime -run 'TestSuperRequestWorkerVMDedupesSameRunByMachineClass|TestRequestWorkerVMReturnsAsyncStartGuidance|TestAppPromotionBaseRefNormalizesPlainGitSHARef|TestAppAdoptionRequiresActualRecipientBuild|TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure' -count=1
+  - nix develop -c go test ./internal/runtime -count=1
 unproven or partial claims:
-  staging deploy identity for the worker-lease dedupe patch; product-path proof
-  that super can request a distinct worker-playwright after worker-small
-  implementation evidence; reviewable Chiron; Motion, Liquid, and Python
-  experiments; recipient adoption; rollback.
+  staging deploy identity for the current plain-git-ref/delegation-required
+  patch; product-path proof that super can delegate work to worker-playwright
+  after leasing it; reviewable Chiron with real screenshot/video refs; Motion,
+  Liquid, and Python experiments; recipient adoption; rollback.
 belief-state changes:
   the runtime is now failing at a narrower evidence gate rather than losing
-  worker state entirely. The positive path needs deployed sequencing and a
-  super-managed browser-proof worker handoff, not another broad async rewrite.
-  The prior `obscura: command not found` was narrowed by PATH hardening; the
-  current proof failure is the lease-dedupe/product-supervision path that kept
-  browser evidence on worker-small instead of creating worker-playwright.
+  worker state entirely. The positive path needs deployed sequencing,
+  checkoutable source-ledger refs, and a super-managed browser-proof worker
+  handoff that includes delegation, not just leasing. The prior
+  `obscura: command not found` was narrowed by PATH hardening; the next proof
+  failure narrowed to recipient-build checkout normalization plus
+  lease-without-delegate structured guidance.
 remaining error field:
-  staging verification of machine-class-specific worker leases; proof prompt
-  may still need to make the second super-managed browser evidence delegation
-  explicit enough; no experiment media proof.
+  staging verification of plain `git:<sha>` source-ledger checkout; proof
+  prompt/runtime may still need to prove the second super-managed browser
+  evidence worker is delegated and observed; no experiment media proof.
 highest-impact remaining uncertainty:
-  can a product-path Choir worker produce implementation evidence, then a fresh
-  verifier and real browser-proof media, then publish exactly one reviewable
-  AppChangePackage without Codex hand-coding the feature?
+  can a product-path Choir worker produce implementation evidence, then a
+  delegated proof worker with real browser-proof media, then recipient-build and
+  rollback evidence, without Codex hand-coding the feature?
 next executable probe:
-  commit the worker-lease machine-class dedupe patch, push main, monitor
-  CI/deploy, verify staging identity, then rerun Chiron through visible product
-  path with an explicit two-stage implementation/proof-worker objective until
-  it publishes one reviewable AppChangePackage or records a precise blocker
-  with media-capability evidence.
+  commit the plain-git-ref checkout and delegation-required patch, push main,
+  monitor CI/deploy, verify staging identity, then rerun Chiron through visible
+  product path until it either adopts/rolls back the package with recipient
+  build evidence and media refs, or records the next precise blocker.
 suggested resume goal string:
   use the One-Line Goal String in this file.
 evidence artifact refs:
   test-results/chiron-sequential-e53cf19-20260523T114634Z
   test-results/chiron-sequential-915bb74-20260523T131116Z
+  test-results/chiron-sequential-f3bcd44-20260523T134909Z
 rollback refs:
   git revert e53cf1910a20780cf726f32c35cc8121bc2acfd2 for the latest recipient
   build normalization patch if it causes regression.
   git revert 915bb74eb3b0f71ebc71f73560060d9173ebb3a1 for the verifier/PATH
   runtime patch if it causes regression.
+  git revert f3bcd44d6ac651e73138a53d636af47da0c5a606 for the worker-lease
+  machine-class dedupe patch if it causes regression.
 ```
