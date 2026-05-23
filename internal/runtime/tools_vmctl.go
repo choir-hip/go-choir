@@ -323,7 +323,7 @@ func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID string
 	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
 		return "", false, false, nil
 	}
-	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	eventsForRun, err := rt.listWorkerToolEventsForCurrentScope(ctx, runID, 500)
 	if err != nil {
 		return "", false, false, fmt.Errorf("request_worker_vm dedupe scan: %w", err)
 	}
@@ -386,7 +386,7 @@ func (rt *Runtime) workerVMRequestInvalidatedByRunEvents(ctx context.Context, ru
 	if !key.Valid() || rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
 		return false, nil
 	}
-	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	eventsForRun, err := rt.listWorkerToolEventsForCurrentScope(ctx, runID, 500)
 	if err != nil {
 		return false, fmt.Errorf("request_worker_vm dedupe invalidation scan: %w", err)
 	}
@@ -425,7 +425,7 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 	if !key.Valid() {
 		return "", false, nil
 	}
-	eventsForRun, err := rt.store.ListEvents(ctx, runID, 500)
+	eventsForRun, err := rt.listWorkerToolEventsForCurrentScope(ctx, runID, 1000)
 	if err != nil {
 		return "", false, fmt.Errorf("delegate_worker_vm dedupe scan: %w", err)
 	}
@@ -459,6 +459,23 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 		candidate = payload.Output
 	}
 	return candidate, candidate != "", nil
+}
+
+func (rt *Runtime) listWorkerToolEventsForCurrentScope(ctx context.Context, runID string, limit int) ([]types.EventRecord, error) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if rec := ctxRunRecord(ctx); rec != nil {
+		ownerID := strings.TrimSpace(rec.OwnerID)
+		trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
+		if ownerID != "" && trajectoryID != "" {
+			return rt.store.ListEventsByTrajectory(ctx, ownerID, trajectoryID, limit)
+		}
+	}
+	return rt.store.ListEvents(ctx, runID, limit)
 }
 
 func delegateWorkerVMResultReusable(output map[string]any) bool {

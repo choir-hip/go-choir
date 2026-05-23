@@ -1725,6 +1725,77 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 	}
 }
 
+func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+	ownerID := "user-alice"
+	agentID := persistentSuperAgentID(ownerID)
+	trajectoryID := "traj-delegate-trajectory-dedupe"
+	firstRun, err := rt.StartRunWithMetadata(context.Background(), "start worker in first super turn", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      agentID,
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+		runMetadataTrajectoryID: trajectoryID,
+	})
+	if err != nil {
+		t.Fatalf("submit first super task: %v", err)
+	}
+	existing := map[string]any{
+		"status":              "worker_run_started",
+		"worker_id":           "worker-trajectory",
+		"worker_vm_id":        "vm-trajectory",
+		"worker_sandbox_url":  "http://worker-trajectory.test",
+		"loop_id":             "worker-run-existing-trajectory",
+		"worker_run_id":       "worker-run-existing-trajectory",
+		"profile":             AgentProfileVSuper,
+		"state":               string(types.RunRunning),
+		"app_change_packages": []map[string]any{},
+	}
+	appendRuntimeToolResult(t, s, *firstRun, "start_worker_delegation", existing)
+
+	secondRun, err := rt.StartRunWithMetadata(context.Background(), "continue worker supervision in second super turn", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentID:      agentID,
+		runMetadataDesktopID:    types.PrimaryDesktopID,
+		runMetadataTrajectoryID: trajectoryID,
+	})
+	if err != nil {
+		t.Fatalf("submit second super task: %v", err)
+	}
+	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondRun), "start_worker_delegation", json.RawMessage(`{
+		"worker_sandbox_url": "http://worker-trajectory.test",
+		"worker_id": "worker-trajectory",
+		"vm_id": "vm-trajectory",
+		"objective": "continue the same async worker package proof",
+		"profile": "vsuper",
+		"timeout_seconds": 1
+	}`))
+	if err != nil {
+		t.Fatalf("start_worker_delegation trajectory dedupe: %v", err)
+	}
+	var got struct {
+		Deduped      bool   `json:"deduped"`
+		DedupeReason string `json:"dedupe_reason"`
+		Status       string `json:"status"`
+		LoopID       string `json:"loop_id"`
+		WorkerRunID  string `json:"worker_run_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("decode trajectory dedupe: %v\n%s", err, raw)
+	}
+	if !got.Deduped || got.DedupeReason != "super_run_already_started_worker_delegation" {
+		t.Fatalf("dedupe fields = %+v, raw=%s", got, raw)
+	}
+	if got.Status != "worker_run_started" || got.LoopID != "worker-run-existing-trajectory" || got.WorkerRunID != "worker-run-existing-trajectory" {
+		t.Fatalf("deduped worker run mismatch = %+v, raw=%s", got, raw)
+	}
+}
+
 func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
