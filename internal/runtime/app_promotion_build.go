@@ -185,19 +185,32 @@ func appPromotionBaseRef(pkg types.AppChangePackageRecord, rec types.AppAdoption
 		"origin/main",
 		"HEAD",
 	} {
-		candidate = strings.TrimSpace(candidate)
+		candidate = appPromotionCheckoutRef(candidate)
 		if candidate == "" {
 			continue
-		}
-		if strings.HasPrefix(candidate, "refs/computers/") || strings.HasPrefix(candidate, "refs/platform-computers/") {
-			continue
-		}
-		if strings.HasPrefix(candidate, "refs/heads/") {
-			return strings.TrimPrefix(candidate, "refs/heads/")
 		}
 		return candidate
 	}
 	return "origin/main"
+}
+
+func appPromotionCheckoutRef(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.HasPrefix(value, "refs/computers/") || strings.HasPrefix(value, "refs/platform-computers/") {
+		return ""
+	}
+	if strings.HasPrefix(value, "refs/heads/") {
+		return strings.TrimSpace(strings.TrimPrefix(value, "refs/heads/"))
+	}
+	if strings.HasPrefix(value, "git:") {
+		if at := strings.LastIndex(value, "@"); at >= 0 && at+1 < len(value) {
+			return strings.TrimSpace(value[at+1:])
+		}
+	}
+	return value
 }
 
 func appPromotionBuildEnv(candidateDir string) ([]string, string, error) {

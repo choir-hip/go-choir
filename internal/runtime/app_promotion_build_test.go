@@ -177,6 +177,35 @@ func TestAppPromotionBaseRefPrefersPackageLedgerBase(t *testing.T) {
 	}
 }
 
+func TestAppPromotionBaseRefNormalizesLedgerGitToken(t *testing.T) {
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
+	const deployedSHA = "357d20670af512af5fdb4eb04b310527047d2e5c"
+	pkg := types.AppChangePackageRecord{
+		ManifestJSON:    json.RawMessage(`{"source_ledger_base_ref":"git:go-choir-candidate@357d20670af512af5fdb4eb04b310527047d2e5c\n"}`),
+		SourceActiveRef: "source-active",
+	}
+	rec := types.AppAdoptionRecord{
+		TargetActiveSourceRefAtCandidateStart: "target-start",
+	}
+	if got := appPromotionBaseRef(pkg, rec, "target-cutover"); got != deployedSHA {
+		t.Fatalf("base ref = %q, want checkoutable sha %q", got, deployedSHA)
+	}
+}
+
+func TestAppPromotionBaseRefSkipsProductOnlyComputerRefs(t *testing.T) {
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "deployed-head")
+	pkg := types.AppChangePackageRecord{
+		ManifestJSON:    json.RawMessage(`{"source_ledger_base_ref":"refs/computers/user-a/active"}`),
+		SourceActiveRef: "refs/platform-computers/default/active",
+	}
+	rec := types.AppAdoptionRecord{
+		TargetActiveSourceRefAtCandidateStart: "refs/computers/user-b/active",
+	}
+	if got := appPromotionBaseRef(pkg, rec, "refs/heads/app-adoptions/candidate"); got != "app-adoptions/candidate" {
+		t.Fatalf("base ref = %q, want checkoutable branch", got)
+	}
+}
+
 func TestAppPromotionBuildEnvUsesWorkspaceScratchPaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "promotion-workspaces")
 	candidateDir := filepath.Join(root, "adoption-1")
