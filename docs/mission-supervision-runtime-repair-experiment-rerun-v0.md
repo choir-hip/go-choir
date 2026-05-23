@@ -1,0 +1,395 @@
+# MissionGradient: Supervision Runtime Repair And Experiment Rerun v0
+
+**Status:** ready_to_run
+**Date:** 2026-05-23
+**Supersedes immediate continuation of:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
+**Resumes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
+**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+
+## One-Line Goal String
+
+```text
+/goal Run docs/mission-supervision-runtime-repair-experiment-rerun-v0.md as a Codex-operated MissionGradient mission: first repair and prove Choir's async supervision runtime, then restart the four human-proof experiments through Choir-in-Choir. Start from deployed runtime checkpoint 732eb4a and the async proof showing request/start/observe/finish use one worker_run_id, but worker submit_worker_update still fails with delivery target requester lookup, VText only receives fallback/stale supervision evidence, and run acceptance can confuse a no-package runtime proof with app-package failure. Root-cause and fix worker-update delivery/fanout so vsuper/co-super substantive updates reach both the live VText dashboard and supervising super without giving VText worker-control authority; keep super as sole redirect/cancel authority; preserve nonblocking start/observe/redirect/finish semantics; prevent duplicate starts; audit gateway/auth/502/timeouts as named runtime failures; improve Trace/run-acceptance signal for LLM content, tool calls, agent messages, worker events, cancellation, and terminal evidence; and establish a bounded screenshot/video/benchmark evidence-worker path rather than requiring Playwright in every VM or claiming Obscura replacement before it proves equivalent staging capability. Land runtime/harness/prompt/diagnostic fixes through git/CI/deploy, verify staging identity, and prove on staging through the visible product path with VText, Trace, run-acceptance, and screenshots that async worker supervision is live, narratable, and resumable. Only then rerun Chiron Shelf observability, process/window/agent animation language, Choir Liquid Material Engine, and Python code mode sequentially through Choir-developed candidate computers. Codex must not hand-code experiment features; if Choir-in-Choir fails, Codex fixes the runtime/harness/orchestration/prompting/evidence substrate and reruns the same experiment through Choir. Finish with owner-readable VText dashboards/reports, real screenshots/video/benchmarks, Trace/run-acceptance evidence, package/adoption/rollback refs or precise blockers, residual risks, and the next realism axis. If incomplete, report checkpoint_incomplete or blocked_incomplete, update this mission doc with a resumable checkpoint, and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
+```
+
+## Mission Frame
+
+The previous async-supervision preflight made real progress. Deployed staging
+commit `732eb4a` proves that the product path can:
+
+- request a worker VM;
+- start one async worker run;
+- observe the same `worker_run_id`;
+- finish that same run without a duplicate successful start;
+- block duplicate same-turn `start_worker_delegation` execution.
+
+That is not enough to restart the four experiments. The proof also showed the
+next runtime fault clearly:
+
+```text
+submit_worker_update failed:
+resolve delivery target requester lookup: record not found
+```
+
+As a result, worker/vsuper updates are not reliably delivered to the live VText
+dashboard or supervising super. VText can show stale or fallback narration even
+when Trace has terminal worker evidence. That is exactly the observability gap
+that caused the previous experiment portfolio to drift into machine receipts,
+static reports, and weak human proof.
+
+This mission repairs the supervision loop first. Then it restarts the four
+experiments as a meta-experiment: Choir must develop the features inside
+candidate/background computers while Codex supervises from VText, screenshots,
+video, Trace, and run-acceptance evidence.
+
+Codex may directly edit runtime, harness, orchestration, prompting, diagnostics,
+Trace, VText, Apps & Changes review gates, and acceptance synthesis. Codex must
+not hand-code Chiron, Motion, Liquid, or Python mode experiment features.
+
+## Real Artifact
+
+The artifact is a self-development loop that is observable by humans while it
+runs:
+
+```text
+visible product prompt
+  -> VText mission dashboard
+  -> persistent super
+  -> async worker VM / vsuper
+  -> implementation and verifier co-supers
+  -> substantive worker updates fan out to super + VText + Trace
+  -> screenshots/video/benchmarks captured by bounded evidence workers
+  -> candidate package/adoption/rollback evidence
+  -> owner-readable report
+```
+
+The runtime part is not complete until a worker's substantive update is
+delivered as a real causal update, not only as a fallback after terminal
+collection.
+
+The experiment part is not complete until each experiment has human proof:
+narrative VText, media/benchmark evidence, and a plain-English recommendation.
+Package refs and build receipts are supporting details, not the review object.
+
+## Hard Invariants
+
+- Super is the foreground control authority. Only super may redirect, cancel,
+  or reassign worker/vsuper work from the foreground.
+- VText may narrate uncertainty and ask super clarifying questions. VText does
+  not issue worker-control commands.
+- VSuper curates substantive owner-level checkpoints from co-super work.
+- Co-supers report primarily to their supervising vsuper.
+- Skip-level super-to-co-super directives are valid only when the supervising
+  vsuper receives the same directive atomically.
+- `request_worker_vm` leases; `start_worker_delegation` starts; `observe`,
+  `redirect`, `cancel`, and `finish` are explicit bounded controls. No hidden
+  synchronous delegate path is a success route.
+- A worker run must not be counted as successfully started more than once for
+  the same worker handle and objective.
+- VText dashboard freshness is a required part of long-run supervision proof.
+- Human proof gates must not treat package publication, recipient build, or
+  run-acceptance receipts as working-feature evidence.
+- Active computers are not mutated directly. Candidate/background computers
+  mutate; active state changes only through verified adoption/promotion with
+  rollback.
+- Staging product proof is required for platform behavior claims.
+
+## Starting Belief State
+
+Known from the deployed proof at `732eb4a`:
+
+- Async request/start/observe/finish can preserve a single worker run id.
+- Same-turn duplicate `start_worker_delegation` is guarded.
+- The old hidden blocking path is no longer the accepted proof route.
+- `submit_worker_update` can still fail inside worker/vsuper runs because the
+  delivery target resolver cannot find the requester record in the worker
+  context.
+- VText may receive synthesized or stale checkpoint content rather than the
+  real worker update.
+- Run acceptance still has app-package assumptions that can mark a pure runtime
+  proof as blocked for the wrong reason.
+- Gateway auth failures, route `502`s, worker timeouts, and browser-evidence
+  gaps can still masquerade as experiment failures unless they are separated in
+  Trace, VText, and run acceptance.
+- Obscura can remain useful for extraction and lightweight browsing, but the
+  current mission still needs a special browser-proof worker class for
+  authenticated product actions, screenshots, and video unless Obscura proves
+  the same capability on staging.
+- The four experiments should remain paused until this supervision loop is
+  repaired and proven on staging.
+
+Highest-impact uncertainty:
+
+```text
+Can a real worker/vsuper/co-super update be delivered live to both VText and
+super, incorporated into owner-readable VText, and observed in Trace/run
+acceptance without blocking super or creating multiple controllers?
+```
+
+## Required Runtime Repair
+
+Investigate from product evidence before patching. Start with the failing
+`submit_worker_update` path:
+
+- inspect worker-run metadata propagation from super to delegated worker/vsuper;
+- inspect delivery target resolution for VText requester, super requester,
+  channel id, trajectory id, and worker context;
+- determine why requester lookup fails when the worker run is remote or
+  isolated;
+- decide whether the durable target should be requester metadata, a stable
+  coordination channel, a VText dashboard id, or a typed copied update event;
+- patch the smallest clean product path that preserves the authority model.
+
+The expected shape is:
+
+- worker/vsuper sends one substantive update;
+- the update is durable and addressable;
+- VText can consume it into a narrative revision;
+- super can observe or receive the same update for supervision;
+- Trace shows the update with useful signal, not only raw noisy events;
+- no duplicate control signal is created;
+- no worker-control authority is granted to VText.
+
+Also repair or precisely scope:
+
+- run-acceptance contracts so runtime-supervision proofs are not blocked by
+  app-package requirements when no AppChangePackage was requested;
+- VText terminal evidence synthesis so `finish_worker_delegation` completion is
+  not contradicted by stale VText prose;
+- worker event summaries so failed and pending worker-run evidence remains
+  durable and owner-reviewable;
+- prompts for super, vsuper, co-super, verifier, and VText so significant
+  updates are sent at a useful cadence and style;
+- Trace UI/API projections so LLM content, tool calls, agent-to-agent messages,
+  worker updates, redirects, cancellation, and terminal evidence are easy to
+  find.
+- blocking/timeouts across gateway, worker VM route resolution, provider calls,
+  delegate tools, and evidence capture so no long operation freezes super or
+  gets flattened into a generic failed experiment;
+- evidence-worker capability for screenshots/video/benchmarks: prefer a
+  special Playwright-capable worker class when full browser proof is needed,
+  not Playwright in every user/candidate VM; use Obscura only for the parts it
+  demonstrably supports.
+
+## Runtime Verification Gate
+
+Do not resume experiments until staging proves:
+
+- visible prompt-bar product path starts a worker delegation;
+- `request_worker_vm`, `start_worker_delegation`, `observe_worker_delegation`,
+  and `finish_worker_delegation` refer to one worker run id;
+- duplicate start attempts are blocked before a second successful worker run is
+  created;
+- at least one worker/vsuper `submit_worker_update` succeeds;
+- the live VText dashboard incorporates that update into a new revision;
+- super receives or can observe the same update without losing control;
+- Trace exposes the update, tool calls, and terminal worker evidence;
+- run acceptance records the correct contract for runtime supervision;
+- gateway/auth/502/timeout failures are either absent or separately visible as
+  named blockers with next probes;
+- screenshot/video capture for experiment evidence is available through a
+  bounded evidence worker, or the mission records the missing capability as a
+  blocker before restarting UI experiments;
+- cancellation or redirect evidence is either proven or left as an explicit
+  residual risk with the next probe;
+- staging `/health` reports the pushed commit.
+
+## Experiment Rerun
+
+After the runtime gate passes, restart experiments one at a time. No
+concurrency until sequential Choir-in-Choir is reliable.
+
+### 1. Chiron Shelf Observability
+
+Desired experiment:
+
+- Shelf streams live tool calls, interim model messages, and agent-to-agent
+  channel messages while work is happening.
+- Desk menu, app buttons, and prompt input remain usable.
+- Clicking into the prompt suppresses or de-emphasizes the Chiron stream.
+- Trace or VText keeps a readable log of streamed items.
+
+Proof:
+
+- Playwright or worker-playwright video of a real run;
+- screenshots showing non-blocking controls;
+- VText narrative that explains what worked and what did not;
+- Trace/run-acceptance refs;
+- package/adoption/rollback refs or a precise blocker.
+
+### 2. Process, Window, And Agent Animation Language
+
+Desired experiment:
+
+- boot, wake, app launch, window raise/minimize/restore, worker activity, and
+  agent progress become more legible through motion;
+- motion communicates state instead of adding decoration.
+
+Proof:
+
+- video of real process/window/agent transitions;
+- reduced confusion in the narrative review;
+- performance or jank notes;
+- rollback path.
+
+### 3. Choir Liquid Material Engine
+
+Desired experiment:
+
+- redesign real Choir desktop surfaces with a liquid/glass material treatment
+  while preserving functionality;
+- use WebGL/WebGPU-like acceleration only where it earns its cost;
+- no private DOM capture or persisted preview screenshots.
+
+Proof:
+
+- screenshots/video of the actual desktop, not a poster;
+- desktop and mobile resource benchmarks;
+- fallback behavior on mobile Safari or unsupported GPU paths;
+- security/privacy review;
+- recommendation to promote, iterate, or abandon.
+
+### 4. Python Code Mode A/B
+
+Desired experiment:
+
+- compare Python-mode arbitrary headless computer use against the existing bash
+  tool in real agent/tool-loop conditions;
+- benchmark time, token usage, tool-loop iterations, trace readability, error
+  handling, and developer ergonomics.
+
+Proof:
+
+- benchmark artifacts;
+- narrative VText explanation of tradeoffs;
+- recommendation on whether Python replaces, complements, or is deferred.
+
+## Dense Feedback
+
+Required evidence sources:
+
+- VText mission dashboard with multiple causal revisions;
+- per-experiment VText reports written for the owner, not for the database;
+- screenshots and videos for UI/motion/liquid/chiron experiments;
+- benchmark JSON and plain-English benchmark summary for Liquid and Python;
+- Trace trajectories focused on LLM content, tool calls, agent messages, and
+  worker updates;
+- run-acceptance records with the right acceptance level and caveats;
+- candidate preview health records;
+- browser-evidence worker records for screenshots/video, including whether the
+  capture used Playwright, Obscura, or another bounded evidence path;
+- recipient build and package/adoption/rollback records where install is
+  attempted;
+- staging commit identity after platform changes;
+- mission doc checkpoint updates after major runtime proof or each experiment.
+
+## Forbidden Shortcuts
+
+- Do not hand-code experiment features with Codex.
+- Do not restart the experiments before the worker-update/VText supervision
+  path is fixed or precisely blocked.
+- Do not let fallback synthesized updates masquerade as live worker updates.
+- Do not call package/build receipts human proof.
+- Do not hide `502`, auth, gateway, worker, preview, route, video, benchmark, or
+  VText failures behind reviewable labels.
+- Do not install Playwright in every VM just to paper over evidence capture.
+- Do not claim Obscura replaces Playwright for this mission unless it proves
+  authenticated product actions, screenshots, and video on staging.
+- Do not use platform deploy as proof of user-computer/candidate experiment
+  success.
+- Do not reintroduce synchronous delegate waiting as a success path.
+- Do not let VText and super both send conflicting worker-control messages.
+- Do not run multiple experiments concurrently in this mission.
+- Do not produce technical VText reports full of package ids and hashes as the
+  owner-facing artifact.
+- Do not call `checkpoint_incomplete` complete.
+
+## Rollback Policy
+
+Platform runtime/harness fixes must follow:
+
+```text
+commit -> push origin main -> monitor CI -> monitor staging deploy
+-> verify staging identity -> run deployed acceptance proof
+```
+
+Every behavior-changing commit needs a rollback ref. If the supervision runtime
+regresses active computers, worker delegation, VText revision, or Trace
+inspection, revert the implicated commit and preserve the failed evidence.
+
+Experiment package/adoption attempts must record:
+
+- source package/change id;
+- source and recipient computer refs;
+- recipient build artifacts;
+- behavior proof;
+- active-state rollback ref;
+- uninstall/disable limitations;
+- residual private-data or capability risks.
+
+## Stopping Condition
+
+`complete` only when:
+
+- runtime-supervision repair is deployed and proven on staging;
+- live worker updates reach VText and super with clear authority semantics;
+- Trace and run acceptance expose the right signals;
+- the four experiments have been rerun sequentially through Choir-in-Choir, or
+  each uncompleted experiment has a precise blocker with the next executable
+  probe;
+- all completed experiments have owner-readable VText reports, media or
+  benchmark proof, Trace/run-acceptance refs, and promotion recommendations;
+- rollback refs and residual risks are recorded.
+
+Use `checkpoint_incomplete` when useful platform progress lands but the
+stopping condition is not satisfied. The checkpoint must name the next safe
+probe.
+
+Use `blocked_incomplete` only after root-cause probes and cognitive transforms
+leave an invariant-level or external blocker.
+
+## Run Checkpoint & Resumption State
+
+```text
+status: ready_to_run
+last checkpoint:
+  Deployed async runtime proof at commit 732eb4a showed one worker_run_id across
+  request/start/observe/finish and no duplicate successful starts, but exposed
+  worker submit_worker_update delivery failure.
+current artifact state:
+  Async worker delegation is partially proven. VText supervision is not yet
+  trustworthy enough to supervise experiment reruns.
+what shipped:
+  9bad6fd, 497f691, 72beeaf, and 732eb4a shipped during the async-supervision
+  preflight series.
+what was proven:
+  Staging proof directory:
+  test-results/async-supervision-runtime-proof-732eb4a-20260523T025003Z
+  Product path reached request/start/observe/finish with worker_run_id
+  ac94397b-84ae-45e6-b3ce-795d81a038b3 and one successful start.
+unproven or partial claims:
+  Direct worker update delivery to VText/super; VText terminal narration;
+  acceptance synthesis for non-package runtime proofs; experiment rerun.
+belief-state changes:
+  Duplicate worker starts are now guarded, but the live supervision update path
+  is still the central blocker.
+remaining error field:
+  submit_worker_update requester lookup in worker context; stale/fallback VText
+  dashboard revisions; noisy Trace; acceptance contracts that over-assume app
+  package evidence.
+highest-impact remaining uncertainty:
+  Whether a real vsuper/co-super update can be delivered live to VText and
+  super without blocking or conflicting control.
+next executable probe:
+  Root-cause submit_worker_update delivery target resolution, patch worker
+  metadata/channel fanout, add focused tests, deploy, then rerun the visible
+  staging async-supervision proof before restarting Chiron.
+suggested resume goal string:
+  Use the one-line goal string in this file.
+evidence artifact refs:
+  test-results/async-supervision-runtime-proof-732eb4a-20260523T025003Z
+rollback refs:
+  Revert 732eb4a if duplicate-start guarding or package-required heuristics
+  regress worker delegation; revert the eventual worker-update repair commit if
+  it regresses VText, Trace, or worker delegation on staging.
+```

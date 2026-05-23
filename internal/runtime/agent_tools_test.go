@@ -3086,6 +3086,66 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 	}
 }
 
+func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-remote-worker-requester"
+	workerRun, err := rt.StartRunWithMetadata(ctx, "Report from isolated worker", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileVSuper,
+		runMetadataAgentRole:    AgentProfileVSuper,
+		runMetadataAgentID:      "vsuper:remote-worker",
+		runMetadataChannelID:    docID,
+		runMetadataTrajectoryID: "traj-remote-worker-requester",
+		"requested_by_agent_id": "vtext:" + docID,
+		"requested_by_profile":  AgentProfileVText,
+		"request_source":        "worker_vm_delegation",
+	})
+	if err != nil {
+		t.Fatalf("start worker run: %v", err)
+	}
+
+	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "submit_worker_update", json.RawMessage(`{
+		"update_id":"remote-worker-update",
+		"findings":["Remote worker update should route through inherited VText metadata."],
+		"tests":["metadata-only requester routing passed"]
+	}`))
+	if err != nil {
+		t.Fatalf("submit_worker_update should not require local requester agent row: %v", err)
+	}
+	var resp struct {
+		AgentID   string `json:"agent_id"`
+		ChannelID string `json:"channel_id"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode submit_worker_update response: %v", err)
+	}
+	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
+		t.Fatalf("response target/channel/status = %+v, want inherited vtext target", resp)
+	}
+
+	update, err := s.GetWorkerUpdate(ctx, ownerID, "remote-worker-update")
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID || update.Role != AgentProfileVSuper {
+		t.Fatalf("worker update target/channel/role = %+v", update)
+	}
+	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	if err != nil {
+		t.Fatalf("list vtext deliveries: %v", err)
+	}
+	if len(deliveries) != 1 || deliveries[0].ChannelID != docID {
+		t.Fatalf("expected metadata-routed vtext delivery, got %+v", deliveries)
+	}
+}
+
 func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	ctx := context.Background()
 	rt, s, _ := testRuntimeWithTempCWD(t)
@@ -3622,6 +3682,151 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 	if packageID == "" || !containsString(updates[0].EvidenceIDs, "app_change_package:"+packageID) {
 		t.Fatalf("worker update checkpoint missing AppChangePackage evidence: %+v", updates[0])
+	}
+}
+
+func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing.T) {
+	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-worker-submit-mirror"
+	now := time.Now().UTC()
+	if err := activeStore.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Worker Submit Mirror",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create active vtext document: %v", err)
+	}
+	if err := activeStore.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "vtext:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "active-sandbox",
+		Profile:   AgentProfileVText,
+		Role:      AgentProfileVText,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert active vtext agent: %v", err)
+	}
+
+	workerDir := t.TempDir()
+	workerDB, err := store.Open(filepath.Join(workerDir, "worker.db"))
+	if err != nil {
+		t.Fatalf("open worker store: %v", err)
+	}
+	workerProvider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-worker-update",
+				Name: "submit_worker_update",
+				Arguments: json.RawMessage(`{
+					"update_id":"worker-direct-update",
+					"findings":["WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint."],
+					"artifacts":["artifacts/chiron-proof.png"],
+					"tests":["worker update routing verified"],
+					"proposals":["Continue supervision from the active VText dashboard."]
+				}`),
+			}},
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "Submitted direct worker update.",
+		},
+	)
+	workerRT := New(Config{
+		SandboxID:           "vm-worker-submit-mirror",
+		StorePath:           filepath.Join(workerDir, "worker.db"),
+		ProviderTimeout:     5 * time.Second,
+		SupervisionInterval: time.Hour,
+	}, workerDB, events.NewEventBus(), workerProvider)
+	if err := workerRT.InstallDefaultAgentTools(workerDir); err != nil {
+		t.Fatalf("install worker tools: %v", err)
+	}
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	workerRT.Start(workerCtx)
+	t.Cleanup(func() {
+		workerRT.Stop()
+		_ = workerDB.Close()
+	})
+
+	workerHandler := NewAPIHandler(workerRT)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/runtime/runs", workerHandler.HandleInternalRunSubmission)
+	mux.HandleFunc("/internal/runtime/runs/", workerHandler.HandleInternalRuntimeRunRouter)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(ctx, "delegate direct worker update proof", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "traj-worker-submit-mirror",
+		runMetadataChannelID:    docID,
+		"requested_by_agent_id": "vtext:" + docID,
+		"requested_by_profile":  AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-submit-mirror",
+		"vm_id": "vm-worker-submit-mirror",
+		"objective": "Submit one worker update for the VText dashboard. Do not publish an AppChangePackage.",
+		"profile": "vsuper",
+		"timeout_seconds": 10
+	}`, srv.URL)))
+	if err != nil {
+		t.Fatalf("finish worker delegation: %v", err)
+	}
+	var result struct {
+		Status                    string   `json:"status"`
+		MirroredWorkerUpdateCount int      `json:"mirrored_worker_update_count"`
+		MirroredWorkerUpdateIDs   []string `json:"mirrored_worker_update_ids"`
+		WorkerUpdateCheckpoint    string   `json:"worker_update_checkpoint"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode finish result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_completed" || result.MirroredWorkerUpdateCount != 1 || result.WorkerUpdateCheckpoint != "worker_submit_update_mirrored" {
+		t.Fatalf("unexpected mirrored worker update result: %+v\nraw=%s", result, raw)
+	}
+	if len(result.MirroredWorkerUpdateIDs) != 1 {
+		t.Fatalf("mirrored update ids = %+v", result.MirroredWorkerUpdateIDs)
+	}
+
+	updates, err := activeStore.ListWorkerUpdatesByTrajectory(ctx, ownerID, "traj-worker-submit-mirror", 10)
+	if err != nil {
+		t.Fatalf("list active worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("active worker updates = %d, want only mirrored direct update; updates=%+v raw=%s", len(updates), updates, raw)
+	}
+	update := updates[0]
+	if !strings.HasPrefix(update.UpdateID, "mirrored-worker-update-") || update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+		t.Fatalf("unexpected mirrored update routing: %+v", update)
+	}
+	if !strings.Contains(strings.Join(update.Findings, "\n"), "WORKER_DIRECT_UPDATE") ||
+		!containsString(update.Artifacts, "artifacts/chiron-proof.png") ||
+		!containsString(update.Tests, "worker update routing verified") {
+		t.Fatalf("mirrored update did not preserve worker payload: %+v", update)
+	}
+	messages, err := activeStore.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list active channel messages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].FromRunID != superRun.RunID || messages[0].ToAgentID != "vtext:"+docID ||
+		!strings.Contains(messages[0].Content, "WORKER_DIRECT_UPDATE") {
+		t.Fatalf("mirrored update did not create active VText channel message: %+v", messages)
 	}
 }
 

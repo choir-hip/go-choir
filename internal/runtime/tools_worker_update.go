@@ -16,20 +16,21 @@ func RegisterWorkerUpdateTools(registry *ToolRegistry, rt *Runtime) error {
 	return registry.Register(newSubmitWorkerUpdateTool(rt))
 }
 
+type submitWorkerUpdateArgs struct {
+	UpdateID    string   `json:"update_id"`
+	AgentID     string   `json:"agent_id,omitempty"`
+	ChannelID   string   `json:"channel_id,omitempty"`
+	Findings    []string `json:"findings,omitempty"`
+	EvidenceIDs []string `json:"evidence_ids,omitempty"`
+	Artifacts   []string `json:"artifacts,omitempty"`
+	Refs        []string `json:"refs,omitempty"`
+	Tests       []string `json:"tests,omitempty"`
+	Questions   []string `json:"questions,omitempty"`
+	Proposals   []string `json:"proposals,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
+}
+
 func newSubmitWorkerUpdateTool(rt *Runtime) Tool {
-	type args struct {
-		UpdateID    string   `json:"update_id"`
-		AgentID     string   `json:"agent_id,omitempty"`
-		ChannelID   string   `json:"channel_id,omitempty"`
-		Findings    []string `json:"findings,omitempty"`
-		EvidenceIDs []string `json:"evidence_ids,omitempty"`
-		Artifacts   []string `json:"artifacts,omitempty"`
-		Refs        []string `json:"refs,omitempty"`
-		Tests       []string `json:"tests,omitempty"`
-		Questions   []string `json:"questions,omitempty"`
-		Proposals   []string `json:"proposals,omitempty"`
-		Notes       []string `json:"notes,omitempty"`
-	}
 	return Tool{
 		Name:        "submit_worker_update",
 		Description: "Persist a structured non-patch worker update and send one addressed delivery to the owning agent.",
@@ -47,7 +48,7 @@ func newSubmitWorkerUpdateTool(rt *Runtime) Tool {
 			"notes":        stringArraySchema(),
 		}, []string{"update_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			var in args
+			var in submitWorkerUpdateArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode submit_worker_update args: %w", err)
 			}

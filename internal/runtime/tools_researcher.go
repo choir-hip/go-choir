@@ -201,6 +201,15 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		if requesterAgentID != "" {
 			target, err := rt.store.GetAgent(ctx, requesterAgentID)
 			if err != nil {
+				if errors.Is(err, store.ErrNotFound) && strings.HasPrefix(requesterAgentID, "vtext:") {
+					channelID := metadataStringValue(runRec.Metadata, runMetadataChannelID)
+					if channelID == "" {
+						channelID = strings.TrimPrefix(requesterAgentID, "vtext:")
+					}
+					if channelID != "" {
+						return requesterAgentID, channelID, nil
+					}
+				}
 				return "", "", fmt.Errorf("resolve delivery target requester lookup: %w", err)
 			}
 			return requesterAgentID, strings.TrimSpace(target.ChannelID), nil

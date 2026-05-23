@@ -882,10 +882,12 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			result["state"] = status.State
 			result["result"] = status.Result
 			result["error"] = status.Error
-			rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, status.State.Terminal() || status.State == types.RunBlocked, result)
+			rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, status.State.Terminal() || status.State == types.RunBlocked, ctxRunRecord(ctx), result)
 			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_observe"); err != nil {
+			if intMapValue(result, "mirrored_worker_update_count") > 0 {
+				result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
+			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_observe"); err != nil {
 				result["worker_update_error"] = err.Error()
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
@@ -998,7 +1000,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 				if profile == AgentProfileVSuper && status.State == types.RunCompleted {
 					evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, evidence, timeout)
 				}
-				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, result)
+				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, ctxRunRecord(ctx), result)
 			}
 			if status.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", workerRunID, status.State, strings.TrimSpace(status.Error)))
@@ -1010,7 +1012,9 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			}
 			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish"); err != nil {
+			if intMapValue(result, "mirrored_worker_update_count") > 0 {
+				result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
+			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish"); err != nil {
 				result["worker_update_error"] = err.Error()
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
@@ -1088,16 +1092,16 @@ func newRedirectWorkerDelegationTool(rt *Runtime) Tool {
 	}
 }
 
-func (rt *Runtime) applyAsyncWorkerEvidence(ctx context.Context, client *http.Client, workerSandboxURL, ownerID, workerRunID string, mirrorTerminalPackages bool, result map[string]any) {
+func (rt *Runtime) applyAsyncWorkerEvidence(ctx context.Context, client *http.Client, workerSandboxURL, ownerID, workerRunID string, mirrorTerminalPackages bool, superRec *types.RunRecord, result map[string]any) {
 	evidence, evidenceErr := fetchWorkerRunEvidence(ctx, client, workerSandboxURL, ownerID, workerRunID)
 	if evidenceErr != nil {
 		result["worker_event_error"] = evidenceErr.Error()
 		return
 	}
-	rt.applyWorkerEvidenceToResult(ctx, client, workerSandboxURL, ownerID, evidence, mirrorTerminalPackages, result)
+	rt.applyWorkerEvidenceToResult(ctx, client, workerSandboxURL, ownerID, evidence, mirrorTerminalPackages, superRec, result)
 }
 
-func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http.Client, workerSandboxURL, ownerID string, evidence workerRunEvidence, mirrorTerminalPackages bool, result map[string]any) {
+func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http.Client, workerSandboxURL, ownerID string, evidence workerRunEvidence, mirrorTerminalPackages bool, superRec *types.RunRecord, result map[string]any) {
 	applyWorkerRunEvidence(result, evidence)
 	if summary := summarizeWorkerRunEvents(evidence.Events); len(summary) > 0 {
 		result["worker_event_summary"] = summary
@@ -1108,6 +1112,7 @@ func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http
 	if count := countWorkerChannelMessages(evidence.Events); count > 0 {
 		result["worker_channel_message_count"] = count
 	}
+	rt.mirrorWorkerSubmitUpdates(ctx, superRec, evidence, result)
 	packages := collectAppChangePackageResults(evidence.Events)
 	if len(packages) > 0 {
 		if mirrorTerminalPackages && rt != nil {
@@ -1126,6 +1131,193 @@ func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http
 			result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or submit_worker_update evidence"
 		}
 	}
+}
+
+type mirroredWorkerSubmitUpdate struct {
+	InvokedEvent types.EventRecord
+	ResultEvent  types.EventRecord
+	Args         submitWorkerUpdateArgs
+}
+
+func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *types.RunRecord, evidence workerRunEvidence, result map[string]any) {
+	if rt == nil || rt.store == nil || superRec == nil || result == nil {
+		return
+	}
+	channelID, targetAgentID, ok := delegateWorkerUpdateTarget(superRec)
+	if !ok {
+		return
+	}
+	submitted := collectSuccessfulWorkerSubmitUpdates(evidence.Events)
+	if len(submitted) == 0 {
+		return
+	}
+
+	var mirroredIDs []string
+	var mirrorErrors []string
+	for _, item := range submitted {
+		sourceUpdateID := strings.TrimSpace(item.Args.UpdateID)
+		if sourceUpdateID == "" {
+			continue
+		}
+		sourceRunID := strings.TrimSpace(item.InvokedEvent.RunID)
+		sourceAgentID := strings.TrimSpace(item.InvokedEvent.AgentID)
+		if sourceAgentID == "" {
+			sourceAgentID = stringMapValue(result, "agent_id")
+		}
+		role := firstNonEmpty(stringMapValue(result, "profile"), AgentProfileVSuper)
+		update := types.WorkerUpdateRecord{
+			UpdateID:      "mirrored-worker-update-" + sanitizeExportPart(superRec.RunID) + "-" + sanitizeExportPart(sourceUpdateID),
+			OwnerID:       superRec.OwnerID,
+			AgentID:       firstNonEmpty(sourceAgentID, agentIDForRun(superRec)),
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			TrajectoryID:  metadataStringValue(superRec.Metadata, runMetadataTrajectoryID),
+			Role:          role,
+			Findings:      trimNonEmpty(item.Args.Findings),
+			EvidenceIDs:   trimNonEmpty(item.Args.EvidenceIDs),
+			Artifacts:     trimNonEmpty(item.Args.Artifacts),
+			Refs:          trimNonEmpty(item.Args.Refs),
+			Tests:         trimNonEmpty(item.Args.Tests),
+			Questions:     trimNonEmpty(item.Args.Questions),
+			Proposals:     trimNonEmpty(item.Args.Proposals),
+			Notes:         trimNonEmpty(item.Args.Notes),
+			CreatedAt:     item.ResultEvent.Timestamp,
+		}
+		if update.CreatedAt.IsZero() {
+			update.CreatedAt = time.Now().UTC()
+		}
+		update.EvidenceIDs = trimDedupeNonEmpty(append(update.EvidenceIDs,
+			"worker_run:"+sourceRunID,
+			"worker_tool_invoked_event:"+item.InvokedEvent.EventID,
+			"worker_tool_result_event:"+item.ResultEvent.EventID,
+		))
+		update.Refs = trimDedupeNonEmpty(append(update.Refs,
+			"worker_update:"+sourceUpdateID,
+			"worker_agent:"+sourceAgentID,
+			"worker_run:"+sourceRunID,
+		))
+		update.Notes = trimDedupeNonEmpty(append(update.Notes,
+			"mirrored_from=worker_submit_worker_update",
+			"super_run:"+superRec.RunID,
+		))
+		update.Content = buildWorkerUpdateMessage(update)
+
+		message := &types.ChannelMessage{
+			ChannelID:    update.ChannelID,
+			From:         superRec.RunID,
+			FromAgentID:  agentIDForRun(superRec),
+			FromRunID:    superRec.RunID,
+			ToAgentID:    update.TargetAgentID,
+			TrajectoryID: update.TrajectoryID,
+			Role:         AgentProfileSuper,
+			Content:      update.Content,
+			Timestamp:    update.CreatedAt,
+		}
+		delivery := types.InboxDelivery{
+			DeliveryID:   uuid.NewString(),
+			OwnerID:      update.OwnerID,
+			ToAgentID:    update.TargetAgentID,
+			FromAgentID:  message.FromAgentID,
+			FromRunID:    message.FromRunID,
+			ChannelID:    update.ChannelID,
+			Role:         message.Role,
+			Content:      message.Content,
+			TrajectoryID: update.TrajectoryID,
+			CreatedAt:    update.CreatedAt,
+		}
+		stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message, delivery)
+		if err != nil {
+			mirrorErrors = append(mirrorErrors, fmt.Sprintf("%s: %v", sourceUpdateID, err))
+			continue
+		}
+		if !created {
+			if err := validateExistingWorkerUpdate(stored, update); err != nil {
+				mirrorErrors = append(mirrorErrors, err.Error())
+				continue
+			}
+		} else {
+			message.Seq = stored.MessageSeq
+			rt.emitChannelMessageEvent(ctx, *message, update.OwnerID)
+		}
+		mirroredIDs = append(mirroredIDs, stored.UpdateID)
+	}
+	if len(mirroredIDs) > 0 {
+		result["mirrored_worker_update_count"] = len(mirroredIDs)
+		result["mirrored_worker_update_ids"] = mirroredIDs
+	}
+	if len(mirrorErrors) > 0 {
+		result["mirrored_worker_update_errors"] = mirrorErrors
+	}
+}
+
+func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirroredWorkerSubmitUpdate {
+	invokedByCallID := map[string]mirroredWorkerSubmitUpdate{}
+	var order []string
+	for _, ev := range events {
+		if ev.Kind != types.EventToolInvoked {
+			continue
+		}
+		var payload struct {
+			Tool      string          `json:"tool"`
+			CallID    string          `json:"call_id"`
+			Arguments json.RawMessage `json:"arguments"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil || strings.TrimSpace(payload.Tool) != "submit_worker_update" {
+			continue
+		}
+		callID := strings.TrimSpace(payload.CallID)
+		if callID == "" {
+			continue
+		}
+		var args submitWorkerUpdateArgs
+		if err := json.Unmarshal(payload.Arguments, &args); err != nil || strings.TrimSpace(args.UpdateID) == "" {
+			continue
+		}
+		if _, exists := invokedByCallID[callID]; !exists {
+			order = append(order, callID)
+		}
+		invokedByCallID[callID] = mirroredWorkerSubmitUpdate{InvokedEvent: ev, Args: args}
+	}
+	if len(invokedByCallID) == 0 {
+		return nil
+	}
+
+	successByCallID := map[string]types.EventRecord{}
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload struct {
+			Tool    string `json:"tool"`
+			CallID  string `json:"call_id"`
+			IsError bool   `json:"is_error"`
+		}
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil ||
+			strings.TrimSpace(payload.Tool) != "submit_worker_update" ||
+			strings.TrimSpace(payload.CallID) == "" ||
+			payload.IsError {
+			continue
+		}
+		successByCallID[strings.TrimSpace(payload.CallID)] = ev
+	}
+
+	var out []mirroredWorkerSubmitUpdate
+	seenUpdates := map[string]bool{}
+	for _, callID := range order {
+		item := invokedByCallID[callID]
+		resultEvent, ok := successByCallID[callID]
+		if !ok {
+			continue
+		}
+		sourceUpdateID := strings.TrimSpace(item.Args.UpdateID)
+		if sourceUpdateID == "" || seenUpdates[sourceUpdateID] {
+			continue
+		}
+		seenUpdates[sourceUpdateID] = true
+		item.ResultEvent = resultEvent
+		out = append(out, item)
+	}
+	return out
 }
 
 func newCancelWorkerDelegationTool(rt *Runtime) Tool {

@@ -201,6 +201,18 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		packages := acceptanceOutputSlice(item.output, "app_change_packages")
 		status := payloadString(item.output, "status")
 		if len(packages) == 0 {
+			if acceptanceDelegateRuntimeSupervisionPassed(item.output) {
+				delegateDetails := acceptanceDelegateWorkerDetails(item.tool, item.output, nil)
+				delegateDetails["acceptance_contract"] = "runtime_supervision"
+				ref := builder.addEventEvidence(item.event, "worker run completed with live worker-update supervision evidence", delegateDetails)
+				builder.addCheckpoint("worker_delegated", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, delegateDetails)
+				builder.addCheckpoint("worker_supervision_observed", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
+					"worker_update_checkpoint": delegateDetails["worker_update_checkpoint"],
+					"worker_update_count":      delegateDetails["mirrored_worker_update_count"],
+					"worker_loop_id":           delegateDetails["worker_loop_id"],
+				})
+				continue
+			}
 			nonPackageDelegateResults = append(nonPackageDelegateResults, item)
 			continue
 		}
@@ -677,7 +689,33 @@ func acceptanceDelegateWorkerDetails(tool string, output map[string]any, package
 	if checkpoint := output["worker_update_checkpoint"]; checkpoint != nil {
 		details["worker_update_checkpoint"] = checkpoint
 	}
+	if count := output["mirrored_worker_update_count"]; count != nil {
+		details["mirrored_worker_update_count"] = count
+	}
+	if ids := acceptanceStringSlice(output, "mirrored_worker_update_ids"); len(ids) > 0 {
+		details["mirrored_worker_update_ids"] = ids
+	}
+	if errors := acceptanceStringSlice(output, "mirrored_worker_update_errors"); len(errors) > 0 {
+		details["mirrored_worker_update_errors"] = errors
+	}
 	return details
+}
+
+func acceptanceDelegateRuntimeSupervisionPassed(output map[string]any) bool {
+	status := payloadString(output, "status")
+	if status != "worker_run_completed" && status != "worker_observed" {
+		return false
+	}
+	if payloadString(output, "terminal_error") != "" || payloadString(output, "completion_blocker") != "" {
+		return false
+	}
+	if intMapValue(output, "mirrored_worker_update_count") > 0 {
+		return true
+	}
+	if payloadString(output, "worker_update_checkpoint") == "worker_submit_update_mirrored" {
+		return true
+	}
+	return false
 }
 
 func acceptanceAppPackageSummaries(packages []map[string]any) []map[string]any {
@@ -1043,6 +1081,10 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && has["vtext_opened"] {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
+	if has["submitted"] && has["vtext_opened"] && has["super_requested"] && has["worker_leased"] && has["worker_supervision_observed"] {
+		level = types.RunAcceptanceStagingSmokeLevel
+		state = types.RunAcceptanceAccepted
+	}
 	if has["app_package_published"] && (has["worker_delegated"] || has["app_adoption_verified"]) {
 		level = types.RunAcceptanceExportLevel
 		state = types.RunAcceptanceAccepted
@@ -1075,6 +1117,7 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"] && kindSet["super_requested"]
 	adoptionPathObserved := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
 	workerMutationBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]
+	workerSupervisionBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["worker_supervision_observed"]
 	adoptionMutationBounded := kindSet["app_adoption_verified"] && kindSet["rollback_available"]
 	checks := []types.RunAcceptanceInvariantCheck{
 		{
@@ -1084,8 +1127,8 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 		},
 		{
 			Name:   "worker_mutation_bounded",
-			State:  stateForBool(workerMutationBounded || adoptionMutationBounded),
-			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary or recipient adoption candidate with rollback before becoming accepted",
+			State:  stateForBool(workerMutationBounded || workerSupervisionBounded || adoptionMutationBounded),
+			Detail: "mutable coding work reached a worker VM/AppChangePackage boundary, runtime-only worker supervision stayed bounded with worker-update evidence, or recipient adoption had rollback before becoming accepted",
 		},
 		{
 			Name:   "promotion_not_overclaimed",

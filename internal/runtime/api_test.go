@@ -315,6 +315,39 @@ func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *
 	}
 }
 
+func TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	seedRunAcceptanceRuntimeSupervisionTrajectory(t, rt)
+
+	body := `{"target_mission_id":"mission-runtime-supervision","trajectory_id":"traj-runtime-supervision"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var rec types.RunAcceptanceRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("decode acceptance: %v", err)
+	}
+	if rec.AcceptanceLevel != types.RunAcceptanceStagingSmokeLevel || rec.State != types.RunAcceptanceAccepted {
+		t.Fatalf("acceptance = %s/%s, want staging-smoke-level/accepted; checkpoints=%+v invariants=%+v risks=%+v", rec.AcceptanceLevel, rec.State, rec.Checkpoints, rec.InvariantChecks, rec.FailureResidualRisks)
+	}
+	if !acceptanceHasCheckpoint(rec, "worker_delegated") || !acceptanceHasCheckpoint(rec, "worker_supervision_observed") {
+		t.Fatalf("runtime supervision checkpoints missing: %+v", rec.Checkpoints)
+	}
+	if acceptanceHasCheckpoint(rec, "app_package_published") {
+		t.Fatalf("runtime-only supervision proof must not synthesize app package checkpoint: %+v", rec.Checkpoints)
+	}
+	delegated := acceptanceCheckpoint(rec, "worker_delegated", "passed")
+	if delegated == nil || delegated.Details["acceptance_contract"] != "runtime_supervision" {
+		t.Fatalf("worker_delegated did not record runtime supervision contract: %+v", delegated)
+	}
+	for _, check := range rec.InvariantChecks {
+		if check.Name == "worker_mutation_bounded" && check.State != "passed" {
+			t.Fatalf("runtime supervision should satisfy bounded worker invariant, got %+v", check)
+		}
+	}
+}
+
 func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
@@ -749,6 +782,143 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 		Timestamp:    now.Add(11 * time.Second),
 		Kind:         types.EventAppChangePackagePublished,
 		Payload:      json.RawMessage(`{"package_id":"pkg-source-only","app_id":"portfolio-source-package","source_computer_id":"computer-source","source_candidate_id":"candidate-source","candidate_source_ref":"refs/computers/computer-source/candidates/candidate-source","package_manifest_sha":"sha256-manifest-source-package"}`),
+	})
+}
+
+func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	finishedAt := now.Add(15 * time.Second)
+	runs := []types.RunRecord{
+		{
+			RunID:        "run-conductor-runtime-supervision",
+			AgentID:      "agent-conductor-runtime-supervision",
+			ChannelID:    "channel-runtime-supervision",
+			AgentProfile: AgentProfileConductor,
+			AgentRole:    AgentProfileConductor,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Prove async worker supervision without publishing a package.",
+			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-runtime-supervision"}`,
+			CreatedAt:    now,
+			UpdatedAt:    finishedAt,
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileConductor,
+				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataTrajectoryID: "traj-runtime-supervision",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+				"input_source":          "prompt_bar",
+			},
+		},
+		{
+			RunID:        "run-vtext-runtime-supervision",
+			AgentID:      "agent-vtext-runtime-supervision",
+			ChannelID:    "channel-runtime-supervision",
+			ParentRunID:  "run-conductor-runtime-supervision",
+			AgentProfile: AgentProfileVText,
+			AgentRole:    AgentProfileVText,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Own the runtime supervision document.",
+			CreatedAt:    now.Add(3 * time.Second),
+			UpdatedAt:    now.Add(4 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileVText,
+				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataTrajectoryID: "traj-runtime-supervision",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+		{
+			RunID:        "run-super-runtime-supervision",
+			AgentID:      "agent-super-runtime-supervision",
+			ChannelID:    "channel-runtime-supervision",
+			ParentRunID:  "run-vtext-runtime-supervision",
+			AgentProfile: AgentProfileSuper,
+			AgentRole:    AgentProfileSuper,
+			OwnerID:      "user-alice",
+			SandboxID:    "sandbox-test",
+			State:        types.RunCompleted,
+			Prompt:       "Delegate a worker and collect a VText worker update. Do not publish an AppChangePackage.",
+			CreatedAt:    now.Add(5 * time.Second),
+			UpdatedAt:    now.Add(12 * time.Second),
+			FinishedAt:   &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: AgentProfileSuper,
+				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataTrajectoryID: "traj-runtime-supervision",
+				runMetadataDesktopID:    types.PrimaryDesktopID,
+			},
+		},
+	}
+	for _, run := range runs {
+		if err := rt.store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.RunID, err)
+		}
+	}
+
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-submit-runtime-supervision",
+		RunID:        "run-conductor-runtime-supervision",
+		AgentID:      "agent-conductor-runtime-supervision",
+		ChannelID:    "channel-runtime-supervision",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-runtime-supervision",
+		Timestamp:    now,
+		Kind:         types.EventRunSubmitted,
+		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
+	})
+	appendAcceptanceEvent(t, rt, types.EventRecord{
+		EventID:      "event-vtext-runtime-supervision",
+		RunID:        "run-vtext-runtime-supervision",
+		AgentID:      "agent-vtext-runtime-supervision",
+		ChannelID:    "channel-runtime-supervision",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-runtime-supervision",
+		Timestamp:    now.Add(4 * time.Second),
+		Kind:         types.EventVTextDocumentRevisionCreated,
+		Payload:      json.RawMessage(`{"doc_id":"doc-runtime-supervision","revision_id":"rev-runtime-supervision"}`),
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-runtime-supervision", "run-vtext-runtime-supervision", "agent-vtext-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(5*time.Second), "request_super_execution", map[string]any{
+		"agent_id": "agent-super-runtime-supervision",
+		"loop_id":  "run-super-runtime-supervision",
+		"state":    "running",
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-worker-lease-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(6*time.Second), "request_worker_vm", map[string]any{
+		"status": "worker_requested",
+		"handle": map[string]any{
+			"kind":          "worker",
+			"worker_id":     "worker-runtime-supervision",
+			"vm_id":         "vm-runtime-supervision",
+			"desktop_id":    types.PrimaryDesktopID,
+			"machine_class": "worker-small",
+			"sandbox_url":   "http://127.0.0.1:8085",
+		},
+	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-finish-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(10*time.Second), "finish_worker_delegation", map[string]any{
+		"status":                       "worker_run_completed",
+		"state":                        string(types.RunCompleted),
+		"worker_vm_id":                 "vm-runtime-supervision",
+		"worker_id":                    "worker-runtime-supervision",
+		"worker_sandbox_url":           "http://127.0.0.1:8085",
+		"loop_id":                      "run-worker-runtime-supervision",
+		"event_count":                  9,
+		"worker_channel_message_count": 1,
+		"worker_update_checkpoint":     "worker_submit_update_mirrored",
+		"mirrored_worker_update_count": 1,
+		"mirrored_worker_update_ids":   []string{"mirrored-worker-update-run-super-runtime-supervision-worker-direct-update"},
+		"worker_event_summary": []map[string]any{{
+			"kind":           "tool.result",
+			"tool":           "submit_worker_update",
+			"is_error":       false,
+			"output_excerpt": `{"status":"submitted","update_id":"worker-direct-update"}`,
+		}},
+		"app_change_packages": []map[string]any{},
 	})
 }
 
