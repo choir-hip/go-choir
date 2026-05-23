@@ -2,6 +2,7 @@
   import { createEventDispatcher, onDestroy } from 'svelte';
 
   export let candidateDesktopId = '';
+  export let previewUrl = '';
   export let title = 'Candidate preview';
 
   const dispatch = createEventDispatcher();
@@ -11,7 +12,10 @@
   let previewMessage = 'Try a change to open a candidate computer without mutating your active computer.';
 
   $: normalizedDesktopId = String(candidateDesktopId || '').trim();
-  $: previewSrc = normalizedDesktopId
+  $: normalizedPreviewUrl = String(previewUrl || '').trim();
+  $: previewSrc = normalizedPreviewUrl
+    ? normalizedPreviewUrl
+    : normalizedDesktopId
     ? `/?desktop_id=${encodeURIComponent(normalizedDesktopId)}&embedded=1`
     : '';
   $: if (!previewSrc) {
@@ -40,6 +44,11 @@
     if (!iframeEl?.contentDocument) return;
     const doc = iframeEl.contentDocument;
     const text = (doc.body?.innerText || '').trim();
+    if (normalizedPreviewUrl) {
+      clearPreviewPoll();
+      publishPreviewState('ready', 'Verified candidate UI preview is ready');
+      return;
+    }
     if (doc.querySelector('[data-desktop][data-desktop-ready="true"]')) {
       clearPreviewPoll();
       publishPreviewState('ready', 'Candidate desktop is ready');
@@ -70,6 +79,7 @@
   class="change-preview-frame"
   data-change-preview-frame
   data-change-preview-desktop-id={normalizedDesktopId}
+  data-change-preview-url={normalizedPreviewUrl}
   data-change-preview-state={previewState}
 >
   {#if previewSrc}

@@ -33,6 +33,9 @@
     ? adoptions.find((adoption) => adoption.package_id === selectedPackage.package_id) || null
     : null;
   $: selectedPreviewId = previewCandidateId || selectedAdoption?.target_candidate_id || '';
+  $: selectedPreviewUrl = selectedAdoption && ['verified', 'adopted', 'rolled_back'].includes(selectedAdoption.status)
+    ? `/api/adoptions/${encodeURIComponent(selectedAdoption.adoption_id)}/preview`
+    : '';
   $: selectedPreviewState = selectedPreviewId ? previewStates[selectedPreviewId] || 'empty' : 'empty';
   $: selectedRemoval = removalProfile(selectedAdoption);
   $: selectedAcceptance = (selectedAdoption?.trace_id ? latestAcceptanceForTrace(selectedAdoption.trace_id) : null)
@@ -886,6 +889,7 @@
             </div>
             <ChangePreviewFrame
               candidateDesktopId={selectedPreviewId}
+              previewUrl={selectedPreviewUrl}
               title={`${selectedChange.title} candidate preview`}
               on:previewstate={handlePreviewState}
             />

@@ -21,7 +21,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	rt.cfg.PromotionWorkspaceRoot = filepath.Join(t.TempDir(), "promotion-workspaces")
 	rt.cfg.AppPromotionRuntimeBuildCommand = `mkdir -p .choir-promotion-artifacts/runtime && cp runtime.txt .choir-promotion-artifacts/runtime/runtime.txt`
 	rt.cfg.AppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/runtime.txt"
-	rt.cfg.AppPromotionUIBuildCommand = `mkdir -p frontend/dist && cp frontend/ui.txt frontend/dist/ui.txt`
+	rt.cfg.AppPromotionUIBuildCommand = `mkdir -p frontend/dist/assets && cp frontend/ui.txt frontend/dist/ui.txt && printf '<script type="module" src="/assets/app.js"></script><div id="app">candidate UI</div>' > frontend/dist/index.html && printf 'console.log("candidate app")' > frontend/dist/assets/app.js`
 	rt.cfg.AppPromotionUIArtifactPath = "frontend/dist"
 
 	runtimePatch := testGitDiffForPath(t, sourceRepo, "runtime.txt", "runtime v1\n")
@@ -103,6 +103,17 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	}
 	if adoption.ForegroundTailMergeResult != "no-conflict" || adoption.TargetActiveSourceRefAtCutover == adoption.TargetActiveSourceRefAtCandidateStart {
 		t.Fatalf("foreground-tail accounting missing: %+v", adoption)
+	}
+	previewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview", "", ownerID)
+	if previewW.Code != http.StatusOK {
+		t.Fatalf("preview status = %d body=%s", previewW.Code, previewW.Body.String())
+	}
+	if !strings.Contains(previewW.Body.String(), "/api/adoptions/"+adoption.AdoptionID+"/preview/assets/app.js") {
+		t.Fatalf("preview index did not rewrite asset path: %s", previewW.Body.String())
+	}
+	assetW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview/assets/app.js", "", ownerID)
+	if assetW.Code != http.StatusOK || !strings.Contains(assetW.Body.String(), "candidate app") {
+		t.Fatalf("preview asset status = %d body=%s", assetW.Code, assetW.Body.String())
 	}
 
 	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)

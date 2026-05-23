@@ -1,10 +1,14 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -318,6 +322,10 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	adoptionID := strings.TrimSpace(parts[0])
+	if len(parts) >= 2 && parts[1] == "preview" {
+		h.handleAppAdoptionPreview(w, r, ownerID, adoptionID, strings.Join(parts[2:], "/"))
+		return
+	}
 	if len(parts) == 1 {
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -378,6 +386,137 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app adoption action not found"})
 	}
+}
+
+func (h *APIHandler) handleAppAdoptionPreview(w http.ResponseWriter, r *http.Request, ownerID, adoptionID, assetPath string) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	assetPath = strings.Trim(strings.TrimSpace(assetPath), "/")
+	previewRoot, err := h.rt.appAdoptionUIPreviewRoot(r.Context(), ownerID, adoptionID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: err.Error()})
+		return
+	}
+	targetPath := filepath.Join(previewRoot, filepath.FromSlash(assetPath))
+	if assetPath == "" {
+		targetPath = filepath.Join(previewRoot, "index.html")
+	}
+	if !pathWithinRoot(previewRoot, targetPath) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsafe preview path"})
+		return
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil || info.IsDir() {
+		targetPath = filepath.Join(previewRoot, "index.html")
+		info, err = os.Stat(targetPath)
+		if err != nil || info.IsDir() {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "adoption preview index not found"})
+			return
+		}
+	}
+	if filepath.Base(targetPath) == "index.html" {
+		h.serveAppAdoptionPreviewIndex(w, r, targetPath, adoptionID)
+		return
+	}
+	http.ServeFile(w, r, targetPath)
+}
+
+func (h *APIHandler) serveAppAdoptionPreviewIndex(w http.ResponseWriter, r *http.Request, indexPath, adoptionID string) {
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "adoption preview index not found"})
+		return
+	}
+	prefix := "/api/adoptions/" + url.PathEscape(adoptionID) + "/preview"
+	html := string(data)
+	html = strings.ReplaceAll(html, `src="/assets/`, `src="`+prefix+`/assets/`)
+	html = strings.ReplaceAll(html, `href="/assets/`, `href="`+prefix+`/assets/`)
+	html = strings.ReplaceAll(html, `src=/assets/`, `src=`+prefix+`/assets/`)
+	html = strings.ReplaceAll(html, `href=/assets/`, `href=`+prefix+`/assets/`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(html))
+}
+
+func (rt *Runtime) appAdoptionUIPreviewRoot(ctx context.Context, ownerID, adoptionID string) (string, error) {
+	if rt == nil || rt.store == nil {
+		return "", fmt.Errorf("adoption preview: runtime store is unavailable")
+	}
+	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	if err != nil {
+		return "", fmt.Errorf("adoption preview not found")
+	}
+	if rec.Status != types.AppAdoptionVerified && rec.Status != types.AppAdoptionAdopted && rec.Status != types.AppAdoptionRolledBack {
+		return "", fmt.Errorf("adoption preview requires a verified recipient build")
+	}
+	root := strings.TrimSpace(rt.cfg.PromotionWorkspaceRoot)
+	if root == "" {
+		return "", fmt.Errorf("adoption preview workspace root is not configured")
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("adoption preview workspace root is invalid")
+	}
+	workspacePath, uiArtifactPath := appAdoptionPreviewPaths(rec.VerifierResultsJSON)
+	if strings.TrimSpace(workspacePath) == "" {
+		return "", fmt.Errorf("adoption preview workspace is not recorded")
+	}
+	if strings.TrimSpace(uiArtifactPath) == "" {
+		uiArtifactPath = rt.cfg.AppPromotionUIArtifactPath
+	}
+	if strings.TrimSpace(uiArtifactPath) == "" {
+		return "", fmt.Errorf("adoption preview UI artifact path is not configured")
+	}
+	absWorkspace, err := filepath.Abs(workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("adoption preview workspace is invalid")
+	}
+	if !pathWithinRoot(absRoot, absWorkspace) {
+		return "", fmt.Errorf("adoption preview workspace is outside promotion root")
+	}
+	previewRoot := filepath.Join(absWorkspace, filepath.FromSlash(uiArtifactPath))
+	absPreviewRoot, err := filepath.Abs(previewRoot)
+	if err != nil {
+		return "", fmt.Errorf("adoption preview UI root is invalid")
+	}
+	if !pathWithinRoot(absRoot, absPreviewRoot) || !pathWithinRoot(absWorkspace, absPreviewRoot) {
+		return "", fmt.Errorf("adoption preview UI root is outside promotion workspace")
+	}
+	if info, err := os.Stat(absPreviewRoot); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("adoption preview UI artifact is not available")
+	}
+	return absPreviewRoot, nil
+}
+
+func appAdoptionPreviewPaths(raw json.RawMessage) (string, string) {
+	var results []struct {
+		ContractID string `json:"contract_id"`
+		Details    struct {
+			WorkspacePath  string `json:"workspace_path"`
+			UIArtifactPath string `json:"ui_artifact_path"`
+		} `json:"details"`
+	}
+	if err := json.Unmarshal(raw, &results); err != nil {
+		return "", ""
+	}
+	for _, result := range results {
+		if result.ContractID == "actual-recipient-runtime-ui-build" {
+			return strings.TrimSpace(result.Details.WorkspacePath), strings.TrimSpace(result.Details.UIArtifactPath)
+		}
+	}
+	return "", ""
+}
+
+func pathWithinRoot(root, path string) bool {
+	root, rootErr := filepath.Abs(filepath.Clean(root))
+	path, pathErr := filepath.Abs(filepath.Clean(path))
+	if rootErr != nil || pathErr != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }
 
 func apiLimit(r *http.Request, fallback int) int {
