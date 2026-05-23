@@ -1,6 +1,8 @@
 # MissionGradient: Async Supervision Runtime Hardening v0
 
-**Status:** superseded by runtime-gate-passed checkpoint in [mission-supervision-runtime-repair-experiment-rerun-v0.md](mission-supervision-runtime-repair-experiment-rerun-v0.md)
+**Status:** active checkpoint: async supervision is deployed through `a01595f`;
+the current fix closes the candidate-source transfer gap found by the first
+Chiron rerun.
 **Date:** 2026-05-23
 **Supersedes local next probe in:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Returns to:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
@@ -409,4 +411,90 @@ rollback refs:
   Pending commit SHA. Revert the eventual runtime-hardening commit if
   worker-delegation, VText revision, or coagent channel delivery regress on
   staging.
+```
+
+### 2026-05-23 Chiron Source-Transfer Checkpoint
+
+After the capacity fix, staging deployed
+`a01595ffff50c97569c8d2a87163317e74c4bbf3` and `/health` reported both proxy
+and upstream at that SHA. The visible product-path Chiron rerun was executed
+with Playwright against `https://draft.choir-ip.com` and produced local evidence
+under:
+
+```text
+/Users/wiz/go-choir/test-results/chiron-sequential-a01595f-20260523T152628Z
+```
+
+Mechanical Playwright status was `1 passed`, but product outcome was
+`no_matching_package`, not experiment success. The run did prove useful runtime
+facts:
+
+- source VText document: `5fe4f267-2015-408f-97c7-36cc2139cdea`;
+- VText head revision: `52bb6a61-55a5-42e2-867e-62a762ee5992`;
+- trajectory: `8279b78c-aa14-497e-b647-9dea961bccd2`;
+- source run acceptance: `runacc-6b74cf32519d4d94155c`,
+  `staging-smoke-level`, accepted;
+- implementation worker:
+  `worker-18fc4a60a02157b1` / `vm-f09452c1fb0f11c64c0955200daba4e2`,
+  `worker-small`;
+- proof worker:
+  `worker-b247d7194b989767` / `vm-24f022facb00684a282c3b102f649e49`,
+  `worker-playwright`.
+
+Root cause of the failed product proof:
+
+```text
+implementation co-super created commit d62e15a841a91cc291b93d2ba30a3c0beb4fde59
+inside the implementation worker checkout only;
+the separate worker-playwright proof worker could not fetch that commit from
+the GitHub remote because it was never pushed or otherwise exported.
+```
+
+The implementation worker reported a real candidate diff touching:
+
+- `frontend/src/lib/ChironStream.svelte`;
+- `frontend/src/lib/Desktop.svelte`;
+- `frontend/src/lib/BottomBar.svelte`.
+
+But it did not call `publish_app_change_package` before the parent attempted
+proof-worker handoff. That exposed a subtle contract bug: the prompts treated
+human proof as if it had to exist before the candidate source delta could be
+published. In a multi-worker proof path, that is backwards. A worker-local Git
+commit is not a transferable source artifact. The AppChangePackage can be
+`evidence_pending` and still carry the source delta; Apps & Changes and review
+evidence must simply refuse to label it human-reviewable until the VText
+narrative plus screenshot/video/benchmark refs exist.
+
+Current patch:
+
+- clarifies super/vsuper/co-super prompts and embedded prompt defaults;
+- clarifies remote worker bootstrap and vsuper delegate contract;
+- says proof workers must inspect a package id or package-derived
+  candidate/adoption route, never only an unreachable worker-local commit;
+- says implementation workers should publish an honest `evidence_pending`
+  AppChangePackage after commit and focused verification when external browser
+  proof is still missing;
+- updates the Chiron product proof prompt to use `worker-medium` for
+  implementation/build work and reserve `worker-playwright` for bounded
+  screenshot/video evidence after package evidence exists.
+
+Local verification for this checkpoint:
+
+```text
+nix develop -c go test ./internal/runtime -run 'TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract|TestWorkerVSuperDelegateContractPreventsCheckoutRaces|TestInstallDefaultAgentToolsProfiles|TestPublishAppChangePackageToolPublishesWithoutGitHubPush|TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview' -count=1
+nix develop -c go test ./internal/vmctl ./internal/vmmanager -count=1
+nix develop -c go test ./internal/runtime -count=1
+```
+
+All three passed locally before this checkpoint was committed.
+
+Next executable probe:
+
+```text
+commit/push this source-transfer contract fix -> monitor CI/deploy ->
+verify staging identity -> rerun the same Chiron product proof.
+Expected improvement: at minimum, the implementation run publishes one
+product-visible AppChangePackage, possibly evidence_pending. If proof/adoption
+still fails, the blocker should move from "unreachable local commit" to a
+specific package/adoption/proof-worker failure.
 ```

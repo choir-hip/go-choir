@@ -55,6 +55,8 @@ func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testin
 		"Chrome/Playwright is an external verifier",
 		"mount the actual app/component or use the product path",
 		"static fixture that hand-creates expected markup is diagnostic only",
+		"publish an honest evidence_pending AppChangePackage",
+		"worker-local commit is not enough for another worker to inspect",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("worker bootstrap prompt missing %q:\n%s", want, prompt)
@@ -5305,6 +5307,8 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"missing tools, failed tests, or package publication failure must end in submit_worker_update",
 		"both child runs finish without publish_app_change_package or submit_worker_update",
 		"publish_app_change_package",
+		"human proof is still evidence_pending",
+		"separate proof/adoption workers need a package id",
 	} {
 		if !strings.Contains(contract, want) {
 			t.Fatalf("delegate contract missing %q in %q", want, contract)

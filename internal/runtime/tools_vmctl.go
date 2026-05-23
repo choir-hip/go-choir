@@ -1902,6 +1902,7 @@ func remoteWorkerRepoBootstrapPrompt(remoteURL, baseSHA string) string {
 		"Use set -euo pipefail for multi-step bash commands so a failed commit, test, or export cannot be hidden by a later successful command.",
 		"Commit candidate changes before calling publish_app_change_package.",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + baseSHA + " when publishing an AppChangePackage.",
+		"If external screenshots/video/benchmarks are still missing but the candidate commit and focused verification evidence exist, publish an honest evidence_pending AppChangePackage instead of ending with a commit-only report. The package is the transferable source artifact; a worker-local commit is not enough for another worker to inspect.",
 		"If clone, checkout, build, verification, or package publication fails, report diagnostics with submit_worker_update instead of claiming repository work or ending with a plain narrative.",
 	}, "\n")
 }
@@ -1922,7 +1923,8 @@ func workerVSuperDelegateContract(timeout time.Duration) string {
 		"- The verifier must inspect only after the implementation child has reported a commit, package, or blocker; avoid racing the worker by repeatedly reading a checkout that is still being mutated.",
 		"- If the objective asks a helper to publish a package, do not override that with \"do not publish\"; let the helper publish, then report that child package.",
 		"- Tell the implementation child that missing tools, failed tests, or package publication failure must end in submit_worker_update with exact command output refs, not a plain final answer.",
-		"- Once a committed repo diff and focused verification evidence exist, make exactly one publish_app_change_package call for the candidate. If a child already published, do not parent-publish again.",
+		"- Once a committed repo diff and focused verification evidence exist, make exactly one publish_app_change_package call for the candidate, even if human proof is still evidence_pending and needs a separate proof worker. If a child already published, do not parent-publish again.",
+		"- Do not leave the only source artifact as a worker-local Git commit; separate proof/adoption workers need a package id or package-derived candidate/adoption route, not an unreachable commit SHA.",
 		"- After package evidence exists, immediately produce the terminal summary or submit_worker_update. Do not sleep, poll for narrative confirmation, or run broad discovery unless the package is invalid and you are doing one focused repair.",
 		"- Starting children, casting assignments, or receiving acknowledgement-only messages is not a terminal result; wait for commit/package/verifier/blocker evidence, or submit_worker_update with the precise missing-evidence blocker.",
 		"- If both child runs finish without publish_app_change_package or submit_worker_update evidence, inspect their final results and tool errors, then submit_worker_update naming the child loop ids and the missing terminal evidence.",
