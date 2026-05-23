@@ -121,6 +121,27 @@
         '';
       };
 
+      rustyV8Archive = pkgs.fetchurl {
+        url = "https://github.com/denoland/rusty_v8/releases/download/v137.3.0/librusty_v8_release_x86_64-unknown-linux-gnu.a.gz";
+        hash = "sha256-omgf3lMBir0zZgGPEyYX3VmAAt948VbHvG0v9gi1ZWc=";
+      };
+
+      obscuraPkg = pkgs.rustPlatform.buildRustPackage {
+        pname = "obscura";
+        version = "0.1.0-choir-348a651";
+        src = pkgs.fetchFromGitHub {
+          owner = "yusefmosiah";
+          repo = "obscura";
+          rev = "348a651e287ad370546762e78fc2095a7d33dc93";
+          hash = "sha256-+h05ieNUbfYCMqIoYuZLXwqhsZPsHHsXtnLzZEUaQMM=";
+        };
+        cargoHash = "sha256-q6bE+5p1nkxeuPdZ6eoLZ6eb274XPKaQASR9DCx4XD4=";
+        nativeBuildInputs = [ pkgs.perl pkgs.pkg-config ];
+        RUSTY_V8_ARCHIVE = rustyV8Archive;
+        cargoBuildFlags = [ "-p" "obscura-cli" ];
+        doCheck = false;
+      };
+
       # Build a single Go service binary
       mkGoService = { pname, subPackage }:
         pkgs.buildGoModule (commonGoArgs // {
@@ -156,6 +177,7 @@
           subPackage = "cmd/sandbox";
         };
         frontend = frontendPkg;
+        obscura = obscuraPkg;
       };
 
     in

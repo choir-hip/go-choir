@@ -194,12 +194,12 @@ EOF
         icu
         nodejs
         perl
-        playwright-driver
         pkg-config
         systemd
         procps
         iproute2
         python3
+        goChoirPackages.obscura
       ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
@@ -236,12 +236,11 @@ EOF
       GOMODCACHE = "/mnt/persistent/go/pkg/mod";
       GOCACHE = "/mnt/persistent/go-build-cache";
       GOTOOLCHAIN = "local";
-      # Worker VMs need browser-backed human evidence capture. The frontend
-      # Nix build skips Playwright browser downloads, so point npm-installed
-      # Playwright at the immutable browser bundle shipped in the guest image.
-      PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+      # Worker VMs use Obscura as their lightweight VM-local browser,
+      # extraction, and bounded-control substrate. Heavy Chrome/Playwright
+      # browser bundles stay outside user/candidate VMs as external verifiers.
+      CHOIR_OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
+      OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";

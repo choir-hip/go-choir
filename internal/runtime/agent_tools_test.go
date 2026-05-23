@@ -50,8 +50,9 @@ func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testin
 	prompt := remoteWorkerRepoBootstrapPrompt("https://github.com/yusefmosiah/go-choir.git", "abc123")
 	for _, want := range []string{
 		"node, npm",
-		"Playwright browser binaries",
-		"node/npm, Playwright",
+		"Obscura browser binary",
+		"node/npm, Obscura",
+		"Chrome/Playwright is an external verifier",
 		"mount the actual app/component or use the product path",
 		"static fixture that hand-creates expected markup is diagnostic only",
 	} {
@@ -4380,7 +4381,7 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 		"git config user.email \"worker@choir.local\"",
 		"git checkout " + base,
 		"Use set -euo pipefail for multi-step bash commands",
-		"Run gofmt, go test, node/npm, Playwright, and scripts directly from the checkout",
+		"Run gofmt, go test, node/npm, Obscura, and scripts directly from the checkout",
 		"Do not run nix develop, nix build, or nix-store inside the worker VM",
 		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
 	} {
