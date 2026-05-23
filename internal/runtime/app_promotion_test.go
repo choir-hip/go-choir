@@ -362,6 +362,42 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		t.Fatalf("human proof refs = %+v", review.HumanProof)
 	}
 
+	summaryOnlyNarrative := `{
+		"app_id":"human-proof-summary-only",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-summary-only",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract",
+		"provenance_refs":{
+			"human_summary":"This prose summary is useful display copy, but it is not a durable VText narrative.",
+			"screenshot_refs":["test-results/summary-only.png"]
+		}
+	}`
+	summaryOnlyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", summaryOnlyNarrative, "user-alice")
+	if summaryOnlyW.Code != http.StatusCreated {
+		t.Fatalf("summary-only package status = %d body=%s", summaryOnlyW.Code, summaryOnlyW.Body.String())
+	}
+	var summaryOnlyPkg types.AppChangePackageRecord
+	if err := json.Unmarshal(summaryOnlyW.Body.Bytes(), &summaryOnlyPkg); err != nil {
+		t.Fatalf("decode summary-only package: %v", err)
+	}
+	summaryOnlyReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+summaryOnlyPkg.PackageID+"/review-evidence", "", "user-alice")
+	if summaryOnlyReviewW.Code != http.StatusOK {
+		t.Fatalf("summary-only review evidence status = %d body=%s", summaryOnlyReviewW.Code, summaryOnlyReviewW.Body.String())
+	}
+	var summaryOnlyReview appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(summaryOnlyReviewW.Body.Bytes(), &summaryOnlyReview); err != nil {
+		t.Fatalf("decode summary-only review evidence: %v", err)
+	}
+	if summaryOnlyReview.HumanProof.State == "human_reviewable" {
+		t.Fatalf("human_summary plus screenshot must not count as a causal VText narrative: %+v", summaryOnlyReview.HumanProof)
+	}
+	if !containsString(summaryOnlyReview.HumanProof.Missing, "narrative VText") {
+		t.Fatalf("summary-only missing evidence should name VText narrative: %+v", summaryOnlyReview.HumanProof)
+	}
+
 	blockedBenchmarkOnly := `{
 		"app_id":"human-proof-blocked-benchmark",
 		"visibility":"unlisted",

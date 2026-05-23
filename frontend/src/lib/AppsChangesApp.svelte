@@ -89,6 +89,65 @@
     return out;
   }
 
+  function credibleHumanBenchmarkRef(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return false;
+    const blockedTerms = [
+      'blocked',
+      'failed',
+      'failure',
+      'error',
+      'unavailable',
+      'not available',
+      'pending',
+      'not run',
+      'not captured',
+      'cannot run',
+      'could not',
+    ];
+    if (blockedTerms.some((term) => text.includes(term))) return false;
+    const receiptOnlyTerms = [
+      'npm --prefix frontend run build',
+      'npm --prefix frontend ci',
+      'npm ci',
+      'npm install',
+      'pnpm build',
+      'go build',
+      'vite build',
+      'build proof',
+      'build receipt',
+      'build passed',
+      'build pass',
+      'frontend production build',
+      'chunk-size warning',
+      'npm audit',
+    ];
+    if (receiptOnlyTerms.some((term) => text.includes(term))) return false;
+    if (!/[0-9]/.test(text)) return false;
+    return ['benchmark', 'latency', 'duration', 'tokens', 'fps', 'memory', 'cpu', 'resource', 'wall time', 'p95', 'median']
+      .some((term) => text.includes(term));
+  }
+
+  function hasCredibleHumanBenchmarkRefs(refs) {
+    return (refs || []).some(credibleHumanBenchmarkRef);
+  }
+
+  function normalizeHumanProof(proof = {}) {
+    const normalized = {
+      state: proof.state || 'evidence_pending',
+      summary: proof.summary || '',
+      recommendation: proof.recommendation || '',
+      narrative_refs: compact(proof.narrative_refs || []),
+      screenshot_refs: compact(proof.screenshot_refs || []),
+      video_refs: compact(proof.video_refs || []),
+      benchmark_refs: compact(proof.benchmark_refs || []),
+      artifact_refs: compact(proof.artifact_refs || []),
+      missing: compact(proof.missing || []),
+    };
+    if (!normalized.state) normalized.state = 'evidence_pending';
+    return normalized;
+  }
+
   function collectHumanProofValue(proof, value, key = '') {
     if (!value) return;
     if (Array.isArray(value)) {
@@ -116,7 +175,7 @@
     if (!text) return;
     const lowerKey = String(key || '').toLowerCase();
     const lowerText = text.toLowerCase();
-    if (lowerKey.includes('vtext') || lowerKey.includes('narrative') || lowerText.startsWith('vtext:')) {
+    if (lowerKey.includes('vtext') || lowerKey.includes('narrative_ref') || lowerText.startsWith('vtext:')) {
       proof.narrative_refs.push(text);
     } else if (
       lowerKey.includes('screenshot') ||
@@ -136,6 +195,9 @@
   }
 
   function humanProofForPackage(pkg, evidence = null) {
+    if (evidence?.human_proof) {
+      return normalizeHumanProof(evidence.human_proof);
+    }
     const proof = {
       state: 'evidence_pending',
       summary: '',
@@ -147,11 +209,7 @@
       artifact_refs: [],
       missing: [],
     };
-    if (evidence?.human_proof) {
-      Object.assign(proof, evidence.human_proof);
-    }
     collectHumanProofValue(proof, parseRecordJSON(pkg?.provenance_refs_json), '');
-    if (proof.summary) proof.narrative_refs.push('human_summary');
     proof.narrative_refs = compact(proof.narrative_refs);
     proof.screenshot_refs = compact(proof.screenshot_refs);
     proof.video_refs = compact(proof.video_refs);
@@ -159,7 +217,7 @@
     proof.artifact_refs = compact(proof.artifact_refs);
     proof.missing = [];
     const hasNarrative = proof.narrative_refs.length > 0;
-    const hasHumanMedia = proof.screenshot_refs.length > 0 || proof.video_refs.length > 0 || proof.benchmark_refs.length > 0;
+    const hasHumanMedia = proof.screenshot_refs.length > 0 || proof.video_refs.length > 0 || hasCredibleHumanBenchmarkRefs(proof.benchmark_refs);
     if (hasNarrative && hasHumanMedia) {
       proof.state = 'human_reviewable';
     } else {

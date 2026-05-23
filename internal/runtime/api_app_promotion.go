@@ -457,7 +457,7 @@ func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) 
 		kind := strings.ToLower(strings.TrimSpace(ref.Kind))
 		summary := ref.Summary + " " + ref.URL
 		lowerSummary := strings.ToLower(summary)
-		if strings.Contains(kind, "vtext") || strings.Contains(lowerSummary, "vtext") || strings.Contains(lowerSummary, "narrative") {
+		if strings.Contains(kind, "vtext") || strings.Contains(lowerSummary, "vtext") {
 			hasNarrative = true
 		}
 		if strings.Contains(kind, "screenshot") ||
@@ -473,7 +473,7 @@ func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) 
 		for _, value := range ref.Details {
 			text := fmt.Sprint(value)
 			lowerText := strings.ToLower(text)
-			if strings.Contains(lowerText, "vtext") || strings.Contains(lowerText, "narrative") {
+			if strings.Contains(lowerText, "vtext") {
 				hasNarrative = true
 			}
 			if strings.Contains(lowerText, ".png") || strings.Contains(lowerText, ".jpg") || strings.Contains(lowerText, ".jpeg") || strings.Contains(lowerText, ".webm") || strings.Contains(lowerText, ".mp4") || (strings.Contains(lowerText, "benchmark") && credibleHumanBenchmarkRef(text)) {
@@ -497,9 +497,6 @@ func humanProofForAppChangePackage(pkg types.AppChangePackageRecord) appChangePa
 		State: "evidence_pending",
 	}
 	collectHumanProofValue(&proof, provenance, "")
-	if strings.TrimSpace(proof.Summary) != "" {
-		proof.NarrativeRefs = append(proof.NarrativeRefs, "human_summary")
-	}
 	proof.NarrativeRefs = compactStringRefs(proof.NarrativeRefs)
 	proof.ScreenshotRefs = compactStringRefs(proof.ScreenshotRefs)
 	proof.VideoRefs = compactStringRefs(proof.VideoRefs)
@@ -630,7 +627,7 @@ func collectHumanProofString(proof *appChangePackageHumanProof, key, raw string)
 	lowerKey := strings.ToLower(key)
 	lowerText := strings.ToLower(text)
 	switch {
-	case strings.Contains(lowerKey, "vtext") || strings.Contains(lowerKey, "narrative") || strings.Contains(lowerText, "vtext:"):
+	case strings.Contains(lowerKey, "vtext") || strings.Contains(lowerKey, "narrative_ref") || strings.Contains(lowerText, "vtext:"):
 		proof.NarrativeRefs = append(proof.NarrativeRefs, text)
 	case strings.Contains(lowerKey, "screenshot") || strings.Contains(lowerKey, "image") || strings.HasSuffix(lowerText, ".png") || strings.HasSuffix(lowerText, ".jpg") || strings.HasSuffix(lowerText, ".jpeg"):
 		proof.ScreenshotRefs = append(proof.ScreenshotRefs, text)

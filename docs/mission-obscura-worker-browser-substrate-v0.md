@@ -59,6 +59,35 @@ behavior for the specific contract being claimed.
   behavior proof still require external Playwright/Chrome verifier evidence or
   a separately proven Obscura CDP screenshot/control contract.
 
+## Capability Matrix
+
+This is the current truth as of the staging proof on `f452977`.
+
+| Capability | Current status | Evidence | Mission consequence |
+| --- | --- | --- | --- |
+| Public web text/html/link extraction | **Proven on staging worker VM** | `/api/browser/capabilities` reported provider `obscura`, substrate `obscura_cli_fetch`; browser session `b134f3a2-70e6-4199-af4d-fc70c77eeb8c` navigated to `https://example.com` and returned expected text plus one link. | Worker/candidate agents can use Obscura for lightweight acquisition and extraction without carrying Playwright browser bundles. |
+| Arbitrary web scraping/extraction | **Partially proven** | The API supports URL-normalized backend snapshots: text, HTML, and up to 100 links. Only a simple public page has been exercised in deployed proof. | Safe to use for simple public extraction; not yet proof for adversarial sites, complex JS apps, paywalls, authenticated pages, or pages needing interaction. |
+| Choir authenticated product UI | **Not proven** | `/api/browser/*` itself is authenticated, but `obscura fetch` does not inherit the user's browser cookies/session when it fetches a target URL. No deployed proof has shown Obscura logging into or controlling `draft.choir-ip.com` as a user. | Do not use Obscura as the acceptance path for authenticated Choir UI behavior yet. Use product APIs plus external authenticated Playwright/Chrome for owner-visible UI proof until a secure session-injection or service-token design exists. |
+| Screenshots | **Code path exists, not deployed-proven** | Runtime has optional `CHOIR_OBSCURA_CDP_SCREENSHOTS` support and opt-in live tests for `Page.captureScreenshot`, but the fresh staging worker capability report did not advertise screenshot/CDP support. | Screenshots for human proof must still come from bounded external verifier tooling unless/until a deployed worker capability report shows `screenshot=true` and a staging screenshot proof passes. |
+| Video | **Not implemented/proven** | No product API or Obscura runtime path records video. At most, future work could assemble frames from screenshots after the screenshot path is proven. | Playwright/Chrome video remains external verifier evidence. Do not claim Obscura video evidence. |
+| Bounded actions (`fill`, `click`) | **Code path exists, not deployed-proven** | Runtime exposes `/api/browser/sessions/{id}/control` only when CDP screenshots are enabled; live tests cover fill/click behind `GO_CHOIR_RUN_OBSCURA_CDP=1`. Staging proof did not enable or verify this. | Not enough for “arbitrary actions.” Treat it as a future bounded-control slice with explicit selector/action limits and separate auth/security review. |
+| General arbitrary browser automation | **Not supported** | The current API only models navigate, snapshot, optional screenshot, optional `fill`, and optional `click`. | Keep experiment acceptance on product APIs and external UI verifier. Do not ask Obscura to replace Playwright for full UI automation yet. |
+| Web Lens iframe fallback | **Good next substrate candidate, not built** | Obscura can provide server-side text/html/link snapshots for pages that block iframes. It cannot yet provide an interactive, authenticated embedded browser replacement. | After the experiment mission, a good mission is “Web Lens Obscura snapshot fallback”: when iframe embedding fails, show an Obscura-backed readable snapshot/extracted links with clear fidelity label, not a fake iframe. |
+
+The key design boundary is now clearer:
+
+```text
+Obscura in user/candidate VMs = lightweight acquisition and extraction.
+External Playwright/Chrome = bounded human-media verifier for screenshots/video.
+Future Obscura CDP slice = optional screenshot/fill/click substrate only after deployed proof.
+```
+
+This means the human-proof experiment rerun should use Obscura to reduce VM
+weight and to let Choir agents inspect public web pages, but it should not wait
+for Obscura to become full Playwright before rerunning Chiron. The Chiron
+acceptance path should still require screenshots/video from external verifier
+tooling until Obscura CDP screenshot/control is separately proven on staging.
+
 ## What Is Special In Our Obscura Fork
 
 Local fork state:
