@@ -310,7 +310,11 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	isError := false
 	output := skipReason
 	if skipReason != "" {
-		isError = true
+		if strings.HasPrefix(skipReason, "tool_notice:") {
+			output = strings.TrimSpace(strings.TrimPrefix(skipReason, "tool_notice:"))
+		} else {
+			isError = true
+		}
 	} else {
 		var err error
 		output, err = registry.Execute(ctx, call.Name, call.Arguments)
@@ -617,6 +621,18 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			if previous, exists := seenDelegateWorker[key]; exists {
+				if call.Name == "start_worker_delegation" {
+					notice, _ := json.Marshal(map[string]any{
+						"status":           "duplicate_start_ignored",
+						"state":            "pending",
+						"deduped":          true,
+						"dedupe_reason":    "start_worker_delegation_already_planned_in_turn",
+						"previous_call_id": calls[previous].ID,
+						"next_tools":        []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
+					})
+					setSkip(i, "tool_notice:"+string(notice))
+					continue
+				}
 				setSkip(i, fmt.Sprintf("tool_error: duplicate %s payload already planned in this turn at call %s; wait for the first worker result instead of starting the same worker delegation twice", call.Name, calls[previous].ID))
 				continue
 			}

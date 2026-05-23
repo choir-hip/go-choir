@@ -742,8 +742,8 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 	if results[0].IsError {
 		t.Fatalf("first start = %#v, want success", results[0])
 	}
-	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate start_worker_delegation") {
-		t.Fatalf("second start = %#v, want duplicate skip", results[1])
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate_start_ignored") {
+		t.Fatalf("second start = %#v, want non-error duplicate notice", results[1])
 	}
 }
 
