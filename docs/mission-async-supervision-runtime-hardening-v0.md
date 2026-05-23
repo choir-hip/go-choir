@@ -16,8 +16,12 @@ next sequential experiment probe: request/start/observe/finish used one worker
 run, worker `submit_worker_update` was mirrored into the active VText channel,
 VText produced an owner-readable dashboard revision after the worker-update
 synthesis wake, and run acceptance recorded `staging-smoke-level` without
-requiring AppChangePackage evidence. See the platform state ledger for evidence
-refs.
+requiring AppChangePackage evidence. The first Chiron rerun then found a
+narrower runtime gap: `finish_worker_delegation` could still return
+`worker_run_active` without the active worker/child evidence that super and
+VText need for redirection. The current continuation patch makes active finish
+return actionable worker evidence and checkpoints only nontrivial active
+evidence, avoiding duplicate startup/update noise.
 
 ## One-Line Goal String
 

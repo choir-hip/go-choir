@@ -1,6 +1,6 @@
 # MissionGradient: Supervision Runtime Repair And Experiment Rerun v0
 
-**Status:** checkpoint_incomplete — runtime gate passed, experiment rerun pending
+**Status:** checkpoint_incomplete — runtime gate passed, first Chiron rerun isolated an active-finish evidence gap
 **Date:** 2026-05-23
 **Supersedes immediate continuation of:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
 **Resumes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
@@ -348,10 +348,104 @@ probe.
 Use `blocked_incomplete` only after root-cause probes and cognitive transforms
 leave an invariant-level or external blocker.
 
+## Chiron Rerun Checkpoint: 2026-05-23
+
+The first post-runtime-gate Chiron probe restarted the sequential experiment
+through the visible product path. It did not prove Chiron. It did prove that the
+next blocker is still in the supervision runtime, not in Chiron design.
+
+Evidence:
+
+- proof harness:
+  `frontend/tests/chiron-sequential-product-proof.tmp.spec.js`
+- evidence directory:
+  `test-results/chiron-sequential-20260523T081544Z`
+- Playwright trace:
+  `frontend/test-results/chiron-sequential-product--3fb34-evidence-or-precise-blocker-chromium/trace.zip`
+- source trajectory/submission:
+  `d850d92a-b90d-48f3-842a-f9fa5d5d3a37`
+- VText dashboard:
+  `bcb8329e-ce45-426c-9bc5-5552fca3208f`
+- VText head revision:
+  `7454b343-205f-405f-8578-76ceca8f87a2`
+- run acceptance:
+  `runacc-86cb5ab95084483a9084`, accepted,
+  `staging-smoke-level`
+- worker VM:
+  `vm-75580c3b67b14b95d055556e085fc2b4`
+- worker:
+  `worker-10476a1dd63bbe16`
+- vsuper loop:
+  `e9062cb7-fcff-4c9e-965d-a4cb4330cc95`
+- implementation co-super loop:
+  `7ee4ff0b-3588-4968-abca-f8cc0d827189`
+- verifier co-super loop:
+  `21ccc7e6-6bf0-487e-8f32-2fa4c38d16f7`
+
+Outcome:
+
+```text
+outcome: no_matching_package
+selected_package: null
+source acceptance: accepted / staging-smoke-level
+trace: 3 agents, 147 moments, 2 delegations, 0 evidence refs, 0 rollback refs
+```
+
+The VText dashboard was materially useful: it reported the candidate-world
+topology, worker sandbox URL, active vsuper/co-super loops, base SHA, and the
+worker's partial source-edit state. It also showed that implementation modified
+`frontend/src/lib/BottomBar.svelte`, then hit `old_string not found` while no
+package, screenshot, video, or precise blocker was returned.
+
+Root cause found after the probe:
+
+- `finish_worker_delegation` returned `worker_run_active` without fetching or
+  preserving worker/child-run evidence.
+- `observe_worker_delegation` already had the right evidence shape, but super's
+  finish path could still lose the child tool failure context needed to
+  redirect vsuper.
+- Duplicate same-turn tool-call guards worked, but their errors added noise to
+  the run and remain a prompt/runtime-tuning target.
+
+Local runtime patch:
+
+- `finish_worker_delegation` now fetches active worker evidence before returning
+  `worker_run_active`.
+- Active finish checkpoints to VText only when the active evidence is
+  actionable: package evidence, child-run evidence, tool errors, or evidence
+  fetch errors. Ordinary startup/root events and direct worker channel traffic
+  are not synthesized into duplicate checkpoints.
+- Regression test:
+  `TestFinishWorkerDelegationActiveIncludesWorkerEvidence`.
+
+Focused local proof in `nix develop`:
+
+```text
+go test ./internal/runtime -run 'TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport|TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText|TestFinishWorkerDelegationActiveIncludesWorkerEvidence|TestDelegateWorkerVMReturnsTimeoutRunEvidence' -count=1
+go test ./internal/runtime -run 'Test.*Worker.*Delegation|TestDelegateWorkerVM|TestFinishWorkerDelegation|TestObserveWorkerDelegation|TestRedirectWorkerDelegation|TestCancelWorkerDelegation' -count=1
+```
+
+Both passed. A full `internal/runtime` package run remains noisy/expensive and
+previously surfaced this same active-checkpoint interaction; use the focused
+worker-delegation slice as the relevant pre-deploy guard unless the full suite
+is being separately stabilized.
+
+Next safe probe after deploy:
+
+1. Push/deploy the active-finish evidence patch.
+2. Verify staging identity.
+3. Rerun only Chiron through the visible product path.
+4. Require VText to show the worker child tool failure, package, or precise
+   blocker while the worker is still active.
+5. Do not proceed to Motion/Liquid/Python until Chiron either produces a real
+   human-proof package/evidence path or a lower-level blocker with the worker
+   events visible in VText/Trace/run acceptance.
+
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete — runtime gate passed, experiment rerun pending
+status: checkpoint_incomplete — runtime gate passed, first Chiron rerun isolated
+  an active-finish evidence gap
 last checkpoint:
   2026-05-23 staging proof at commit 846cfbb closed the worker-update and
   runtime-acceptance gap from the earlier 732eb4a checkpoint. The deployed

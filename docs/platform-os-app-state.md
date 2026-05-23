@@ -1,7 +1,7 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-22
+**Last updated:** 2026-05-23
 **Baseline checked:** Live computer sync driver-lease completion
 `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`
 
@@ -485,6 +485,14 @@ dashboards:
   `mirrored_worker_update_count=1`), VText synthesis into an owner-readable
   request/start/observe/finish dashboard, Trace-visible worker events, and
   runtime-supervision run acceptance without AppChangePackage requirements;
+- first Chiron sequential rerun after that proof did not produce a package:
+  evidence directory `test-results/chiron-sequential-20260523T081544Z`,
+  trajectory `d850d92a-b90d-48f3-842a-f9fa5d5d3a37`, VText dashboard
+  `bcb8329e-ce45-426c-9bc5-5552fca3208f`, run acceptance
+  `runacc-86cb5ab95084483a9084` at `staging-smoke-level`, and outcome
+  `no_matching_package`. That probe isolated the next runtime gap:
+  active `finish_worker_delegation` needed to return and checkpoint
+  actionable worker/child-run evidence before terminal completion;
 - caveat: screenshot/video evidence was captured by the outer Playwright proof
   harness. Product-requested `worker-playwright` evidence capture remains the
   next proof requirement for UI experiment reruns.

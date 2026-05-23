@@ -4902,6 +4902,146 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	}
 }
 
+func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
+	activeRT, s, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	workerEvents := []types.EventRecord{
+		{
+			EventID:   "worker-active-spawn",
+			RunID:     "worker-run-active",
+			AgentID:   "worker-agent-active",
+			OwnerID:   "user-alice",
+			Timestamp: now,
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"spawn_agent",
+				"is_error":false,
+				"output":"{\"agent_id\":\"agent-worker-impl\",\"loop_id\":\"child-implementation-active\",\"profile\":\"co-super\"}"
+			}`),
+		},
+	}
+	childEvents := []types.EventRecord{
+		{
+			EventID:   "worker-active-child-edit-failed",
+			RunID:     "child-implementation-active",
+			AgentID:   "agent-worker-impl",
+			OwnerID:   "user-alice",
+			Timestamp: now.Add(time.Second),
+			Kind:      types.EventToolResult,
+			Payload: json.RawMessage(`{
+				"tool":"edit_file",
+				"is_error":true,
+				"output":"tool_error: old_string not found in frontend/src/lib/BottomBar.svelte"
+			}`),
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-active":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "worker-run-active",
+				AgentID:      "worker-agent-active",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunRunning,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-run-active/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: workerEvents})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/child-implementation-active":
+			writeAPIJSON(w, http.StatusOK, runStatusResponse{
+				RunID:        "child-implementation-active",
+				AgentID:      "agent-worker-impl",
+				AgentProfile: AgentProfileCoSuper,
+				State:        types.RunRunning,
+				OwnerID:      "user-alice",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/child-implementation-active/events":
+			writeAPIJSON(w, http.StatusOK, eventListResponse{Events: childEvents})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "finish active worker", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataTrajectoryID: "trace-finish-active",
+		runMetadataChannelID:    "doc-finish-active",
+		"requested_by_profile":  AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	toolCtx := WithToolExecutionContext(context.Background(), superRun)
+	raw, err := registry.Execute(toolCtx, "finish_worker_delegation", mustJSON(t, map[string]any{
+		"worker_sandbox_url": srv.URL,
+		"worker_run_id":      "worker-run-active",
+		"worker_id":          "worker-active",
+		"vm_id":              "vm-worker-active",
+		"profile":            AgentProfileVSuper,
+		"objective":          "produce an AppChangePackage or precise blocker",
+	}))
+	if err != nil {
+		t.Fatalf("finish_worker_delegation should return active evidence, got error: %v", err)
+	}
+
+	var result struct {
+		Status                 string            `json:"status"`
+		RunID                  string            `json:"loop_id"`
+		State                  types.RunState    `json:"state"`
+		FinishReady            bool              `json:"finish_ready"`
+		EventCount             int               `json:"event_count"`
+		WorkerEventSummary     []map[string]any  `json:"worker_event_summary"`
+		WorkerChildRunIDs      []string          `json:"worker_child_run_ids"`
+		WorkerChildRunStates   map[string]string `json:"worker_child_run_states"`
+		AppChangePackages      []map[string]any  `json:"app_change_packages"`
+		WorkerUpdateCheckpoint string            `json:"worker_update_checkpoint"`
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode finish result: %v\n%s", err, raw)
+	}
+	if result.Status != "worker_run_active" || result.RunID != "worker-run-active" || result.State != types.RunRunning || result.FinishReady {
+		t.Fatalf("unexpected active finish result: %+v\nraw=%s", result, raw)
+	}
+	if result.EventCount != len(workerEvents)+len(childEvents) || len(result.WorkerEventSummary) != len(workerEvents)+len(childEvents) {
+		t.Fatalf("finish active evidence missing worker events: %+v\nraw=%s", result, raw)
+	}
+	if !containsString(result.WorkerChildRunIDs, "child-implementation-active") ||
+		result.WorkerChildRunStates["child-implementation-active"] != string(types.RunRunning) {
+		t.Fatalf("finish active evidence missing child run state: %+v\nraw=%s", result, raw)
+	}
+	if len(result.AppChangePackages) != 0 {
+		t.Fatalf("active failed edit should not synthesize package evidence: %+v\nraw=%s", result.AppChangePackages, raw)
+	}
+	if !strings.Contains(raw, "old_string not found") {
+		t.Fatalf("finish active result did not preserve child tool failure: %s", raw)
+	}
+	if result.WorkerUpdateCheckpoint != "submitted_or_existing" {
+		t.Fatalf("finish active result did not checkpoint VText update: %+v\nraw=%s", result, raw)
+	}
+
+	updates, err := s.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-finish-active", 10)
+	if err != nil {
+		t.Fatalf("list worker updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
+	}
+	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	if !strings.Contains(joinedFindings, "worker event summary was preserved with 2 event") ||
+		!strings.Contains(strings.Join(updates[0].Notes, "\n"), "checkpoint_source=async_finish_active") ||
+		!containsString(updates[0].Refs, "worker_vm:vm-worker-active") ||
+		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-active") {
+		t.Fatalf("worker update checkpoint missing active finish evidence: %+v", updates[0])
+	}
+}
+
 func TestDelegateWorkerVMReturnsSubmitFailureEvidence(t *testing.T) {
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {

@@ -983,6 +983,18 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			if !status.State.Terminal() && status.State != types.RunBlocked {
 				result["status"] = "worker_run_active"
 				result["finish_ready"] = false
+				rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, false, ctxRunRecord(ctx), result)
+				updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if intMapValue(result, "mirrored_worker_update_count") > 0 {
+					result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
+				} else if !shouldCheckpointActiveWorkerFinish(result) {
+					result["worker_update_checkpoint"] = "active_evidence_deferred"
+				} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish_active"); err != nil {
+					result["worker_update_error"] = err.Error()
+				} else {
+					result["worker_update_checkpoint"] = "submitted_or_existing"
+				}
 				return toolResultJSON(result)
 			}
 			evidence, evidenceErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
@@ -1022,6 +1034,27 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			return toolResultJSON(result)
 		},
 	}
+}
+
+func shouldCheckpointActiveWorkerFinish(result map[string]any) bool {
+	if result == nil {
+		return false
+	}
+	if stringMapValue(result, "worker_event_error") != "" {
+		return true
+	}
+	if len(mapSliceValue(result, "app_change_packages")) > 0 {
+		return true
+	}
+	if len(stringSliceMapValue(result, "worker_child_run_ids")) > 0 {
+		return true
+	}
+	for _, item := range mapSliceValue(result, "worker_event_summary") {
+		if isError, _ := item["is_error"].(bool); isError {
+			return true
+		}
+	}
+	return false
 }
 
 func newRedirectWorkerDelegationTool(rt *Runtime) Tool {
