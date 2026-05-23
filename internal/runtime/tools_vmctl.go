@@ -2281,6 +2281,20 @@ func delegateRequiresAppChangePackage(profile, objective string) bool {
 		return false
 	}
 	objective = strings.ToLower(objective)
+	for _, negative := range []string{
+		"do not publish_app_change_package",
+		"do not call publish_app_change_package",
+		"do not publish an appchangepackage",
+		"do not publish appchangepackage",
+		"do not publish an app change package",
+		"do not publish app change package",
+		"no appchangepackage",
+		"no app change package",
+	} {
+		if strings.Contains(objective, negative) {
+			return false
+		}
+	}
 	for _, needle := range []string{
 		"publish_app_change_package",
 		"appchangepackage",

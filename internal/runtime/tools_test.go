@@ -667,6 +667,78 @@ func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	executions := 0
+	if err := registry.Register(Tool{
+		Name: "start_worker_delegation",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			mu.Lock()
+			executions++
+			mu.Unlock()
+			return `{"status":"worker_run_started","worker_id":"worker-1","worker_run_id":"run-1","app_change_packages":[]}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register start_worker_delegation: %v", err)
+	}
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "super-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileSuper,
+	})
+	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"run harmless worker proof","profile":"vsuper"}`)
+	results := executeTools(ctx, registry, []types.ToolCall{
+		{ID: "start-1", Name: "start_worker_delegation", Arguments: args},
+		{ID: "start-2", Name: "start_worker_delegation", Arguments: args},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	mu.Lock()
+	gotExecutions := executions
+	mu.Unlock()
+	if gotExecutions != 1 {
+		t.Fatalf("start executions = %d, want one", gotExecutions)
+	}
+	if results[0].IsError {
+		t.Fatalf("first start = %#v, want success", results[0])
+	}
+	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate start_worker_delegation") {
+		t.Fatalf("second start = %#v, want duplicate skip", results[1])
+	}
+}
+
+func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *testing.T) {
+	tests := []struct {
+		name      string
+		objective string
+		want      bool
+	}{
+		{
+			name:      "positive package objective",
+			objective: "commit the candidate checkout and publish_app_change_package for an owner-pullable package",
+			want:      true,
+		},
+		{
+			name:      "negative app change package objective",
+			objective: "run a harmless ephemeral verification command, report the marker, and submit a precise worker update; do not edit Choir source and do not publish an AppChangePackage.",
+			want:      false,
+		},
+		{
+			name:      "negative tool name objective",
+			objective: "collect evidence only; do not call publish_app_change_package for this probe",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := delegateRequiresAppChangePackage(AgentProfileVSuper, tt.objective); got != tt.want {
+				t.Fatalf("delegateRequiresAppChangePackage() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	registry := NewToolRegistry()
 	var mu sync.Mutex
