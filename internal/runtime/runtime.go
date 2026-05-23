@@ -333,6 +333,15 @@ func (rt *Runtime) StartRun(ctx context.Context, prompt, ownerID string) (*types
 // emits a submitted event, and begins execution in a goroutine. Metadata is
 // used to carry feature-specific context (e.g., vtext agent revision info).
 func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
+	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
+	if err != nil {
+		return nil, err
+	}
+	rt.startRunAsync(rec)
+	return rec, nil
+}
+
+func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
 	now := time.Now().UTC()
 	runID := uuid.New().String()
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
@@ -368,7 +377,10 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 
 	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": len(prompt)})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, promptLenPayload)
+	return rec, nil
+}
 
+func (rt *Runtime) startRunAsync(rec *types.RunRecord) {
 	// Begin execution in a goroutine. Use a copy of the record to avoid
 	// racing with the caller (the returned rec must retain RunPending).
 	runRec := *rec
@@ -380,8 +392,6 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 
 	rt.wg.Add(1)
 	go rt.executeRun(runCtx, &runRec)
-
-	return rec, nil
 }
 
 // completePromptBarDecisionRun records a server-owned conductor decision that

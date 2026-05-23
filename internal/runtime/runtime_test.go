@@ -454,7 +454,9 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		"API calls, curl fetches",
 		"Delegate work that changes Choir/app/harness behavior",
 		"first call request_worker_vm",
-		"delegate_worker_vm transition to a vsuper run",
+		"start_worker_delegation` using the returned `start_args",
+		"observe_worker_delegation",
+		"finish_worker_delegation",
 		"Do not answer that class of request only with submit_worker_update",
 		"worker-small",
 	} {

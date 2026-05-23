@@ -551,13 +551,12 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 			"profile":            AgentProfileCoSuper,
 			"timeout_seconds":    10,
 		})
-		delegateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
-			ID:        "delegate-worker-product-path",
-			Name:      "delegate_worker_vm",
-			Arguments: delegateArgs,
-		}})
-		if err := json.Unmarshal([]byte(delegateResults[0].Output), &delegateResp); err != nil {
-			t.Fatalf("decode delegate_worker_vm result: %v\n%s", err, delegateResults[0].Output)
+		delegateRaw, err := executeWorkerDelegationUntilSettled(t, superRegistry, WithToolExecutionContext(context.Background(), superRun), delegateArgs)
+		if err != nil {
+			t.Fatalf("delegate_worker_vm: %v", err)
+		}
+		if err := json.Unmarshal([]byte(delegateRaw), &delegateResp); err != nil {
+			t.Fatalf("decode delegate_worker_vm result: %v\n%s", err, delegateRaw)
 		}
 	}
 	if delegateResp.State != types.RunCompleted || delegateResp.WorkerIsolation != "local_worktree" || delegateResp.WorkerBaseSHA != base {

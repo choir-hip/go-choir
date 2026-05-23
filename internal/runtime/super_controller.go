@@ -65,13 +65,14 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 	}
 
-	rec, err := rt.StartRunWithMetadata(ctx, buildPersistentSuperInboxPrompt(deliveries), ownerID, metadata)
+	rec, err := rt.createRunWithMetadata(ctx, buildPersistentSuperInboxPrompt(deliveries), ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
 	if err := rt.markSuperInboxDeliveriesStarted(ctx, deliveries, rec.RunID); err != nil {
 		return nil, err
 	}
+	rt.startRunAsync(rec)
 	return rec, nil
 }
 
