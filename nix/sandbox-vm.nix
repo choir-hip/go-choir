@@ -21,6 +21,42 @@
 # needs per-VM networking, port assignment, and lifecycle control.
 { config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", includePlaywright ? false, ... }:
 
+let
+  playwrightCli = pkgs.writeShellApplication {
+    name = "playwright";
+    runtimeInputs = [ pkgs.nodejs ];
+    text = ''
+      export PLAYWRIGHT_BROWSERS_PATH="''${PLAYWRIGHT_BROWSERS_PATH:-${pkgs.playwright-driver.browsers}}"
+      export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="''${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-1}"
+      exec ${pkgs.nodejs}/bin/node ${pkgs.playwright}/cli.js "$@"
+    '';
+  };
+
+  playwrightCoreCli = pkgs.writeShellApplication {
+    name = "playwright-core";
+    runtimeInputs = [ pkgs.nodejs ];
+    text = ''
+      export PLAYWRIGHT_BROWSERS_PATH="''${PLAYWRIGHT_BROWSERS_PATH:-${pkgs.playwright-driver.browsers}}"
+      export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="''${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-1}"
+      exec ${pkgs.nodejs}/bin/node ${pkgs.playwright}/cli.js "$@"
+    '';
+  };
+
+  playwrightNodeModules = pkgs.runCommand "go-choir-playwright-node-modules" { } ''
+    mkdir -p "$out/lib/node_modules"
+    ln -s ${pkgs.playwright} "$out/lib/node_modules/playwright-core"
+    ln -s ${pkgs.playwright} "$out/lib/node_modules/playwright"
+  '';
+
+  playwrightTools = pkgs.symlinkJoin {
+    name = "go-choir-playwright-tools";
+    paths = [
+      playwrightCli
+      playwrightCoreCli
+      playwrightNodeModules
+    ];
+  };
+in
 {
   networking.hostName = if includePlaywright then "go-choir-playwright-worker" else "go-choir-sandbox";
 
@@ -201,7 +237,7 @@ EOF
         python3
         goChoirPackages.obscura
       ]) ++ lib.optionals includePlaywright (with pkgs; [
-        playwright
+        playwrightTools
       ])));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
@@ -251,6 +287,8 @@ EOF
       RUNTIME_LLM_REASONING_EFFORT = "low";
     } // lib.optionalAttrs includePlaywright {
       CHOIR_WORKER_BROWSER_CLASS = "playwright";
+      CHOIR_PLAYWRIGHT_BIN = "${playwrightTools}/bin/playwright";
+      NODE_PATH = "${playwrightTools}/lib/node_modules";
       PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
       PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
@@ -299,7 +337,7 @@ EOF
     python3
     bash
   ]) ++ lib.optionals includePlaywright (with pkgs; [
-    playwright
+    playwrightTools
   ]);
 
   system.stateVersion = "25.11";
