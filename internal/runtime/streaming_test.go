@@ -326,13 +326,8 @@ func TestStreamingCompletesWithProperTermination(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(300 * time.Millisecond)
-
 	// Verify task completed.
-	stored, err := rt.GetRun(ctx, rec.RunID, "user-term")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-term", 5*time.Second)
 	if stored.State != types.RunCompleted {
 		t.Fatalf("state: got %q, want completed", stored.State)
 	}

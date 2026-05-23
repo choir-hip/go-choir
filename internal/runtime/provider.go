@@ -85,19 +85,21 @@ func (p *StubProvider) Execute(ctx context.Context, task *types.RunRecord, emit 
 	// Emit a progress event at the start.
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"stub"}`))
 
-	// Simulate work in increments.
-	deadline := time.After(p.Delay)
-	tick := time.NewTicker(p.Delay / 4)
-	defer tick.Stop()
+	if p.Delay > 0 {
+		// Simulate work in increments.
+		deadline := time.After(p.Delay)
+		tick := time.NewTicker(p.Delay / 4)
+		defer tick.Stop()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-deadline:
-			goto done
-		case <-tick.C:
-			emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"working","provider":"stub"}`))
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline:
+				goto done
+			case <-tick.C:
+				emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"working","provider":"stub"}`))
+			}
 		}
 	}
 

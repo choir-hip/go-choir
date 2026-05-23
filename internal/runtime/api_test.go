@@ -39,7 +39,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 	}
 
 	bus := events.NewEventBus()
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := NewStubProvider(0)
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,

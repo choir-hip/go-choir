@@ -16,6 +16,22 @@ nix develop -c go test ./internal/runtime ...
 nix develop -c go build ./cmd/sandbox
 ```
 
+The runtime package is intentionally broad and CI shards it. For local runtime
+coverage, prefer the same sharded path instead of a full serial package run:
+
+```text
+nix develop -c scripts/go-test-runtime-shards
+nix develop -c env SHARD_INDEX=0 TOTAL_SHARDS=4 scripts/go-test-runtime-shards
+nix develop -c scripts/go-test-local
+```
+
+Use focused `go test ./internal/runtime -run TestName` while shaping one
+transition. Avoid unbounded full serial `go test ./internal/runtime` runs unless
+you are deliberately profiling the whole package. Local all-shard runs are
+sequential by default because concurrent embedded-Dolt runtime shards contend on
+developer machines; use `PARALLEL_SHARDS=1` only when you are deliberately
+checking local shard concurrency.
+
 Do not hand-enter local `CGO_CFLAGS`, `CGO_CXXFLAGS`, or `CGO_LDFLAGS` for the
 Dolt ICU dependency except as a short diagnostic to confirm a missing-dev-shell
 failure. The durable fix is that Codex, workers, candidate computers, and CI

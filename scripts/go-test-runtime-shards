@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+total_shards="${TOTAL_SHARDS:-4}"
+if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TOTAL_SHARDS must be a positive integer, got: $total_shards" >&2
+  exit 2
+fi
+
+mapfile -t tests < <(go test ./internal/runtime -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
+if (( ${#tests[@]} == 0 )); then
+  echo "No internal/runtime tests found"
+  exit 0
+fi
+
+run_shard() {
+  local shard_index="$1"
+  shift
+  local -a selected=()
+  for i in "${!tests[@]}"; do
+    if (( i % total_shards == shard_index )); then
+      selected+=("${tests[$i]}")
+    fi
+  done
+
+  if (( ${#selected[@]} == 0 )); then
+    echo "No internal/runtime tests selected for shard ${shard_index}/${total_shards}"
+    return 0
+  fi
+
+  local regex
+  regex="$(IFS='|'; echo "^(${selected[*]})$")"
+  echo "Running ${#selected[@]} of ${#tests[@]} internal/runtime tests in shard ${shard_index}/${total_shards}"
+  go test ./internal/runtime -count=1 -run "$regex" "$@"
+}
+
+if [[ -n "${SHARD_INDEX:-}" ]]; then
+  if ! [[ "$SHARD_INDEX" =~ ^[0-9]+$ ]] || (( SHARD_INDEX >= total_shards )); then
+    echo "SHARD_INDEX must be an integer in [0, $((total_shards - 1))], got: $SHARD_INDEX" >&2
+    exit 2
+  fi
+  run_shard "$SHARD_INDEX" "$@"
+  exit $?
+fi
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+status=0
+
+if [[ "${PARALLEL_SHARDS:-0}" == "1" ]]; then
+  pids=()
+  for shard_index in $(seq 0 $((total_shards - 1))); do
+    (
+      run_shard "$shard_index" "$@"
+    ) >"$tmpdir/shard-${shard_index}.log" 2>&1 &
+    pids+=("$!")
+  done
+
+  for shard_index in $(seq 0 $((total_shards - 1))); do
+    pid="${pids[$shard_index]}"
+    if ! wait "$pid"; then
+      status=1
+    fi
+    cat "$tmpdir/shard-${shard_index}.log"
+  done
+else
+  for shard_index in $(seq 0 $((total_shards - 1))); do
+    if ! run_shard "$shard_index" "$@"; then
+      status=1
+    fi
+  done
+fi
+
+exit "$status"

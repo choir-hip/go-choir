@@ -37,7 +37,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	}
 
 	bus := events.NewEventBus()
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := NewStubProvider(0)
 	cfg := Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
@@ -1078,21 +1078,6 @@ func TestListRunsByOwner(t *testing.T) {
 	}
 }
 
-func TestEventPayloadContent(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-
-	_, err := rt.StartRun(ctx, "test prompt content", "user-alice")
-	if err != nil {
-		t.Fatalf("submit task: %v", err)
-	}
-
-	time.Sleep(200 * time.Millisecond)
-
-	evts, _ := s.ListEvents(ctx, "", 20)
-	_ = evts // Events are per-task, may need to query by task ID
-}
-
 func TestProviderStubEmitsProgress(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
@@ -1105,16 +1090,21 @@ func TestProviderStubEmitsProgress(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Collect events for a short time.
+	// Collect events until the run completes instead of sleeping for a fixed
+	// wall-clock delay.
 	var received []events.RuntimeEvent
-	timer := time.After(300 * time.Millisecond)
+	timer := time.After(2 * time.Second)
 	for {
 		select {
 		case ev := <-ch:
 			if ev.Record.OwnerID == "user-alice" {
 				received = append(received, ev)
+				if ev.Record.Kind == types.EventRunCompleted {
+					goto done
+				}
 			}
 		case <-timer:
+			t.Fatal("timed out waiting for completed event")
 			goto done
 		}
 	}
