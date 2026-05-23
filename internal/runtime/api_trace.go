@@ -136,6 +136,10 @@ type traceMomentSummary struct {
 	RevisionID        string          `json:"revision_id,omitempty"`
 	CurrentRevisionID string          `json:"current_revision_id,omitempty"`
 	FindingID         string          `json:"finding_id,omitempty"`
+	LLMProvider       string          `json:"llm_provider,omitempty"`
+	LLMModel          string          `json:"llm_model,omitempty"`
+	LLMReasoning      string          `json:"llm_reasoning_effort,omitempty"`
+	ModelPolicy       string          `json:"model_policy,omitempty"`
 }
 
 type traceMomentReferences struct {
@@ -965,6 +969,14 @@ func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAg
 	revisionID := payloadString(payload, "revision_id")
 	currentRevisionID := payloadString(payload, "current_revision_id")
 	findingID := payloadString(payload, "finding_id")
+	llmProvider := payloadString(payload, "llm_provider")
+	if llmProvider == "" {
+		llmProvider = payloadString(payload, "provider")
+	}
+	llmModel := payloadString(payload, "llm_model")
+	if llmModel == "" {
+		llmModel = payloadString(payload, "model")
+	}
 	channelID := strings.TrimSpace(ev.ChannelID)
 	if ch := payloadString(payload, "channel_id"); ch != "" {
 		channelID = ch
@@ -989,6 +1001,10 @@ func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAg
 		RevisionID:        revisionID,
 		CurrentRevisionID: currentRevisionID,
 		FindingID:         findingID,
+		LLMProvider:       llmProvider,
+		LLMModel:          llmModel,
+		LLMReasoning:      payloadString(payload, "llm_reasoning_effort"),
+		ModelPolicy:       payloadString(payload, "model_policy"),
 	}
 }
 

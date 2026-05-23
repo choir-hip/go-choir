@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -192,6 +193,13 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	parent, child := seedTraceTrajectory(t, rt)
+	modelPayload, _ := json.Marshal(map[string]any{
+		"llm_provider":         "fireworks",
+		"llm_model":            "accounts/fireworks/models/deepseek-v4-flash",
+		"llm_reasoning_effort": "low",
+		"model_policy":         "run_metadata",
+	})
+	rt.emitEvent(context.Background(), child, types.EventRunProgress, events.CauseProviderProgress, modelPayload)
 	if _, err := rt.store.UpsertRunAcceptance(context.Background(), types.RunAcceptanceRecord{
 		AcceptanceID:          "acceptance-trace-1",
 		TargetMissionID:       "mission-trace-test",
@@ -283,6 +291,7 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 		t.Fatalf("expected delegation edge from %s to %s", parent.AgentID, child.AgentID)
 	}
 	foundMessageMoment := false
+	foundModelMoment := false
 	for _, moment := range resp.Moments {
 		if moment.Kind == types.EventChannelMessage && strings.Contains(moment.Summary, "damp shade") {
 			foundMessageMoment = true
@@ -290,9 +299,24 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 				t.Fatal("channel.message moment should include message_seq")
 			}
 		}
+		if moment.Kind == types.EventRunProgress && moment.LLMProvider == "fireworks" {
+			foundModelMoment = true
+			if moment.LLMModel != "accounts/fireworks/models/deepseek-v4-flash" {
+				t.Fatalf("llm_model = %q", moment.LLMModel)
+			}
+			if moment.LLMReasoning != "low" {
+				t.Fatalf("llm_reasoning_effort = %q", moment.LLMReasoning)
+			}
+			if moment.ModelPolicy != "run_metadata" {
+				t.Fatalf("model_policy = %q", moment.ModelPolicy)
+			}
+		}
 	}
 	if !foundMessageMoment {
 		t.Fatal("expected research channel.message moment")
+	}
+	if !foundModelMoment {
+		t.Fatal("expected model policy moment in trace snapshot")
 	}
 }
 
