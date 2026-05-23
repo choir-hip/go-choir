@@ -1,6 +1,6 @@
 # MissionGradient: Human-Proof Experiment Rerun v1
 
-**Status:** checkpoint incomplete after `81d29d2` staging proof
+**Status:** checkpoint incomplete after `b808696` staging proof
 **Date:** 2026-05-23
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Depends on:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
@@ -29,7 +29,7 @@ The async-supervision follow-up fixed much of the runtime shape:
   worker VMs stay lighter while browser evidence has a bounded heavier path;
 - worker/vsuper/co-super prompting now has a clearer control contract.
 
-The latest Chyron rerun found a narrower gap. The implementation worker created
+An earlier Chyron rerun found a narrower gap. The implementation worker created
 a candidate commit locally, but the proof worker could not inspect that commit
 because it was not pushed or exported. The correct fix is not to push worker
 commits to GitHub. The correct fix is to make the source delta transferable as
@@ -37,7 +37,14 @@ an AppChangePackage before asking a separate proof worker to inspect it.
 Commit `b11ed4f2f517b2f1a7a3d8a054b17490b76510ec` deployed that
 source-transfer contract to staging on 2026-05-23.
 
-This mission resumes from that learning.
+Subsequent checkpoints proved package preloading into proof workers and
+recipient adoption/rollback. Commit `b8086961ce2d8ec35b5c06a53037002d11806840`
+then shipped the missing verified adoption UI preview route. The first deployed
+proof run against that route did not reach the Chyron package/adoption stage:
+it failed during Playwright re-authentication with
+`login/begin failed: 500 {"error":"failed to save challenge"}`. This mission
+therefore resumes from a narrower substrate checkpoint, not from Chyron feature
+success.
 
 ## Core Invariant
 
@@ -324,24 +331,30 @@ AppChangePackage
 status: checkpoint_incomplete
 last checkpoint:
   Chyron source-transfer/adoption proof reached on staging after iterative
-  runtime fixes. The proof worker now sees the product-visible AppChangePackage
-  after the worker-delegation preload fix, but the run still does not produce
-  reviewable human proof. The remaining blocker is a real package-derived
-  preview/app-run path for the proof worker: it can inspect the package record
-  and source delta, but it cannot yet materialize and open the changed app in a
-  candidate/product route to capture screenshots or video.
+  runtime fixes. The proof worker saw the product-visible AppChangePackage
+  after the worker-delegation preload fix, and recipient build/adoption/rollback
+  succeeded for a Chyron package. Commit b808696 then shipped a verified
+  adoption UI preview route so Apps & Changes / evidence tooling can open the
+  recipient-built UI artifact at /api/adoptions/{adoption_id}/preview. The
+  first deployed proof run after that patch failed before publishing a new
+  package because the Playwright auth helper hit login/begin 500
+  "failed to save challenge".
 current artifact state:
   Runtime has async worker supervision, distinct worker classes, package
   publication mirroring, recipient AppChangePackage pull/adoption/build/verify,
   rollback proof, and a new worker-delegation preload path that imports
   referenced visible AppChangePackages into the proof worker runtime before the
-  worker run starts.
+  worker run starts. Apps & Changes now has a product-visible verified adoption
+  preview route backed by the recipient build workspace; ordinary preview is
+  still gated by a verified/adopted/rolled_back adoption state and owner scope.
 what shipped:
   a28a7a added this mission. 8ad20d8 normalized ledger role refs for adoption
   builds. b222079 made duplicate worker starts idempotent. aee2b81 honored
   explicit package app_id/visibility constraints. 81d29d2 preloads referenced
   AppChangePackages into proof workers and tightens the super proof-worker
-  prompt. CI and Node B staging deploy passed for 81d29d2.
+  prompt. b808696 serves verified adoption UI previews from recipient build
+  workspaces. CI run 26342292117 passed for b808696, and Node B staging health
+  reported proxy and sandbox deployed_commit b808696 at 2026-05-23T20:07:36Z.
 what was proven:
   On staging 81d29d2, Chyron package 466c8786-4bc1-4b8c-8be9-7aeb45226707 was
   published as unlisted with app_id
@@ -351,41 +364,60 @@ what was proven:
   verified, promoted, and rolled back. The proof worker's observe output showed
   one product-visible preloaded AppChangePackage, proving the package-context
   preload path itself works.
+  Locally and in CI, b808696 added tests that a verified adoption preview
+  rewrites built UI asset paths and serves assets from the recipient build
+  workspace without exposing arbitrary paths.
 unproven or partial claims:
   Chyron still lacks actual screenshot/video/benchmark human proof of the
   feature behavior. The VText narrative remains too technical and does not yet
-  function as an owner-readable live dashboard. Motion, Liquid, and Python have
-  not been rerun.
+  function as an owner-readable live dashboard. The b808696 deployed proof did
+  not establish that the preview route can show the Chyron behavior because it
+  stopped at auth challenge persistence before package/adoption preview. Motion,
+  Liquid, and Python have not been rerun.
 belief-state changes:
   Human proof must come after transferable source packaging in multi-worker
   evidence paths. A package can be evidence_pending; reviewability cannot.
   Passing only a package id is no longer enough even after preload; the proof
   worker also needs a durable package-derived candidate/adoption preview route
   or an equivalent materialized workspace/app URL that can be opened by browser
-  evidence tooling.
+  evidence tooling. That preview route now exists, but the next proof must
+  first show the auth/session path is healthy enough for long product-path
+  Playwright runs.
 remaining error field:
-  How to create the proof-worker preview route without copying binaries,
-  mutating active computers, or letting a package/build receipt masquerade as
-  behavior proof.
+  Whether the login/begin "failed to save challenge" error was transient,
+  account/session-state-specific, or a real auth persistence regression. If it
+  is real, Chyron rerun should pause for root-cause and a platform patch before
+  attempting more experiment work.
 highest-impact remaining uncertainty:
   Can Choir itself produce the first useful self-development change without
   Codex hand-coding it?
 next executable probe:
-  Implement the smallest real AppChangePackage preview/materialization path for
-  evidence workers or Apps & Changes Try: apply the package in a candidate
-  workspace, build/run the recipient UI/runtime or a bounded app route, expose
-  a product-visible preview URL, and let worker-playwright capture screenshots
-  or video. Then rerun Chyron through the visible staging prompt bar.
+  Run a narrow staging auth/login smoke for the Playwright proof account and
+  inspect auth persistence logs if it fails. If auth is healthy, rerun the
+  Chyron proof against b808696 and require the proof harness to open
+  /api/adoptions/{adoption_id}/preview after verification and capture
+  screenshot/video of real behavior. If auth is not healthy, patch auth
+  challenge persistence through git/CI/deploy, verify staging identity, and
+  resume the same Chyron proof.
 suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
   docs/mission-async-supervision-runtime-hardening-v0.md;
-  /Users/wiz/go-choir/test-results/chyron-sequential-aee2b81-20260523T185730Z;
-  /Users/wiz/go-choir/test-results/chyron-sequential-81d29d2-20260523T193842Z
+  /Users/wiz/go-choir/test-results/chyron-sequential-b808696-20260523T201837Z;
+  /Users/wiz/go-choir/test-results/frontend-tests-chiron-sequ-68a22-evidence-or-precise-blocker
 rollback refs:
   Revert aee2b81 for package constraint regressions. Revert 81d29d2 if worker
   delegation starts failing before worker run submission or if package
-  preloading exposes packages outside normal visibility rules.
+  preloading exposes packages outside normal visibility rules. Revert b808696
+  if adoption preview leaks paths or serves previews for non-owner,
+  non-verified adoption records.
+deferred adjacent work:
+  Runtime model catalog/config should become durable runtime configuration:
+  adding model ids to an already-configured provider should not require a
+  platform deploy or ChatGPT auth replacement. Fireworks is already credentialed
+  on Node B, while ChatGPT auth should remain on the existing account because
+  the previous rate limit reset. This provider/model work is important but is
+  deliberately deferred until this mission checkpoint is recorded.
 ```
 
 ## Stopping Condition
