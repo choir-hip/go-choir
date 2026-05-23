@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -609,6 +610,31 @@ func TestChatGPTAuthRefreshesStaleToken(t *testing.T) {
 	}
 }
 
+func TestChatGPTAuthDoesNotRefreshUnexpiredJWTAccessToken(t *testing.T) {
+	now := time.Now().UTC()
+	authPath := writeTestCodexAuth(t, testJWTWithExpiry(t, now.Add(10*24*time.Hour)), "refresh-123", now.Add(-2*time.Hour))
+	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("refresh endpoint should not be called for an unexpired access token")
+	}))
+	defer refreshServer.Close()
+
+	auth := NewChatGPTAuth(ChatGPTAuthOptions{
+		Path:          authPath,
+		RefreshURL:    refreshServer.URL,
+		RefreshBefore: 30 * time.Minute,
+		HTTPClient:    refreshServer.Client(),
+		Now:           func() time.Time { return now },
+	})
+
+	header, err := auth.Header(context.Background())
+	if err != nil {
+		t.Fatalf("auth header: %v", err)
+	}
+	if !strings.HasPrefix(header, "Bearer ") {
+		t.Fatalf("header = %q, want bearer token", header)
+	}
+}
+
 func TestChatGPTAuthRefreshFailureDoesNotReturnStaleToken(t *testing.T) {
 	authPath := writeTestCodexAuth(t, "old-access", "refresh-123", time.Now().UTC().Add(-2*time.Hour))
 	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -654,6 +680,16 @@ func writeTestCodexAuth(t *testing.T, accessToken, refreshToken string, lastRefr
 		t.Fatalf("write auth: %v", err)
 	}
 	return path
+}
+
+func testJWTWithExpiry(t *testing.T, exp time.Time) string {
+	t.Helper()
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, err := json.Marshal(map[string]any{"exp": exp.Unix()})
+	if err != nil {
+		t.Fatalf("marshal jwt payload: %v", err)
+	}
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 }
 
 // --- Bridge Provider Tests ---

@@ -65,3 +65,35 @@ Good bundled targets:
 This mission is best saved for an interactive window where a human can inspect
 the replacement manifest, migration policy, and staging evidence before the
 cutover lands.
+
+## Node B Disk Retention And Image Reclaim
+
+Node B repeatedly accumulates disk pressure during long Choir-in-Choir and
+browser-worker runs. The current vmctl stale-state policy can reclaim stopped or
+hibernated worker/candidate VM-state directories, but that is only one class of
+disk growth. A dedicated reliability mission should inventory and bound all
+large substrate artifacts:
+
+- guest and guest-playwright image build outputs;
+- stale worker and candidate VM disks under `/var/lib/go-choir/vm-state`;
+- Nix generations, old store paths, and build caches;
+- worker evidence bundles and Playwright/video artifacts;
+- candidate build workspaces and adoption preview artifacts;
+- journals and deployment logs.
+
+Required strategy:
+
+```text
+measure largest consumers
+-> classify active / rollback-critical / review-evidence / disposable
+-> define retention windows per class
+-> implement bounded reclaim from safest largest stale artifacts first
+-> expose redacted operator report
+-> add emergency reclaim that refuses active primary computers and rollback refs
+-> verify staging deploy/build headroom after cleanup
+```
+
+Do not normalize manual deletion of unknown disk images. Old images may still be
+rollback refs, active candidate evidence, or owner-reviewable artifacts. The
+cleanup path needs explicit provenance and refusal reasons, not only free-space
+targets.

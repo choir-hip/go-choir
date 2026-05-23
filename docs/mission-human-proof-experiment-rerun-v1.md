@@ -1,6 +1,6 @@
 # MissionGradient: Human-Proof Experiment Rerun v1
 
-**Status:** checkpoint_incomplete — substrate deployed at `415b87e`, local test-loop cleanup `adbc04f` pending push, Chyron human proof still unproven
+**Status:** checkpoint_incomplete — substrate deployed at `a8b02af`, model/gateway smoke found ChatGPT auth refresh failure, Chyron human proof still unproven
 **Date:** 2026-05-23
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Depends on:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
@@ -332,14 +332,15 @@ AppChangePackage
 ```text
 status: checkpoint_incomplete
 last checkpoint:
-  Runtime model/context substrate shipped at 415b87e and staging currently
-  reports proxy and sandbox deployed_commit 415b87ee5167382250087b60c26aa18b4423b789.
-  A local follow-up commit adbc04f871f772dbda6feba33ab2c3abaa639ddf improves
+  Runtime model/context substrate shipped at 415b87e. Follow-up checkpoint
+  a8b02af40b6d3808f123d38775d4f1efd2924e78 is now pushed to main, CI run
+  26345624615 passed, and staging reports proxy and sandbox deployed_commit
+  a8b02af40b6d3808f123d38775d4f1efd2924e78.
+  Follow-up commit adbc04f871f772dbda6feba33ab2c3abaa639ddf improves
   the runtime test loop by removing default artificial stub-provider delay,
   deleting a no-op sleep-only test, replacing one streaming sleep with terminal
   polling, and adding shared local/CI runtime shard scripts. That commit is
-  local-only at this checkpoint and must be pushed/verified before the next
-  long product run.
+  included in the pushed a8b02af checkpoint and is deployed.
 
   Previous Chyron source-transfer/adoption proof remains useful but
   incomplete:
@@ -375,8 +376,10 @@ what shipped:
   reported proxy and sandbox deployed_commit b808696 at 2026-05-23T20:07:36Z.
   415b87e hardened runtime model/context substrate; GitHub Actions run
   26344950167 passed and staging health reported proxy/sandbox deployed_commit
-  415b87e at 2026-05-23T22:17:41Z. adbc04f test-loop cleanup is committed
-  locally but not yet pushed.
+  415b87e at 2026-05-23T22:17:41Z. a8b02af checkpointed the mission docs and
+  included adbc04f test-loop cleanup; GitHub Actions run 26345624615 passed and
+  Node B deploy completed in 8m51s. Staging health reported proxy/sandbox
+  deployed_commit a8b02af at 2026-05-23T22:50:47Z.
 what was proven:
   On staging 81d29d2, Chyron package 466c8786-4bc1-4b8c-8be9-7aeb45226707 was
   published as unlisted with app_id
@@ -406,22 +409,27 @@ belief-state changes:
   first show the auth/session path is healthy enough for long product-path
   Playwright runs.
 remaining error field:
-  Whether auth/gateway/model-policy/context behavior remains stable under a
-  real product-path Chyron run after the 415b87e substrate deploy; whether
-  adbc04f changes CI/deploy behavior after push; whether the next Chyron run
-  can produce human-readable VText/media proof instead of only package/build
-  receipts.
+  A narrow staging auth shell smoke passed, but a trace-level product-path
+  model/context smoke failed before useful LLM work with
+  "gateway client: chatgpt: auth: refresh chatgpt auth via http: status 401
+  Unauthorized" and provider error code "refresh_token_reused". The run did
+  not surface llm_provider/llm_model/model_policy evidence. Root-cause whether
+  conductor/VText are still pinned to ChatGPT, whether model policy fallback is
+  not being applied or not being recorded, and whether ChatGPT refresh is not
+  single-flight/persisted correctly before rerunning Chyron. Separately, verify
+  whether the next Chyron run can produce human-readable VText/media proof
+  instead of only package/build receipts.
 highest-impact remaining uncertainty:
   Can Choir itself produce the first useful self-development change without
-  Codex hand-coding it?
+  Codex hand-coding it once the model/gateway substrate is healthy?
 next executable probe:
-  Push adbc04f, monitor CI/deploy, verify staging identity, then run a narrow
-  staging auth/gateway/model-policy/context smoke. If healthy, rerun the
-  Chyron proof and require the proof harness to open
-  /api/adoptions/{adoption_id}/preview after verification and capture
-  screenshot/video of real behavior. If auth is not healthy, patch auth
-  challenge persistence through git/CI/deploy, verify staging identity, and
-  resume the same Chyron proof.
+  Investigate the a8b02af ChatGPT refresh_token_reused failure and missing
+  product-visible model-policy evidence. Patch the smallest implicated
+  provider/model-policy/auth/runtime evidence boundary through git/CI/deploy,
+  verify staging identity, then rerun the trace-level auth/gateway/model-policy
+  smoke. If healthy, rerun the Chyron proof and require the proof harness to
+  open /api/adoptions/{adoption_id}/preview after verification and capture
+  screenshot/video of real behavior.
 suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
@@ -436,8 +444,8 @@ rollback refs:
   if adoption preview leaks paths or serves previews for non-owner,
   non-verified adoption records.
   Revert 415b87e if model/context substrate regresses auth/gateway/runtime
-  behavior. Revert adbc04f after it lands if the shared runtime shard script
-  path regresses CI or local developer test behavior.
+  behavior. Revert adbc04f/a8b02af if the shared runtime shard script path
+  regresses CI or local developer test behavior.
 deferred adjacent work:
   Runtime model catalog/config should become durable runtime configuration:
   adding model ids to an already-configured provider should not require a
@@ -445,6 +453,16 @@ deferred adjacent work:
   on Node B, while ChatGPT auth should remain on the existing account because
   the previous rate limit reset. This provider/model work is important but is
   deliberately deferred until this mission checkpoint is recorded.
+  Node B deploy also exposed disk pressure: during the a8b02af deploy, `/` on
+  node-b had about 57G free on a 476G filesystem while rebuilding guest and
+  guest-playwright images. Add a dedicated cleanup/retention task for old guest
+  images, stale VM disks, Nix generations/store paths, worker evidence bundles,
+  and candidate artifacts. The policy must preserve rollback refs and active
+  computer state while reclaiming largest stale candidate/worker image data
+  first. Do not treat ad hoc `rm` of old images as the solution; define a
+  retention controller/report that inventories largest consumers, proves which
+  artifacts are disposable, preserves rollback/product evidence, and gives the
+  operator an explicit emergency reclaim path.
 ```
 
 ## Stopping Condition

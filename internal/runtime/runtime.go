@@ -531,6 +531,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		agentRec.ChannelID = runID
 	}
 	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
+	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {

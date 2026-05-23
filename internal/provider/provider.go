@@ -34,6 +34,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1938,6 +1939,9 @@ func (a *ChatGPTAuth) needsRefresh(record *codexAuthFile) bool {
 	if record == nil || strings.TrimSpace(record.Tokens.AccessToken) == "" {
 		return true
 	}
+	if exp, ok := jwtExpiry(record.Tokens.AccessToken); ok {
+		return !a.now().UTC().Before(exp.UTC().Add(-a.refreshBefore))
+	}
 	if strings.TrimSpace(record.LastRefresh) == "" {
 		return false
 	}
@@ -1946,6 +1950,24 @@ func (a *ChatGPTAuth) needsRefresh(record *codexAuthFile) bool {
 		return false
 	}
 	return a.now().UTC().After(lastRefresh.UTC().Add(a.refreshBefore))
+}
+
+func jwtExpiry(token string) (time.Time, bool) {
+	parts := strings.Split(strings.TrimSpace(token), ".")
+	if len(parts) < 2 {
+		return time.Time{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return time.Time{}, false
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || claims.Exp <= 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(claims.Exp, 0).UTC(), true
 }
 
 func (a *ChatGPTAuth) refresh(ctx context.Context, record *codexAuthFile) (*codexAuthFile, error) {

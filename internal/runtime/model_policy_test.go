@@ -80,6 +80,53 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 }
 
+func TestStartChildRunResolvesModelPolicyIntoRunMetadata(t *testing.T) {
+	rt, _ := testRuntime(t)
+	ctx := context.Background()
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "chatgpt"
+fallback_model = "gpt-5.5"
+
+[roles.vtext]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	parent, err := rt.createRunWithMetadata(ctx, "parent", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileConductor,
+		runMetadataAgentRole:    AgentProfileConductor,
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+
+	child, err := rt.StartChildRun(ctx, parent.RunID, "revise vtext", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+	})
+	if err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+
+	if got := metadataStringValue(child.Metadata, runMetadataLLMProvider); got != "fireworks" {
+		t.Fatalf("child llm_provider = %q, want fireworks; metadata=%+v", got, child.Metadata)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMModel); got != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("child llm_model = %q", got)
+	}
+	if got := metadataStringValue(child.Metadata, runMetadataLLMPolicySource); got != policyPath {
+		t.Fatalf("child llm_policy_source = %q, want %q", got, policyPath)
+	}
+}
+
 func TestRuntimeFallsBackToPreviousValidModelPolicy(t *testing.T) {
 	rt, _ := testRuntime(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
