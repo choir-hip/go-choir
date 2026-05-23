@@ -508,6 +508,12 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		if err := rt.enforceChildSpawnBudget(ctx, &parentRec); err != nil {
 			return nil, err
 		}
+		if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot == "verifier" &&
+			canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper {
+			if err := rt.enforceVSuperVerifierSequencing(ctx, &parentRec); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	now := time.Now().UTC()
@@ -626,6 +632,33 @@ func (rt *Runtime) activeChildRunForCoSuperSlot(ctx context.Context, parentRunID
 		}
 	}
 	return types.RunRecord{}, false, nil
+}
+
+func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, parentRec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || parentRec == nil {
+		return nil
+	}
+	if impl, found, err := rt.activeChildRunForCoSuperSlot(ctx, parentRec.RunID, "implementation"); err != nil {
+		return err
+	} else if found {
+		return fmt.Errorf("vsuper verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; call wait_agent or observe the implementation result before spawning slot=\"verifier\"", impl.RunID)
+	}
+	children, err := rt.store.ListChildRuns(ctx, parentRec.RunID, 100)
+	if err != nil {
+		return fmt.Errorf("list child runs for verifier sequencing: %w", err)
+	}
+	for _, child := range children {
+		if canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileCoSuper {
+			continue
+		}
+		if normalizeVSuperCoSuperSlot(metadataStringValue(child.Metadata, runMetadataCoSuperSlot)) != "implementation" {
+			continue
+		}
+		if child.State.Terminal() {
+			return nil
+		}
+	}
+	return fmt.Errorf("vsuper verifier spawn requires prior implementation co-super evidence; spawn slot=\"implementation\" first, wait for commit/package/blocker evidence, then spawn slot=\"verifier\" with the exact evidence to inspect")
 }
 
 func (rt *Runtime) latestChildAppChangePackage(ctx context.Context, parentRunID string) (map[string]any, bool, error) {

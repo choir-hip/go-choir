@@ -1,11 +1,22 @@
 # MissionGradient: Supervision Continuation And Experiment Rerun v0
 
-**Status:** checkpoint_incomplete — local continuation patch passes runtime tests; staging proof pending
+**Status:** superseded by [mission-runtime-human-proof-experiment-rerun-v1.md](mission-runtime-human-proof-experiment-rerun-v1.md)
 **Date:** 2026-05-23
 **Starts from deployed runtime checkpoint:** `0d321ac34e52da47c6e5af4aae506765a19fdc4a`
 **Supersedes immediate continuation of:** [mission-supervision-runtime-repair-experiment-rerun-v0.md](mission-supervision-runtime-repair-experiment-rerun-v0.md)
 **Returns to:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+
+## Supersession Note
+
+This mission records the continuation-runtime checkpoint that led to the
+`e53cf19` staging proof. Its immediate continuation has moved to
+[mission-runtime-human-proof-experiment-rerun-v1.md](mission-runtime-human-proof-experiment-rerun-v1.md),
+which starts from the newer evidence: active worker/VText continuation and
+recipient-build ref normalization are working, but the Chiron rerun still
+blocked before AppChangePackage publication because verifier sequencing and
+browser-proof worker capability are not reliable enough for human-reviewable
+experiment output.
 
 ## One-Line Goal String
 

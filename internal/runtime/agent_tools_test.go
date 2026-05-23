@@ -2148,21 +2148,120 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 		t.Fatalf("complete verifier child: %v", err)
 	}
 	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
-		"objective":"start replacement verifier",
+		"objective":"start another implementation child after budget frees up",
 		"role":"co-super",
-		"slot":"verifier"
+		"slot":"implementation"
 	}`))
 	if err != nil {
-		t.Fatalf("spawn replacement co-super: %v", err)
+		t.Fatalf("spawn replacement implementation co-super: %v", err)
 	}
 	var resp struct {
 		Profile string `json:"profile"`
+		Slot    string `json:"slot"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode replacement spawn: %v", err)
 	}
-	if resp.Profile != AgentProfileCoSuper {
-		t.Fatalf("replacement profile = %q, want %q", resp.Profile, AgentProfileCoSuper)
+	if resp.Profile != AgentProfileCoSuper || resp.Slot != "implementation" {
+		t.Fatalf("replacement response = %+v, want co-super implementation", resp)
+	}
+}
+
+func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	parent := types.RunRecord{
+		RunID:        "vsuper-sequencing-parent",
+		OwnerID:      "user-alice",
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Coordinate implementation then verification.",
+		ChannelID:    "worker-channel",
+		AgentProfile: AgentProfileVSuper,
+		AgentRole:    AgentProfileVSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVSuper,
+			runMetadataAgentRole:    AgentProfileVSuper,
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create vsuper parent: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	_, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"verify before implementation",
+		"role":"co-super",
+		"slot":"verifier"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "requires prior implementation co-super evidence") {
+		t.Fatalf("early verifier error = %v, want prerequisite refusal", err)
+	}
+
+	impl := types.RunRecord{
+		RunID:        "vsuper-sequencing-impl",
+		AgentID:      "agent-implementation-child",
+		ChannelID:    parent.ChannelID,
+		ParentRunID:  parent.RunID,
+		AgentProfile: AgentProfileCoSuper,
+		AgentRole:    AgentProfileCoSuper,
+		OwnerID:      parent.OwnerID,
+		SandboxID:    parent.SandboxID,
+		State:        types.RunRunning,
+		Prompt:       "Implement candidate change.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileCoSuper,
+			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataCoSuperSlot:  "implementation",
+		},
+	}
+	if err := s.CreateRun(ctx, impl); err != nil {
+		t.Fatalf("create active implementation child: %v", err)
+	}
+
+	_, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"verify while implementation is still active",
+		"role":"co-super",
+		"slot":"verifier"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "blocked until implementation co-super") {
+		t.Fatalf("active implementation verifier error = %v, want active implementation refusal", err)
+	}
+
+	finishedAt := now.Add(time.Second)
+	impl.State = types.RunCompleted
+	impl.FinishedAt = &finishedAt
+	impl.UpdatedAt = finishedAt
+	if err := s.UpdateRun(ctx, impl); err != nil {
+		t.Fatalf("complete implementation child: %v", err)
+	}
+
+	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+		"objective":"verify implementation commit abc123 and saved evidence",
+		"role":"co-super",
+		"slot":"verifier"
+	}`))
+	if err != nil {
+		t.Fatalf("spawn verifier after implementation: %v", err)
+	}
+	var resp struct {
+		Profile string `json:"profile"`
+		Slot    string `json:"slot"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode verifier spawn: %v", err)
+	}
+	if resp.Profile != AgentProfileCoSuper || resp.Slot != "verifier" {
+		t.Fatalf("verifier response = %+v, want co-super verifier", resp)
 	}
 }
 
@@ -5193,9 +5292,12 @@ func TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead(t *tes
 func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 	contract := workerVSuperDelegateContract(15 * time.Minute)
 	for _, want := range []string{
+		"Spawn the implementation co-super first",
+		"Do not spawn slot=\"verifier\" until",
+		"label that result stale",
 		"exclusive writer for go-choir-candidate",
 		"do not run reset, clean, edit, or commit commands",
-		"verifier should inspect only after the implementation child has reported",
+		"verifier must inspect only after the implementation child has reported",
 		"missing tools, failed tests, or package publication failure must end in submit_worker_update",
 		"both child runs finish without publish_app_change_package or submit_worker_update",
 		"publish_app_change_package",

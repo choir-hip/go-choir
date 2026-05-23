@@ -842,6 +842,38 @@ func TestToolCommandEnvUsesPersistentScratchRoot(t *testing.T) {
 	}
 }
 
+func TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath(t *testing.T) {
+	filesRoot := t.TempDir()
+	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("CHOIR_OBSCURA_BIN", "/nix/store/example-obscura/bin/obscura")
+	t.Setenv("CHOIR_PLAYWRIGHT_BIN", "/nix/store/example-playwright/bin/playwright")
+
+	env, err := toolCommandEnv("/tmp/ignored")
+	if err != nil {
+		t.Fatalf("toolCommandEnv: %v", err)
+	}
+	pathValue := envValue(env, "PATH")
+	for _, want := range []string{
+		"/usr/bin",
+		"/nix/store/example-obscura/bin",
+		"/nix/store/example-playwright/bin",
+	} {
+		if !pathListContains(pathValue, want) {
+			t.Fatalf("PATH = %q, missing %q", pathValue, want)
+		}
+	}
+}
+
+func pathListContains(raw, want string) bool {
+	for _, part := range filepath.SplitList(raw) {
+		if part == want {
+			return true
+		}
+	}
+	return false
+}
+
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, entry := range env {

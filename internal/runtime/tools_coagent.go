@@ -56,7 +56,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			"role":       map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
 			"profile":    map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id": map[string]any{"type": "string"},
-			"slot":       map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer and verifier for the independent checker. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"slot":       map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
 			"model":      map[string]any{"type": "string"},
 			"initial_content": map[string]any{
 				"type":        "string",

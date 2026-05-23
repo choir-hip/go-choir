@@ -488,7 +488,41 @@ func toolCommandEnv(cwd string) ([]string, error) {
 	for key, value := range dirs {
 		env = setEnvValue(env, key, value)
 	}
+	env = appendToolBinaryDirsToPath(env, "CHOIR_OBSCURA_BIN", "OBSCURA_BIN", "CHOIR_PLAYWRIGHT_BIN")
 	return env, nil
+}
+
+func appendToolBinaryDirsToPath(env []string, keys ...string) []string {
+	pathValue := envValueFromList(env, "PATH")
+	seen := map[string]bool{}
+	for _, dir := range filepath.SplitList(pathValue) {
+		if dir != "" {
+			seen[dir] = true
+		}
+	}
+	for _, key := range keys {
+		bin := strings.TrimSpace(envValueFromList(env, key))
+		if bin == "" {
+			bin = strings.TrimSpace(os.Getenv(key))
+		}
+		if bin == "" || !filepath.IsAbs(bin) {
+			continue
+		}
+		dir := filepath.Dir(bin)
+		if dir == "." || dir == string(os.PathSeparator) || seen[dir] {
+			continue
+		}
+		if pathValue == "" {
+			pathValue = dir
+		} else {
+			pathValue += string(os.PathListSeparator) + dir
+		}
+		seen[dir] = true
+	}
+	if pathValue != "" {
+		env = setEnvValue(env, "PATH", pathValue)
+	}
+	return env
 }
 
 func toolScratchRoot(cwd string) string {
@@ -515,6 +549,16 @@ func setEnvValue(env []string, key, value string) []string {
 		}
 	}
 	return append(env, prefix+value)
+}
+
+func envValueFromList(env []string, key string) string {
+	prefix := key + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix)
+		}
+	}
+	return ""
 }
 
 func guardForegroundSuperMutation(ctx context.Context, tool string) error {
