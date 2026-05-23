@@ -747,6 +747,21 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 	}
 }
 
+func TestExplicitAppChangePackageConstraintsFromRunPrompt(t *testing.T) {
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "worker-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileVSuper,
+		Prompt:       `Use app_id "human-proof-chyron-chyron-seq-123", visibility "unlisted", and include marker "chyron-seq-123".`,
+	})
+	if got := explicitAppChangePackageAppID(ctx); got != "human-proof-chyron-chyron-seq-123" {
+		t.Fatalf("explicit app_id = %q", got)
+	}
+	if got := explicitAppChangePackageVisibility(ctx); got != "unlisted" {
+		t.Fatalf("explicit visibility = %q", got)
+	}
+}
+
 func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *testing.T) {
 	tests := []struct {
 		name      string

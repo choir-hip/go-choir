@@ -161,8 +161,8 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				"candidate-computer",
 			)
 			sourceCandidateID := firstNonEmpty(strings.TrimSpace(in.SourceCandidateID), runID, sanitizeExportPart(headSHA))
-			appID := firstNonEmpty(strings.TrimSpace(in.AppID), "computer-change")
-			visibility := firstNonEmpty(strings.TrimSpace(in.Visibility), "unlisted")
+			appID := firstNonEmpty(explicitAppChangePackageAppID(ctx), strings.TrimSpace(in.AppID), "computer-change")
+			visibility := firstNonEmpty(explicitAppChangePackageVisibility(ctx), strings.TrimSpace(in.Visibility), "unlisted")
 			candidateSourceRef := strings.TrimSpace(in.CandidateSourceRef)
 			sourceLedgerCandidateRef := strings.TrimSpace(in.SourceLedgerCandidateRef)
 			if candidateSourceRef != "" && !isProductCandidateSourceRef(candidateSourceRef) {
@@ -238,6 +238,55 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			})
 		},
 	}
+}
+
+func explicitAppChangePackageAppID(ctx context.Context) string {
+	prompt := appChangePackageRunPrompt(ctx)
+	for _, marker := range []string{`app_id "`, `app_id: "`, "`app_id`: `", "app_id `"} {
+		if value := quotedValueAfter(prompt, marker); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func explicitAppChangePackageVisibility(ctx context.Context) string {
+	prompt := strings.ToLower(appChangePackageRunPrompt(ctx))
+	for _, visibility := range []string{"unlisted", "public", "private"} {
+		if strings.Contains(prompt, `visibility "`+visibility+`"`) ||
+			strings.Contains(prompt, `visibility: `+visibility) ||
+			strings.Contains(prompt, `visibility `+visibility) ||
+			strings.Contains(prompt, "`visibility`: `"+visibility+"`") {
+			return visibility
+		}
+	}
+	return ""
+}
+
+func appChangePackageRunPrompt(ctx context.Context) string {
+	if rec := ctxRunRecord(ctx); rec != nil {
+		return rec.Prompt
+	}
+	return ""
+}
+
+func quotedValueAfter(text, marker string) string {
+	idx := strings.Index(text, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := text[idx+len(marker):]
+	terminators := []string{`"`, "`", "\n", " ", ","}
+	end := len(rest)
+	for _, term := range terminators {
+		if term == "" {
+			continue
+		}
+		if pos := strings.Index(rest, term); pos >= 0 && pos < end {
+			end = pos
+		}
+	}
+	return strings.TrimSpace(rest[:end])
 }
 
 func humanProofProvenanceRefs(in publishPackageHumanProofInput) json.RawMessage {
