@@ -1,10 +1,23 @@
 # MissionGradient: Async Supervision Runtime Hardening v0
 
-**Status:** checkpoint_incomplete
+**Status:** superseded by runtime-gate-passed checkpoint in [mission-supervision-runtime-repair-experiment-rerun-v0.md](mission-supervision-runtime-repair-experiment-rerun-v0.md)
 **Date:** 2026-05-23
 **Supersedes local next probe in:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Returns to:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+
+## Supersession Note
+
+This mission remains useful as the broader async-supervision architecture
+sketch, but its immediate runtime blocker has moved to
+[mission-supervision-runtime-repair-experiment-rerun-v0.md](mission-supervision-runtime-repair-experiment-rerun-v0.md).
+The 2026-05-23 staging proof at `846cfbb` reached the runtime gate for the
+next sequential experiment probe: request/start/observe/finish used one worker
+run, worker `submit_worker_update` was mirrored into the active VText channel,
+VText produced an owner-readable dashboard revision after the worker-update
+synthesis wake, and run acceptance recorded `staging-smoke-level` without
+requiring AppChangePackage evidence. See the platform state ledger for evidence
+refs.
 
 ## One-Line Goal String
 

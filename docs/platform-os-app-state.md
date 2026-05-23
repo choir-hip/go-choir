@@ -443,6 +443,52 @@ Recent deployed platform proof for live-spatial Desktop Overview previews:
   screenshots, duplicated app mounts, persisted preview captures, fake
   thumbnails, host/global telemetry, or phone-mode simplification.
 
+Recent deployed runtime proof for async supervision and VText worker-update
+dashboards:
+
+- behavior commits:
+  `490f70aafed53802a01e5e763f5afa3ccab554fd` and
+  `846cfbbf2eb47206c6262d0ab032845c013ff8eb`;
+- CI/deploy run for `846cfbb`:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26327200933`;
+- deploy job:
+  `https://github.com/yusefmosiah/go-choir/actions/runs/26327200933/job/77507019637`;
+- staging health reported proxy and upstream commit
+  `846cfbbf2eb47206c6262d0ab032845c013ff8eb`, built at
+  `20260523074113`, deployed at `2026-05-23T07:43:07Z`;
+- deployed product proof:
+  `GO_CHOIR_RUN_ASYNC_SUPERVISION_PROOF=1 ... pnpm exec playwright test
+  tests/async-supervision-runtime-proof.tmp.spec.js --project=chromium`;
+- evidence directories:
+  `test-results/async-supervision-runtime-proof-846cfbb-20260523T075607Z`
+  and
+  `test-results/async-supervision-runtime-proof-846cfbb-vtextwait-20260523T080251Z`;
+- Playwright trace/video:
+  `frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/trace.zip`
+  and
+  `frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/video.webm`;
+- result: `1 passed` in the VText-wait proof;
+- trajectory/submission:
+  `2d45d210-cce7-4276-9ec8-b68d62cafb68`;
+- accepted run acceptance:
+  `runacc-0addeeafd0abe7c9154d` at `staging-smoke-level`;
+- VText dashboard document:
+  `b7663242-616b-4a23-a80f-bc7065f059fb`, final head revision
+  `192cfee2-2601-4664-b945-db4eeb94e95f`;
+- worker proof:
+  request/start/observe/finish converged on worker run
+  `6e9eaaf3-5119-4318-8dde-a74e91a65a7b`, worker VM
+  `vm-2e6c63b2b834b6441c324cb32f82d24f`, worker
+  `worker-c38f1d6d33760bd2`;
+- proof covered successful `submit_worker_update` mirroring into the active
+  VText channel (`worker_submit_update_mirrored`,
+  `mirrored_worker_update_count=1`), VText synthesis into an owner-readable
+  request/start/observe/finish dashboard, Trace-visible worker events, and
+  runtime-supervision run acceptance without AppChangePackage requirements;
+- caveat: screenshot/video evidence was captured by the outer Playwright proof
+  harness. Product-requested `worker-playwright` evidence capture remains the
+  next proof requirement for UI experiment reruns.
+
 ## Divergence Plan
 
 This file is common platform state today. As source-lineage and personal

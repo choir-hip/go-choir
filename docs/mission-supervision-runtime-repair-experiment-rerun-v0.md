@@ -1,6 +1,6 @@
 # MissionGradient: Supervision Runtime Repair And Experiment Rerun v0
 
-**Status:** ready_to_run
+**Status:** checkpoint_incomplete — runtime gate passed, experiment rerun pending
 **Date:** 2026-05-23
 **Supersedes immediate continuation of:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
 **Resumes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
@@ -351,45 +351,113 @@ leave an invariant-level or external blocker.
 ## Run Checkpoint & Resumption State
 
 ```text
-status: ready_to_run
+status: checkpoint_incomplete — runtime gate passed, experiment rerun pending
 last checkpoint:
-  Deployed async runtime proof at commit 732eb4a showed one worker_run_id across
-  request/start/observe/finish and no duplicate successful starts, but exposed
-  worker submit_worker_update delivery failure.
+  2026-05-23 staging proof at commit 846cfbb closed the worker-update and
+  runtime-acceptance gap from the earlier 732eb4a checkpoint. The deployed
+  product path now reaches request/start/observe/finish with one worker_run_id,
+  mirrors a worker submit_worker_update into the active VText channel, wakes
+  VText, and synthesizes a runtime-supervision run acceptance without requiring
+  an AppChangePackage.
 current artifact state:
-  Async worker delegation is partially proven. VText supervision is not yet
-  trustworthy enough to supervise experiment reruns.
+  Async worker delegation is proven enough to resume the sequential
+  Choir-in-Choir experiment rerun. The four experiment features themselves have
+  not restarted and remain unproven.
 what shipped:
-  9bad6fd, 497f691, 72beeaf, and 732eb4a shipped during the async-supervision
-  preflight series.
+  - 9bad6fd, 497f691, 72beeaf, and 732eb4a shipped the initial async
+    supervision surface.
+  - 490f70a repaired worker-update target resolution/fanout and runtime
+    supervision acceptance.
+  - 846cfbb repaired runtime-supervision acceptance ordering.
+ci/deploy:
+  - CI/deploy run for 846cfbb:
+    https://github.com/yusefmosiah/go-choir/actions/runs/26327200933
+  - Deploy job:
+    https://github.com/yusefmosiah/go-choir/actions/runs/26327200933/job/77507019637
+  - staging /health reported proxy and upstream commit
+    846cfbbf2eb47206c6262d0ab032845c013ff8eb, built at 20260523074113,
+    deployed at 2026-05-23T07:43:07Z.
 what was proven:
-  Staging proof directory:
-  test-results/async-supervision-runtime-proof-732eb4a-20260523T025003Z
-  Product path reached request/start/observe/finish with worker_run_id
-  ac94397b-84ae-45e6-b3ce-795d81a038b3 and one successful start.
+  Local focused proof:
+  - internal/runtime tests for submit_worker_update requester metadata,
+    finish_worker_delegation worker-update mirroring, and runtime-supervision
+    run acceptance passed in nix develop.
+  Deployed product proof:
+  - first deployed proof:
+    test-results/async-supervision-runtime-proof-846cfbb-20260523T075607Z
+  - VText-wait deployed proof:
+    test-results/async-supervision-runtime-proof-846cfbb-vtextwait-20260523T080251Z
+  - Playwright trace/video for the VText-wait proof:
+    frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/trace.zip
+    frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/video.webm
+  - trajectory/submission id:
+    2d45d210-cce7-4276-9ec8-b68d62cafb68
+  - VText dashboard doc:
+    b7663242-616b-4a23-a80f-bc7065f059fb
+  - accepted run acceptance:
+    runacc-0addeeafd0abe7c9154d
+  - worker run:
+    6e9eaaf3-5119-4318-8dde-a74e91a65a7b
+  - worker VM:
+    vm-2e6c63b2b834b6441c324cb32f82d24f
+  - worker:
+    worker-c38f1d6d33760bd2
+  - final VText head revision:
+    192cfee2-2601-4664-b945-db4eeb94e95f
+  - run acceptance state:
+    accepted / staging-smoke-level
+  - worker_update_checkpoint:
+    worker_submit_update_mirrored
+  - mirrored_worker_update_count:
+    1
+  - VText head incorporated the marker, worker refs, command evidence, and a
+    request/start/observe/finish status dashboard after waiting for the
+    worker-update synthesis run.
 unproven or partial claims:
-  Direct worker update delivery to VText/super; VText terminal narration;
-  acceptance synthesis for non-package runtime proofs; experiment rerun.
+  - The four experiments have not been rerun.
+  - Browser evidence capture was proven through the outer Codex Playwright
+    proof harness, not yet by a product-requested `worker-playwright` evidence
+    worker. The code and Nix profile for `worker-playwright` exist, but the next
+    UI experiment should treat screenshot/video production as a product-path
+    evidence requirement and record any worker-playwright failure explicitly.
+  - Redirect/cancel/resume semantics are implemented in the broader async
+    runtime work but were not part of this terminal worker-update proof.
+  - Trace is still noisy as a human review surface, though the needed tool
+    calls, channel messages, and terminal worker evidence are durable.
 belief-state changes:
-  Duplicate worker starts are now guarded, but the live supervision update path
-  is still the central blocker.
+  The central blocker was not VText wake itself. The stale-dashboard observation
+  came from reading VText immediately after run acceptance. When the deployed
+  proof waited for the worker-update synthesis run, VText produced the expected
+  owner-readable dashboard revision.
 remaining error field:
-  submit_worker_update requester lookup in worker context; stale/fallback VText
-  dashboard revisions; noisy Trace; acceptance contracts that over-assume app
-  package evidence.
+  Product-path screenshot/video evidence capture inside Choir workers; noisy
+  Trace review; experiment-specific prompts and proof gates; possible
+  duplicate tool-call attempts inside worker turns, which are currently guarded
+  and visible but should be reduced by prompt/runtime tuning.
 highest-impact remaining uncertainty:
-  Whether a real vsuper/co-super update can be delivered live to VText and
-  super without blocking or conflicting control.
+  Whether Chiron can now be built by Choir-in-Choir, with the feature work done
+  inside a candidate/background computer and supervised primarily through live
+  VText narrative plus media evidence rather than Codex hand-coding.
 next executable probe:
-  Root-cause submit_worker_update delivery target resolution, patch worker
-  metadata/channel fanout, add focused tests, deploy, then rerun the visible
-  staging async-supervision proof before restarting Chiron.
+  Restart only the Chiron Shelf observability experiment through the visible
+  product path. Require the live VText dashboard to update after substantive
+  worker steps, require screenshots/video or a named worker-playwright blocker,
+  require Trace/run-acceptance refs, and do not proceed to Motion/Liquid/Python
+  until Chiron proves the sequential loop or records a precise blocker.
 suggested resume goal string:
-  Use the one-line goal string in this file.
+  Continue this mission from the runtime-gate-passed checkpoint and run the
+  Chiron experiment first; keep the one-line goal string in this file as the
+  full mission envelope.
 evidence artifact refs:
-  test-results/async-supervision-runtime-proof-732eb4a-20260523T025003Z
+  - test-results/async-supervision-runtime-proof-732eb4a-20260523T025003Z
+  - test-results/async-supervision-runtime-proof-846cfbb-20260523T075607Z
+  - test-results/async-supervision-runtime-proof-846cfbb-vtextwait-20260523T080251Z
+  - frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/trace.zip
+  - frontend/test-results/async-supervision-runtime--aad53-evidence-or-precise-blocker-chromium/video.webm
 rollback refs:
-  Revert 732eb4a if duplicate-start guarding or package-required heuristics
-  regress worker delegation; revert the eventual worker-update repair commit if
-  it regresses VText, Trace, or worker delegation on staging.
+  - Revert 846cfbb if runtime-supervision run-acceptance ordering regresses.
+  - Revert 490f70a if worker-update target resolution, mirroring, or VText
+    dashboard wake regresses.
+  - Revert 732eb4a and earlier async-supervision commits only if the async
+    worker tool surface itself must be withdrawn.
 ```
