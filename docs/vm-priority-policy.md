@@ -24,7 +24,7 @@ VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5
 VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB=32768
 VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_PERCENT=10
 VMCTL_STALE_STATE_MIN_AGE=6h
-VMCTL_STALE_STATE_MAX_DELETES=5
+VMCTL_STALE_STATE_MAX_DELETES=25
 ```
 
 Node B also loads optional operator priority overrides from:
@@ -115,6 +115,10 @@ terminal VM-state directories per sweep:
 - eligible kinds: worker VMs and unpublished non-primary candidate computers;
 - minimum age: `VMCTL_STALE_STATE_MIN_AGE`;
 - sweep bound: `VMCTL_STALE_STATE_MAX_DELETES`;
+- when state-dir pressure is active, terminal stale worker/candidate state is
+  reclaimed from the largest eligible VM disks first, so cleanup quickly
+  restores deploy/build headroom without touching primary or published
+  computers;
 - protected: active, booting, degraded, stopping, primary, published,
   premium-always-on, recent, unknown-last-active, and recently critical
   verifier/promotion/rollback/publication work.

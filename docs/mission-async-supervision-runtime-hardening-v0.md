@@ -305,6 +305,27 @@ Then resume the four-experiment mission through the product path:
 
 ## Run Checkpoint & Resumption State
 
+### 2026-05-23 Capacity And Worker-Liveness Checkpoint
+
+The async worker-delegation/runtime patch was landed and pushed in staged
+pieces through `27d07a1c85fab2b1ab1d872bbc88645854df2d08`, but the deploy for
+that SHA failed before switch because Node B exhausted root/state-dir build
+space while compiling `platformd` and building the Playwright worker guest
+image. Root cause was accumulated terminal worker VM state under
+`/var/lib/go-choir/vm-state`, plus orphaned Firecracker processes for some
+terminal workers that prevented the existing stale-state reclaim from deleting
+them. Operational recovery backed up `ownerships.json`, removed a bounded set of
+old terminal worker VM states with no live Firecracker process, and restored
+Node B from about 2 GB free to about 95 GB free without deleting primary
+computers.
+
+The current code patch makes this recovery durable: stale terminal worker /
+candidate state is now ranked by actual state-dir disk usage under pressure,
+orphaned same-VM Firecracker processes can be cleaned before stale state
+deletion, and Node B's stale-state delete bound is raised to 25 per sweep. This
+patch still needs commit, push, CI/deploy, staging identity verification, and
+product proof.
+
 ```text
 status: checkpoint_incomplete
 last checkpoint:

@@ -357,7 +357,7 @@ in
         "VMCTL_PRESSURE_MAX_IO_SOME_AVG10=5.0"
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
         "VMCTL_STALE_STATE_MIN_AGE=6h"
-        "VMCTL_STALE_STATE_MAX_DELETES=5"
+        "VMCTL_STALE_STATE_MAX_DELETES=25"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 )
@@ -1981,8 +1982,17 @@ func (r *OwnershipRegistry) staleStateReclaimCandidates() []*VMOwnership {
 			candidates = append(candidates, own)
 		}
 	}
+	stateSizes := make(map[string]int64, len(candidates))
+	for _, own := range candidates {
+		stateSizes[own.VMID] = vmStateDirUsageBytes(cfg.StateDir, own.VMID)
+	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
+		leftSize := stateSizes[left.VMID]
+		rightSize := stateSizes[right.VMID]
+		if leftSize != rightSize {
+			return leftSize > rightSize
+		}
 		if left.Kind != right.Kind {
 			return left.Kind == VMKindWorker
 		}
@@ -1997,6 +2007,40 @@ func (r *OwnershipRegistry) staleStateReclaimCandidates() []*VMOwnership {
 		candidates = candidates[:cfg.MaxStateDeletes]
 	}
 	return candidates
+}
+
+func vmStateDirUsageBytes(stateDir, vmID string) int64 {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
+		return 0
+	}
+	root := filepath.Clean(stateDir)
+	if root == "." || root == string(os.PathSeparator) {
+		return 0
+	}
+	dir := filepath.Clean(filepath.Join(root, vmID))
+	if dir == root || !strings.HasPrefix(dir, root+string(os.PathSeparator)) {
+		return 0
+	}
+	var total int64
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d == nil {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Blocks > 0 {
+			total += stat.Blocks * 512
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }
 
 func staleVMStateReclaimable(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) bool {

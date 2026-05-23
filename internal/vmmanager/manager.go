@@ -967,6 +967,8 @@ func (m *Manager) DestroyVMState(vmID string) error {
 			return fmt.Errorf("vm %s has live process %d; refuse to destroy state", vmID, inst.PID)
 		}
 		delete(m.vms, vmID)
+	} else {
+		m.cleanupOrphanedFirecrackerLocked(vmID)
 	}
 	if pids := firecrackerPIDsForVM(vmID); len(pids) > 0 {
 		return fmt.Errorf("vm %s still has Firecracker process(es); refuse to destroy state", vmID)
