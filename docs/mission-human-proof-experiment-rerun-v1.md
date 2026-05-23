@@ -321,47 +321,61 @@ AppChangePackage
 ## Run Checkpoint & Resumption State
 
 ```text
-status: ready_resume
+status: checkpoint_incomplete
 last checkpoint:
-  Async supervision deployed through a01595f; source-transfer contract patch
-  b11ed4f deployed to staging and /health reports proxy/upstream at that SHA.
+  Chyron source-transfer/adoption proof reached on staging after iterative
+  runtime fixes. The remaining blocker is human-visible proof: the separate
+  browser proof worker could not inspect the package-derived candidate route
+  because it looked in its own local runtime/Git clone instead of receiving the
+  product-visible AppChangePackage context.
 current artifact state:
-  Runtime has async worker supervision and distinct worker classes. First
-  Chyron rerun produced a worker-local candidate commit but no package because
-  the proof route expected a separate worker to inspect an unreachable commit.
+  Runtime has async worker supervision, distinct worker classes, package
+  publication mirroring, recipient AppChangePackage pull/adoption/build/verify,
+  rollback proof, and a new worker-delegation preload path that imports
+  referenced visible AppChangePackages into the proof worker runtime before the
+  worker run starts.
 what shipped:
-  Up through b11ed4f2f517b2f1a7a3d8a054b17490b76510ec. GitHub Actions run
-  26337846243 passed and staging /health reported proxy/upstream at that SHA.
+  a28a7a added this mission. 8ad20d8 normalized ledger role refs for adoption
+  builds. b222079 made duplicate worker starts idempotent. aee2b81 honored
+  explicit package app_id/visibility constraints. The current unshipped patch
+  preloads referenced AppChangePackages into proof workers and tightens the
+  super proof-worker prompt.
 what was proven:
-  Async worker start/observe evidence, VText worker-update mirroring,
-  worker-playwright browser smoke, and review-gate distinction between machine
-  receipts and human proof.
+  Staging Chyron package 37a05b90-1c85-483f-9cfc-6d4c4c129c1a was published
+  as unlisted with app_id human-proof-chyron-chyron-seq-1779562652687, pulled
+  into a recipient computer, built with recipient-specific Go/Svelte artifact
+  hashes, verified, promoted, and rolled back. Runtime tests now prove that a
+  worker objective containing a visible package id preloads that package into
+  the worker runtime and gives explicit inspection guidance.
 unproven or partial claims:
-  Chyron has not yet reached end-to-end package + human proof + recipient
-  adoption/rollback. Motion, Liquid, and Python have not been rerun.
+  Chyron still lacks actual screenshot/video/benchmark human proof of the
+  feature behavior. Motion, Liquid, and Python have not been rerun.
 belief-state changes:
   Human proof must come after transferable source packaging in multi-worker
-  evidence paths. The package can be evidence_pending; reviewability cannot.
+  evidence paths. A package can be evidence_pending; reviewability cannot.
+  Passing only a package id is too weak unless the worker can inspect a
+  materialized package record/source delta or a real candidate/adoption route.
 remaining error field:
-  Whether Choir-in-Choir now publishes a Chyron AppChangePackage on staging and
-  whether the proof worker can attach media evidence through a package-derived
-  route.
+  Whether the proof worker can now use the preloaded package record/source delta
+  to build or open a real candidate/product path and attach screenshots/video
+  without Codex hand-coding the experiment feature.
 highest-impact remaining uncertainty:
   Can Choir itself produce the first useful self-development change without
   Codex hand-coding it?
 next executable probe:
-  Rerun Chyron through the visible staging prompt bar. If no package appears,
-  investigate runtime/prompt/orchestration. If package appears but
-  proof/adoption fails, investigate Apps & Changes, candidate routing, proof
-  worker, or adoption.
+  Commit/push/deploy the AppChangePackage preload fix, verify staging identity,
+  then rerun Chyron through the visible staging prompt bar. If package/adoption
+  still succeeds but screenshot/video proof fails, inspect the proof worker's
+  package-local preview/build route rather than retrying broad orchestration.
 suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
   docs/mission-async-supervision-runtime-hardening-v0.md;
-  /Users/wiz/go-choir/test-results/chiron-sequential-a01595f-20260523T152628Z
+  /Users/wiz/go-choir/test-results/chyron-sequential-aee2b81-20260523T185730Z
 rollback refs:
-  Revert b11ed4f if source-transfer prompt changes regress package publication,
-  worker delegation, or review-gate behavior after deploy.
+  Revert aee2b81 for package constraint regressions. Revert the next preload
+  commit if worker delegation starts failing before worker run submission or
+  if package preloading exposes packages outside normal visibility rules.
 ```
 
 ## Stopping Condition

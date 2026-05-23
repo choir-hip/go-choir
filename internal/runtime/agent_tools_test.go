@@ -3790,6 +3790,101 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	}
 }
 
+func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
+	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	packageID := "37a05b90-1c85-483f-9cfc-6d4c4c129c1a"
+	now := time.Now().UTC()
+	_, err := activeRT.store.UpsertAppChangePackage(context.Background(), types.AppChangePackageRecord{
+		PackageID:             packageID,
+		OwnerID:               "user-alice",
+		AppID:                 "human-proof-chyron",
+		Status:                types.AppChangePackagePublishedUnlisted,
+		Visibility:            "unlisted",
+		SourceComputerID:      "source-computer",
+		SourceCandidateID:     "candidate-chyron",
+		SourceActiveRef:       "refs/computers/source/active",
+		CandidateSourceRef:    "refs/computers/source/candidates/candidate-chyron",
+		RuntimeSourceDelta:    "runtime delta",
+		UISourceDelta:         "ui delta",
+		PackageManifestSHA256: "manifest-sha",
+		ManifestJSON:          json.RawMessage(`{"name":"human-proof-chyron"}`),
+		ProvenanceRefsJSON:    json.RawMessage(`{"human_summary":"pending"}`),
+		VerifierContractsJSON: json.RawMessage(`[]`),
+		CreatedAt:             now,
+		UpdatedAt:             now,
+	})
+	if err != nil {
+		t.Fatalf("upsert package: %v", err)
+	}
+
+	var imported types.AppChangePackageRecord
+	var submittedPrompt string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/app-change-packages":
+			if r.Header.Get("X-Internal-Caller") != "true" {
+				t.Fatalf("missing internal caller header")
+			}
+			if err := json.NewDecoder(r.Body).Decode(&imported); err != nil {
+				t.Fatalf("decode imported package: %v", err)
+			}
+			writeAPIJSON(w, http.StatusCreated, imported)
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			var req internalRunSubmitRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode submitted run: %v", err)
+			}
+			submittedPrompt = req.Prompt
+			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
+				RunID:        "worker-run-preload",
+				AgentID:      "worker-agent-preload",
+				AgentProfile: AgentProfileVSuper,
+				State:        types.RunPending,
+				OwnerID:      "user-alice",
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate package proof", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileSuper,
+		runMetadataAgentRole:    AgentProfileSuper,
+	})
+	if err != nil {
+		t.Fatalf("start active super run: %v", err)
+	}
+	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "start_worker_delegation", json.RawMessage(fmt.Sprintf(`{
+		"worker_sandbox_url": %q,
+		"worker_id": "worker-preload",
+		"vm_id": "vm-preload",
+		"objective": "Capture human proof for package id %s using product evidence.",
+		"profile": "vsuper",
+		"timeout_seconds": 10
+	}`, srv.URL, packageID)))
+	if err != nil {
+		t.Fatalf("start worker delegation: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, raw)
+	}
+	if result["status"] != "worker_run_started" {
+		t.Fatalf("status = %v, want worker_run_started: %s", result["status"], raw)
+	}
+	if imported.PackageID != packageID {
+		t.Fatalf("preloaded package id = %q, want %q", imported.PackageID, packageID)
+	}
+	if !strings.Contains(submittedPrompt, "Referenced AppChangePackages have been preloaded") || !strings.Contains(submittedPrompt, packageID) {
+		t.Fatalf("submitted prompt missing preload guidance:\n%s", submittedPrompt)
+	}
+}
+
 func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing.T) {
 	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {

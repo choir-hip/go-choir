@@ -798,6 +798,16 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 	if profile == AgentProfileVSuper {
 		objective = workerVSuperDelegateContract(timeout) + "\n\n" + objective
 	}
+	if preload := rt.preloadWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, delegatedObjective); len(preload.ImportedPackageIDs) > 0 || len(preload.Errors) > 0 {
+		if len(preload.ImportedPackageIDs) > 0 {
+			metadata["preloaded_app_change_package_ids"] = preload.ImportedPackageIDs
+			objective = workerAppChangePackagePreloadPrompt(preload.ImportedPackageIDs) + "\n\n" + objective
+		}
+		if len(preload.Errors) > 0 {
+			metadata["preloaded_app_change_package_errors"] = preload.Errors
+			objective = workerAppChangePackagePreloadErrorPrompt(preload.Errors) + "\n\n" + objective
+		}
+	}
 
 	startResp, err := submitInternalWorkerRun(ctx, client, in.WorkerSandboxURL, internalRunSubmitRequest{
 		OwnerID:  ownerID,
@@ -847,6 +857,97 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
 	}
 	return toolResultJSON(result)
+}
+
+type workerAppChangePackagePreloadResult struct {
+	ImportedPackageIDs []string
+	Errors             []string
+}
+
+func (rt *Runtime) preloadWorkerAppChangePackages(ctx context.Context, client *http.Client, workerSandboxURL, ownerID, objective string) workerAppChangePackagePreloadResult {
+	var result workerAppChangePackagePreloadResult
+	if rt == nil || rt.store == nil {
+		return result
+	}
+	for _, packageID := range appChangePackageIDsInObjective(objective) {
+		rec, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, packageID)
+		if err != nil {
+			continue
+		}
+		if err := postInternalWorkerAppChangePackage(ctx, client, workerSandboxURL, rec); err != nil {
+			result.Errors = append(result.Errors, packageID+": "+err.Error())
+			continue
+		}
+		result.ImportedPackageIDs = append(result.ImportedPackageIDs, packageID)
+		if len(result.ImportedPackageIDs) >= 8 {
+			break
+		}
+	}
+	return result
+}
+
+func appChangePackageIDsInObjective(objective string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	fields := strings.FieldsFunc(objective, func(r rune) bool {
+		return !(r >= '0' && r <= '9') &&
+			!(r >= 'a' && r <= 'f') &&
+			!(r >= 'A' && r <= 'F') &&
+			r != '-'
+	})
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if len(field) != 36 || seen[field] {
+			continue
+		}
+		if _, err := uuid.Parse(field); err != nil {
+			continue
+		}
+		seen[field] = true
+		out = append(out, field)
+		if len(out) >= 16 {
+			break
+		}
+	}
+	return out
+}
+
+func postInternalWorkerAppChangePackage(ctx context.Context, client *http.Client, workerSandboxURL string, rec types.AppChangePackageRecord) error {
+	endpoint, err := workerRuntimeURL(workerSandboxURL, "/internal/runtime/app-change-packages", nil)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("worker app change package preload: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("worker app change package preload failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func workerAppChangePackagePreloadPrompt(packageIDs []string) string {
+	return "Referenced AppChangePackages have been preloaded into this worker runtime store: " + strings.Join(packageIDs, ", ") + ". Inspect them with GET /api/app-change-packages/{package_id} using any authenticated viewer header, or with GET /internal/runtime/app-change-packages/{package_id}?viewer_id=<viewer> and X-Internal-Caller: true. Do not fetch them from this worker's local Git clone and do not assume GitHub contains per-computer candidate refs; use the package source deltas and manifest as the transferable artifact."
+}
+
+func workerAppChangePackagePreloadErrorPrompt(errors []string) string {
+	return "Some referenced AppChangePackages could not be preloaded into this worker runtime: " + strings.Join(errors, "; ") + ". If package inspection is required, fail fast with this preload blocker instead of probing unrelated local stores."
 }
 
 func newObserveWorkerDelegationTool(rt *Runtime) Tool {
