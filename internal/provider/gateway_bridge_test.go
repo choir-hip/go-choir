@@ -293,6 +293,47 @@ func TestGatewayBridgeProviderCallWithToolsToolUse(t *testing.T) {
 	}
 }
 
+func TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection(t *testing.T) {
+	mock := &mockGatewayCaller{
+		name:   "gateway",
+		isReal: true,
+		resp: &LLMResponse{
+			ID:         "resp-model-policy",
+			Text:       "ok",
+			Model:      "accounts/fireworks/models/deepseek-v4-flash",
+			StopReason: "end_turn",
+			Usage:      Usage{InputTokens: 10, OutputTokens: 2},
+		},
+	}
+	gbp := NewGatewayBridgeProvider(mock)
+	gbp.SetRuntimeLLMConfig("chatgpt", "gpt-5.5", "low")
+
+	req := runtime.ToolLoopRequest{
+		Provider:        "fireworks",
+		Model:           "accounts/fireworks/models/deepseek-v4-flash",
+		ReasoningEffort: "none",
+		System:          "system",
+		Messages:        []json.RawMessage{[]byte(`{"role":"user","content":"hi"}`)},
+		MaxTokens:       1024,
+	}
+
+	if _, err := gbp.CallWithTools(context.Background(), req); err != nil {
+		t.Fatalf("CallWithTools failed: %v", err)
+	}
+	if mock.lastReq == nil {
+		t.Fatal("no request sent to gateway")
+	}
+	if mock.lastReq.Provider != "fireworks" {
+		t.Fatalf("provider = %q, want fireworks", mock.lastReq.Provider)
+	}
+	if mock.lastReq.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("model = %q", mock.lastReq.Model)
+	}
+	if mock.lastReq.ReasoningEffort != "none" {
+		t.Fatalf("reasoning = %q, want none", mock.lastReq.ReasoningEffort)
+	}
+}
+
 func TestGatewayBridgeProviderCallWithToolsError(t *testing.T) {
 	mock := &mockGatewayCaller{
 		name:   "gateway",

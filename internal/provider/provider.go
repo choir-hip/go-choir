@@ -8,6 +8,7 @@
 //   - GLM-5.1 (Z.AI, provider "zai") — Z.AI model
 //   - GLM-5-Turbo (Z.AI, provider "zai") — faster Z.AI variant, same provider
 //   - Kimi K2.5 Turbo (Fireworks AI, provider "fireworks") — Fireworks router model
+//   - DeepSeek V4 Pro/Flash and Kimi K2.6 (Fireworks AI, provider "fireworks")
 //   - Claude Sonnet 4.5 (Bedrock, provider "bedrock") — Bedrock model
 //
 // Design decisions:
@@ -94,21 +95,36 @@ type ToolDef struct {
 	InputSchema map[string]any `json:"input_schema,omitempty"` // Anthropic uses "input_schema"
 }
 
-// Block is a content block within a message. It supports all Anthropic
-// Messages API content block types: text, tool_use, and tool_result.
+// Block is a content block within a message. It supports text, image,
+// tool_use, and tool_result content. Image blocks carry a MediaSource so the
+// runtime can preserve evidence provenance while adapters serialize to the
+// provider-specific wire format.
 // The fields are structured so that each block type uses its relevant
 // subset:
 //   - text: Type="text", Text=content
+//   - image: Type="image", Source={Kind:"base64"|"url"|"artifact_ref", ...}
 //   - tool_use: Type="tool_use", ID=call_id, Name=tool_name, Input=args
 //   - tool_result: Type="tool_result", ToolUseID=call_id, Text=result_content
 type Block struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Source    *MediaSource    `json:"source,omitempty"`
 	ID        string          `json:"id,omitempty"`          // tool_use: provider-assigned call ID
 	Name      string          `json:"name,omitempty"`        // tool_use: tool name to invoke
 	Input     json.RawMessage `json:"input,omitempty"`       // tool_use: tool arguments as JSON
 	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result: ID of the originating tool call
 	IsError   bool            `json:"is_error,omitempty"`    // tool_result: true if result is an error
+}
+
+// MediaSource is the provider-neutral image/media source representation. The
+// gateway/runtime should resolve artifact_ref sources into URL or base64 before
+// the final provider call.
+type MediaSource struct {
+	Kind     string `json:"kind"` // base64, url, artifact_ref
+	MIMEType string `json:"mime_type,omitempty"`
+	Data     string `json:"data,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Ref      string `json:"ref,omitempty"`
 }
 
 // LLMResponse is the unified response shape from all provider backends.
@@ -364,6 +380,9 @@ func (p *BedrockProvider) Stream(ctx context.Context, req LLMRequest, onChunk fu
 // because streaming uses binary EventStream, not SSE.
 func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("bedrock: %w", err)
+	}
 	endpoint := fmt.Sprintf(
 		"https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke",
 		p.region, pathEscape(modelID),
@@ -476,6 +495,9 @@ func (p *ZAIProvider) IsReal() bool { return true }
 func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("zai: %w", err)
+	}
 
 	body := p.buildRequestBody(req, modelID)
 
@@ -507,6 +529,9 @@ func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, e
 func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("zai: %w", err)
+	}
 
 	// Build streaming request.
 	req.Stream = true
@@ -623,6 +648,9 @@ func (p *FireworksProvider) IsReal() bool { return true }
 func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("fireworks: %w", err)
+	}
 
 	body := p.buildRequestBody(req, modelID)
 
@@ -651,6 +679,9 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("fireworks: %w", err)
+	}
 
 	req.Stream = true
 	body := p.buildRequestBody(req, modelID)
@@ -769,6 +800,9 @@ func (p *ChatGPTProvider) IsReal() bool { return true }
 func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("chatgpt: %w", err)
+	}
 	body := p.buildRequestBody(req, modelID)
 
 	log.Printf("provider: chatgpt call model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
@@ -784,6 +818,9 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("chatgpt: %w", err)
+	}
 	body := p.buildRequestBody(req, modelID)
 	body.Stream = true
 
@@ -956,6 +993,10 @@ func convertOpenAIInput(messages []Message) []openAIItem {
 				if block.Text != "" {
 					parts = append(parts, map[string]string{"type": contentType, "text": block.Text})
 				}
+			case "image":
+				if source := openAIImageSource(block.Source); source != "" {
+					parts = append(parts, map[string]string{"type": "input_image", "image_url": source})
+				}
 			case "tool_use":
 				flushText()
 				out = append(out, openAIItem{
@@ -1027,6 +1068,7 @@ type anthropicMessage struct {
 type anthropicContent struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Source    any             `json:"source,omitempty"`
 	ID        string          `json:"id,omitempty"`          // tool_use: call ID
 	Name      string          `json:"name,omitempty"`        // tool_use: tool name
 	Input     json.RawMessage `json:"input,omitempty"`       // tool_use: arguments
@@ -1067,6 +1109,7 @@ func convertMessages(msgs []Message) []anthropicMessage {
 			ac := anthropicContent{
 				Type:      block.Type,
 				Text:      block.Text,
+				Source:    anthropicImageSource(block.Source),
 				ID:        block.ID,
 				Name:      block.Name,
 				Input:     block.Input,
@@ -1084,6 +1127,114 @@ func convertMessages(msgs []Message) []anthropicMessage {
 		out = append(out, item)
 	}
 	return out
+}
+
+func anthropicImageSource(source *MediaSource) any {
+	if source == nil {
+		return nil
+	}
+	switch strings.TrimSpace(source.Kind) {
+	case "base64":
+		if source.Data == "" {
+			return nil
+		}
+		mimeType := strings.TrimSpace(source.MIMEType)
+		if mimeType == "" {
+			mimeType = "image/png"
+		}
+		return map[string]string{"type": "base64", "media_type": mimeType, "data": source.Data}
+	case "url":
+		if source.URL == "" {
+			return nil
+		}
+		return map[string]string{"type": "url", "url": source.URL}
+	case "artifact_ref":
+		if source.Ref == "" {
+			return nil
+		}
+		return map[string]string{"type": "artifact_ref", "ref": source.Ref, "media_type": source.MIMEType}
+	default:
+		return nil
+	}
+}
+
+func openAIImageSource(source *MediaSource) string {
+	if source == nil {
+		return ""
+	}
+	switch strings.TrimSpace(source.Kind) {
+	case "base64":
+		mimeType := strings.TrimSpace(source.MIMEType)
+		if mimeType == "" {
+			mimeType = "image/png"
+		}
+		if source.Data == "" {
+			return ""
+		}
+		return "data:" + mimeType + ";base64," + source.Data
+	case "url":
+		return strings.TrimSpace(source.URL)
+	case "artifact_ref":
+		return ""
+	default:
+		return ""
+	}
+}
+
+func validateMediaRequest(modelID string, req LLMRequest) error {
+	hasImage := false
+	for _, msg := range req.Messages {
+		for _, block := range msg.Content {
+			if block.Type != "image" {
+				continue
+			}
+			hasImage = true
+			if block.Source == nil {
+				return fmt.Errorf("image block missing source")
+			}
+			switch strings.TrimSpace(block.Source.Kind) {
+			case "base64":
+				if strings.TrimSpace(block.Source.Data) == "" {
+					return fmt.Errorf("image block base64 source missing data")
+				}
+			case "url":
+				if strings.TrimSpace(block.Source.URL) == "" {
+					return fmt.Errorf("image block url source missing url")
+				}
+			case "artifact_ref":
+				return fmt.Errorf("image artifact_ref %q requires gateway artifact resolver before provider call", block.Source.Ref)
+			default:
+				return fmt.Errorf("unsupported image source kind %q", block.Source.Kind)
+			}
+		}
+	}
+	if hasImage && !modelSupportsImage(modelID) {
+		return fmt.Errorf("model %q is text-only in Choir model catalog; image input requires a multimodal model policy", modelID)
+	}
+	return nil
+}
+
+func modelSupportsImage(modelID string) bool {
+	modelID = strings.TrimSpace(modelID)
+	for _, info := range SupportedModels() {
+		if info.ID != modelID {
+			continue
+		}
+		for _, modality := range info.Modalities {
+			if modality == "image" {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case strings.HasPrefix(modelID, "gpt-5.5"), strings.HasPrefix(modelID, "gpt-5.4"):
+		return true
+	case strings.Contains(modelID, "kimi-k2p6"):
+		return true
+	default:
+		return false
+	}
 }
 
 // convertToolDefs converts provider ToolDef values to the Anthropic
@@ -1984,6 +2135,16 @@ type ModelInfo struct {
 
 	// MaxOutputTokens is the maximum output tokens for this model.
 	MaxOutputTokens int `json:"max_output_tokens"`
+
+	// Modalities names upstream content modalities known for this model.
+	Modalities []string `json:"modalities,omitempty"`
+
+	// AdapterModalities names modalities Choir currently knows how to serialize
+	// for this provider adapter.
+	AdapterModalities []string `json:"adapter_modalities,omitempty"`
+
+	// RecommendedFor names role/purpose hints for model policy UIs.
+	RecommendedFor []string `json:"recommended_for,omitempty"`
 }
 
 // SupportedModels returns the list of models that the provider package
@@ -2025,10 +2186,39 @@ func SupportedModels() []ModelInfo {
 		},
 		// Fireworks models
 		{
-			ID:              "accounts/fireworks/routers/kimi-k2p5-turbo",
-			DisplayName:     "Kimi K2.5",
-			Provider:        "fireworks",
-			MaxOutputTokens: 131072,
+			ID:                "accounts/fireworks/routers/kimi-k2p5-turbo",
+			DisplayName:       "Kimi K2.5",
+			Provider:          "fireworks",
+			MaxOutputTokens:   131072,
+			Modalities:        []string{"text"},
+			AdapterModalities: []string{"text"},
+		},
+		{
+			ID:                "accounts/fireworks/models/deepseek-v4-pro",
+			DisplayName:       "DeepSeek V4 Pro",
+			Provider:          "fireworks",
+			MaxOutputTokens:   131072,
+			Modalities:        []string{"text"},
+			AdapterModalities: []string{"text"},
+			RecommendedFor:    []string{"vsuper", "cosuper_coding"},
+		},
+		{
+			ID:                "accounts/fireworks/models/deepseek-v4-flash",
+			DisplayName:       "DeepSeek V4 Flash",
+			Provider:          "fireworks",
+			MaxOutputTokens:   131072,
+			Modalities:        []string{"text"},
+			AdapterModalities: []string{"text"},
+			RecommendedFor:    []string{"vtext", "researcher"},
+		},
+		{
+			ID:                "accounts/fireworks/models/kimi-k2p6",
+			DisplayName:       "Kimi K2.6",
+			Provider:          "fireworks",
+			MaxOutputTokens:   131072,
+			Modalities:        []string{"text", "image"},
+			AdapterModalities: []string{"text", "image"},
+			RecommendedFor:    []string{"verifier_multimodal"},
 		},
 		// ChatGPT/Codex subscription models
 		{

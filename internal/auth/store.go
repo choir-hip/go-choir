@@ -128,8 +128,20 @@ func OpenStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("auth store: open %s: %w", dbPath, err)
 	}
 
+	// The auth service performs short challenge/session writes from request
+	// handlers. SQLite permits many readers but only one writer; without an
+	// explicit busy timeout concurrent login/register ceremonies can fail fast
+	// with SQLITE_BUSY. Keep one writer connection and wait briefly instead of
+	// surfacing a transient auth failure to the browser.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
 	// Enable WAL mode for better concurrent read performance and enable
 	// foreign keys so that CASCADE works.
+	if _, err := db.Exec("PRAGMA busy_timeout=10000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("auth store: set busy timeout: %w", err)
+	}
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("auth store: set WAL mode: %w", err)

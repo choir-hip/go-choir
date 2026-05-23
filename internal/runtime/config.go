@@ -111,6 +111,11 @@ type Config struct {
 	// LLM calls.
 	LLMReasoningEffort string
 
+	// ModelPolicyPath is the computer-owned editable text file that maps agent
+	// roles to provider/model/reasoning selections. Environment LLM settings
+	// remain the platform fallback; this file is the user-computer policy.
+	ModelPolicyPath string
+
 	// ObscuraPath is an optional path or executable name for the backend browser
 	// provider. Empty means the backend browser substrate is not configured.
 	ObscuraPath string
@@ -166,6 +171,7 @@ func LoadConfig() Config {
 		LLMProvider:         os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:            os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort:  os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
+		ModelPolicyPath:     os.Getenv("RUNTIME_MODEL_POLICY_PATH"),
 		ObscuraPath:         envOr("CHOIR_OBSCURA_BIN", os.Getenv("OBSCURA_BIN")),
 		ObscuraCDPScreenshots: boolOr(
 			"CHOIR_OBSCURA_CDP_SCREENSHOTS",

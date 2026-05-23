@@ -1509,6 +1509,89 @@ func TestConvertMessagesPreservesToolResultBlocks(t *testing.T) {
 	}
 }
 
+func TestConvertMessagesPreservesImageBlocks(t *testing.T) {
+	msgs := []Message{
+		{
+			Role: "user",
+			Content: []Block{
+				{Type: "text", Text: "Inspect this screenshot."},
+				{Type: "image", Source: &MediaSource{Kind: "base64", MIMEType: "image/png", Data: "abc123"}},
+			},
+		},
+	}
+
+	result := convertMessages(msgs)
+	if len(result) != 1 || len(result[0].Content) != 2 {
+		t.Fatalf("converted messages = %#v", result)
+	}
+	block := result[0].Content[1]
+	if block.Type != "image" {
+		t.Fatalf("block type = %q, want image", block.Type)
+	}
+	source, ok := block.Source.(map[string]string)
+	if !ok {
+		t.Fatalf("image source type = %T", block.Source)
+	}
+	if source["type"] != "base64" || source["media_type"] != "image/png" || source["data"] != "abc123" {
+		t.Fatalf("image source = %#v", source)
+	}
+}
+
+func TestConvertOpenAIInputPreservesImageBlocks(t *testing.T) {
+	msgs := []Message{
+		{
+			Role: "user",
+			Content: []Block{
+				{Type: "text", Text: "Inspect this screenshot."},
+				{Type: "image", Source: &MediaSource{Kind: "url", URL: "https://example.com/screen.png"}},
+			},
+		},
+	}
+
+	result := convertOpenAIInput(msgs)
+	if len(result) != 1 {
+		t.Fatalf("converted inputs = %#v", result)
+	}
+	parts, ok := result[0].Content.([]map[string]string)
+	if !ok {
+		t.Fatalf("content type = %T", result[0].Content)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("parts = %#v", parts)
+	}
+	if parts[1]["type"] != "input_image" || parts[1]["image_url"] != "https://example.com/screen.png" {
+		t.Fatalf("image part = %#v", parts[1])
+	}
+}
+
+func TestValidateMediaRequestRejectsTextOnlyModelImages(t *testing.T) {
+	req := LLMRequest{
+		Model: "accounts/fireworks/models/deepseek-v4-flash",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "url", URL: "https://example.com/screen.png"}}},
+		}},
+	}
+	err := validateMediaRequest(req.Model, req)
+	if err == nil || !strings.Contains(err.Error(), "text-only") {
+		t.Fatalf("error = %v, want text-only rejection", err)
+	}
+}
+
+func TestValidateMediaRequestRejectsUnresolvedArtifactRefs(t *testing.T) {
+	req := LLMRequest{
+		Model: "accounts/fireworks/models/kimi-k2p6",
+		Messages: []Message{{
+			Role:    "user",
+			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "artifact_ref", Ref: "screenshot-1"}}},
+		}},
+	}
+	err := validateMediaRequest(req.Model, req)
+	if err == nil || !strings.Contains(err.Error(), "requires gateway artifact resolver") {
+		t.Fatalf("error = %v, want artifact resolver blocker", err)
+	}
+}
+
 // --- CallWithTools with Tool Definitions Tests ---
 
 func TestBridgeProviderCallWithToolsPassesToolDefinitions(t *testing.T) {

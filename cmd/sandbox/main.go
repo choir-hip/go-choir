@@ -47,6 +47,7 @@ func main() {
 		LLMProvider:                     rtRuntimeCfg.LLMProvider,
 		LLMModel:                        rtRuntimeCfg.LLMModel,
 		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
+		ModelPolicyPath:                 rtRuntimeCfg.ModelPolicyPath,
 		ObscuraPath:                     rtRuntimeCfg.ObscuraPath,
 		ObscuraCDPScreenshots:           rtRuntimeCfg.ObscuraCDPScreenshots,
 		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
@@ -63,6 +64,9 @@ func main() {
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = runtime.DefaultStorePath
+	}
+	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
+		rtCfg.ModelPolicyPath = runtime.DefaultModelPolicyPath(filesRoot)
 	}
 
 	// Ensure the store directory exists.
@@ -215,6 +219,9 @@ func loadProviderConfig() provider.ProviderConfig {
 		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
 		FireworksModels: []string{
 			"accounts/fireworks/routers/kimi-k2p5-turbo",
+			"accounts/fireworks/models/deepseek-v4-pro",
+			"accounts/fireworks/models/deepseek-v4-flash",
+			"accounts/fireworks/models/kimi-k2p6",
 		},
 		ChatGPTModels:          []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
 		ChatGPTReasoningEffort: "low",

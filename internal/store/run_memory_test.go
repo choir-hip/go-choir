@@ -63,11 +63,23 @@ func TestRunMemoryAppendListAndLatest(t *testing.T) {
 		t.Fatalf("latest entry: got %q, want %q", latest.EntryID, second.EntryID)
 	}
 
+	retrieved, err := s.GetRunMemoryEntry(ctx, "owner-1", first.EntryID)
+	if err != nil {
+		t.Fatalf("get entry: %v", err)
+	}
+	if retrieved.EntryID != first.EntryID || string(retrieved.Message) != `{"role":"user","content":"hello"}` {
+		t.Fatalf("retrieved entry = %+v", retrieved)
+	}
+
 	otherOwnerEntries, err := s.ListRunMemoryEntries(ctx, "owner-2", "run-memory-test")
 	if err != nil {
 		t.Fatalf("list other owner: %v", err)
 	}
 	if len(otherOwnerEntries) != 0 {
 		t.Fatalf("other owner entries: got %d, want 0", len(otherOwnerEntries))
+	}
+
+	if _, err := s.GetRunMemoryEntry(ctx, "owner-2", first.EntryID); err == nil {
+		t.Fatalf("cross-owner get succeeded, want error")
 	}
 }

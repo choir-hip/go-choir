@@ -50,6 +50,8 @@ type Runtime struct {
 	browserOps       map[string]*sync.Mutex
 	browserCDPMu     sync.Mutex
 	browserCDP       map[string]*browserCDPSession
+	modelPolicyMu    sync.Mutex
+	modelPolicies    map[string]ModelPolicy
 }
 
 type vtextWakeTimer interface {
@@ -76,6 +78,7 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		workerRequests:   make(map[string]string),
 		browserOps:       make(map[string]*sync.Mutex),
 		browserCDP:       make(map[string]*browserCDPSession),
+		modelPolicies:    make(map[string]ModelPolicy),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -350,6 +353,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		agentRec.ChannelID = runID
 	}
 	metadata = ensureTrajectoryID(metadata, nil, runID)
+	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
@@ -1056,13 +1060,14 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
+	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, 4096, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
 		if isPersistentSuperInboxRun(rec) {
 			return nil, nil
 		}
 		return rt.injectPendingInboxTurns(context.Background(), rec, finalCheckpoint)
-	}, WithToolLoopMemoryHooks(memory.hooks()))
+	}, WithToolLoopMemoryHooks(memory.hooks()), WithToolLoopLLMConfig(llmConfig))
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())

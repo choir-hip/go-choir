@@ -71,6 +71,22 @@ func TestOpenStoreSetsWALAndForeignKeys(t *testing.T) {
 	}
 }
 
+func TestOpenStoreSerializesWritesAndWaitsOnBusy(t *testing.T) {
+	store := TestStore(t)
+
+	if got := store.DB().Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("MaxOpenConnections = %d, want 1", got)
+	}
+
+	var busyTimeout int
+	if err := store.DB().QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout); err != nil {
+		t.Fatalf("query busy_timeout: %v", err)
+	}
+	if busyTimeout < 10000 {
+		t.Fatalf("busy_timeout = %d, want at least 10000", busyTimeout)
+	}
+}
+
 // --- User CRUD ---
 
 func TestCreateUser(t *testing.T) {

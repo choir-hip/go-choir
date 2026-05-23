@@ -98,6 +98,7 @@ func (b *BridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 // canned stub responses.
 func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit runtime.EventEmitFunc) error {
 	providerName := b.inner.Name()
+	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
 
 	// Emit a progress event showing we're about to call a real provider.
 	startPayload, _ := json.Marshal(map[string]string{
@@ -109,8 +110,9 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 
 	// Build the LLM request from the task prompt with streaming enabled.
 	req := LLMRequest{
-		Model:  "", // model is set by the provider internally
-		System: "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
+		Model:           llmConfig.Model,
+		System:          "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
+		ReasoningEffort: llmConfig.ReasoningEffort,
 		Messages: []Message{
 			{
 				Role: "user",
@@ -186,12 +188,13 @@ func (b *BridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoop
 
 	// Convert the tool-loop request into an LLMRequest.
 	llmReq := LLMRequest{
-		Model:     "", // model is set by the provider internally
-		System:    req.System,
-		Messages:  convertRawMessages(req.Messages),
-		Tools:     convertToolLoopDefs(req.ToolDefinitions),
-		MaxTokens: req.MaxTokens,
-		Stream:    false,
+		Model:           req.Model,
+		System:          req.System,
+		Messages:        convertRawMessages(req.Messages),
+		Tools:           convertToolLoopDefs(req.ToolDefinitions),
+		MaxTokens:       req.MaxTokens,
+		Stream:          false,
+		ReasoningEffort: req.ReasoningEffort,
 	}
 
 	log.Printf("bridge: calling %s provider with %d tools (messages=%d)",
@@ -284,6 +287,7 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 		var blocks []struct {
 			Type      string          `json:"type"`
 			Text      string          `json:"text,omitempty"`
+			Source    *MediaSource    `json:"source,omitempty"`
 			ToolUseID string          `json:"tool_use_id,omitempty"`
 			ID        string          `json:"id,omitempty"`
 			Name      string          `json:"name,omitempty"`
@@ -311,6 +315,11 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 				content = append(content, Block{
 					Type: "text",
 					Text: block.Text,
+				})
+			case "image":
+				content = append(content, Block{
+					Type:   "image",
+					Source: block.Source,
 				})
 			case "tool_result":
 				resultText := block.Content
@@ -417,12 +426,16 @@ func (g *GatewayBridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 // streaming enabled, emitting incremental delta events for each text chunk.
 func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit runtime.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
+	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
+	providerName := firstNonEmpty(llmConfig.Provider, g.llmProvider)
+	model := firstNonEmpty(llmConfig.Model, g.llmModel)
+	reasoning := firstNonEmpty(llmConfig.ReasoningEffort, g.reasoningEffort)
 
 	req := LLMRequest{
-		Provider:        g.llmProvider,
-		Model:           g.llmModel,
+		Provider:        providerName,
+		Model:           model,
 		System:          "You are a helpful assistant running inside the ChoirOS sandbox runtime. Respond concisely and helpfully.",
-		ReasoningEffort: g.reasoningEffort,
+		ReasoningEffort: reasoning,
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: task.Prompt}}},
 		},
@@ -478,14 +491,14 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 // returns a response that may contain tool calls.
 func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoopRequest) (*runtime.ToolLoopResponse, error) {
 	llmReq := LLMRequest{
-		Provider:        g.llmProvider,
-		Model:           g.llmModel,
+		Provider:        firstNonEmpty(req.Provider, g.llmProvider),
+		Model:           firstNonEmpty(req.Model, g.llmModel),
 		System:          req.System,
 		Messages:        convertRawMessages(req.Messages),
 		Tools:           convertToolLoopDefs(req.ToolDefinitions),
 		MaxTokens:       req.MaxTokens,
 		Stream:          false,
-		ReasoningEffort: g.reasoningEffort,
+		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, g.reasoningEffort),
 	}
 
 	log.Printf("gateway-bridge: calling gateway with %d tools (messages=%d)", len(req.ToolDefinitions), len(req.Messages))
@@ -513,6 +526,15 @@ func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req runtime.T
 	log.Printf("gateway-bridge: gateway responded (stop=%s text_len=%d tool_calls=%d)", tlr.StopReason, len(tlr.Text), len(tlr.ToolCalls))
 
 	return tlr, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 // convertToolLoopDefs converts runtime.ToolDefinition values to provider

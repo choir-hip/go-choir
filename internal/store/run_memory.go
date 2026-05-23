@@ -176,6 +176,35 @@ func (s *Store) LatestRunMemoryEntry(ctx context.Context, runID string) (types.R
 	return scanRunMemoryEntry(row)
 }
 
+// GetRunMemoryEntry returns a single durable memory entry by id, scoped to the
+// owner when ownerID is non-empty.
+func (s *Store) GetRunMemoryEntry(ctx context.Context, ownerID, entryID string) (types.RunMemoryEntry, error) {
+	if entryID == "" {
+		return types.RunMemoryEntry{}, fmt.Errorf("get run memory: entry_id is required")
+	}
+	if ownerID == "" {
+		row := s.db.QueryRowContext(ctx,
+			`SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
+			        kind, role, message_json, summary, first_kept_entry_id,
+			        tokens_before, reason, model, details_json, created_at
+			   FROM run_memory_entries
+			  WHERE entry_id = ?`,
+			entryID,
+		)
+		return scanRunMemoryEntry(row)
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
+		        kind, role, message_json, summary, first_kept_entry_id,
+		        tokens_before, reason, model, details_json, created_at
+		   FROM run_memory_entries
+		  WHERE owner_id = ? AND entry_id = ?`,
+		ownerID,
+		entryID,
+	)
+	return scanRunMemoryEntry(row)
+}
+
 func scanRunMemoryEntry(row interface{ Scan(...any) error }) (types.RunMemoryEntry, error) {
 	var entry types.RunMemoryEntry
 	var messageJSON, detailsJSON, createdAt string

@@ -37,6 +37,15 @@ type ToolLoopProvider interface {
 // the full conversation history including prior tool results, the available
 // tool definitions, and the system prompt.
 type ToolLoopRequest struct {
+	// Provider is the provider identifier for gateway-routed requests.
+	Provider string `json:"provider,omitempty"`
+
+	// Model is the per-run model resolved from runtime/user-computer policy.
+	Model string `json:"model,omitempty"`
+
+	// ReasoningEffort is the provider-specific per-run reasoning control.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+
 	// System is the system prompt (potentially including the tool catalog).
 	System string `json:"system"`
 
@@ -99,6 +108,7 @@ type ToolLoopMemoryHooks struct {
 
 type toolLoopOptions struct {
 	memoryHooks ToolLoopMemoryHooks
+	llmConfig   LLMSelection
 }
 
 // ToolLoopOption configures optional tool-loop behavior.
@@ -109,6 +119,14 @@ type ToolLoopOption func(*toolLoopOptions)
 func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.memoryHooks = hooks
+	}
+}
+
+// WithToolLoopLLMConfig carries the per-run provider/model choice resolved
+// from computer-owned model policy into each provider request.
+func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.llmConfig = config
 	}
 }
 
@@ -191,6 +209,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		}
 
 		req := ToolLoopRequest{
+			Provider:        options.llmConfig.Provider,
+			Model:           options.llmConfig.Model,
+			ReasoningEffort: options.llmConfig.ReasoningEffort,
 			System:          systemPrompt,
 			Messages:        messages,
 			ToolDefinitions: toolDefs,

@@ -174,9 +174,11 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		TokensBefore:     plan.TokensBefore,
 		Reason:           reason,
 		Details: map[string]any{
-			"compacted_messages": plan.CompactedMessages,
-			"kept_messages":      plan.KeptMessages,
-			"tokens_after":       plan.TokensAfterEstimate,
+			"compacted_messages":        plan.CompactedMessages,
+			"kept_messages":             plan.KeptMessages,
+			"tokens_after":              plan.TokensAfterEstimate,
+			"raw_entry_ids":             plan.RawEntryIDs,
+			"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
 		},
 	})
 	if err != nil {
@@ -184,13 +186,15 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 	}
 
 	donePayload, _ := json.Marshal(map[string]any{
-		"entry_id":            entry.EntryID,
-		"reason":              reason,
-		"tokens_before":       plan.TokensBefore,
-		"tokens_after":        plan.TokensAfterEstimate,
-		"first_kept_entry_id": plan.FirstKeptEntryID,
-		"compacted_messages":  plan.CompactedMessages,
-		"kept_messages":       plan.KeptMessages,
+		"entry_id":                  entry.EntryID,
+		"reason":                    reason,
+		"tokens_before":             plan.TokensBefore,
+		"tokens_after":              plan.TokensAfterEstimate,
+		"first_kept_entry_id":       plan.FirstKeptEntryID,
+		"compacted_messages":        plan.CompactedMessages,
+		"kept_messages":             plan.KeptMessages,
+		"raw_entry_ids":             plan.RawEntryIDs,
+		"raw_tool_result_entry_ids": plan.RawToolResultEntryIDs,
 	})
 	m.emit(types.EventRunCompactionCompleted, "run_memory", donePayload)
 	return true, nil
@@ -266,12 +270,14 @@ func (m *runMemoryManager) compactRunEventLedger(ctx context.Context, entries []
 }
 
 type runMemoryCompactionPlan struct {
-	Summary             string
-	FirstKeptEntryID    string
-	TokensBefore        int
-	TokensAfterEstimate int
-	CompactedMessages   int
-	KeptMessages        int
+	Summary               string
+	FirstKeptEntryID      string
+	TokensBefore          int
+	TokensAfterEstimate   int
+	CompactedMessages     int
+	KeptMessages          int
+	RawEntryIDs           []string
+	RawToolResultEntryIDs []string
 }
 
 func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens int, reason string) (runMemoryCompactionPlan, bool) {
@@ -336,6 +342,7 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 	}
 	tokensBefore := estimateRawMessagesTokens(buildRunMemoryContext(entries))
 	summary := summarizeRunMemoryMessages(previousSummary, summarized, reason)
+	rawEntryIDs, rawToolResultEntryIDs := runMemoryRawEntryIDs(summarized)
 
 	afterEstimateMessages := []json.RawMessage{compactionSummaryMessage(summary, tokensBefore)}
 	for _, idx := range messageIdxs {
@@ -345,12 +352,14 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 	}
 
 	return runMemoryCompactionPlan{
-		Summary:             summary,
-		FirstKeptEntryID:    firstKeptEntryID,
-		TokensBefore:        tokensBefore,
-		TokensAfterEstimate: estimateRawMessagesTokens(afterEstimateMessages),
-		CompactedMessages:   len(summarized),
-		KeptMessages:        keptMessages,
+		Summary:               summary,
+		FirstKeptEntryID:      firstKeptEntryID,
+		TokensBefore:          tokensBefore,
+		TokensAfterEstimate:   estimateRawMessagesTokens(afterEstimateMessages),
+		CompactedMessages:     len(summarized),
+		KeptMessages:          keptMessages,
+		RawEntryIDs:           rawEntryIDs,
+		RawToolResultEntryIDs: rawToolResultEntryIDs,
 	}, true
 }
 
@@ -448,6 +457,11 @@ func summarizeRunMemoryMessages(previousSummary string, entries []types.RunMemor
 	b.WriteString("Compacted conversation:\n")
 	for _, entry := range entries {
 		b.WriteString("- ")
+		if strings.TrimSpace(entry.EntryID) != "" {
+			b.WriteString("entry_id=")
+			b.WriteString(entry.EntryID)
+			b.WriteString(" ")
+		}
 		b.WriteString(entry.Role)
 		if entry.Role == "" {
 			b.WriteString(runMemoryMessageRole(entry.Message))
@@ -457,6 +471,21 @@ func summarizeRunMemoryMessages(previousSummary string, entries []types.RunMemor
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func runMemoryRawEntryIDs(entries []types.RunMemoryEntry) ([]string, []string) {
+	all := make([]string, 0, len(entries))
+	toolResults := []string{}
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.EntryID) == "" {
+			continue
+		}
+		all = append(all, entry.EntryID)
+		if isToolResultOnlyMessage(entry.Message) {
+			toolResults = append(toolResults, entry.EntryID)
+		}
+	}
+	return all, toolResults
 }
 
 func summarizeRunEventLedgerCheckpoint(reason, sourceText string) string {

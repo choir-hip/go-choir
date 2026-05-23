@@ -17,12 +17,58 @@ func RegisterEvidenceTools(registry *ToolRegistry, rt *Runtime) error {
 		newSaveEvidenceTool(rt),
 		newReadEvidenceTool(rt),
 		newListEvidenceTool(rt),
+		newGetRunMemoryEntryTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func newGetRunMemoryEntryTool(rt *Runtime) Tool {
+	type args struct {
+		EntryID string `json:"entry_id"`
+	}
+	return Tool{
+		Name:        "get_run_memory_entry",
+		Description: "Retrieve an exact durable run-memory message or compaction by entry_id when a checkpoint summary is insufficient.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"entry_id": map[string]any{"type": "string"},
+		}, []string{"entry_id"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode get_run_memory_entry args: %w", err)
+			}
+			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			if ownerID == "" {
+				return "", fmt.Errorf("get_run_memory_entry missing owner context")
+			}
+			entryID := strings.TrimSpace(in.EntryID)
+			if entryID == "" {
+				return "", fmt.Errorf("entry_id must not be empty")
+			}
+			entry, err := rt.store.GetRunMemoryEntry(ctx, ownerID, entryID)
+			if err != nil {
+				return "", err
+			}
+			return toolResultJSON(map[string]any{
+				"entry_id":            entry.EntryID,
+				"loop_id":             entry.RunID,
+				"seq":                 entry.Seq,
+				"kind":                entry.Kind,
+				"role":                entry.Role,
+				"message":             string(entry.Message),
+				"summary":             entry.Summary,
+				"first_kept_entry_id": entry.FirstKeptEntryID,
+				"tokens_before":       entry.TokensBefore,
+				"reason":              entry.Reason,
+				"details":             entry.Details,
+				"created_at":          entry.CreatedAt.Format(time.RFC3339Nano),
+			})
+		},
+	}
 }
 
 func newSaveEvidenceTool(rt *Runtime) Tool {

@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -98,6 +99,55 @@ func TestRunMemoryCompactionDoesNotSplitToolResultPair(t *testing.T) {
 	}
 	if !isToolResultOnlyMessage(messages[2]) {
 		t.Fatalf("expected tool_result after assistant tool_use: %s", messages[2])
+	}
+}
+
+func TestRunMemoryCompactionNamesRawRetrievalEntries(t *testing.T) {
+	entries := []types.RunMemoryEntry{
+		{
+			EntryID: "m1",
+			Kind:    types.RunMemoryEntryMessage,
+			Role:    "user",
+			Message: json.RawMessage(`{"role":"user","content":"please calculate"}`),
+		},
+		{
+			EntryID: "m2",
+			Kind:    types.RunMemoryEntryMessage,
+			Role:    "assistant",
+			Message: json.RawMessage(`{"role":"assistant","content":[{"type":"tool_use","id":"call-1","name":"calculator","input":{"expr":"2+2"}}]}`),
+		},
+		{
+			EntryID: "m3",
+			Kind:    types.RunMemoryEntryMessage,
+			Role:    "user",
+			Message: json.RawMessage(`{"role":"user","content":[{"type":"tool_result","tool_use_id":"call-1","content":"4"}]}`),
+		},
+		{
+			EntryID: "m4",
+			Kind:    types.RunMemoryEntryMessage,
+			Role:    "assistant",
+			Message: json.RawMessage(`{"role":"assistant","content":"done"}`),
+		},
+	}
+
+	plan, ok := planRunMemoryCompaction(entries, 1, "threshold")
+	if !ok {
+		t.Fatalf("expected compaction plan")
+	}
+	if len(plan.RawEntryIDs) == 0 {
+		t.Fatalf("raw entry ids missing")
+	}
+	if !strings.Contains(plan.Summary, "entry_id=m1") {
+		t.Fatalf("summary does not name raw entry ids:\n%s", plan.Summary)
+	}
+	foundToolResult := false
+	for _, id := range plan.RawToolResultEntryIDs {
+		if id == "m3" {
+			foundToolResult = true
+		}
+	}
+	if !foundToolResult {
+		t.Fatalf("raw tool result ids = %#v, want m3", plan.RawToolResultEntryIDs)
 	}
 }
 
