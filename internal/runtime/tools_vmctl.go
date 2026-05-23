@@ -167,7 +167,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small. A different requested machine_class receives a distinct lease instead of reusing the current run's ordinary worker.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-medium for repo/app/harness implementation work that may run Go/Svelte builds; use worker-small only for lightweight non-build probes; use worker-playwright only for high-fidelity browser evidence such as screenshots/video. Omitting machine_class still leases worker-small. A different requested machine_class receives a distinct lease instead of reusing the current run's ordinary worker.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
 			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large", "worker-playwright"}},

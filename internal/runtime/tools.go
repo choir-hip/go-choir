@@ -269,56 +269,21 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	results := make([]types.ToolResult, len(calls))
 	skipped := plannedToolSkips(ctx, calls)
 
+	if shouldExecuteToolsSequentially(calls) {
+		for i, call := range calls {
+			results[i] = executeOneTool(ctx, registry, call, skipped[i], emit)
+		}
+		executeRequiredToolTransitions(ctx, registry, calls, results, emit)
+		return results
+	}
+
 	// Execute tool calls in parallel — results collected in order.
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
 		go func(idx int, c types.ToolCall) {
 			defer wg.Done()
-
-			// Emit full tool inputs: Trace is owner-scoped and is the proof surface
-			// for workflow tests, so summaries are not enough.
-			args := json.RawMessage(strings.TrimSpace(string(c.Arguments)))
-			if len(args) == 0 {
-				args = json.RawMessage(`{}`)
-			}
-			invokedPayload, _ := json.Marshal(map[string]any{
-				"tool":      c.Name,
-				"call_id":   c.ID,
-				"arguments": args,
-			})
-			emit(types.EventToolInvoked, "tool_call", invokedPayload)
-
-			isError := false
-			output, skip := skipped[idx]
-			if skip {
-				isError = true
-			} else {
-				var err error
-				output, err = registry.Execute(ctx, c.Name, c.Arguments)
-				if err != nil {
-					output = fmt.Sprintf("tool_error: %v", err)
-					isError = true
-				}
-			}
-
-			output = capToolOutput(output)
-
-			// Emit tool.result event after execution.
-			resultPayload, _ := json.Marshal(map[string]any{
-				"tool":       c.Name,
-				"call_id":    c.ID,
-				"is_error":   isError,
-				"output_len": len(output),
-				"output":     output,
-			})
-			emit(types.EventToolResult, "tool_call", resultPayload)
-
-			results[idx] = types.ToolResult{
-				CallID:  c.ID,
-				Output:  output,
-				IsError: isError,
-			}
+			results[idx] = executeOneTool(ctx, registry, c, skipped[idx], emit)
 		}(i, call)
 	}
 	wg.Wait()
@@ -326,6 +291,88 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	executeRequiredToolTransitions(ctx, registry, calls, results, emit)
 
 	return results
+}
+
+func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, skipReason string, emit EventEmitFunc) types.ToolResult {
+	// Emit full tool inputs: Trace is owner-scoped and is the proof surface
+	// for workflow tests, so summaries are not enough.
+	args := json.RawMessage(strings.TrimSpace(string(call.Arguments)))
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	invokedPayload, _ := json.Marshal(map[string]any{
+		"tool":      call.Name,
+		"call_id":   call.ID,
+		"arguments": args,
+	})
+	emit(types.EventToolInvoked, "tool_call", invokedPayload)
+
+	isError := false
+	output := skipReason
+	if skipReason != "" {
+		isError = true
+	} else {
+		var err error
+		output, err = registry.Execute(ctx, call.Name, call.Arguments)
+		if err != nil {
+			output = fmt.Sprintf("tool_error: %v", err)
+			isError = true
+		}
+	}
+
+	output = capToolOutput(output)
+
+	// Emit tool.result event after execution.
+	resultPayload, _ := json.Marshal(map[string]any{
+		"tool":       call.Name,
+		"call_id":    call.ID,
+		"is_error":   isError,
+		"output_len": len(output),
+		"output":     output,
+	})
+	emit(types.EventToolResult, "tool_call", resultPayload)
+
+	return types.ToolResult{
+		CallID:  call.ID,
+		Output:  output,
+		IsError: isError,
+	}
+}
+
+func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
+	for _, call := range calls {
+		if toolRequiresSequentialTurnExecution(call.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func toolRequiresSequentialTurnExecution(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "bash",
+		"write_file",
+		"edit_vtext",
+		"spawn_agent",
+		"cast_agent",
+		"cast_agent_update",
+		"wait_agent",
+		"cancel_agent",
+		"request_super_execution",
+		"request_worker_vm",
+		"delegate_worker_vm",
+		"start_worker_delegation",
+		"observe_worker_delegation",
+		"redirect_worker_delegation",
+		"finish_worker_delegation",
+		"cancel_worker_delegation",
+		"publish_app_change_package",
+		"submit_worker_update",
+		"save_evidence":
+		return true
+	default:
+		return false
+	}
 }
 
 // Historical versions executed a hidden request_worker_vm -> delegate_worker_vm

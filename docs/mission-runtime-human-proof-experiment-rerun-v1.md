@@ -285,9 +285,16 @@ what shipped:
   worker lease dedupe; GitHub Actions run 26334078335 passed and deployed to
   staging, and /health reported proxy and sandbox deployed_commit
   f3bcd44d6ac651e73138a53d636af47da0c5a606.
-  The plain `git:<sha>` checkout normalization plus corrected
-  `delegation_required:true` worker-lease result are local and not yet
-  committed, pushed, deployed, or proven on staging.
+  3600b20548f9159d5e9da447217d6efbc885f0a6 shipped the plain `git:<sha>`
+  checkout normalization plus corrected `delegation_required:true`
+  worker-lease result; GitHub Actions run 26334822528 passed and deployed to
+  staging, and /health reported proxy and sandbox deployed_commit
+  3600b20548f9159d5e9da447217d6efbc885f0a6.
+  A local runtime hardening patch now serializes heavy/side-effect tool calls
+  inside one model turn and updates super guidance to use `worker-medium` for
+  repo/app/harness implementation work that may run Go/Svelte builds. That
+  patch is tested locally but not yet committed, pushed, deployed, or proven on
+  staging.
 what was proven:
   staging Chiron proof reached VText dashboard and worker/vsuper evidence, and
   correctly withheld AppChangePackage publication when fresh verifier and
@@ -308,6 +315,16 @@ what was proven:
   `git:f3bcd44d6ac651e73138a53d636af47da0c5a606` and failed with git exit
   128. The proof worker was leased but had no running worker run, indicating
   the request_worker_vm result/prompt still allowed lease-without-delegate.
+  The 3600b20 staging rerun reached VText dashboard marker
+  chiron-seq-1779546096652 and leased worker-small
+  worker-20ef96f9449bc05f / vm-8ee2af499420e5aa5126bbc3a3019e4f. The run did
+  not reach AppChangePackage publication or a worker-playwright lease. The
+  worker VM became CPU-saturated (Firecracker at about 95% CPU), stopped
+  answering `/health` even with a 20-second probe, and vmctl marked it
+  unhealthy every 15 seconds while serial logs still showed gateway/tool-loop
+  activity. The local Playwright harness was stopped early because the live
+  evidence had narrowed the blocker; the runaway worker was hibernated via
+  `/internal/vmctl/hibernate-worker` without touching the parent desktop.
 
   Local tests for the shipped 915bb74 patch:
   - nix develop -c go test ./internal/runtime -run 'TestVSuperSpawnAgentEnforcesActiveChildBudget|TestVSuperVerifierSpawnRequiresCompletedImplementation|TestWorkerVSuperDelegateContractPreventsCheckoutRaces|TestToolCommandEnvUsesPersistentScratchRoot|TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath' -count=1
@@ -318,41 +335,50 @@ what was proven:
   Local tests for the current plain-git-ref/delegation-required patch:
   - nix develop -c go test ./internal/runtime -run 'TestSuperRequestWorkerVMDedupesSameRunByMachineClass|TestRequestWorkerVMReturnsAsyncStartGuidance|TestAppPromotionBaseRefNormalizesPlainGitSHARef|TestAppAdoptionRequiresActualRecipientBuild|TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure' -count=1
   - nix develop -c go test ./internal/runtime -count=1
+  Local tests for the current worker-liveness hardening patch:
+  - nix develop -c go test ./internal/runtime -run 'TestExecuteToolsSerializesHeavySideEffectTurns|TestExecuteToolsParallel|TestSuperRequestWorkerVMReturnsTypedHandle|TestSuperRequestWorkerVMDedupesSameRunByMachineClass|TestAppPromotionBaseRefNormalizesPlainGitSHARef|TestAppAdoptionRequiresActualRecipientBuild|TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure' -count=1
+  - nix develop -c go test ./internal/runtime -count=1
 unproven or partial claims:
-  staging deploy identity for the current plain-git-ref/delegation-required
-  patch; product-path proof that super can delegate work to worker-playwright
-  after leasing it; reviewable Chiron with real screenshot/video refs; Motion,
-  Liquid, and Python experiments; recipient adoption; rollback.
+  staging deploy identity for the current worker-liveness hardening patch;
+  product-path proof that a repo/app implementation worker stays responsive
+  and reaches terminal package/blocker evidence; product-path proof that super
+  can delegate work to worker-playwright after implementation/package evidence;
+  reviewable Chiron with real screenshot/video refs; Motion, Liquid, and Python
+  experiments; recipient adoption; rollback.
 belief-state changes:
   the runtime is now failing at a narrower evidence gate rather than losing
   worker state entirely. The positive path needs deployed sequencing,
   checkoutable source-ledger refs, and a super-managed browser-proof worker
   handoff that includes delegation, not just leasing. The prior
-  `obscura: command not found` was narrowed by PATH hardening; the next proof
-  failure narrowed to recipient-build checkout normalization plus
-  lease-without-delegate structured guidance.
+  `obscura: command not found` was narrowed by PATH hardening; recipient-build
+  checkout normalization and lease-without-delegate were narrowed by 3600b20.
+  The next proof failure narrowed to worker resource/liveness: one-vCPU
+  worker-small is a poor default for repo/app implementation, and parallel
+  side-effect tool execution can overload or wedge a candidate worker before it
+  reaches terminal evidence.
 remaining error field:
-  staging verification of plain `git:<sha>` source-ledger checkout; proof
-  prompt/runtime may still need to prove the second super-managed browser
+  staging verification of heavy-tool serialization and worker-medium guidance;
+  proof prompt/runtime still needs to prove the second super-managed browser
   evidence worker is delegated and observed; no experiment media proof.
 highest-impact remaining uncertainty:
   can a product-path Choir worker produce implementation evidence, then a
   delegated proof worker with real browser-proof media, then recipient-build and
   rollback evidence, without Codex hand-coding the feature?
 next executable probe:
-  commit the plain-git-ref checkout and delegation-required patch, push main,
-  monitor CI/deploy, verify staging identity, then rerun Chiron through visible
-  product path until it either adopts/rolls back the package with recipient
-  build evidence and media refs, or records the next precise blocker.
+  commit the worker-liveness patch, push main, monitor CI/deploy, verify
+  staging identity, then rerun Chiron through visible product path with
+  implementation work on worker-medium until it either reaches
+  package/browser/recipient-build evidence or records the next precise blocker.
 suggested resume goal string:
   use the One-Line Goal String in this file.
 evidence artifact refs:
   test-results/chiron-sequential-e53cf19-20260523T114634Z
   test-results/chiron-sequential-915bb74-20260523T131116Z
   test-results/chiron-sequential-f3bcd44-20260523T134909Z
+  test-results/chiron-sequential-3600b20-20260523T142135Z
 rollback refs:
-  git revert e53cf1910a20780cf726f32c35cc8121bc2acfd2 for the latest recipient
-  build normalization patch if it causes regression.
+  git revert 3600b20548f9159d5e9da447217d6efbc885f0a6 for the recipient-build
+  normalization/delegation guidance patch if it causes regression.
   git revert 915bb74eb3b0f71ebc71f73560060d9173ebb3a1 for the verifier/PATH
   runtime patch if it causes regression.
   git revert f3bcd44d6ac651e73138a53d636af47da0c5a606 for the worker-lease

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -460,6 +461,45 @@ func TestExecuteToolsParallel(t *testing.T) {
 	}
 	if results[1].Output != "fast-result" {
 		t.Errorf("result[1] output: got %q, want fast-result", results[1].Output)
+	}
+}
+
+func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
+	registry := NewToolRegistry()
+	var mu sync.Mutex
+	var order []string
+	register := func(name string) {
+		t.Helper()
+		if err := registry.Register(Tool{
+			Name: name,
+			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+				mu.Lock()
+				order = append(order, "start:"+name)
+				mu.Unlock()
+				time.Sleep(10 * time.Millisecond)
+				mu.Lock()
+				order = append(order, "end:"+name)
+				mu.Unlock()
+				return name + "-result", nil
+			},
+		}); err != nil {
+			t.Fatalf("register %s: %v", name, err)
+		}
+	}
+	register("bash")
+	register("read_file")
+
+	results := executeTools(context.Background(), registry, []types.ToolCall{
+		{ID: "call-1", Name: "bash", Arguments: json.RawMessage(`{}`)},
+		{ID: "call-2", Name: "read_file", Arguments: json.RawMessage(`{}`)},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if results[0].Output != "bash-result" || results[1].Output != "read_file-result" {
+		t.Fatalf("results = %+v, want both tool outputs", results)
+	}
+	want := []string{"start:bash", "end:bash", "start:read_file", "end:read_file"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Fatalf("execution order = %v, want %v", order, want)
 	}
 }
 
