@@ -241,7 +241,10 @@ type vmGatewayTokenReader interface {
 type VMManagerConfig struct {
 	VMID              string
 	KernelImagePath   string
+	InitrdPath        string
 	RootfsPath        string
+	StoreDiskPath     string
+	KernelParams      string
 	GuestPort         int
 	MachineCPUCount   int
 	MachineMemSizeMib int
@@ -251,6 +254,40 @@ type VMManagerConfig struct {
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
 	GatewayToken string
+}
+
+// VMImageProfile points a VM boot at a non-default guest image. Ordinary
+// workers use the manager defaults; evidence/verifier classes such as
+// worker-playwright use explicit profile paths so their heavy browser closure
+// does not leak into every user/candidate VM.
+type VMImageProfile struct {
+	KernelImagePath string
+	InitrdPath      string
+	RootfsPath      string
+	StoreDiskPath   string
+	KernelParams    string
+}
+
+// MissingRequiredFields returns required boot artifact fields that are absent
+// from a non-default image profile.
+func (p VMImageProfile) MissingRequiredFields() []string {
+	var missing []string
+	if strings.TrimSpace(p.KernelImagePath) == "" {
+		missing = append(missing, "kernel_image")
+	}
+	if strings.TrimSpace(p.InitrdPath) == "" {
+		missing = append(missing, "initrd")
+	}
+	if strings.TrimSpace(p.RootfsPath) == "" {
+		missing = append(missing, "rootfs")
+	}
+	if strings.TrimSpace(p.StoreDiskPath) == "" {
+		missing = append(missing, "store_disk")
+	}
+	if strings.TrimSpace(p.KernelParams) == "" {
+		missing = append(missing, "kernel_params")
+	}
+	return missing
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -329,6 +366,11 @@ type OwnershipRegistry struct {
 	// VM lifecycle operations to this manager for real Firecracker VMs.
 	vmManager VMManager
 
+	// workerImageProfiles maps worker machine classes to alternate guest image
+	// artifacts. This keeps heavyweight evidence workers (for example
+	// worker-playwright) out of the default VM image.
+	workerImageProfiles map[string]VMImageProfile
+
 	// gatewayURL is the URL of the host-side gateway service. When set,
 	// the registry issues gateway tokens for VM sandboxes before booting
 	// so the guest sandbox can authenticate to the gateway.
@@ -358,6 +400,7 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		pressureReclaim:            DefaultPressureReclaimConfig(),
 		pressureSampler:            sampleHostPressure,
 		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
+		workerImageProfiles:        make(map[string]VMImageProfile),
 		epochCounter:               1,
 	}
 }
@@ -546,6 +589,27 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	}
 }
 
+// SetWorkerImageProfile registers an alternate guest image for a worker
+// machine class. It is intended for bounded evidence/verifier classes such as
+// worker-playwright, not for ordinary user or candidate computers.
+func (r *OwnershipRegistry) SetWorkerImageProfile(machineClass string, profile VMImageProfile) {
+	machineClass = strings.ToLower(strings.TrimSpace(machineClass))
+	if machineClass == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if strings.TrimSpace(profile.KernelImagePath) == "" &&
+		strings.TrimSpace(profile.InitrdPath) == "" &&
+		strings.TrimSpace(profile.RootfsPath) == "" &&
+		strings.TrimSpace(profile.StoreDiskPath) == "" &&
+		strings.TrimSpace(profile.KernelParams) == "" {
+		delete(r.workerImageProfiles, machineClass)
+		return
+	}
+	r.workerImageProfiles[machineClass] = profile
+}
+
 // SetGatewayURL configures the gateway URL for issuing sandbox tokens.
 // When set, the registry will issue a gateway token for each VM before
 // booting so the guest sandbox can authenticate to the gateway.
@@ -723,9 +787,15 @@ func normalizeWorkerMachineClass(raw string) (string, int, int, error) {
 		return "worker-medium", 2, 4096, nil
 	case "worker-large", "large":
 		return "worker-large", 4, 8192, nil
+	case "worker-playwright", "playwright", "evidence", "evidence-browser", "verifier-browser":
+		return "worker-playwright", 4, 8192, nil
 	default:
 		return "", 0, 0, fmt.Errorf("unsupported machine_class %q", strings.TrimSpace(raw))
 	}
+}
+
+func workerMachineClassRequiresImageProfile(machineClass string) bool {
+	return strings.TrimSpace(machineClass) == "worker-playwright"
 }
 
 func machineShapeForOwnership(own *VMOwnership) (int, int) {
@@ -1473,6 +1543,24 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	if parent == nil {
 		return nil, fmt.Errorf("no parent desktop VM found for user %s desktop %s", req.UserID, req.DesktopID)
 	}
+	var imageProfile VMImageProfile
+	hasImageProfile := false
+	r.mu.RLock()
+	mgrConfigured := r.vmManager != nil
+	if mgrConfigured {
+		imageProfile, hasImageProfile = r.workerImageProfiles[machineClass]
+	}
+	r.mu.RUnlock()
+	if mgrConfigured {
+		if workerMachineClassRequiresImageProfile(machineClass) && !hasImageProfile {
+			return nil, fmt.Errorf("%s requires a configured worker image profile", machineClass)
+		}
+		if hasImageProfile {
+			if missing := imageProfile.MissingRequiredFields(); len(missing) > 0 {
+				return nil, fmt.Errorf("%s worker image profile is incomplete: missing %s", machineClass, strings.Join(missing, ", "))
+			}
+		}
+	}
 
 	now := time.Now()
 	vmID := generateVMID()
@@ -1516,13 +1604,19 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 
 	if mgr != nil {
 		gwToken := r.issueGatewayToken(vmID)
-		info, err := mgr.BootVM(VMManagerConfig{
+		bootCfg := VMManagerConfig{
 			VMID:              vmID,
+			KernelImagePath:   imageProfile.KernelImagePath,
+			InitrdPath:        imageProfile.InitrdPath,
+			RootfsPath:        imageProfile.RootfsPath,
+			StoreDiskPath:     imageProfile.StoreDiskPath,
+			KernelParams:      imageProfile.KernelParams,
 			GuestPort:         8085,
 			MachineCPUCount:   cpuCount,
 			MachineMemSizeMib: memSizeMib,
 			GatewayToken:      gwToken,
-		})
+		}
+		info, err := mgr.BootVM(bootCfg)
 		if err != nil {
 			log.Printf("vmctl: Firecracker boot failed for worker VM %s: %v", vmID, err)
 			r.mu.Lock()

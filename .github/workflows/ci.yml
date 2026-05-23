@@ -244,10 +244,13 @@ jobs:
             echo "==> Building NixOS closure and guest images"
             host_build_log=$(mktemp)
             guest_build_log=$(mktemp)
+            playwright_guest_build_log=$(mktemp)
             /run/current-system/sw/bin/nix build .#nixosConfigurations.go-choir-b.config.system.build.toplevel -o /tmp/go-choir-nixos-result >"$host_build_log" 2>&1 &
             host_build_pid=$!
             /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result >"$guest_build_log" 2>&1 &
             guest_build_pid=$!
+            /run/current-system/sw/bin/nix build .#guest-image-playwright -o /tmp/guest-image-playwright-result >"$playwright_guest_build_log" 2>&1 &
+            playwright_guest_build_pid=$!
 
             host_status=0
             wait "$host_build_pid" || host_status=$?
@@ -259,9 +262,14 @@ jobs:
             echo "==> Guest image build log"
             cat "$guest_build_log"
 
-            rm -f "$host_build_log" "$guest_build_log"
-            if [ "$host_status" -ne 0 ] || [ "$guest_status" -ne 0 ]; then
-              echo "Nix build failed: host=${host_status} guest=${guest_status}" >&2
+            playwright_guest_status=0
+            wait "$playwright_guest_build_pid" || playwright_guest_status=$?
+            echo "==> Playwright guest image build log"
+            cat "$playwright_guest_build_log"
+
+            rm -f "$host_build_log" "$guest_build_log" "$playwright_guest_build_log"
+            if [ "$host_status" -ne 0 ] || [ "$guest_status" -ne 0 ] || [ "$playwright_guest_status" -ne 0 ]; then
+              echo "Nix build failed: host=${host_status} guest=${guest_status} playwright_guest=${playwright_guest_status}" >&2
               exit 1
             fi
             echo "    Nix builds complete"
@@ -312,27 +320,35 @@ jobs:
             sleep 5
             note_phase "service settle"
 
-            echo "==> Installing guest images (kernel + rootfs + initrd + store disk)"
-            guest_dir=/var/lib/go-choir/guest
-            guest_tmp=$(mktemp -d "$guest_dir/.incoming.XXXXXX")
-            cleanup_guest_tmp() {
-              if [ -n "${guest_tmp:-}" ] && [ -d "$guest_tmp" ]; then
-                rm -rf "$guest_tmp"
-              fi
+            install_guest_image() {
+              local src="$1"
+              local dst="$2"
+              install -d -m 0750 "$dst"
+              local tmp
+              tmp=$(mktemp -d "$dst/.incoming.XXXXXX")
+              cleanup_guest_tmp() {
+                if [ -n "${tmp:-}" ] && [ -d "$tmp" ]; then
+                  rm -rf "$tmp"
+                fi
+              }
+              trap cleanup_guest_tmp EXIT
+              install -m 0644 "$src/vmlinux" "$tmp/vmlinux"
+              install -m 0644 "$src/rootfs.ext4" "$tmp/rootfs.ext4"
+              install -m 0644 "$src/initrd" "$tmp/initrd"
+              install -m 0644 "$src/storedisk.erofs" "$tmp/storedisk.erofs"
+              install -m 0644 "$src/kernel-params" "$tmp/kernel-params"
+              sync
+              for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params; do
+                mv -f "$tmp/$artifact" "$dst/$artifact"
+              done
+              rmdir "$tmp"
+              tmp=
+              trap - EXIT
             }
-            trap cleanup_guest_tmp EXIT
-            install -m 0644 /tmp/guest-image-result/vmlinux "$guest_tmp/vmlinux"
-            install -m 0644 /tmp/guest-image-result/rootfs.ext4 "$guest_tmp/rootfs.ext4"
-            install -m 0644 /tmp/guest-image-result/initrd "$guest_tmp/initrd"
-            install -m 0644 /tmp/guest-image-result/storedisk.erofs "$guest_tmp/storedisk.erofs"
-            install -m 0644 /tmp/guest-image-result/kernel-params "$guest_tmp/kernel-params"
-            sync
-            for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params; do
-              mv -f "$guest_tmp/$artifact" "$guest_dir/$artifact"
-            done
-            rmdir "$guest_tmp"
-            guest_tmp=
-            trap - EXIT
+
+            echo "==> Installing guest images (kernel + rootfs + initrd + store disk)"
+            install_guest_image /tmp/guest-image-result /var/lib/go-choir/guest
+            install_guest_image /tmp/guest-image-playwright-result /var/lib/go-choir/guest-playwright
             echo "    Guest images deployed"
             note_phase "guest image install"
 

@@ -69,6 +69,10 @@ func main() {
 	warmnessPolicy := warmnessPolicyConfigFromEnv()
 	registry.SetWarmnessPolicyConfig(warmnessPolicy)
 	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s always_on_user_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.AlwaysOnUserIDs))
+	if profile, ok := workerImageProfileFromEnv("VM_PLAYWRIGHT"); ok {
+		registry.SetWorkerImageProfile("worker-playwright", profile)
+		log.Printf("vmctl: worker-playwright image profile configured")
+	}
 
 	// Check if Firecracker is available on this host.
 	// If so, create a VM manager for real Firecracker lifecycle management
@@ -126,7 +130,10 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 	inst, err := a.mgr.BootVM(vmmanager.VMConfig{
 		VMID:              cfg.VMID,
 		KernelImagePath:   cfg.KernelImagePath,
+		InitrdPath:        cfg.InitrdPath,
 		RootfsPath:        cfg.RootfsPath,
+		StoreDiskPath:     cfg.StoreDiskPath,
+		KernelParams:      cfg.KernelParams,
 		GuestPort:         cfg.GuestPort,
 		MachineCPUCount:   cfg.MachineCPUCount,
 		MachineMemSizeMib: cfg.MachineMemSizeMib,
@@ -146,6 +153,37 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		LastHealthCheck: inst.LastHealthCheck,
 		LastHealthyAt:   inst.LastHealthyAt,
 	}, nil
+}
+
+func workerImageProfileFromEnv(prefix string) (vmctl.VMImageProfile, bool) {
+	profile := vmctl.VMImageProfile{
+		KernelImagePath: strings.TrimSpace(os.Getenv(prefix + "_KERNEL_IMAGE")),
+		InitrdPath:      strings.TrimSpace(os.Getenv(prefix + "_INITRD_IMAGE")),
+		RootfsPath:      strings.TrimSpace(os.Getenv(prefix + "_ROOTFS_IMAGE")),
+		StoreDiskPath:   strings.TrimSpace(os.Getenv(prefix + "_STORE_DISK_IMAGE")),
+	}
+	if paramsFile := strings.TrimSpace(os.Getenv(prefix + "_KERNEL_PARAMS_FILE")); paramsFile != "" {
+		if data, err := os.ReadFile(paramsFile); err == nil {
+			profile.KernelParams = strings.TrimSpace(string(data))
+		} else {
+			log.Printf("vmctl: could not read %s kernel params file %s: %v", prefix, paramsFile, err)
+		}
+	}
+	if params := strings.TrimSpace(os.Getenv(prefix + "_KERNEL_PARAMS")); params != "" {
+		profile.KernelParams = params
+	}
+	ok := profile.KernelImagePath != "" ||
+		profile.InitrdPath != "" ||
+		profile.RootfsPath != "" ||
+		profile.StoreDiskPath != "" ||
+		profile.KernelParams != ""
+	if ok {
+		if missing := profile.MissingRequiredFields(); len(missing) > 0 {
+			log.Printf("vmctl: incomplete %s worker image profile ignored; missing %s", prefix, strings.Join(missing, ", "))
+			return vmctl.VMImageProfile{}, false
+		}
+	}
+	return profile, ok
 }
 
 func (a *vmManagerAdapter) StopVM(vmID string) error {

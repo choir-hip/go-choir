@@ -162,10 +162,10 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "request_worker_vm",
-		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call delegate_worker_vm next using next_required_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, and worker-large; omit machine_class for worker-small.",
+		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call delegate_worker_vm next using next_required_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-playwright only for high-fidelity browser evidence such as screenshots/video; omit machine_class for worker-small.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
-			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large"}},
+			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large", "worker-playwright"}},
 			"allow_parallel": map[string]any{"type": "boolean"},
 		}, []string{"purpose"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -601,6 +601,8 @@ func normalizeRuntimeWorkerMachineClass(raw string) string {
 		return "worker-medium"
 	case "large":
 		return "worker-large"
+	case "playwright", "evidence", "evidence-browser", "verifier-browser":
+		return "worker-playwright"
 	default:
 		return strings.TrimSpace(raw)
 	}

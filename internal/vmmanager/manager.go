@@ -92,6 +92,11 @@ type VMConfig struct {
 	// read-only virtio-blk drive that the NixOS init mounts at /nix/store.
 	StoreDiskPath string
 
+	// KernelParams is the image-specific microvm.nix kernel parameter set.
+	// Empty means use the manager default. Special worker image classes must
+	// pass this with their store disk so init paths match the selected image.
+	KernelParams string
+
 	// GuestPort is the port the guest sandbox runtime listens on inside
 	// the VM. The host-side vsock or tap networking maps this to a
 	// host-accessible URL.
@@ -586,6 +591,9 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 	}
 	if cfg.StoreDiskPath == "" {
 		cfg.StoreDiskPath = m.cfg.StoreDiskPath
+	}
+	if cfg.KernelParams == "" {
+		cfg.KernelParams = m.cfg.KernelParams
 	}
 	if cfg.GuestPort == 0 {
 		cfg.GuestPort = m.cfg.GuestPort
@@ -1128,7 +1136,11 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	//   - init=/bin/init tells the kernel to run our custom init script
 	//   - root=/dev/vda points to the ext4 root drive
 	var bootArgs string
-	if cfg.StoreDiskPath != "" && strings.TrimSpace(m.cfg.KernelParams) != "" {
+	kernelParams := strings.TrimSpace(cfg.KernelParams)
+	if kernelParams == "" {
+		kernelParams = strings.TrimSpace(m.cfg.KernelParams)
+	}
+	if cfg.StoreDiskPath != "" && kernelParams != "" {
 		runtimeArgs := []string{
 			"console=ttyS0,115200",
 			"reboot=k",
@@ -1148,7 +1160,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.GatewayToken != "" {
 			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", cfg.GatewayToken))
 		}
-		bootArgs = strings.Join(append([]string{strings.TrimSpace(m.cfg.KernelParams)}, runtimeArgs...), " ")
+		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script.
 		bootArgs = fmt.Sprintf(

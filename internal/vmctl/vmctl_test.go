@@ -512,6 +512,8 @@ func TestNormalizeWorkerMachineClassResourceEnvelope(t *testing.T) {
 		{name: "medium", raw: "worker-medium", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
 		{name: "medium alias", raw: " medium ", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
 		{name: "large", raw: "worker-large", wantClass: "worker-large", wantCPU: 4, wantMem: 8192},
+		{name: "playwright evidence worker", raw: "worker-playwright", wantClass: "worker-playwright", wantCPU: 4, wantMem: 8192},
+		{name: "playwright alias", raw: "verifier-browser", wantClass: "worker-playwright", wantCPU: 4, wantMem: 8192},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -556,6 +558,99 @@ func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testi
 	got := mock.boots[0]
 	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 4096 {
 		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 4096 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
+	}
+}
+
+func TestOwnershipRegistry_RequestPlaywrightWorkerUsesDedicatedImageProfile(t *testing.T) {
+	mock := &mockVMManager{}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mock)
+	reg.SetWorkerImageProfile("worker-playwright", VMImageProfile{
+		KernelImagePath: "/var/lib/go-choir/guest-playwright/vmlinux",
+		InitrdPath:      "/var/lib/go-choir/guest-playwright/initrd",
+		RootfsPath:      "/var/lib/go-choir/guest-playwright/rootfs.ext4",
+		StoreDiskPath:   "/var/lib/go-choir/guest-playwright/storedisk.erofs",
+		KernelParams:    "root=fstab init=/nix/store/playwright-init/init",
+	})
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	mock.boots = nil
+
+	worker, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-1",
+		Purpose:       "Capture browser screenshots and video evidence",
+		MachineClass:  "worker-playwright",
+	})
+	if err != nil {
+		t.Fatalf("RequestWorker: %v", err)
+	}
+	if worker.MachineClass != "worker-playwright" {
+		t.Fatalf("worker machine_class = %q, want worker-playwright", worker.MachineClass)
+	}
+	if len(mock.boots) != 1 {
+		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
+	}
+	got := mock.boots[0]
+	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 8192 {
+		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 4 cpu / 8192 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
+	}
+	if got.KernelImagePath != "/var/lib/go-choir/guest-playwright/vmlinux" ||
+		got.InitrdPath != "/var/lib/go-choir/guest-playwright/initrd" ||
+		got.RootfsPath != "/var/lib/go-choir/guest-playwright/rootfs.ext4" ||
+		got.StoreDiskPath != "/var/lib/go-choir/guest-playwright/storedisk.erofs" ||
+		!strings.Contains(got.KernelParams, "playwright-init") {
+		t.Fatalf("BootVM did not use playwright image profile: %+v", got)
+	}
+}
+
+func TestOwnershipRegistry_RequestPlaywrightWorkerRequiresDedicatedImageProfile(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(&mockVMManager{})
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+
+	_, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-1",
+		Purpose:       "Capture browser screenshots and video evidence",
+		MachineClass:  "worker-playwright",
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires a configured worker image profile") {
+		t.Fatalf("RequestWorker error = %v, want missing image profile error", err)
+	}
+}
+
+func TestOwnershipRegistry_RequestPlaywrightWorkerRejectsIncompleteImageProfile(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(&mockVMManager{})
+	reg.SetWorkerImageProfile("worker-playwright", VMImageProfile{
+		KernelImagePath: "/var/lib/go-choir/guest-playwright/vmlinux",
+		RootfsPath:      "/var/lib/go-choir/guest-playwright/rootfs.ext4",
+	})
+
+	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+
+	_, err := reg.RequestWorker(WorkerRequest{
+		UserID:        "user-1",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-1",
+		Purpose:       "Capture browser screenshots and video evidence",
+		MachineClass:  "worker-playwright",
+	})
+	if err == nil || !strings.Contains(err.Error(), "worker image profile is incomplete") {
+		t.Fatalf("RequestWorker error = %v, want incomplete image profile error", err)
 	}
 }
 

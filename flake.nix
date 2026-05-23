@@ -197,33 +197,39 @@
       #   nix build .#guest-image
       #   install to a temp dir, then mv artifacts into /var/lib/go-choir/guest/
       guestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm.config;
+      playwrightGuestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm-playwright.config;
 
-      # Guest kernel (vmlinux ELF binary for Firecracker).
-      guestKernel = guestVmConfig.boot.kernelPackages.kernel.dev;
+      mkGuestImage = name: vmConfig:
+        let
+          # Guest kernel (vmlinux ELF binary for Firecracker).
+          guestKernel = vmConfig.boot.kernelPackages.kernel.dev;
 
-      # Guest boot disk (root filesystem image).
-      guestBootDisk = guestVmConfig.microvm.bootDisk;
+          # Guest boot disk (root filesystem image).
+          guestBootDisk = vmConfig.microvm.bootDisk;
 
-      # Guest initrd (contains ext4, erofs, virtio modules needed by systemd).
-      guestInitrd = guestVmConfig.system.build.initialRamdisk;
+          # Guest initrd (contains ext4, erofs, virtio modules needed by systemd).
+          guestInitrd = vmConfig.system.build.initialRamdisk;
 
-      # Guest store disk (erofs image containing the nix store closure).
-      # This is the shared read-only nix store that all VMs reference.
-      # With KSM on the host, identical pages are deduplicated across VMs.
-      guestStoreDisk = guestVmConfig.microvm.storeDisk;
-
-      # Convenience package that bundles all guest artifacts together.
-      # The CI deploy script atomically installs these to /var/lib/go-choir/guest/.
-      guest-image = pkgs.runCommand "go-choir-guest-image" { } ''
+          # Guest store disk (erofs image containing the nix store closure).
+          # This is the shared read-only nix store that VMs of this image class
+          # reference. With KSM on the host, identical pages are deduplicated.
+          guestStoreDisk = vmConfig.microvm.storeDisk;
+        in pkgs.runCommand name { } ''
         mkdir -p $out
         cp ${guestKernel}/vmlinux $out/vmlinux
         cp ${guestBootDisk} $out/rootfs.ext4
-        cp ${guestInitrd}/${guestVmConfig.system.boot.loader.initrdFile} $out/initrd
+        cp ${guestInitrd}/${vmConfig.system.boot.loader.initrdFile} $out/initrd
         cp ${guestStoreDisk} $out/storedisk.erofs
         cat > $out/kernel-params <<'EOF'
-${builtins.concatStringsSep " " guestVmConfig.microvm.kernelParams}
+${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
 EOF
       '';
+
+      # Convenience packages that bundle guest artifacts together. The ordinary
+      # image stays light and Obscura-backed; worker-playwright gets its own
+      # image so high-fidelity screenshot/video proof does not inflate every VM.
+      guest-image = mkGuestImage "go-choir-guest-image" guestVmConfig;
+      guest-image-playwright = mkGuestImage "go-choir-guest-image-playwright" playwrightGuestVmConfig;
     in
     {
       devShells = forDevSystems (devSystem: {
@@ -234,7 +240,7 @@ EOF
         default = self.packages.${system}.auth;
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
-        inherit guest-image;
+        inherit guest-image guest-image-playwright;
       };
 
       # ── Sandbox guest VM NixOS configuration ──────────────────────────
@@ -255,6 +261,20 @@ EOF
         specialArgs = {
           goChoirPackages = goChoirPackages;
           inherit buildCommit sourceRepoRemote;
+          includePlaywright = false;
+        };
+        modules = [
+          microvm.nixosModules.microvm
+          ./nix/sandbox-vm.nix
+        ];
+      };
+
+      nixosConfigurations.go-choir-sandbox-vm-playwright = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          goChoirPackages = goChoirPackages;
+          inherit buildCommit sourceRepoRemote;
+          includePlaywright = true;
         };
         modules = [
           microvm.nixosModules.microvm

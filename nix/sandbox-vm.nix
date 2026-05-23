@@ -19,10 +19,10 @@
 # the kernel, rootfs, and store disk from the microvm runner outputs.
 # It does NOT use the microvm runner scripts directly because vmmanager
 # needs per-VM networking, port assignment, and lifecycle control.
-{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", includePlaywright ? false, ... }:
 
 {
-  networking.hostName = "go-choir-sandbox";
+  networking.hostName = if includePlaywright then "go-choir-playwright-worker" else "go-choir-sandbox";
 
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {
@@ -180,7 +180,7 @@ EOF
       # run through an interactive shell. Give the sandbox service an explicit
       # guest PATH so tool implementations and shell tools see the same basic
       # runtime utilities.
-      PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
+      PATH = lib.mkForce (lib.makeBinPath ((with pkgs; [
         bash
         coreutils
         findutils
@@ -200,7 +200,9 @@ EOF
         iproute2
         python3
         goChoirPackages.obscura
-      ]));
+      ]) ++ lib.optionals includePlaywright (with pkgs; [
+        playwright
+      ])));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
       SERVER_HOST = "0.0.0.0";
@@ -238,7 +240,8 @@ EOF
       GOTOOLCHAIN = "local";
       # Worker VMs use Obscura as their lightweight VM-local browser,
       # extraction, and bounded-control substrate. Heavy Chrome/Playwright
-      # browser bundles stay outside user/candidate VMs as external verifiers.
+      # browser bundles stay out of ordinary user/candidate VMs. The separate
+      # worker-playwright image is the opt-in evidence/verifier exception.
       CHOIR_OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       # Explicit runtime-selected model. Provider credentials remain host-side;
@@ -246,6 +249,11 @@ EOF
       RUNTIME_LLM_PROVIDER = "chatgpt";
       RUNTIME_LLM_MODEL = "gpt-5.5";
       RUNTIME_LLM_REASONING_EFFORT = "low";
+    } // lib.optionalAttrs includePlaywright {
+      CHOIR_WORKER_BROWSER_CLASS = "playwright";
+      PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
     };
     serviceConfig = {
       ExecStart = "${goChoirPackages.sandbox}/bin/sandbox";
@@ -273,7 +281,7 @@ EOF
 
   # ── System packages ──────────────────────────────────────────────────
   # Minimal set for debugging and runtime support.
-  environment.systemPackages = with pkgs; [
+  environment.systemPackages = (with pkgs; [
     coreutils
     curl
     gcc
@@ -290,7 +298,9 @@ EOF
     iproute2
     python3
     bash
-  ];
+  ]) ++ lib.optionals includePlaywright (with pkgs; [
+    playwright
+  ]);
 
   system.stateVersion = "25.11";
 }

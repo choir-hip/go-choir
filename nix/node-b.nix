@@ -301,7 +301,7 @@ in
       # cycles (VAL-CROSS-116). Provider credentials are NEVER written here
       # (VAL-VM-011).
       StateDirectory = "go-choir/vm-state";
-      ReadWritePaths = [ "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
+      ReadWritePaths = [ "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" "/var/lib/go-choir/guest-playwright" ];
       # Optional runtime priority overrides. This is intentionally outside the
       # repo-tracked Nix closure so operators can add paid/real-user always-on
       # IDs without a platform rebuild:
@@ -322,6 +322,11 @@ in
         "VM_INITRD_IMAGE=/var/lib/go-choir/guest/initrd"
         "VM_STORE_DISK_IMAGE=/var/lib/go-choir/guest/storedisk.erofs"
         "VM_KERNEL_PARAMS_FILE=/var/lib/go-choir/guest/kernel-params"
+        "VM_PLAYWRIGHT_KERNEL_IMAGE=/var/lib/go-choir/guest-playwright/vmlinux"
+        "VM_PLAYWRIGHT_ROOTFS_IMAGE=/var/lib/go-choir/guest-playwright/rootfs.ext4"
+        "VM_PLAYWRIGHT_INITRD_IMAGE=/var/lib/go-choir/guest-playwright/initrd"
+        "VM_PLAYWRIGHT_STORE_DISK_IMAGE=/var/lib/go-choir/guest-playwright/storedisk.erofs"
+        "VM_PLAYWRIGHT_KERNEL_PARAMS_FILE=/var/lib/go-choir/guest-playwright/kernel-params"
         "VM_STATE_DIR=/var/lib/go-choir/vm-state"
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
@@ -503,6 +508,7 @@ in
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
     "d /var/lib/go-choir/guest 0750 root root -"
+    "d /var/lib/go-choir/guest-playwright 0750 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"
