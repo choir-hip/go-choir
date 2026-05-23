@@ -147,9 +147,6 @@ func normalizeProxyHumanProof(raw map[string]any) map[string]any {
 	screenshotRefs := proxyStringList(raw["screenshot_refs"])
 	videoRefs := proxyStringList(raw["video_refs"])
 	benchmarkRefs := proxyStringList(raw["benchmark_refs"])
-	if summary, _ := raw["summary"].(string); strings.TrimSpace(summary) != "" {
-		narrativeRefs = append(narrativeRefs, "human_summary")
-	}
 	narrativeRefs = compactProxyStringRefs(narrativeRefs)
 	screenshotRefs = compactProxyStringRefs(screenshotRefs)
 	videoRefs = compactProxyStringRefs(videoRefs)

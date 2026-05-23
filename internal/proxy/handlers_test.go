@@ -433,6 +433,26 @@ func TestAppChangePackageReviewEvidenceSanitizesStaleSourceHumanProof(t *testing
 	}
 }
 
+func TestNormalizeProxyHumanProofDoesNotTreatSummaryAsNarrative(t *testing.T) {
+	proof := normalizeProxyHumanProof(map[string]any{
+		"state":           "human_reviewable",
+		"summary":         "This display summary is useful prose, but it is not a causal VText narrative.",
+		"screenshot_refs": []any{"test-results/summary-only.png"},
+	})
+
+	if proof["state"] != "evidence_pending" {
+		t.Fatalf("summary-only proof state = %q, want evidence_pending; proof=%+v", proof["state"], proof)
+	}
+	narrativeRefs := proxyStringList(proof["narrative_refs"])
+	if len(narrativeRefs) != 0 {
+		t.Fatalf("summary-only proof gained narrative refs: %+v", narrativeRefs)
+	}
+	missing, ok := proof["missing"].([]string)
+	if !ok || !slices.Contains(missing, "narrative VText") {
+		t.Fatalf("summary-only proof missing refs = %+v, want narrative VText", proof["missing"])
+	}
+}
+
 // --- VAL-PROXY-001: Missing or invalid auth fails closed ---
 
 func TestBootstrapDeniesMissingAuth(t *testing.T) {
