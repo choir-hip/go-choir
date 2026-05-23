@@ -1,6 +1,6 @@
 # MissionGradient: Runtime Model And Context Substrate v0
 
-**Status:** ready
+**Status:** checkpoint_incomplete — deployed substrate patch at `415b87e`; product-path proof still pending
 **Date:** 2026-05-23
 **Purpose:** remove execution blockers and make model/context configuration good enough to resume the Chyron, Motion, Liquid, and Python mode experiment rerun.
 **Depends on:** [mission-human-proof-experiment-rerun-v1.md](mission-human-proof-experiment-rerun-v1.md)
@@ -275,16 +275,16 @@ Use this section during execution.
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: local substrate patch and focused dev-shell verification
-current artifact state: auth SQLite busy handling, Fireworks catalog entries, per-computer model policy file, provider image blocks, per-run model routing, and run-memory raw-entry retrieval are patched locally
-what shipped: none yet
-what was proven: focused dev-shell tests passed for auth busy timeout, provider multimodal conversion/validation, gateway per-run model routing, model-policy resolution/fallback, run-memory compaction raw ids, and store run-memory retrieval
-unproven or partial claims: deployed staging auth/login, gateway routing through the new policy, artifact_ref image resolver, Trace/run-acceptance display of model/context evidence, and product-path compaction retrieval remain unproven
-belief-state changes: the observed SQLite auth failure is plausibly a fast SQLITE_BUSY from concurrent challenge/session writes; the durable local fix is one writer connection plus busy_timeout; full runtime package tests are Dolt-heavy and exceed quick local feedback time, while focused changed-path tests pass
-remaining error field: staging auth/gateway/model/context reliability, plus runtime package-wide test cost
-highest-impact remaining uncertainty: whether staging product-path runs resolve and record the new per-computer model policy without breaking existing ChatGPT auth
-next executable probe: stage only relevant files, commit/push, monitor CI/deploy, verify staging identity, then run deployed product-path auth/model/context evidence probes
+last checkpoint: substrate patch landed and deployed at 415b87e; local test-loop cleanup adbc04f is committed but not pushed
+current artifact state: auth SQLite busy handling, Fireworks catalog entries, per-computer model policy file, provider image blocks, per-run model routing, run-memory raw-entry retrieval, and the AGENTS dev-shell/runtime-test guidance are implemented. Staging currently reports proxy and sandbox deployed_commit 415b87ee5167382250087b60c26aa18b4423b789.
+what shipped: 415b87ee5167382250087b60c26aa18b4423b789 "Harden runtime model and context substrate" shipped through GitHub Actions run 26344950167 and deployed to staging at 2026-05-23T22:17:41Z. adbc04f871f772dbda6feba33ab2c3abaa639ddf "Speed up local runtime test loop" is local-only at this checkpoint and must be pushed before a clean long run.
+what was proven: focused dev-shell tests passed for auth busy timeout, provider multimodal conversion/validation, gateway per-run model routing, model-policy resolution/fallback, run-memory compaction raw ids, store run-memory retrieval, stub-provider zero-delay behavior, streaming completion polling, and runtime shard script execution for representative shards. Staging health proves 415b87e is live.
+unproven or partial claims: deployed product-path auth/login under long-run pressure, gateway routing through editable per-computer model policy, artifact_ref image resolver into a live multimodal provider call, Trace/run-acceptance display of model/context evidence, product-path compaction retrieval, and the full Chyron human-proof rerun remain unproven.
+belief-state changes: the model/context substrate is no longer purely local; the next risk is product-path integration rather than code existence. Runtime package tests are broad embedded-Dolt integration tests; CI shards them on separate runners, while local execution should use scripts/go-test-runtime-shards or scripts/go-test-local instead of unbounded serial package runs.
+remaining error field: staging auth/gateway/model/context reliability under real Choir-in-Choir load; whether adbc04f changes CI/deploy behavior; whether the Chyron proof can use model/context improvements without exposing new evidence gaps.
+highest-impact remaining uncertainty: whether staging product-path runs resolve and record the new per-computer model policy, preserve auth/gateway reliability, and let Choir-in-Choir reach human proof without Codex hand-coding the experiment.
+next executable probe: push adbc04f, monitor CI/deploy, verify staging identity, then run a narrow product-path auth/model/context smoke before resuming the Chyron proof.
 suggested resume goal string: use the one-line goal string above
 evidence artifact refs: local `nix develop -c go test ./cmd/gateway ./cmd/sandbox ./internal/auth ./internal/provider ./internal/store -count=1`; local `nix develop -c go test ./internal/runtime -run 'TestParseModelPolicyResolvesRoles|TestRuntimeResolvesModelPolicyIntoRunMetadata|TestRuntimeFallsBackToPreviousValidModelPolicy|TestRunMemoryCompactionNamesRawRetrievalEntries|TestRunMemoryCompactionDoesNotSplitToolResultPair|TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete' -count=1 -timeout=90s`; local focused aggregate changed-path test with the same new test set
-rollback refs: current origin/main before mission
+rollback refs: revert 415b87ee5167382250087b60c26aa18b4423b789 for model/context substrate regressions; revert adbc04f871f772dbda6feba33ab2c3abaa639ddf if the local/CI shard script path regresses CI or developer test behavior after push.
 ```

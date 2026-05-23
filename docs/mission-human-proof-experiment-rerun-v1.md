@@ -1,6 +1,6 @@
 # MissionGradient: Human-Proof Experiment Rerun v1
 
-**Status:** checkpoint incomplete after `b808696` staging proof
+**Status:** checkpoint_incomplete — substrate deployed at `415b87e`, local test-loop cleanup `adbc04f` pending push, Chyron human proof still unproven
 **Date:** 2026-05-23
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Depends on:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
@@ -9,7 +9,7 @@
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-human-proof-experiment-rerun-v1.md as a Codex-supervised MissionGradient mission: finish the async supervision/source-transfer hardening, then rerun the four experiments sequentially through Choir-in-Choir. First prove Chyron Shelf Observability end to end: Choir agents must build the candidate change, publish an honest AppChangePackage as the transferable source artifact, attach owner-readable VText narrative plus screenshot/video human proof, verify recipient build/adoption/rollback through product APIs, and expose readable Trace/run-acceptance evidence. A package may be evidence_pending, but it must not be reviewable until human proof exists. Codex may patch runtime/harness/prompts/evidence plumbing but must not hand-code Chyron, Motion, Liquid, or Python experiment features. Continue to Motion, Liquid, and Python only after Chyron proves the loop; otherwise investigate, patch the substrate through git/CI/deploy, and rerun Chyron. Stop only on full Chyron loop success plus sequential next-step readiness, or a named invariant-level blocker with VText, media, Trace, run-acceptance, rollback refs, residual risks, and the next executable probe.
+/goal Run docs/mission-human-proof-experiment-rerun-v1.md as a Codex-supervised MissionGradient mission: restore a clean deployed baseline, then rerun Chyron Shelf Observability through Choir-in-Choir until it produces human-proof feature evidence or a precise substrate blocker. Start from staging 415b87e, where runtime model/context substrate is deployed, and local commit adbc04f, which must be pushed, CI/deploy-monitored, and staging-identity verified before product proof. Run a narrow staging auth/gateway/model-policy/context smoke, then use visible product path and VText dashboard supervision to have Choir agents build Chyron in a candidate computer, publish an honest AppChangePackage as transferable source, attach owner-readable VText narrative plus screenshot/video or benchmark proof, verify recipient build/adoption/rollback through product APIs, and expose readable Trace/run-acceptance evidence. A package may be evidence_pending, but it must not be reviewable until human proof exists. Codex may patch runtime/harness/prompts/evidence plumbing but must not hand-code Chyron, Motion, Liquid, or Python experiment features. Continue to Motion, Liquid, and Python only after Chyron proves the loop; otherwise investigate, patch the substrate through git/CI/deploy, and rerun Chyron. Stop only on full Chyron loop success plus sequential next-step readiness, or a named invariant-level blocker with VText, media, Trace, run-acceptance, rollback refs, residual risks, and the next executable probe.
 ```
 
 ## Mission Frame
@@ -290,13 +290,15 @@ move to the next experiment while the current one has only machine receipts.
 Required local checks for platform patches:
 
 ```text
-nix develop -c go test ./internal/runtime -count=1
+nix develop -c scripts/go-test-runtime-shards
+nix develop -c scripts/go-test-local
 nix develop -c go test ./internal/vmctl ./internal/vmmanager -count=1
 npm --prefix frontend run build
 ```
 
-Use narrower focused tests first when iterating, but do not skip the relevant
-full package tests before push when runtime contracts change.
+Use narrower focused tests first when iterating. The runtime package is broad
+and embedded-Dolt-heavy; use the sharded script for real local runtime coverage
+instead of an unbounded serial `go test ./internal/runtime` run.
 
 Required landing loop for behavior-changing platform changes:
 
@@ -330,6 +332,17 @@ AppChangePackage
 ```text
 status: checkpoint_incomplete
 last checkpoint:
+  Runtime model/context substrate shipped at 415b87e and staging currently
+  reports proxy and sandbox deployed_commit 415b87ee5167382250087b60c26aa18b4423b789.
+  A local follow-up commit adbc04f871f772dbda6feba33ab2c3abaa639ddf improves
+  the runtime test loop by removing default artificial stub-provider delay,
+  deleting a no-op sleep-only test, replacing one streaming sleep with terminal
+  polling, and adding shared local/CI runtime shard scripts. That commit is
+  local-only at this checkpoint and must be pushed/verified before the next
+  long product run.
+
+  Previous Chyron source-transfer/adoption proof remains useful but
+  incomplete:
   Chyron source-transfer/adoption proof reached on staging after iterative
   runtime fixes. The proof worker saw the product-visible AppChangePackage
   after the worker-delegation preload fix, and recipient build/adoption/rollback
@@ -347,6 +360,11 @@ current artifact state:
   worker run starts. Apps & Changes now has a product-visible verified adoption
   preview route backed by the recipient build workspace; ordinary preview is
   still gated by a verified/adopted/rolled_back adoption state and owner scope.
+  Runtime model/context substrate has also landed: auth busy handling,
+  Fireworks model catalog additions, editable per-computer model policy,
+  provider image blocks, per-run model routing, and run-memory raw-entry
+  retrieval. Local test execution guidance now points agents to dev-shell
+  sharded runtime tests.
 what shipped:
   a28a7a added this mission. 8ad20d8 normalized ledger role refs for adoption
   builds. b222079 made duplicate worker starts idempotent. aee2b81 honored
@@ -355,6 +373,10 @@ what shipped:
   prompt. b808696 serves verified adoption UI previews from recipient build
   workspaces. CI run 26342292117 passed for b808696, and Node B staging health
   reported proxy and sandbox deployed_commit b808696 at 2026-05-23T20:07:36Z.
+  415b87e hardened runtime model/context substrate; GitHub Actions run
+  26344950167 passed and staging health reported proxy/sandbox deployed_commit
+  415b87e at 2026-05-23T22:17:41Z. adbc04f test-loop cleanup is committed
+  locally but not yet pushed.
 what was proven:
   On staging 81d29d2, Chyron package 466c8786-4bc1-4b8c-8be9-7aeb45226707 was
   published as unlisted with app_id
@@ -384,17 +406,18 @@ belief-state changes:
   first show the auth/session path is healthy enough for long product-path
   Playwright runs.
 remaining error field:
-  Whether the login/begin "failed to save challenge" error was transient,
-  account/session-state-specific, or a real auth persistence regression. If it
-  is real, Chyron rerun should pause for root-cause and a platform patch before
-  attempting more experiment work.
+  Whether auth/gateway/model-policy/context behavior remains stable under a
+  real product-path Chyron run after the 415b87e substrate deploy; whether
+  adbc04f changes CI/deploy behavior after push; whether the next Chyron run
+  can produce human-readable VText/media proof instead of only package/build
+  receipts.
 highest-impact remaining uncertainty:
   Can Choir itself produce the first useful self-development change without
   Codex hand-coding it?
 next executable probe:
-  Run a narrow staging auth/login smoke for the Playwright proof account and
-  inspect auth persistence logs if it fails. If auth is healthy, rerun the
-  Chyron proof against b808696 and require the proof harness to open
+  Push adbc04f, monitor CI/deploy, verify staging identity, then run a narrow
+  staging auth/gateway/model-policy/context smoke. If healthy, rerun the
+  Chyron proof and require the proof harness to open
   /api/adoptions/{adoption_id}/preview after verification and capture
   screenshot/video of real behavior. If auth is not healthy, patch auth
   challenge persistence through git/CI/deploy, verify staging identity, and
@@ -403,6 +426,7 @@ suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
   docs/mission-async-supervision-runtime-hardening-v0.md;
+  docs/mission-runtime-model-context-substrate-v0.md;
   /Users/wiz/go-choir/test-results/chyron-sequential-b808696-20260523T201837Z;
   /Users/wiz/go-choir/test-results/frontend-tests-chiron-sequ-68a22-evidence-or-precise-blocker
 rollback refs:
@@ -411,6 +435,9 @@ rollback refs:
   preloading exposes packages outside normal visibility rules. Revert b808696
   if adoption preview leaks paths or serves previews for non-owner,
   non-verified adoption records.
+  Revert 415b87e if model/context substrate regresses auth/gateway/runtime
+  behavior. Revert adbc04f after it lands if the shared runtime shard script
+  path regresses CI or local developer test behavior.
 deferred adjacent work:
   Runtime model catalog/config should become durable runtime configuration:
   adding model ids to an already-configured provider should not require a
