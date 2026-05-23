@@ -37,21 +37,27 @@ behavior for the specific contract being claimed.
 
 ## Current Facts
 
-- The deployed worker VM currently includes `pkgs.playwright-driver` and
-  `PLAYWRIGHT_BROWSERS_PATH` through commit
-  `6135a245cb4b1a15dd1a3d5b362320025ca0d321`.
-- Choir runtime already has Obscura hooks:
+- Staging now serves commit `f452977af7532e99daf7850fd0b635915c3082e6`.
+- Worker/candidate VM images now include the pinned Obscura package and no
+  longer carry the Playwright browser bundle/environment as the VM-local
+  browser substrate.
+- Fresh deployed worker proof shows `/api/browser/capabilities` returning
+  provider `obscura`, mode `backend`, substrate `obscura_cli_fetch`,
+  configured/available `true`, status `ready`, and binary `obscura`.
+- A fresh deployed worker browser session successfully navigated to
+  `https://example.com`, returned text and link snapshots, and was then closed.
+- The deployed `hibernate-worker` vmctl endpoint can now hibernate typed worker
+  VMs without touching the parent desktop; the proof worker and parent were both
+  left hibernated.
+- Choir runtime has Obscura hooks:
   `CHOIR_OBSCURA_BIN` / `OBSCURA_BIN`, optional
   `CHOIR_OBSCURA_CDP_SCREENSHOTS`, and `/api/browser/*` capability reporting.
-- Those hooks are not currently packaged/configured inside the worker VM.
 - Previous Browser docs prove host-process Obscura text/html/link snapshots,
   opt-in CDP screenshots, persistent sessions, and bounded fill/click control.
-- The known unresolved boundary is VM-local execution: do not expose `vm_id`,
-  worker sandbox URLs, or vmctl handles through browser-public APIs.
-- A local go-choir patch now packages a pinned Obscura fork revision and wires
-  it into the sandbox VM while removing Playwright browser environment from the
-  guest. This patch has Linux/Nix build proof on Node A, but it has not yet
-  been pushed, deployed, or verified on staging.
+- The remaining Obscura-specific fidelity boundary is screenshot/control:
+  VM-local text/html/link extraction is proven, while screenshots/video and
+  behavior proof still require external Playwright/Chrome verifier evidence or
+  a separately proven Obscura CDP screenshot/control contract.
 
 ## What Is Special In Our Obscura Fork
 
@@ -301,18 +307,18 @@ Required evidence:
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: ported the narrow external-module Obscura slice onto upstream main, pushed Obscura branch `codex/choir-obscura-upstream-merge-2026-05-22`, packaged that commit in go-choir Nix, removed Playwright browser wiring from the sandbox VM, and proved the Obscura package plus full guest image build on Node A.
-current artifact state: go-choir staging still serves `6135a` with Playwright browser wiring in worker VMs. The local worktree replaces that VM dependency with pinned Obscura, sets `CHOIR_OBSCURA_BIN` / `OBSCURA_BIN`, and updates worker/super prompt contracts to treat Chrome/Playwright as external verifier tooling.
-what shipped: Obscura fork branch `348a651e287ad370546762e78fc2095a7d33dc93` was committed and pushed. No go-choir platform behavior for this tangent has shipped yet.
-what was proven: blind full cherry-pick conflicts in 13 files; narrow Obscura runtime slice passes `cargo test -p obscura-js --lib`; Node A built `.#packages.x86_64-linux.obscura`; `obscura fetch https://example.com --dump text --timeout 10 --quiet` returned expected text; Node A built `.#guest-image --no-link` with Obscura in the sandbox VM graph; Obscura closure is 507.9 MiB versus `playwright-driver.browsers` at 2.0 GiB.
-unproven or partial claims: the go-choir Obscura VM patch has not been committed, pushed, built by CI, deployed, or verified on staging. VM-local `/api/browser/capabilities`, CDP screenshot/control, candidate preview, and Chiron rerun proof are still missing. Most old Choir Obscura patch-stack features remain intentionally unported until needed.
-belief-state changes: the heavy Playwright browser bundle is not necessary to keep in every worker VM merely to provide a VM-local browser/extraction primitive; Obscura can now be built reproducibly enough for the next platform proof, but its screenshot/control fidelity still needs product-path verification.
-remaining error field: land the go-choir Obscura VM patch through CI/deploy, verify staging identity, launch a fresh worker/candidate VM, prove `obscura` and `CHOIR_OBSCURA_BIN` inside the guest, verify `/api/browser/capabilities` and candidate preview evidence, then rerun Chiron through Choir-in-Choir.
-highest-impact remaining uncertainty: whether reconciled Obscura can produce enough owner-readable evidence for Chiron/Motion/Liquid without Chrome-level rendering.
-next executable probe: run local focused tests/diff checks, commit and push the go-choir Obscura VM patch, monitor CI/deploy, then run staging VM-local Obscura capability and Chiron preview proof.
+last checkpoint: shipped the Obscura VM substrate at `ddc5069dd69e020fb0801941b4f80764559c5ec7`, then shipped `f452977af7532e99daf7850fd0b635915c3082e6` to add explicit internal typed-worker hibernation for proof cleanup. Fresh staging worker proof passed and both proof worker and parent were hibernated afterward.
+current artifact state: staging proxy and upstream sandbox both report `f452977af7532e99daf7850fd0b635915c3082e6`. Worker/candidate VMs use pinned Obscura for backend text/html/link browser extraction through `CHOIR_OBSCURA_BIN` / `OBSCURA_BIN`; Chrome/Playwright remains external verifier tooling, not a VM-local browser dependency.
+what shipped: Obscura fork branch `348a651e287ad370546762e78fc2095a7d33dc93`; go-choir commit `ddc5069dd69e020fb0801941b4f80764559c5ec7` (`Use Obscura in worker VMs`); go-choir commit `f452977af7532e99daf7850fd0b635915c3082e6` (`Add vmctl worker hibernate endpoint`). GitHub Actions run `26318375143` passed and deployed `ddc5069`; GitHub Actions run `26318837141` passed and deployed `f452977`.
+what was proven: blind full Obscura cherry-pick conflicts in 13 files; narrow Obscura runtime slice passes `cargo test -p obscura-js --lib`; Node A built `.#packages.x86_64-linux.obscura`; `obscura fetch https://example.com --dump text --timeout 10 --quiet` returned expected text; Node A built `.#guest-image --no-link`; Obscura closure is 507.9 MiB versus `playwright-driver.browsers` at 2.0 GiB; staging `/health` reports proxy/upstream at `f452977`; a fresh deployed worker `worker-ed239185b8596177` on VM `vm-840aa642db68196a0e4359085cfb28a0` reported Obscura backend capabilities, created browser session `b134f3a2-70e6-4199-af4d-fc70c77eeb8c`, navigated to `https://example.com`, returned the expected `Example Domain` text snapshot and one link, closed the session, and then hibernated through `/internal/vmctl/hibernate-worker`.
+unproven or partial claims: Obscura CDP screenshot/control is not yet proven in deployed worker VMs. Candidate preview, screenshots/video, and Chiron behavior proof still need owner-readable media evidence, likely through external Playwright/Chrome until Obscura CDP screenshot/control is separately proven. Most old Choir Obscura patch-stack features remain intentionally unported until needed.
+belief-state changes: the VM-local browser substrate no longer needs the heavy Playwright browser bundle for extraction and simple navigation snapshots. The proof loop also needs explicit typed-worker cleanup; that is now present as internal vmctl hibernation rather than broad process killing.
+remaining error field: return to `docs/mission-human-proof-experiment-rerun-v0.md` and rerun Chiron through Choir-in-Choir with Obscura as the VM-local extraction substrate and external Playwright/Chrome as bounded human-media verifier. If screenshot/control must become VM-local, define and prove a separate Obscura CDP screenshot/control slice rather than smuggling Chrome back into every VM.
+highest-impact remaining uncertainty: whether the next Chiron rerun can produce an owner-pullable unlisted AppChangePackage with live VText narrative, screenshots/video, recipient build/adoption evidence, and rollback, without Codex hand-coding the feature.
+next executable probe: run the Chiron rerun sequentially through the visible product path, requiring an unlisted owner-pullable package, causal VText dashboard updates, media evidence from external verifier tooling, recipient build/adoption proof, and rollback refs.
 suggested resume goal string: use the one-line goal string in this file.
-evidence artifact refs: `/Users/wiz/obscura`; `/Users/wiz/obscura-upstream-merge`; Obscura commit `348a651e287ad370546762e78fc2095a7d33dc93`; Node A `/tmp/go-choir-obscura-probe`; Obscura output `/nix/store/gc6qvq656dm1wvxid97cpcxk69pfs9g6-obscura-0.1.0-choir-348a651`; guest image output `/nix/store/8fimb6vls8xj6ld9y1nyj0lyn5620wam-go-choir-guest-image`; `docs/mission-human-proof-experiment-rerun-v0.md`.
-rollback refs: revert the eventual go-choir Obscura VM patch if staging guest image or worker browser capability fails; revert `2995853a9ea80c23a6268035b5a87737e894d9eb` and `6135a245cb4b1a15dd1a3d5b362320025ca0d321` after Obscura replacement lands if Playwright-in-VM remains undesirable.
+evidence artifact refs: `/Users/wiz/obscura`; `/Users/wiz/obscura-upstream-merge`; Obscura commit `348a651e287ad370546762e78fc2095a7d33dc93`; Node A `/tmp/go-choir-obscura-probe`; Obscura output `/nix/store/gc6qvq656dm1wvxid97cpcxk69pfs9g6-obscura-0.1.0-choir-348a651`; guest image output `/nix/store/8fimb6vls8xj6ld9y1nyj0lyn5620wam-go-choir-guest-image`; GitHub Actions runs `26318375143` and `26318837141`; staging `/health`; fresh proof user `obscura-proof-1779497627`; proof worker `worker-ed239185b8596177`; proof VM `vm-840aa642db68196a0e4359085cfb28a0`; proof browser session `b134f3a2-70e6-4199-af4d-fc70c77eeb8c`; `docs/mission-human-proof-experiment-rerun-v0.md`.
+rollback refs: revert `ddc5069dd69e020fb0801941b4f80764559c5ec7` if Obscura VM substrate regresses worker browser extraction; revert `f452977af7532e99daf7850fd0b635915c3082e6` if the internal worker hibernation endpoint causes vmctl lifecycle regressions; revert `2995853a9ea80c23a6268035b5a87737e894d9eb` and `6135a245cb4b1a15dd1a3d5b362320025ca0d321` if Playwright-in-VM cleanup needs to be audited separately.
 ```
 
 ## Stopping Condition
