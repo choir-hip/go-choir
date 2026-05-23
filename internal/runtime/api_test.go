@@ -900,6 +900,29 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			"sandbox_url":   "http://127.0.0.1:8085",
 		},
 	})
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-start-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(7*time.Second), "start_worker_delegation", map[string]any{
+		"status":             "worker_run_active",
+		"state":              string(types.RunRunning),
+		"worker_vm_id":       "vm-runtime-supervision",
+		"worker_id":          "worker-runtime-supervision",
+		"worker_sandbox_url": "http://127.0.0.1:8085",
+		"loop_id":            "run-worker-runtime-supervision",
+		"event_count":        3,
+	})
+	appendAcceptanceToolErrorForTrajectory(t, rt, "event-duplicate-start-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(8*time.Second), "start_worker_delegation", "tool_error: duplicate start_worker_delegation payload already planned in this turn; wait for the first worker result instead of starting the same worker delegation twice")
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-observe-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(9*time.Second), "observe_worker_delegation", map[string]any{
+		"status":                       "worker_observed",
+		"state":                        string(types.RunRunning),
+		"worker_vm_id":                 "vm-runtime-supervision",
+		"worker_id":                    "worker-runtime-supervision",
+		"worker_sandbox_url":           "http://127.0.0.1:8085",
+		"loop_id":                      "run-worker-runtime-supervision",
+		"event_count":                  9,
+		"worker_channel_message_count": 1,
+		"worker_update_checkpoint":     "worker_submit_update_mirrored",
+		"mirrored_worker_update_count": 1,
+		"mirrored_worker_update_ids":   []string{"mirrored-worker-update-run-super-runtime-supervision-worker-direct-update"},
+	})
 	appendAcceptanceToolResultForTrajectory(t, rt, "event-finish-runtime-supervision", "run-super-runtime-supervision", "agent-super-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(10*time.Second), "finish_worker_delegation", map[string]any{
 		"status":                       "worker_run_completed",
 		"state":                        string(types.RunCompleted),
@@ -1409,6 +1432,10 @@ func appendAcceptanceToolInvoked(t *testing.T, rt *Runtime, eventID, runID, agen
 }
 
 func appendAcceptanceToolError(t *testing.T, rt *Runtime, eventID, runID, agentID string, at time.Time, tool, output string) {
+	appendAcceptanceToolErrorForTrajectory(t, rt, eventID, runID, agentID, "traj-acceptance", "channel-acceptance", at, tool, output)
+}
+
+func appendAcceptanceToolErrorForTrajectory(t *testing.T, rt *Runtime, eventID, runID, agentID, trajectoryID, channelID string, at time.Time, tool, output string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
 		"tool":       tool,
@@ -1424,9 +1451,9 @@ func appendAcceptanceToolError(t *testing.T, rt *Runtime, eventID, runID, agentI
 		EventID:      eventID,
 		RunID:        runID,
 		AgentID:      agentID,
-		ChannelID:    "channel-acceptance",
+		ChannelID:    channelID,
 		OwnerID:      "user-alice",
-		TrajectoryID: "traj-acceptance",
+		TrajectoryID: trajectoryID,
 		Timestamp:    at,
 		Kind:         types.EventToolResult,
 		Payload:      payload,

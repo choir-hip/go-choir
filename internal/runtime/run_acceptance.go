@@ -341,7 +341,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 				details["status"] = "invoked_without_terminal_result"
 			}
 		}
-		if len(refs) > 0 {
+		if len(refs) > 0 && !acceptanceRecordHasPassedCheckpoint(builder.record, "worker_supervision_observed") {
 			builder.addCheckpoint("worker_delegated", "blocked", blockedAt, blockedSeq, refs, details)
 		}
 	}
@@ -1101,17 +1101,9 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 
 func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAcceptanceInvariantCheck {
 	kindSet := map[string]bool{}
-	var lastSeq int64
-	orderOK := true
 	for _, checkpoint := range rec.Checkpoints {
 		if checkpoint.State == "passed" {
 			kindSet[checkpoint.Kind] = true
-		}
-		if checkpoint.StreamSeq > 0 {
-			if lastSeq > 0 && checkpoint.StreamSeq < lastSeq {
-				orderOK = false
-			}
-			lastSeq = checkpoint.StreamSeq
 		}
 	}
 	promptPathObserved := kindSet["submitted"] && kindSet["vtext_opened"] && kindSet["super_requested"]
@@ -1137,11 +1129,63 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 		},
 		{
 			Name:   "checkpoint_causal_order",
-			State:  stateForBool(orderOK),
-			Detail: "checkpoint stream sequence is monotonic where trace events provide stream_seq",
+			State:  stateForBool(acceptanceCheckpointPhaseOrderOK(rec.Checkpoints)),
+			Detail: "primary passed checkpoint phases are causal where trace events provide stream_seq; repeated observations and superseded async probes are tolerated",
 		},
 	}
 	return checks
+}
+
+func acceptanceRecordHasPassedCheckpoint(rec types.RunAcceptanceRecord, kind string) bool {
+	for _, checkpoint := range rec.Checkpoints {
+		if checkpoint.Kind == kind && checkpoint.State == "passed" {
+			return true
+		}
+	}
+	return false
+}
+
+func acceptanceCheckpointPhaseOrderOK(checkpoints []types.RunAcceptanceCheckpoint) bool {
+	phaseByKind := map[string]int{
+		"super_requested":             1,
+		"worker_leased":               2,
+		"worker_delegated":            3,
+		"worker_supervision_observed": 3,
+		"app_package_published":       4,
+		"app_adoption_verifying":      5,
+		"app_adoption_verified":       6,
+		"app_adoption_promoted":       7,
+		"rollback_available":          8,
+		"compacted":                   9,
+		"continued":                   10,
+	}
+	earliestByPhase := map[int]int64{}
+	for _, checkpoint := range checkpoints {
+		if checkpoint.State != "passed" || checkpoint.StreamSeq <= 0 {
+			continue
+		}
+		phase, ok := phaseByKind[checkpoint.Kind]
+		if !ok {
+			continue
+		}
+		if current, exists := earliestByPhase[phase]; !exists || checkpoint.StreamSeq < current {
+			earliestByPhase[phase] = checkpoint.StreamSeq
+		}
+	}
+	var lastSeq int64
+	for phase := 1; phase <= 10; phase++ {
+		seq := earliestByPhase[phase]
+		if seq <= 0 {
+			continue
+		}
+		if lastSeq > 0 && seq < lastSeq {
+			return false
+		}
+		if seq > lastSeq {
+			lastSeq = seq
+		}
+	}
+	return true
 }
 
 func acceptanceHasBlockedInvariant(checks []types.RunAcceptanceInvariantCheck) bool {
