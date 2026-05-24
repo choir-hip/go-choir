@@ -944,6 +944,33 @@ The follow-up patch makes that backfill more tolerant:
 Expected deploy class: `gateway,sandbox` service pointers only, no host OS
 switch, no guest image rebuild, and no vmctl restart.
 
+Acceptance commit: `ffa7fbf753f047e2014ffa7b09f1bd5c80477847`.
+
+- CI run: `26370833003`
+- FlakeHub rolling publish: `26370833002`
+- deploy job duration: `14s`
+- selected classes:
+  - `deploy_frontend=false`
+  - `host_services=gateway,sandbox`
+  - `deploy_host_os=false`
+  - `deploy_ordinary_guest=false`
+  - `deploy_playwright_guest=false`
+  - `deploy_vmctl_restart=false`
+- Node B fast-built `gateway` and `sandbox` in parallel.
+- Node B nix/service build phase: `5s`
+- host service install/restart phase: `2s`
+- hot-refresh phase for active interactive computers: `1s`
+- remote deploy through health and asset graph: `9s`
+- skipped frontend bundle, host NixOS closure, NixOS switch, ordinary guest
+  image, Playwright guest image, guest image install, and vmctl restart.
+- hot-refreshed two active primary computers onto the new sandbox runtime
+  package without rebooting vmctl.
+- staging `/health` reported deployed commit
+  `ffa7fbf753f047e2014ffa7b09f1bd5c80477847`.
+
+This is the current best evidence for the service-pointer path: a real runtime
+behavior fix, deployed and hot-refreshed into active computers in seconds.
+
 ### Updated Residual Risks
 
 - Full host-root deploys still cost minutes on the GitHub runner and should be
