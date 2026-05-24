@@ -8,7 +8,7 @@
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-fireworks-reasoning-protocol-hardening-v0.md as a Codex-operated MissionGradient mission: harden Choir's provider protocol, tool-loop behavior, and dynamic model policy so any configured model can safely serve any compatible agent role. Treat current ChatGPT/Fireworks assignments as editable defaults, not architecture: conductor, VText, researcher, super, vsuper, co-super, verifier, and future roles must all be selectable across ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later catalog models when the current turn's modality and tool needs match. Research current Fireworks OpenAI-compatible chat-completions docs, Fireworks reasoning docs, Fireworks DeepSeek V4 Flash/Pro behavior, Fireworks Kimi K2.6 behavior, Kimi K2.6 docs, DeepSeek V4 reasoning-content semantics as secondary context, and Choir's ChatGPT Responses adapter as a comparison path. Run a deep request-shape and role matrix for max_tokens omitted vs bounded vs model maximum, reasoning_effort omitted/none/low/medium/high/max, thinking/reasoning budget parameters where supported, streaming vs non-streaming, tool-calling vs plain chat, required-tool behavior for VText/appagents, multimodal image input where supported, text-only verification where image input is not needed, and reasoning_content/thinking carry-forward across multi-turn tool loops. Prove behavior first with direct provider probes, then local Choir provider/runtime/tool-loop harness loops, then Node B/staging product-path prompt-bar runs. Fix the provider/runtime/model-policy/context plumbing so simple prompts do not hang, VText cannot spend a whole call writing uncaptured prose instead of producing a revision/tool action, long outputs remain possible, provider calls have correct per-call deadlines, interim progress is visible in Trace/VText, unsupported provider parameters are omitted, text-only models can be selected for non-image roles and verifier tasks, multimodal requirements are enforced only when the task actually needs media input, and per-computer model policy can be changed dynamically and agentically through durable product state rather than Node B env edits. Do not restore tiny 8k/16k ceilings as a false fix, hard-code one model per role, treat DeepSeek text-only status as unusability for verification, pass OpenAI Responses parameters to OpenAI Chat Completions providers, drop required reasoning_content when a provider requires carry-forward, hide hangs behind longer loop deadlines, or claim success without staging evidence for conductor, VText, researcher, super/vsuper/co-super, verifier text-only, Kimi multimodal, and runtime policy-edit paths. Land through git/CI/deploy, verify staging identity, update docs/model policy notes, and finish with a provider/model-policy protocol certificate, rollback refs, residual risks, and the next executable probe back toward the Chyron/Motion/Liquid/Python experiment rerun.
+/goal Run docs/mission-fireworks-reasoning-protocol-hardening-v0.md as a Codex-operated MissionGradient mission: harden Choir's provider protocol, tool-loop behavior, and dynamic model policy so any configured model can safely serve any compatible agent role. Treat current ChatGPT/Fireworks assignments as editable defaults, not architecture: conductor, VText, researcher, super, vsuper, co-super, verifier, and future roles must all be selectable across ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later catalog models when the current turn's modality and tool needs match. Research current Fireworks OpenAI-compatible chat-completions docs, Fireworks reasoning docs, Fireworks-hosted DeepSeek V4 Flash/Pro behavior, Fireworks-hosted Kimi K2.6 behavior, Kimi K2.6 docs, DeepSeek V4 reasoning-content semantics as secondary context only, and Choir's ChatGPT Responses adapter as a comparison path. Run a deep request-shape and role matrix for max_tokens omitted vs bounded vs model maximum, reasoning_effort omitted/none/low/medium/high/max, thinking/reasoning budget parameters where supported, streaming vs non-streaming, tool-calling vs plain chat, required-tool behavior for VText/appagents, multimodal image input where supported, text-only verification where image input is not needed, and reasoning_content/thinking carry-forward across multi-turn tool loops. Prove behavior first with direct provider probes, then local Choir provider/runtime/tool-loop harness loops, then Node B/staging product-path prompt-bar runs. Fix the provider/runtime/model-policy/context plumbing so simple prompts do not hang, VText cannot spend a whole call writing uncaptured prose instead of producing a revision/tool action, long outputs remain possible, provider calls have correct per-call deadlines, interim progress is visible in Trace/VText, unsupported provider parameters are omitted, text-only models can be selected for non-image roles and verifier tasks, multimodal requirements are enforced only when the task actually needs media input, and per-computer model policy can be changed dynamically and agentically through durable product state rather than Node B env edits. Do not restore tiny 8k/16k ceilings as a false fix, hard-code one model per role, treat DeepSeek text-only status as unusability for verification, pass OpenAI Responses parameters to OpenAI Chat Completions providers, drop required reasoning_content when a provider requires carry-forward, hide hangs behind longer loop deadlines, or claim success without staging evidence for conductor, VText, researcher, super/vsuper/co-super, verifier text-only, Kimi multimodal, and runtime policy-edit paths. Land through git/CI/deploy, verify staging identity, update docs/model policy notes, and finish with a provider/model-policy protocol certificate, rollback refs, residual risks, and the next executable probe back toward the Chyron/Motion/Liquid/Python experiment rerun.
 ```
 
 ## Mission Frame
@@ -23,13 +23,16 @@ Choir now has multiple usable model/provider families:
   that needs screenshots or other image inputs.
 
 The current mapping is a default model policy, not a permanent architecture.
-Choir should allow any configured model to serve any compatible role. Conductor,
-VText, researcher, super, vsuper, co-super, verifier, and future roles are
-runtime consumers of model capabilities, not hard-coded provider homes. The
-selection should be editable at runtime through durable product state, including
-agentic edits by `super` in response to an owner prompt, without patching Node B
-environment variables or deploying a new platform build just to change a
-computer's model policy.
+In practice this means both directions must be possible: if the active default
+puts conductor/super on ChatGPT, those roles should still be movable to
+Fireworks or another compatible model; if the active default puts VText or
+researcher on Fireworks, those roles should still be movable to ChatGPT or
+another compatible model. Conductor, VText, researcher, super, vsuper,
+co-super, verifier, and future roles are runtime consumers of model
+capabilities, not hard-coded provider homes. The selection should be editable
+at runtime through durable product state, including agentic edits by `super` in
+response to an owner prompt, without patching Node B environment variables or
+deploying a new platform build just to change a computer's model policy.
 
 After restoring full model output budgets, simple staging runs began hanging at
 `vtext loop started`, and some runs failed with Fireworks context deadline or
@@ -74,7 +77,8 @@ The artifact is a deployed provider/runtime substrate where:
 - researcher routes can call web/search/fetch tools and report findings;
 - super/vsuper/co-super can run tool loops without protocol errors;
 - conductor, VText, researcher, super, vsuper, co-super, verifier, and future
-  roles can be switched among configured compatible models without code edits;
+  roles can be switched among configured compatible models without code edits
+  or platform deploys;
 - DeepSeek V4 Flash/Pro can be used for verifier tasks that do not require
   image input;
 - Kimi K2.6 can process screenshots/images through the declared multimodal
@@ -82,7 +86,9 @@ The artifact is a deployed provider/runtime substrate where:
 - multimodal requirements are declared and enforced at the task/turn boundary,
   not by permanently locking verifier roles to one model;
 - per-computer model policy is durable product state and can be edited by the
-  owner or by `super` through the product path;
+  owner or by `super` through the product path, including ordinary natural
+  language requests such as asking Choir to use a faster writing model or a
+  stronger coding model for subsequent runs;
 - long output remains possible without making every trivial call reserve the
   model's maximum token budget or letting appagents burn the whole call outside
   their required tool/action path;
@@ -257,6 +263,9 @@ Increase realism while preserving the same object:
    verifier text-only, and verifier multimodal.
 7. Runtime policy edit: owner or `super` changes a computer's model selection,
    then a subsequent run uses the new effective policy without platform deploy.
+8. Role-agnostic policy proof: move at least one foreground role and one
+   background/tool-heavy role to a different compatible model family through
+   product state, then prove the next run records and uses that policy.
 
 Do not skip from direct API success to product success. Direct API success only
 proves credentials and a request shape, not Choir's harness.
@@ -282,6 +291,8 @@ Add or preserve observability so a hung run is diagnosable:
 - Do not treat the current conductor/super defaults as proof that only ChatGPT
   can serve foreground roles, or the current VText/researcher defaults as proof
   that only Fireworks can serve document/research roles.
+- Do not treat `RecommendedFor` catalog hints as enforcement. They are UI and
+  policy suggestions; capability checks are what decide compatibility.
 - Do not let VText or another canonical-artifact appagent answer in plain text
   when the product state requires a tool-mediated revision/action.
 - Do not treat text-only models as invalid for verifier work that does not need
@@ -327,6 +338,8 @@ Add or preserve observability so a hung run is diagnosable:
   blocker before provider call.
 - Runtime policy tests prove per-computer policy can change effective model
   selection without code edits.
+- Product-path policy tests prove an owner or `super` can change effective
+  model selection for a computer without a platform deploy or Node B env edit.
 - Tool-choice/tool-requirement tests prove appagents that must mutate canonical
   artifacts cannot exhaust a model call with uncaptured plain text.
 
@@ -373,12 +386,12 @@ last checkpoint: bounded required-tool retry patch and focused tests on 2026-05-
 current artifact state: commit 9a30124 separates model catalog max from requested max_tokens, omits Fireworks max_tokens unless policy explicitly sets it, records optional max_tokens in model policy metadata, emits provider_call progress before blocking provider calls, and logs gateway request shape with tools/system/max/reasoning fields. Commit 67cb492 adds `tool_choice` through runtime, gateway, gatewayruntime, provider bridges, Fireworks Chat Completions, and ChatGPT Responses; VText agent revision runs send `tool_choice:"required"` on the first provider call. Commit 0c4c0ff additionally treats required-tool turns as bounded control turns: required-tool calls cap at 4096 output tokens, retry once through the tool path if the model stops at max_tokens without a tool call, then restore the full selected model budget for normal content turns.
 what shipped: 0c4c0ffe0cfcc528c6d9769e92b3cf40b4063c08 reached staging; `/health` reported proxy and upstream deployed_commit at 0c4c0ff. CI and FlakeHub publish runs for 0c4c0ff succeeded, and the staging deploy job completed in 16s.
 what was proven: focused local runtime/provider/gateway/gatewayruntime tests passed; direct Fireworks probes on Node B show DeepSeek V4 Flash accepts reasoning_effort omitted/none/low/medium/high/max; DeepSeek V4 Flash/Pro return tool_calls quickly; Kimi K2.6 handles a valid image_url; a Fireworks tool loop can complete a second turn without carrying reasoning_content back; gateway direct probes with large VText-like prompts/tools complete, with omitted max_tokens faster than forcing 131072; deployed gateway E2E prompt-bar smoke passed and opened a VText with initial revisions. Direct Fireworks probes show Fireworks accepts `tool_choice:"required"` for DeepSeek V4 Flash, DeepSeek V4 Pro, and Kimi K2.6 in simple and synthetic long-system tool requests, returning `finish_reason=tool_calls`. Focused tests prove `tool_choice` reaches Fireworks and ChatGPT request bodies, crosses gateway/gatewayruntime bridges, is visible in provider-call progress, applies to VText agent revision runs, and caps/retries required-tool turns without capping later content turns. Staging product proof after 0c4c0ff: submission `97b766fc-8665-460c-ad02-4a560fd83e21` / document `a08fdca5-1d8f-43d4-a161-e985e42422c2` produced appagent VText revision `48e2ae5d` in about 34s for a Boston weather prompt; Trace showed researcher handoff, live fetch/search activity, 84 moments, and no max_tokens failure.
-unproven or partial claims: the specific deployed Boston weather path now passes, but broader simple prompts and current-events prompts still need repeated product probes. Full role matrix, super/vsuper/co-super smoke, dynamic per-computer policy through product UI/API, ChatGPT comparison path, and Kimi multimodal product verifier path remain unproven.
+unproven or partial claims: the specific deployed Boston weather path now passes, but a deployed short-story prompt (`ddc995d8-ea2a-4d03-bb18-91bcca10ddc8` / document `bb84e8d1-7a05-4bc3-bdea-a8afb5efdfc7`) still failed to advance beyond the initial conductor-created VText after 100 seconds, ending with only 22 moments and 2 revisions. Broader simple prompts, current-events prompts, full role matrix, super/vsuper/co-super smoke, dynamic per-computer policy through product UI/API, ChatGPT comparison path, and Kimi multimodal product verifier path remain unproven.
 belief-state changes: `tool_choice:"required"` is necessary but insufficient for real VText prompts with the full tool catalog. Fireworks can honor required tool calls in direct probes, but DeepSeek V4 Flash can still ignore the constraint in the deployed VText prompt shape. The safer abstraction is to treat required-tool turns as short control turns with retry evidence, while preserving long budgets for ordinary answer/content turns.
 remaining error field: VText/appagent loops may still need model fallback or specific-tool forcing if a second required-tool attempt fails; ChatGPT conductor auth remains a separate residual issue unless it blocks comparison/fallback tests; per-computer dynamic model policy edit path is not yet product-proven.
-highest-impact remaining uncertainty: whether bounded required-tool retry generalizes beyond the Boston weather path to story, current-events, super/vsuper/co-super, text-only verifier, and Kimi multimodal paths.
-next executable probe: prove story/current-events prompts on staging, then prove role-agnostic per-computer policy edits across foreground and background roles.
+highest-impact remaining uncertainty: why the bounded required-tool retry fixed the Boston weather/research path but not the story/VText-only path, and whether role-agnostic policy edits can route around or expose the failure without hard-coding providers by role.
+next executable probe: root-cause the story/VText-only stall from Trace and Node B logs, patch the implicated VText/tool-loop/provider path, then prove story/current-events prompts on staging and prove role-agnostic per-computer policy edits across foreground and background roles.
 suggested resume goal string: use the One-Line Goal String above
-evidence artifact refs: Node B direct/gateway probe output in Codex transcript; focused test commands in Codex transcript; staging health for 0c4c0ff; Playwright gateway E2E result `frontend/test-results/gateway-e2e-deployed/test-results.json`; scratch trajectories `6174ec99-c4ab-472d-a2bc-7d9aa8355f15`, `8805ede8-64ac-497f-b960-bc3308f4c7f1`, `5cc3c612-2c39-4d1b-8026-eccd22fdffce`, `142efe69-da03-44a5-b277-d38712cdd95f`, and `97b766fc-8665-460c-ad02-4a560fd83e21`; local focused test command `nix develop -c go test ./internal/runtime ./internal/provider ./internal/gatewayruntime ./internal/gateway -run 'TestRunToolLoop|TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestCallWithToolsRoutesThroughGatewayWireContract|TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection|TestFireworksProviderCallUsesOpenAIChatCompletions|TestFireworksProviderCallOmitsMaxTokensWhenUnset|TestChatGPTProviderCallSuccess'`
+evidence artifact refs: Node B direct/gateway probe output in Codex transcript; focused test commands in Codex transcript; staging health for 0c4c0ff; Playwright gateway E2E result `frontend/test-results/gateway-e2e-deployed/test-results.json`; scratch trajectories `6174ec99-c4ab-472d-a2bc-7d9aa8355f15`, `8805ede8-64ac-497f-b960-bc3308f4c7f1`, `5cc3c612-2c39-4d1b-8026-eccd22fdffce`, `142efe69-da03-44a5-b277-d38712cdd95f`, `97b766fc-8665-460c-ad02-4a560fd83e21`, and failed story probe `ddc995d8-ea2a-4d03-bb18-91bcca10ddc8`; local focused test command `nix develop -c go test ./internal/runtime ./internal/provider ./internal/gatewayruntime ./internal/gateway -run 'TestRunToolLoop|TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestCallWithToolsRoutesThroughGatewayWireContract|TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection|TestFireworksProviderCallUsesOpenAIChatCompletions|TestFireworksProviderCallOmitsMaxTokensWhenUnset|TestChatGPTProviderCallSuccess'`
 rollback refs: previous deployed provider/model-policy behavior before 9a30124; revert 0c4c0ff and/or 67cb492 if staging regressions appear; git revert 9a30124 if needed, preferably preserving provider_call observability
 ```

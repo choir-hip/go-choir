@@ -8,7 +8,7 @@
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-runtime-model-context-substrate-v0.md as a Codex-operated MissionGradient mission: fix the current blocking runtime issues, add the Fireworks DeepSeek/Kimi models, make per-computer model policy editable as durable text, add multimodal provider message support for screenshots/images, and upgrade run context management using Pi-style batch pruning with recoverable raw tool outputs. Preserve platform provider secrets as server-owned, user model policy as computer-owned editable state, Dolt/product APIs as canonical state, and Trace/VText/run-acceptance as evidence. Land through git/CI/deploy, verify staging identity, and resume the human-proof experiment rerun only after deployed product-path proof shows auth/login, gateway model routing, model policy resolution, multimodal evidence plumbing, and context compaction/retrieval are working or precisely blocked.
+/goal Run docs/mission-runtime-model-context-substrate-v0.md as a Codex-operated MissionGradient mission: fix the current blocking runtime issues, add the Fireworks DeepSeek/Kimi models, make per-computer model policy editable as durable text, add multimodal provider message support for screenshots/images, and upgrade run context management using Pi-style batch pruning with recoverable raw tool outputs. Treat current role-to-model assignments as editable defaults, not architecture: any configured model can serve conductor, VText, researcher, super, vsuper, co-super, verifier, or future roles when its capabilities match the current turn. Preserve platform provider secrets as server-owned, user model policy as computer-owned editable state, Dolt/product APIs as canonical state, and Trace/VText/run-acceptance as evidence. Land through git/CI/deploy, verify staging identity, and resume the human-proof experiment rerun only after deployed product-path proof shows auth/login, gateway model routing, dynamic model policy resolution, modality-aware provider selection, multimodal evidence plumbing, and context compaction/retrieval are working or precisely blocked.
 ```
 
 ## Mission Frame
@@ -20,6 +20,10 @@ the Chyron idea itself. The system needs to be able to:
 - route model calls through the right provider/model without redeploying for
   every model addition;
 - let a user computer modify its own model policy by normal Choir agency;
+- keep role assignments dynamic: ChatGPT, Fireworks DeepSeek V4 Flash/Pro,
+  Fireworks Kimi K2.6, and later catalog models should be selectable for any
+  role whose current turn is compatible with the model's modality and tool
+  capabilities;
 - send screenshots and image evidence to multimodal models;
 - keep long agent runs bounded without losing exact tool-output evidence.
 
@@ -41,6 +45,7 @@ Model policy is user-computer-owned editable state.
 Model calls record the exact resolved provider/model/reasoning used.
 Multimodal evidence is passed as durable artifacts, not loose browser state.
 Run memory pruning removes bulk from hot context, never from durable memory.
+Role-to-model mappings are policy, not code topology.
 ```
 
 ## Real Artifact
@@ -114,7 +119,10 @@ Required behavior:
 
 Model policy must be easy for the user or super to change. The canonical user
 policy should be a durable editable text file inside the computer, not only a
-hidden settings row.
+hidden settings row. The policy is a capability-aware routing preference, not a
+permission to hard-code provider families into roles. `super` should be able to
+edit it in response to an owner prompt, and subsequent runs should use the new
+effective policy without platform redeploy or Node B environment edits.
 
 Candidate location:
 
@@ -170,10 +178,14 @@ requires = ["image", "tool_use"]
 Runtime requirements:
 
 - parse and validate the policy into an effective role table;
+- allow any configured model to be selected for any role when the current turn
+  is compatible with the model's declared text/image/tool capabilities;
 - keep the previous valid policy if an edit is invalid;
 - use platform fallback defaults so a bad policy does not brick the computer;
 - apply policy changes to new runs, not mid-call mutation of already running
   agents;
+- reject or reroute at the task/turn boundary when a policy selects a text-only
+  model for a turn requiring screenshots, images, video frames, or other media;
 - record the exact resolved provider/model/reasoning in run metadata, Trace,
   and run acceptance evidence;
 - let prompt-bar -> VText/super update the text policy through normal

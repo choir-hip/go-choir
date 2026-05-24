@@ -37,6 +37,23 @@ func TestVTextPromptCreativeDraftFastPath(t *testing.T) {
 	}
 }
 
+func TestVTextPromptShortStoryFastPath(t *testing.T) {
+	prompt := "Tell me a short story about a careful computer. Write it as a VText document, under 120 words."
+	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+		t.Fatalf("expected %q to allow an ungrounded creative draft", prompt)
+	}
+	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, true) {
+		t.Fatal("short story conductor seed should not require worker grounding")
+	}
+}
+
+func TestVTextPromptStoryWithCurrentFactsRequiresGrounding(t *testing.T) {
+	prompt := "What's the story with the Iran deal now?"
+	if vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+		t.Fatalf("%q should require grounded research", prompt)
+	}
+}
+
 func TestVTextPromptExplicitSentenceFastPath(t *testing.T) {
 	prompt := "write one short sentence that says VText wrapper cleanup works"
 	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {

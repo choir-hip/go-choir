@@ -1625,9 +1625,15 @@ func vtextPromptAllowsUngroundedCreativeDraft(prompt string) bool {
 	}
 	creativeMarkers := []string{
 		"tell me a story",
+		"tell me a short story",
 		"write a story",
+		"write a short story",
 		"make up a story",
 		"draft a story",
+		"draft a short story",
+		"short story",
+		"fictional story",
+		"fiction",
 		"write one short sentence",
 		"write a short sentence",
 		"write one sentence",
