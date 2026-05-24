@@ -399,6 +399,9 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 		result.Rungs = append(result.Rungs, extractionRung{Name: htmlRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
 	} else if isTextMedia(result.MediaType) {
 		result.Text = strings.TrimSpace(string(raw))
+		if result.MediaType == "application/rss+xml" {
+			result.Title = extractRSSFeedTitle(raw)
+		}
 		result.Rungs = append(result.Rungs, extractionRung{Name: textRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
 	}
 	if len(result.Text) > maxStoredExtractedText {
@@ -834,6 +837,17 @@ func extractReadableHTML(data []byte) (string, string) {
 	return strings.TrimSpace(title), strings.TrimSpace(strings.Join(out, "\n"))
 }
 
+func extractRSSFeedTitle(data []byte) string {
+	source := string(data)
+	if channel := regexp.MustCompile(`(?is)<channel\b[^>]*>(.*?)</channel>`).FindStringSubmatch(source); len(channel) > 1 {
+		source = channel[1]
+	}
+	if matches := regexp.MustCompile(`(?is)<title\b[^>]*>(.*?)</title>`).FindStringSubmatch(source); len(matches) > 1 {
+		return collapseWhitespace(htmlEntityDecode(stripHTMLTags(stripCDATA(matches[1]))))
+	}
+	return ""
+}
+
 func collapseWhitespace(s string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.IsSpace(r) {
@@ -857,6 +871,10 @@ func htmlEntityDecode(source string) string {
 		"&nbsp;", " ",
 	)
 	return replacer.Replace(source)
+}
+
+func stripCDATA(source string) string {
+	return regexp.MustCompile(`(?is)<!\[CDATA\[(.*?)\]\]>`).ReplaceAllString(source, "$1")
 }
 
 func ensureJSONObject(raw json.RawMessage) json.RawMessage {

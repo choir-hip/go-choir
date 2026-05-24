@@ -55,3 +55,14 @@ func TestPodcastSubscriptionTitleNeedsRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractRSSFeedTitle(t *testing.T) {
+	raw := []byte(`<?xml version="1.0"?>
+<rss><channel>
+  <title><![CDATA[Tasteland &amp; Friends]]></title>
+  <item><title>Episode title should not win</title></item>
+</channel></rss>`)
+	if got := extractRSSFeedTitle(raw); got != "Tasteland & Friends" {
+		t.Fatalf("extractRSSFeedTitle() = %q, want %q", got, "Tasteland & Friends")
+	}
+}
