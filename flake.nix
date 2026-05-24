@@ -197,6 +197,7 @@
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
+          vendorHash = "sha256-Zi7CIbMdCmTj2ZhP0J+kNARQAG24v/88KlN5l3S7urE=";
           internalDirs = [
             "internal/server"
             "internal/vmctl"
