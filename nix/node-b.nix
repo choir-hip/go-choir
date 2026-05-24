@@ -553,6 +553,7 @@ in
     nodejs
     pkg-config
     icu
+    icu.dev
     procps
     ripgrep
     vim

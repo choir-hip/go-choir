@@ -305,6 +305,7 @@ jobs:
             "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_FRONTEND='${{ needs.deploy-impact.outputs.deploy_frontend }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' DEPLOY_HOST_OS='${{ needs.deploy-impact.outputs.deploy_host_os }}' HOST_SERVICES='${{ needs.deploy-impact.outputs.host_services }}' bash -s" <<'REMOTE_DEPLOY'
             set -euo pipefail
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+            export PKG_CONFIG_PATH="/run/current-system/sw/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
             deploy_started_at=$(date +%s)
             phase_started_at=$deploy_started_at
             echo "==> Deploy impact classes"

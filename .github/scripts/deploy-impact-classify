@@ -74,6 +74,13 @@ mark_host_os() {
   deploy_vmctl_restart=true
 }
 
+mark_host_os_only() {
+  deploy_needed=true
+  deploy_host_os=true
+  deploy_host=true
+  deploy_vmctl_restart=true
+}
+
 for path in "${changed[@]}"; do
   case "$path" in
     docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go)
@@ -208,11 +215,15 @@ for path in "${changed[@]}"; do
       mark_playwright_guest
       add_explanation "$path -> ordinary + playwright guest images"
       ;;
-    flake.nix|flake.lock|nix/node-b.nix|nix/hardware.nix|nix/disks.nix)
+    flake.nix|flake.lock)
       mark_host_os
       mark_ordinary_guest
       mark_playwright_guest
       add_explanation "$path -> host OS + ordinary + playwright guest images (shared Nix input)"
+      ;;
+    nix/node-b.nix|nix/hardware.nix|nix/disks.nix)
+      mark_host_os_only
+      add_explanation "$path -> host OS only"
       ;;
     nix/*)
       mark_host_os
