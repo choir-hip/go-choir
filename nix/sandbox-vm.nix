@@ -270,6 +270,10 @@ EOF
       RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
       RUNTIME_PROMOTION_SOURCE_REPO = sourceRepoRemote;
       RUNTIME_PROMOTION_WORKSPACE_ROOT = "/mnt/persistent/promotion-workspaces";
+      # Guest health is part of staging acceptance. Stamp the source revision
+      # into the VM runtime so refreshed active computers can prove which guest
+      # image they are serving, even though they do not mount host deploy.env.
+      CHOIR_DEPLOYED_COMMIT = buildCommit;
       # Worker candidate repos need non-interactive commits for export proof.
       GIT_AUTHOR_NAME = "Choir Worker";
       GIT_AUTHOR_EMAIL = "worker@choir.local";
