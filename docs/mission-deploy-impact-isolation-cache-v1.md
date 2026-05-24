@@ -442,8 +442,7 @@ Deployed CI run: `26359636428`.
 The EROFS flag change helped the store-disk builder, but the deploy loop is now
 dominated by ephemeral-runner custom derivation rebuilds and copying the guest
 image outputs to Node B. The next deploy-loop change should let guest images
-build directly on Node B, whose Nix store persists across runs, while keeping
-runner prebuild/copy for frontend, host services, and host OS closures.
+build directly on Node B, whose Nix store persists across runs.
 
 ### Node B Guest Build Evidence
 
@@ -470,3 +469,40 @@ Conclusion: for guest-image deploys, building on Node B from its persistent
 Nix store is currently much faster than building and copying full image outputs
 from ephemeral GitHub runners. Paid cache may still help for custom derivations,
 but it is no longer the first lever for this deploy path.
+
+### Sandbox Model Policy Deploy Evidence
+
+Commit `0c8743e7bc9f3a29de7ccbe82949e6b474dfc54a` moved generated and
+fallback foreground agent defaults off ChatGPT and onto the available
+Fireworks models:
+
+- `conductor`: `accounts/fireworks/models/deepseek-v4-flash`
+- `super`, `vsuper`, `co-super`: `accounts/fireworks/models/deepseek-v4-pro`
+- `researcher` and `vtext`: `accounts/fireworks/models/deepseek-v4-flash`
+- `verifier_multimodal`: `accounts/fireworks/models/kimi-k2p6`
+
+It also taught the deploy-impact classifier that
+`internal/runtime/model_policy.go` is a sandbox service plus ordinary guest
+change, not a broad host OS change.
+
+Deployed CI run: `26360311083`.
+
+- selected deploy classes: sandbox host service, ordinary guest, vmctl restart
+- GitHub runner selected root: `.#sandbox`
+- GitHub runner sandbox prebuild: `181s`
+- GitHub runner closure copy: `8s`
+- Node B host service sandbox build from copied closure: `1s`
+- Node B ordinary guest build: `33s`
+- Node B deploy through health and asset graph: `43s`
+- skipped frontend bundle, host NixOS closure, NixOS switch, and Playwright
+  guest image
+- staging health after deploy: `ok`
+- deployed commit identity: `0c8743e7bc9f3a29de7ccbe82949e6b474dfc54a`
+
+Conclusion: service-pointer plus guest-image deploys now have the opposite
+problem from the original pipeline. Remote activation is fast, but the
+ephemeral runner still spends minutes rebuilding service roots that Node B can
+build from its persistent Nix store. The next patch skips GitHub runner
+prebuild/copy for host service roots as well as guest-image roots; frontend and
+full host OS roots remain eligible for runner prebuild/copy until measured
+otherwise.

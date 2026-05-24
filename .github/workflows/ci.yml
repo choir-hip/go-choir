@@ -253,11 +253,8 @@ jobs:
             roots+=(.#frontend)
           fi
           if [[ "$service_pointer_deploy" == "true" ]]; then
-            IFS=',' read -ra service_roots <<< "$HOST_SERVICES"
-            for service in "${service_roots[@]}"; do
-              [[ -z "$service" ]] && continue
-              roots+=(.#"${service}")
-            done
+            echo "    Host service roots will build on Node B, not on the ephemeral GitHub runner."
+            echo "    Node B has the persistent Nix store; runner service prebuilds were slower than remote warm builds."
           elif [[ "$DEPLOY_HOST" == "true" ]]; then
             roots+=(.#nixosConfigurations.go-choir-b.config.system.build.toplevel)
           fi
