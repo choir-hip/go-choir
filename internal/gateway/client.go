@@ -29,7 +29,7 @@ type GatewayClient struct {
 	httpClient *http.Client
 }
 
-const gatewayClientHTTPTimeout = 5*time.Minute + 30*time.Second
+const gatewayClientHTTPTimeout = 10*time.Minute + 30*time.Second
 
 // NewGatewayClient creates a GatewayClient pointing at the given gateway URL
 // with the given sandbox credential token.

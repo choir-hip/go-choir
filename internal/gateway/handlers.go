@@ -15,7 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
-const inferenceTimeout = 5 * time.Minute
+const inferenceTimeout = 10 * time.Minute
 
 // HealthResponse is the JSON structure returned by GET /health.
 type gatewayHealthResponse struct {

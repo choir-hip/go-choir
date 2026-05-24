@@ -288,7 +288,7 @@ type ProviderConfig struct {
 	SelectedProvider string
 }
 
-const defaultProviderHTTPTimeout = 5 * time.Minute
+const defaultProviderHTTPTimeout = 10 * time.Minute
 
 // BedrockProvider implements the Provider interface for AWS Bedrock using
 // the Anthropic Messages API format over the Bedrock invoke endpoint.
