@@ -54,6 +54,22 @@ func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 }
 
+func TestMaxInteractiveOutputTokensForSelectionCapsForegroundBudgets(t *testing.T) {
+	sel := LLMSelection{Model: "accounts/fireworks/models/deepseek-v4-flash"}
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileConductor); got != 4096 {
+		t.Fatalf("conductor interactive tokens = %d, want 4096", got)
+	}
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileVText); got != 8192 {
+		t.Fatalf("vtext interactive tokens = %d, want 8192", got)
+	}
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileSuper); got != 16384 {
+		t.Fatalf("super interactive tokens = %d, want 16384", got)
+	}
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, AgentProfileSuper); got != 8192 {
+		t.Fatalf("low-limit model interactive tokens = %d, want 8192", got)
+	}
+}
+
 func TestFallbackModelPolicyKeepsForegroundRolesOffChatGPT(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)

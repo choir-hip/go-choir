@@ -681,25 +681,40 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 	return parseOpenAIChatCompletionsResponse(resp, modelID, "fireworks")
 }
 
-// Stream currently uses a non-streaming chat completion and emits the complete
-// text as one delta. Fireworks streaming uses OpenAI chat-completion chunks,
-// which are distinct from the Responses and Anthropic streams parsed elsewhere.
 func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	resp, err := p.Call(ctx, req)
+	endpoint := p.fireworksChatCompletionsEndpoint()
+	modelID := effectiveModel(req.Model, p.modelID)
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("fireworks: %w", err)
+	}
+
+	req.Stream = true
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+	body.Stream = true
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fireworks: build stream request: %w", err)
 	}
-	onChunk(StreamChunk{Type: "message_start", ID: resp.ID, Model: resp.Model})
-	if resp.Text != "" {
-		onChunk(StreamChunk{Type: "content_block_delta", Delta: resp.Text})
+
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	log.Printf("provider: fireworks stream model=%s", modelID)
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("fireworks: stream http call: %w", err)
 	}
-	onChunk(StreamChunk{
-		Type:       "message_delta",
-		StopReason: resp.StopReason,
-		Usage:      &StreamUsage{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens},
-	})
-	onChunk(StreamChunk{Type: "message_stop"})
-	return resp, nil
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("fireworks: status %s (sanitized)", resp.Status)
+	}
+
+	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "fireworks", onChunk)
 }
 
 func (p *FireworksProvider) fireworksChatCompletionsEndpoint() string {
@@ -1638,6 +1653,169 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
+}
+
+func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	result := &LLMResponse{
+		Model:        modelID,
+		ProviderName: providerName,
+	}
+	type toolBuffer struct {
+		callID string
+		name   string
+		args   string
+		open   bool
+	}
+	tools := map[int]*toolBuffer{}
+	started := false
+	completed := false
+
+	emitStart := func() {
+		if started {
+			return
+		}
+		started = true
+		onChunk(StreamChunk{Type: "message_start", ID: result.ID, Model: result.Model})
+	}
+	flushTools := func() {
+		for idx, tool := range tools {
+			if tool == nil {
+				continue
+			}
+			result.ToolCalls = append(result.ToolCalls, ContentToolCall{
+				ID:        tool.callID,
+				Name:      tool.name,
+				Arguments: canonicalJSON(json.RawMessage(tool.args)),
+			})
+			if tool.open {
+				onChunk(StreamChunk{Type: "content_block_stop", ToolCallID: tool.callID, ToolCallName: tool.name})
+			}
+			delete(tools, idx)
+		}
+	}
+	finish := func(reason string, usage openAIChatCompletionUsage) {
+		if completed {
+			return
+		}
+		completed = true
+		flushTools()
+		switch reason {
+		case "tool_calls":
+			result.StopReason = "tool_use"
+		case "length":
+			result.StopReason = "max_tokens"
+		case "", "stop":
+			result.StopReason = "end_turn"
+		default:
+			result.StopReason = reason
+		}
+		if usage.PromptTokens > 0 || usage.CompletionTokens > 0 {
+			result.Usage.InputTokens = usage.PromptTokens
+			result.Usage.OutputTokens = usage.CompletionTokens
+		}
+		emitStart()
+		onChunk(StreamChunk{
+			Type:       "message_delta",
+			StopReason: result.StopReason,
+			Usage:      &StreamUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens},
+		})
+	}
+
+	if err := readOpenAISSE(body, func(data []byte) error {
+		if len(data) == 0 || strings.TrimSpace(string(data)) == "[DONE]" {
+			return nil
+		}
+		var payload struct {
+			ID      string `json:"id"`
+			Model   string `json:"model"`
+			Choices []struct {
+				Delta struct {
+					Content   any `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
+			} `json:"choices"`
+			Usage openAIChatCompletionUsage `json:"usage"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return nil
+		}
+		if payload.ID != "" {
+			result.ID = payload.ID
+		}
+		if payload.Model != "" {
+			result.Model = payload.Model
+		}
+		emitStart()
+		for _, choice := range payload.Choices {
+			if text := chatDeltaText(choice.Delta.Content); text != "" {
+				result.Text += text
+				onChunk(StreamChunk{Type: "content_block_delta", Delta: text})
+			}
+			for _, call := range choice.Delta.ToolCalls {
+				tool := tools[call.Index]
+				if tool == nil {
+					tool = &toolBuffer{}
+					tools[call.Index] = tool
+				}
+				if call.ID != "" {
+					tool.callID = call.ID
+				}
+				if call.Function.Name != "" {
+					tool.name = call.Function.Name
+				}
+				if !tool.open && (tool.callID != "" || tool.name != "") {
+					tool.open = true
+					onChunk(StreamChunk{Type: "content_block_start", ToolCallID: tool.callID, ToolCallName: tool.name})
+				}
+				if call.Function.Arguments != "" {
+					tool.args += call.Function.Arguments
+					onChunk(StreamChunk{Type: "content_block_delta", ToolCallDelta: call.Function.Arguments, ToolCallID: tool.callID, ToolCallName: tool.name})
+				}
+			}
+			if choice.FinishReason != "" {
+				finish(choice.FinishReason, payload.Usage)
+			}
+		}
+		if len(payload.Choices) == 0 && (payload.Usage.PromptTokens > 0 || payload.Usage.CompletionTokens > 0) {
+			result.Usage.InputTokens = payload.Usage.PromptTokens
+			result.Usage.OutputTokens = payload.Usage.CompletionTokens
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("%s: read chat completions stream: %w", providerName, err)
+	}
+	if !completed {
+		finish("stop", openAIChatCompletionUsage{})
+	}
+	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
+	log.Printf("provider: %s chat completion stream model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+	return result, nil
+}
+
+func chatDeltaText(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var b strings.Builder
+		for _, part := range v {
+			if m, ok := part.(map[string]any); ok {
+				b.WriteString(stringValue(m["text"]))
+			}
+		}
+		return b.String()
+	default:
+		return ""
+	}
 }
 
 func coalesce(s, fallback string) string {

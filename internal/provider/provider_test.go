@@ -2001,6 +2001,105 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 	}
 }
 
+func TestFireworksProviderStreamUsesOpenAIChatCompletionsChunks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("path = %q, want /chat/completions", r.URL.Path)
+		}
+		var body openAIChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if !body.Stream {
+			t.Fatal("stream request did not set stream=true")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"content\":\" from Fireworks\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":3,\"total_tokens\":8}}\n\n")
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	var chunks []StreamChunk
+	resp, err := p.Stream(context.Background(), LLMRequest{
+		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Say hello."}}}},
+		MaxTokens: 1024,
+	}, func(chunk StreamChunk) {
+		chunks = append(chunks, chunk)
+	})
+	if err != nil {
+		t.Fatalf("fireworks stream: %v", err)
+	}
+	if resp.Text != "Hello from Fireworks" {
+		t.Fatalf("text = %q", resp.Text)
+	}
+	if resp.StopReason != "end_turn" {
+		t.Fatalf("stop = %q", resp.StopReason)
+	}
+	if resp.Usage.InputTokens != 5 || resp.Usage.OutputTokens != 3 {
+		t.Fatalf("usage = %+v", resp.Usage)
+	}
+	var delta string
+	for _, chunk := range chunks {
+		delta += chunk.Delta
+	}
+	if delta != resp.Text {
+		t.Fatalf("streamed delta = %q, want %q", delta, resp.Text)
+	}
+}
+
+func TestFireworksProviderStreamParsesToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_tool\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"record_status\",\"arguments\":\"\"}}]}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_tool\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"status\\\":\"}}]}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_tool\",\"model\":\"accounts/fireworks/models/deepseek-v4-flash\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"ok\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n")
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	resp, err := p.Stream(context.Background(), LLMRequest{
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Record ok."}}}},
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+		MaxTokens: 1024,
+	}, func(StreamChunk) {})
+	if err != nil {
+		t.Fatalf("fireworks stream tool call: %v", err)
+	}
+	if resp.StopReason != "tool_use" {
+		t.Fatalf("stop = %q", resp.StopReason)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "record_status" {
+		t.Fatalf("tool calls = %+v", resp.ToolCalls)
+	}
+	var args map[string]string
+	if err := json.Unmarshal(resp.ToolCalls[0].Arguments, &args); err != nil {
+		t.Fatalf("args: %v", err)
+	}
+	if args["status"] != "ok" {
+		t.Fatalf("status = %q", args["status"])
+	}
+}
+
 func TestBedrockProviderStreamFallback(t *testing.T) {
 	// Bedrock provider falls back to non-streaming Call.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

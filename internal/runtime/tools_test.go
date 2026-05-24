@@ -598,8 +598,8 @@ func TestExecuteToolsConductorVTextRouteSkipsOtherSpawn(t *testing.T) {
 	if len(executed) != 1 || executed[0] != AgentProfileVText {
 		t.Fatalf("executed = %#v, want only vtext", executed)
 	}
-	if !results[0].IsError || !strings.Contains(results[0].Output, "vtext owns downstream") {
-		t.Fatalf("research spawn result = %#v, want skipped downstream worker", results[0])
+	if results[0].IsError || !strings.Contains(results[0].Output, "vtext owns downstream") {
+		t.Fatalf("research spawn result = %#v, want non-error skipped downstream worker notice", results[0])
 	}
 	if results[1].IsError || results[1].Output != AgentProfileVText {
 		t.Fatalf("vtext spawn result = %#v, want success", results[1])

@@ -1037,7 +1037,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
 	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
-	maxOutputTokens := MaxOutputTokensForSelection(llmConfig)
+	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
 		if isPersistentSuperInboxRun(rec) {

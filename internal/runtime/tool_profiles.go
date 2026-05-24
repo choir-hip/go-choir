@@ -256,7 +256,7 @@ func canonicalAgentProfile(profile string) string {
 	profile = strings.TrimSpace(profile)
 	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
 	switch normalized {
-	case "researcher", "research", "research-agent", "web-research", "web-researcher":
+	case "researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher":
 		return AgentProfileResearcher
 	case "cosuper", "co-super", "coagent", "co-agent":
 		return AgentProfileCoSuper

@@ -1800,7 +1800,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\nFor factual/current claims, call spawn_agent with role=\"researcher\" on this document channel. Use parallel researchers when you can give each one a distinct branch; otherwise start with one broad researcher.")
 			b.WriteString("\nOrdinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work. Do not route them to request_super_execution unless the user also asks for code execution, product mutation, candidate-world work, or verifier contracts.")
 			b.WriteString("\nFor coding, generated artifacts, execution, or verification, call request_super_execution.")
-			b.WriteString("\nAfter starting the necessary worker request(s), end the run without edit_vtext. Worker deliveries will wake the next VText run to create the next revision.")
+			b.WriteString("\nAfter starting the necessary worker request(s), write a brief interim revision instead of leaving the seed visible: name the objective, worker type, evidence being gathered, and next expected revision. Do not include ungrounded factual claims. Worker deliveries will wake later VText runs to create evidence-backed revisions.")
 		}
 	}
 	b.WriteString("\nTreat this run as one step in an ongoing document loop.")

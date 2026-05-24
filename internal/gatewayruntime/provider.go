@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -82,7 +81,7 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit runt
 		Messages: []message{
 			{Role: "user", Content: []block{{Type: "text", Text: task.Prompt}}},
 		},
-		MaxTokens: modelcatalog.MaxOutputTokensForModel(model),
+		MaxTokens: runtime.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
 		Stream:    true,
 	}
 

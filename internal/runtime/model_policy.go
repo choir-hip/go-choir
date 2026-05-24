@@ -42,6 +42,27 @@ func MaxOutputTokensForSelection(sel LLMSelection) int {
 	return modelcatalog.MaxOutputTokensForModel(sel.Model)
 }
 
+// MaxInteractiveOutputTokensForSelection returns the per-turn generation budget
+// used by foreground agent loops. It is intentionally lower than the upstream
+// model API limit: the API maximum is an artifact capability, not a good
+// product default for interactive VText/conductor/research loops.
+func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
+	limit := modelcatalog.MaxOutputTokensForModel(sel.Model)
+	budget := 8192
+	switch normalizeModelPolicyRole(role) {
+	case AgentProfileConductor:
+		budget = 4096
+	case AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+		budget = 16384
+	case AgentProfileResearcher, AgentProfileVText, "verifier_multimodal":
+		budget = 8192
+	}
+	if limit > 0 && limit < budget {
+		return limit
+	}
+	return budget
+}
+
 type ModelPolicy struct {
 	Defaults LLMSelection
 	Roles    map[string]LLMSelection

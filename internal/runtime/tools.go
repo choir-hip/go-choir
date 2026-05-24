@@ -533,7 +533,7 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 				if firstVText == -1 {
 					firstVText = i
 				} else {
-					setSkip(i, "tool_error: conductor already routed this prompt to vtext; do not create duplicate vtext routes")
+					setSkip(i, "tool_notice: conductor already routed this prompt to vtext; duplicate vtext route skipped")
 				}
 			}
 		}
@@ -542,7 +542,7 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 				if i == firstVText || call.Name != "spawn_agent" {
 					continue
 				}
-				setSkip(i, "tool_error: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests")
+				setSkip(i, "tool_notice: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests")
 			}
 		}
 	}
@@ -628,7 +628,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 						"deduped":          true,
 						"dedupe_reason":    "start_worker_delegation_already_planned_in_turn",
 						"previous_call_id": calls[previous].ID,
-						"next_tools":        []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
+						"next_tools":       []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
 					})
 					setSkip(i, "tool_notice:"+string(notice))
 					continue
