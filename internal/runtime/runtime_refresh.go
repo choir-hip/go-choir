@@ -17,7 +17,8 @@ var runtimeRestartCommand = func(ctx context.Context) *exec.Cmd {
 // It is deploy machinery for active guest VMs: the host has already installed a
 // new sandbox runtime package, and the guest service ExecStartPre knows how to
 // fetch it. Restarting the in-guest service is much cheaper than rebooting the
-// whole Firecracker VM.
+// whole Firecracker VM; the host deploy verifies the cutover by polling guest
+// /health until the build commit matches the just-deployed revision.
 func (h *APIHandler) HandleInternalRuntimeRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
