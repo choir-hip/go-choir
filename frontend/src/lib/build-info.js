@@ -6,8 +6,8 @@ export const BUILD_INFO = Object.freeze({
 });
 
 export function exposeBuildInfo() {
+  // Deploy-impact proof: frontend-only changes must not rebuild guest images.
   window.__CHOIR_BUILD__ = BUILD_INFO;
   document.documentElement.dataset.choirBuildCommit = BUILD_INFO.commit;
   document.documentElement.dataset.choirBuildVersion = BUILD_INFO.version;
 }
-
