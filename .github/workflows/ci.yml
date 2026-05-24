@@ -235,11 +235,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          prebuild_timeout="${CHOIR_NIX_PREBUILD_TIMEOUT:-8m}"
           started_at=$(date +%s)
-          echo "==> Building deploy closures on GitHub runner (timeout ${prebuild_timeout})"
+          echo "==> Building deploy closures on GitHub runner"
           deploy_paths_file=$(mktemp)
-          if timeout "$prebuild_timeout" nix build -L --print-out-paths --no-link \
+          if nix build -L --print-out-paths --no-link \
             .#nixosConfigurations.go-choir-b.config.system.build.toplevel \
             .#guest-image \
             .#guest-image-playwright >"$deploy_paths_file"; then
