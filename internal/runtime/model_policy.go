@@ -20,6 +20,8 @@ const (
 
 	defaultModelPolicyRelativePath = "System/model-policy.toml"
 
+	// Keep generated foreground defaults on broadly available gateway providers.
+	// Per-computer policy files may still override these roles through product state.
 	defaultFireworksProvider       = "fireworks"
 	defaultConductorModel          = "accounts/fireworks/models/deepseek-v4-flash"
 	defaultSuperModel              = "accounts/fireworks/models/deepseek-v4-pro"
