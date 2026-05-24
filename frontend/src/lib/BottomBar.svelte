@@ -657,6 +657,8 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    justify-content: flex-start;
+    min-width: 0;
     padding: 4px 8px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid #333;
@@ -665,7 +667,8 @@
     color: #c0c0d0;
     transition: background 0.15s;
     white-space: nowrap;
-    flex-shrink: 0;
+    flex: 1 1 8.5rem;
+    max-width: 14rem;
   }
 
   .window-indicator:hover,
@@ -689,7 +692,8 @@
 
   .indicator-name {
     font-size: 0.7rem;
-    max-width: 80px;
+    min-width: 0;
+    max-width: none;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -825,6 +829,11 @@
 
     .window-switcher {
       max-width: 29vw;
+    }
+
+    .window-indicator {
+      flex: 0 0 auto;
+      max-width: 7rem;
     }
 
     .start-app {

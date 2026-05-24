@@ -74,6 +74,44 @@ func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 	}
 }
 
+func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<rss><channel>
+  <title>Existing Feed</title>
+  <item><title>Episode One</title><enclosure url="https://example.com/episode-one.mp3" type="audio/mpeg"/></item>
+</channel></rss>`))
+	}))
+	defer feed.Close()
+
+	_, handler := testAPISetup(t)
+	createBody := `{
+		"source_type":"url",
+		"media_type":"application/rss+xml",
+		"app_hint":"podcast",
+		"title":"Existing Feed",
+		"source_url":` + strconv.Quote(feed.URL+"/feed.rss") + `,
+		"text_content":"<rss><channel><title>Existing Feed</title></channel></rss>"
+	}`
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/content/items", createBody, "user-podcast")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create content status = %d body=%s", createW.Code, createW.Body.String())
+	}
+
+	refreshW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/podcast/subscriptions/refresh?limit=10", `{}`, "user-podcast")
+	if refreshW.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d body=%s", refreshW.Code, refreshW.Body.String())
+	}
+	var refreshed podcastSubscriptionsResponse
+	if err := json.Unmarshal(refreshW.Body.Bytes(), &refreshed); err != nil {
+		t.Fatalf("decode refresh: %v", err)
+	}
+	if len(refreshed.Subscriptions) != 1 || refreshed.Subscriptions[0].FeedURL != feed.URL+"/feed.rss" {
+		t.Fatalf("refreshed subscriptions = %+v", refreshed.Subscriptions)
+	}
+}
+
 func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")

@@ -145,7 +145,7 @@ func (h *APIHandler) HandlePodcastSubscriptionsRefresh(w http.ResponseWriter, r 
 	if limit > 100 {
 		limit = 100
 	}
-	subs, err := h.rt.Store().ListPodcastSubscriptions(r.Context(), ownerID, limit)
+	subs, err := h.listPodcastSubscriptionsWithContent(r.Context(), ownerID, limit)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
