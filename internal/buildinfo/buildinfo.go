@@ -29,10 +29,14 @@ type Info struct {
 // restarting otherwise-unaffected host services.
 func Snapshot(service string) Info {
 	deployedAt, deployedCommit := deployMetadata()
+	commit := Commit
+	if deployedCommit != "" {
+		commit = deployedCommit
+	}
 	return Info{
 		Service:        service,
 		Version:        Version,
-		Commit:         Commit,
+		Commit:         commit,
 		BuiltAt:        BuiltAt,
 		DeployedAt:     deployedAt,
 		DeployedCommit: deployedCommit,

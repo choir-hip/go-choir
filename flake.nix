@@ -51,32 +51,39 @@
           '';
         };
 
-      # Common buildGoModule args for all Go services
-      commonGoArgs = {
-        src = pkgs.lib.cleanSourceWith {
+      rootPath = toString ./.;
+      relPath = path:
+        let
+          full = toString path;
+          prefix = rootPath + "/";
+        in
+          if pkgs.lib.hasPrefix prefix full then pkgs.lib.removePrefix prefix full else full;
+
+      goServiceSrc = { subPackage, includeSkills ? false }:
+        pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
-            type == "directory" ||
-            (pkgs.lib.hasSuffix ".go" path) ||
-            (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path && pkgs.lib.hasSuffix ".md" path) ||
-            (pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path) ||
-            (baseNameOf path == "go.mod") ||
-            (baseNameOf path == "go.sum");
+            let
+              rel = relPath path;
+              base = baseNameOf path;
+            in
+              type == "directory" ||
+              (base == "go.mod") ||
+              (base == "go.sum") ||
+              (pkgs.lib.hasPrefix (subPackage + "/") rel && pkgs.lib.hasSuffix ".go" path) ||
+              (pkgs.lib.hasPrefix "internal/" rel && pkgs.lib.hasSuffix ".go" path) ||
+              (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path && pkgs.lib.hasSuffix ".md" path) ||
+              (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
         };
+
+      # Common buildGoModule args for all Go services
+      commonGoArgs = {
         vendorHash = "sha256-7sTVRCu7SWElqse4g82ERcaJAeWd9EAKmgAdmRa7Ezw=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
-          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
-          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${buildDate}"
         ];
-        postInstall = ''
-          if [ -d skills ]; then
-            mkdir -p $out/share/go-choir/skills
-            cp -R skills/. $out/share/go-choir/skills/
-          fi
-        '';
         doCheck = false; # Tests run separately in CI
       };
 
@@ -143,11 +150,19 @@
       };
 
       # Build a single Go service binary
-      mkGoService = { pname, subPackage }:
+      mkGoService = { pname, subPackage, includeSkills ? false }:
         pkgs.buildGoModule (commonGoArgs // {
           inherit pname;
           version = goModuleVersion;
+          src = goServiceSrc { inherit subPackage includeSkills; };
           subPackages = [ subPackage ];
+        } // pkgs.lib.optionalAttrs includeSkills {
+          postInstall = ''
+            if [ -d skills ]; then
+              mkdir -p $out/share/go-choir/skills
+              cp -R skills/. $out/share/go-choir/skills/
+            fi
+          '';
         });
 
       # All packages
@@ -175,6 +190,7 @@
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
+          includeSkills = true;
         };
         frontend = frontendPkg;
         obscura = obscuraPkg;
