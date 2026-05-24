@@ -7,6 +7,7 @@ export const BUILD_INFO = Object.freeze({
 
 export function exposeBuildInfo() {
   // Deploy-impact proof: frontend-only changes must not rebuild guest images.
+  // Frontend pointer proof: this bundle should deploy without host activation.
   window.__CHOIR_BUILD__ = BUILD_INFO;
   document.documentElement.dataset.choirBuildCommit = BUILD_INFO.commit;
   document.documentElement.dataset.choirBuildVersion = BUILD_INFO.version;
