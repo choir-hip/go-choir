@@ -154,10 +154,11 @@
       };
 
       # Build a single Go service binary
-      mkGoService = { pname, subPackage, internalDirs, includeSkills ? false }:
+      mkGoService = { pname, subPackage, internalDirs, includeSkills ? false, vendorHash ? commonGoArgs.vendorHash }:
         pkgs.buildGoModule (commonGoArgs // {
           inherit pname;
           version = goModuleVersion;
+          inherit vendorHash;
           src = goServiceSrc { inherit subPackage internalDirs includeSkills; };
           subPackages = [ subPackage ];
         } // pkgs.lib.optionalAttrs includeSkills {
@@ -174,6 +175,7 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
+          vendorHash = "sha256-5lI1eHUCgp1pIEAQxrMXGlZTdGy9l/fIyElT1FilUWA=";
           internalDirs = [
             "internal/auth"
             "internal/server"
