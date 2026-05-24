@@ -10,9 +10,13 @@ func TestCleanVTextToolContentRemovesWrapperTags(t *testing.T) {
 }
 
 func TestCleanVTextToolContentRemovesDanglingClosingMarker(t *testing.T) {
-	input := "VText wrapper cleanup works.</\n"
-	if got := cleanVTextToolContent(input); got != "VText wrapper cleanup works." {
-		t.Fatalf("cleanVTextToolContent() = %q", got)
+	for _, input := range []string{
+		"VText wrapper cleanup works.</\n",
+		"VText wrapper cleanup works.</妮>",
+	} {
+		if got := cleanVTextToolContent(input); got != "VText wrapper cleanup works." {
+			t.Fatalf("cleanVTextToolContent(%q) = %q", input, got)
+		}
 	}
 }
 

@@ -392,13 +392,27 @@ func cleanVTextToolContent(content string) string {
 		next = strings.TrimPrefix(next, "<content>")
 		next = strings.TrimSuffix(next, "</payload>")
 		next = strings.TrimSuffix(next, "</content>")
-		next = strings.TrimSuffix(next, "</")
+		next = trimTrailingClosingMarkupFragment(next)
 		next = strings.TrimSpace(next)
 		if next == cleaned {
 			return cleaned
 		}
 		cleaned = next
 	}
+}
+
+func trimTrailingClosingMarkupFragment(content string) string {
+	cleaned := strings.TrimSpace(content)
+	idx := strings.LastIndex(cleaned, "</")
+	if idx < 0 {
+		return cleaned
+	}
+	suffix := cleaned[idx:]
+	fragment := strings.TrimPrefix(suffix, "</")
+	if len([]rune(suffix)) > 32 || strings.ContainsAny(fragment, " \t\r\n<") {
+		return cleaned
+	}
+	return strings.TrimSpace(cleaned[:idx])
 }
 
 func applyVTextTextEdit(content string, edit vtextTextEdit) (string, error) {
