@@ -32,6 +32,7 @@
   let playbackError = '';
   let isPlaying = false;
   let removeLiveListener = () => {};
+  let refreshTimer = null;
 
   const recommendedPodcasts = [
     {
@@ -132,7 +133,7 @@
     libraryLoading = true;
     libraryError = '';
     try {
-      const res = await fetchWithRenewal('/api/content/items?limit=100');
+      const res = await fetchWithRenewal('/api/podcast/subscriptions?limit=100');
       if (!res.ok) {
         if (res.status === 401) {
           dispatch('authexpired');
@@ -144,7 +145,9 @@
       }
       const body = await res.json();
       if (requestSeq !== libraryRequestSeq) return;
-      library = (body.items || []).filter(isPodcastContent);
+      library = (body.subscriptions || [])
+        .map(subscriptionToContent)
+        .filter(Boolean);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -156,6 +159,51 @@
         libraryLoading = false;
       }
     }
+  }
+
+  async function refreshPodcastLibrary({ force = false } = {}) {
+    if (!authenticated || item) return;
+    try {
+      const res = await fetchWithRenewal('/api/podcast/subscriptions/refresh?limit=50', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          dispatch('authexpired');
+        }
+        return;
+      }
+      const body = await res.json();
+      library = (body.subscriptions || [])
+        .map(subscriptionToContent)
+        .filter(Boolean);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+      }
+    }
+  }
+
+  function subscriptionToContent(subscription) {
+    if (!subscription) return null;
+    if (subscription.content_item) {
+      return {
+        ...subscription.content_item,
+        podcast_subscription: subscription,
+      };
+    }
+    if (!subscription.feed_url) return null;
+    return {
+      content_id: subscription.content_id || subscription.subscription_id,
+      title: subscription.title || subscription.feed_url,
+      source_url: subscription.feed_url,
+      media_type: 'application/rss+xml',
+      app_hint: 'podcast',
+      text_content: '',
+      podcast_subscription: subscription,
+    };
   }
 
   function isPodcastContent(content) {
@@ -250,8 +298,8 @@
     }
   }
 
-  async function importPodcastFeed() {
-    const url = importUrl.trim();
+  async function importPodcastFeed(details = {}) {
+    const url = (details.feedUrl || importUrl).trim();
     if (!url || importing) return;
     if (!authenticated) {
       requestAuth('podcast_import');
@@ -260,10 +308,15 @@
     importing = true;
     libraryError = '';
     try {
-      const res = await fetchWithRenewal('/api/content/import-url', {
+      const res = await fetchWithRenewal('/api/podcast/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, query: url }),
+        body: JSON.stringify({
+          feed_url: url,
+          title: details.title || '',
+          author: details.author || '',
+          artwork_url: details.artworkUrl || details.artwork_url || '',
+        }),
       });
       if (!res.ok) {
         if (res.status === 401) {
@@ -274,7 +327,8 @@
         libraryError = body.error || `Podcast import failed (${res.status})`;
         return;
       }
-      item = await res.json();
+      const body = await res.json();
+      item = subscriptionToContent(body.subscription);
       importUrl = '';
       upsertLibraryItem(item);
     } catch (err) {
@@ -290,8 +344,25 @@
 
   async function importPodcastResult(result) {
     if (!result?.feed_url || importing) return;
-    importUrl = result.feed_url;
-    await importPodcastFeed();
+    await importPodcastFeed({
+      feedUrl: result.feed_url,
+      title: result.title || '',
+      author: result.author || '',
+      artworkUrl: result.artwork_url || '',
+    });
+  }
+
+  async function importRecommendedPodcast(podcast) {
+    if (!authenticated) {
+      requestAuth('podcast_add_recommended');
+      return;
+    }
+    await importPodcastFeed({
+      feedUrl: podcast.feedUrl,
+      title: podcast.title,
+      author: '',
+      artworkUrl: '',
+    });
   }
 
   function requestAuth(kind = 'podcast') {
@@ -387,7 +458,10 @@
   }
 
   onMount(() => {
-    void loadInitialState();
+    void loadInitialState().then(() => refreshPodcastLibrary());
+    refreshTimer = setInterval(() => {
+      void refreshPodcastLibrary();
+    }, 30 * 60 * 1000);
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
       if (kind === 'content.item.created' && !item) {
@@ -405,6 +479,7 @@
 
   onDestroy(() => {
     removeLiveListener();
+    if (refreshTimer) clearInterval(refreshTimer);
   });
 </script>
 
@@ -461,7 +536,7 @@
       {#if libraryError}<p class="error" role="alert">{libraryError}</p>{/if}
 
       <div class="library-scroll">
-        {#if !authenticated}
+        {#if !authenticated || (authenticated && library.length === 0 && searchResults.length === 0)}
           <section class="library-section" data-podcast-library-recommended>
             <h3>Recommended Podcasts</h3>
             <div class="library-list">
@@ -472,11 +547,13 @@
                     <span>{podcast.description}</span>
                     <span>{podcast.feedUrl}</span>
                   </div>
-                  <button type="button" on:click={() => requestAuth('podcast_add_recommended')}>Add</button>
+                  <button type="button" on:click={() => importRecommendedPodcast(podcast)} disabled={importing}>Add</button>
                 </article>
               {/each}
             </div>
-            <p class="status subtle">Sign in to search providers, subscribe, and keep playback positions across sessions.</p>
+            {#if !authenticated}
+              <p class="status subtle">Sign in to search providers, subscribe, and keep playback positions across sessions.</p>
+            {/if}
           </section>
         {/if}
 

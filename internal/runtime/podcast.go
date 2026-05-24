@@ -34,6 +34,24 @@ type podcastSearchResponse struct {
 	Warnings       []string              `json:"warnings,omitempty"`
 }
 
+type podcastSubscriptionRequest struct {
+	FeedURL    string `json:"feed_url"`
+	Title      string `json:"title,omitempty"`
+	Author     string `json:"author,omitempty"`
+	ArtworkURL string `json:"artwork_url,omitempty"`
+	Force      bool   `json:"force,omitempty"`
+}
+
+type podcastSubscriptionResponse struct {
+	Subscription types.PodcastSubscription `json:"subscription"`
+}
+
+type podcastSubscriptionsResponse struct {
+	Subscriptions []types.PodcastSubscription `json:"subscriptions"`
+	Refreshed     int                         `json:"refreshed,omitempty"`
+	Errors        []string                    `json:"errors,omitempty"`
+}
+
 func (h *APIHandler) HandlePodcastSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -74,6 +92,197 @@ func (h *APIHandler) HandlePodcastSearch(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func (h *APIHandler) HandlePodcastSubscriptions(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		limit := apiLimit(r, 100)
+		if limit > 200 {
+			limit = 200
+		}
+		subs, err := h.listPodcastSubscriptionsWithContent(r.Context(), ownerID, limit)
+		if err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, podcastSubscriptionsResponse{Subscriptions: subs})
+	case http.MethodPost:
+		var req podcastSubscriptionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid JSON body"})
+			return
+		}
+		sub, err := h.subscribePodcastFeed(r.Context(), ownerID, req)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusCreated, podcastSubscriptionResponse{Subscription: sub})
+	default:
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
+func (h *APIHandler) HandlePodcastSubscriptionsRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req podcastSubscriptionRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	limit := apiLimit(r, 50)
+	if limit > 100 {
+		limit = 100
+	}
+	subs, err := h.rt.Store().ListPodcastSubscriptions(r.Context(), ownerID, limit)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	refreshed := 0
+	refreshErrors := []string{}
+	for _, sub := range subs {
+		if !req.Force && !podcastSubscriptionRefreshDue(sub, time.Now().UTC()) {
+			continue
+		}
+		next, err := h.refreshPodcastSubscription(r.Context(), sub)
+		if err != nil {
+			refreshErrors = append(refreshErrors, fmt.Sprintf("%s: %v", sub.FeedURL, err))
+			continue
+		}
+		refreshed++
+		_ = next
+	}
+	out, err := h.listPodcastSubscriptionsWithContent(r.Context(), ownerID, limit)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, podcastSubscriptionsResponse{Subscriptions: out, Refreshed: refreshed, Errors: refreshErrors})
+}
+
+func (h *APIHandler) subscribePodcastFeed(ctx context.Context, ownerID string, req podcastSubscriptionRequest) (types.PodcastSubscription, error) {
+	feedURL := strings.TrimSpace(req.FeedURL)
+	if feedURL == "" {
+		return types.PodcastSubscription{}, fmt.Errorf("feed_url is required")
+	}
+	normalizedURL, err := normalizeHTTPURL(feedURL)
+	if err != nil {
+		return types.PodcastSubscription{}, err
+	}
+	now := time.Now().UTC()
+	sub := types.PodcastSubscription{
+		OwnerID:    ownerID,
+		FeedURL:    normalizedURL,
+		Title:      strings.TrimSpace(req.Title),
+		Author:     strings.TrimSpace(req.Author),
+		ArtworkURL: strings.TrimSpace(req.ArtworkURL),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	return h.refreshPodcastSubscription(ctx, sub)
+}
+
+func (h *APIHandler) refreshPodcastSubscription(ctx context.Context, sub types.PodcastSubscription) (types.PodcastSubscription, error) {
+	query := firstNonEmptyPromotion(sub.Title, sub.FeedURL)
+	item, err := h.rt.ImportURLContent(ctx, sub.OwnerID, sub.FeedURL, query)
+	if err != nil {
+		return sub, err
+	}
+	now := time.Now().UTC()
+	sub.ContentID = item.ContentID
+	if strings.TrimSpace(sub.Title) == "" {
+		sub.Title = firstNonEmptyPromotion(item.Title, item.SourceURL)
+	}
+	sub.LastFetchedAt = now
+	sub.UpdatedAt = now
+	saved, err := h.rt.Store().UpsertPodcastSubscription(ctx, sub)
+	if err != nil {
+		return sub, err
+	}
+	saved.ContentItem = &item
+	_, _ = h.rt.emitProductEvent(ctx, sub.OwnerID, types.PrimaryDesktopID, types.EventContentItemCreated, map[string]any{
+		"content_id":       item.ContentID,
+		"subscription_id":  saved.SubscriptionID,
+		"feed_url":         saved.FeedURL,
+		"podcast_library":  true,
+		"last_fetched_at":  saved.LastFetchedAt.UTC().Format(time.RFC3339Nano),
+		"subscription_ref": saved.SubscriptionID,
+	})
+	return saved, nil
+}
+
+func podcastSubscriptionRefreshDue(sub types.PodcastSubscription, now time.Time) bool {
+	if sub.LastFetchedAt.IsZero() {
+		return true
+	}
+	return now.Sub(sub.LastFetchedAt) >= 30*time.Minute
+}
+
+func (h *APIHandler) listPodcastSubscriptionsWithContent(ctx context.Context, ownerID string, limit int) ([]types.PodcastSubscription, error) {
+	subs, err := h.rt.Store().ListPodcastSubscriptions(ctx, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(subs) == 0 {
+		if err := h.seedPodcastSubscriptionsFromContentItems(ctx, ownerID); err != nil {
+			return nil, err
+		}
+		subs, err = h.rt.Store().ListPodcastSubscriptions(ctx, ownerID, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for i := range subs {
+		if strings.TrimSpace(subs[i].ContentID) == "" {
+			continue
+		}
+		item, err := h.rt.Store().GetContentItem(ctx, ownerID, subs[i].ContentID)
+		if err != nil {
+			continue
+		}
+		subs[i].ContentItem = &item
+	}
+	return subs, nil
+}
+
+func (h *APIHandler) seedPodcastSubscriptionsFromContentItems(ctx context.Context, ownerID string) error {
+	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 200)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if !contentItemLooksPodcast(item) {
+			continue
+		}
+		feedURL := firstNonEmptyPromotion(item.SourceURL, item.CanonicalURL)
+		if feedURL == "" {
+			continue
+		}
+		_, err := h.rt.Store().UpsertPodcastSubscription(ctx, types.PodcastSubscription{
+			OwnerID:   ownerID,
+			FeedURL:   feedURL,
+			ContentID: item.ContentID,
+			Title:     firstNonEmptyPromotion(item.Title, item.SourceURL, item.CanonicalURL),
+			CreatedAt: item.CreatedAt,
+			UpdatedAt: item.UpdatedAt,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func podcastSearchProviderName() string {

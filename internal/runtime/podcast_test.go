@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 )
 
@@ -70,5 +71,46 @@ func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 	}
 	if len(resp.Results) != 1 || resp.Results[0].Source != "library" {
 		t.Fatalf("fallback response = %+v", resp)
+	}
+}
+
+func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<rss><channel>
+  <title>Mission Gradient Radio</title>
+  <item><title>Episode One</title><enclosure url="https://example.com/episode-one.mp3" type="audio/mpeg"/></item>
+</channel></rss>`))
+	}))
+	defer feed.Close()
+
+	_, handler := testAPISetup(t)
+	body := `{"feed_url":` + strconv.Quote(feed.URL+"/feed.rss") + `,"title":"Mission Gradient Radio"}`
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/podcast/subscriptions", body, "user-podcast")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("subscribe status = %d body=%s", createW.Code, createW.Body.String())
+	}
+	var created podcastSubscriptionResponse
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode subscribe: %v", err)
+	}
+	if created.Subscription.ContentID == "" || created.Subscription.ContentItem == nil {
+		t.Fatalf("subscription missing imported content: %+v", created.Subscription)
+	}
+	if created.Subscription.ContentItem.AppHint != "podcast" {
+		t.Fatalf("content app hint = %q", created.Subscription.ContentItem.AppHint)
+	}
+
+	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/podcast/subscriptions?limit=10", "", "user-podcast")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listed podcastSubscriptionsResponse
+	if err := json.Unmarshal(listW.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listed.Subscriptions) != 1 || listed.Subscriptions[0].ContentItem == nil {
+		t.Fatalf("listed subscriptions = %+v", listed.Subscriptions)
 	}
 }

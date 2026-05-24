@@ -1441,6 +1441,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
+	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
+	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
 	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
 	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
 	s.HandleFunc("/api/content/", h.HandleContentRouter)

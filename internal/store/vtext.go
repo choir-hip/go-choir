@@ -136,6 +136,22 @@ CREATE TABLE IF NOT EXISTS content_items (
 
 CREATE INDEX IF NOT EXISTS idx_content_items_owner_updated ON content_items(owner_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_content_items_owner_app ON content_items(owner_id, app_hint, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS podcast_subscriptions (
+	subscription_id VARCHAR(255) PRIMARY KEY,
+	owner_id        VARCHAR(255) NOT NULL,
+	feed_url        VARCHAR(2048) NOT NULL,
+	content_id      VARCHAR(255) NOT NULL DEFAULT '',
+	title           LONGTEXT NOT NULL DEFAULT '',
+	author          LONGTEXT NOT NULL DEFAULT '',
+	artwork_url     VARCHAR(2048) NOT NULL DEFAULT '',
+	last_fetched_at DATETIME,
+	created_at      DATETIME NOT NULL,
+	updated_at      DATETIME NOT NULL,
+	UNIQUE KEY uniq_podcast_subscriptions_owner_feed (owner_id, feed_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_podcast_subscriptions_owner_updated ON podcast_subscriptions(owner_id, updated_at DESC);
 `
 
 // OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for vtext
