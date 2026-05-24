@@ -52,8 +52,8 @@ type podcastSubscriptionsResponse struct {
 	Errors        []string                    `json:"errors,omitempty"`
 }
 
-// Podcast APIs run from the sandbox runtime package so app fixes can deploy
-// without rebuilding the base guest image.
+// Podcast APIs run from the sandbox runtime package so ordinary app fixes can
+// deploy without rebuilding the base guest image.
 func (h *APIHandler) HandlePodcastSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

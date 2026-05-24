@@ -719,16 +719,36 @@ jobs:
               if [ "${#active_interactive[@]}" -eq 0 ]; then
                 echo "    No active interactive computers need refresh"
               else
+                refresh_pids=()
+                refresh_status=0
+                max_parallel_refresh=4
                 for record in "${active_interactive[@]}"; do
                   IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id <<< "$record"
-                  echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
-                  payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
-                  timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
-                    -H "X-Internal-Caller: true" \
-                    -H "Content-Type: application/json" \
-                    -d "$payload" \
-                    http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                  (
+                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                    timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
+                      -H "X-Internal-Caller: true" \
+                      -H "Content-Type: application/json" \
+                      -d "$payload" \
+                      http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                    echo "    Refreshed ${refresh_vm_id}"
+                  ) &
+                  refresh_pids+=("$!")
+                  if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
+                    for refresh_pid in "${refresh_pids[@]}"; do
+                      wait "$refresh_pid" || refresh_status=$?
+                    done
+                    refresh_pids=()
+                  fi
                 done
+                for refresh_pid in "${refresh_pids[@]}"; do
+                  wait "$refresh_pid" || refresh_status=$?
+                done
+                if [ "$refresh_status" -ne 0 ]; then
+                  echo "One or more active computer refreshes failed" >&2
+                  exit "$refresh_status"
+                fi
               fi
             else
               echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"
