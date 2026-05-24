@@ -2,7 +2,7 @@
 // sandbox runtime. It supports Bedrock (Anthropic Messages API over AWS
 // Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), and Fireworks AI
 // (OpenAI-compatible Chat Completions API) as required deployed-provider paths for
-// Mission 3.
+// deployed agent/runtime work.
 //
 // Supported models (matching Droid settings.json customModels):
 //   - GLM-5.1 (Z.AI, provider "zai") — Z.AI model
