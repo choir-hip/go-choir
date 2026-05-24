@@ -25,7 +25,7 @@ func TestSnapshotReadsDeployMetadataFile(t *testing.T) {
 	}
 }
 
-func TestSnapshotEnvironmentOverridesDeployMetadataFile(t *testing.T) {
+func TestSnapshotDeployMetadataFileOverridesStaleEnvironment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deploy.env")
 	if err := os.WriteFile(path, []byte("CHOIR_DEPLOYED_AT=file-time\nCHOIR_DEPLOYED_COMMIT=file-commit\n"), 0o644); err != nil {
 		t.Fatalf("write deploy env: %v", err)
@@ -35,10 +35,10 @@ func TestSnapshotEnvironmentOverridesDeployMetadataFile(t *testing.T) {
 	t.Setenv("CHOIR_DEPLOYED_COMMIT", "env-commit")
 
 	info := Snapshot("proxy")
-	if info.DeployedAt != "env-time" {
+	if info.DeployedAt != "file-time" {
 		t.Fatalf("DeployedAt = %q", info.DeployedAt)
 	}
-	if info.DeployedCommit != "env-commit" {
+	if info.DeployedCommit != "file-commit" {
 		t.Fatalf("DeployedCommit = %q", info.DeployedCommit)
 	}
 }

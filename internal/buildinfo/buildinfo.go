@@ -42,9 +42,6 @@ func Snapshot(service string) Info {
 func deployMetadata() (string, string) {
 	deployedAt := os.Getenv("CHOIR_DEPLOYED_AT")
 	deployedCommit := os.Getenv("CHOIR_DEPLOYED_COMMIT")
-	if deployedAt != "" && deployedCommit != "" {
-		return deployedAt, deployedCommit
-	}
 
 	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_ENV_PATH"))
 	if path == "" {
@@ -61,13 +58,9 @@ func deployMetadata() (string, string) {
 		}
 		switch key {
 		case "CHOIR_DEPLOYED_AT":
-			if deployedAt == "" {
-				deployedAt = value
-			}
+			deployedAt = value
 		case "CHOIR_DEPLOYED_COMMIT":
-			if deployedCommit == "" {
-				deployedCommit = value
-			}
+			deployedCommit = value
 		}
 	}
 	return deployedAt, deployedCommit
