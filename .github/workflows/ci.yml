@@ -258,7 +258,8 @@ jobs:
             echo "    Host service roots will build on Node B, not on the ephemeral GitHub runner."
             echo "    Node B has the persistent Nix store; runner service prebuilds were slower than remote warm builds."
           elif [[ "$DEPLOY_HOST" == "true" ]]; then
-            roots+=(.#nixosConfigurations.go-choir-b.config.system.build.toplevel)
+            echo "    Host NixOS roots will build on Node B, not on the ephemeral GitHub runner."
+            echo "    Node B has the persistent Nix store; runner host prebuilds were slower and less reliable than remote warm builds."
           fi
           if [[ "$DEPLOY_ORDINARY_GUEST" == "true" || "$DEPLOY_PLAYWRIGHT_GUEST" == "true" ]]; then
             echo "    Guest image roots will build on Node B, not on the ephemeral GitHub runner."
