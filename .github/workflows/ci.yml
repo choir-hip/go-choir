@@ -245,7 +245,7 @@ jobs:
           echo "    deploy_host_os=${DEPLOY_HOST_OS}"
           echo "    host_services=${HOST_SERVICES}"
           service_pointer_deploy=false
-          if [[ "$DEPLOY_HOST_OS" != "true" && "$DEPLOY_ORDINARY_GUEST" != "true" && "$DEPLOY_PLAYWRIGHT_GUEST" != "true" && -n "$HOST_SERVICES" ]]; then
+          if [[ "$DEPLOY_HOST_OS" != "true" && -n "$HOST_SERVICES" ]]; then
             service_pointer_deploy=true
           fi
           roots=()
@@ -319,7 +319,7 @@ jobs:
             echo "    deploy_host_os=${DEPLOY_HOST_OS}"
             echo "    host_services=${HOST_SERVICES}"
             service_pointer_deploy=false
-            if [ "${DEPLOY_HOST_OS}" != "true" ] && [ "${DEPLOY_ORDINARY_GUEST}" != "true" ] && [ "${DEPLOY_PLAYWRIGHT_GUEST}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
+            if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
               service_pointer_deploy=true
             fi
             note_phase() {
