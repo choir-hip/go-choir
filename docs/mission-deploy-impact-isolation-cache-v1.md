@@ -857,6 +857,35 @@ verification on Node B. Acceptance for this checkpoint is the next behavior
 change deploy showing the same staging identity/health proof with a shorter
 deploy job setup interval before the SSH deploy begins.
 
+#### Acceptance: first deploy after runner prebuild removal
+
+Commit `e67967c849891da044bc28a495bef172e5bbc16a` exercised a real
+frontend-plus-sandbox service-pointer deploy after the runner-side Nix setup and
+prebuild/copy path were removed.
+
+- CI run: `26370325173`
+- deploy job: `77621335838`
+- deploy job duration: `14s`
+- selected classes:
+  - `deploy_frontend=true`
+  - `host_services=sandbox`
+  - `deploy_host_os=false`
+  - `deploy_ordinary_guest=false`
+  - `deploy_playwright_guest=false`
+  - `deploy_vmctl_restart=false`
+- Node B build phase: `8s`
+  - fast sandbox service build: `4s`
+  - frontend bundle build: `8s`
+- remote deploy total: `10s`
+- skipped host NixOS switch, ordinary guest image, Playwright guest image, and
+  vmctl restart.
+- staging `/health` reported deployed commit
+  `e67967c849891da044bc28a495bef172e5bbc16a`.
+
+The removed runner setup saved the previously observed ~20s GitHub-runner Nix
+setup/prebuild overhead and made the behavior-changing deploy path shorter than
+the CI test fan-out.
+
 ### Updated Residual Risks
 
 - Full host-root deploys still cost minutes on the GitHub runner and should be
