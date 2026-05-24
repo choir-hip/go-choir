@@ -222,6 +222,10 @@ type VMManager interface {
 	// RecoverVM force-kills and reboots a failed VM (new epoch).
 	RecoverVM(vmID string) (*VMInstanceInfo, error)
 
+	// RefreshVM force-kills and reboots a VM onto the current deploy's
+	// default boot artifacts while preserving mutable state.
+	RefreshVM(vmID string) (*VMInstanceInfo, error)
+
 	// DestroyVMState deletes stopped terminal VM state. The registry calls this
 	// only after policy checks exclude primary/published/active computers.
 	DestroyVMState(vmID string) error
@@ -2272,7 +2276,7 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	}
 
 	if r.vmManager != nil {
-		info, err := r.vmManager.RecoverVM(own.VMID)
+		info, err := r.vmManager.RefreshVM(own.VMID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to refresh VM %s: %w", own.VMID, err)
 		}

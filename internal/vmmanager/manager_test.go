@@ -49,6 +49,53 @@ func TestManagerDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) {
+	old := VMConfig{
+		VMID:              "vm-stale",
+		KernelImagePath:   "/old/kernel",
+		InitrdPath:        "/old/initrd",
+		RootfsPath:        "/old/rootfs",
+		StoreDiskPath:     "/old/store",
+		KernelParams:      "init=/old/init",
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 4096,
+		PersistentDir:     "/state/vm-stale/persist",
+		SourceVMID:        "vm-source",
+		GatewayToken:      "sandbox-token",
+		Epoch:             7,
+	}
+	defaults := DefaultManagerConfig()
+	defaults.StoreDiskPath = "/current/store"
+
+	got := refreshConfigForCurrentDeploy(old, defaults)
+	if got.KernelImagePath != "" || got.InitrdPath != "" || got.RootfsPath != "" || got.StoreDiskPath != "" || got.KernelParams != "" {
+		t.Fatalf("refresh config kept stale boot artifacts: %+v", got)
+	}
+	if got.SourceVMID != "" {
+		t.Fatalf("refresh config kept stale source VM copy request: %+v", got)
+	}
+	if got.VMID != old.VMID || got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort || got.MachineMemSizeMib != old.MachineMemSizeMib {
+		t.Fatalf("refresh config did not preserve VM identity and mutable state fields: %+v", got)
+	}
+}
+
+func TestRefreshConfigForCurrentDeployPreservesLegacyRootfsConfig(t *testing.T) {
+	old := VMConfig{
+		VMID:            "vm-legacy",
+		KernelImagePath: "/old/kernel",
+		RootfsPath:      "/state/vm-legacy/rootfs.ext4",
+		KernelParams:    "console=ttyS0",
+	}
+	defaults := DefaultManagerConfig()
+	defaults.StoreDiskPath = ""
+
+	got := refreshConfigForCurrentDeploy(old, defaults)
+	if !reflect.DeepEqual(got, old) {
+		t.Fatalf("legacy rootfs refresh config changed unexpectedly:\n got=%+v\nwant=%+v", got, old)
+	}
+}
+
 func TestManagerBootVMRequiresKernelAndRootfs(t *testing.T) {
 	// BootVM should fail when no kernel/rootfs is configured.
 	tmpDir := t.TempDir()

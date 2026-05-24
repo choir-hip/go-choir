@@ -195,6 +195,9 @@ func (m *blockingBootVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*
 func (m *blockingBootVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 2, Healthy: true, State: "running"}, nil
 }
+func (m *blockingBootVMManager) RefreshVM(vmID string) (*VMInstanceInfo, error) {
+	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 3, Healthy: true, State: "running"}, nil
+}
 func (m *blockingBootVMManager) DestroyVMState(vmID string) error      { return nil }
 func (m *blockingBootVMManager) GetVM(vmID string) *VMInstanceInfo     { return nil }
 func (m *blockingBootVMManager) CheckHealth(vmID string) (bool, error) { return true, nil }
@@ -3077,6 +3080,7 @@ type mockVMManager struct {
 	resumes    []string
 	reattaches []string
 	recovers   []string
+	refreshes  []string
 	destroys   []string
 	tokens     map[string]string
 	// Configurable responses
@@ -3088,6 +3092,8 @@ type mockVMManager struct {
 	reattachError    error
 	recoverResponse  *VMInstanceInfo
 	recoverError     error
+	refreshResponse  *VMInstanceInfo
+	refreshError     error
 	getVMs           map[string]*VMInstanceInfo
 	checkHealthOK    *bool
 	checkHealthError error
@@ -3146,6 +3152,17 @@ func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 		return m.recoverResponse, nil
 	}
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9003", Epoch: 2, Healthy: true, State: "running"}, nil
+}
+
+func (m *mockVMManager) RefreshVM(vmID string) (*VMInstanceInfo, error) {
+	m.refreshes = append(m.refreshes, vmID)
+	if m.refreshError != nil {
+		return nil, m.refreshError
+	}
+	if m.refreshResponse != nil {
+		return m.refreshResponse, nil
+	}
+	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9004", Epoch: 3, Healthy: true, State: "running"}, nil
 }
 
 func (m *mockVMManager) DestroyVMState(vmID string) error {
@@ -3671,7 +3688,7 @@ func TestOwnershipRegistry_DelegatesRecoverToVMManager(t *testing.T) {
 
 func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	mock := &mockVMManager{
-		recoverResponse: &VMInstanceInfo{
+		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9045",
 			Epoch:   100,
 			Healthy: true,
@@ -3687,8 +3704,11 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RefreshVMForDesktop: %v", err)
 	}
-	if len(mock.recovers) != 1 {
-		t.Fatalf("expected 1 RecoverVM call, got %d", len(mock.recovers))
+	if len(mock.refreshes) != 1 {
+		t.Fatalf("expected 1 RefreshVM call, got %d", len(mock.refreshes))
+	}
+	if len(mock.recovers) != 0 {
+		t.Fatalf("expected refresh to avoid crash-recovery path, got %d RecoverVM calls", len(mock.recovers))
 	}
 	if own.State != VMStateActive {
 		t.Fatalf("state = %s, want active", own.State)

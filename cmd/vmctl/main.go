@@ -246,6 +246,22 @@ func (a *vmManagerAdapter) RecoverVM(vmID string) (*vmctl.VMInstanceInfo, error)
 	}, nil
 }
 
+func (a *vmManagerAdapter) RefreshVM(vmID string) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.RefreshVM(vmID)
+	if err != nil {
+		return nil, err
+	}
+	return &vmctl.VMInstanceInfo{
+		HostURL:         inst.HostURL,
+		Epoch:           inst.Config.Epoch,
+		Healthy:         inst.Healthy,
+		State:           string(inst.State),
+		StartedAt:       inst.StartedAt,
+		LastHealthCheck: inst.LastHealthCheck,
+		LastHealthyAt:   inst.LastHealthyAt,
+	}, nil
+}
+
 func (a *vmManagerAdapter) DestroyVMState(vmID string) error {
 	return a.mgr.DestroyVMState(vmID)
 }

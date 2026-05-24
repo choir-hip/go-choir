@@ -1067,6 +1067,41 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 	return m.BootVM(inst.Config)
 }
 
+// RefreshVM force-kills and reboots a VM onto the current manager boot
+// artifacts while preserving the mutable data image. Deploy-time refresh is not
+// crash recovery: active VMs must pick up the current guest/store/runtime
+// closure instead of replaying stale boot paths captured when the VM was first
+// created.
+func (m *Manager) RefreshVM(vmID string) (*VMInstance, error) {
+	m.mu.Lock()
+	inst, ok := m.vms[vmID]
+	if !ok {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("vm %s not found", vmID)
+	}
+
+	m.killFirecrackerProcess(inst)
+	inst.State = StateFailed
+	cfg := refreshConfigForCurrentDeploy(inst.Config, m.cfg)
+	m.mu.Unlock()
+
+	return m.BootVM(cfg)
+}
+
+func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfig {
+	if defaults.StoreDiskPath == "" {
+		return cfg
+	}
+
+	cfg.KernelImagePath = ""
+	cfg.InitrdPath = ""
+	cfg.RootfsPath = ""
+	cfg.StoreDiskPath = ""
+	cfg.KernelParams = ""
+	cfg.SourceVMID = ""
+	return cfg
+}
+
 // buildFirecrackerConfig generates the JSON configuration for a
 // Firecracker VM launch. This config is written to a temp file and
 // passed to the Firecracker binary via --config-file.
