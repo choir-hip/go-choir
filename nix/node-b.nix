@@ -36,6 +36,14 @@ let
       ${pkgs.dolt}/bin/dolt init
     fi
   '';
+  serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
+    set -euo pipefail
+    override="/var/lib/go-choir/services/${name}/bin/${name}"
+    if [ -x "$override" ]; then
+      exec "$override" "$@"
+    fi
+    exec "${package}/bin/${name}" "$@"
+  '';
 
   # Common systemd service hardening options applied to all go-choir
   # services. These restrict what the service process can do at the
@@ -182,7 +190,7 @@ in
     wants = [ "network-online.target" ];
     serviceConfig = commonServiceHardening // {
       ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f /var/lib/go-choir/auth-signing/ed25519-key || ${pkgs.openssh}/bin/ssh-keygen -q -t ed25519 -N \"\" -f /var/lib/go-choir/auth-signing/ed25519-key'";
-      ExecStart = "${goChoirPackages.auth}/bin/auth";
+      ExecStart = "${serviceExec "auth" goChoirPackages.auth}";
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/auth";
@@ -208,7 +216,7 @@ in
     wants = [ "network-online.target" "go-choir-sandbox.service" "go-choir-platformd.service" ];
     requires = [ "go-choir-auth.service" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${goChoirPackages.proxy}/bin/proxy";
+      ExecStart = "${serviceExec "proxy" goChoirPackages.proxy}";
       Restart = "on-failure";
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
@@ -256,7 +264,7 @@ in
     wants = [ "network-online.target" ];
     requires = [ "go-choir-platform-dolt.service" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${goChoirPackages.platformd}/bin/platformd";
+      ExecStart = "${serviceExec "platformd" goChoirPackages.platformd}";
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
@@ -275,7 +283,7 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${goChoirPackages.vmctl}/bin/vmctl";
+      ExecStart = "${serviceExec "vmctl" goChoirPackages.vmctl}";
       Restart = "on-failure";
       RestartSec = 3;
       # Firecracker needs access to /dev/kvm for VM hardware acceleration.
@@ -375,7 +383,7 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${goChoirPackages.gateway}/bin/gateway";
+      ExecStart = "${serviceExec "gateway" goChoirPackages.gateway}";
       Restart = "on-failure";
       RestartSec = 3;
       # Provider credentials (LLM and search) are injected via an EnvironmentFile
@@ -461,7 +469,7 @@ in
           exit 1
         '';
       in "${bootstrapScript}";
-      ExecStart = "${goChoirPackages.sandbox}/bin/sandbox";
+      ExecStart = "${serviceExec "sandbox" goChoirPackages.sandbox}";
       Restart = "on-failure";
       RestartSec = 3;
       # Read the gateway token obtained by ExecStartPre.
@@ -508,6 +516,7 @@ in
     "d /var/www 0755 root root -"
     "d /var/www/go-choir 0755 root root -"
     "d /var/lib/go-choir 0750 root root -"
+    "d /var/lib/go-choir/services 0755 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
     "d /var/lib/go-choir/guest 0750 root root -"

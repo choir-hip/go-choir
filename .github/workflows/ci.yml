@@ -154,6 +154,7 @@ jobs:
       deploy_playwright_guest: ${{ steps.detect.outputs.deploy_playwright_guest }}
       deploy_host_os: ${{ steps.detect.outputs.deploy_host_os }}
       deploy_vmctl_restart: ${{ steps.detect.outputs.deploy_vmctl_restart }}
+      host_services: ${{ steps.detect.outputs.host_services }}
       class_explanation: ${{ steps.detect.outputs.class_explanation }}
     steps:
       - uses: actions/checkout@v4
@@ -230,6 +231,8 @@ jobs:
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
           DEPLOY_PLAYWRIGHT_GUEST: ${{ needs.deploy-impact.outputs.deploy_playwright_guest }}
+          DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
+          HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
         run: |
           set -euo pipefail
           started_at=$(date +%s)
@@ -239,11 +242,23 @@ jobs:
           echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
           echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
           echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
+          echo "    deploy_host_os=${DEPLOY_HOST_OS}"
+          echo "    host_services=${HOST_SERVICES}"
+          service_pointer_deploy=false
+          if [[ "$DEPLOY_HOST_OS" != "true" && "$DEPLOY_ORDINARY_GUEST" != "true" && "$DEPLOY_PLAYWRIGHT_GUEST" != "true" && -n "$HOST_SERVICES" ]]; then
+            service_pointer_deploy=true
+          fi
           roots=()
           if [[ "$DEPLOY_FRONTEND" == "true" ]]; then
             roots+=(.#frontend)
           fi
-          if [[ "$DEPLOY_HOST" == "true" ]]; then
+          if [[ "$service_pointer_deploy" == "true" ]]; then
+            IFS=',' read -ra service_roots <<< "$HOST_SERVICES"
+            for service in "${service_roots[@]}"; do
+              [[ -z "$service" ]] && continue
+              roots+=(.#"${service}")
+            done
+          elif [[ "$DEPLOY_HOST" == "true" ]]; then
             roots+=(.#nixosConfigurations.go-choir-b.config.system.build.toplevel)
           fi
           if [[ "$DEPLOY_ORDINARY_GUEST" == "true" ]]; then
@@ -290,7 +305,7 @@ jobs:
       - name: Deploy to staging
         run: |
           ssh go-choir-node-b \
-            "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_FRONTEND='${{ needs.deploy-impact.outputs.deploy_frontend }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' bash -s" <<'REMOTE_DEPLOY'
+            "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_FRONTEND='${{ needs.deploy-impact.outputs.deploy_frontend }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' DEPLOY_HOST_OS='${{ needs.deploy-impact.outputs.deploy_host_os }}' HOST_SERVICES='${{ needs.deploy-impact.outputs.host_services }}' bash -s" <<'REMOTE_DEPLOY'
             set -euo pipefail
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
             deploy_started_at=$(date +%s)
@@ -301,6 +316,12 @@ jobs:
             echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
             echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
             echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
+            echo "    deploy_host_os=${DEPLOY_HOST_OS}"
+            echo "    host_services=${HOST_SERVICES}"
+            service_pointer_deploy=false
+            if [ "${DEPLOY_HOST_OS}" != "true" ] && [ "${DEPLOY_ORDINARY_GUEST}" != "true" ] && [ "${DEPLOY_PLAYWRIGHT_GUEST}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
+              service_pointer_deploy=true
+            fi
             note_phase() {
               local phase="$1"
               local now
@@ -357,7 +378,14 @@ jobs:
             else
               echo "    Skipping frontend bundle build"
             fi
-            if [ "${DEPLOY_HOST}" = "true" ]; then
+            if [ "${service_pointer_deploy}" = "true" ]; then
+              IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+              for service in "${service_roots[@]}"; do
+                [ -z "$service" ] && continue
+                build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result"
+              done
+              echo "    Skipping host NixOS closure build for service-pointer deploy"
+            elif [ "${DEPLOY_HOST}" = "true" ]; then
               build_selected_root "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "/tmp/go-choir-nixos-result"
             else
               echo "    Skipping host NixOS closure build"
@@ -375,7 +403,9 @@ jobs:
             echo "    Selected Nix builds complete"
             note_phase "nix build"
 
-            if [ "${DEPLOY_HOST}" = "true" ]; then
+            if [ "${service_pointer_deploy}" = "true" ]; then
+              echo "==> Skipping NixOS switch (host service pointer deploy)"
+            elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Activating NixOS config"
               current_system=$(readlink -f /run/current-system)
               next_system=$(readlink -f /tmp/go-choir-nixos-result)
@@ -437,8 +467,51 @@ jobs:
             fi
             note_phase "frontend install"
 
+            install_service_pointer() {
+              local service="$1"
+              local src
+              src=$(readlink -f "/tmp/go-choir-service-${service}-result")
+              local root="/var/lib/go-choir/services"
+              local current="$root/$service"
+              local previous="$root/${service}-previous"
+              local next="$root/.${service}-next"
+              if [ ! -x "$src/bin/$service" ]; then
+                echo "Host service package missing executable $service at $src" >&2
+                exit 1
+              fi
+              install -d -m 0755 "$root"
+              rm -rf "$next"
+              mkdir -p "$next"
+              cp -a "$src/." "$next/"
+              rm -rf "$previous"
+              if [ -e "$current" ]; then
+                mv "$current" "$previous"
+              fi
+              mv "$next" "$current"
+              echo "    Host service pointer updated: $service -> $current"
+            }
+
+            if [ "${service_pointer_deploy}" = "true" ]; then
+              echo "==> Installing selected host service packages"
+              IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+              for service in "${service_roots[@]}"; do
+                [ -z "$service" ] && continue
+                install_service_pointer "$service"
+              done
+              echo "==> Restarting selected host services"
+              for service in "${service_roots[@]}"; do
+                [ -z "$service" ] && continue
+                systemctl restart "go-choir-${service}.service"
+                systemctl is-active --quiet "go-choir-${service}.service"
+                echo "    Restarted go-choir-${service}.service"
+              done
+            else
+              echo "    Skipping host service pointer install"
+            fi
+            note_phase "host service install"
+
             echo "==> Ensuring edge config and host services are live"
-            if [ "${DEPLOY_HOST}" = "true" ]; then
+            if [ "${DEPLOY_HOST}" = "true" ] && [ "${service_pointer_deploy}" != "true" ]; then
               systemctl daemon-reload || true
               systemctl start \
                 go-choir-auth \
@@ -452,6 +525,8 @@ jobs:
               else
                 systemctl start caddy
               fi
+            elif [ "${service_pointer_deploy}" = "true" ]; then
+              echo "    Host service pointer deploy already restarted selected services"
             elif [ "${DEPLOY_FRONTEND}" = "true" ]; then
               echo "    Host closure not selected; reloading Caddy only for frontend pointer update"
               if systemctl is-active --quiet caddy; then

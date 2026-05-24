@@ -14,6 +14,7 @@ deploy_vmctl_restart=false
 
 declare -a changed=()
 declare -a explanations=()
+declare -a host_services=()
 
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
@@ -38,6 +39,15 @@ mark_host_service() {
   deploy_needed=true
   deploy_host_service=true
   deploy_host=true
+}
+
+add_host_service() {
+  local service="$1"
+  mark_host_service
+  for existing in "${host_services[@]}"; do
+    [[ "$existing" == "$service" ]] && return
+  done
+  host_services+=("$service")
 }
 
 mark_vmctl_restart() {
@@ -83,13 +93,29 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> frontend bundle"
       ;;
     cmd/vmctl/*|internal/vmctl/*|internal/vmmanager/*)
-      mark_host_service
+      add_host_service "vmctl"
       mark_vmctl_restart
       add_explanation "$path -> vmctl host service closure + vmctl restart"
       ;;
-    cmd/auth/*|cmd/proxy/*|cmd/gateway/*|cmd/platformd/*|cmd/shipper/*|internal/auth/*|internal/proxy/*|internal/gateway/*|internal/provider/*|internal/platform/*|internal/modelcatalog/*|internal/promotion/*|internal/shipper/*)
+    cmd/auth/*|internal/auth/*)
+      add_host_service "auth"
+      add_explanation "$path -> auth host service"
+      ;;
+    cmd/proxy/*|internal/proxy/*)
+      add_host_service "proxy"
+      add_explanation "$path -> proxy host service"
+      ;;
+    cmd/gateway/*|internal/gateway/*|internal/provider/*)
+      add_host_service "gateway"
+      add_explanation "$path -> gateway host service"
+      ;;
+    cmd/platformd/*|internal/platform/*|internal/modelcatalog/*|internal/promotion/*)
+      add_host_service "platformd"
+      add_explanation "$path -> platformd host service"
+      ;;
+    cmd/shipper/*|internal/shipper/*)
       mark_host_service
-      add_explanation "$path -> host service closure"
+      add_explanation "$path -> host service closure (no deployed service pointer yet)"
       ;;
     cmd/sandbox/*|internal/runtime/*|internal/sandbox/*|internal/store/*|internal/types/*|internal/events/*|internal/search/*|internal/server/*|skills/*)
       mark_host
@@ -148,6 +174,7 @@ if [[ -n "$output_file" ]]; then
     echo "deploy_playwright_guest=${deploy_playwright_guest}"
     echo "deploy_host_os=${deploy_host_os}"
     echo "deploy_vmctl_restart=${deploy_vmctl_restart}"
+    echo "host_services=$(IFS=,; echo "${host_services[*]}")"
     echo "changed_paths<<EOF"
     printf '%s\n' "${changed[@]}"
     echo "EOF"
@@ -166,6 +193,7 @@ deploy_ordinary_guest=${deploy_ordinary_guest}
 deploy_playwright_guest=${deploy_playwright_guest}
 deploy_host_os=${deploy_host_os}
 deploy_vmctl_restart=${deploy_vmctl_restart}
+host_services=$(IFS=,; echo "${host_services[*]}")
 EOF
 
 printf '%s\n' "${explanations[@]}"
