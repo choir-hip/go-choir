@@ -202,12 +202,8 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up Nix
-        uses: DeterminateSystems/determinate-nix-action@v3
 
       - name: Setup SSH
         run: |
@@ -224,82 +220,6 @@ jobs:
             ServerAliveInterval 30
             ServerAliveCountMax 6
           EOF
-
-      - name: Prebuild and copy Nix deploy closures
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ needs.deploy-impact.outputs.deploy_host }}
-          DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
-          DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
-          DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
-          DEPLOY_PLAYWRIGHT_GUEST: ${{ needs.deploy-impact.outputs.deploy_playwright_guest }}
-          DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
-          HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
-        run: |
-          set -euo pipefail
-          started_at=$(date +%s)
-          echo "==> Building selected deploy closures on GitHub runner"
-          echo "    deploy_host=${DEPLOY_HOST}"
-          echo "    deploy_frontend=${DEPLOY_FRONTEND}"
-          echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
-          echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
-          echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
-          echo "    deploy_host_os=${DEPLOY_HOST_OS}"
-          echo "    host_services=${HOST_SERVICES}"
-          service_pointer_deploy=false
-          if [[ "$DEPLOY_HOST_OS" != "true" && -n "$HOST_SERVICES" ]]; then
-            service_pointer_deploy=true
-          fi
-          roots=()
-          if [[ "$DEPLOY_FRONTEND" == "true" ]]; then
-            echo "    Frontend roots will build on Node B, not on the ephemeral GitHub runner."
-            echo "    Node B has a persistent Nix store; runner frontend prebuild/copy was slower than remote warm builds."
-          fi
-          if [[ "$service_pointer_deploy" == "true" ]]; then
-            echo "    Host service roots will build on Node B, not on the ephemeral GitHub runner."
-            echo "    Node B has the persistent Nix store; runner service prebuilds were slower than remote warm builds."
-          elif [[ "$DEPLOY_HOST" == "true" ]]; then
-            echo "    Host NixOS roots will build on Node B, not on the ephemeral GitHub runner."
-            echo "    Node B has the persistent Nix store; runner host prebuilds were slower and less reliable than remote warm builds."
-          fi
-          if [[ "$DEPLOY_ORDINARY_GUEST" == "true" || "$DEPLOY_PLAYWRIGHT_GUEST" == "true" ]]; then
-            echo "    Guest image roots will build on Node B, not on the ephemeral GitHub runner."
-            echo "    Node B has the persistent Nix store; runner prebuilds were slower than remote warm builds."
-          fi
-          if (( ${#roots[@]} == 0 )); then
-            echo "    No deploy roots selected; skipping prebuild/copy."
-            exit 0
-          fi
-          printf "    selected root: %s\n" "${roots[@]}"
-          deploy_paths_file=$(mktemp)
-          if nix build -L --print-out-paths --no-link "${roots[@]}" >"$deploy_paths_file"; then
-            :
-          else
-            prebuild_status=$?
-            rm -f "$deploy_paths_file"
-            echo "::warning::GitHub runner prebuild failed with status ${prebuild_status}; Node B will build during deploy."
-            exit 0
-          fi
-          mapfile -t deploy_paths < "$deploy_paths_file"
-          rm -f "$deploy_paths_file"
-
-          build_done_at=$(date +%s)
-          echo "    Built ${#deploy_paths[@]} deploy roots in $((build_done_at - started_at))s"
-          printf "    %s\n" "${deploy_paths[@]}"
-
-          echo "==> Copying deploy closures to Node B Nix store"
-          copy_status=0
-          nix copy \
-            --no-check-sigs \
-            --substitute-on-destination \
-            --to 'ssh-ng://go-choir-node-b?trusted=true' \
-            "${deploy_paths[@]}" || copy_status=$?
-          copied_at=$(date +%s)
-          if [ "$copy_status" -ne 0 ]; then
-            echo "::warning::Nix closure copy failed with status ${copy_status}; Node B will build during deploy."
-            exit 0
-          fi
-          echo "    Copied deploy closures in $((copied_at - build_done_at))s"
 
       - name: Deploy to staging
         run: |

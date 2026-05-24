@@ -836,6 +836,27 @@ changes, but only with a controlled before/after benchmark and a known cache
 key. The next higher-leverage work is to reduce guest-image rebuild size and
 state-disk pressure, not to add another cache layer blindly.
 
+### Runner Prebuild Removal Checkpoint
+
+Commit `0c30a38e49725c465ea53f64901736cfe50bdfe4` proved the service-pointer
+hot path, but the deploy job still spent runner time installing Nix and entering
+a prebuild/copy step whose selected root list was intentionally empty. Earlier
+measurements showed runner-side Nix builds and closure copies were slower and
+less reliable than warm builds on Node B's persistent Nix store, so the workflow
+now treats Node B as the only deploy builder.
+
+The resulting workflow simplification removes:
+
+- `DeterminateSystems/determinate-nix-action` from `deploy-staging`;
+- the unused runner-side "Prebuild and copy Nix deploy closures" step;
+- the now-unneeded `id-token: write` permission on the deploy job.
+
+The remote deploy script still performs checkout, selected frontend/service/
+host/guest builds, install, restart, health checks, and frontend asset graph
+verification on Node B. Acceptance for this checkpoint is the next behavior
+change deploy showing the same staging identity/health proof with a shorter
+deploy job setup interval before the SSH deploy begins.
+
 ### Updated Residual Risks
 
 - Full host-root deploys still cost minutes on the GitHub runner and should be
