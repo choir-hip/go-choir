@@ -534,3 +534,40 @@ Node B and reduced the end-to-end deploy job to about two minutes. The remaining
 cost is the real sandbox package rebuild plus EROFS guest image construction.
 The next deploy-speed axis is not paid cache first; it is reducing or layering
 the sandbox/guest build itself while keeping the impact classifier conservative.
+
+### Trace Live Update Deploy Evidence
+
+Commit `d76cf8481bc46398f7476b57b58b3dc9c2529eb3` shipped the first queued
+regression fixes on top of the deploy-speed work:
+
+- Trace subscribes to `/api/ws` events, refreshes the trajectory list when a
+  new trajectory appears, and refreshes the selected trajectory when matching
+  events arrive.
+- Trace exposes a product route,
+  `GET /api/trace/trajectories/{id}/logs`, and a `Copy logs` button for
+  owner-debuggable trajectory text.
+- The wide Shelf lets minimized app buttons consume the left side while the
+  prompt bar stays right-aligned.
+- Podcast progress reporting no longer references an undefined playback-rate
+  variable.
+
+Deployed CI run: `26360793813`.
+
+- selected deploy classes: frontend bundle, sandbox host service, ordinary
+  guest, vmctl restart
+- GitHub runner prebuild/copy: skipped with `No deploy roots selected`
+- Node B frontend bundle build: `1s`
+- Node B host service sandbox build: `66s`
+- Node B ordinary guest build: `35s`
+- Node B nix build phase total: `102s`
+- Node B deploy through health and asset graph: `111s`
+- full deploy job: `2m46s`
+- skipped host NixOS closure, NixOS switch, and Playwright guest image
+- staging health after deploy: `ok`
+- deployed commit identity: `d76cf8481bc46398f7476b57b58b3dc9c2529eb3`
+
+Conclusion: a combined frontend plus sandbox plus ordinary-guest deploy now
+lands in under three minutes once CI gates pass. The deploy job still spends
+almost all of its time building the sandbox package and rebuilding the ordinary
+guest image, so the next structural speedup should target guest layering or
+decoupling guest images from ordinary sandbox-service changes.
