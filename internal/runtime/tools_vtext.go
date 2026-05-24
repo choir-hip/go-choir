@@ -392,6 +392,7 @@ func cleanVTextToolContent(content string) string {
 		next = strings.TrimPrefix(next, "<content>")
 		next = strings.TrimSuffix(next, "</payload>")
 		next = strings.TrimSuffix(next, "</content>")
+		next = strings.TrimSuffix(next, "</")
 		next = strings.TrimSpace(next)
 		if next == cleaned {
 			return cleaned

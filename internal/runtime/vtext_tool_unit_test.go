@@ -9,6 +9,13 @@ func TestCleanVTextToolContentRemovesWrapperTags(t *testing.T) {
 	}
 }
 
+func TestCleanVTextToolContentRemovesDanglingClosingMarker(t *testing.T) {
+	input := "VText wrapper cleanup works.</\n"
+	if got := cleanVTextToolContent(input); got != "VText wrapper cleanup works." {
+		t.Fatalf("cleanVTextToolContent() = %q", got)
+	}
+}
+
 func TestCleanVTextToolContentPreservesOrdinaryText(t *testing.T) {
 	input := "The paragraph mentions <payload> as literal text inside the body."
 	if got := cleanVTextToolContent(input); got != input {

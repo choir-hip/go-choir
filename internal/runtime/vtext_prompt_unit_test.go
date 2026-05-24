@@ -37,6 +37,13 @@ func TestVTextPromptCreativeDraftFastPath(t *testing.T) {
 	}
 }
 
+func TestVTextPromptExplicitSentenceFastPath(t *testing.T) {
+	prompt := "write one short sentence that says VText wrapper cleanup works"
+	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+		t.Fatalf("expected %q to allow direct drafting without worker grounding", prompt)
+	}
+}
+
 func TestVTextPromptCurrentEventsRequiresResearcher(t *testing.T) {
 	prompt := "what's going on with iran deal now"
 	if vtextPromptAllowsUngroundedCreativeDraft(prompt) {

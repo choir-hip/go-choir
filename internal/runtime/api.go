@@ -329,20 +329,22 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 			AppHint:   contentAppHint,
 		}
 		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
-	} else {
-		if _, err := h.rt.EnsurePersistentSuperAgent(r.Context(), ownerID); err != nil {
-			log.Printf("runtime api: ensure persistent super: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
-			return
+	} else if requestedApp == AgentProfileVText {
+		decision := conductorDecision{
+			Action: "open_app",
+			App:    AgentProfileVText,
+			Title:  buildInitialVTextTitle(text, ""),
 		}
-		rec, err = h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
-		if err == nil && requestedApp == AgentProfileVText {
+		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
+		if err == nil {
 			if _, routeErr := h.rt.ensureConductorVTextRoute(r.Context(), rec, text, ""); routeErr != nil {
 				log.Printf("runtime api: materialize prompt-bar vtext route: %v", routeErr)
 				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
 				return
 			}
 		}
+	} else {
+		rec, err = h.rt.StartRunWithMetadata(r.Context(), text, ownerID, metadata)
 	}
 	if err != nil {
 		log.Printf("runtime api: submit prompt-bar intent: %v", err)
