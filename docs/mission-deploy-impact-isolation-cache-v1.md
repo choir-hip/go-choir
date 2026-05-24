@@ -423,3 +423,24 @@ multithread-capable tool.
 Expected tradeoff: somewhat larger guest store disks, potentially much faster
 `microvm-store-disk.erofs` builds. Acceptance is comparative timing from the
 next full guest-image deploy, not local proof.
+
+### Guest EROFS Evidence
+
+Commit `278a9ba020f4e6c2fad1672363df64936781bfa1` set ordinary and
+Playwright guest images to explicit fast LZ4 EROFS flags.
+
+Deployed CI run: `26359636428`.
+
+- selected deploy classes: ordinary guest, Playwright guest, vmctl restart
+- GitHub runner prebuild: `521s`
+- GitHub runner closure copy: `163s`
+- ordinary `microvm-store-disk.erofs`: `50s`
+- Playwright `microvm-store-disk.erofs`: `53s`
+- Node B remote build/install/restart/health: `18s`
+- Node B deployed commit identity: `278a9ba020f4e6c2fad1672363df64936781bfa1`
+
+The EROFS flag change helped the store-disk builder, but the deploy loop is now
+dominated by ephemeral-runner custom derivation rebuilds and copying the guest
+image outputs to Node B. The next deploy-loop change should let guest images
+build directly on Node B, whose Nix store persists across runs, while keeping
+runner prebuild/copy for frontend, host services, and host OS closures.
