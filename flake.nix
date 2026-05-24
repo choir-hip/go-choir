@@ -205,6 +205,7 @@
         gateway = mkGoService {
           pname = "gateway";
           subPackage = "cmd/gateway";
+          vendorHash = "sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=";
           internalDirs = [
             "internal/buildinfo"
             "internal/events"
@@ -231,6 +232,7 @@
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
+          vendorHash = "sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=";
           internalDirs = [
             "internal/buildinfo"
             "internal/events"
