@@ -96,6 +96,20 @@ func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
 	}
 }
 
+func TestDefaultModelPolicyIgnoresChatGPTProcessFallback(t *testing.T) {
+	raw := defaultModelPolicyText(Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"})
+	policy, err := parseModelPolicy(raw, "generated")
+	if err != nil {
+		t.Fatalf("parse generated policy: %v", err)
+	}
+	if got := policy.Resolve("unknown-role"); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("generated fallback selection = %+v", got)
+	}
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "none" {
+		t.Fatalf("generated conductor selection = %+v", got)
+	}
+}
+
 func TestEnsureDefaultModelPolicyMigratesSemanticallyLegacyGeneratedPolicy(t *testing.T) {
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {

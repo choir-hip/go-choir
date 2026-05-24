@@ -57,14 +57,6 @@ func DefaultModelPolicyPath(filesRoot string) string {
 }
 
 func defaultModelPolicyText(cfg Config) string {
-	fallbackProvider := strings.TrimSpace(cfg.LLMProvider)
-	if fallbackProvider == "" {
-		fallbackProvider = "chatgpt"
-	}
-	fallbackModel := strings.TrimSpace(cfg.LLMModel)
-	if fallbackModel == "" {
-		fallbackModel = "gpt-5.5"
-	}
 	return fmt.Sprintf(`# Choir model policy
 # This computer-owned file maps agent roles to provider/model choices.
 # Provider secrets stay server-owned; this file names models only.
@@ -106,7 +98,7 @@ reasoning = "none"
 provider = "fireworks"
 model = "accounts/fireworks/models/kimi-k2p6"
 requires = ["image", "tool_use"]
-`, fallbackProvider, fallbackModel, strings.TrimSpace(cfg.LLMReasoningEffort))
+`, defaultFireworksProvider, defaultResearcherVTextModel, strings.TrimSpace(cfg.LLMReasoningEffort))
 }
 
 func legacyGeneratedModelPolicyText(cfg Config) string {
@@ -162,16 +154,10 @@ requires = ["image", "tool_use"]
 
 func fallbackModelPolicy(cfg Config) ModelPolicy {
 	defaults := LLMSelection{
-		Provider:        strings.TrimSpace(cfg.LLMProvider),
-		Model:           strings.TrimSpace(cfg.LLMModel),
+		Provider:        defaultFireworksProvider,
+		Model:           defaultResearcherVTextModel,
 		ReasoningEffort: strings.TrimSpace(cfg.LLMReasoningEffort),
 		Source:          "platform_fallback",
-	}
-	if defaults.Provider == "" {
-		defaults.Provider = "chatgpt"
-	}
-	if defaults.Model == "" {
-		defaults.Model = "gpt-5.5"
 	}
 	return ModelPolicy{
 		Defaults: defaults,
