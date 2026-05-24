@@ -562,6 +562,22 @@
       if (!authenticated) return;
       const kind = liveEventKind(message);
       if (!kind) return;
+      if (
+        !userPinnedTrajectory &&
+        message.trajectory_id &&
+        message.trajectory_id !== selectedTrajectoryId &&
+        (kind === 'loop.submitted' || kind === 'loop.started')
+      ) {
+        selectedTrajectoryId = message.trajectory_id;
+        selectedAgentId = '';
+        selectedMomentId = '';
+        momentDetails = {};
+        selectedContinuation = null;
+        selectedAcceptanceId = '';
+        continuationError = '';
+        mobilePanel = 'summary';
+        scheduleSnapshotRefresh();
+      }
       scheduleTrajectoryIndexRefresh();
       if (message.trajectory_id && message.trajectory_id === selectedTrajectoryId) {
         scheduleSnapshotRefresh();

@@ -302,6 +302,9 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	if err != nil {
 		return false
 	}
+	if hasLegacyChatGPTFallback(policy) {
+		return true
+	}
 	conductor, ok := policy.Roles[AgentProfileConductor]
 	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
 		return hasLegacyChatGPTForegroundPin(policy)
@@ -326,6 +329,10 @@ func hasLegacyChatGPTForegroundPin(policy ModelPolicy) bool {
 	super := policy.Roles[AgentProfileSuper]
 	return isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "") ||
 		isModelPolicySelection(super, "chatgpt", "gpt-5.5", "")
+}
+
+func hasLegacyChatGPTFallback(policy ModelPolicy) bool {
+	return isModelPolicySelection(policy.Defaults, "chatgpt", "gpt-5.5", "")
 }
 
 func isModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
