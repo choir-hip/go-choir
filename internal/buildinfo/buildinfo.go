@@ -1,6 +1,9 @@
 package buildinfo
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // These values are filled by release builds through Go ldflags. Local builds
 // keep deterministic fallback values so tests and dev servers still work.
@@ -22,14 +25,50 @@ type Info struct {
 }
 
 // Snapshot returns the current service build identity. Deploy metadata is read
-// at request time so systemd EnvironmentFile updates are reflected after restart.
+// at request time so frontend-only deploys can update /health identity without
+// restarting otherwise-unaffected host services.
 func Snapshot(service string) Info {
+	deployedAt, deployedCommit := deployMetadata()
 	return Info{
 		Service:        service,
 		Version:        Version,
 		Commit:         Commit,
 		BuiltAt:        BuiltAt,
-		DeployedAt:     os.Getenv("CHOIR_DEPLOYED_AT"),
-		DeployedCommit: os.Getenv("CHOIR_DEPLOYED_COMMIT"),
+		DeployedAt:     deployedAt,
+		DeployedCommit: deployedCommit,
 	}
+}
+
+func deployMetadata() (string, string) {
+	deployedAt := os.Getenv("CHOIR_DEPLOYED_AT")
+	deployedCommit := os.Getenv("CHOIR_DEPLOYED_COMMIT")
+	if deployedAt != "" && deployedCommit != "" {
+		return deployedAt, deployedCommit
+	}
+
+	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_ENV_PATH"))
+	if path == "" {
+		path = "/var/lib/go-choir/deploy.env"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return deployedAt, deployedCommit
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "CHOIR_DEPLOYED_AT":
+			if deployedAt == "" {
+				deployedAt = value
+			}
+		case "CHOIR_DEPLOYED_COMMIT":
+			if deployedCommit == "" {
+				deployedCommit = value
+			}
+		}
+	}
+	return deployedAt, deployedCommit
 }

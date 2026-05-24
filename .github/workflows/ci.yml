@@ -226,6 +226,7 @@ jobs:
         shell: bash
         env:
           DEPLOY_HOST: ${{ needs.deploy-impact.outputs.deploy_host }}
+          DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
           DEPLOY_PLAYWRIGHT_GUEST: ${{ needs.deploy-impact.outputs.deploy_playwright_guest }}
@@ -234,10 +235,14 @@ jobs:
           started_at=$(date +%s)
           echo "==> Building selected deploy closures on GitHub runner"
           echo "    deploy_host=${DEPLOY_HOST}"
+          echo "    deploy_frontend=${DEPLOY_FRONTEND}"
           echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
           echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
           echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
           roots=()
+          if [[ "$DEPLOY_FRONTEND" == "true" ]]; then
+            roots+=(.#frontend)
+          fi
           if [[ "$DEPLOY_HOST" == "true" ]]; then
             roots+=(.#nixosConfigurations.go-choir-b.config.system.build.toplevel)
           fi
@@ -285,13 +290,14 @@ jobs:
       - name: Deploy to staging
         run: |
           ssh go-choir-node-b \
-            "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' bash -s" <<'REMOTE_DEPLOY'
+            "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_FRONTEND='${{ needs.deploy-impact.outputs.deploy_frontend }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' bash -s" <<'REMOTE_DEPLOY'
             set -euo pipefail
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
             deploy_started_at=$(date +%s)
             phase_started_at=$deploy_started_at
             echo "==> Deploy impact classes"
             echo "    deploy_host=${DEPLOY_HOST}"
+            echo "    deploy_frontend=${DEPLOY_FRONTEND}"
             echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
             echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
             echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
@@ -346,6 +352,11 @@ jobs:
               echo "    ${label} build complete in $((ended - started))s"
             }
 
+            if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+              build_selected_root "Frontend bundle" ".#frontend" "/tmp/go-choir-frontend-result"
+            else
+              echo "    Skipping frontend bundle build"
+            fi
             if [ "${DEPLOY_HOST}" = "true" ]; then
               build_selected_root "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "/tmp/go-choir-nixos-result"
             else
@@ -393,6 +404,30 @@ jobs:
             fi
             note_phase "nixos switch"
 
+            install_frontend_pointer() {
+              local src="$1"
+              local link="/srv/go-choir/frontend-current"
+              install -d -m 0755 /srv/go-choir
+              if [ ! -f "$src/index.html" ]; then
+                echo "Frontend bundle missing index.html at $src" >&2
+                exit 1
+              fi
+              ln -sfn "$src" /srv/go-choir/.frontend-current.next
+              mv -Tf /srv/go-choir/.frontend-current.next "$link"
+              echo "    Frontend pointer now targets $(readlink -f "$link")"
+            }
+
+            echo "==> Installing selected frontend bundle"
+            if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+              install_frontend_pointer /tmp/go-choir-frontend-result
+            elif [ ! -e /srv/go-choir/frontend-current ]; then
+              echo "Frontend pointer is missing and frontend bundle was not selected" >&2
+              exit 1
+            else
+              echo "    Skipping frontend pointer update"
+            fi
+            note_phase "frontend install"
+
             echo "==> Ensuring edge config and host services are live"
             if [ "${DEPLOY_HOST}" = "true" ]; then
               systemctl daemon-reload || true
@@ -408,9 +443,15 @@ jobs:
               else
                 systemctl start caddy
               fi
+            elif [ "${DEPLOY_FRONTEND}" = "true" ]; then
+              echo "    Host closure not selected; reloading Caddy only for frontend pointer update"
+              if systemctl is-active --quiet caddy; then
+                systemctl reload caddy || systemctl restart caddy
+              else
+                systemctl start caddy
+              fi
             else
-              echo "    Host closure not selected; restarting proxy to publish deploy.env identity"
-              systemctl restart go-choir-proxy
+              echo "    Host closure not selected; no host service activation required"
             fi
             note_phase "service activation"
 
@@ -476,9 +517,14 @@ jobs:
             note_phase "health checks"
 
             echo "==> Smoke test: public frontend asset graph"
-            configured_frontend_root=$(sed -n "s|^[[:space:]]*root \\* \\(/nix/store/[^[:space:]]*go-choir-frontend[^[:space:]]*\\).*|\\1|p" /etc/caddy/caddy_config | head -n 1)
+            configured_frontend_root=$(sed -n "s|^[[:space:]]*root \\* \\([^[:space:]]*\\).*|\\1|p" /etc/caddy/caddy_config | head -n 1)
             if [ -z "$configured_frontend_root" ]; then
               echo "Could not find configured frontend root in Caddy config" >&2
+              exit 1
+            fi
+            resolved_frontend_root=$(readlink -f "$configured_frontend_root")
+            if [ -z "$resolved_frontend_root" ] || [ ! -d "$resolved_frontend_root" ]; then
+              echo "Configured frontend root $configured_frontend_root did not resolve to a directory" >&2
               exit 1
             fi
             served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors https://draft.choir-ip.com/ |
@@ -488,11 +534,11 @@ jobs:
               echo "Could not find served frontend JS asset in public index" >&2
               exit 1
             fi
-            if [ ! -f "$configured_frontend_root/assets/$served_asset" ]; then
-              echo "Served asset $served_asset is not in configured frontend root $configured_frontend_root" >&2
+            if [ ! -f "$resolved_frontend_root/assets/$served_asset" ]; then
+              echo "Served asset $served_asset is not in configured frontend root $configured_frontend_root ($resolved_frontend_root)" >&2
               exit 1
             fi
-            echo "    Public frontend asset $served_asset belongs to $configured_frontend_root"
+            echo "    Public frontend asset $served_asset belongs to $configured_frontend_root ($resolved_frontend_root)"
             note_phase "frontend asset graph"
 
             echo "==> Staging deploy complete"

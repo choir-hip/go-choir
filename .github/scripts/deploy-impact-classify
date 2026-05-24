@@ -32,7 +32,6 @@ mark_host() {
 mark_frontend() {
   deploy_needed=true
   deploy_frontend=true
-  deploy_host=true
 }
 
 mark_host_service() {
@@ -61,6 +60,7 @@ mark_host_os() {
   deploy_needed=true
   deploy_host_os=true
   deploy_host=true
+  deploy_frontend=true
   deploy_vmctl_restart=true
 }
 
@@ -80,7 +80,7 @@ for path in "${changed[@]}"; do
   case "$path" in
     frontend/src/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html|frontend/public/*)
       mark_frontend
-      add_explanation "$path -> frontend + host closure"
+      add_explanation "$path -> frontend bundle"
       ;;
     cmd/vmctl/*|internal/vmctl/*|internal/vmmanager/*)
       mark_host_service

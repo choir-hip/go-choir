@@ -20,6 +20,7 @@ let
   # via interpolation instead of raw *_KEY_PATH=/absolute/path literals
   # that Droid-Shield false-positives on.
   authSigningDir = "/var/lib/go-choir/auth-signing";
+  frontendCurrent = "/srv/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
@@ -132,12 +133,12 @@ in
           respond "internal routes are not available from the public edge" 403
         }
         handle /assets/* {
-          root * ${goChoirPackages.frontend}
+          root * ${frontendCurrent}
           header Cache-Control "public, max-age=31536000, immutable"
           file_server
         }
         handle {
-          root * ${goChoirPackages.frontend}
+          root * ${frontendCurrent}
           # The SPA shell must not be browser-cached. Vite content-hashes built
           # assets, but index.html is the pointer to the current asset graph.
           header Cache-Control "no-store"
@@ -504,6 +505,7 @@ in
   # placed in this directory or in the guest image itself (VAL-VM-011).
   systemd.tmpfiles.rules = [
     "d /opt/go-choir 0755 root root -"
+    "d /srv/go-choir 0755 root root -"
     "d /var/lib/go-choir 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
