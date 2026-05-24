@@ -2,25 +2,28 @@
 set -euo pipefail
 
 json_log="$(mktemp)"
-trap 'rm -f "$json_log"' EXIT
+json_only_log="$(mktemp)"
+trap 'rm -f "$json_log" "$json_only_log"' EXIT
 
 test_status=0
 go test -json "$@" 2>&1 | tee "$json_log" || test_status=${PIPESTATUS[0]}
 
 if command -v jq >/dev/null 2>&1; then
+  awk '/^[[:space:]]*\{/ { print }' "$json_log" > "$json_only_log"
+
   echo "::group::Go test timing summary"
   echo "Slowest packages:"
   jq -r '
     select((.Action == "pass" or .Action == "fail") and (.Test == null)) |
     [(.Elapsed // 0), .Package, .Action] | @tsv
-  ' "$json_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 20 {printf "  %7.2fs  %-70s %s\n", $1, $2, $3}'
+  ' "$json_only_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 20 {printf "  %7.2fs  %-70s %s\n", $1, $2, $3}'
 
   echo
   echo "Slowest tests:"
   jq -r '
     select((.Action == "pass" or .Action == "fail") and (.Test != null)) |
     [(.Elapsed // 0), .Package, .Test, .Action] | @tsv
-  ' "$json_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 40 {printf "  %7.2fs  %-58s %-80s %s\n", $1, $2, $3, $4}'
+  ' "$json_only_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 40 {printf "  %7.2fs  %-58s %-80s %s\n", $1, $2, $3, $4}'
 
   if [[ "$test_status" -ne 0 ]]; then
     echo
@@ -28,7 +31,7 @@ if command -v jq >/dev/null 2>&1; then
     jq -r '
       select(.Test != null and (.Action == "run" or .Action == "pass" or .Action == "fail" or .Action == "skip")) |
       [.Package, .Test, .Action] | @tsv
-    ' "$json_log" 2>/dev/null |
+    ' "$json_only_log" 2>/dev/null |
       awk -F '\t' '{key=$1 "\t" $2; status[key]=$3} END {for (key in status) if (status[key] == "run") print key}' |
       sort |
       awk -F '\t' 'NR <= 40 {printf "  %-58s %s\n", $1, $2}'
