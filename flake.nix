@@ -184,6 +184,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
+          vendorHash = "sha256-+qN6OZMZuzyZeCmwdnQyzH3teNOY/ChJP1yRsEEiULQ=";
           internalDirs = [
             "internal/buildinfo"
             "internal/platform"
