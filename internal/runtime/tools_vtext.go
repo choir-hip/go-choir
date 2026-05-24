@@ -372,7 +372,7 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 		return materializedVTextEdit{}, fmt.Errorf("operation = %q, want replace_all or apply_edits", edit.Operation)
 	}
 
-	content = strings.TrimSpace(content)
+	content = cleanVTextToolContent(content)
 	if content == "" {
 		return materializedVTextEdit{}, fmt.Errorf("materialized document content must not be empty")
 	}
@@ -382,6 +382,22 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 		BaseRevisionID: baseRevisionID,
 		EditCount:      editCount,
 	}, nil
+}
+
+func cleanVTextToolContent(content string) string {
+	cleaned := strings.TrimSpace(content)
+	for {
+		next := strings.TrimSpace(cleaned)
+		next = strings.TrimPrefix(next, "<payload>")
+		next = strings.TrimPrefix(next, "<content>")
+		next = strings.TrimSuffix(next, "</payload>")
+		next = strings.TrimSuffix(next, "</content>")
+		next = strings.TrimSpace(next)
+		if next == cleaned {
+			return cleaned
+		}
+		cleaned = next
+	}
 }
 
 func applyVTextTextEdit(content string, edit vtextTextEdit) (string, error) {
