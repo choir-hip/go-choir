@@ -369,8 +369,11 @@ jobs:
               echo "    ${label} build complete in $((ended - started))s"
             }
 
+            selected_build_pids=()
+            selected_build_status=0
             if [ "${DEPLOY_FRONTEND}" = "true" ]; then
-              build_selected_root "Frontend bundle" ".#frontend" "/tmp/go-choir-frontend-result"
+              build_selected_root "Frontend bundle" ".#frontend" "/tmp/go-choir-frontend-result" &
+              selected_build_pids+=("$!")
             else
               echo "    Skipping frontend bundle build"
             fi
@@ -378,7 +381,8 @@ jobs:
               IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
               for service in "${service_roots[@]}"; do
                 [ -z "$service" ] && continue
-                build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result"
+                build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result" &
+                selected_build_pids+=("$!")
               done
               echo "    Skipping host NixOS closure build for service-pointer deploy"
             elif [ "${DEPLOY_HOST}" = "true" ]; then
@@ -386,28 +390,26 @@ jobs:
             else
               echo "    Skipping host NixOS closure build"
             fi
-            guest_build_pids=()
             if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
               build_selected_root "Guest image" ".#guest-image" "/tmp/guest-image-result" &
-              guest_build_pids+=("$!")
+              selected_build_pids+=("$!")
             else
               echo "    Skipping ordinary guest image build"
             fi
             if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
               build_selected_root "Playwright guest image" ".#guest-image-playwright" "/tmp/guest-image-playwright-result" &
-              guest_build_pids+=("$!")
+              selected_build_pids+=("$!")
             else
               echo "    Skipping Playwright guest image build"
             fi
-            guest_build_status=0
-            for pid in "${guest_build_pids[@]}"; do
+            for pid in "${selected_build_pids[@]}"; do
               if ! wait "$pid"; then
-                guest_build_status=1
+                selected_build_status=1
               fi
             done
-            if [ "$guest_build_status" -ne 0 ]; then
-              echo "One or more guest image builds failed" >&2
-              exit "$guest_build_status"
+            if [ "$selected_build_status" -ne 0 ]; then
+              echo "One or more selected Nix builds failed" >&2
+              exit "$selected_build_status"
             fi
             echo "    Selected Nix builds complete"
             note_phase "nix build"
