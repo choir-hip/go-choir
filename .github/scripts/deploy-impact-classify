@@ -132,10 +132,39 @@ for path in "${changed[@]}"; do
       mark_ordinary_guest
       add_explanation "$path -> sandbox Trace API + ordinary guest image"
       ;;
-    internal/runtime/*|internal/store/*|internal/types/*|internal/events/*|internal/search/*|internal/server/*)
-      mark_host
+    internal/runtime/*|internal/store/*)
+      add_host_service "gateway"
+      add_host_service "sandbox"
       mark_ordinary_guest
-      add_explanation "$path -> ordinary guest image + host closure (shared sandbox/runtime impact)"
+      add_explanation "$path -> gateway/sandbox service pointers + ordinary guest image"
+      ;;
+    internal/types/*)
+      add_host_service "gateway"
+      add_host_service "proxy"
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> shared API types: gateway/proxy/sandbox service pointers + ordinary guest image"
+      ;;
+    internal/events/*)
+      add_host_service "gateway"
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> event bus users: gateway/sandbox service pointers + ordinary guest image"
+      ;;
+    internal/server/*)
+      add_host_service "auth"
+      add_host_service "gateway"
+      add_host_service "platformd"
+      add_host_service "proxy"
+      add_host_service "sandbox"
+      add_host_service "vmctl"
+      mark_ordinary_guest
+      add_explanation "$path -> shared HTTP server: all host service pointers + ordinary guest image"
+      ;;
+    internal/search/*)
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> sandbox search runtime + ordinary guest image"
       ;;
     nix/sandbox-vm.nix)
       mark_ordinary_guest
