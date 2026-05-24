@@ -1297,6 +1297,30 @@ func TestCookieAuthRejectedByGateway(t *testing.T) {
 	}
 }
 
+func TestAuthorizedRuntimePeerIncludesVMManagerSubnetRollover(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+		want bool
+	}{
+		{name: "first vmmanager subnet", ip: "10.200.0.2", want: true},
+		{name: "second vmmanager /16 after rollover", ip: "10.201.3.2", want: true},
+		{name: "last bounded vmmanager /16", ip: "10.215.255.2", want: true},
+		{name: "host side rejected", ip: "10.201.3.1", want: false},
+		{name: "outside bounded vmmanager pool", ip: "10.216.0.2", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(`{}`))
+			req.RemoteAddr = net.JoinHostPort(tt.ip, "44444")
+			if got := isAuthorizedRuntimePeer(req); got != tt.want {
+				t.Fatalf("isAuthorizedRuntimePeer(%s) = %v, want %v", tt.ip, got, tt.want)
+			}
+		})
+	}
+}
+
 // --- Multiple Sandbox Isolation Tests ---
 
 func TestMultipleSandboxesIsolated(t *testing.T) {

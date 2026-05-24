@@ -669,15 +669,16 @@ func remoteIP(r *http.Request) net.IP {
 }
 
 // Choir guests boot on host tap networks with the host side at *.1 and the
-// guest side at *.2. Keep this narrow so a leaked bearer token is not enough
-// to call the gateway from arbitrary hosts.
+// guest side at *.2. Keep this aligned with vmmanager's bounded private
+// allocation pool so a leaked bearer token is not enough to call the gateway
+// from arbitrary hosts.
 func isChoirGuestPeer(ip net.IP) bool {
 	ip4 := ip.To4()
 	if ip4 == nil {
 		return false
 	}
 	return (ip4[0] == 172 && ip4[2] == 0 && ip4[3] == 2) ||
-		(ip4[0] == 10 && ip4[1] == 200 && ip4[3] == 2)
+		(ip4[0] == 10 && ip4[1] >= 200 && ip4[1] <= 215 && ip4[3] == 2)
 }
 
 // httptest.NewRequest uses documentation-only test networks, which are never
