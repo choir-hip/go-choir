@@ -13,14 +13,14 @@ if command -v jq >/dev/null 2>&1; then
   jq -r '
     select((.Action == "pass" or .Action == "fail") and (.Test == null)) |
     [(.Elapsed // 0), .Package, .Action] | @tsv
-  ' "$json_log" 2>/dev/null | sort -nr | head -20 | awk -F '\t' '{printf "  %7.2fs  %-70s %s\n", $1, $2, $3}'
+  ' "$json_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 20 {printf "  %7.2fs  %-70s %s\n", $1, $2, $3}'
 
   echo
   echo "Slowest tests:"
   jq -r '
     select((.Action == "pass" or .Action == "fail") and (.Test != null)) |
     [(.Elapsed // 0), .Package, .Test, .Action] | @tsv
-  ' "$json_log" 2>/dev/null | sort -nr | head -40 | awk -F '\t' '{printf "  %7.2fs  %-58s %-80s %s\n", $1, $2, $3, $4}'
+  ' "$json_log" 2>/dev/null | sort -nr | awk -F '\t' 'NR <= 40 {printf "  %7.2fs  %-58s %-80s %s\n", $1, $2, $3, $4}'
 
   if [[ "$test_status" -ne 0 ]]; then
     echo
@@ -31,8 +31,7 @@ if command -v jq >/dev/null 2>&1; then
     ' "$json_log" 2>/dev/null |
       awk -F '\t' '{key=$1 "\t" $2; status[key]=$3} END {for (key in status) if (status[key] == "run") print key}' |
       sort |
-      head -40 |
-      awk -F '\t' '{printf "  %-58s %s\n", $1, $2}'
+      awk -F '\t' 'NR <= 40 {printf "  %-58s %s\n", $1, $2}'
   fi
   echo "::endgroup::"
 else
