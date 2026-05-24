@@ -356,9 +356,6 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
-	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
-		return nil, fmt.Errorf("persist agent: %w", err)
-	}
 	rec := &types.RunRecord{
 		RunID:        runID,
 		AgentID:      agentRec.AgentID,
@@ -374,13 +371,9 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		Metadata:     metadata,
 	}
 
-	if err := rt.store.CreateRun(ctx, *rec); err != nil {
-		return nil, fmt.Errorf("persist run: %w", err)
+	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt)); err != nil {
+		return nil, err
 	}
-	rt.createAgentMutationForRun(ctx, rec)
-
-	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": len(prompt)})
-	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, promptLenPayload)
 	return rec, nil
 }
 
@@ -711,30 +704,12 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 	if metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
 		return
 	}
-	docID := metadataStringValue(rec.Metadata, "doc_id")
-	if docID == "" {
+	mutation := agentMutationForRun(rec)
+	if mutation == nil {
 		log.Printf("runtime: vtext agent revision run %s: missing doc_id for mutation", rec.RunID)
 		return
 	}
-	scheduledSeq := int64(0)
-	if rec.Metadata != nil {
-		switch v := rec.Metadata["scheduled_message_seq"].(type) {
-		case int64:
-			scheduledSeq = v
-		case int:
-			scheduledSeq = int64(v)
-		case float64:
-			scheduledSeq = int64(v)
-		}
-	}
-	if err := rt.store.CreateAgentMutation(ctx, store.AgentMutation{
-		DocID:               docID,
-		RunID:               rec.RunID,
-		OwnerID:             rec.OwnerID,
-		State:               "pending",
-		ScheduledMessageSeq: scheduledSeq,
-		CreatedAt:           rec.CreatedAt,
-	}); err != nil {
+	if err := rt.store.CreateAgentMutation(ctx, *mutation); err != nil {
 		log.Printf("runtime: vtext agent revision run %s: create mutation: %v", rec.RunID, err)
 	}
 }

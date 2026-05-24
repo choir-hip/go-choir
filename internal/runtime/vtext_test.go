@@ -1561,7 +1561,7 @@ func TestVTextAgentRevisionCreatesCanonicalRevision(t *testing.T) {
 }
 
 func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
 		RunID:        "run-vtext-shared-prompt",

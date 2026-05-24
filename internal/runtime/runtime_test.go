@@ -60,6 +60,22 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	return rt, s
 }
 
+// testPromptRuntime creates only the prompt-related Runtime surface. It avoids
+// opening embedded Dolt for tests that assert prompt composition only.
+func testPromptRuntime(t *testing.T) *Runtime {
+	t.Helper()
+	promptRoot := filepath.Join(t.TempDir(), "prompts")
+	return &Runtime{
+		cfg: Config{
+			SandboxID:           "sandbox-prompt-test",
+			PromptRoot:          promptRoot,
+			SupervisionInterval: time.Hour,
+		},
+		promptStore:   NewPromptStore(promptRoot),
+		modelPolicies: make(map[string]ModelPolicy),
+	}
+}
+
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
@@ -378,7 +394,7 @@ func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) 
 }
 
 func TestProviderPromptUsesPromptOverride(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 	if _, err := rt.PromptStore().Save("user-alice", AgentProfileConductor, "Custom conductor prompt"); err != nil {
 		t.Fatalf("save prompt override: %v", err)
 	}
@@ -402,7 +418,7 @@ func TestProviderPromptUsesPromptOverride(t *testing.T) {
 }
 
 func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
 		RunID:        "run-vtext-1",
@@ -433,7 +449,7 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 }
 
 func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
 		RunID:        "run-super-sweep",
@@ -467,7 +483,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 }
 
 func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 	metadata := map[string]any{
 		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
 		runMetadataWorkerRepoBaseSHA:   "abc123",
@@ -548,7 +564,7 @@ func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
 }
 
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
 		RunID:        "run-researcher-1",
@@ -581,7 +597,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 }
 
 func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 	skillsRoot := t.TempDir()
 	for _, skill := range []struct {
 		name        string

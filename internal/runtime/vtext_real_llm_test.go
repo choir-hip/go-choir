@@ -1,3 +1,5 @@
+//go:build integration
+
 package runtime
 
 import (
@@ -249,6 +251,7 @@ func resolveRealProvider(t *testing.T) (Provider, string) {
 // It returns an APIHandler, store, runtime, and provider name.
 func vtextRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, string) {
 	t.Helper()
+	realProvider, providerName := resolveRealProvider(t)
 
 	dir := filepath.Join(os.TempDir(), "go-choir-m2-vtext-real-llm-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -264,8 +267,6 @@ func vtextRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, strin
 	t.Cleanup(func() { _ = s.Close() })
 
 	bus := events.NewEventBus()
-	realProvider, providerName := resolveRealProvider(t)
-
 	cfg := Config{
 		SandboxID:           "sandbox-vtext-real-llm",
 		StorePath:           dbPath,
