@@ -41,6 +41,7 @@
   let lastAppContextTarget = '';
   let copyLogsBusy = false;
   let copyLogsStatus = '';
+  let userPinnedTrajectory = Boolean(selectedTrajectoryId);
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -266,10 +267,21 @@
     }
     error = '';
     try {
+      const previousSelected = selectedTrajectoryId;
+      const previousLatest = trajectories[0]?.trajectory_id || '';
       const response = await listTrajectories(200);
       trajectories = response.trajectories || [];
-      if (!selectedTrajectoryId && trajectories.length > 0) {
-        selectedTrajectoryId = trajectories[0].trajectory_id;
+      const nextLatest = trajectories[0]?.trajectory_id || '';
+      if (!selectedTrajectoryId && nextLatest) {
+        selectedTrajectoryId = nextLatest;
+      } else if (
+        !userPinnedTrajectory &&
+        previousSelected &&
+        previousSelected === previousLatest &&
+        nextLatest &&
+        nextLatest !== previousSelected
+      ) {
+        selectedTrajectoryId = nextLatest;
       }
       if (selectedTrajectoryId) {
         await loadTrajectorySnapshot(selectedTrajectoryId);
@@ -445,6 +457,7 @@
     selectedAcceptanceId = '';
     continuationError = '';
     mobilePanel = 'summary';
+    userPinnedTrajectory = true;
     await loadTrajectorySnapshot(trajectoryId);
   }
 
@@ -458,6 +471,7 @@
     selectedTrajectoryId = trajectoryId;
     selectedAcceptanceId = acceptanceId;
     selectedAgentId = '';
+    userPinnedTrajectory = true;
     selectedMomentId = '';
     momentDetails = {};
     selectedContinuation = null;

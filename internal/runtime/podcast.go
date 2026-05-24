@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	pathpkg "path"
 	"strconv"
 	"strings"
 	"time"
@@ -204,7 +205,7 @@ func (h *APIHandler) refreshPodcastSubscription(ctx context.Context, sub types.P
 	}
 	now := time.Now().UTC()
 	sub.ContentID = item.ContentID
-	if strings.TrimSpace(sub.Title) == "" {
+	if podcastSubscriptionTitleNeedsRefresh(sub.Title, item.Title, item.SourceURL) {
 		sub.Title = firstNonEmptyPromotion(item.Title, item.SourceURL)
 	}
 	sub.LastFetchedAt = now
@@ -232,6 +233,27 @@ func podcastSubscriptionRefreshDue(sub types.PodcastSubscription, now time.Time)
 	// Opening Podcast should refresh stale feeds without importing a new RSS
 	// content item on every app launch.
 	return now.Sub(sub.LastFetchedAt) >= 30*time.Minute
+}
+
+func podcastSubscriptionTitleNeedsRefresh(current, importedTitle, sourceURL string) bool {
+	title := strings.TrimSpace(current)
+	if title == "" {
+		return true
+	}
+	imported := strings.TrimSpace(importedTitle)
+	if imported == "" || title == imported {
+		return false
+	}
+	lower := strings.ToLower(title)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return true
+	}
+	sourcePath := strings.TrimSpace(sourceURL)
+	if parsed, err := url.Parse(sourcePath); err == nil {
+		sourcePath = parsed.Path
+	}
+	base := strings.TrimSpace(pathpkg.Base(sourcePath))
+	return base != "." && base != "/" && strings.EqualFold(title, base)
 }
 
 func (h *APIHandler) listPodcastSubscriptionsWithContent(ctx context.Context, ownerID string, limit int) ([]types.PodcastSubscription, error) {
