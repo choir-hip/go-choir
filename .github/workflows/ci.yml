@@ -147,6 +147,14 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
       deploy_needed: ${{ steps.detect.outputs.deploy_needed }}
+      deploy_host: ${{ steps.detect.outputs.deploy_host }}
+      deploy_frontend: ${{ steps.detect.outputs.deploy_frontend }}
+      deploy_host_service: ${{ steps.detect.outputs.deploy_host_service }}
+      deploy_ordinary_guest: ${{ steps.detect.outputs.deploy_ordinary_guest }}
+      deploy_playwright_guest: ${{ steps.detect.outputs.deploy_playwright_guest }}
+      deploy_host_os: ${{ steps.detect.outputs.deploy_host_os }}
+      deploy_vmctl_restart: ${{ steps.detect.outputs.deploy_vmctl_restart }}
+      class_explanation: ${{ steps.detect.outputs.class_explanation }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -170,26 +178,9 @@ jobs:
             mapfile -t changed < <(git diff --name-only "$before" "$after")
           fi
 
-          deploy_needed=false
-          for path in "${changed[@]}"; do
-            case "$path" in
-              docs/*|.github/*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*)
-                continue
-                ;;
-            esac
-            if [[ "$path" != */* && "$path" == *.md ]]; then
-              continue
-            fi
-            deploy_needed=true
-            break
-          done
+          printf '%s\n' "${changed[@]}" | .github/scripts/deploy-impact-classify "$GITHUB_OUTPUT"
 
-          {
-            echo "deploy_needed=${deploy_needed}"
-            echo "changed_paths<<EOF"
-            printf '%s\n' "${changed[@]}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          deploy_needed="$(grep '^deploy_needed=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)"
 
           if [[ "$deploy_needed" == "true" ]]; then
             echo "Staging deploy required: at least one deployed artifact path changed."
@@ -233,15 +224,36 @@ jobs:
 
       - name: Prebuild and copy Nix deploy closures
         shell: bash
+        env:
+          DEPLOY_HOST: ${{ needs.deploy-impact.outputs.deploy_host }}
+          DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
+          DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
+          DEPLOY_PLAYWRIGHT_GUEST: ${{ needs.deploy-impact.outputs.deploy_playwright_guest }}
         run: |
           set -euo pipefail
           started_at=$(date +%s)
-          echo "==> Building deploy closures on GitHub runner"
+          echo "==> Building selected deploy closures on GitHub runner"
+          echo "    deploy_host=${DEPLOY_HOST}"
+          echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
+          echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
+          echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
+          roots=()
+          if [[ "$DEPLOY_HOST" == "true" ]]; then
+            roots+=(.#nixosConfigurations.go-choir-b.config.system.build.toplevel)
+          fi
+          if [[ "$DEPLOY_ORDINARY_GUEST" == "true" ]]; then
+            roots+=(.#guest-image)
+          fi
+          if [[ "$DEPLOY_PLAYWRIGHT_GUEST" == "true" ]]; then
+            roots+=(.#guest-image-playwright)
+          fi
+          if (( ${#roots[@]} == 0 )); then
+            echo "    No deploy roots selected; skipping prebuild/copy."
+            exit 0
+          fi
+          printf "    selected root: %s\n" "${roots[@]}"
           deploy_paths_file=$(mktemp)
-          if nix build -L --print-out-paths --no-link \
-            .#nixosConfigurations.go-choir-b.config.system.build.toplevel \
-            .#guest-image \
-            .#guest-image-playwright >"$deploy_paths_file"; then
+          if nix build -L --print-out-paths --no-link "${roots[@]}" >"$deploy_paths_file"; then
             :
           else
             prebuild_status=$?
@@ -272,11 +284,17 @@ jobs:
 
       - name: Deploy to staging
         run: |
-          ssh go-choir-node-b '
+          ssh go-choir-node-b \
+            "DEPLOY_HOST='${{ needs.deploy-impact.outputs.deploy_host }}' DEPLOY_VMCTL_RESTART='${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}' DEPLOY_ORDINARY_GUEST='${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}' DEPLOY_PLAYWRIGHT_GUEST='${{ needs.deploy-impact.outputs.deploy_playwright_guest }}' bash -s" <<'REMOTE_DEPLOY'
             set -euo pipefail
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
             deploy_started_at=$(date +%s)
             phase_started_at=$deploy_started_at
+            echo "==> Deploy impact classes"
+            echo "    deploy_host=${DEPLOY_HOST}"
+            echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
+            echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
+            echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
             note_phase() {
               local phase="$1"
               local now
@@ -304,78 +322,95 @@ jobs:
 
             systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
 
-            echo "==> Building NixOS closure and guest images"
-            host_build_log=$(mktemp)
-            guest_build_log=$(mktemp)
-            playwright_guest_build_log=$(mktemp)
-            /run/current-system/sw/bin/nix build .#nixosConfigurations.go-choir-b.config.system.build.toplevel -o /tmp/go-choir-nixos-result >"$host_build_log" 2>&1 &
-            host_build_pid=$!
-            /run/current-system/sw/bin/nix build .#guest-image -o /tmp/guest-image-result >"$guest_build_log" 2>&1 &
-            guest_build_pid=$!
-            /run/current-system/sw/bin/nix build .#guest-image-playwright -o /tmp/guest-image-playwright-result >"$playwright_guest_build_log" 2>&1 &
-            playwright_guest_build_pid=$!
+            echo "==> Building selected NixOS closure and guest images"
+            build_selected_root() {
+              local label="$1"
+              local attr="$2"
+              local out="$3"
+              local log
+              log=$(mktemp)
+              local started
+              started=$(date +%s)
+              echo "    Building ${label}: ${attr}"
+              local status=0
+              /run/current-system/sw/bin/nix build "$attr" -o "$out" >"$log" 2>&1 || status=$?
+              echo "==> ${label} build log"
+              cat "$log"
+              rm -f "$log"
+              local ended
+              ended=$(date +%s)
+              if [ "$status" -ne 0 ]; then
+                echo "Nix build failed for ${label} with status ${status}" >&2
+                exit "$status"
+              fi
+              echo "    ${label} build complete in $((ended - started))s"
+            }
 
-            host_status=0
-            wait "$host_build_pid" || host_status=$?
-            echo "==> Host NixOS closure build log"
-            cat "$host_build_log"
-
-            guest_status=0
-            wait "$guest_build_pid" || guest_status=$?
-            echo "==> Guest image build log"
-            cat "$guest_build_log"
-
-            playwright_guest_status=0
-            wait "$playwright_guest_build_pid" || playwright_guest_status=$?
-            echo "==> Playwright guest image build log"
-            cat "$playwright_guest_build_log"
-
-            rm -f "$host_build_log" "$guest_build_log" "$playwright_guest_build_log"
-            if [ "$host_status" -ne 0 ] || [ "$guest_status" -ne 0 ] || [ "$playwright_guest_status" -ne 0 ]; then
-              echo "Nix build failed: host=${host_status} guest=${guest_status} playwright_guest=${playwright_guest_status}" >&2
-              exit 1
+            if [ "${DEPLOY_HOST}" = "true" ]; then
+              build_selected_root "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "/tmp/go-choir-nixos-result"
+            else
+              echo "    Skipping host NixOS closure build"
             fi
-            echo "    Nix builds complete"
+            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+              build_selected_root "Guest image" ".#guest-image" "/tmp/guest-image-result"
+            else
+              echo "    Skipping ordinary guest image build"
+            fi
+            if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
+              build_selected_root "Playwright guest image" ".#guest-image-playwright" "/tmp/guest-image-playwright-result"
+            else
+              echo "    Skipping Playwright guest image build"
+            fi
+            echo "    Selected Nix builds complete"
             note_phase "nix build"
 
-            echo "==> Activating NixOS config"
-            current_system=$(readlink -f /run/current-system)
-            next_system=$(readlink -f /tmp/go-choir-nixos-result)
-            if [ "$current_system" = "$next_system" ]; then
-              echo "    Host closure unchanged; skipping NixOS switch"
-            else
-              run_switch() {
-                /run/current-system/sw/bin/nix-env -p /nix/var/nix/profiles/system --set "$next_system"
-                NIXOS_NO_CHECK=1 "$next_system/bin/switch-to-configuration" switch
-              }
-              switch_status=0
-              run_switch || switch_status=$?
-              if [ "$switch_status" -ne 0 ]; then
-                echo "    Switch failed with status ${switch_status}; checking logind before one retry" >&2
-                if ! timeout 10 loginctl list-users >/dev/null 2>&1; then
-                  echo "    logind did not answer; restarting systemd-logind before retry" >&2
-                  systemctl restart systemd-logind.service || true
-                  sleep 3
+            if [ "${DEPLOY_HOST}" = "true" ]; then
+              echo "==> Activating NixOS config"
+              current_system=$(readlink -f /run/current-system)
+              next_system=$(readlink -f /tmp/go-choir-nixos-result)
+              if [ "$current_system" = "$next_system" ]; then
+                echo "    Host closure unchanged; skipping NixOS switch"
+              else
+                run_switch() {
+                  /run/current-system/sw/bin/nix-env -p /nix/var/nix/profiles/system --set "$next_system"
+                  NIXOS_NO_CHECK=1 "$next_system/bin/switch-to-configuration" switch
+                }
+                switch_status=0
+                run_switch || switch_status=$?
+                if [ "$switch_status" -ne 0 ]; then
+                  echo "    Switch failed with status ${switch_status}; checking logind before one retry" >&2
+                  if ! timeout 10 loginctl list-users >/dev/null 2>&1; then
+                    echo "    logind did not answer; restarting systemd-logind before retry" >&2
+                    systemctl restart systemd-logind.service || true
+                    sleep 3
+                  fi
+                  run_switch
                 fi
-                run_switch
+                echo "    Switch complete"
               fi
-              echo "    Switch complete"
+            else
+              echo "==> Skipping NixOS switch (host closure not selected)"
             fi
             note_phase "nixos switch"
 
             echo "==> Ensuring edge config and host services are live"
-            systemctl daemon-reload || true
-            systemctl start \
-              go-choir-auth \
-              go-choir-platformd \
-              go-choir-sandbox \
-              go-choir-gateway \
-              go-choir-proxy \
-              caddy
-            if systemctl is-active --quiet caddy; then
-              systemctl reload caddy || systemctl restart caddy
+            if [ "${DEPLOY_HOST}" = "true" ]; then
+              systemctl daemon-reload || true
+              systemctl start \
+                go-choir-auth \
+                go-choir-platformd \
+                go-choir-sandbox \
+                go-choir-gateway \
+                go-choir-proxy \
+                caddy
+              if systemctl is-active --quiet caddy; then
+                systemctl reload caddy || systemctl restart caddy
+              else
+                systemctl start caddy
+              fi
             else
-              systemctl start caddy
+              echo "    Host closure not selected; restarting proxy to publish deploy.env identity"
+              systemctl restart go-choir-proxy
             fi
             note_phase "service activation"
 
@@ -409,15 +444,28 @@ jobs:
               trap - EXIT
             }
 
-            echo "==> Installing guest images (kernel + rootfs + initrd + store disk)"
-            install_guest_image /tmp/guest-image-result /var/lib/go-choir/guest
-            install_guest_image /tmp/guest-image-playwright-result /var/lib/go-choir/guest-playwright
-            echo "    Guest images deployed"
+            echo "==> Installing selected guest images (kernel + rootfs + initrd + store disk)"
+            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+              install_guest_image /tmp/guest-image-result /var/lib/go-choir/guest
+              echo "    Ordinary guest image deployed"
+            else
+              echo "    Skipping ordinary guest image install"
+            fi
+            if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
+              install_guest_image /tmp/guest-image-playwright-result /var/lib/go-choir/guest-playwright
+              echo "    Playwright guest image deployed"
+            else
+              echo "    Skipping Playwright guest image install"
+            fi
             note_phase "guest image install"
 
-            echo "==> Restarting vmctl to pick up new guest images"
-            systemctl restart go-choir-vmctl
-            sleep 3
+            if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
+              echo "==> Restarting vmctl when selected classes require it"
+              systemctl restart go-choir-vmctl
+              sleep 3
+            else
+              echo "==> Skipping vmctl restart; selected classes do not affect vmctl or guest images"
+            fi
             note_phase "vmctl restart"
 
             echo "==> Smoke test: health endpoints"
@@ -448,7 +496,7 @@ jobs:
             note_phase "frontend asset graph"
 
             echo "==> Staging deploy complete"
-          '
+          REMOTE_DEPLOY
 
       - name: Cleanup SSH
         if: always()
