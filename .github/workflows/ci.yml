@@ -706,14 +706,14 @@ jobs:
               if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
                 echo "==> Refreshing active interactive computers onto deployed guest image"
               else
-                echo "==> Refreshing active interactive computers onto deployed sandbox runtime package"
+                echo "==> Hot-refreshing active interactive computers onto deployed sandbox runtime package"
               fi
               ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
               mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
                 .ownerships[]
                 | select(.state == "active")
                 | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                | [.user_id, (.desktop_id // "primary"), .vm_id]
+                | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url]
                 | @tsv
               ')
               if [ "${#active_interactive[@]}" -eq 0 ]; then
@@ -723,16 +723,45 @@ jobs:
                 refresh_status=0
                 max_parallel_refresh=4
                 for record in "${active_interactive[@]}"; do
-                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id <<< "$record"
+                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_sandbox_url <<< "$record"
                   (
-                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
-                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
-                    timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
-                      -H "X-Internal-Caller: true" \
-                      -H "Content-Type: application/json" \
-                      -d "$payload" \
-                      http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
-                    echo "    Refreshed ${refresh_vm_id}"
+                    if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+                      echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                      payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                      timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
+                        -H "X-Internal-Caller: true" \
+                        -H "Content-Type: application/json" \
+                        -d "$payload" \
+                        http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                      echo "    Refreshed ${refresh_vm_id}"
+                    else
+                      echo "    Hot-refreshing sandbox runtime in ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                      hot_status=$(curl -sS -o /tmp/go-choir-hot-refresh-"${refresh_vm_id}".json -w '%{http_code}' --max-time 20 \
+                        -H "X-Internal-Caller: true" \
+                        -X POST \
+                        "${refresh_sandbox_url}/internal/runtime/refresh" || true)
+                      if [ "$hot_status" -lt 200 ] || [ "$hot_status" -ge 300 ]; then
+                        echo "    Hot-refresh endpoint unavailable for ${refresh_vm_id} (HTTP ${hot_status}); falling back to one full VM refresh"
+                        payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                        timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
+                          -H "X-Internal-Caller: true" \
+                          -H "Content-Type: application/json" \
+                          -d "$payload" \
+                          http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                        echo "    Refreshed ${refresh_vm_id}"
+                        exit 0
+                      fi
+                      for attempt in $(seq 1 60); do
+                        commit=$(curl -fsS --max-time 2 "${refresh_sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                        if [ "$commit" = "$current_commit" ]; then
+                          echo "    Hot-refreshed ${refresh_vm_id}"
+                          exit 0
+                        fi
+                        sleep 1
+                      done
+                      echo "Timed out waiting for ${refresh_vm_id} to serve sandbox runtime ${current_commit}" >&2
+                      exit 1
+                    fi
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
