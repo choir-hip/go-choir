@@ -11,6 +11,7 @@ var (
 )
 
 // Info is the public build/deploy identity shape exposed by health endpoints.
+// Keep it small: staging acceptance reads this on every deploy.
 type Info struct {
 	Service        string `json:"service"`
 	Version        string `json:"version"`
