@@ -7,7 +7,6 @@
 // Supported models (matching Droid settings.json customModels):
 //   - GLM-5.1 (Z.AI, provider "zai") — Z.AI model
 //   - GLM-5-Turbo (Z.AI, provider "zai") — faster Z.AI variant, same provider
-//   - Kimi K2.5 Turbo (Fireworks AI, provider "fireworks") — Fireworks router model
 //   - DeepSeek V4 Pro/Flash and Kimi K2.6 (Fireworks AI, provider "fireworks")
 //   - Claude Sonnet 4.5 (Bedrock, provider "bedrock") — Bedrock model
 //
@@ -25,6 +24,8 @@
 //     with bearer auth via ZAI_API_KEY.
 //   - Fireworks AI uses OpenAI-compatible Chat Completions at
 //     https://api.fireworks.ai/inference/v1/chat/completions with bearer auth via FIREWORKS_API_KEY.
+//     Keep this path distinct from Anthropic-compatible adapters; Fireworks
+//     models should not be sent through the Responses or Messages schemas.
 //   - MultiProvider holds multiple provider backends for the upcoming
 //     multiagent system where multiple models run simultaneously. Model
 //     routing is its own scope and not implemented here.
