@@ -127,6 +127,11 @@ for path in "${changed[@]}"; do
       mark_ordinary_guest
       add_explanation "$path -> sandbox model policy + ordinary guest image"
       ;;
+    internal/runtime/api_trace.go)
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> sandbox Trace API + ordinary guest image"
+      ;;
     internal/runtime/*|internal/store/*|internal/types/*|internal/events/*|internal/search/*|internal/server/*)
       mark_host
       mark_ordinary_guest

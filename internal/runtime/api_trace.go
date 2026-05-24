@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -205,6 +206,8 @@ func (h *APIHandler) HandleTraceTrajectories(w http.ResponseWriter, r *http.Requ
 	switch {
 	case len(parts) == 1:
 		h.handleTraceTrajectorySnapshot(w, r, ownerID, trajectoryID)
+	case len(parts) == 2 && parts[1] == "logs":
+		h.handleTraceTrajectoryLogs(w, r, ownerID, trajectoryID)
 	case len(parts) == 2 && parts[1] == "events":
 		h.handleTraceTrajectoryEvents(w, r, ownerID, trajectoryID)
 	case len(parts) == 3 && parts[1] == "moments":
@@ -260,6 +263,24 @@ func (h *APIHandler) handleTraceTrajectorySnapshot(w http.ResponseWriter, r *htt
 		MobileSummary: buildTraceProvenanceMobileSummary(bundle),
 		Acceptances:   bundle.Acceptances,
 	})
+}
+
+func (h *APIHandler) handleTraceTrajectoryLogs(w http.ResponseWriter, r *http.Request, ownerID, trajectoryID string) {
+	bundle, err := h.loadTraceTrajectoryBundle(r.Context(), ownerID, trajectoryID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
+			return
+		}
+		log.Printf("runtime trace: load trajectory logs: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load trajectory logs"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(formatTraceTrajectoryLog(bundle)))
 }
 
 func (h *APIHandler) handleTraceTrajectoryMomentDetail(w http.ResponseWriter, r *http.Request, ownerID, trajectoryID, momentID string) {
@@ -403,6 +424,127 @@ func writeTraceEvent(w http.ResponseWriter, ev types.EventRecord) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+}
+
+func formatTraceTrajectoryLog(bundle traceTrajectoryBundle) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Trajectory: %s\n", bundle.Trajectory.Title)
+	fmt.Fprintf(&b, "ID: %s\n", bundle.Trajectory.TrajectoryID)
+	fmt.Fprintf(&b, "State: %s\n", bundle.Trajectory.State)
+	fmt.Fprintf(&b, "Latest activity: %s\n", bundle.Trajectory.LatestActivityAt)
+	fmt.Fprintf(&b, "Counts: %d agents, %d delegations, %d moments, %d messages, %d findings, %d searches\n\n",
+		bundle.Trajectory.AgentCount,
+		bundle.Trajectory.DelegationCount,
+		bundle.Trajectory.MomentCount,
+		bundle.Trajectory.MessageCount,
+		bundle.Trajectory.FindingCount,
+		bundle.Trajectory.SearchAttemptCount,
+	)
+
+	if len(bundle.Agents) > 0 {
+		b.WriteString("Agents\n")
+		for _, agent := range bundle.Agents {
+			fmt.Fprintf(&b, "- %s role=%s profile=%s state=%s runs=%d agent_id=%s\n",
+				traceNonEmpty(agent.Label, "agent"),
+				traceNonEmpty(agent.Role, "unknown"),
+				traceNonEmpty(agent.Profile, "unknown"),
+				agent.State,
+				agent.RunCount,
+				agent.AgentID,
+			)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(bundle.Acceptances) > 0 {
+		b.WriteString("Run Acceptances\n")
+		for _, acceptance := range bundle.Acceptances {
+			fmt.Fprintf(&b, "- %s level=%s state=%s mission=%s run=%s evidence_refs=%d rollback_refs=%d\n",
+				acceptance.AcceptanceID,
+				acceptance.AcceptanceLevel,
+				acceptance.State,
+				acceptance.TargetMissionID,
+				acceptance.RunID,
+				len(acceptance.EvidenceRefs),
+				len(acceptance.RollbackRefs),
+			)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(bundle.events) > 0 {
+		b.WriteString("Events\n")
+		for _, ev := range bundle.events {
+			payload := parseTracePayload(ev.Payload)
+			fmt.Fprintf(&b, "- #%d %s %s run=%s agent=%s channel=%s kind=%s phase=%s summary=%s payload=%s\n",
+				ev.StreamSeq,
+				ev.Timestamp.UTC().Format(time.RFC3339Nano),
+				ev.EventID,
+				ev.RunID,
+				ev.AgentID,
+				ev.ChannelID,
+				ev.Kind,
+				ev.Phase,
+				traceEventSummary(ev, payload),
+				traceLogPayload(ev.Payload),
+			)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(bundle.messages) > 0 {
+		b.WriteString("Channel Messages\n")
+		for _, msg := range bundle.messages {
+			fmt.Fprintf(&b, "- #%d %s from=%s role=%s run=%s channel=%s content=%s\n",
+				msg.Seq,
+				msg.Timestamp.UTC().Format(time.RFC3339Nano),
+				traceNonEmpty(msg.From, msg.FromAgentID),
+				msg.Role,
+				msg.FromRunID,
+				msg.ChannelID,
+				traceLogText(msg.Content),
+			)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(bundle.findings) > 0 {
+		b.WriteString("Research Findings\n")
+		for _, finding := range bundle.findings {
+			fmt.Fprintf(&b, "- %s %s agent=%s channel=%s findings=%s questions=%s evidence=%s\n",
+				finding.FindingID,
+				finding.CreatedAt.UTC().Format(time.RFC3339Nano),
+				finding.AgentID,
+				finding.ChannelID,
+				strings.Join(finding.Findings, " | "),
+				strings.Join(finding.Questions, " | "),
+				strings.Join(finding.EvidenceIDs, ","),
+			)
+		}
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func traceLogPayload(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return "{}"
+	}
+	var compacted bytes.Buffer
+	if err := json.Compact(&compacted, raw); err == nil {
+		return traceLogText(compacted.String())
+	}
+	return traceLogText(string(raw))
+}
+
+func traceLogText(text string) string {
+	normalized := strings.Join(strings.Fields(text), " ")
+	const limit = 8000
+	if len(normalized) <= limit {
+		return normalized
+	}
+	return normalized[:limit] + fmt.Sprintf("…[truncated %d chars]", len(normalized)-limit)
 }
 
 func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, trajectoryID string) (traceTrajectoryBundle, error) {

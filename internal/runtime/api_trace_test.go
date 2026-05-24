@@ -322,6 +322,35 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 }
 
+func TestHandleTraceTrajectoryLogsReturnsDebugText(t *testing.T) {
+	rt, handler := testAPISetup(t)
+
+	parent, _ := seedTraceTrajectory(t, rt)
+
+	req := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+parent.RunID+"/logs", "", "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandleTraceTrajectories(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+		t.Fatalf("content-type = %q, want text/plain", got)
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"Trajectory: Investigate moss habitats",
+		"Agents",
+		"Events",
+		"Channel Messages",
+		"Moss thrives in damp shade",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("log body missing %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
 	now := time.Now().UTC()
 	finishedAt := now.Add(30 * time.Second)

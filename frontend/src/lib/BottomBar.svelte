@@ -362,7 +362,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
+    flex: 1 1 auto;
     min-width: 0;
     min-height: 40px;
   }
@@ -643,8 +643,9 @@
     align-items: center;
     gap: 4px;
     overflow-x: auto;
-    flex-shrink: 0;
-    max-width: min(38vw, 460px);
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
     scrollbar-width: none;
   }
 
@@ -694,16 +695,16 @@
   }
 
   .bar-center {
-    flex: 1;
+    flex: 0 1 min(42vw, 680px);
     min-width: 0;
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     align-items: flex-end;
   }
 
   .prompt-bar {
     width: 100%;
-    max-width: 600px;
+    max-width: 680px;
     display: grid;
     gap: 0.35rem;
   }

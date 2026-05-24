@@ -304,7 +304,7 @@
       contentId: episode.id,
       sourceUrl: episode.audioUrl || '',
       title: episode.title || '',
-      playbackRate,
+      playbackRate: playbackSpeed,
     } : {};
   }
 

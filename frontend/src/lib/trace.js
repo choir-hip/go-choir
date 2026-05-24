@@ -29,6 +29,14 @@ export function getTrajectoryMomentDetail(trajectoryId, momentId) {
   );
 }
 
+export async function getTrajectoryLogText(trajectoryId) {
+  const res = await fetchWithRenewal(`/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/logs`, { method: 'GET' });
+  if (!res.ok) {
+    await decodeError(res, `Trajectory log fetch failed (${res.status})`);
+  }
+  return res.text();
+}
+
 export async function synthesizeContinuation(sourceRunId, { start = false } = {}) {
   const res = await fetchWithRenewal('/api/continuations', {
     method: 'POST',

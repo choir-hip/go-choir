@@ -506,3 +506,31 @@ build from its persistent Nix store. The next patch skips GitHub runner
 prebuild/copy for host service roots as well as guest-image roots; frontend and
 full host OS roots remain eligible for runner prebuild/copy until measured
 otherwise.
+
+### Node B Service Root Build Evidence
+
+Commit `ac7cc3eee1614656f660a069cf11ca126f04cf6f` exercised the same
+sandbox-service plus ordinary-guest class after CI stopped prebuilding service
+roots on the GitHub runner.
+
+Deployed CI run: `26360488587`.
+
+- selected deploy classes: sandbox host service, ordinary guest, vmctl restart
+- GitHub runner prebuild/copy: skipped with `No deploy roots selected`
+- Node B host service sandbox build: `65s`
+- Node B ordinary guest build: `36s`
+- Node B nix build phase total: `101s`
+- Node B deploy through health and asset graph: `109s`
+- full deploy job: about `2m11s`
+- skipped frontend bundle, host NixOS closure, NixOS switch, and Playwright
+  guest image
+- staging health after deploy: `ok`
+- deployed commit identity: `ac7cc3eee1614656f660a069cf11ca126f04cf6f`
+
+Conclusion: service-root prebuild/copy on the GitHub runner was counterproductive
+for this class. The previous comparable run spent `181s` building `.#sandbox`
+and `8s` copying before Node B deploy began. The new run moved that work onto
+Node B and reduced the end-to-end deploy job to about two minutes. The remaining
+cost is the real sandbox package rebuild plus EROFS guest image construction.
+The next deploy-speed axis is not paid cache first; it is reducing or layering
+the sandbox/guest build itself while keeping the impact classifier conservative.

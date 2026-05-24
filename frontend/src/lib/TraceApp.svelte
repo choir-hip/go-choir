@@ -3,12 +3,14 @@
   import { AuthRequiredError } from './auth.js';
   import {
     getTrajectoryMomentDetail,
+    getTrajectoryLogText,
     getTrajectorySnapshot,
     listTrajectories,
     openTrajectoryEventStream,
     startContinuation,
     synthesizeContinuation,
   } from './trace.js';
+  import { addLiveEventListener, liveEventKind } from './live-events.js';
 
   const dispatch = createEventDispatcher();
 
@@ -29,12 +31,16 @@
   let streamStatus = 'idle';
   let lastStreamSeq = 0;
   let refreshTimer = null;
+  let indexRefreshTimer = null;
+  let removeLiveListener = null;
   let continuationBusy = false;
   let continuationError = '';
   let selectedContinuation = null;
   let selectedAcceptanceId = appContext?.acceptanceId || '';
   let mobilePanel = 'summary';
   let lastAppContextTarget = '';
+  let copyLogsBusy = false;
+  let copyLogsStatus = '';
 
   function parseDate(value) {
     const time = value ? new Date(value).getTime() : 0;
@@ -137,6 +143,10 @@
     if (refreshTimer) {
       clearTimeout(refreshTimer);
       refreshTimer = null;
+    }
+    if (indexRefreshTimer) {
+      clearTimeout(indexRefreshTimer);
+      indexRefreshTimer = null;
     }
     if (stream) {
       stream.close();
@@ -246,12 +256,14 @@
     };
   }
 
-  async function loadTrajectoryIndex() {
+  async function loadTrajectoryIndex({ silent = false } = {}) {
     if (!authenticated) {
       enterGuestTrace();
       return;
     }
-    loadingIndex = true;
+    if (!silent) {
+      loadingIndex = true;
+    }
     error = '';
     try {
       const response = await listTrajectories(200);
@@ -269,7 +281,9 @@
       }
       error = err.message || 'Failed to load Trace';
     } finally {
-      loadingIndex = false;
+      if (!silent) {
+        loadingIndex = false;
+      }
     }
   }
 
@@ -352,6 +366,48 @@
         error = err.message || 'Failed to refresh Trace';
       }
     }, 250);
+  }
+
+  function scheduleTrajectoryIndexRefresh() {
+    if (!authenticated || indexRefreshTimer) return;
+    indexRefreshTimer = setTimeout(async () => {
+      indexRefreshTimer = null;
+      try {
+        await loadTrajectoryIndex({ silent: true });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          dispatch('authexpired');
+          return;
+        }
+        error = err.message || 'Failed to refresh Trace runs';
+      }
+    }, 250);
+  }
+
+  async function copyTrajectoryLogs() {
+    if (!authenticated) {
+      requestTraceAuth();
+      return;
+    }
+    if (!selectedTrajectoryId || copyLogsBusy) return;
+    copyLogsBusy = true;
+    copyLogsStatus = '';
+    try {
+      const text = await getTrajectoryLogText(selectedTrajectoryId);
+      await navigator.clipboard.writeText(text);
+      copyLogsStatus = 'copied';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      copyLogsStatus = err.message || 'copy failed';
+    } finally {
+      copyLogsBusy = false;
+      setTimeout(() => {
+        copyLogsStatus = '';
+      }, 2200);
+    }
   }
 
   function connectStream(trajectoryId) {
@@ -488,6 +544,15 @@
   $: canContinueTrajectory = canSelectContinuation(trajectory, continuableRunId);
 
   onMount(() => {
+    removeLiveListener = addLiveEventListener((message) => {
+      if (!authenticated) return;
+      const kind = liveEventKind(message);
+      if (!kind || !message?.trajectory_id) return;
+      scheduleTrajectoryIndexRefresh();
+      if (message.trajectory_id === selectedTrajectoryId) {
+        scheduleSnapshotRefresh();
+      }
+    });
     if (authenticated) {
       loadTrajectoryIndex();
     } else {
@@ -508,6 +573,7 @@
   }
 
   onDestroy(() => {
+    removeLiveListener?.();
     closeTraceStream();
   });
 </script>
@@ -599,6 +665,15 @@
               {continuationBusy ? 'Working...' : 'Next Objective'}
             </button>
           {/if}
+          <button
+            class="ghost-btn"
+            data-trace-copy-logs
+            on:click={copyTrajectoryLogs}
+            disabled={copyLogsBusy}
+            title="Copy this trajectory's debug log"
+          >
+            {copyLogsBusy ? 'Copying...' : copyLogsStatus || 'Copy logs'}
+          </button>
           <span class={`status-pill ${stateTone(trajectory.state)}`}>{trajectory.live ? 'live' : trajectory.state || 'idle'}</span>
           <span class="status-pill neutral">{formatTime(trajectory.latest_activity_at)}</span>
         </div>
