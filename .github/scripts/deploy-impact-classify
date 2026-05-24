@@ -92,10 +92,19 @@ for path in "${changed[@]}"; do
       mark_frontend
       add_explanation "$path -> frontend bundle"
       ;;
-    cmd/vmctl/*|internal/vmctl/*|internal/vmmanager/*)
+    cmd/vmctl/*|internal/vmmanager/*)
       add_host_service "vmctl"
       mark_vmctl_restart
       add_explanation "$path -> vmctl host service closure + vmctl restart"
+      ;;
+    internal/vmctl/*)
+      add_host_service "gateway"
+      add_host_service "proxy"
+      add_host_service "sandbox"
+      add_host_service "vmctl"
+      mark_ordinary_guest
+      mark_vmctl_restart
+      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + ordinary guest image + vmctl restart"
       ;;
     cmd/auth/*|internal/auth/*)
       add_host_service "auth"
@@ -105,13 +114,24 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_explanation "$path -> proxy host service"
       ;;
-    cmd/gateway/*|internal/gateway/*|internal/provider/*)
+    cmd/gateway/*)
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
       ;;
-    cmd/platformd/*|internal/platform/*|internal/modelcatalog/*|internal/promotion/*)
+    internal/gateway/*|internal/provider/*|internal/modelcatalog/*|internal/sandbox/*|internal/store/*)
+      add_host_service "gateway"
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> gateway/sandbox shared runtime dependency + ordinary guest image"
+      ;;
+    cmd/platformd/*|internal/promotion/*)
       add_host_service "platformd"
       add_explanation "$path -> platformd host service"
+      ;;
+    internal/platform/*)
+      add_host_service "platformd"
+      add_host_service "proxy"
+      add_explanation "$path -> platform/proxy shared dependency"
       ;;
     cmd/shipper/*|internal/shipper/*)
       mark_host_service
@@ -132,7 +152,7 @@ for path in "${changed[@]}"; do
       mark_ordinary_guest
       add_explanation "$path -> sandbox Trace API + ordinary guest image"
       ;;
-    internal/runtime/*|internal/store/*)
+    internal/runtime/*)
       add_host_service "gateway"
       add_host_service "sandbox"
       mark_ordinary_guest
@@ -144,6 +164,14 @@ for path in "${changed[@]}"; do
       add_host_service "sandbox"
       mark_ordinary_guest
       add_explanation "$path -> shared API types: gateway/proxy/sandbox service pointers + ordinary guest image"
+      ;;
+    internal/buildinfo/*)
+      add_host_service "gateway"
+      add_host_service "platformd"
+      add_host_service "proxy"
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> build identity users: gateway/platformd/proxy/sandbox + ordinary guest image"
       ;;
     internal/events/*)
       add_host_service "gateway"
@@ -183,7 +211,7 @@ for path in "${changed[@]}"; do
       mark_playwright_guest
       add_explanation "$path -> conservative Nix impact: host OS + both guest images"
       ;;
-    go.mod|go.sum|internal/buildinfo/*)
+    go.mod|go.sum)
       mark_host_service
       mark_ordinary_guest
       mark_playwright_guest
