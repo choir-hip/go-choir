@@ -24,7 +24,7 @@ func main() {
 		log.Printf("gateway: identity persistence enabled (%s)", cfg.IdentityStorePath)
 	}
 
-	// Resolve all available real providers from environment credentials
+	// Resolve all available real providers from environment credentials.
 	// using the MultiProvider for multi-provider routing. The gateway
 	// routes requests to the correct provider based on the provider field
 	// or model parameter (VAL-LLM-001, VAL-LLM-005).
