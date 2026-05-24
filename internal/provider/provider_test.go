@@ -1934,6 +1934,12 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 		if len(body.Tools) != 1 || body.Tools[0].Function.Name != "record_status" {
 			t.Fatalf("tools = %#v", body.Tools)
 		}
+		if body.ReasoningEffort != "none" {
+			t.Errorf("reasoning_effort = %q, want none", body.ReasoningEffort)
+		}
+		if body.Temperature == nil || *body.Temperature != 0.1 {
+			t.Errorf("temperature = %v, want 0.1 for tool calls", body.Temperature)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{
@@ -1971,7 +1977,8 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 			Description: "Record status.",
 			InputSchema: map[string]any{"type": "object"},
 		}},
-		MaxTokens: 1024,
+		MaxTokens:       1024,
+		ReasoningEffort: "none",
 	})
 	if err != nil {
 		t.Fatalf("fireworks call: %v", err)

@@ -77,7 +77,7 @@ reasoning = %q
 [roles.conductor]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "low"
+reasoning = "none"
 
 [roles.super]
 provider = "fireworks"
@@ -95,10 +95,12 @@ model = "accounts/fireworks/models/deepseek-v4-pro"
 [roles.researcher]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "none"
 
 [roles.vtext]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "none"
 
 [roles.verifier_multimodal]
 provider = "fireworks"
@@ -174,12 +176,12 @@ func fallbackModelPolicy(cfg Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:  {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "low", Source: "platform_fallback"},
+			AgentProfileConductor:  {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none", Source: "platform_fallback"},
 			AgentProfileSuper:      {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
 			AgentProfileVSuper:     {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:    {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileResearcher: {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, Source: "platform_fallback"},
-			AgentProfileVText:      {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, Source: "platform_fallback"},
+			AgentProfileResearcher: {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			AgentProfileVText:      {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
 			"verifier_multimodal":  {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",

@@ -57,12 +57,16 @@ func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 func TestFallbackModelPolicyKeepsForegroundRolesOffChatGPT(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "low" {
+	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "none" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
 	if super.Provider != "fireworks" || super.Model != "accounts/fireworks/models/deepseek-v4-pro" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
+	}
+	vtext := policy.Resolve(AgentProfileVText)
+	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" || vtext.ReasoningEffort != "none" {
+		t.Fatalf("vtext selection = %+v", vtext)
 	}
 }
 
