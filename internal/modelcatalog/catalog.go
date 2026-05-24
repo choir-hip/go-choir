@@ -65,14 +65,6 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens: 131072,
 		},
 		{
-			ID:                "accounts/fireworks/routers/kimi-k2p5-turbo",
-			DisplayName:       "Kimi K2.5",
-			Provider:          "fireworks",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-		},
-		{
 			ID:                "accounts/fireworks/models/deepseek-v4-pro",
 			DisplayName:       "DeepSeek V4 Pro",
 			Provider:          "fireworks",

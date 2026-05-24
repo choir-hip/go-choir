@@ -1,3 +1,5 @@
+//go:build comprehensive
+
 package runtime
 
 import (

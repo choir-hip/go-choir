@@ -1368,7 +1368,7 @@ func setupMultiProviderHandler(t *testing.T) (*Handler, *IdentityRegistry) {
 		response: &provider.LLMResponse{
 			ID:           "fw-resp-001",
 			Text:         "Hello from Fireworks AI!",
-			Model:        "accounts/fireworks/routers/kimi-k2p5-turbo",
+			Model:        "accounts/fireworks/models/deepseek-v4-flash",
 			StopReason:   "end_turn",
 			ProviderName: "fireworks",
 			Usage:        provider.Usage{InputTokens: 8, OutputTokens: 12},
@@ -1458,8 +1458,8 @@ func TestMultiProvider_RoutesToFireworksByProviderField(t *testing.T) {
 	if resp.Text != "Hello from Fireworks AI!" {
 		t.Errorf("Text = %q, want %q", resp.Text, "Hello from Fireworks AI!")
 	}
-	if resp.Model != "accounts/fireworks/routers/kimi-k2p5-turbo" {
-		t.Errorf("Model = %q, want %q", resp.Model, "accounts/fireworks/routers/kimi-k2p5-turbo")
+	if resp.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Errorf("Model = %q, want %q", resp.Model, "accounts/fireworks/models/deepseek-v4-flash")
 	}
 	if resp.Usage.InputTokens == 0 || resp.Usage.OutputTokens == 0 {
 		t.Errorf("Usage should have non-zero tokens, got: %+v", resp.Usage)
@@ -1473,7 +1473,7 @@ func TestMultiProvider_RoutesToFireworksByModel(t *testing.T) {
 	result, _ := reg.IssueCredential("sandbox-fw-model")
 
 	payload := ProviderRequest{
-		Model:     "accounts/fireworks/routers/kimi-k2p5-turbo",
+		Model:     "accounts/fireworks/models/deepseek-v4-flash",
 		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
 		MaxTokens: 100,
 	}
@@ -1719,7 +1719,7 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 		real: true,
 		response: &provider.LLMResponse{
 			ID:         "fw-tool-001",
-			Model:      "accounts/fireworks/routers/kimi-k2p5-turbo",
+			Model:      "accounts/fireworks/models/deepseek-v4-flash",
 			StopReason: "tool_use",
 			Usage:      provider.Usage{InputTokens: 50, OutputTokens: 20},
 			ToolCalls: []provider.ContentToolCall{
@@ -1742,7 +1742,7 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 
 	payload := ProviderRequest{
 		Provider: "fireworks",
-		Model:    "accounts/fireworks/routers/kimi-k2p5-turbo",
+		Model:    "accounts/fireworks/models/deepseek-v4-flash",
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "What's the weather?"}}}},
 		Tools: []provider.ToolDef{
 			{Name: "get_weather", Description: "Get weather", InputSchema: map[string]any{"type": "object"}},
@@ -1814,7 +1814,7 @@ func TestMultiProvider_RateLimitStillWorks(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "fw-resp-001",
 			Text:         "Hello!",
-			Model:        "kimi-k2p5-turbo",
+			Model:        "deepseek-v4-flash",
 			StopReason:   "end_turn",
 			ProviderName: "fireworks",
 			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 5},
@@ -1872,7 +1872,7 @@ func TestMultiProvider_FireworksWithSystemPrompt(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "fw-sys-001",
 			Text:         "System-aware response",
-			Model:        "accounts/fireworks/routers/kimi-k2p5-turbo",
+			Model:        "accounts/fireworks/models/deepseek-v4-flash",
 			StopReason:   "end_turn",
 			ProviderName: "fireworks",
 			Usage:        provider.Usage{InputTokens: 30, OutputTokens: 10},
@@ -1987,7 +1987,7 @@ func TestHandleInference_StreamingFireworks(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "fw-stream-001",
 			Text:         "Hello from Fireworks streaming!",
-			Model:        "kimi-k2p5-turbo",
+			Model:        "deepseek-v4-flash",
 			StopReason:   "end_turn",
 			ProviderName: "fireworks",
 			Usage:        provider.Usage{InputTokens: 8, OutputTokens: 6},
@@ -2180,7 +2180,7 @@ func TestProviderRouting(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "fw-resp-routing",
 			Text:         "Fireworks response",
-			Model:        "accounts/fireworks/routers/kimi-k2p5-turbo",
+			Model:        "accounts/fireworks/models/deepseek-v4-flash",
 			StopReason:   "end_turn",
 			ProviderName: "fireworks",
 			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 5},
@@ -2240,7 +2240,7 @@ func TestProviderRouting(t *testing.T) {
 		},
 		{
 			name:             "model_fireworks_exact_match",
-			model:            "accounts/fireworks/routers/kimi-k2p5-turbo",
+			model:            "accounts/fireworks/models/deepseek-v4-flash",
 			wantStatus:       http.StatusOK,
 			wantProviderName: "fireworks",
 		},
@@ -2322,7 +2322,7 @@ func TestProviderRouting(t *testing.T) {
 		{
 			name:             "explicit_provider_overrides_model",
 			provider:         "zai",
-			model:            "accounts/fireworks/routers/kimi-k2p5-turbo",
+			model:            "accounts/fireworks/models/deepseek-v4-flash",
 			wantStatus:       http.StatusOK,
 			wantProviderName: "zai",
 		},

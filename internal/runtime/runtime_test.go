@@ -1,3 +1,5 @@
+//go:build comprehensive
+
 package runtime
 
 import (
@@ -16,65 +18,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-// testRuntime creates a fresh Runtime for testing with a temporary store
-// and the stub provider.
-func testRuntime(t *testing.T) (*Runtime, *store.Store) {
-	t.Helper()
-
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
-	dbPath := filepath.Join(dir, t.Name()+".db")
-	promptRoot := filepath.Join(dir, t.Name()+"-prompts")
-	_ = os.Remove(dbPath)
-	_ = os.RemoveAll(promptRoot)
-
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-
-	bus := events.NewEventBus()
-	provider := NewStubProvider(0)
-	cfg := Config{
-		SandboxID:           "sandbox-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: 1 * time.Hour, // don't run supervisor in most tests
-	}
-
-	rt := New(cfg, s, bus, provider)
-
-	// Stop the runtime (cancels in-flight goroutines) before closing
-	// the store to avoid "database is closed" log noise.
-	t.Cleanup(func() {
-		rt.Stop()
-		_ = s.Close()
-		_ = os.Remove(dbPath)
-		_ = os.RemoveAll(promptRoot)
-	})
-
-	return rt, s
-}
-
-// testPromptRuntime creates only the prompt-related Runtime surface. It avoids
-// opening embedded Dolt for tests that assert prompt composition only.
-func testPromptRuntime(t *testing.T) *Runtime {
-	t.Helper()
-	promptRoot := filepath.Join(t.TempDir(), "prompts")
-	return &Runtime{
-		cfg: Config{
-			SandboxID:           "sandbox-prompt-test",
-			PromptRoot:          promptRoot,
-			SupervisionInterval: time.Hour,
-		},
-		promptStore:   NewPromptStore(promptRoot),
-		modelPolicies: make(map[string]ModelPolicy),
-	}
-}
 
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
 	rt, _ := testRuntime(t)

@@ -380,7 +380,7 @@ func TestResolveProviderReturnsNilWhenNoCredentials(t *testing.T) {
 	p, err := ResolveProvider(ProviderConfig{
 		BedrockModels:   []string{"us.anthropic.claude-sonnet-4-6"},
 		ZAIModels:       []string{"glm-5.1"},
-		FireworksModels: []string{"accounts/fireworks/routers/kimi-k2p5-turbo"},
+		FireworksModels: []string{"accounts/fireworks/models/deepseek-v4-flash"},
 	})
 	if err != nil {
 		t.Fatalf("resolve provider: %v", err)
@@ -411,7 +411,7 @@ func TestResolveProviderSelectsFireworks(t *testing.T) {
 func TestFireworksProviderFromEnvMissingKey(t *testing.T) {
 	t.Setenv("FIREWORKS_API_KEY", "")
 
-	_, err := NewFireworksProviderFromEnv("accounts/fireworks/routers/kimi-k2p5-turbo")
+	_, err := NewFireworksProviderFromEnv("accounts/fireworks/models/deepseek-v4-flash")
 	if err == nil || !strings.Contains(err.Error(), "api key") {
 		t.Errorf("expected api key error, got: %v", err)
 	}
@@ -420,11 +420,11 @@ func TestFireworksProviderFromEnvMissingKey(t *testing.T) {
 func TestFireworksProviderFromEnvPassesModel(t *testing.T) {
 	t.Setenv("FIREWORKS_API_KEY", "fw_test-key")
 
-	p, err := NewFireworksProviderFromEnv("accounts/fireworks/routers/kimi-k2p5-turbo")
+	p, err := NewFireworksProviderFromEnv("accounts/fireworks/models/deepseek-v4-flash")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if p.modelID != "accounts/fireworks/routers/kimi-k2p5-turbo" {
+	if p.modelID != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Errorf("expected passed model, got: %s", p.modelID)
 	}
 }
@@ -457,6 +457,9 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 		}
 		if body.Model != "gpt-5.5" {
 			t.Errorf("model = %q, want gpt-5.5", body.Model)
+		}
+		if body.MaxOutputTokens != 64 {
+			t.Errorf("max_output_tokens = %d, want 64", body.MaxOutputTokens)
 		}
 		if body.Reasoning == nil || body.Reasoning.Effort != "low" {
 			t.Errorf("reasoning = %+v, want low", body.Reasoning)
@@ -1905,57 +1908,89 @@ func TestZAIProviderStreamWithToolUse(t *testing.T) {
 	}
 }
 
-func TestFireworksProviderStreamSuccess(t *testing.T) {
-	// Verify Fireworks streaming works with the same SSE format.
+func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
+	// Fireworks recommends OpenAI-compatible chat completions for DeepSeek/Kimi.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify Authorization Bearer header.
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("path = %q, want /chat/completions", r.URL.Path)
+		}
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			t.Errorf("expected Bearer auth, got: %s", auth)
 		}
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		events := []string{
-			`event: message_start` + "\n" + `data: {"type":"message_start","message":{"id":"msg_fw_stream_001","model":"kimi-k2p5-turbo","usage":{"input_tokens":8}}}`,
-			`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
-			`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from Fireworks!"}}`,
-			`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":0}`,
-			`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}`,
-			`event: message_stop` + "\n" + `data: {"type":"message_stop"}`,
+		var body openAIChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if body.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+			t.Errorf("model = %q", body.Model)
+		}
+		if body.MaxTokens != 1024 {
+			t.Errorf("max_tokens = %d, want 1024", body.MaxTokens)
+		}
+		if len(body.Messages) != 2 || body.Messages[0].Role != "system" || body.Messages[1].Role != "user" {
+			t.Fatalf("messages = %#v", body.Messages)
+		}
+		if len(body.Tools) != 1 || body.Tools[0].Function.Name != "record_status" {
+			t.Fatalf("tools = %#v", body.Tools)
 		}
 
-		for _, event := range events {
-			fmt.Fprintln(w, event)
-			fmt.Fprintln(w)
-		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_test",
+			"model":"accounts/fireworks/models/deepseek-v4-flash",
+			"choices":[{
+				"finish_reason":"tool_calls",
+				"message":{
+					"role":"assistant",
+					"content":"",
+					"tool_calls":[{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"record_status","arguments":"{\"status\":\"ok\"}"}
+					}]
+				}
+			}],
+			"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}
+		}`)
 	}))
 	defer server.Close()
 
 	p := &FireworksProvider{
 		apiKey:     "fw-test-key",
-		modelID:    "accounts/fireworks/routers/kimi-k2p5-turbo",
+		modelID:    "accounts/fireworks/models/deepseek-v4-flash",
 		httpClient: server.Client(),
 		baseURL:    server.URL,
 	}
 
-	resp, err := p.Stream(context.Background(), LLMRequest{
-		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Hello"}}}},
+	resp, err := p.Call(context.Background(), LLMRequest{
+		System:   "You are helpful.",
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Record ok."}}}},
+		Tools: []ToolDef{{
+			Name:        "record_status",
+			Description: "Record status.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
 		MaxTokens: 1024,
-	}, func(chunk StreamChunk) {})
-
+	})
 	if err != nil {
-		t.Fatalf("fireworks stream: %v", err)
-	}
-	if resp.Text != "Hello from Fireworks!" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Hello from Fireworks!")
+		t.Fatalf("fireworks call: %v", err)
 	}
 	if resp.ProviderName != "fireworks" {
 		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "fireworks")
 	}
-	if resp.StopReason != "end_turn" {
-		t.Errorf("StopReason = %q, want %q", resp.StopReason, "end_turn")
+	if resp.StopReason != "tool_use" {
+		t.Errorf("StopReason = %q, want %q", resp.StopReason, "tool_use")
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "record_status" {
+		t.Fatalf("ToolCalls = %#v", resp.ToolCalls)
+	}
+	var args map[string]string
+	if err := json.Unmarshal(resp.ToolCalls[0].Arguments, &args); err != nil {
+		t.Fatalf("args json: %v", err)
+	}
+	if args["status"] != "ok" {
+		t.Fatalf("status arg = %q", args["status"])
 	}
 }
 

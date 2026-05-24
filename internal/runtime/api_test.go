@@ -1,3 +1,5 @@
+//go:build comprehensive
+
 package runtime
 
 import (
@@ -15,78 +17,9 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-// testAPISetup creates a fresh Runtime and APIHandler for HTTP handler tests.
-func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
-	t.Helper()
-
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-api-test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
-	dbPath := filepath.Join(dir, t.Name()+".db")
-	promptRoot := filepath.Join(dir, t.Name()+"-prompts")
-	_ = os.Remove(dbPath)
-	_ = os.RemoveAll(promptRoot)
-
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-
-	bus := events.NewEventBus()
-	provider := NewStubProvider(0)
-	cfg := Config{
-		SandboxID:           "sandbox-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: 1 * time.Hour,
-	}
-
-	rt := New(cfg, s, bus, provider)
-	handler := NewAPIHandler(rt)
-
-	// Stop the runtime before closing the store to avoid "database is
-	// closed" log noise from in-flight goroutines.
-	t.Cleanup(func() {
-		rt.Stop()
-		_ = s.Close()
-		_ = os.Remove(dbPath)
-		_ = os.RemoveAll(promptRoot)
-	})
-
-	return rt, handler
-}
-
-// authenticatedRequest creates an HTTP request with the X-Authenticated-User
-// header set, simulating the proxy's user-context injection.
-func authenticatedRequest(method, path, body, user string) *http.Request {
-	var req *http.Request
-	if body != "" {
-		req = httptest.NewRequest(method, path, strings.NewReader(body))
-	} else {
-		req = httptest.NewRequest(method, path, nil)
-	}
-	if user != "" {
-		req.Header.Set("X-Authenticated-User", user)
-	}
-	return req
-}
-
-func registeredRuntimeRequest(t *testing.T, handler *APIHandler, method, path, body, user string) *httptest.ResponseRecorder {
-	t.Helper()
-	srv := server.NewServer("runtime-api-test", "0")
-	RegisterRoutes(srv, handler)
-	req := authenticatedRequest(method, path, body, user)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	return w
-}
 
 // --- Task Submission Tests ---
 

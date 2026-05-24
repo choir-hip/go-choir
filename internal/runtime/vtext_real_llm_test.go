@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration || comprehensive
 
 package runtime
 
@@ -240,7 +240,7 @@ func resolveRealProvider(t *testing.T) (Provider, string) {
 		if baseURL == "" {
 			baseURL = "https://api.fireworks.ai/inference"
 		}
-		return newAnthropicClient("fireworks", apiKey, baseURL, "accounts/fireworks/routers/kimi-k2p5-turbo"), "fireworks"
+		return newAnthropicClient("fireworks", apiKey, baseURL, "accounts/fireworks/models/deepseek-v4-flash"), "fireworks"
 	}
 
 	t.Skip("No LLM provider credentials configured (set ZAI_API_KEY or FIREWORKS_API_KEY to run real LLM tests)")
@@ -966,7 +966,7 @@ func TestRealLLMProviderInfo(t *testing.T) {
 	if os.Getenv("ZAI_API_KEY") != "" {
 		t.Log("Real LLM provider available: Z.AI (glm-5-turbo)")
 	} else if os.Getenv("FIREWORKS_API_KEY") != "" {
-		t.Log("Real LLM provider available: Fireworks (kimi-k2p5-turbo)")
+		t.Log("Real LLM provider available: Fireworks (deepseek-v4-flash)")
 	} else {
 		t.Log("No LLM provider credentials found. Real LLM tests will be skipped.")
 		t.Log("Set ZAI_API_KEY or FIREWORKS_API_KEY to enable real LLM tests.")

@@ -24,7 +24,9 @@ func TestIntegrationAllModelsLive(t *testing.T) {
 		},
 		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
 		FireworksModels: []string{
-			"accounts/fireworks/routers/kimi-k2p5-turbo",
+			"accounts/fireworks/models/deepseek-v4-flash",
+			"accounts/fireworks/models/deepseek-v4-pro",
+			"accounts/fireworks/models/kimi-k2p6",
 		},
 	}
 

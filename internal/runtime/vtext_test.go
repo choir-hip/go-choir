@@ -1,3 +1,5 @@
+//go:build comprehensive
+
 package runtime
 
 import (
@@ -54,23 +56,6 @@ func vtextAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 	rt := New(cfg, s, bus, provider)
 
 	return NewAPIHandler(rt), s
-}
-
-func vtextRequest(t *testing.T, method, path string, body interface{}) *http.Request {
-	t.Helper()
-	var reqBody *bytes.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			t.Fatalf("marshal request body: %v", err)
-		}
-		reqBody = bytes.NewReader(data)
-	} else {
-		reqBody = bytes.NewReader(nil)
-	}
-	req := httptest.NewRequest(method, path, reqBody)
-	req.Header.Set("X-Authenticated-User", "user-1")
-	return req
 }
 
 func vtextReplaceAllResult(content string, baseRevisionIDs ...string) string {
@@ -1275,29 +1260,6 @@ func createDocWithUserRevision(t *testing.T, h *APIHandler) (string, string) {
 	_ = json.NewDecoder(w.Body).Decode(&revResp)
 
 	return docResp.DocID, revResp.RevisionID
-}
-
-// waitForTaskCompletion polls the task status until it reaches a terminal
-// state or the timeout expires.
-func waitForTaskCompletion(t *testing.T, h *APIHandler, taskID string, timeout time.Duration) types.RunState {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		req := vtextRequest(t, http.MethodGet, "/api/agent/status?loop_id="+taskID, nil)
-		w := httptest.NewRecorder()
-		h.HandleRunStatus(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("get task status: status = %d", w.Code)
-		}
-		var resp runStatusResponse
-		_ = json.NewDecoder(w.Body).Decode(&resp)
-		if resp.State.Terminal() {
-			return resp.State
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("task %s did not complete within %v", taskID, timeout)
-	return ""
 }
 
 func waitForRunRunning(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) {

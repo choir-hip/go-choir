@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration || comprehensive
 
 package runtime_test
 

@@ -1,7 +1,7 @@
 // Package provider implements real LLM provider bridges for the go-choir
 // sandbox runtime. It supports Bedrock (Anthropic Messages API over AWS
 // Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), and Fireworks AI
-// (Anthropic-compatible API) as the first required real-provider paths for
+// (OpenAI-compatible Chat Completions API) as the first required real-provider paths for
 // Mission 3.
 //
 // Supported models (matching Droid settings.json customModels):
@@ -23,8 +23,8 @@
 //     matching the pattern established in choiros-rs.
 //   - Z.AI uses an Anthropic-compatible API at https://api.z.ai/api/anthropic
 //     with bearer auth via ZAI_API_KEY.
-//   - Fireworks AI uses an Anthropic-compatible API at
-//     https://api.fireworks.ai/inference with bearer auth via FIREWORKS_API_KEY.
+//   - Fireworks AI uses OpenAI-compatible Chat Completions at
+//     https://api.fireworks.ai/inference/v1/chat/completions with bearer auth via FIREWORKS_API_KEY.
 //   - MultiProvider holds multiple provider backends for the upcoming
 //     multiagent system where multiple models run simultaneously. Model
 //     routing is its own scope and not implemented here.
@@ -267,7 +267,7 @@ type ProviderConfig struct {
 	ZAIModels []string
 
 	// FireworksModels lists Fireworks model IDs (e.g.,
-	// "accounts/fireworks/routers/kimi-k2p5-turbo"). The first entry seeds
+	// "accounts/fireworks/models/deepseek-v4-flash"). The first entry seeds
 	// the provider instance; request.Model still controls per-call selection.
 	// If empty, Fireworks is not initialized even if FIREWORKS_API_KEY is set.
 	FireworksModels []string
@@ -587,8 +587,8 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 	return ar
 }
 
-// FireworksProvider implements the Provider interface for Fireworks AI
-// using the Anthropic-compatible API at https://api.fireworks.ai/inference.
+// FireworksProvider implements the Provider interface for Fireworks AI using
+// the OpenAI-compatible Chat Completions API.
 type FireworksProvider struct {
 	apiKey     string // loaded at init time, never logged
 	modelID    string
@@ -600,7 +600,7 @@ type FireworksProvider struct {
 type FireworksConfig struct {
 	APIKey  string
 	ModelID string
-	BaseURL string // defaults to https://api.fireworks.ai/inference
+	BaseURL string // defaults to https://api.fireworks.ai/inference/v1
 }
 
 // NewFireworksProvider creates a Fireworks provider from the given config.
@@ -614,7 +614,7 @@ func NewFireworksProvider(cfg FireworksConfig) (*FireworksProvider, error) {
 
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
-		baseURL = "https://api.fireworks.ai/inference"
+		baseURL = "https://api.fireworks.ai/inference/v1"
 	}
 
 	return &FireworksProvider{
@@ -628,7 +628,7 @@ func NewFireworksProvider(cfg FireworksConfig) (*FireworksProvider, error) {
 // NewFireworksProviderFromEnv creates a Fireworks provider using credentials
 // from environment variables (FIREWORKS_API_KEY) and the given model ID.
 // The model is a runtime concern, not an env var. The base URL defaults to
-// https://api.fireworks.ai/inference unless FIREWORKS_BASE_URL is set.
+// https://api.fireworks.ai/inference/v1 unless FIREWORKS_BASE_URL is set.
 func NewFireworksProviderFromEnv(modelID string) (*FireworksProvider, error) {
 	apiKey := os.Getenv("FIREWORKS_API_KEY")
 	baseURL := os.Getenv("FIREWORKS_BASE_URL")
@@ -647,15 +647,15 @@ func NewFireworksProviderFromEnv(modelID string) (*FireworksProvider, error) {
 func (p *FireworksProvider) Name() string { return "fireworks" }
 func (p *FireworksProvider) IsReal() bool { return true }
 
-// Call sends the request to Fireworks AI's Anthropic-compatible endpoint.
+// Call sends the request to Fireworks AI's OpenAI-compatible chat completions endpoint.
 func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	endpoint := p.baseURL + "/v1/messages"
+	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
 	if err := validateMediaRequest(modelID, req); err != nil {
 		return nil, fmt.Errorf("fireworks: %w", err)
 	}
 
-	body := p.buildRequestBody(req, modelID)
+	body := p.buildChatCompletionsRequestBody(req, modelID)
 
 	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
 	if err != nil {
@@ -674,64 +674,53 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	return parseAnthropicResponse(resp, modelID, "fireworks")
+	return parseOpenAIChatCompletionsResponse(resp, modelID, "fireworks")
 }
 
-// Stream sends the request to Fireworks AI with stream=true and processes
-// the SSE response using the same Anthropic-compatible SSE format.
+// Stream currently uses a non-streaming chat completion and emits the complete
+// text as one delta. Fireworks streaming uses OpenAI chat-completion chunks,
+// which are distinct from the Responses and Anthropic streams parsed elsewhere.
 func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	endpoint := p.baseURL + "/v1/messages"
-	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("fireworks: %w", err)
-	}
-
-	req.Stream = true
-	body := p.buildRequestBody(req, modelID)
-	body.Stream = true
-
-	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	resp, err := p.Call(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("fireworks: build stream request: %w", err)
+		return nil, err
 	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
-
-	log.Printf("provider: fireworks stream model=%s", modelID)
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("fireworks: stream http call: %w", err)
+	onChunk(StreamChunk{Type: "message_start", ID: resp.ID, Model: resp.Model})
+	if resp.Text != "" {
+		onChunk(StreamChunk{Type: "content_block_delta", Delta: resp.Text})
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("fireworks: status %s (sanitized)", resp.Status)
-	}
-
-	return parseSSEStream(resp.Body, modelID, "fireworks", onChunk)
+	onChunk(StreamChunk{
+		Type:       "message_delta",
+		StopReason: resp.StopReason,
+		Usage:      &StreamUsage{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens},
+	})
+	onChunk(StreamChunk{Type: "message_stop"})
+	return resp, nil
 }
 
-func (p *FireworksProvider) buildRequestBody(req LLMRequest, modelID string) anthropicRequest {
-	ar := anthropicRequest{
+func (p *FireworksProvider) fireworksChatCompletionsEndpoint() string {
+	base := strings.TrimRight(p.baseURL, "/")
+	switch {
+	case strings.HasSuffix(base, "/chat/completions"):
+		return base
+	case strings.HasSuffix(base, "/v1"):
+		return base + "/chat/completions"
+	case strings.HasSuffix(base, "/inference"):
+		return base + "/v1/chat/completions"
+	default:
+		return base + "/chat/completions"
+	}
+}
+
+func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
+	body := openAIChatCompletionRequest{
 		Model:     modelID,
+		Messages:  convertOpenAIChatMessages(req.System, req.Messages),
+		Tools:     convertOpenAIChatTools(req.Tools),
 		MaxTokens: defaultMaxTokens(req.MaxTokens),
 		Stream:    false,
 	}
-
-	if req.System != "" {
-		ar.System = []anthropicSystemBlock{{
-			Type: "text",
-			Text: req.System,
-		}}
-	}
-
-	ar.Messages = convertMessages(req.Messages)
-	ar.Tools = convertToolDefs(req.Tools)
-	return ar
+	return body
 }
 
 // ChatGPTProvider implements the Provider interface for ChatGPT subscription
@@ -888,12 +877,13 @@ func (p *ChatGPTProvider) doStreamRequest(ctx context.Context, body openAIReques
 
 func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openAIRequest {
 	payload := openAIRequest{
-		Model:        modelID,
-		Instructions: req.System,
-		Input:        convertOpenAIInput(req.Messages),
-		Tools:        convertOpenAITools(req.Tools),
-		Store:        false,
-		Stream:       req.Stream,
+		Model:           modelID,
+		Instructions:    req.System,
+		Input:           convertOpenAIInput(req.Messages),
+		Tools:           convertOpenAITools(req.Tools),
+		MaxOutputTokens: defaultMaxTokens(req.MaxTokens),
+		Store:           false,
+		Stream:          req.Stream,
 	}
 	if effort := effectiveReasoning(req.ReasoningEffort, p.reasoning); effort != "" && effort != "none" && effort != "off" {
 		payload.Reasoning = &openAIReasoning{Effort: effort}
@@ -916,13 +906,14 @@ func effectiveModel(requested, fallback string) string {
 }
 
 type openAIRequest struct {
-	Model        string           `json:"model"`
-	Instructions string           `json:"instructions,omitempty"`
-	Input        []openAIItem     `json:"input,omitempty"`
-	Tools        []openAITool     `json:"tools,omitempty"`
-	Store        bool             `json:"store"`
-	Stream       bool             `json:"stream,omitempty"`
-	Reasoning    *openAIReasoning `json:"reasoning,omitempty"`
+	Model           string           `json:"model"`
+	Instructions    string           `json:"instructions,omitempty"`
+	Input           []openAIItem     `json:"input,omitempty"`
+	Tools           []openAITool     `json:"tools,omitempty"`
+	MaxOutputTokens int              `json:"max_output_tokens,omitempty"`
+	Store           bool             `json:"store"`
+	Stream          bool             `json:"stream,omitempty"`
+	Reasoning       *openAIReasoning `json:"reasoning,omitempty"`
 }
 
 type openAIReasoning struct {
@@ -944,6 +935,57 @@ type openAITool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+type openAIChatCompletionRequest struct {
+	Model     string              `json:"model"`
+	Messages  []openAIChatMessage `json:"messages"`
+	Tools     []openAIChatTool    `json:"tools,omitempty"`
+	MaxTokens int                 `json:"max_tokens,omitempty"`
+	Stream    bool                `json:"stream,omitempty"`
+}
+
+type openAIChatMessage struct {
+	Role       string               `json:"role"`
+	Content    any                  `json:"content,omitempty"`
+	ToolCallID string               `json:"tool_call_id,omitempty"`
+	ToolCalls  []openAIChatToolCall `json:"tool_calls,omitempty"`
+}
+
+type openAIChatTool struct {
+	Type     string             `json:"type"`
+	Function openAIChatFunction `json:"function"`
+}
+
+type openAIChatFunction struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+	Arguments   string         `json:"arguments,omitempty"`
+}
+
+type openAIChatToolCall struct {
+	ID       string             `json:"id"`
+	Type     string             `json:"type"`
+	Function openAIChatFunction `json:"function"`
+}
+
+type openAIChatCompletionResponse struct {
+	ID      string                    `json:"id"`
+	Model   string                    `json:"model,omitempty"`
+	Choices []openAIChatChoice        `json:"choices"`
+	Usage   openAIChatCompletionUsage `json:"usage"`
+}
+
+type openAIChatChoice struct {
+	FinishReason string            `json:"finish_reason"`
+	Message      openAIChatMessage `json:"message"`
+}
+
+type openAIChatCompletionUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 type openAIResponse struct {
@@ -1022,6 +1064,84 @@ func convertOpenAIInput(messages []Message) []openAIItem {
 	return out
 }
 
+func convertOpenAIChatMessages(system string, messages []Message) []openAIChatMessage {
+	out := make([]openAIChatMessage, 0, len(messages)+1)
+	if strings.TrimSpace(system) != "" {
+		out = append(out, openAIChatMessage{Role: "system", Content: system})
+	}
+	for _, msg := range messages {
+		var textParts []string
+		var multimodal []map[string]any
+		var assistantToolCalls []openAIChatToolCall
+
+		flushText := func() {
+			if len(textParts) == 0 && len(multimodal) == 0 {
+				return
+			}
+			if len(multimodal) > 0 {
+				out = append(out, openAIChatMessage{Role: msg.Role, Content: multimodal})
+			} else {
+				out = append(out, openAIChatMessage{Role: msg.Role, Content: strings.Join(textParts, "\n")})
+			}
+			textParts = nil
+			multimodal = nil
+		}
+
+		for _, block := range msg.Content {
+			switch block.Type {
+			case "text":
+				if block.Text == "" {
+					continue
+				}
+				if len(multimodal) > 0 {
+					multimodal = append(multimodal, map[string]any{"type": "text", "text": block.Text})
+				} else {
+					textParts = append(textParts, block.Text)
+				}
+			case "image":
+				if msg.Role != "user" {
+					continue
+				}
+				if len(textParts) > 0 {
+					for _, text := range textParts {
+						multimodal = append(multimodal, map[string]any{"type": "text", "text": text})
+					}
+					textParts = nil
+				}
+				if source := openAIImageSource(block.Source); source != "" {
+					multimodal = append(multimodal, map[string]any{
+						"type":      "image_url",
+						"image_url": map[string]string{"url": source},
+					})
+				}
+			case "tool_use":
+				assistantToolCalls = append(assistantToolCalls, openAIChatToolCall{
+					ID:   block.ID,
+					Type: "function",
+					Function: openAIChatFunction{
+						Name:      block.Name,
+						Arguments: string(canonicalJSON(block.Input)),
+					},
+				})
+			case "tool_result":
+				flushText()
+				out = append(out, openAIChatMessage{
+					Role:       "tool",
+					ToolCallID: block.ToolUseID,
+					Content:    block.Text,
+				})
+			}
+		}
+		if len(assistantToolCalls) > 0 {
+			content := strings.Join(textParts, "\n")
+			out = append(out, openAIChatMessage{Role: "assistant", Content: content, ToolCalls: assistantToolCalls})
+			continue
+		}
+		flushText()
+	}
+	return out
+}
+
 func convertOpenAITools(tools []ToolDef) []openAITool {
 	if len(tools) == 0 {
 		return nil
@@ -1033,6 +1153,24 @@ func convertOpenAITools(tools []ToolDef) []openAITool {
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  tool.InputSchema,
+		})
+	}
+	return out
+}
+
+func convertOpenAIChatTools(tools []ToolDef) []openAIChatTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]openAIChatTool, 0, len(tools))
+	for _, tool := range tools {
+		out = append(out, openAIChatTool{
+			Type: "function",
+			Function: openAIChatFunction{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.InputSchema,
+			},
 		})
 	}
 	return out
@@ -1436,6 +1574,56 @@ func parseOpenAIResponse(resp *http.Response, modelID string, providerName strin
 	log.Printf("provider: %s response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason,
 		result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+
+	return result, nil
+}
+
+func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, providerName string) (*LLMResponse, error) {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%s: status %s (sanitized)", providerName, resp.Status)
+	}
+
+	var payload openAIChatCompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("%s: decode chat completion response: %w", providerName, err)
+	}
+
+	result := &LLMResponse{
+		ID:           payload.ID,
+		Model:        coalesce(payload.Model, modelID),
+		Usage:        Usage{InputTokens: payload.Usage.PromptTokens, OutputTokens: payload.Usage.CompletionTokens},
+		ProviderName: providerName,
+	}
+
+	if len(payload.Choices) == 0 {
+		result.StopReason = "end_turn"
+		return result, nil
+	}
+	choice := payload.Choices[0]
+	if content, ok := choice.Message.Content.(string); ok {
+		result.Text = content
+	}
+	switch choice.FinishReason {
+	case "tool_calls":
+		result.StopReason = "tool_use"
+	case "length":
+		result.StopReason = "max_tokens"
+	case "", "stop":
+		result.StopReason = "end_turn"
+	default:
+		result.StopReason = choice.FinishReason
+	}
+	for _, call := range choice.Message.ToolCalls {
+		result.ToolCalls = append(result.ToolCalls, ContentToolCall{
+			ID:        call.ID,
+			Name:      call.Function.Name,
+			Arguments: canonicalJSON(json.RawMessage(call.Function.Arguments)),
+		})
+	}
+
+	log.Printf("provider: %s chat completion model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
 }
