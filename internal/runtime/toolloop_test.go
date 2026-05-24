@@ -63,12 +63,16 @@ type capturingToolChoiceProvider struct {
 	Provider
 	responses []*ToolLoopResponse
 	choices   *[]string
+	maxTokens *[]int
 	callCount int
 }
 
 func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	if p.choices != nil {
 		*p.choices = append(*p.choices, req.ToolChoice)
+	}
+	if p.maxTokens != nil {
+		*p.maxTokens = append(*p.maxTokens, req.MaxTokens)
 	}
 	idx := p.callCount
 	p.callCount++
@@ -240,6 +244,83 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 	}
 	if choices[1] != "" {
 		t.Fatalf("second tool choice = %q, want empty", choices[1])
+	}
+}
+
+func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "record_status",
+		Description: "Record status.",
+		Parameters: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"status": map[string]any{"type": "string"}},
+			"required":   []string{"status"},
+		},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"ok":true}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register tool: %v", err)
+	}
+
+	var choices []string
+	var maxTokens []int
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "max_tokens",
+			Text:       strings.Repeat("runaway prose ", 100),
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: requiredToolTurnMaxTokens},
+			Model:      "test-model",
+		},
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-1",
+				Name:      "record_status",
+				Arguments: json.RawMessage(`{"status":"ok"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices, maxTokens: &maxTokens}
+
+	var retrySeen bool
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+		"You are helpful.",
+		131072,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind == types.EventRunRetry && phase == "required_tool_call" {
+				retrySeen = true
+			}
+		},
+		nil,
+		WithInitialToolChoice("required"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want done", text)
+	}
+	if !retrySeen {
+		t.Fatal("missing required_tool_call retry event")
+	}
+	if len(choices) != 3 || choices[0] != "required" || choices[1] != "required" || choices[2] != "" {
+		t.Fatalf("choices = %#v, want required retry then normal completion", choices)
+	}
+	if len(maxTokens) != 3 || maxTokens[0] != requiredToolTurnMaxTokens || maxTokens[1] != requiredToolTurnMaxTokens || maxTokens[2] != 131072 {
+		t.Fatalf("maxTokens = %#v, want bounded required turns then full content budget", maxTokens)
 	}
 }
 

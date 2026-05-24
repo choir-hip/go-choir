@@ -151,7 +151,13 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 // after this many iterations. This is a temporary stability ceiling while
 // worker leases, cancellation, compaction, and budget backpressure mature
 // toward longer or budget-governed execution.
-const maxToolLoopIterations = 200
+const (
+	maxToolLoopIterations = 200
+
+	// requiredToolTurnMaxTokens bounds control turns whose only job is to pick
+	// a tool. Normal content turns still use the selected model's output budget.
+	requiredToolTurnMaxTokens = 4096
+)
 
 var providerRateLimitRetryDelays = []time.Duration{
 	5 * time.Second,
@@ -186,6 +192,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		toolDefs = registry.Definitions()
 		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
 	}
+	forceInitialToolChoiceRetry := false
 
 	appendMessage := func(role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
@@ -233,9 +240,13 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			ToolDefinitions: toolDefs,
 			MaxTokens:       maxTokens,
 		}
-		if i == 0 && len(toolDefs) > 0 && options.initialToolChoice != "" {
+		if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			req.ToolChoice = options.initialToolChoice
 		}
+		if req.ToolChoice != "" && (req.MaxTokens == 0 || req.MaxTokens > requiredToolTurnMaxTokens) {
+			req.MaxTokens = requiredToolTurnMaxTokens
+		}
+		forceInitialToolChoiceRetry = false
 
 		if emit != nil {
 			preCallPayload, _ := json.Marshal(map[string]any{
@@ -349,6 +360,29 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			return resp.Text, totalUsage, nil
 
 		case "max_tokens":
+			if req.ToolChoice != "" && len(resp.ToolCalls) == 0 && i < maxToolLoopIterations-1 {
+				if emit != nil {
+					retryPayload, _ := json.Marshal(map[string]any{
+						"iteration":   i + 1,
+						"reason":      "required_tool_not_called",
+						"tool_choice": req.ToolChoice,
+						"max_tokens":  req.MaxTokens,
+					})
+					emit(types.EventRunRetry, "required_tool_call", retryPayload)
+				}
+				reminderMsg, _ := json.Marshal(map[string]any{
+					"role": "user",
+					"content": []map[string]string{{
+						"type": "text",
+						"text": "The previous model turn stopped at max_tokens without calling a required tool. Call exactly one available tool now. Do not write prose.",
+					}},
+				})
+				if err := appendMessage("user", reminderMsg); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist required-tool retry message: %w", err)
+				}
+				forceInitialToolChoiceRetry = true
+				continue
+			}
 			return resp.Text, totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens (iteration %d)", i+1)
 
 		default:
