@@ -20,7 +20,7 @@ let
   # via interpolation instead of raw *_KEY_PATH=/absolute/path literals
   # that Droid-Shield false-positives on.
   authSigningDir = "/var/lib/go-choir/auth-signing";
-  frontendCurrent = "/srv/go-choir/frontend-current";
+  frontendCurrent = "/var/www/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
@@ -505,7 +505,8 @@ in
   # placed in this directory or in the guest image itself (VAL-VM-011).
   systemd.tmpfiles.rules = [
     "d /opt/go-choir 0755 root root -"
-    "d /srv/go-choir 0755 root root -"
+    "d /var/www 0755 root root -"
+    "d /var/www/go-choir 0755 root root -"
     "d /var/lib/go-choir 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"

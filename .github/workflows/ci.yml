@@ -406,25 +406,34 @@ jobs:
 
             install_frontend_pointer() {
               local src="$1"
-              local link="/srv/go-choir/frontend-current"
-              install -d -m 0755 /srv/go-choir
+              local root="/var/www/go-choir"
+              local current="$root/frontend-current"
+              local previous="$root/frontend-previous"
+              local next="$root/.frontend-next"
+              install -d -m 0755 "$root"
               if [ ! -f "$src/index.html" ]; then
                 echo "Frontend bundle missing index.html at $src" >&2
                 exit 1
               fi
-              ln -sfn "$src" /srv/go-choir/.frontend-current.next
-              mv -Tf /srv/go-choir/.frontend-current.next "$link"
-              echo "    Frontend pointer now targets $(readlink -f "$link")"
+              rm -rf "$next"
+              mkdir -p "$next"
+              cp -a "$src/." "$next/"
+              rm -rf "$previous"
+              if [ -e "$current" ]; then
+                mv "$current" "$previous"
+              fi
+              mv "$next" "$current"
+              echo "    Frontend directory now contains $(find "$current/assets" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') assets"
             }
 
             echo "==> Installing selected frontend bundle"
             if [ "${DEPLOY_FRONTEND}" = "true" ]; then
               install_frontend_pointer /tmp/go-choir-frontend-result
-            elif [ ! -e /srv/go-choir/frontend-current ]; then
-              echo "Frontend pointer is missing and frontend bundle was not selected" >&2
+            elif [ ! -f /var/www/go-choir/frontend-current/index.html ]; then
+              echo "Frontend directory is missing and frontend bundle was not selected" >&2
               exit 1
             else
-              echo "    Skipping frontend pointer update"
+              echo "    Skipping frontend directory update"
             fi
             note_phase "frontend install"
 
