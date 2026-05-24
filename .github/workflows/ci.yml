@@ -387,6 +387,11 @@ jobs:
                 return 1
               fi
 
+              if ! pkg-config --exists icu-i18n icu-uc; then
+                echo "    Fast host service build ICU headers missing; using Nix package build"
+                return 1
+              fi
+
               local out="/tmp/go-choir-service-${service}-result"
               local log
               log=$(mktemp)
@@ -400,11 +405,9 @@ jobs:
                 export CGO_ENABLED=1
                 export GOCACHE=/var/cache/go-choir/go-build
                 export GOMODCACHE=/var/cache/go-choir/gomodcache
-                if pkg-config --exists icu-i18n icu-uc; then
-                  export CGO_CFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CFLAGS:-}"
-                  export CGO_CXXFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CXXFLAGS:-}"
-                  export CGO_LDFLAGS="$(pkg-config --libs icu-i18n icu-uc) ${CGO_LDFLAGS:-}"
-                fi
+                export CGO_CFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CFLAGS:-}"
+                export CGO_CXXFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CXXFLAGS:-}"
+                export CGO_LDFLAGS="$(pkg-config --libs icu-i18n icu-uc) ${CGO_LDFLAGS:-}"
                 go build \
                   -trimpath \
                   -ldflags "-s -w -X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=0.1.0 -X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${current_commit} -X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${deployed_at}" \
@@ -434,10 +437,12 @@ jobs:
 
             build_host_service_root() {
               local service="$1"
+              local out="/tmp/go-choir-service-${service}-result"
               if fast_build_host_service "$service"; then
                 return 0
               fi
-              build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result"
+              rm -rf "$out"
+              build_selected_root "Host service ${service}" ".#${service}" "$out"
             }
 
             selected_build_pids=()
