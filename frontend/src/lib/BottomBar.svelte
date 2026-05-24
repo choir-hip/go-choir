@@ -642,10 +642,9 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    /* Keep open app buttons using the Shelf space left of the prompt on wide screens. */
     overflow-x: auto;
-    flex: 1 1 auto;
-    max-width: none;
+    flex: 0 1 auto;
+    max-width: 100%;
     min-width: 0;
     scrollbar-width: none;
   }
@@ -668,8 +667,8 @@
     color: #c0c0d0;
     transition: background 0.15s;
     white-space: nowrap;
-    flex: 1 1 8.5rem;
-    max-width: none;
+    flex: 0 1 9rem;
+    max-width: 9rem;
   }
 
   .window-indicator:hover,
@@ -694,13 +693,13 @@
   .indicator-name {
     font-size: 0.7rem;
     min-width: 0;
-    max-width: none;
+    max-width: 6.5rem;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .bar-center {
-    flex: 0 1 min(42vw, 680px);
+    flex: 0 1 min(48vw, 780px);
     min-width: 0;
     display: flex;
     justify-content: flex-end;
@@ -709,7 +708,7 @@
 
   .prompt-bar {
     width: 100%;
-    max-width: 680px;
+    max-width: 780px;
     display: grid;
     gap: 0.35rem;
   }
@@ -820,6 +819,10 @@
       flex: 1;
     }
 
+    .bar-left {
+      flex: 0 0 auto;
+    }
+
     .prompt-bar {
       max-width: none;
     }
@@ -829,12 +832,7 @@
     }
 
     .window-switcher {
-      max-width: 29vw;
-    }
-
-    .window-indicator {
-      flex: 0 0 auto;
-      max-width: 7rem;
+      display: none;
     }
 
     .start-app {

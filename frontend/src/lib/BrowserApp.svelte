@@ -44,6 +44,7 @@
   let backendHTML = '';
   let backendLinks = [];
   let backendScreenshotPNG = '';
+  let showingSnapshot = false;
   let controlSelector = '';
   let controlValue = '';
   let controlStatus = '';
@@ -88,6 +89,8 @@
     loading = true;
     urlInput = normalized;
     currentUrl = normalized;
+    showingSnapshot = false;
+    clearBackendSnapshots();
 
     if (addToHistory) {
       // Trim forward history
@@ -96,9 +99,7 @@
       historyIndex = history.length - 1;
     }
 
-    if (browserCapabilities?.available) {
-      navigateBackend(normalized);
-    }
+    window.clearTimeout(loadTimeout);
   }
 
   function clearBackendSnapshots() {
@@ -126,6 +127,8 @@
       currentUrl = url;
       loading = true;
       error = '';
+      showingSnapshot = false;
+      clearBackendSnapshots();
     }
   }
 
@@ -137,6 +140,8 @@
       currentUrl = url;
       loading = true;
       error = '';
+      showingSnapshot = false;
+      clearBackendSnapshots();
     }
   }
 
@@ -145,7 +150,7 @@
       loading = true;
       error = '';
       const url = currentUrl;
-      if (browserCapabilities?.available) {
+      if (showingSnapshot && browserCapabilities?.available) {
         navigateBackend(url);
       } else {
         // Force iframe reload by briefly clearing the src.
@@ -166,7 +171,7 @@
 
   function handleIframeError() {
     loading = false;
-    error = 'This site may block embedding. Use Web Lens snapshots for text, links, source, and import when the backend is available.';
+    error = 'This site may block embedding. Try a Web Lens snapshot for readable text, links, source, and import.';
   }
 
   function handleAuthError(err) {
@@ -186,6 +191,7 @@
     };
     capabilityError = '';
     backendSession = null;
+    showingSnapshot = false;
     clearBackendSnapshots();
   }
 
@@ -205,9 +211,6 @@
       browserCapabilities = await res.json();
       if (browserCapabilities?.available) {
         await ensureBackendSession();
-        if (currentUrl) {
-          navigateBackend(currentUrl);
-        }
       }
     } catch (err) {
       if (handleAuthError(err)) return;
@@ -232,6 +235,7 @@
 
   async function navigateBackend(targetUrl) {
     const seq = ++backendNavigationSeq;
+    showingSnapshot = true;
     loading = true;
     error = '';
     try {
@@ -325,6 +329,7 @@
       }
       backendSession = body;
       currentUrl = '';
+      showingSnapshot = false;
       clearBackendSnapshots();
       loading = false;
     } catch (err) {
@@ -363,6 +368,17 @@
       createdFrom: 'web_lens',
       toastMessage: 'Opened Web Lens snapshot in VText',
     });
+  }
+
+  function showPagePreview() {
+    showingSnapshot = false;
+    error = '';
+    loading = Boolean(currentUrl);
+  }
+
+  function showSnapshot() {
+    if (!currentUrl || !browserCapabilities?.available) return;
+    navigateBackend(currentUrl);
   }
 
   // Monitor for iframe load timeout (sites that block may not fire error event)
@@ -481,8 +497,10 @@
       {#if browserCapabilities?.available}
         {#if backendSession?.state === 'closed'}
           Web Lens snapshot closed: {browserCapabilities.provider}
-        {:else}
+        {:else if showingSnapshot}
           Web Lens snapshot ready: {browserCapabilities.provider}
+        {:else}
+          Page preview mode
         {/if}
       {:else if capabilityError}
         {capabilityError}
@@ -490,7 +508,31 @@
         Iframe preview mode - Web Lens backend not configured
       {/if}
     </span>
-    {#if browserCapabilities?.available && backendSession?.session_id && backendSession.state !== 'closed'}
+    {#if browserCapabilities?.available && currentUrl && !showingSnapshot}
+      <button
+        class="backend-close"
+        data-browser-open-snapshot
+        on:click={showSnapshot}
+        disabled={loading}
+        title="Open readable Web Lens snapshot"
+        aria-label="Open readable Web Lens snapshot"
+      >
+        Snapshot
+      </button>
+    {/if}
+    {#if showingSnapshot}
+      <button
+        class="backend-close"
+        data-browser-show-page-preview
+        on:click={showPagePreview}
+        disabled={loading}
+        title="Return to page preview"
+        aria-label="Return to page preview"
+      >
+        Page
+      </button>
+    {/if}
+    {#if browserCapabilities?.available && showingSnapshot && backendSession?.session_id && backendSession.state !== 'closed'}
       <button
         class="backend-close"
         data-browser-close-session
@@ -571,7 +613,7 @@
 
   <!-- iframe -->
   {#if currentUrl}
-    {#if browserCapabilities?.available}
+    {#if browserCapabilities?.available && showingSnapshot}
       <div class="backend-snapshot" data-browser-backend-snapshot>
         {#if backendSnapshot}
           <div class="backend-snapshot-layout">
