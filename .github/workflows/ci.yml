@@ -377,7 +377,7 @@ jobs:
             fast_build_host_service() {
               local service="$1"
               case "$service" in
-                auth|gateway|platformd|proxy|vmctl)
+                auth|gateway|platformd|proxy|sandbox|vmctl)
                   ;;
                 *)
                   echo "    Fast host service build unsupported for ${service}; using Nix package build"
@@ -430,6 +430,16 @@ jobs:
                   echo "    Fast host service ${service} binary has unresolved dynamic libraries; using Nix package build"
                   return 1
                 fi
+              fi
+
+              if [ "$service" = "sandbox" ] && [ -d skills ]; then
+                mkdir -p "$out/share/go-choir/skills"
+                (
+                  cd skills
+                  find . -type f -name SKILL.md | while IFS= read -r skill_file; do
+                    install -Dm0644 "$skill_file" "$out/share/go-choir/skills/$skill_file"
+                  done
+                )
               fi
 
               rm -f "$log"
