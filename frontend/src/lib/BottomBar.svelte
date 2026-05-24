@@ -642,6 +642,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    /* Keep open app buttons using the Shelf space left of the prompt on wide screens. */
     overflow-x: auto;
     flex: 1 1 auto;
     max-width: none;
