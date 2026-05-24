@@ -640,7 +640,11 @@ jobs:
             note_phase "service activation"
 
             echo "==> Waiting for services to start"
-            sleep 5
+            if [ "${service_pointer_deploy}" = "true" ]; then
+              echo "    Service pointer deploys already wait for selected systemd restarts; health probes below perform readiness retries"
+            else
+              sleep 5
+            fi
             note_phase "service settle"
 
             install_guest_image() {
