@@ -258,7 +258,11 @@ jobs:
 
           echo "==> Copying deploy closures to Node B Nix store"
           copy_status=0
-          nix copy --to ssh-ng://go-choir-node-b "${deploy_paths[@]}" || copy_status=$?
+          nix copy \
+            --no-check-sigs \
+            --substitute-on-destination \
+            --to 'ssh-ng://go-choir-node-b?trusted=true' \
+            "${deploy_paths[@]}" || copy_status=$?
           copied_at=$(date +%s)
           if [ "$copy_status" -ne 0 ]; then
             echo "::warning::Nix closure copy failed with status ${copy_status}; Node B will build during deploy."
