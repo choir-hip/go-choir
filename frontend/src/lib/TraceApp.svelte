@@ -74,6 +74,15 @@
     }
   }
 
+  function liveEventTrajectoryId(message) {
+    const direct = String(message?.trajectory_id || '').trim();
+    if (direct) return direct;
+    const payload = message?.payload && typeof message.payload === 'object' ? message.payload : {};
+    const payloadTrajectory = String(payload.trajectory_id || '').trim();
+    if (payloadTrajectory) return payloadTrajectory;
+    return String(message?.loop_id || '').trim();
+  }
+
   function stateTone(state) {
     if (state === 'completed' || state === 'passed' || state === 'accepted') return 'success';
     if (state === 'running' || state === 'pending' || state === 'blocked' || state === 'synthesized') return 'active';
@@ -562,13 +571,14 @@
       if (!authenticated) return;
       const kind = liveEventKind(message);
       if (!kind) return;
+      const eventTrajectoryId = liveEventTrajectoryId(message);
       if (
         !userPinnedTrajectory &&
-        message.trajectory_id &&
-        message.trajectory_id !== selectedTrajectoryId &&
+        eventTrajectoryId &&
+        eventTrajectoryId !== selectedTrajectoryId &&
         (kind === 'loop.submitted' || kind === 'loop.started')
       ) {
-        selectedTrajectoryId = message.trajectory_id;
+        selectedTrajectoryId = eventTrajectoryId;
         selectedAgentId = '';
         selectedMomentId = '';
         momentDetails = {};
@@ -579,7 +589,7 @@
         scheduleSnapshotRefresh();
       }
       scheduleTrajectoryIndexRefresh();
-      if (message.trajectory_id && message.trajectory_id === selectedTrajectoryId) {
+      if (eventTrajectoryId && eventTrajectoryId === selectedTrajectoryId) {
         scheduleSnapshotRefresh();
       }
     });
