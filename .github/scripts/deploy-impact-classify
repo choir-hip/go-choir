@@ -118,7 +118,16 @@ for path in "${changed[@]}"; do
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
       ;;
-    internal/gateway/*|internal/provider/*|internal/modelcatalog/*|internal/sandbox/*|internal/store/*)
+    internal/gateway/*|internal/provider/*)
+      add_host_service "gateway"
+      add_explanation "$path -> host gateway provider boundary"
+      ;;
+    internal/gatewayruntime/*)
+      add_host_service "sandbox"
+      mark_ordinary_guest
+      add_explanation "$path -> guest gateway runtime bridge + ordinary guest image"
+      ;;
+    internal/modelcatalog/*|internal/sandbox/*|internal/store/*)
       add_host_service "gateway"
       add_host_service "sandbox"
       mark_ordinary_guest

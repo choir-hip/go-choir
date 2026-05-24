@@ -239,9 +239,8 @@
           internalDirs = [
             "internal/buildinfo"
             "internal/events"
-            "internal/gateway"
+            "internal/gatewayruntime"
             "internal/modelcatalog"
-            "internal/provider"
             "internal/runtime"
             "internal/sandbox"
             "internal/server"

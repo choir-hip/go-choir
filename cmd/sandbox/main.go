@@ -8,8 +8,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/gateway"
-	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -84,16 +83,10 @@ func main() {
 
 	bus := events.NewEventBus()
 
-	// Resolve the provider for host and guest sandbox runtime modes:
-	//  1. When RUNTIME_GATEWAY_URL is set (VM mode), use the GatewayClient
-	//     to route LLM calls through the host-side gateway. This ensures
-	//     provider credentials stay host-side and the sandbox never touches
-	//     them directly (VAL-GATEWAY-001, VAL-GATEWAY-004).
-	//  2. When direct provider credentials are available (Bedrock, Z.AI,
-	//     Fireworks), resolve the provider directly. This is the host-process
-	//     path used when there is no gateway between the runtime and the
-	//     upstream provider.
-	//  3. Otherwise, fall back to the stub provider.
+	// Resolve the runtime provider. VM guests route through the host-side
+	// gateway so provider credentials and upstream adapter code stay out of
+	// the guest image. A missing gateway falls back to the stub provider for
+	// local diagnostics only.
 	var rtProvider runtime.Provider
 	gatewayURL := os.Getenv("RUNTIME_GATEWAY_URL")
 	if gatewayURL == "" {
@@ -106,24 +99,14 @@ func main() {
 		if strings.TrimSpace(gatewayToken) == "" {
 			log.Printf("sandbox: gateway provider configured without RUNTIME_GATEWAY_TOKEN; LLM calls will fail until the VM receives a sandbox credential")
 		}
-		client := gateway.NewGatewayClient(gatewayURL, gatewayToken)
-		bridge := provider.NewGatewayBridgeProvider(client)
+		bridge := gatewayruntime.New(gatewayURL, gatewayToken)
 		bridge.SetRuntimeLLMConfig(rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
 		rtProvider = bridge
 		log.Printf("sandbox: using gateway provider (url=%s provider=%s model=%s reasoning=%s)",
 			gatewayURL, rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
 	} else {
-		realProvider, err := provider.ResolveProvider(loadProviderConfig())
-		if err != nil {
-			log.Printf("sandbox: provider resolution failed, using stub: %v", err)
-		}
-		if realProvider != nil {
-			rtProvider = provider.NewBridgeProvider(realProvider)
-			log.Printf("sandbox: using real provider: %s", realProvider.Name())
-		} else {
-			rtProvider = runtime.NewStubProvider(rtCfg.ProviderTimeout)
-			log.Printf("sandbox: using stub provider (no credentials configured)")
-		}
+		rtProvider = runtime.NewStubProvider(rtCfg.ProviderTimeout)
+		log.Printf("sandbox: using stub provider (no gateway configured)")
 	}
 
 	// Build runtime options based on configuration.
@@ -204,46 +187,6 @@ func storeDir(path string) string {
 		}
 	}
 	return "."
-}
-
-// loadProviderConfig builds a ProviderConfig from environment variables.
-// Model selection is a runtime concern resolved here at the sandbox entry
-// point, not inside the provider package.
-func loadProviderConfig() provider.ProviderConfig {
-	cfg := provider.ProviderConfig{
-		BedrockModels: []string{
-			"us.anthropic.claude-haiku-4-5-20251001-v1:0",
-			"us.anthropic.claude-sonnet-4-6",
-			"us.anthropic.claude-opus-4-6-v1",
-		},
-		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
-		FireworksModels: []string{
-			"accounts/fireworks/models/deepseek-v4-pro",
-			"accounts/fireworks/models/deepseek-v4-flash",
-			"accounts/fireworks/models/kimi-k2p6",
-		},
-		ChatGPTModels:          []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
-		ChatGPTReasoningEffort: "low",
-		SelectedProvider:       os.Getenv("RUNTIME_LLM_PROVIDER"),
-	}
-
-	if v := os.Getenv("SANDBOX_BEDROCK_MODELS"); v != "" {
-		cfg.BedrockModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("SANDBOX_ZAI_MODELS"); v != "" {
-		cfg.ZAIModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("SANDBOX_FIREWORKS_MODELS"); v != "" {
-		cfg.FireworksModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("SANDBOX_CHATGPT_MODELS"); v != "" {
-		cfg.ChatGPTModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("SANDBOX_CHATGPT_REASONING_EFFORT"); v != "" {
-		cfg.ChatGPTReasoningEffort = v
-	}
-
-	return cfg
 }
 
 func desktopIDFromRequest(r *http.Request) string {
