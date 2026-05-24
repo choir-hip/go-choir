@@ -1790,6 +1790,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		} else if allowsUngroundedCreativeDraft {
 			b.WriteString("\nThe current conductor seed is for a creative/non-factual draft.")
 			b.WriteString("\nYou may call edit_vtext to produce the requested creative document without worker grounding.")
+			b.WriteString("\nDo not spawn researcher or request super for this creative draft unless the user asks for factual grounding, current events, citations, code execution, product mutation, or verification.")
 			b.WriteString("\nDo not add factual, current-events, citation, coding, or product claims unless worker evidence exists.")
 		} else {
 			b.WriteString("\nDo not call edit_vtext from model priors. The current conductor abstract is already the visible document seed.")

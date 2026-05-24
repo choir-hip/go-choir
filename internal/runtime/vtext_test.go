@@ -1699,6 +1699,7 @@ func TestVTextPromptAllowsCreativeDraftWithoutWorkerGrounding(t *testing.T) {
 	for _, want := range []string{
 		"The current conductor seed is for a creative/non-factual draft",
 		"You may call edit_vtext to produce the requested creative document without worker grounding",
+		"Do not spawn researcher or request super for this creative draft",
 		"Do not add factual, current-events, citation, coding, or product claims unless worker evidence exists",
 	} {
 		if !strings.Contains(prompt, want) {
