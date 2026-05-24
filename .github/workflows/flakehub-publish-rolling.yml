@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "*.md"
+      - ".github/**"
 jobs:
   flakehub-publish:
     runs-on: "ubuntu-latest"

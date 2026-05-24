@@ -886,6 +886,20 @@ The removed runner setup saved the previously observed ~20s GitHub-runner Nix
 setup/prebuild overhead and made the behavior-changing deploy path shorter than
 the CI test fan-out.
 
+#### Acceptance: workflow/docs publishing noise
+
+Commit `c615cfe8a12d259c98d2ce289cf7c2f3ae40feb9` was a docs-only checkpoint.
+The main CI workflow correctly skipped it, but the rolling FlakeHub workflow
+still published it. Commit `f76407be1e95c78f4f7c24398d3a3cf3f35a8180` added
+docs and top-level Markdown path ignores to the FlakeHub workflow. The workflow
+change itself still triggered one final FlakeHub publish, as expected.
+
+The follow-up workflow filter also ignores `.github/**`: CI/deploy workflow
+edits should validate through the main CI workflow, but they do not change flake
+outputs and should not publish a new rolling flake version. This keeps future
+docs/workflow-only commits from spending extra GitHub Actions time on cache
+publication that cannot improve the staging deploy path.
+
 ### Updated Residual Risks
 
 - Full host-root deploys still cost minutes on the GitHub runner and should be
