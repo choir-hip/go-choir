@@ -223,6 +223,7 @@
         platformd = mkGoService {
           pname = "platformd";
           subPackage = "cmd/platformd";
+          vendorHash = "sha256-LHIXwcHctefXm9MrSfqWB/4O+p8HXQi0VDT4NXt9xlg=";
           internalDirs = [
             "internal/buildinfo"
             "internal/platform"
