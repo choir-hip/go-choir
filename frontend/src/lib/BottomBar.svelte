@@ -362,7 +362,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     min-height: 40px;
   }
@@ -699,16 +699,16 @@
   }
 
   .bar-center {
-    flex: 0 1 min(48vw, 780px);
+    flex: 1 1 24rem;
     min-width: 0;
     display: flex;
-    justify-content: flex-end;
+    justify-content: stretch;
     align-items: flex-end;
   }
 
   .prompt-bar {
     width: 100%;
-    max-width: 780px;
+    max-width: none;
     display: grid;
     gap: 0.35rem;
   }
