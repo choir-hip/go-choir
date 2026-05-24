@@ -44,6 +44,7 @@ func (c *Config) validate() error {
 }
 
 func (c *Config) EnsureDirs() error {
+	// Platform artifacts are content-addressed below this root.
 	if err := os.MkdirAll(filepath.Join(c.ArtifactsRoot, "sha256"), 0o750); err != nil {
 		return fmt.Errorf("platform config: create artifacts root: %w", err)
 	}
