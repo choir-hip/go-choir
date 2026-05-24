@@ -227,6 +227,8 @@ func podcastSubscriptionRefreshDue(sub types.PodcastSubscription, now time.Time)
 	if sub.LastFetchedAt.IsZero() {
 		return true
 	}
+	// Opening Podcast should refresh stale feeds without importing a new RSS
+	// content item on every app launch.
 	return now.Sub(sub.LastFetchedAt) >= 30*time.Minute
 }
 
