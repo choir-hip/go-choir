@@ -72,6 +72,21 @@ user computer. The old `/state` path remains a marker and legacy-import source;
 fresh accepted staging computers showed no runtime SQLite WAL/SHM pair. Host
 auth/session state remains host-owned.
 
+Runtime model selection is policy-driven. Provider secrets and the platform
+model catalog are platform-owned, but the effective model policy for a user
+computer is computer-owned durable state. The platform may ship default role
+mappings, such as ChatGPT for a foreground role or Fireworks-hosted DeepSeek/Kimi
+for another, but those mappings are not architectural boundaries. Any configured
+model may serve conductor, VText, researcher, super, vsuper, co-super, verifier,
+or future roles when its declared capabilities match the current turn. Text-only
+models can run orchestration, research, coding, writing, and text/code/evidence
+verification. Multimodal models are required only for turns that actually need
+screenshots, images, video frames, uploaded files, or other media input. The
+target architecture is a hierarchy of platform catalog -> platform defaults ->
+per-computer policy -> per-run/task override -> modality requirement, with
+owner and `super` edits flowing through product state rather than Node B config
+patches.
+
 Platform publication now has a first service boundary. A host-side `platformd`
 service writes to a separate localhost-only `dolt sql-server` primary and owns
 platform-visible publication, route, artifact manifest/blob, retrieval source/

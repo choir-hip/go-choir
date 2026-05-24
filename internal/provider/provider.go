@@ -72,6 +72,10 @@ type LLMRequest struct {
 	// When non-empty, the provider may return tool_use content blocks.
 	Tools []ToolDef `json:"tools,omitempty"`
 
+	// ToolChoice optionally constrains tool selection for compatible
+	// providers. The shared string modes are "auto", "none", and "required".
+	ToolChoice string `json:"tool_choice,omitempty"`
+
 	// MaxTokens is the maximum number of output tokens.
 	MaxTokens int `json:"max_tokens"`
 
@@ -737,6 +741,7 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		Model:           modelID,
 		Messages:        convertOpenAIChatMessages(req.System, req.Messages),
 		Tools:           tools,
+		ToolChoice:      strings.TrimSpace(req.ToolChoice),
 		Stream:          false,
 		ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
 	}
@@ -909,6 +914,7 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		Instructions:    req.System,
 		Input:           convertOpenAIInput(req.Messages),
 		Tools:           convertOpenAITools(req.Tools),
+		ToolChoice:      strings.TrimSpace(req.ToolChoice),
 		MaxOutputTokens: defaultMaxTokens(req.MaxTokens),
 		Store:           false,
 		Stream:          req.Stream,
@@ -938,6 +944,7 @@ type openAIRequest struct {
 	Instructions    string           `json:"instructions,omitempty"`
 	Input           []openAIItem     `json:"input,omitempty"`
 	Tools           []openAITool     `json:"tools,omitempty"`
+	ToolChoice      string           `json:"tool_choice,omitempty"`
 	MaxOutputTokens int              `json:"max_output_tokens,omitempty"`
 	Store           bool             `json:"store"`
 	Stream          bool             `json:"stream,omitempty"`
@@ -969,6 +976,7 @@ type openAIChatCompletionRequest struct {
 	Model           string              `json:"model"`
 	Messages        []openAIChatMessage `json:"messages"`
 	Tools           []openAIChatTool    `json:"tools,omitempty"`
+	ToolChoice      string              `json:"tool_choice,omitempty"`
 	MaxTokens       *int                `json:"max_tokens,omitempty"`
 	Stream          bool                `json:"stream,omitempty"`
 	ReasoningEffort string              `json:"reasoning_effort,omitempty"`

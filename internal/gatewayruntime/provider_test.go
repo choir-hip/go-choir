@@ -42,9 +42,10 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/deepseek-v4-flash", "none")
 
 	resp, err := provider.CallWithTools(context.Background(), runtime.ToolLoopRequest{
-		System:    "system",
-		Messages:  []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
-		MaxTokens: 2048,
+		System:     "system",
+		Messages:   []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
+		ToolChoice: "required",
+		MaxTokens:  2048,
 		ToolDefinitions: []runtime.ToolDefinition{{
 			Name:        "lookup",
 			Description: "look something up",
@@ -62,6 +63,9 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	}
 	if gotReq.Stream {
 		t.Fatal("CallWithTools should use non-streaming gateway request")
+	}
+	if gotReq.ToolChoice != "required" {
+		t.Fatalf("tool_choice = %q, want required", gotReq.ToolChoice)
 	}
 	if len(gotReq.Tools) != 1 || gotReq.Tools[0].Name != "lookup" {
 		t.Fatalf("tools = %+v, want lookup tool", gotReq.Tools)

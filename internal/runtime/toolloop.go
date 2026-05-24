@@ -56,6 +56,11 @@ type ToolLoopRequest struct {
 	// ToolDefinitions is the list of available tool schemas.
 	ToolDefinitions []ToolDefinition `json:"tool_definitions"`
 
+	// ToolChoice optionally constrains provider tool selection for this call.
+	// Supported values are provider-dependent, but "auto", "none", and
+	// "required" are the shared OpenAI-compatible modes.
+	ToolChoice string `json:"tool_choice,omitempty"`
+
 	// MaxTokens is the maximum output tokens for this call.
 	MaxTokens int `json:"max_tokens"`
 }
@@ -107,8 +112,9 @@ type ToolLoopMemoryHooks struct {
 }
 
 type toolLoopOptions struct {
-	memoryHooks ToolLoopMemoryHooks
-	llmConfig   LLMSelection
+	memoryHooks       ToolLoopMemoryHooks
+	llmConfig         LLMSelection
+	initialToolChoice string
 }
 
 // ToolLoopOption configures optional tool-loop behavior.
@@ -127,6 +133,16 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.llmConfig = config
+	}
+}
+
+// WithInitialToolChoice constrains tool use only on the first provider call.
+// This is useful for appagents that must take a tool-mediated action before
+// ordinary assistant text can be meaningful, while still allowing later turns
+// in the same loop to finish naturally after tool results are appended.
+func WithInitialToolChoice(choice string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.initialToolChoice = strings.TrimSpace(choice)
 	}
 }
 
@@ -217,6 +233,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			ToolDefinitions: toolDefs,
 			MaxTokens:       maxTokens,
 		}
+		if i == 0 && len(toolDefs) > 0 && options.initialToolChoice != "" {
+			req.ToolChoice = options.initialToolChoice
+		}
 
 		if emit != nil {
 			preCallPayload, _ := json.Marshal(map[string]any{
@@ -230,6 +249,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"llm_provider":         options.llmConfig.Provider,
 				"llm_model":            options.llmConfig.Model,
 				"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
+				"tool_choice":          req.ToolChoice,
 				"model_policy":         "run_metadata",
 			})
 			emit(types.EventRunProgress, "provider_call", preCallPayload)

@@ -130,6 +130,7 @@ type vtextEditToolProvider struct {
 	result     string
 	resultFunc func(prompt string) string
 	delay      time.Duration
+	choices    []string
 }
 
 func newVTextEditToolProvider(result string) *vtextEditToolProvider {
@@ -163,6 +164,7 @@ func (p *vtextEditToolProvider) Execute(ctx context.Context, task *types.RunReco
 }
 
 func (p *vtextEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
 	if p.delay > 0 {
 		timer := time.NewTimer(p.delay)
 		select {
@@ -1591,6 +1593,9 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	}
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
+	}
+	if len(provider.choices) == 0 || provider.choices[0] != "required" {
+		t.Fatalf("initial vtext tool_choice = %#v, want first choice required", provider.choices)
 	}
 }
 

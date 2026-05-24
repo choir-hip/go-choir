@@ -49,6 +49,9 @@ type ProviderRequest struct {
 	// Tools is the list of tool definitions.
 	Tools []provider.ToolDef `json:"tools,omitempty"`
 
+	// ToolChoice optionally constrains compatible provider tool selection.
+	ToolChoice string `json:"tool_choice,omitempty"`
+
 	// MaxTokens is the maximum output tokens.
 	MaxTokens int `json:"max_tokens,omitempty"`
 
@@ -264,13 +267,14 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		System:          req.System,
 		Messages:        req.Messages,
 		Tools:           req.Tools,
+		ToolChoice:      req.ToolChoice,
 		MaxTokens:       req.MaxTokens,
 		Stream:          req.Stream,
 		ReasoningEffort: req.ReasoningEffort,
 	}
 
-	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d tools=%d system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
-		sandboxID, p.Name(), req.Model, len(req.Messages), len(req.Tools), len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
+	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
+		sandboxID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()

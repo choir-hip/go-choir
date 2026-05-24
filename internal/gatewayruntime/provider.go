@@ -130,6 +130,7 @@ func (p *Provider) CallWithTools(ctx context.Context, req runtime.ToolLoopReques
 		System:          req.System,
 		Messages:        convertRawMessages(req.Messages),
 		Tools:           convertToolLoopDefs(req.ToolDefinitions),
+		ToolChoice:      req.ToolChoice,
 		MaxTokens:       req.MaxTokens,
 		Stream:          false,
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, p.reasoningEffort),
@@ -390,6 +391,7 @@ type llmRequest struct {
 	Messages        []message `json:"messages"`
 	System          string    `json:"system,omitempty"`
 	Tools           []toolDef `json:"tools,omitempty"`
+	ToolChoice      string    `json:"tool_choice,omitempty"`
 	MaxTokens       int       `json:"max_tokens,omitempty"`
 	Stream          bool      `json:"stream,omitempty"`
 	ReasoningEffort string    `json:"reasoning_effort,omitempty"`

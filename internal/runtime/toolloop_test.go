@@ -32,9 +32,12 @@ type mockToolLoopProvider struct {
 
 	// callCount tracks how many times CallWithTools was invoked.
 	callCount int32
+
+	lastReq ToolLoopRequest
 }
 
 func (m *mockToolLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	m.lastReq = req
 	idx := int(atomic.AddInt32(&m.callCount, 1)) - 1
 	if idx >= len(m.responses) {
 		idx = len(m.responses) - 1
@@ -54,6 +57,28 @@ func newMockToolLoopProvider(responses ...*ToolLoopResponse) *mockToolLoopProvid
 	return &mockToolLoopProvider{
 		responses: responses,
 	}
+}
+
+type capturingToolChoiceProvider struct {
+	Provider
+	responses []*ToolLoopResponse
+	choices   *[]string
+	callCount int
+}
+
+func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	if p.choices != nil {
+		*p.choices = append(*p.choices, req.ToolChoice)
+	}
+	idx := p.callCount
+	p.callCount++
+	if idx >= len(p.responses) {
+		idx = len(p.responses) - 1
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("no responses configured")
+	}
+	return p.responses[idx], nil
 }
 
 // --- Tool-Calling Loop Tests ---
@@ -150,6 +175,71 @@ func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 	}
 	if got := providerCallPayload["llm_provider"]; got != "fireworks" {
 		t.Fatalf("llm_provider = %v, want fireworks", got)
+	}
+}
+
+func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "record_status",
+		Description: "Record status.",
+		Parameters: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"status": map[string]any{"type": "string"}},
+			"required":   []string{"status"},
+		},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"ok":true}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register tool: %v", err)
+	}
+
+	var choices []string
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-1",
+				Name:      "record_status",
+				Arguments: json.RawMessage(`{"status":"ok"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices}
+
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+		"You are helpful.",
+		0,
+		func(types.EventKind, string, json.RawMessage) {},
+		nil,
+		WithInitialToolChoice("required"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want done", text)
+	}
+	if len(choices) != 2 {
+		t.Fatalf("choices = %#v, want two provider calls", choices)
+	}
+	if choices[0] != "required" {
+		t.Fatalf("first tool choice = %q, want required", choices[0])
+	}
+	if choices[1] != "" {
+		t.Fatalf("second tool choice = %q, want empty", choices[1])
 	}
 }
 

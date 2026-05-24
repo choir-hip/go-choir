@@ -1039,12 +1039,20 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
 	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
 
+	toolLoopOptions := []ToolLoopOption{
+		WithToolLoopMemoryHooks(memory.hooks()),
+		WithToolLoopLLMConfig(llmConfig),
+	}
+	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
+		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice("required"))
+	}
+
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
 		if isPersistentSuperInboxRun(rec) {
 			return nil, nil
 		}
 		return rt.injectPendingInboxTurns(context.Background(), rec, finalCheckpoint)
-	}, WithToolLoopMemoryHooks(memory.hooks()), WithToolLoopLLMConfig(llmConfig))
+	}, toolLoopOptions...)
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())

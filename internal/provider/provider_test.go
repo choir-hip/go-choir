@@ -464,6 +464,9 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 		if body.Reasoning == nil || body.Reasoning.Effort != "low" {
 			t.Errorf("reasoning = %+v, want low", body.Reasoning)
 		}
+		if body.ToolChoice != "required" {
+			t.Errorf("tool_choice = %#v, want required", body.ToolChoice)
+		}
 		if !body.Stream {
 			t.Errorf("stream = false, want true")
 		}
@@ -486,9 +489,11 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 	p.httpClient = server.Client()
 
 	resp, err := p.Call(context.Background(), LLMRequest{
-		System:    "You are helpful.",
-		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Hi"}}}},
-		MaxTokens: 64,
+		System:     "You are helpful.",
+		Messages:   []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Hi"}}}},
+		Tools:      []ToolDef{{Name: "record_status", InputSchema: map[string]any{"type": "object"}}},
+		ToolChoice: "required",
+		MaxTokens:  64,
 	})
 	if err != nil {
 		t.Fatalf("chatgpt call: %v", err)
@@ -1934,6 +1939,9 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 		if len(body.Tools) != 1 || body.Tools[0].Function.Name != "record_status" {
 			t.Fatalf("tools = %#v", body.Tools)
 		}
+		if body.ToolChoice != "required" {
+			t.Errorf("tool_choice = %#v, want required", body.ToolChoice)
+		}
 		if body.ReasoningEffort != "none" {
 			t.Errorf("reasoning_effort = %q, want none", body.ReasoningEffort)
 		}
@@ -1977,6 +1985,7 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 			Description: "Record status.",
 			InputSchema: map[string]any{"type": "object"},
 		}},
+		ToolChoice:      "required",
 		MaxTokens:       1024,
 		ReasoningEffort: "none",
 	})

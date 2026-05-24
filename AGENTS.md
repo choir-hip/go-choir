@@ -151,6 +151,15 @@ product path, including by `super` in response to an owner prompt. Do not patch
 Node B environment variables or tracked server files as a substitute for a
 runtime policy path unless the mission is explicitly a platform config deploy.
 
+Role defaults are policy defaults, not architecture. Any configured model may
+serve any agent role when its declared capabilities match the current turn:
+conductor, VText, researcher, super, vsuper, co-super, verifier, or future
+roles. Text-only models are valid for orchestration, research, coding, writing,
+and verification that does not need media input. Multimodal models are required
+only when the turn needs screenshots, images, video frames, files, or other
+media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
+that as the active computer's effective policy, not a hard-coded role boundary.
+
 Provider request schemas must preserve modality. If a task needs screenshots,
 videos, files, or other media evidence, route through a model/provider path that
 declares that modality and record the blocker precisely when the adapter cannot

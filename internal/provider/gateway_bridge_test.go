@@ -314,6 +314,7 @@ func TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection(t *testing.T
 		ReasoningEffort: "none",
 		System:          "system",
 		Messages:        []json.RawMessage{[]byte(`{"role":"user","content":"hi"}`)},
+		ToolChoice:      "required",
 		MaxTokens:       1024,
 	}
 
@@ -331,6 +332,9 @@ func TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection(t *testing.T
 	}
 	if mock.lastReq.ReasoningEffort != "none" {
 		t.Fatalf("reasoning = %q, want none", mock.lastReq.ReasoningEffort)
+	}
+	if mock.lastReq.ToolChoice != "required" {
+		t.Fatalf("tool_choice = %q, want required", mock.lastReq.ToolChoice)
 	}
 }
 
