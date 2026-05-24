@@ -669,7 +669,7 @@
     transition: background 0.15s;
     white-space: nowrap;
     flex: 1 1 8.5rem;
-    max-width: 14rem;
+    max-width: none;
   }
 
   .window-indicator:hover,

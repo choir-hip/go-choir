@@ -547,9 +547,9 @@
     removeLiveListener = addLiveEventListener((message) => {
       if (!authenticated) return;
       const kind = liveEventKind(message);
-      if (!kind || !message?.trajectory_id) return;
+      if (!kind) return;
       scheduleTrajectoryIndexRefresh();
-      if (message.trajectory_id === selectedTrajectoryId) {
+      if (message.trajectory_id && message.trajectory_id === selectedTrajectoryId) {
         scheduleSnapshotRefresh();
       }
     });
