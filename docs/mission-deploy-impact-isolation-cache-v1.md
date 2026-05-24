@@ -410,3 +410,16 @@ store-disk EROFS path on every sandbox change. Measure whether a paid binary
 cache helps only after the guest image layers are split enough to generate
 stable reusable artifacts.
 ```
+
+### Follow-On Guest Image Builder Experiment
+
+After the cache repeat showed no useful Magic Nix Cache improvement, the next
+low-risk lever is the microvm store-disk builder itself. Upstream microvm.nix
+defaults to EROFS flags that include fragments and dedupe on newer kernels; that
+chooses the single-threaded `mkfs.erofs` path. The follow-on change keeps EROFS
+but sets the guest images to fast LZ4-only flags so the builder can use the
+multithread-capable tool.
+
+Expected tradeoff: somewhat larger guest store disks, potentially much faster
+`microvm-store-disk.erofs` builds. Acceptance is comparative timing from the
+next full guest-image deploy, not local proof.

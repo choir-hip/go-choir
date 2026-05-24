@@ -92,6 +92,11 @@ in
     # across VMs with KSM deduplication on the host.
     storeOnDisk = true;
     storeDiskType = "erofs";
+    # Favor deploy-loop speed over maximum image compaction. microvm.nix's
+    # default EROFS flags include fragments/dedupe on newer kernels, which
+    # force the single-threaded mkfs.erofs path; keeping only fast LZ4 lets the
+    # builder use the multithread-capable tool.
+    storeDiskErofsFlags = [ "-zlz4" ];
 
     # No virtiofs or 9p shares. With shares = [], microvm.nix
     # automatically generates an erofs disk for the nix store closure.
