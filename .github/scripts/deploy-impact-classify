@@ -109,9 +109,8 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_host_service "sandbox"
       add_host_service "vmctl"
-      mark_ordinary_guest
       mark_vmctl_restart
-      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + ordinary guest image + vmctl restart"
+      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + vmctl restart"
       ;;
     cmd/auth/*|internal/auth/*)
       add_host_service "auth"
@@ -131,14 +130,12 @@ for path in "${changed[@]}"; do
       ;;
     internal/gatewayruntime/*)
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> guest gateway runtime bridge + ordinary guest image"
+      add_explanation "$path -> sandbox runtime package"
       ;;
     internal/modelcatalog/*|internal/sandbox/*|internal/store/*)
       add_host_service "gateway"
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> gateway/sandbox shared runtime dependency + ordinary guest image"
+      add_explanation "$path -> gateway/sandbox shared runtime dependency"
       ;;
     cmd/platformd/*|internal/promotion/*)
       add_host_service "platformd"
@@ -155,45 +152,38 @@ for path in "${changed[@]}"; do
       ;;
     cmd/sandbox/*|internal/sandbox/*|skills/*)
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> sandbox host service + ordinary guest image"
+      add_explanation "$path -> sandbox runtime package"
       ;;
     internal/runtime/model_policy.go)
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> sandbox model policy + ordinary guest image"
+      add_explanation "$path -> sandbox runtime package"
       ;;
     internal/runtime/api_trace.go)
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> sandbox Trace API + ordinary guest image"
+      add_explanation "$path -> sandbox runtime package"
       ;;
     internal/runtime/*)
       add_host_service "gateway"
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> gateway/sandbox service pointers + ordinary guest image"
+      add_explanation "$path -> gateway/sandbox service pointers"
       ;;
     internal/types/*)
       add_host_service "gateway"
       add_host_service "proxy"
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> shared API types: gateway/proxy/sandbox service pointers + ordinary guest image"
+      add_explanation "$path -> shared API types: gateway/proxy/sandbox service pointers"
       ;;
     internal/buildinfo/*)
       add_host_service "gateway"
       add_host_service "platformd"
       add_host_service "proxy"
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> build identity users: gateway/platformd/proxy/sandbox + ordinary guest image"
+      add_explanation "$path -> build identity users: gateway/platformd/proxy/sandbox"
       ;;
     internal/events/*)
       add_host_service "gateway"
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> event bus users: gateway/sandbox service pointers + ordinary guest image"
+      add_explanation "$path -> event bus users: gateway/sandbox service pointers"
       ;;
     internal/server/*)
       add_host_service "auth"
@@ -202,13 +192,12 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_host_service "sandbox"
       add_host_service "vmctl"
-      mark_ordinary_guest
-      add_explanation "$path -> shared HTTP server: all host service pointers + ordinary guest image"
+      mark_vmctl_restart
+      add_explanation "$path -> shared HTTP server: all host service pointers + vmctl restart"
       ;;
     internal/search/*)
       add_host_service "sandbox"
-      mark_ordinary_guest
-      add_explanation "$path -> sandbox search runtime + ordinary guest image"
+      add_explanation "$path -> sandbox search runtime package"
       ;;
     nix/sandbox-vm.nix)
       mark_ordinary_guest

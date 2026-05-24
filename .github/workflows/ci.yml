@@ -683,8 +683,21 @@ jobs:
             fi
             note_phase "vmctl restart"
 
-            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-              echo "==> Refreshing active interactive computers onto deployed guest image"
+            sandbox_service_selected=false
+            if [ -n "${HOST_SERVICES}" ]; then
+              IFS=',' read -ra refresh_services <<< "${HOST_SERVICES}"
+              for service in "${refresh_services[@]}"; do
+                if [ "$service" = "sandbox" ]; then
+                  sandbox_service_selected=true
+                fi
+              done
+            fi
+            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "$sandbox_service_selected" = "true" ]; then
+              if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+                echo "==> Refreshing active interactive computers onto deployed guest image"
+              else
+                echo "==> Refreshing active interactive computers onto deployed sandbox runtime package"
+              fi
               ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
               mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
                 .ownerships[]
@@ -708,7 +721,7 @@ jobs:
                 done
               fi
             else
-              echo "==> Skipping active computer refresh; ordinary guest image unchanged"
+              echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"
             fi
             note_phase "active computer refresh"
 

@@ -56,6 +56,72 @@ let
       playwrightNodeModules
     ];
   };
+
+  sandboxRuntimeInstall = pkgs.writeShellScript "go-choir-install-sandbox-runtime" ''
+    set -euo pipefail
+
+    env_file="/run/go-choir-sandbox.env"
+    if [ -f "$env_file" ]; then
+      set -a
+      # shellcheck disable=SC1090
+      . "$env_file"
+      set +a
+    fi
+
+    runtime_url="''${RUNTIME_VMCTL_URL:-}"
+    runtime_root="/mnt/persistent/runtime"
+    current="$runtime_root/sandbox"
+    previous="$runtime_root/sandbox-previous"
+    next="$runtime_root/.sandbox-next"
+
+    if [ -z "$runtime_url" ]; then
+      echo "go-choir-sandbox: RUNTIME_VMCTL_URL is unavailable; using baked sandbox runtime" >&2
+      exit 0
+    fi
+
+    mkdir -p "$runtime_root"
+    rm -rf "$next"
+    mkdir -p "$next"
+
+    if ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 --retry-all-errors \
+      -H "X-Internal-Caller: true" \
+      "$runtime_url/internal/vmctl/runtime-package/sandbox" |
+      ${pkgs.gnutar}/bin/tar -x -C "$next"; then
+      if [ ! -x "$next/bin/sandbox" ]; then
+        echo "go-choir-sandbox: downloaded runtime package lacks bin/sandbox; keeping current runtime" >&2
+        rm -rf "$next"
+        exit 0
+      fi
+      rm -rf "$previous"
+      if [ -e "$current" ]; then
+        mv "$current" "$previous"
+      fi
+      mv "$next" "$current"
+      echo "go-choir-sandbox: installed host-provided sandbox runtime package"
+    else
+      echo "go-choir-sandbox: runtime package download failed; keeping current or baked runtime" >&2
+      rm -rf "$next"
+    fi
+  '';
+
+  sandboxRuntimeExec = pkgs.writeShellScript "go-choir-run-sandbox-runtime" ''
+    set -euo pipefail
+
+    dynamic="/mnt/persistent/runtime/sandbox/bin/sandbox"
+    if [ -x "$dynamic" ]; then
+      if [ -f /mnt/persistent/runtime/sandbox/choir-runtime.env ]; then
+        set -a
+        # shellcheck disable=SC1091
+        . /mnt/persistent/runtime/sandbox/choir-runtime.env
+        set +a
+      fi
+      export RUNTIME_SKILLS_ROOT="/mnt/persistent/runtime/sandbox/share/go-choir/skills"
+      exec "$dynamic" "$@"
+    fi
+
+    export RUNTIME_SKILLS_ROOT="${goChoirPackages.sandbox}/share/go-choir/skills"
+    exec ${goChoirPackages.sandbox}/bin/sandbox "$@"
+  '';
 in
 {
   networking.hostName = if includePlaywright then "go-choir-playwright-worker" else "go-choir-sandbox";
@@ -239,6 +305,7 @@ EOF
         nodejs
         perl
         pkg-config
+        gnutar
         systemd
         procps
         iproute2
@@ -306,7 +373,8 @@ EOF
       PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
     };
     serviceConfig = {
-      ExecStart = "${goChoirPackages.sandbox}/bin/sandbox";
+      ExecStartPre = "${sandboxRuntimeInstall}";
+      ExecStart = "${sandboxRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;
       # App adoption builds run as sandbox child processes. If a child build
@@ -334,6 +402,7 @@ EOF
   environment.systemPackages = (with pkgs; [
     coreutils
     curl
+    gnutar
     gcc
     git
     go

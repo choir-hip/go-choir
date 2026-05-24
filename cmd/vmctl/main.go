@@ -111,6 +111,10 @@ func main() {
 	}
 
 	handler := vmctl.NewHandler(registry)
+	if dir := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PACKAGE_DIR")); dir != "" {
+		handler.SetSandboxRuntimePackageDir(dir)
+		log.Printf("vmctl: sandbox runtime package directory configured (%s)", dir)
+	}
 
 	s := server.NewServer("vmctl", port)
 	vmctl.RegisterRoutes(s, handler)

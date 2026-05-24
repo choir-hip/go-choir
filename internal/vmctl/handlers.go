@@ -1,13 +1,18 @@
 package vmctl
 
 import (
+	"archive/tar"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -98,12 +103,20 @@ type workerActionRequest struct {
 
 // Handler provides HTTP handlers for the vmctl service.
 type Handler struct {
-	registry *OwnershipRegistry
+	registry                 *OwnershipRegistry
+	sandboxRuntimePackageDir string
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
 func NewHandler(registry *OwnershipRegistry) *Handler {
 	return &Handler{registry: registry}
+}
+
+// SetSandboxRuntimePackageDir configures the host-side package directory that
+// VM guests fetch at boot. This lets ordinary guest images stay stable while
+// sandbox/runtime code moves through the fast host service pointer path.
+func (h *Handler) SetSandboxRuntimePackageDir(path string) {
+	h.sandboxRuntimePackageDir = strings.TrimSpace(path)
 }
 
 // writeJSON writes a JSON response.
@@ -796,6 +809,137 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleRuntimePackage streams the current sandbox runtime package as a tar
+// archive. It is intended for guest VMs booting over the vmctl tap path; it
+// never exposes provider credentials and remains guarded by the same internal
+// caller contract as other vmctl control endpoints.
+func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	if strings.Trim(r.URL.Path, "/") != "internal/vmctl/runtime-package/sandbox" {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "runtime package not found"})
+		return
+	}
+
+	root := h.sandboxRuntimePackageDir
+	if root == "" {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package directory is not configured"})
+		return
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package directory is not available"})
+		return
+	}
+	if !info.IsDir() {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package path is not a directory"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-tar")
+	w.Header().Set("Content-Disposition", `attachment; filename="go-choir-sandbox-runtime.tar"`)
+	tw := tar.NewWriter(w)
+	defer func() {
+		if err := tw.Close(); err != nil {
+			log.Printf("vmctl: close runtime package tar: %v", err)
+		}
+	}()
+
+	if err := writeRuntimePackageTar(tw, root, buildinfo.Snapshot("vmctl")); err != nil {
+		log.Printf("vmctl: stream runtime package from %s: %v", root, err)
+		return
+	}
+}
+
+func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info) error {
+	root = filepath.Clean(root)
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "/") {
+			return fmt.Errorf("refuse unsafe runtime package path %q", rel)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		var link string
+		if info.Mode()&os.ModeSymlink != 0 {
+			link, err = os.Readlink(path)
+			if err != nil {
+				return err
+			}
+		}
+		hdr, err := tar.FileInfoHeader(info, link)
+		if err != nil {
+			return err
+		}
+		hdr.Name = rel
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			_, copyErr := io.Copy(tw, f)
+			closeErr := f.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	commit := strings.TrimSpace(snapshot.Commit)
+	if commit == "" {
+		commit = strings.TrimSpace(snapshot.DeployedCommit)
+	}
+	if commit == "" {
+		commit = "unknown"
+	}
+	deployedAt := strings.TrimSpace(snapshot.DeployedAt)
+	env := fmt.Sprintf("CHOIR_DEPLOYED_COMMIT=%s\nRUNTIME_WORKER_REPO_BASE_SHA=%s\n", shellEnvValue(commit), shellEnvValue(commit))
+	if deployedAt != "" {
+		env += fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
+	}
+	hdr := &tar.Header{
+		Name: "choir-runtime.env",
+		Mode: 0o644,
+		Size: int64(len(env)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	_, err := tw.Write([]byte(env))
+	return err
+}
+
+func shellEnvValue(value string) string {
+	return strings.NewReplacer("\n", "", "\r", "", "\x00", "").Replace(value)
+}
+
 // isInternalCaller checks whether the request originated from an internal
 // caller (localhost or internal service). vmctl control endpoints must only
 // be reachable from internal host/service paths (VAL-VM-012).
@@ -859,6 +1003,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/refresh", h.HandleRefresh)
 	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
+	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
 }
 
 // ResolveEndpoint returns the full resolve endpoint URL for the vmctl

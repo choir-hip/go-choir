@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -757,10 +759,83 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	mux.HandleFunc("/internal/vmctl/recover", handler.HandleRecover)
 	mux.HandleFunc("/internal/vmctl/logout", handler.HandleLogout)
 	mux.HandleFunc("/internal/vmctl/idle-check", handler.HandleIdleCheck)
+	mux.HandleFunc("/internal/vmctl/runtime-package/sandbox", handler.HandleRuntimePackage)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, reg
+}
+
+func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	handler := NewHandler(reg)
+	pkgDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(pkgDir, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(pkgDir, "share", "go-choir", "skills"), 0o755); err != nil {
+		t.Fatalf("mkdir skills: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "sandbox"), []byte("sandbox-binary"), 0o755); err != nil {
+		t.Fatalf("write sandbox: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "skills", "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+	handler.SetSandboxRuntimePackageDir(pkgDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	rr := httptest.NewRecorder()
+	handler.HandleRuntimePackage(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); got != "application/x-tar" {
+		t.Fatalf("content-type = %q", got)
+	}
+
+	tr := tar.NewReader(rr.Body)
+	entries := make(map[string]string)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		if hdr.FileInfo().Mode().IsRegular() {
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				t.Fatalf("read %s: %v", hdr.Name, err)
+			}
+			entries[hdr.Name] = string(data)
+		}
+	}
+	if entries["bin/sandbox"] != "sandbox-binary" {
+		t.Fatalf("bin/sandbox entry = %q", entries["bin/sandbox"])
+	}
+	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
+		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
+	}
+	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA=") || !strings.Contains(env, "CHOIR_DEPLOYED_COMMIT=") {
+		t.Fatalf("runtime env missing deployment refs: %q", env)
+	}
+}
+
+func TestHandler_RuntimePackageDeniesExternalCaller(t *testing.T) {
+	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
+	handler.SetSandboxRuntimePackageDir(t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req.Host = "draft.choir-ip.com"
+	req.RemoteAddr = "203.0.113.10:4444"
+	rr := httptest.NewRecorder()
+	handler.HandleRuntimePackage(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
 }
 
 func TestHandler_Health(t *testing.T) {

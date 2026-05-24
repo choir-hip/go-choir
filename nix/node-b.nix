@@ -318,6 +318,11 @@ in
       EnvironmentFile = "-/var/lib/go-choir/vmctl-priority.env";
       Environment = [
         "VMCTL_PORT=8083"
+        # Guest images are a stable boot substrate. At boot, guest sandboxes
+        # fetch the current sandbox service package from this host-side pointer
+        # and execute it from their writable data disk, so ordinary runtime code
+        # deploys do not have to rebuild the whole microVM image.
+        "VMCTL_SANDBOX_PACKAGE_DIR=/var/lib/go-choir/services/sandbox"
         # Firecracker VM configuration (VAL-VM-010):
         # Guest images are built from the repo via `nix build .#guest-image`.
         # The microvm.nix approach produces:
