@@ -48,6 +48,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 )
 
 // LLMRequest is the unified request shape for all provider backends.
@@ -1258,6 +1260,10 @@ func defaultMaxTokens(n int) int {
 	return n
 }
 
+func maxOutputTokensForModel(modelID string) int {
+	return modelcatalog.MaxOutputTokensForModel(modelID)
+}
+
 func pathEscape(s string) string {
 	return strings.ReplaceAll(s, "/", "~1")
 }
@@ -2143,125 +2149,13 @@ func numberValue(v any) float64 {
 	}
 }
 
-// ModelInfo describes a supported model and its associated provider.
-type ModelInfo struct {
-	// ID is the model identifier used in API requests (provider-specific).
-	ID string `json:"id"`
-
-	// DisplayName is a human-readable name for logging and UI.
-	DisplayName string `json:"display_name"`
-
-	// Provider is the provider name that serves this model (e.g., "zai",
-	// "fireworks", "bedrock").
-	Provider string `json:"provider"`
-
-	// MaxOutputTokens is the maximum output tokens for this model.
-	MaxOutputTokens int `json:"max_output_tokens"`
-
-	// Modalities names upstream content modalities known for this model.
-	Modalities []string `json:"modalities,omitempty"`
-
-	// AdapterModalities names modalities Choir currently knows how to serialize
-	// for this provider adapter.
-	AdapterModalities []string `json:"adapter_modalities,omitempty"`
-
-	// RecommendedFor names role/purpose hints for model policy UIs.
-	RecommendedFor []string `json:"recommended_for,omitempty"`
-}
+type ModelInfo = modelcatalog.ModelInfo
 
 // SupportedModels returns the list of models that the provider package
 // can serve. These are derived from the Droid settings.json customModels
 // configuration.
 func SupportedModels() []ModelInfo {
-	return []ModelInfo{
-		// Bedrock models (cross-region inference IDs)
-		{
-			ID:              "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-			DisplayName:     "Claude Haiku 4.5",
-			Provider:        "bedrock",
-			MaxOutputTokens: 8192,
-		},
-		{
-			ID:              "us.anthropic.claude-sonnet-4-6",
-			DisplayName:     "Claude Sonnet 4.6",
-			Provider:        "bedrock",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "us.anthropic.claude-opus-4-6-v1",
-			DisplayName:     "Claude Opus 4.6",
-			Provider:        "bedrock",
-			MaxOutputTokens: 32768,
-		},
-		// Z.AI models
-		{
-			ID:              "glm-5.1",
-			DisplayName:     "GLM-5.1",
-			Provider:        "zai",
-			MaxOutputTokens: 131072,
-		},
-		{
-			ID:              "glm-5-turbo",
-			DisplayName:     "GLM-5-Turbo",
-			Provider:        "zai",
-			MaxOutputTokens: 131072,
-		},
-		// Fireworks models
-		{
-			ID:                "accounts/fireworks/routers/kimi-k2p5-turbo",
-			DisplayName:       "Kimi K2.5",
-			Provider:          "fireworks",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-		},
-		{
-			ID:                "accounts/fireworks/models/deepseek-v4-pro",
-			DisplayName:       "DeepSeek V4 Pro",
-			Provider:          "fireworks",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"vsuper", "cosuper_coding"},
-		},
-		{
-			ID:                "accounts/fireworks/models/deepseek-v4-flash",
-			DisplayName:       "DeepSeek V4 Flash",
-			Provider:          "fireworks",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text"},
-			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"vtext", "researcher"},
-		},
-		{
-			ID:                "accounts/fireworks/models/kimi-k2p6",
-			DisplayName:       "Kimi K2.6",
-			Provider:          "fireworks",
-			MaxOutputTokens:   131072,
-			Modalities:        []string{"text", "image"},
-			AdapterModalities: []string{"text", "image"},
-			RecommendedFor:    []string{"verifier_multimodal"},
-		},
-		// ChatGPT/Codex subscription models
-		{
-			ID:              "gpt-5.5",
-			DisplayName:     "GPT-5.5",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.4",
-			DisplayName:     "GPT-5.4",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.4-mini",
-			DisplayName:     "GPT-5.4 Mini",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-	}
+	return modelcatalog.SupportedModels()
 }
 
 // MultiProvider holds provider backends keyed by provider name. Model

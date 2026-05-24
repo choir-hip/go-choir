@@ -13,7 +13,7 @@
 # - Auth persists sessions in SQLite, so sessions survive auth restarts
 # - Auth reuses the same signing key file across restarts, so existing
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
-{ config, lib, pkgs, goChoirPackages, guestRunner ? null, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, guestRunner ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
   # Auth signing material lives in this writable runtime directory.
   # Using a let-binding so downstream env vars compose the key paths

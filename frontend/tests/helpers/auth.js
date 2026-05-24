@@ -151,7 +151,11 @@ export async function registerPasskey(page, email, baseURL = 'http://localhost:4
  * @param {string} [baseURL] - Base URL for auth API (default: http://localhost:4173).
  * @returns {Promise<{ok: boolean, user?: {id: string, email: string, created_at: string}}>}
  */
-export async function loginPasskey(page, email, baseURL = 'http://localhost:4173') {
+function isPendingCredentialRequestError(err) {
+  return String(err?.message || err).includes('request is already pending');
+}
+
+async function loginPasskeyOnce(page, email, baseURL = 'http://localhost:4173') {
   return page.evaluate(async (opts) => {
     const { email, baseURL } = opts;
 
@@ -250,6 +254,26 @@ export async function loginPasskey(page, email, baseURL = 'http://localhost:4173
 
     return finishRes.json();
   }, { email, baseURL });
+}
+
+export async function loginPasskey(page, email, baseURL = 'http://localhost:4173') {
+  let lastErr = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await loginPasskeyOnce(page, email, baseURL);
+    } catch (err) {
+      lastErr = err;
+      if (!isPendingCredentialRequestError(err)) {
+        throw err;
+      }
+      await page.waitForTimeout(500 + attempt * 500);
+      const session = await getSession(page, baseURL).catch(() => null);
+      if (session?.authenticated) {
+        return { ok: true, user: session.user, reused_existing_session: true };
+      }
+    }
+  }
+  throw lastErr;
 }
 
 /**

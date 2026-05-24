@@ -1543,9 +1543,10 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 	if userDiffErr != nil {
 		log.Printf("vtext api: user revision diffs: %v", userDiffErr)
 	}
-	requiresWorkerGrounding := !hasGroundedHistory && currentRevision.AuthorKind != types.AuthorUser
+	allowsUngroundedCreativeDraft := vtextPromptAllowsUngroundedCreativeDraft(req.Prompt)
+	requiresWorkerGrounding := vtextRevisionRequiresWorkerGrounding(hasGroundedHistory, currentRevision.AuthorKind, allowsUngroundedCreativeDraft)
 
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, userRevisionDiffs)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, allowsUngroundedCreativeDraft, recentWorkerMessages, userRevisionDiffs)
 
 	// Create the runtime run with vtext agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -1561,6 +1562,9 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		"request_intent":            strings.TrimSpace(req.Intent),
 		"original_prompt":           strings.TrimSpace(req.Prompt),
 		"requires_worker_grounding": requiresWorkerGrounding,
+	}
+	if allowsUngroundedCreativeDraft {
+		runMetadata["ungrounded_generation_scope"] = "creative_draft"
 	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
@@ -1614,9 +1618,68 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 	return rec, nil
 }
 
+func vtextPromptAllowsUngroundedCreativeDraft(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	creativeMarkers := []string{
+		"tell me a story",
+		"write a story",
+		"make up a story",
+		"draft a story",
+		"write a poem",
+		"compose a poem",
+		"write fiction",
+		"make up",
+		"bedtime story",
+	}
+	hasCreativeMarker := false
+	for _, marker := range creativeMarkers {
+		if strings.Contains(text, marker) {
+			hasCreativeMarker = true
+			break
+		}
+	}
+	if !hasCreativeMarker {
+		return false
+	}
+	factualMarkers := []string{
+		"latest",
+		"current",
+		"now",
+		"today",
+		"yesterday",
+		"news",
+		"research",
+		"cite",
+		"citation",
+		"source",
+		"sources",
+		"look up",
+		"what's",
+		"what is",
+		"who ",
+		"when ",
+		"where ",
+		"why ",
+		"how ",
+	}
+	for _, marker := range factualMarkers {
+		if strings.Contains(text, marker) {
+			return false
+		}
+	}
+	return true
+}
+
+func vtextRevisionRequiresWorkerGrounding(hasGroundedHistory bool, authorKind types.AuthorKind, allowsUngroundedCreativeDraft bool) bool {
+	return !hasGroundedHistory && authorKind != types.AuthorUser && !allowsUngroundedCreativeDraft
+}
+
 // buildAgentRevisionRequest constructs the backend-owned vtext revision
 // request sent as the user turn for the vtext appagent.
-func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, userRevisionDiffs []string) string {
+func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, allowsUngroundedCreativeDraft bool, recentWorkerMessages []ChannelMessage, userRevisionDiffs []string) string {
 	var b strings.Builder
 	b.WriteString("A revise event was triggered for the current vtext document.")
 
@@ -1724,9 +1787,14 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\nYou may edit user-provided text for structure, clarity, or formatting.")
 			b.WriteString("\nDo not add factual claims, citations, or coding results from model priors.")
 			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, start the needed worker request before ending the run.")
+		} else if allowsUngroundedCreativeDraft {
+			b.WriteString("\nThe current conductor seed is for a creative/non-factual draft.")
+			b.WriteString("\nYou may call edit_vtext to produce the requested creative document without worker grounding.")
+			b.WriteString("\nDo not add factual, current-events, citation, coding, or product claims unless worker evidence exists.")
 		} else {
 			b.WriteString("\nDo not call edit_vtext from model priors. The current conductor abstract is already the visible document seed.")
 			b.WriteString("\nFor factual/current claims, call spawn_agent with role=\"researcher\" on this document channel. Use parallel researchers when you can give each one a distinct branch; otherwise start with one broad researcher.")
+			b.WriteString("\nOrdinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work. Do not route them to request_super_execution unless the user also asks for code execution, product mutation, candidate-world work, or verifier contracts.")
 			b.WriteString("\nFor coding, generated artifacts, execution, or verification, call request_super_execution.")
 			b.WriteString("\nAfter starting the necessary worker request(s), end the run without edit_vtext. Worker deliveries will wake the next VText run to create the next revision.")
 		}

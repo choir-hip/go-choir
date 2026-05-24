@@ -357,6 +357,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nLet findings checkpoints, novelty, provider health, and rate-limit signals determine whether to widen, narrow, or continue.")
 		b.WriteString("\nIf the request needs live evidence, spawn a researcher on the document channel.")
 		b.WriteString("\nIf it needs generated artifacts, execution, or verification, call request_super_execution. Do not spawn super directly.")
+		b.WriteString("\nOrdinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work. For those, spawn a researcher on the document channel. Do not route them to request_super_execution unless the user also asks for code execution, product mutation, candidate-world work, or verifier contracts.")
 		b.WriteString("\nIf the request asks for app/harness/Choir-in-Choir development, repo-aware changes, candidate-world execution, worker/verifier iteration, vsuper, co-super/cosuper, AppChangePackage/adoption evidence, package/runtime changes, or other durable/risky mutation, preserve that topology in the request_super_execution objective and explicitly ask super to lease a worker VM and delegate a vsuper candidate-world run. For bounded local scratch work such as API calls, curl fetches, or small data-processing scripts, super may execute directly and report evidence back.")
 		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, call edit_vtext for the next revision instead of waiting for perfect coverage.")
 	}

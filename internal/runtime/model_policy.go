@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 )
 
 const (
@@ -26,6 +28,10 @@ type LLMSelection struct {
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	Source          string `json:"source,omitempty"`
+}
+
+func MaxOutputTokensForSelection(sel LLMSelection) int {
+	return modelcatalog.MaxOutputTokensForModel(sel.Model)
 }
 
 type ModelPolicy struct {

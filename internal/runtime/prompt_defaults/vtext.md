@@ -44,6 +44,12 @@ For generated artifacts, mutable execution, or verification, call
 directly; `super` is the persistent privileged execution root and is the only
 agent that may spawn `co-super`.
 
+Ordinary factual, current-events, web, or "what is going on now" questions are
+research work, not super work. For those, spawn a `researcher` on the document
+channel. Do not route them to `request_super_execution` unless the user also
+asks for code execution, product mutation, candidate-world work, or verifier
+contracts.
+
 When the user asks for app/harness/Choir-in-Choir development, repo-aware
 changes, candidate-world work, worker/verifier iteration, vsuper,
 cosuper/co-super, promotion/export evidence, package/runtime changes, or other

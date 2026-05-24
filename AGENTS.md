@@ -49,6 +49,36 @@ capabilities are explicitly verified for the task at hand.
 
 Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
 
+## Problem Documentation First
+
+Every platform behavior-changing mission must observe the following invariant:
+
+> **Documenting a problem is the first priority. Fixing it is second.**
+
+When staging evidence (or any reliable evidence) reveals a new problem, the
+first commit that follows must be a checkpoint or mission doc update that names
+the problem, records the evidence, and updates the belief state and remaining
+error field — without any code fix. The fix commit(s) come second, referencing
+the prior documentation.
+
+This ensures that:
+
+- Problems can be reviewed independently of any particular solution.
+- Alternative solutions can be considered before committing to an approach.
+- Refactoring and re-evaluation can happen after mission pressure passes.
+- Other agents and humans can examine the problem record to form their own
+  judgment about the right fix.
+
+Context-dependent fixes authored during a mission ("get past this blocker") are
+especially susceptible to narrowing the solution space prematurely. A separate
+documentation step creates a natural review gate.
+
+Exceptions require explicit justification in the commit message, naming why the
+problem could not be documented before being fixed.
+
+See [docs/memo-problem-documentation-first.md](docs/memo-problem-documentation-first.md)
+for the finding that motivated this invariant.
+
 ## Landing Loop
 
 Every platform behavior-changing mission includes:
@@ -77,12 +107,14 @@ Read [docs/missiongradient-method.md](docs/missiongradient-method.md) before aut
 Do not turn MissionGradient into a brittle checklist. Preserve the invariant and increase realism as evidence arrives.
 
 For long-running Choir-in-Choir missions, maintain an owner-readable VText
-dashboard. Each substantive change in plan, evidence, blocker, or result should
-produce a concise narrative VText revision that explains the whole run state so
-far: past work, current work, evidence, learnings, risks, and next step. Do not
-dump every low-level event into VText. Trace is the causal ledger for dense tool
-calls, LLM content, and agent-to-agent messages; VText is the human supervision
-surface.
+narrative. Each substantive change in plan, evidence, blocker, or result should
+produce a concise revision that explains the whole run state so far in plain
+language: objective, past work, current work, what changed, evidence, learnings,
+risks, and next step. Do not make VText a Trace-like topology/status table, and
+do not dump low-level events into VText. Trace is the causal ledger for dense
+tool calls, LLM content, and agent-to-agent messages; feature-specific live
+surfaces such as Chyron may show granular activity streams; VText is the human
+supervision narrative.
 
 ## Authority Boundaries
 

@@ -9,7 +9,7 @@
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-human-proof-experiment-rerun-v1.md as a Codex-supervised MissionGradient mission: restore a clean deployed baseline, then rerun Chyron Shelf Observability through Choir-in-Choir until it produces human-proof feature evidence or a precise substrate blocker. Start from staging 415b87e, where runtime model/context substrate is deployed, and local commit adbc04f, which must be pushed, CI/deploy-monitored, and staging-identity verified before product proof. Run a narrow staging auth/gateway/model-policy/context smoke, then use visible product path and VText dashboard supervision to have Choir agents build Chyron in a candidate computer, publish an honest AppChangePackage as transferable source, attach owner-readable VText narrative plus screenshot/video or benchmark proof, verify recipient build/adoption/rollback through product APIs, and expose readable Trace/run-acceptance evidence. A package may be evidence_pending, but it must not be reviewable until human proof exists. Codex may patch runtime/harness/prompts/evidence plumbing but must not hand-code Chyron, Motion, Liquid, or Python experiment features. Continue to Motion, Liquid, and Python only after Chyron proves the loop; otherwise investigate, patch the substrate through git/CI/deploy, and rerun Chyron. Stop only on full Chyron loop success plus sequential next-step readiness, or a named invariant-level blocker with VText, media, Trace, run-acceptance, rollback refs, residual risks, and the next executable probe.
+/goal Run docs/mission-human-proof-experiment-rerun-v1.md as a Codex-supervised MissionGradient mission: restore a clean deployed baseline, then rerun Chyron Shelf Observability through Choir-in-Choir until it produces human-proof feature evidence or a precise substrate blocker. Start from staging 415b87e, where runtime model/context substrate is deployed, and local commit adbc04f, which must be pushed, CI/deploy-monitored, and staging-identity verified before product proof. Run a narrow staging auth/gateway/model-policy/context smoke, then use visible product path and VText narrative supervision to have Choir agents build Chyron in a candidate computer, publish an honest AppChangePackage as transferable source, attach owner-readable VText narrative plus screenshot/video or benchmark proof, verify recipient build/adoption/rollback through product APIs, and expose readable Trace/run-acceptance evidence. A package may be evidence_pending, but it must not be reviewable until human proof exists. Codex may patch runtime/harness/prompts/evidence plumbing but must not hand-code Chyron, Motion, Liquid, or Python experiment features. Continue to Motion, Liquid, and Python only after Chyron proves the loop; otherwise investigate, patch the substrate through git/CI/deploy, and rerun Chyron. Stop only on full Chyron loop success plus sequential next-step readiness, or a named invariant-level blocker with VText, media, Trace, run-acceptance, rollback refs, residual risks, and the next executable probe.
 ```
 
 ## Mission Frame
@@ -24,7 +24,7 @@ The async-supervision follow-up fixed much of the runtime shape:
 - super can start worker delegations asynchronously instead of disappearing
   inside one blocking delegate call;
 - VText can receive mirrored worker updates and serve as a live mission
-  dashboard;
+  narrative;
 - `worker-medium` and `worker-playwright` are separate classes, so ordinary
   worker VMs stay lighter while browser evidence has a bounded heavier path;
 - worker/vsuper/co-super prompting now has a clearer control contract.
@@ -79,7 +79,7 @@ Codex supervises the platform harness
   -> human proof attaches to that same package identity
   -> recipient computer pulls, rebuilds, verifies, adopts, rolls back
   -> Apps & Changes presents the result in human terms
-  -> VText narrates the run as a live dashboard and final report
+  -> VText narrates the run as a live human-readable story and final report
 ```
 
 The first payload is **Chyron Shelf Observability**. The spelling matters:
@@ -105,7 +105,7 @@ this mission.
 - May directly patch runtime, harness, prompts, product proof, Apps & Changes,
   VText, Trace, run acceptance, and deployment plumbing.
 - Must not hand-code Chyron, Motion, Liquid, or Python experiment features.
-- Supervises by reading VText dashboards, screenshots/video, Trace, and
+- Supervises by reading VText narratives, screenshots/video, Trace, and
   run-acceptance evidence.
 - If Choir-in-Choir fails, investigates why, patches the substrate if
   authorized, deploys, and reruns the same experiment through Choir.
@@ -141,9 +141,13 @@ this mission.
 
 **VText**
 
-- Is the live narrative dashboard.
-- Produces revisions that summarize the whole run so far: past work, current
-  state, learnings, blockers, next steps, and owner-relevant risks.
+- Is the live narrative supervision surface.
+- Produces revisions that summarize the whole run so far in prose: objective,
+  past work, what changed, current state, evidence, learnings, blockers, next
+  steps, and owner-relevant risks.
+- Must not become a Trace-like topology dashboard, worker table, raw event log,
+  or hash/id ledger. Technical ids belong in a short appendix only when they
+  help review or rollback.
 - May ask super clarifying questions.
 - Does not issue worker-control commands.
 
@@ -190,14 +194,18 @@ call that a Chyron experiment result.
 
 Chyron is not reviewable until evidence shows:
 
-- live prompt/tool/run status text appears while work is happening;
-- agent-to-agent/channel messages are represented at human-readable resolution;
+- a video shows Choir operating normally while Chyron text streams over or near
+  the Shelf during real work;
+- the Chyron stream is more granular than VText and carries concise live
+  activity items such as tool calls, interim model messages, worker/run status,
+  and agent-to-agent/channel messages;
 - the stream does not block Desk menu, app buttons, prompt input, or window
   controls;
 - prompt input focus hides, pauses, or de-emphasizes the stream;
 - screenshot/video evidence is captured through `worker-playwright` or another
   explicitly verified product-path browser proof;
-- VText explains the behavior and limitations plainly.
+- VText explains the objective, what changed, what evidence exists, what is
+  still missing, and what happens next in plain narrative prose.
 
 Do not accept:
 
@@ -277,7 +285,7 @@ After the first successful Chyron loop, perform a quality pass before moving to
 Motion:
 
 - simplify prompts or duplicated runtime paths exposed by the run;
-- improve VText dashboard readability;
+- improve VText narrative readability;
 - make Trace highlight the important events;
 - verify Apps & Changes presents the package in human terms;
 - record residual risks and rollback refs.
@@ -313,7 +321,7 @@ Required product proof after source-transfer patch:
 visible prompt bar on staging
 -> Chyron candidate run through super -> vsuper -> co-super
 -> product-visible AppChangePackage or precise blocker
--> VText dashboard revision
+-> VText narrative revision
 -> run acceptance synthesis
 ```
 
@@ -395,7 +403,7 @@ what was proven:
 unproven or partial claims:
   Chyron still lacks actual screenshot/video/benchmark human proof of the
   feature behavior. The VText narrative remains too technical and does not yet
-  function as an owner-readable live dashboard. The b808696 deployed proof did
+  function as an owner-readable live narrative. The b808696 deployed proof did
   not establish that the preview route can show the Chyron behavior because it
   stopped at auth challenge persistence before package/adoption preview. Motion,
   Liquid, and Python have not been rerun.

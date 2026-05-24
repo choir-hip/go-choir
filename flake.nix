@@ -24,7 +24,7 @@
       goModuleVersion = "0.1.0";
       buildCommit = self.rev or self.dirtyRev or "local";
       buildDate = self.lastModifiedDate or "unknown";
-      sourceRepoRemote = "https://github.com/yusefmosiah/go-choir.git";
+      sourceRepoRemote = "https://github.com/choir-hip/go-choir.git";
       devSystems = [
         "aarch64-darwin"
         "x86_64-darwin"

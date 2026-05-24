@@ -1692,6 +1692,82 @@ func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
 	}
 }
 
+func TestVTextPromptCreativeDraftClassifierKeepsResearchGrounded(t *testing.T) {
+	if !vtextPromptAllowsUngroundedCreativeDraft("tell me a story about computers") {
+		t.Fatal("expected simple story prompt to allow ungrounded creative drafting")
+	}
+	for _, prompt := range []string{
+		"what's going on with iran deal now",
+		"tell me a story about the latest iran deal now",
+		"write a cited story about today's AI news",
+	} {
+		if vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+			t.Fatalf("prompt %q should require grounded research", prompt)
+		}
+	}
+}
+
+func TestVTextCreativeDraftSkipsWorkerGroundingWithoutDolt(t *testing.T) {
+	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, true) {
+		t.Fatal("creative conductor seed should not require worker grounding")
+	}
+	if !vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, false) {
+		t.Fatal("non-creative conductor seed should require worker grounding")
+	}
+	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorUser, false) {
+		t.Fatal("user-provided text edits should not require worker grounding")
+	}
+	if vtextRevisionRequiresWorkerGrounding(true, types.AuthorAppAgent, false) {
+		t.Fatal("already-grounded documents should not require fresh worker grounding")
+	}
+}
+
+func TestVTextPromptAllowsCreativeDraftWithoutWorkerGrounding(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-story",
+		RevisionID: "rev-story",
+		Content:    "# tell me a story\n\ntell me a story about computers",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "tell me a story about computers",
+	}, "", false, true, nil, nil)
+
+	for _, want := range []string{
+		"The current conductor seed is for a creative/non-factual draft",
+		"You may call edit_vtext to produce the requested creative document without worker grounding",
+		"Do not add factual, current-events, citation, coding, or product claims unless worker evidence exists",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("creative vtext prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-current-events",
+		RevisionID: "rev-current-events",
+		Content:    "what's going on with iran deal now",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "what's going on with iran deal now",
+	}, "", false, false, nil, nil)
+
+	for _, want := range []string{
+		"For factual/current claims, call spawn_agent with role=\"researcher\"",
+		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
+		"Do not route them to request_super_execution",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("current-events vtext prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func TestVTextAgentRevisionAppliesStructuredEdit(t *testing.T) {
 	provider := newVTextEditToolProvider(vtextApplyEditsResult([]vtextTextEdit{
 		{Op: "replace", Find: "Hello, world!", Replace: "Hello, edited document."},
@@ -2767,7 +2843,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 
 	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
-	}, "", true, recent, nil)
+	}, "", true, false, recent, nil)
 
 	for _, want := range []string{
 		"At least one recent worker message says a delegated worker is still active",

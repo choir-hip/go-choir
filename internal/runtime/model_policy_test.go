@@ -42,8 +42,20 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 }
 
+func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
+	if got := MaxOutputTokensForSelection(LLMSelection{Model: "accounts/fireworks/models/deepseek-v4-flash"}); got != 131072 {
+		t.Fatalf("deepseek flash max tokens = %d, want 131072", got)
+	}
+	if got := MaxOutputTokensForSelection(LLMSelection{Model: "gpt-5.5"}); got != 65536 {
+		t.Fatalf("gpt-5.5 max tokens = %d, want 65536", got)
+	}
+	if got := MaxOutputTokensForSelection(LLMSelection{Model: "unknown-model"}); got != 65536 {
+		t.Fatalf("unknown model max tokens = %d, want safe default 65536", got)
+	}
+}
+
 func TestRuntimeResolvesModelPolicyIntoRunMetadata(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -61,21 +73,18 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 	rt.cfg.ModelPolicyPath = policyPath
 
-	rec, err := rt.createRunWithMetadata(context.Background(), "research", "user-alice", map[string]any{
+	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 	})
-	if err != nil {
-		t.Fatalf("createRunWithMetadata: %v", err)
-	}
 
-	if got := metadataStringValue(rec.Metadata, runMetadataLLMProvider); got != "fireworks" {
+	if got := metadataStringValue(metadata, runMetadataLLMProvider); got != "fireworks" {
 		t.Fatalf("llm_provider = %q, want fireworks", got)
 	}
-	if got := metadataStringValue(rec.Metadata, runMetadataLLMModel); got != "accounts/fireworks/models/deepseek-v4-flash" {
+	if got := metadataStringValue(metadata, runMetadataLLMModel); got != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Fatalf("llm_model = %q", got)
 	}
-	if got := metadataStringValue(rec.Metadata, runMetadataLLMPolicySource); got != policyPath {
+	if got := metadataStringValue(metadata, runMetadataLLMPolicySource); got != policyPath {
 		t.Fatalf("llm_policy_source = %q, want %q", got, policyPath)
 	}
 }
@@ -128,7 +137,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 }
 
 func TestRuntimeFallsBackToPreviousValidModelPolicy(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt := testPromptRuntime(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
 		t.Fatal(err)

@@ -102,6 +102,31 @@ The experiment output is not reviewable until the owner can inspect a narrative 
 
 ## Runtime Repair Targets
 
+### 0. Disk And VM-State Pressure Backlog
+
+Long self-development runs keep producing large VM-state directories and
+browser-proof artifacts. This is not the immediate Chiron feature blocker, but
+it is now a reliability blocker for overnight work because Node B has repeatedly
+approached full-disk conditions during Choir-in-Choir missions.
+
+Track the follow-up as a dedicated resource-retention mission rather than a
+manual cleanup habit:
+
+- inventory `/var/lib/go-choir/vm-state`, Nix store/build outputs, worker
+  evidence bundles, Playwright/video artifacts, candidate workspaces, and
+  journals;
+- classify each artifact as active primary, active candidate, rollback-critical,
+  owner-review evidence, or disposable stale state;
+- reclaim stale worker/candidate VM images only after provenance/ref checks;
+- keep primary computers, published computers, rollback refs, and reviewable
+  evidence protected;
+- expose an operator report with largest consumers, refusal reasons, and safe
+  reclaim candidates;
+- make emergency reclaim bounded and auditable, not a broad delete button.
+
+Reference policy: [deferred-reliability-migrations-2026-05-14.md](deferred-reliability-migrations-2026-05-14.md)
+and [vm-priority-policy.md](vm-priority-policy.md).
+
 ### 1. Verifier Sequencing
 
 Patch prompts and, where necessary, runtime guardrails so `vsuper` does not spawn a verifier into a race.

@@ -43,3 +43,6 @@ vmctl.log
 # GStack
 .gstack/*
 .gstack/
+
+# Test results
+test-results/

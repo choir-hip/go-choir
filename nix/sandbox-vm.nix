@@ -19,7 +19,7 @@
 # the kernel, rootfs, and store disk from the microvm runner outputs.
 # It does NOT use the microvm runner scripts directly because vmmanager
 # needs per-VM networking, port assignment, and lifecycle control.
-{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/yusefmosiah/go-choir.git", buildCommit ? "local", includePlaywright ? false, ... }:
+{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", includePlaywright ? false, ... }:
 
 let
   playwrightCli = pkgs.writeShellApplication {

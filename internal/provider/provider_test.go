@@ -18,6 +18,18 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func TestMaxOutputTokensForModelUsesSupportedModelCatalog(t *testing.T) {
+	if got := maxOutputTokensForModel("accounts/fireworks/models/deepseek-v4-flash"); got != 131072 {
+		t.Fatalf("deepseek flash max tokens = %d, want 131072", got)
+	}
+	if got := maxOutputTokensForModel("gpt-5.5"); got != 65536 {
+		t.Fatalf("gpt-5.5 max tokens = %d, want 65536", got)
+	}
+	if got := maxOutputTokensForModel("unknown-model"); got != 65536 {
+		t.Fatalf("unknown model max tokens = %d, want safe default 65536", got)
+	}
+}
+
 // --- Bedrock Provider Tests ---
 
 func TestBedrockProviderRequiresRegion(t *testing.T) {

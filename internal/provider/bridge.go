@@ -121,7 +121,7 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 				},
 			},
 		},
-		MaxTokens: 4096,
+		MaxTokens: maxOutputTokensForModel(llmConfig.Model),
 		Stream:    true,
 	}
 
@@ -439,7 +439,7 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: task.Prompt}}},
 		},
-		MaxTokens: 4096,
+		MaxTokens: maxOutputTokensForModel(model),
 		Stream:    true,
 	}
 
