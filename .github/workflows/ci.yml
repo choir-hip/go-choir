@@ -371,6 +371,75 @@ jobs:
               echo "    ${label} build complete in $((ended - started))s"
             }
 
+            fast_build_host_service() {
+              local service="$1"
+              case "$service" in
+                auth|gateway|platformd|proxy|vmctl)
+                  ;;
+                *)
+                  echo "    Fast host service build unsupported for ${service}; using Nix package build"
+                  return 1
+                  ;;
+              esac
+
+              if ! command -v go >/dev/null 2>&1 || ! command -v pkg-config >/dev/null 2>&1 || ! command -v gcc >/dev/null 2>&1; then
+                echo "    Fast host service build prerequisites missing; using Nix package build"
+                return 1
+              fi
+
+              local out="/tmp/go-choir-service-${service}-result"
+              local log
+              log=$(mktemp)
+              local started
+              started=$(date +%s)
+              echo "    Fast building Host service ${service}: ./cmd/${service}"
+              rm -rf "$out"
+              mkdir -p "$out/bin" /var/cache/go-choir/go-build /var/cache/go-choir/gomodcache
+
+              (
+                export CGO_ENABLED=1
+                export GOCACHE=/var/cache/go-choir/go-build
+                export GOMODCACHE=/var/cache/go-choir/gomodcache
+                if pkg-config --exists icu-i18n icu-uc; then
+                  export CGO_CFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CFLAGS:-}"
+                  export CGO_CXXFLAGS="$(pkg-config --cflags icu-i18n icu-uc) ${CGO_CXXFLAGS:-}"
+                  export CGO_LDFLAGS="$(pkg-config --libs icu-i18n icu-uc) ${CGO_LDFLAGS:-}"
+                fi
+                go build \
+                  -trimpath \
+                  -ldflags "-s -w -X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=0.1.0 -X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${current_commit} -X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${deployed_at}" \
+                  -o "$out/bin/$service" \
+                  "./cmd/$service"
+              ) >"$log" 2>&1 || {
+                cat "$log"
+                rm -f "$log"
+                echo "    Fast host service ${service} build failed; using Nix package build"
+                return 1
+              }
+
+              if command -v ldd >/dev/null 2>&1; then
+                if ldd "$out/bin/$service" 2>&1 | tee -a "$log" | grep -q "not found"; then
+                  cat "$log"
+                  rm -f "$log"
+                  echo "    Fast host service ${service} binary has unresolved dynamic libraries; using Nix package build"
+                  return 1
+                fi
+              fi
+
+              rm -f "$log"
+              local ended
+              ended=$(date +%s)
+              echo "    Fast host service ${service} build complete in $((ended - started))s"
+            }
+
+            build_host_service_root() {
+              local service="$1"
+              if fast_build_host_service "$service"; then
+                return 0
+              fi
+              build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result"
+            }
+
             selected_build_pids=()
             selected_build_status=0
             if [ "${DEPLOY_FRONTEND}" = "true" ]; then
@@ -383,7 +452,7 @@ jobs:
               IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
               for service in "${service_roots[@]}"; do
                 [ -z "$service" ] && continue
-                build_selected_root "Host service ${service}" ".#${service}" "/tmp/go-choir-service-${service}-result" &
+                build_host_service_root "$service" &
                 selected_build_pids+=("$!")
               done
               echo "    Skipping host NixOS closure build for service-pointer deploy"
