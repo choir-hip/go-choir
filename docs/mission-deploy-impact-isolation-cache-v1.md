@@ -597,3 +597,135 @@ computers do not continue serving stale runtime code after a guest image deploy.
 The remaining structural speed axis is still guest layering/decoupling, but
 correct code identity for active computers is now an invariant of the deploy
 loop.
+
+### Active Computer Refresh Deploy Evidence
+
+Commit `336ba6b9a29e764fa4395c93e81f03403b78d761` landed the active
+interactive computer refresh path and the semantic generated-model-policy
+migration away from stale ChatGPT foreground defaults.
+
+Deployed CI run: `26361582906`.
+
+- selected deploy classes: sandbox host service, ordinary guest, vmctl restart
+- GitHub runner prebuild/copy: skipped with `No deploy roots selected`
+- Node B sandbox host service build: `70s`
+- Node B ordinary guest build: `37s`
+- Node B nix build phase total: `107s`
+- active interactive computer refresh phase: `24s`
+- full deploy job: about `3m20s`
+- skipped frontend bundle, host NixOS closure, NixOS switch, and Playwright
+  guest image
+- staging health after deploy: `ok`
+- deployed commit identity: `336ba6b9a29e764fa4395c93e81f03403b78d761`
+
+This fixed a real product correctness problem: warm primary computers must not
+continue serving old guest runtime code after a guest image deploy.
+
+Commit `9e51b7400fc88b345c6b14d920e4d76ca145370c` then stamped
+`CHOIR_DEPLOYED_COMMIT` into the guest sandbox environment so VM health can
+report the guest image identity directly.
+
+Deployed CI run: `26361827566`.
+
+- selected deploy classes: ordinary guest, vmctl restart
+- Node B ordinary guest build: `54s`
+- Node B nix build phase total: `54s`
+- active interactive computer refresh phase: `13s`
+- full deploy job: about `2m03s`
+- active VM health showed `build.commit` and `deployed_commit` both at
+  `9e51b7400fc88b345c6b14d920e4d76ca145370c`
+
+### Concurrent Guest Build Evidence
+
+Commit `41a226332e43f78dd843cc272007267b648313c5` changed the remote deploy
+script to build ordinary and Playwright guest image roots concurrently when both
+are selected.
+
+Deployed CI run: `26361945573`.
+
+- selected deploy classes: ordinary guest, Playwright guest, vmctl restart
+- ordinary guest image build: `43s`
+- Playwright guest image build: `40s`
+- Node B nix build phase total: `43s`
+- active interactive computer refresh phase: `13s`
+- full deploy job: about `1m27s`
+- skipped frontend bundle, host service pointer work, host NixOS closure, and
+  NixOS switch
+- staging health after deploy: `ok`
+- deployed commit identity: `41a226332e43f78dd843cc272007267b648313c5`
+
+This is the current best measured path for a guest-image-only deploy that
+touches both image classes.
+
+### Podcast Persistence And Runtime Shared-Dependency Evidence
+
+Commit `255bd1b4ee1ceaa944ac655d1e088211c58b5c86` fixed Podcast subscription
+persistence and RSS refresh behavior by adding durable owner-scoped
+`podcast_subscriptions` records plus product API routes.
+
+Deployed CI run: `26362395479`.
+
+- selected deploy classes before the classifier fix: frontend, ordinary guest,
+  vmctl restart, and broad host deployment
+- GitHub runner selected roots: `.#frontend` plus the full
+  `.#nixosConfigurations.go-choir-b.config.system.build.toplevel`
+- GitHub prebuild: `463s`
+- full deploy job: about `9m20s`
+- staging health after deploy: `ok`
+- deployed commit identity: `255bd1b4ee1ceaa944ac655d1e088211c58b5c86`
+
+This was a regression in deploy proportionality, not in product behavior. The
+runtime/store/types changes were conservatively treated as broad host closure
+changes even though the service-pointer path could carry them.
+
+Commit `9f0d7c4d1c71749884163d287f1b6c26ff209e0d` corrected the classifier so
+shared runtime/store/type/event/server/search changes select service pointers
+and ordinary guest images instead of the full host OS closure when possible.
+
+Commit `4d8a89a8727f2fc0fc6a0ada5d5689e948e1c7d` then made selected remote
+builds concurrent across frontend, service roots, and guest images.
+
+Commit `f096c000eed77bcf46c5f34e16ca6a570dfbd0c2` exercised that path with an
+`internal/runtime/podcast.go` comment-only change.
+
+Deployed CI run: `26362845823`.
+
+- selected deploy classes: `HOST_SERVICES=gateway,sandbox`, ordinary guest,
+  vmctl restart
+- skipped frontend bundle
+- skipped host NixOS closure and NixOS switch
+- skipped Playwright guest image
+- Node B gateway service build: `110s`
+- Node B sandbox service build: `111s`
+- Node B ordinary guest build: `144s`
+- Node B nix build phase total: `144s` because service and guest roots built
+  concurrently
+- host service install/restart phase: `3s`
+- active interactive computer refresh phase: `18s`
+- remote deploy total through health and asset graph: `174s`
+- full deploy job: `3m19s`
+- staging health after deploy: `ok`
+- proxy and upstream sandbox health reported deployed commit
+  `f096c000eed77bcf46c5f34e16ca6a570dfbd0c2`
+
+Conclusion: the full-host tax is gone for this class. The remaining cost is
+real service package rebuild plus ordinary guest image construction.
+
+### Current Bottleneck Analysis
+
+The flake still gives every Go service a source tree containing all
+`internal/**/*.go`. More importantly, `cmd/gateway` imports `internal/provider`,
+and `internal/provider` imports `internal/runtime` for bridge interfaces and
+tool-loop types. That means a runtime package change legitimately changes the
+gateway derivation today, even when the touched runtime file is only meaningful
+inside sandbox behavior.
+
+There are two separable next axes:
+
+1. Narrow each Go service source to the internal package directories it imports
+   so unrelated internal packages do not poison service derivations.
+2. Split provider/runtime bridge interfaces into a small shared package so the
+   gateway does not depend on the full runtime package.
+
+Do not solve this by pretending runtime changes cannot affect gateway. The
+right fix is dependency graph surgery plus deployed timing proof.
