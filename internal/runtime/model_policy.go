@@ -318,11 +318,11 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	}
 	conductor, ok := policy.Roles[AgentProfileConductor]
 	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
-		return false
+		return hasLegacyChatGPTForegroundPin(policy)
 	}
 	super, ok := policy.Roles[AgentProfileSuper]
 	if !ok || !isModelPolicySelection(super, "chatgpt", "gpt-5.5", "medium") {
-		return false
+		return hasLegacyChatGPTForegroundPin(policy)
 	}
 	researcher, ok := policy.Roles[AgentProfileResearcher]
 	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, defaultResearcherVTextModel, "") {
@@ -333,6 +333,13 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 		return false
 	}
 	return true
+}
+
+func hasLegacyChatGPTForegroundPin(policy ModelPolicy) bool {
+	conductor := policy.Roles[AgentProfileConductor]
+	super := policy.Roles[AgentProfileSuper]
+	return isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "") ||
+		isModelPolicySelection(super, "chatgpt", "gpt-5.5", "")
 }
 
 func isModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
