@@ -248,3 +248,165 @@ Use `blocked_incomplete` if Nix/Caddy/systemd constraints prevent frontend point
 ```text
 /goal Run docs/mission-deploy-impact-isolation-cache-v1.md as a Codex-operated MissionGradient mission: optimize Choir's staging deploy path by isolating deploy impact classes before judging cache. Starting from the partial v0 proof at 2568564, preserve the deployed class detector and selected guest-root behavior, then remove the remaining broad-host tax: make frontend-only changes deploy by building/copying only the frontend package, updating a durable frontend pointer, reloading only the edge path required, and proving no NixOS switch, no vmctl restart, and no guest EROFS build. Then split host-service changes so ordinary service edits do not rebuild unrelated services or guest images unless shared dependencies require it, while still preserving staging /health commit identity through deploy metadata rather than binary-wide commit poisoning where feasible. Measure Magic Nix Cache/FlakeHub behavior only after the selected roots are correct. Do not edit Node B directly as source/config, skip health identity, hide fallback remote builds, underbuild ambiguous shared dependencies, or call a checkpoint complete. Finish with frontend-only, host-service-only, ordinary-guest, and cache-hit timing evidence, rollback refs, residual risks, and the next deploy-speed realism axis.
 ```
+
+## Execution Checkpoint: 2026-05-24
+
+**Status:** checkpoint_complete_for_impact_isolation, cache_not_worth_paying_yet.
+
+The deploy graph is now substantially proportional for the three measured
+classes. The remaining long pole is ordinary guest image construction, not broad
+host activation.
+
+### Landed Commits
+
+| Commit | Purpose | Result |
+| --- | --- | --- |
+| `23d8278` | initial v1 mission doc and frontend selected-root path | set up frontend proof |
+| `d109645` | serve frontend from stable directory | one-time host cutover |
+| `c2e66fe` | frontend-only proof commit | proved frontend package-only deploy |
+| `88e213b` | health identity from live deploy metadata | fixed stale health identity |
+| `a9c792f` | split Go service build inputs and remove commit poisoning | reduced unrelated Go rebuilds |
+| `bbd3d6f` | gateway-only proof before service pointers | proved no guests, but still host closure |
+| `8f4dd54` | service pointer deploy path | one-time host cutover |
+| `ebdc51c` | gateway-only proof after service pointers | proved service package-only deploy |
+| `9b67d53` | compose service pointer deploys with guest images | enabled `sandbox + guest-image` without host OS |
+| `4aa75ce` | ordinary guest proof commit | proved ordinary guest-only plus sandbox pointer deploy |
+
+### Frontend-Only Evidence
+
+Proof commit: `c2e66fe`.
+
+- selected root: `.#frontend`
+- GitHub prebuild: `28s`
+- copy to Node B: `2s`
+- no host NixOS closure build
+- no NixOS switch
+- no ordinary guest image build
+- no Playwright guest image build
+- no vmctl restart
+- frontend asset graph served from `/var/www/go-choir/frontend-current`
+
+The first attempt used `/srv/go-choir/frontend-current` and produced 404s; the
+durable path is now `/var/www/go-choir/frontend-current`.
+
+### Host-Service-Only Evidence
+
+Proof commit before service pointers: `bbd3d6f`.
+
+- selected root: host NixOS closure only
+- no ordinary guest image
+- no Playwright guest image
+- no vmctl restart
+- still built a broad host NixOS closure and all host service closure references
+- deploy job about `8m28s`
+
+Proof commit after service pointers: `ebdc51c`.
+
+- selected root: `.#gateway`
+- `DEPLOY_HOST_OS=false`
+- `HOST_SERVICES=gateway`
+- GitHub prebuild: `188s`
+- copy to Node B: `5s`
+- remote deploy: host service build `1s`, no NixOS switch, restart only `go-choir-gateway.service`
+- no ordinary guest image
+- no Playwright guest image
+- no vmctl restart
+- `/health` reported deployed commit `ebdc51ceada0ce49179b6b5be0f0472fe55efa97`
+
+This proves the service pointer path works. The remaining host-service cost is
+the GitHub-side package build, not host activation.
+
+### Ordinary Guest Evidence
+
+Proof commit: `4aa75ce`.
+
+Classifier output for `cmd/sandbox/main.go`:
+
+```text
+deploy_host=true
+deploy_frontend=false
+deploy_host_service=true
+deploy_ordinary_guest=true
+deploy_playwright_guest=false
+deploy_host_os=false
+deploy_vmctl_restart=true
+host_services=sandbox
+```
+
+First run:
+
+- selected roots: `.#sandbox`, `.#guest-image`
+- GitHub prebuild: `750s`
+- `microvm-store-disk.erofs`: `2m16s`
+- copy to Node B: `45s`
+- remote host service sandbox build: `1s`
+- remote guest image build from copied closure: `5s`
+- skipped frontend bundle
+- skipped host NixOS closure and NixOS switch
+- installed sandbox service pointer at `/var/lib/go-choir/services/sandbox`
+- restarted `go-choir-sandbox.service`
+- installed ordinary guest image
+- skipped Playwright guest image build/install
+- restarted `go-choir-vmctl` because ordinary guest image changed
+- `/health` reported deployed commit `4aa75cee112d0843a9047fcccc5a5be4d79fe937`
+
+This proves ordinary guest deploys no longer require host NixOS activation or
+the Playwright guest image when the change is sandbox-specific.
+
+### Cache Repeat Evidence
+
+The same `4aa75ce` ordinary guest run was rerun without a code change.
+
+- selected roots remained `.#sandbox`, `.#guest-image`
+- GitHub prebuild: `836s`, slower than the first run
+- `microvm-store-disk.erofs`: `2m59s`, slower than the first run
+- copy to Node B: `1s`
+- remote deploy remained cheap: sandbox build `0s`, guest image build `1s`, no NixOS switch, Playwright skipped
+- Magic Nix Cache emitted FlakeHub 401 errors:
+  `Failed to auth to FlakeHub ... User is not authorized for this resource`
+- post-job log: `FlakeHub cache is not enabled, not uploading anything to it`
+
+Conclusion: do not pay for FlakeHub Cache yet on this evidence. The current
+free Magic Nix Cache setup did not materially improve ordinary guest rebuilds
+and added noisy FlakeHub authentication warnings. The workflow now removes Magic
+Nix Cache until a paid cache or a narrower guest-image build graph gives it a
+clear target.
+
+### Rollback Refs
+
+- Frontend pointer path rollback: revert `d109645` and `c2e66fe` shape back to
+  embedded Caddy `${goChoirPackages.frontend}`.
+- Service pointer path rollback: revert `8f4dd54` and use host NixOS closure
+  activation for host services.
+- Sandbox plus guest composition rollback: revert `9b67d53` to send sandbox
+  changes through host NixOS closure while keeping ordinary guest image updates.
+- Go identity split rollback: revert `a9c792f` and restore commit/date ldflags
+  in service binaries.
+
+### Residual Risks
+
+- Guest image construction remains expensive even when correctly selected.
+- `internal/runtime`, `internal/store`, `internal/types`, `internal/events`,
+  `internal/search`, and `internal/server` still conservatively select host
+  closure plus ordinary guest because they are shared enough that underbuilding
+  would be worse than overbuilding.
+- Only `gateway` and `sandbox` have been exercised through service pointers in
+  deployed proof. Other host services should get one focused proof each when
+  next touched.
+- Service pointer rollback keeps `*-previous` directories but does not yet expose
+  a first-class rollback command in CI.
+- GitHub Actions still runs broad Go/frontend test jobs for all non-doc changes;
+  this mission optimized deploy activation, not CI test selection.
+- Node.js 20 action deprecation warnings remain.
+
+### Next Deploy-Speed Realism Axis
+
+The next useful mission should target guest-image rebuild cost directly:
+
+```text
+Make ordinary and Playwright guest images compositional so sandbox binary,
+skills, Obscura, and base OS/store layers do not force the whole microvm
+store-disk EROFS path on every sandbox change. Measure whether a paid binary
+cache helps only after the guest image layers are split enough to generate
+stable reusable artifacts.
+```
