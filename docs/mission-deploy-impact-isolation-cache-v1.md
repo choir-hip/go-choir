@@ -444,3 +444,29 @@ dominated by ephemeral-runner custom derivation rebuilds and copying the guest
 image outputs to Node B. The next deploy-loop change should let guest images
 build directly on Node B, whose Nix store persists across runs, while keeping
 runner prebuild/copy for frontend, host services, and host OS closures.
+
+### Node B Guest Build Evidence
+
+Commit `8b3815916757969f64639e8b0f6d3cec3443c024` changed CI so guest-image
+deploy classes skip GitHub runner prebuild/copy and build directly on Node B.
+It also moved the remaining frontend actions to Node 24-capable majors and
+updated the deployed checkout remote to `choir-hip/go-choir`.
+
+Deployed CI run: `26360101028`.
+
+- selected deploy classes: ordinary guest, Playwright guest, vmctl restart
+- GitHub runner prebuild/copy: skipped with `No deploy roots selected`
+- Node B ordinary guest build: `49s`
+- Node B Playwright guest build: `46s`
+- Node B nix build phase total: `95s`
+- Node B deploy through health and asset graph: `112s`
+- full deploy job: about `2m13s`
+- staging health after deploy: `ok`
+- deployed commit identity: `8b3815916757969f64639e8b0f6d3cec3443c024`
+- FlakeHub rolling publish workflow completed successfully for this commit,
+  but the deploy speedup here does not depend on paid FlakeHub cache.
+
+Conclusion: for guest-image deploys, building on Node B from its persistent
+Nix store is currently much faster than building and copying full image outputs
+from ephemeral GitHub runners. Paid cache may still help for custom derivations,
+but it is no longer the first lever for this deploy path.

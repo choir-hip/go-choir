@@ -19,6 +19,12 @@ const (
 	runMetadataLLMPolicyError     = "llm_policy_error"
 
 	defaultModelPolicyRelativePath = "System/model-policy.toml"
+
+	defaultFireworksProvider       = "fireworks"
+	defaultConductorModel          = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultSuperModel              = "accounts/fireworks/models/deepseek-v4-pro"
+	defaultResearcherVTextModel    = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultMultimodalVerifierModel = "accounts/fireworks/models/kimi-k2p6"
 )
 
 // LLMSelection is the effective provider/model/reasoning tuple used for a run.
@@ -49,6 +55,57 @@ func DefaultModelPolicyPath(filesRoot string) string {
 }
 
 func defaultModelPolicyText(cfg Config) string {
+	fallbackProvider := strings.TrimSpace(cfg.LLMProvider)
+	if fallbackProvider == "" {
+		fallbackProvider = "chatgpt"
+	}
+	fallbackModel := strings.TrimSpace(cfg.LLMModel)
+	if fallbackModel == "" {
+		fallbackModel = "gpt-5.5"
+	}
+	return fmt.Sprintf(`# Choir model policy
+# This computer-owned file maps agent roles to provider/model choices.
+# Provider secrets stay server-owned; this file names models only.
+
+[defaults]
+fallback_provider = %q
+fallback_model = %q
+reasoning = %q
+
+[roles.conductor]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "low"
+
+[roles.super]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+reasoning = "medium"
+
+[roles.vsuper]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+
+[roles.co-super]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+
+[roles.researcher]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.vtext]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.verifier_multimodal]
+provider = "fireworks"
+model = "accounts/fireworks/models/kimi-k2p6"
+requires = ["image", "tool_use"]
+`, fallbackProvider, fallbackModel, strings.TrimSpace(cfg.LLMReasoningEffort))
+}
+
+func legacyGeneratedModelPolicyText(cfg Config) string {
 	fallbackProvider := strings.TrimSpace(cfg.LLMProvider)
 	if fallbackProvider == "" {
 		fallbackProvider = "chatgpt"
@@ -115,13 +172,13 @@ func fallbackModelPolicy(cfg Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:  {Provider: "chatgpt", Model: "gpt-5.5", ReasoningEffort: "low", Source: "platform_fallback"},
-			AgentProfileSuper:      {Provider: "chatgpt", Model: "gpt-5.5", ReasoningEffort: "medium", Source: "platform_fallback"},
-			AgentProfileVSuper:     {Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-pro", Source: "platform_fallback"},
-			AgentProfileCoSuper:    {Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-pro", Source: "platform_fallback"},
-			AgentProfileResearcher: {Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", Source: "platform_fallback"},
-			AgentProfileVText:      {Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", Source: "platform_fallback"},
-			"verifier_multimodal":  {Provider: "fireworks", Model: "accounts/fireworks/models/kimi-k2p6", Source: "platform_fallback"},
+			AgentProfileConductor:  {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "low", Source: "platform_fallback"},
+			AgentProfileSuper:      {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
+			AgentProfileVSuper:     {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileCoSuper:    {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileResearcher: {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, Source: "platform_fallback"},
+			AgentProfileVText:      {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, Source: "platform_fallback"},
+			"verifier_multimodal":  {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -226,6 +283,13 @@ func (rt *Runtime) loadModelPolicy(_ context.Context, ownerID string) (ModelPoli
 
 func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 	if _, err := os.Stat(path); err == nil {
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if string(raw) == legacyGeneratedModelPolicyText(cfg) {
+			return os.WriteFile(path, []byte(defaultModelPolicyText(cfg)), 0o644)
+		}
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err

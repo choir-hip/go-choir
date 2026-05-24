@@ -54,6 +54,44 @@ func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 }
 
+func TestFallbackModelPolicyKeepsForegroundRolesOffChatGPT(t *testing.T) {
+	policy := fallbackModelPolicy(Config{})
+	conductor := policy.Resolve(AgentProfileConductor)
+	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "low" {
+		t.Fatalf("conductor selection = %+v", conductor)
+	}
+	super := policy.Resolve(AgentProfileSuper)
+	if super.Provider != "fireworks" || super.Model != "accounts/fireworks/models/deepseek-v4-pro" || super.ReasoningEffort != "medium" {
+		t.Fatalf("super selection = %+v", super)
+	}
+}
+
+func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"}
+	if err := os.WriteFile(policyPath, []byte(legacyGeneratedModelPolicyText(cfg)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureDefaultModelPolicyFile(policyPath, cfg); err != nil {
+		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
+	}
+	raw, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := parseModelPolicy(string(raw), policyPath)
+	if err != nil {
+		t.Fatalf("parse migrated policy: %v", err)
+	}
+	conductor := policy.Resolve(AgentProfileConductor)
+	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("migrated conductor selection = %+v", conductor)
+	}
+}
+
 func TestRuntimeResolvesModelPolicyIntoRunMetadata(t *testing.T) {
 	rt := testPromptRuntime(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
