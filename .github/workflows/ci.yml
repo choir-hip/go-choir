@@ -252,7 +252,8 @@ jobs:
           fi
           roots=()
           if [[ "$DEPLOY_FRONTEND" == "true" ]]; then
-            roots+=(.#frontend)
+            echo "    Frontend roots will build on Node B, not on the ephemeral GitHub runner."
+            echo "    Node B has a persistent Nix store; runner frontend prebuild/copy was slower than remote warm builds."
           fi
           if [[ "$service_pointer_deploy" == "true" ]]; then
             echo "    Host service roots will build on Node B, not on the ephemeral GitHub runner."
