@@ -456,6 +456,17 @@ required by the product architecture. Z.AI, ChatGPT auth, Fireworks, Bedrock, an
 future providers are adapters. Stored records should capture provider/model
 attribution when available, but product behavior should not require one provider.
 
+Model policy is a runtime object, not a deployment decision. The platform model
+catalog records capabilities such as context window, output ceiling, tool use,
+and input modalities. A computer-owned policy chooses defaults for roles and may
+request provider-specific options such as reasoning effort or an explicit
+`max_tokens` budget. The ordinary case should rely on provider defaults where
+that provider behaves better without an explicit maximum; Fireworks-hosted
+DeepSeek V4 Flash/Pro, for example, are text-only models that remain valid for
+coding, research, orchestration, and text-only verification, while Kimi K2.6 or
+another multimodal model is required only when a turn actually includes image or
+media input.
+
 ## Publication Sequence
 
 Publication should be forward-compatible without deciding the whole economic

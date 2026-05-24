@@ -15,6 +15,7 @@ const (
 	runMetadataLLMProvider        = "llm_provider"
 	runMetadataLLMModel           = "llm_model"
 	runMetadataLLMReasoningEffort = "llm_reasoning_effort"
+	runMetadataLLMMaxTokens       = "llm_max_tokens"
 	runMetadataLLMPolicySource    = "llm_policy_source"
 	runMetadataLLMPolicyError     = "llm_policy_error"
 
@@ -35,6 +36,7 @@ type LLMSelection struct {
 	Provider        string `json:"provider,omitempty"`
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	MaxTokens       int    `json:"max_tokens,omitempty"`
 	Source          string `json:"source,omitempty"`
 }
 
@@ -42,12 +44,20 @@ func MaxOutputTokensForSelection(sel LLMSelection) int {
 	return modelcatalog.MaxOutputTokensForModel(sel.Model)
 }
 
-// MaxInteractiveOutputTokensForSelection returns the per-call generation
-// budget used by foreground agent loops. Keep this aligned with the model
-// catalog maximum: output length is a capability choice, while stuck or slow
-// providers are controlled by request deadlines, cancellation, and loop
-// supervision.
+// MaxInteractiveOutputTokensForSelection returns the per-call generation budget
+// requested by foreground agent loops. This is intentionally separate from the
+// model catalog maximum: catalog limits describe capability, while request
+// budgets are provider protocol choices. Fireworks' OpenAI-compatible chat
+// completions path behaves best when ordinary agent loops omit max_tokens; a
+// positive per-computer policy override can still request an explicit budget for
+// bounded or long-output work.
 func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
+	if sel.MaxTokens > 0 {
+		return sel.MaxTokens
+	}
+	if strings.EqualFold(strings.TrimSpace(sel.Provider), defaultFireworksProvider) {
+		return 0
+	}
 	return MaxOutputTokensForSelection(sel)
 }
 
@@ -69,6 +79,8 @@ func defaultModelPolicyText(cfg Config) string {
 	return fmt.Sprintf(`# Choir model policy
 # This computer-owned file maps agent roles to provider/model choices.
 # Provider secrets stay server-owned; this file names models only.
+# Optional max_tokens requests an explicit per-call budget. Omit it for provider
+# defaults, especially Fireworks chat completions.
 
 [defaults]
 fallback_provider = %q
@@ -214,6 +226,9 @@ func (rt *Runtime) ensureResolvedLLMMetadata(ctx context.Context, ownerID string
 	if selection.ReasoningEffort != "" {
 		metadata[runMetadataLLMReasoningEffort] = selection.ReasoningEffort
 	}
+	if selection.MaxTokens > 0 {
+		metadata[runMetadataLLMMaxTokens] = selection.MaxTokens
+	}
 	if selection.Source != "" {
 		metadata[runMetadataLLMPolicySource] = selection.Source
 	}
@@ -239,6 +254,9 @@ func fillSelection(sel, defaults LLMSelection) LLMSelection {
 	}
 	if sel.ReasoningEffort == "" {
 		sel.ReasoningEffort = defaults.ReasoningEffort
+	}
+	if sel.MaxTokens <= 0 {
+		sel.MaxTokens = defaults.MaxTokens
 	}
 	if sel.Source == "" {
 		if defaults.Source != "" {
@@ -427,6 +445,11 @@ func applyModelPolicyValue(sel *LLMSelection, key, value string) {
 		sel.Model = strings.TrimSpace(value)
 	case "reasoning", "reasoning_effort":
 		sel.ReasoningEffort = strings.TrimSpace(value)
+	case "max_tokens", "max_output_tokens":
+		var parsed int
+		if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &parsed); err == nil && parsed > 0 {
+			sel.MaxTokens = parsed
+		}
 	}
 }
 
@@ -449,6 +472,7 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 		Provider:        strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMProvider)),
 		Model:           strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMModel)),
 		ReasoningEffort: strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMReasoningEffort)),
+		MaxTokens:       metadataIntValue(metadata, runMetadataLLMMaxTokens),
 		Source:          strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicySource)),
 	}
 }

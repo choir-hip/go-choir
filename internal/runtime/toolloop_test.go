@@ -107,6 +107,52 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
+	provider := newMockToolLoopProvider(&ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "done",
+		Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+		Model:      "test-model",
+	})
+
+	var providerCallPayload map[string]any
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunProgress || phase != "provider_call" {
+			return
+		}
+		if err := json.Unmarshal(payload, &providerCallPayload); err != nil {
+			t.Fatalf("unmarshal provider_call payload: %v", err)
+		}
+	}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		0,
+		emit,
+		nil,
+		WithToolLoopLLMConfig(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", ReasoningEffort: "none"}),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if providerCallPayload == nil {
+		t.Fatal("missing provider_call progress event")
+	}
+	if got := providerCallPayload["phase"]; got != "provider_call_started" {
+		t.Fatalf("phase = %v, want provider_call_started", got)
+	}
+	if got := providerCallPayload["max_tokens_requested"]; got != false {
+		t.Fatalf("max_tokens_requested = %v, want false", got)
+	}
+	if got := providerCallPayload["llm_provider"]; got != "fireworks" {
+		t.Fatalf("llm_provider = %v, want fireworks", got)
+	}
+}
+
 func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 	provider := newMockToolLoopProvider(&ToolLoopResponse{
 		StopReason: "end_turn",

@@ -1925,8 +1925,8 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 		if body.Model != "accounts/fireworks/models/deepseek-v4-flash" {
 			t.Errorf("model = %q", body.Model)
 		}
-		if body.MaxTokens != 1024 {
-			t.Errorf("max_tokens = %d, want 1024", body.MaxTokens)
+		if body.MaxTokens == nil || *body.MaxTokens != 1024 {
+			t.Errorf("max_tokens = %v, want 1024", body.MaxTokens)
 		}
 		if len(body.Messages) != 2 || body.Messages[0].Role != "system" || body.Messages[1].Role != "user" {
 			t.Fatalf("messages = %#v", body.Messages)
@@ -1998,6 +1998,44 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 	}
 	if args["status"] != "ok" {
 		t.Fatalf("status arg = %q", args["status"])
+	}
+}
+
+func TestFireworksProviderCallOmitsMaxTokensWhenUnset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := raw["max_tokens"]; ok {
+			t.Fatalf("max_tokens should be omitted when unset: %#v", raw["max_tokens"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_no_max",
+			"model":"accounts/fireworks/models/deepseek-v4-flash",
+			"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}],
+			"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/deepseek-v4-flash",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages:        []Message{{Role: "user", Content: []Block{{Type: "text", Text: "ok?"}}}},
+		ReasoningEffort: "none",
+	})
+	if err != nil {
+		t.Fatalf("fireworks call: %v", err)
+	}
+	if resp.Text != "ok" {
+		t.Fatalf("text = %q, want ok", resp.Text)
 	}
 }
 

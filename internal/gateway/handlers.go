@@ -269,8 +269,8 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ReasoningEffort: req.ReasoningEffort,
 	}
 
-	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d stream=%v)",
-		sandboxID, p.Name(), req.Model, len(req.Messages), req.Stream)
+	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d tools=%d system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
+		sandboxID, p.Name(), req.Model, len(req.Messages), len(req.Tools), len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()

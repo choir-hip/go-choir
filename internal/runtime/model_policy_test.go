@@ -13,11 +13,13 @@ func TestParseModelPolicyResolvesRoles(t *testing.T) {
 fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 reasoning = "low"
+max_tokens = 12000
 
 [roles.super]
 provider = "chatgpt"
 model = "gpt-5.5"
 reasoning = "medium"
+max_tokens = 24000
 
 [roles.vtext]
 provider = "fireworks"
@@ -32,9 +34,15 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
 	}
+	if super.MaxTokens != 24000 {
+		t.Fatalf("super max tokens = %d, want 24000", super.MaxTokens)
+	}
 	vtext := policy.Resolve(AgentProfileVText)
 	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Fatalf("vtext selection = %+v", vtext)
+	}
+	if vtext.MaxTokens != 12000 {
+		t.Fatalf("vtext inherited max tokens = %d, want 12000", vtext.MaxTokens)
 	}
 	researcher := policy.Resolve(AgentProfileResearcher)
 	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.5" || researcher.ReasoningEffort != "low" {
@@ -55,15 +63,15 @@ func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 }
 
 func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
-	sel := LLMSelection{Model: "accounts/fireworks/models/deepseek-v4-flash"}
-	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileConductor); got != 131072 {
-		t.Fatalf("conductor interactive tokens = %d, want 131072", got)
+	sel := LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash"}
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileConductor); got != 0 {
+		t.Fatalf("conductor interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileVText); got != 131072 {
-		t.Fatalf("vtext interactive tokens = %d, want 131072", got)
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileVText); got != 0 {
+		t.Fatalf("vtext interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileSuper); got != 131072 {
-		t.Fatalf("super interactive tokens = %d, want 131072", got)
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", MaxTokens: 32768}, AgentProfileSuper); got != 32768 {
+		t.Fatalf("explicit Fireworks interactive tokens = %d, want 32768", got)
 	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, AgentProfileSuper); got != 8192 {
 		t.Fatalf("low-limit model interactive tokens = %d, want 8192", got)

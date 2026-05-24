@@ -737,9 +737,12 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		Model:           modelID,
 		Messages:        convertOpenAIChatMessages(req.System, req.Messages),
 		Tools:           tools,
-		MaxTokens:       defaultMaxTokens(req.MaxTokens),
 		Stream:          false,
 		ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
+	}
+	if req.MaxTokens > 0 {
+		maxTokens := req.MaxTokens
+		body.MaxTokens = &maxTokens
 	}
 	if len(tools) > 0 {
 		temperature := 0.1
@@ -966,7 +969,7 @@ type openAIChatCompletionRequest struct {
 	Model           string              `json:"model"`
 	Messages        []openAIChatMessage `json:"messages"`
 	Tools           []openAIChatTool    `json:"tools,omitempty"`
-	MaxTokens       int                 `json:"max_tokens,omitempty"`
+	MaxTokens       *int                `json:"max_tokens,omitempty"`
 	Stream          bool                `json:"stream,omitempty"`
 	ReasoningEffort string              `json:"reasoning_effort,omitempty"`
 	Temperature     *float64            `json:"temperature,omitempty"`

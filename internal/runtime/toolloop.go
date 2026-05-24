@@ -218,6 +218,23 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			MaxTokens:       maxTokens,
 		}
 
+		if emit != nil {
+			preCallPayload, _ := json.Marshal(map[string]any{
+				"iteration":            i + 1,
+				"phase":                "provider_call_started",
+				"messages":             len(messages),
+				"tools":                len(toolDefs),
+				"system_chars":         len(systemPrompt),
+				"max_tokens":           maxTokens,
+				"max_tokens_requested": maxTokens > 0,
+				"llm_provider":         options.llmConfig.Provider,
+				"llm_model":            options.llmConfig.Model,
+				"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
+				"model_policy":         "run_metadata",
+			})
+			emit(types.EventRunProgress, "provider_call", preCallPayload)
+		}
+
 		// Call the LLM with current conversation state.
 		resp, err := callToolLoopProviderWithRetries(ctx, provider, req, emit)
 		if err != nil {
