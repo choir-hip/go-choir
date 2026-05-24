@@ -30,12 +30,14 @@ type Provider struct {
 	reasoningEffort string
 }
 
+const gatewayClientTimeout = 5*time.Minute + 30*time.Second
+
 // New creates a gateway-routed runtime provider.
 func New(gatewayURL, token string) *Provider {
 	return &Provider{
 		gatewayURL: strings.TrimRight(strings.TrimSpace(gatewayURL), "/"),
 		token:      strings.TrimSpace(token),
-		httpClient: &http.Client{Timeout: 130 * time.Second},
+		httpClient: &http.Client{Timeout: gatewayClientTimeout},
 	}
 }
 

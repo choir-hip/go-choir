@@ -29,13 +29,15 @@ type GatewayClient struct {
 	httpClient *http.Client
 }
 
+const gatewayClientHTTPTimeout = 5*time.Minute + 30*time.Second
+
 // NewGatewayClient creates a GatewayClient pointing at the given gateway URL
 // with the given sandbox credential token.
 func NewGatewayClient(gatewayURL, token string) *GatewayClient {
 	return &GatewayClient{
 		gatewayURL: gatewayURL,
 		token:      token,
-		httpClient: &http.Client{Timeout: 130 * time.Second},
+		httpClient: &http.Client{Timeout: gatewayClientHTTPTimeout},
 	}
 }
 

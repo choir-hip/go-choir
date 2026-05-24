@@ -15,6 +15,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
+const inferenceTimeout = 5 * time.Minute
+
 // HealthResponse is the JSON structure returned by GET /health.
 type gatewayHealthResponse struct {
 	Status               string   `json:"status"`
@@ -270,7 +272,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	log.Printf("gateway: inference request from sandbox %s (provider=%s model=%s messages=%d stream=%v)",
 		sandboxID, p.Name(), req.Model, len(req.Messages), req.Stream)
 
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
 
 	// If the client requests streaming, use SSE streaming.
@@ -318,7 +320,7 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 
 	flusher, canFlush := w.(http.Flusher)
 
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
 
 	resp, err := p.Stream(ctx, llmReq, func(chunk provider.StreamChunk) {

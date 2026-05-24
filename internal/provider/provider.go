@@ -288,6 +288,8 @@ type ProviderConfig struct {
 	SelectedProvider string
 }
 
+const defaultProviderHTTPTimeout = 5 * time.Minute
+
 // BedrockProvider implements the Provider interface for AWS Bedrock using
 // the Anthropic Messages API format over the Bedrock invoke endpoint.
 // Auth uses a bearer identity token (AWS_BEARER_TOKEN_BEDROCK) rather
@@ -324,7 +326,7 @@ func NewBedrockProvider(cfg BedrockConfig) (*BedrockProvider, error) {
 		region:     cfg.Region,
 		modelID:    cfg.ModelID,
 		authToken:  cfg.AuthToken,
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		anthropicV: "bedrock-2023-05-31",
 	}, nil
 }
@@ -468,7 +470,7 @@ func NewZAIProvider(cfg ZAIConfig) (*ZAIProvider, error) {
 	return &ZAIProvider{
 		apiKey:     cfg.APIKey,
 		modelID:    cfg.ModelID,
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		baseURL:    strings.TrimRight(baseURL, "/"),
 	}, nil
 }
@@ -621,7 +623,7 @@ func NewFireworksProvider(cfg FireworksConfig) (*FireworksProvider, error) {
 	return &FireworksProvider{
 		apiKey:     cfg.APIKey,
 		modelID:    cfg.ModelID,
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		baseURL:    strings.TrimRight(baseURL, "/"),
 	}, nil
 }
@@ -772,7 +774,7 @@ func NewChatGPTProvider(cfg ChatGPTConfig) (*ChatGPTProvider, error) {
 	return &ChatGPTProvider{
 		auth:       auth,
 		modelID:    cfg.ModelID,
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		baseURL:    baseURL,
 		reasoning:  reasoning,
 	}, nil
