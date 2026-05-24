@@ -289,8 +289,8 @@ EOF
       OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
-      RUNTIME_LLM_PROVIDER = "chatgpt";
-      RUNTIME_LLM_MODEL = "gpt-5.5";
+      RUNTIME_LLM_PROVIDER = "fireworks";
+      RUNTIME_LLM_MODEL = "accounts/fireworks/models/deepseek-v4-flash";
       RUNTIME_LLM_REASONING_EFFORT = "low";
     } // lib.optionalAttrs includePlaywright {
       CHOIR_WORKER_BROWSER_CLASS = "playwright";

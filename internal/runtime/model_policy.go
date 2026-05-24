@@ -289,7 +289,7 @@ func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 		if readErr != nil {
 			return readErr
 		}
-		if string(raw) == legacyGeneratedModelPolicyText(cfg) {
+		if shouldMigrateLegacyGeneratedModelPolicy(string(raw), cfg) {
 			return os.WriteFile(path, []byte(defaultModelPolicyText(cfg)), 0o644)
 		}
 		return nil
@@ -300,6 +300,47 @@ func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(defaultModelPolicyText(cfg)), 0o644)
+}
+
+func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
+	if strings.TrimSpace(raw) == strings.TrimSpace(legacyGeneratedModelPolicyText(cfg)) {
+		return true
+	}
+	if !strings.Contains(raw, "# Choir model policy") ||
+		!strings.Contains(raw, "Provider secrets stay server-owned") {
+		return false
+	}
+	policy, err := parseModelPolicy(raw, "legacy-generated-model-policy")
+	if err != nil {
+		return false
+	}
+	conductor, ok := policy.Roles[AgentProfileConductor]
+	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
+		return false
+	}
+	super, ok := policy.Roles[AgentProfileSuper]
+	if !ok || !isModelPolicySelection(super, "chatgpt", "gpt-5.5", "medium") {
+		return false
+	}
+	researcher, ok := policy.Roles[AgentProfileResearcher]
+	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+		return false
+	}
+	vtext, ok := policy.Roles[AgentProfileVText]
+	if !ok || !isModelPolicySelection(vtext, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+		return false
+	}
+	return true
+}
+
+func isModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
+	if strings.TrimSpace(sel.Provider) != provider || strings.TrimSpace(sel.Model) != model {
+		return false
+	}
+	if reasoning == "" {
+		return true
+	}
+	return strings.TrimSpace(sel.ReasoningEffort) == reasoning
 }
 
 func parseModelPolicy(raw, source string) (ModelPolicy, error) {

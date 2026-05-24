@@ -643,6 +643,54 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleRefresh handles POST /internal/vmctl/refresh.
+// It force-reboots an active computer onto the current guest image while
+// preserving persistent state. This endpoint is internal deploy machinery.
+func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	var req resolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+
+	if req.UserID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
+		return
+	}
+	req.DesktopID = normalizeDesktopID(req.DesktopID)
+
+	own, err := h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
+		VMID:            own.VMID,
+		UserID:          own.UserID,
+		DesktopID:       own.DesktopID,
+		Kind:            own.Kind,
+		ParentDesktopID: own.ParentDesktopID,
+		ParentVMID:      own.ParentVMID,
+		SnapshotKind:    own.SnapshotKind,
+		Published:       own.Published,
+		SandboxURL:      own.SandboxURL,
+		State:           string(own.State),
+	})
+}
+
 // HandleLogout handles POST /internal/vmctl/logout.
 // Transitions only the current user's VM to stopped state on logout
 // (VAL-VM-008). Other users' VMs are not affected.
@@ -808,6 +856,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/hibernate", h.HandleHibernate)
 	s.HandleFunc("/internal/vmctl/resume", h.HandleResume)
 	s.HandleFunc("/internal/vmctl/recover", h.HandleRecover)
+	s.HandleFunc("/internal/vmctl/refresh", h.HandleRefresh)
 	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 }

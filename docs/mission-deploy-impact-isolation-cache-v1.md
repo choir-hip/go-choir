@@ -571,3 +571,29 @@ lands in under three minutes once CI gates pass. The deploy job still spends
 almost all of its time building the sandbox package and rebuilding the ordinary
 guest image, so the next structural speedup should target guest layering or
 decoupling guest images from ordinary sandbox-service changes.
+
+### Active Computer Refresh Checkpoint
+
+After the deploy-speed work, staging exposed a correctness issue that also
+affects deploy confidence: active interactive VMs survived vmctl restarts and
+kept running stale sandbox builds after a new ordinary guest image deployed.
+That made user computers show mixed behavior: the host sandbox/proxy was on the
+latest commit, but warm user VMs still routed conductor through older ChatGPT
+defaults while VText/researcher used the newer Fireworks path.
+
+The next deploy patch therefore adds a deploy-time active-computer refresh
+phase for ordinary guest image changes:
+
+- deploy installs the ordinary guest image;
+- deploy restarts vmctl;
+- deploy lists active interactive computers through internal vmctl;
+- each active interactive computer is force-rebooted onto the deployed guest
+  image with persistent data preserved and a new epoch;
+- stopped/hibernated computers are left alone because their next resume boots
+  from the current image.
+
+This preserves the fast no-host-OS deploy class while ensuring warm user
+computers do not continue serving stale runtime code after a guest image deploy.
+The remaining structural speed axis is still guest layering/decoupling, but
+correct code identity for active computers is now an invariant of the deploy
+loop.

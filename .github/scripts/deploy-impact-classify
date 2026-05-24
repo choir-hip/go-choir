@@ -76,7 +76,7 @@ mark_host_os() {
 
 for path in "${changed[@]}"; do
   case "$path" in
-    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*)
+    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
       ;;

@@ -92,6 +92,92 @@ func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultModelPolicyMigratesSemanticallyLegacyGeneratedPolicy(t *testing.T) {
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := `# Choir model policy
+# This computer-owned file maps agent roles to provider/model choices.
+# Provider secrets stay server-owned; this file names models only.
+
+[defaults]
+fallback_provider = "chatgpt"
+fallback_model = "gpt-5.5"
+
+[roles.conductor]
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning = "low"
+
+[roles.super]
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning = "medium"
+
+[roles.researcher]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.vtext]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+`
+	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
+		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
+	}
+	migrated, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := parseModelPolicy(string(migrated), policyPath)
+	if err != nil {
+		t.Fatalf("parse migrated policy: %v", err)
+	}
+	if got := policy.Resolve(AgentProfileSuper); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+		t.Fatalf("migrated super selection = %+v", got)
+	}
+}
+
+func TestEnsureDefaultModelPolicyPreservesCustomPolicy(t *testing.T) {
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := `# Choir model policy
+# This computer-owned file maps agent roles to provider/model choices.
+# Provider secrets stay server-owned; this file names models only.
+
+[defaults]
+fallback_provider = "fireworks"
+fallback_model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.conductor]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.super]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+`
+	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
+		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
+	}
+	kept, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(kept) != raw {
+		t.Fatalf("custom policy was unexpectedly rewritten")
+	}
+}
+
 func TestRuntimeResolvesModelPolicyIntoRunMetadata(t *testing.T) {
 	rt := testPromptRuntime(t)
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")

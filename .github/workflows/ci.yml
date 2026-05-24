@@ -589,6 +589,35 @@ jobs:
             fi
             note_phase "vmctl restart"
 
+            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+              echo "==> Refreshing active interactive computers onto deployed guest image"
+              ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
+              mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
+                .ownerships[]
+                | select(.state == "active")
+                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+                | [.user_id, (.desktop_id // "primary"), .vm_id]
+                | @tsv
+              ')
+              if [ "${#active_interactive[@]}" -eq 0 ]; then
+                echo "    No active interactive computers need refresh"
+              else
+                for record in "${active_interactive[@]}"; do
+                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id <<< "$record"
+                  echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                  payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                  timeout 240 curl -fsS --retry 2 --retry-delay 2 --retry-all-errors \
+                    -H "X-Internal-Caller: true" \
+                    -H "Content-Type: application/json" \
+                    -d "$payload" \
+                    http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null
+                done
+              fi
+            else
+              echo "==> Skipping active computer refresh; ordinary guest image unchanged"
+            fi
+            note_phase "active computer refresh"
+
             echo "==> Smoke test: health endpoints"
             for port in 8081 8082 8083 8084 8086; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health

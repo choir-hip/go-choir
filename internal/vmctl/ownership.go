@@ -2249,6 +2249,48 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	return own, nil
 }
 
+// RefreshVMForDesktop force-reboots a running computer onto the current guest
+// image while preserving persistent user data. This is for deploy-time image
+// refresh, not crash recovery, so active computers are valid targets.
+func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	var ensureVMID string
+	defer func() {
+		if ensureVMID != "" {
+			r.ensureExistingGatewayCredential(ensureVMID)
+		}
+	}()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	if !ok {
+		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+
+	if own.State != VMStateActive && own.State != VMStateBooting && own.State != VMStateDegraded && own.State != VMStateFailed {
+		return nil, fmt.Errorf("VM %s is not refreshable (state=%s)", own.VMID, own.State)
+	}
+
+	if r.vmManager != nil {
+		info, err := r.vmManager.RecoverVM(own.VMID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to refresh VM %s: %w", own.VMID, err)
+		}
+		own.SandboxURL = info.HostURL
+		own.Epoch = info.Epoch
+	} else {
+		own.Epoch = r.nextEpoch()
+	}
+
+	own.State = VMStateActive
+	own.LastActiveAt = time.Now()
+	own.StoppedBy = ""
+	r.saveLocked()
+	log.Printf("vmctl: refreshed VM %s for user %s desktop %s (new_epoch=%d, deploy-image-refresh)", own.VMID, userID, own.DesktopID, own.Epoch)
+	ensureVMID = own.VMID
+	return own, nil
+}
+
 // LogoutVM handles VM lifecycle transition on user logout. It transitions
 // only the current user's VM to stopped state (VAL-VM-008).
 // Other users' VMs are not affected.
