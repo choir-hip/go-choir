@@ -284,7 +284,7 @@ func (h *APIHandler) listPodcastSubscriptionsWithContent(ctx context.Context, ow
 }
 
 func (h *APIHandler) seedPodcastSubscriptionsFromContentItems(ctx context.Context, ownerID string) error {
-	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 200)
+	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 1000)
 	if err != nil {
 		return err
 	}
@@ -431,5 +431,14 @@ func contentItemLooksPodcast(item types.ContentItem) bool {
 	return item.AppHint == "podcast" ||
 		item.MediaType == "application/rss+xml" ||
 		strings.Contains(strings.ToLower(item.SourceURL+" "+item.FilePath), "podcast") ||
-		strings.Contains(strings.ToLower(item.SourceURL+" "+item.FilePath), "rss")
+		strings.Contains(strings.ToLower(item.SourceURL+" "+item.FilePath), "rss") ||
+		contentTextLooksRSSFeed(item.TextContent)
+}
+
+func contentTextLooksRSSFeed(text string) bool {
+	sample := strings.ToLower(strings.TrimSpace(text))
+	if len(sample) > 4096 {
+		sample = sample[:4096]
+	}
+	return strings.Contains(sample, "<rss") && strings.Contains(sample, "<channel")
 }

@@ -66,3 +66,12 @@ func TestExtractRSSFeedTitle(t *testing.T) {
 		t.Fatalf("extractRSSFeedTitle() = %q, want %q", got, "Tasteland & Friends")
 	}
 }
+
+func TestContentTextLooksRSSFeed(t *testing.T) {
+	if !contentTextLooksRSSFeed(`<?xml version="1.0"?><rss><channel><title>Tasteland</title></channel></rss>`) {
+		t.Fatal("expected RSS channel XML to be recognized")
+	}
+	if contentTextLooksRSSFeed(`<html><body><channel>not a feed</channel></body></html>`) {
+		t.Fatal("expected non-RSS text to be ignored")
+	}
+}

@@ -900,6 +900,50 @@ outputs and should not publish a new rolling flake version. This keeps future
 docs/workflow-only commits from spending extra GitHub Actions time on cache
 publication that cannot improve the staging deploy path.
 
+#### Acceptance: frontend-only Trace patch after runner simplification
+
+Commit `73b9c76b56db4202dc3dd58a5c48c83cf70be86c` hardened Trace live-follow
+handling so live events can identify a trajectory through top-level
+`trajectory_id`, payload `trajectory_id`, or `loop_id`.
+
+- CI run: `26370668893`
+- FlakeHub rolling publish: `26370668894`
+- deploy classes:
+  - `deploy_frontend=true`
+  - `deploy_host_os=false`
+  - `deploy_ordinary_guest=false`
+  - `deploy_playwright_guest=false`
+  - `deploy_vmctl_restart=false`
+- Node B build phase: `8s`
+- remote deploy total through health and asset graph: `13s`
+- full deploy job: about `22s`
+- skipped host NixOS closure, NixOS switch, ordinary guest image, Playwright
+  guest image, vmctl restart, and active computer refresh
+- public frontend asset: `index-ZZ7GUVdp.js`
+- staging `/health` reported deployed commit
+  `73b9c76b56db4202dc3dd58a5c48c83cf70be86c`
+
+This proves frontend-only fixes remain on the fast deploy path after the
+runner-side Nix setup was removed.
+
+#### Podcast subscription backfill follow-up
+
+The Podcast app now stores subscriptions in `podcast_subscriptions`, but old
+libraries can contain generic XML RSS content items created before that table
+existed. The backfill path scans old content items when a user has no explicit
+subscription rows. It previously scanned too shallowly and only recognized
+podcasts by app/media hints or URL/path text, so old RSS XML artifacts could
+look like an empty subscription library.
+
+The follow-up patch makes that backfill more tolerant:
+
+- scan up to `1000` recent content items during the one-time seed;
+- recognize RSS channel XML in `text_content`;
+- keep the normal subscription table as the durable library after seeding.
+
+Expected deploy class: `gateway,sandbox` service pointers only, no host OS
+switch, no guest image rebuild, and no vmctl restart.
+
 ### Updated Residual Risks
 
 - Full host-root deploys still cost minutes on the GitHub runner and should be
