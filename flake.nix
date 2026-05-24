@@ -59,20 +59,24 @@
         in
           if pkgs.lib.hasPrefix prefix full then pkgs.lib.removePrefix prefix full else full;
 
-      goServiceSrc = { subPackage, includeSkills ? false }:
+      goServiceSrc = { subPackage, internalDirs, includeSkills ? false }:
         pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
             let
               rel = relPath path;
               base = baseNameOf path;
+              inInternalDir = dir:
+                pkgs.lib.hasPrefix (dir + "/") rel && pkgs.lib.hasSuffix ".go" path;
             in
               type == "directory" ||
               (base == "go.mod") ||
               (base == "go.sum") ||
               (pkgs.lib.hasPrefix (subPackage + "/") rel && pkgs.lib.hasSuffix ".go" path) ||
-              (pkgs.lib.hasPrefix "internal/" rel && pkgs.lib.hasSuffix ".go" path) ||
-              (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path && pkgs.lib.hasSuffix ".md" path) ||
+              (pkgs.lib.any inInternalDir internalDirs) ||
+              (pkgs.lib.elem "internal/runtime" internalDirs &&
+                pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
+                pkgs.lib.hasSuffix ".md" path) ||
               (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
         };
 
@@ -150,11 +154,11 @@
       };
 
       # Build a single Go service binary
-      mkGoService = { pname, subPackage, includeSkills ? false }:
+      mkGoService = { pname, subPackage, internalDirs, includeSkills ? false }:
         pkgs.buildGoModule (commonGoArgs // {
           inherit pname;
           version = goModuleVersion;
-          src = goServiceSrc { inherit subPackage includeSkills; };
+          src = goServiceSrc { inherit subPackage internalDirs includeSkills; };
           subPackages = [ subPackage ];
         } // pkgs.lib.optionalAttrs includeSkills {
           postInstall = ''
@@ -170,26 +174,74 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
+          internalDirs = [
+            "internal/auth"
+            "internal/server"
+          ];
         };
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/platform"
+            "internal/proxy"
+            "internal/server"
+            "internal/types"
+            "internal/vmctl"
+          ];
         };
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
+          internalDirs = [
+            "internal/server"
+            "internal/vmctl"
+            "internal/vmmanager"
+          ];
         };
         gateway = mkGoService {
           pname = "gateway";
           subPackage = "cmd/gateway";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/events"
+            "internal/gateway"
+            "internal/modelcatalog"
+            "internal/provider"
+            "internal/runtime"
+            "internal/sandbox"
+            "internal/server"
+            "internal/store"
+            "internal/types"
+            "internal/vmctl"
+          ];
         };
         platformd = mkGoService {
           pname = "platformd";
           subPackage = "cmd/platformd";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/platform"
+            "internal/server"
+          ];
         };
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/events"
+            "internal/gateway"
+            "internal/modelcatalog"
+            "internal/provider"
+            "internal/runtime"
+            "internal/sandbox"
+            "internal/server"
+            "internal/store"
+            "internal/types"
+            "internal/vmctl"
+          ];
           includeSkills = true;
         };
         frontend = frontendPkg;
