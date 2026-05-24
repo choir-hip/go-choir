@@ -84,7 +84,7 @@ func main() {
 
 	bus := events.NewEventBus()
 
-	// Resolve the provider:
+	// Resolve the provider for host and guest sandbox runtime modes:
 	//  1. When RUNTIME_GATEWAY_URL is set (VM mode), use the GatewayClient
 	//     to route LLM calls through the host-side gateway. This ensures
 	//     provider credentials stay host-side and the sandbox never touches
