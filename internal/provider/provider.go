@@ -649,7 +649,7 @@ func (p *FireworksProvider) Name() string { return "fireworks" }
 func (p *FireworksProvider) IsReal() bool { return true }
 
 // Call sends the request to Fireworks AI's OpenAI-compatible chat completions endpoint.
-// Provider adapter edits should deploy as gateway-only changes; VM guests use gatewayruntime.
+// Provider adapter edits should deploy as fast gateway-only changes; VM guests use gatewayruntime.
 func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
