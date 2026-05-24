@@ -1,6 +1,6 @@
 # MissionGradient: Deploy Impact Isolation And Cache v1
 
-**Status:** ready_for_execution  
+**Status:** checkpoint_complete_for_service_pointer_deploys  
 **Date:** 2026-05-24  
 **Purpose:** make staging deploys proportional to the artifact that changed. Cache is useful only after the deploy graph stops selecting broad roots unnecessarily.
 
@@ -397,7 +397,9 @@ clear target.
   a first-class rollback command in CI.
 - GitHub Actions still runs broad Go/frontend test jobs for all non-doc changes;
   this mission optimized deploy activation, not CI test selection.
-- Node.js 20 action deprecation warnings remain.
+- Node.js 20 action deprecation warnings were removed by moving workflow
+  checkout actions to Node 24-capable versions and setting
+  `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`.
 
 ### Next Deploy-Speed Realism Axis
 
@@ -729,3 +731,138 @@ There are two separable next axes:
 
 Do not solve this by pretending runtime changes cannot affect gateway. The
 right fix is dependency graph surgery plus deployed timing proof.
+
+### Classifier And Per-Service Source Checkpoint
+
+Commit `80cfba46b9866e3551490447fb3fe41207ca06ba` corrected several impact
+classification boundaries before deeper Nix work:
+
+- `internal/provider`, `internal/gateway`, `internal/modelcatalog`,
+  `internal/sandbox`, and shared runtime/store/type/event/server/search changes
+  select the gateway and sandbox service pointers plus the ordinary guest image.
+- `internal/platform` selects `platformd` and `proxy`.
+- `internal/vmctl` selects `gateway`, `proxy`, `sandbox`, and `vmctl`, plus the
+  ordinary guest image and a vmctl restart.
+- `internal/buildinfo` selects host service pointers plus ordinary guest, not a
+  full host OS switch.
+
+Commit `91bcc78f137db601d21871d4492d790f9be4777d` narrowed the Nix source
+filter for each Go service to the internal package directories it actually
+needs, with conservative shared dependencies preserved. This made per-service
+pointer builds hashable independently instead of every service observing every
+`internal/**/*.go` change.
+
+The first full-flake deployment after narrowing exposed fixed-output
+`vendorHash` drift for the per-service Go modules. These were pinned in small
+commits:
+
+| Commit | Service | `vendorHash` |
+| --- | --- | --- |
+| `e7b98b9` | `auth` | `sha256-5lI1eHUCgp1pIEAQxrMXGlZTdGy9l/fIyElT1FilUWA=` |
+| `62266ad` | `gateway`, `sandbox` | `sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=` |
+| `17d3ba4` | `platformd` | `sha256-LHIXwcHctefXm9MrSfqWB/4O+p8HXQi0VDT4NXt9xlg=` |
+| `1a86be0` | `proxy` | `sha256-+qN6OZMZuzyZeCmwdnQyzH3teNOY/ChJP1yRsEEiULQ=` |
+| `52d64ee` | `vmctl` | `sha256-Zi7CIbMdCmTj2ZhP0J+kNARQAG24v/88KlN5l3S7urE=` |
+
+The important result is not the hashes themselves. It is that the flake can now
+evaluate and build narrowed per-service modules without falling back to an
+untrusted or mismatched derivation path.
+
+### Clean Full-Flake Deploy Evidence
+
+Commit `52d64ee01b4f7e7f43cf035b7e603191af3968ba` was the first clean deploy
+after all per-service hashes were pinned.
+
+- CI run: `26364009817`
+- deploy job: `77604584364`
+- selected roots on the GitHub runner: `.#frontend` and
+  `.#nixosConfigurations.go-choir-b.config.system.build.toplevel`
+- no per-service hash mismatch annotation
+- copied `8` paths to Node B in about `1s`
+- Node B nix build phase: `48s`
+- Node B active computer refresh: `19s`
+- remote deploy total: `77s`
+- full deploy job: `8m36s`
+- staging health reported deployed commit
+  `52d64ee01b4f7e7f43cf035b7e603191af3968ba`
+
+Conclusion: the full flake can deploy cleanly, but full host-root prebuilds
+still cost minutes on the GitHub runner. That path is necessary for flake or
+host OS changes, but it should not be the ordinary service-edit path.
+
+### Service-Only Deploy Evidence
+
+Commit `63b8771410ebc3fd436f62bc4eadc4ed3d66fa47` added a harmless comment to
+`internal/platform/config.go` to exercise the narrowed service-pointer path.
+
+- CI run: `26364258529`
+- deploy job: `77605248081`
+- deploy classes:
+  - `DEPLOY_HOST=true`
+  - `DEPLOY_FRONTEND=false`
+  - `DEPLOY_VMCTL_RESTART=false`
+  - `DEPLOY_ORDINARY_GUEST=false`
+  - `DEPLOY_PLAYWRIGHT_GUEST=false`
+  - `DEPLOY_HOST_OS=false`
+  - `HOST_SERVICES=platformd,proxy`
+- GitHub runner selected no deploy roots and skipped prebuild/copy.
+- Node B skipped frontend build, host NixOS closure build, ordinary guest image,
+  Playwright guest image, NixOS switch, vmctl restart, and active computer
+  refresh.
+- Node B built `platformd` and `proxy` service roots in parallel; both completed
+  in about `11s`.
+- Node B nix build phase: `11s`
+- remote deploy script total: `18s`
+- full deploy job: `39s`
+- staging health and the service health endpoints reported deployed commit
+  `63b8771410ebc3fd436f62bc4eadc4ed3d66fa47`
+
+This is the strongest evidence in the mission so far. Ordinary host-service
+changes can now deploy without rebuilding guest images, frontend assets, the
+host OS closure, or unrelated service pointers.
+
+### Cache Decision Checkpoint
+
+Magic Nix Cache did not produce useful evidence for this repo during the
+optimization run. Logs repeatedly showed FlakeHub cache authentication failures
+(`401 Unauthorized`) followed by native GitHub Action cache fallback. Even when
+the cache path did not hard-fail, the original problem was over-selection of
+large deploy roots, not merely cache misses.
+
+Do not pay for FlakeHub Cache solely to solve the current service-deploy loop.
+After impact isolation, the measured service-only path is already `39s` end to
+end. Paid cache may still be worth evaluating for full host-root or guest-image
+changes, but only with a controlled before/after benchmark and a known cache
+key. The next higher-leverage work is to reduce guest-image rebuild size and
+state-disk pressure, not to add another cache layer blindly.
+
+### Updated Residual Risks
+
+- Full host-root deploys still cost minutes on the GitHub runner and should be
+  reserved for flake, NixOS, and host configuration changes.
+- Ordinary guest image construction remains the dominant cost for runtime and
+  sandbox changes that genuinely affect user computers.
+- Runtime/provider package coupling still causes some changes to select both
+  gateway and sandbox plus ordinary guest. Splitting bridge interfaces remains
+  the right follow-up if that class is too expensive.
+- Node B state disk pressure is still a product and deploy risk. Earlier VM
+  health showed very low state-dir free percentage and hundreds of hibernated
+  ownerships. A cleanup/retention policy for old computer images is now part of
+  the deploy-reliability backlog.
+- FlakeHub cache authentication is still not configured for the organization
+  cache. That is noisy but no longer on the critical path for service-only
+  deploy speed.
+
+### Updated Next Deploy-Speed Realism Axis
+
+The next deploy-speed mission should target durable guest/runtime cost, not
+another cache experiment:
+
+```text
+Split the ordinary and Playwright guest-image build graph into stable base
+layers and small runtime/sandbox overlays where microvm.nix permits it; add a
+safe state-disk retention policy for old candidate and hibernated computer
+images; then benchmark full-host, service-only, runtime-plus-ordinary-guest,
+and both-guest deploy classes again before deciding whether a paid binary cache
+is worth it.
+```
