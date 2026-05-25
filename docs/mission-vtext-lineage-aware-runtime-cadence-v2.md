@@ -367,6 +367,29 @@ worker/search timeline: researcher spawn at about 10.7s; first search result at 
 gateway evidence: after deploy, Node B gateway logs showed ChatGPT calls with `max_tokens=0`, including `tool_choice=function:edit_vtext` and `tool_choice=function:submit_research_findings`; the prior `400 Bad Request` failure did not recur.
 residual risks: the proof still recorded duplicate/stale `edit_vtext` tool-result errors with output length 52 while successful revisions were created. This is not the ChatGPT max-token root cause, but it remains part of the broader VText cadence cleanup field.
 
+### 2026-05-25 Coordination-Noise Baseline
+
+Playwright/API command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium,fireworks-kimi-k2p6-low,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball,deep-research,linked-source,coding-super,mixed npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+evidence artifact directory: `/Users/wiz/go-choir/test-results/vtext-model-cadence-matrix-2026-05-25T20-16-55-259Z/`.
+prompt classes: broad sports research (`Last Night in Baseball`), deeper current research (`research the current Artemis II launch schedule...`), linked-source synthesis, bounded super/coding execution (`write and run a tiny shell command...`), and mixed research plus shell-command drafting.
+model scope: product-path model policy set conductor, VText, researcher, super, vsuper, co-super, and verifier roles to the same tested provider/model/reasoning variant for each run.
+
+Observed matrix highlights:
+
+| variant | useful research cadence | super/coding cadence | coordination-noise signal |
+| --- | --- | --- | --- |
+| `fireworks-deepseek-v4-flash-medium` | baseball v1 5.3s, findings 27.3s, v2 38.3s; deep research v1 9.1s, findings 31.1s, v2 54.1s | mixed routed to super once but produced no v2 within the observation window | no completed-mutation VText errors in captured successful prompts; researcher import attempts hit ordinary 403 fetch errors |
+| `fireworks-kimi-k2p6-low` | baseball v1 2.6s, findings 15.6s, v2 23.6s; deep research v1 5.7s, findings 32.7s, v2 46.7s | mixed routed to super once but produced no v2 within the observation window | deep research produced two post-success `edit_vtext` errors: `vtext mutation is completed, not pending`; baseball had a VText `cast_agent target lookup: record not found` after useful revision work |
+| `chatgpt-gpt-5-5-low` | all five prompts completed with v1/v2; baseball v1 4.9s, findings 26.9s, v2 37.9s; deep research v1 5.5s, findings 24.5s, v2 44.5s | coding-super v1 4.2s, super request(s), v2 25.2s with command/output evidence | every prompt showed post-success `edit_vtext` calls rejected as `vtext mutation is completed, not pending`; deep research also repeated duplicate `submit_research_findings` primary-key inserts; coding-super had a duplicate `bash` command skip |
+
+Probe limitations: the `fireworks-deepseek-v4-flash-medium` and `fireworks-kimi-k2p6-low` columns both hit transient authenticated API `401` responses for `linked-source` and `coding-super` within the Playwright session, while later prompts in the same variant continued. Treat those rows as probe/session noise until reproduced separately.
+
+belief-state update: the highest-confidence coordination-noise bug is not model-specific factual quality. It is a loop termination/idempotency issue after successful VText side effects. `edit_vtext` creates or completes the canonical mutation, but the tool loop then feeds the result back into another provider iteration. Some models then call `edit_vtext` again or try adjacent coordination tools, producing noisy mutation-state errors even though the useful revision already exists. Worker-opening tools (`spawn_agent` and `request_super_execution`) are similar side-effect boundaries: after the required continuation has succeeded, the VText run should normally return and let worker updates wake the next VText run.
+
+remaining error field: VText tool-loop termination should become explicit for successful VText side-effect tools unless their result declares a `next_required_tool`. Same-turn duplicate `edit_vtext` calls should not race or produce mutation-state errors after the first successful edit. Researcher duplicate `submit_research_findings` evidence-id errors and super duplicate `bash` planning remain secondary coordination-noise classes after VText termination is fixed.
+
+candidate fix: add a generic tool-loop terminal-success option, enabled for VText runs with `edit_vtext`, `spawn_agent`, and `request_super_execution`. After a successful terminal tool batch with no `next_required_tool`, return from the loop instead of asking the model for another turn. Separately, skip additional `edit_vtext` calls in the same VText tool batch as a non-error duplicate notice so a model that emits two edits at once cannot turn the second one into a completed-mutation error.
+
 ## Run Checkpoint And Resumption State
 
 ```text
