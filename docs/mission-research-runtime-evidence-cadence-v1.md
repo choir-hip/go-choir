@@ -400,19 +400,19 @@ residual risks:
 ## Run Checkpoint And Resumption State
 
 ```text
-status: draft
-last checkpoint: v0 showed fast v1 but delayed v2 because the whole researcher -> findings -> VText path was measured, not only search latency.
-current artifact state: VText and researcher prompts encourage early checkpointing, but tool-output projection, durable evidence refs, gateway-owned provider cooldowns, Parallel Search integration, and cross-model cadence matrix are not yet complete.
-what shipped: v0 prompt guidance and deployed cadence probes.
-what was proven: first useful VText can appear quickly; once findings are submitted, VText can write promptly; researcher/reporting path remains the main silence source.
-unproven or partial claims: whether tool output size is the dominant delay; whether gateway fanout is adding avoidable latency; whether prompt-only pipelining works across models; whether Parallel Search improves fast-path research.
-belief-state changes: the mission target is now research evidence flow, with VText cadence as one consumer.
-remaining error field: large model-visible tool outputs, sequential research cadence, gateway rate-limit reuse, gateway fanout latency, missing Parallel Search provider, missing cross-model evals.
-highest-impact remaining uncertainty: how much of first-findings delay comes from model-visible tool-result size versus researcher prompt behavior versus search provider latency.
-next executable probe: instrument current staging runs to capture first search/fetch output bytes, estimated tokens, provider timings, first findings time, and first VText-after-findings time across the model matrix.
+status: checkpoint_incomplete
+last checkpoint: deployed c39f048 split compact model-visible tool output from durable full evidence, added gateway-owned provider cooldowns, preserved PARALLEL_API_KEY on Node B, and integrated Parallel Search as an additive search provider only.
+current artifact state: focused runtime/gateway tests pass; staging identity shows c39f048; weather smoke improved first VText to ~4-6s and v2 to ~26-27s with Brave+Parallel after cooldown; sports/current-events smoke still waited ~61s for v2 because the researcher continued many searches before first findings.
+what shipped: durable tool-output projection envelope, compact web_search/fetch_url model projections, full_output/full_output_sha256 Trace payload fields, gateway quota/rate-limit cooldowns, Parallel Search provider, provider credential deploy preservation, and v1 mission framing.
+what was proven: Parallel Search auth/output works locally and on staging; cooldown avoids repeatedly calling exhausted Tavily/Exa/Brave providers; model-visible search outputs are bounded to roughly 1-2k estimated tokens in tested prompts; once findings arrive, VText can write the next version within ~7-9s.
+unproven or partial claims: cross-model cadence matrix beyond DeepSeek V4 Flash; whether prompt-only cadence changes can stop oversearching across models; whether the projection schema is sufficient for longer linked-source/autopaper prompts; whether Chyron projection is wired to the same event stream.
+belief-state changes: provider health was a real gateway problem and is now partially addressed; remaining silence is primarily researcher cadence/oversearching before first findings, not provider latency alone.
+remaining error field: researcher still violates intended first-checkpoint cadence on broad prompts; only two VText revisions appear for long search prompts; model matrix is not yet broad enough; Trace probes do not yet expose output_projection/full_output metrics in the local JSON summaries.
+highest-impact remaining uncertainty: whether stronger researcher/tool-description guidance is enough, or whether VText should split broad objectives into explicit first-pass and follow-up researcher turns.
+next executable probe: strengthen researcher and submit_research_findings prompt contracts so the next model turn after a useful search/fetch includes submit_research_findings, then rerun weather and sports staging probes before widening the model matrix.
 suggested resume goal string: use the One-Line Goal String above.
-evidence artifact refs: to be filled by the first v1 run.
-rollback refs: v0 mission remains in docs/mission-vtext-runtime-progress-cadence-v0.md.
+evidence artifact refs: frontend/test-results/vtext-model-cadence-smoke-20260525T173217Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-smoke-cooldown-20260525T173521Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-20260525T173734Z/fireworks-deepseek-v4-flash-none.json.
+rollback refs: v0 mission remains in docs/mission-vtext-runtime-progress-cadence-v0.md; platform rollback target before this run is f482da6.
 ```
 
 ## Sources And Prior Art
