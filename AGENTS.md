@@ -143,6 +143,23 @@ they are not necessarily computation-only observers. They may run commands,
 write temporary scripts, or create tests inside an authorized scratch or
 candidate environment when that is required to verify behavior.
 
+## Harness Minimalism
+
+Keep the agent harness small and programmatically uniform across roles by
+default. The core tool loop, provider call semantics, run-memory plumbing,
+event emission, cancellation, retry, compaction, and continuation mechanics
+should behave identically for conductor, VText, researcher, super, vsuper,
+co-super, verifier, and future agent roles unless there is a proven invariant
+that requires divergence.
+
+Prefer role prompts, tool descriptions, capability policy, and product-visible
+state over role-specific harness branches. If a proposed fix requires
+programmatic divergence in the core loop for one role, document the evidence,
+the invariant being protected, the simpler alternatives rejected, and obtain
+explicit human approval before landing it. Divergence is acceptable only when it
+protects correctness, security, authority boundaries, or resource isolation in a
+way that cannot be represented cleanly as policy or prompt contract.
+
 ## Runtime Configuration
 
 Provider secrets and platform model catalogs are platform-owned. Per-computer
