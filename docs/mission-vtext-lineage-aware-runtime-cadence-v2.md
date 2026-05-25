@@ -401,6 +401,24 @@ root cause: this is the previously observed research-classifier gap resurfacing 
 remaining error field: terminal VText runs need deterministic research continuation for baseball/current recap phrasing, not reliance on the model voluntarily calling `spawn_agent` after a successful edit.
 candidate fix: extend the VText research-continuation classifier to cover `baseball`, `last night`, and recap phrasing, with unit coverage for `Last Night in Baseball`.
 
+### 2026-05-25 Terminal-Tool Fix Final Proof
+
+behavior commit: `3c16961d37ab41959dd7cbe3ca7fe73a98e8b8ff`.
+CI/deploy: GitHub Actions CI run `26419476815` passed, including runtime shards, non-runtime tests, vet/build, and staging deploy. FlakeHub publish run `26419476784` passed.
+staging identity: `/health` reported proxy and sandbox deployed at `3c16961d37ab41959dd7cbe3ca7fe73a98e8b8ff`, deployed at `2026-05-25T20:57:48Z`.
+local verification: `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn|TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry|TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn|TestVTextInitialEditRequiresContinuationButSpawnDoesNotForceSecondEdit|TestRunToolLoopRequiredNextTool|TestRunToolLoopMaxTokens' -count=1` passed; broader focused runtime/VText/tool-loop checks also passed.
+
+research acceptance command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium,fireworks-kimi-k2p6-low,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball,deep-research npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`, executed as part of a three-prompt matrix where the coding rows hit a late-session 401 and were rerun separately.
+research evidence directory: `/Users/wiz/go-choir/test-results/vtext-model-cadence-matrix-2026-05-25T20-58-18-911Z/`.
+research result: all successful baseball and deep-research rows across `fireworks-deepseek-v4-flash-medium`, `fireworks-kimi-k2p6-low`, and `chatgpt-gpt-5-5-low` produced v1, researcher findings, and v2 with `edit_vtext` error count `0`, VText mutation-state error count `0`, and duplicate-tool error count `0`.
+baseball classifier proof: after adding `baseball`/`last night`/`recap` research markers, `fireworks-deepseek-v4-flash-medium` for `Last Night in Baseball` produced v1 at about 6.6s, first findings at about 24.6s, and v2 at about 45.6s.
+
+super/coding acceptance command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium,fireworks-kimi-k2p6-low,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=coding-super npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+super/coding evidence directory: `/Users/wiz/go-choir/test-results/vtext-model-cadence-matrix-2026-05-25T21-14-37-624Z/`.
+super/coding result: all three variants produced v1, requested super execution, and produced v2 with `edit_vtext` error count `0` and VText mutation-state error count `0`. `fireworks-deepseek-v4-flash-medium` had v1 about 3.3s and v2 about 17.3s; `fireworks-kimi-k2p6-low` had v1 about 4.2s and v2 about 16.2s; `chatgpt-gpt-5-5-low` had v1 about 3.8s and v2 about 29.8s.
+remaining coordination noise: GPT-5.5 low still produced duplicate `bash` planning inside the super run for the coding-super prompt; those were skipped by existing duplicate-bash guards and did not create VText mutation errors. Researcher-side tool noise remains for content-file reads/imports and duplicate finding ids in some model/prompt combinations. These are now distinct secondary noise classes, not the VText completed-mutation loop.
+rollback refs: before terminal-tool behavior change, `cd580c5`; before classifier fix, `3e064c3`.
+
 ## Run Checkpoint And Resumption State
 
 ```text
