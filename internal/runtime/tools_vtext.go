@@ -143,7 +143,20 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 	if prompt == "" || vtextPromptAllowsUngroundedCreativeDraft(prompt) {
 		return vtextRequiredContinuation{}, false
 	}
-	if vtextPromptNeedsSuperExecution(prompt) {
+	needsResearch := vtextPromptNeedsResearchContinuation(prompt)
+	needsSuper := vtextPromptNeedsSuperExecution(prompt)
+	if needsResearch && (!needsSuper || vtextPromptExplicitlyAsksResearchFirst(prompt)) {
+		return vtextRequiredContinuation{
+			Tool: "spawn_agent",
+			Args: map[string]any{
+				"role":       AgentProfileResearcher,
+				"channel_id": docID,
+				"objective":  buildVTextResearchContinuationObjective(prompt),
+			},
+			Instruction: "The first VText revision is now stored. Spawn a researcher before ending this run so evidence can wake the next VText revision. Do not say a researcher was dispatched unless this tool call succeeds.",
+		}, true
+	}
+	if needsSuper {
 		return vtextRequiredContinuation{
 			Tool: "request_super_execution",
 			Args: map[string]any{
@@ -153,7 +166,7 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 			Instruction: "The first VText revision is now stored. Request super execution for the actual execution/coding work before ending this run. Do not claim work is underway unless this tool call succeeds.",
 		}, true
 	}
-	if vtextPromptNeedsResearchContinuation(prompt) {
+	if needsResearch {
 		return vtextRequiredContinuation{
 			Tool: "spawn_agent",
 			Args: map[string]any{
@@ -165,6 +178,19 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 		}, true
 	}
 	return vtextRequiredContinuation{}, false
+}
+
+func vtextPromptExplicitlyAsksResearchFirst(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	for _, marker := range []string{"research", "look up", "search", "cite", "citation", "sources"} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func vtextPromptNeedsResearchContinuation(prompt string) bool {

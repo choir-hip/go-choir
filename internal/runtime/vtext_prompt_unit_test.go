@@ -151,6 +151,7 @@ func TestVTextInitialEditContinuationClassifiesPrompts(t *testing.T) {
 		{prompt: "hey"},
 		{prompt: "tell me a story about computers"},
 		{prompt: "write a tiny bash command that counts files", wantSuper: true},
+		{prompt: "research mud brick architecture and write a tiny shell command", wantResearch: true, wantSuper: true},
 		{prompt: "debug and fix the runtime gateway", wantSuper: true},
 	}
 	for _, tc := range tests {
@@ -162,5 +163,15 @@ func TestVTextInitialEditContinuationClassifiesPrompts(t *testing.T) {
 				t.Fatalf("vtextPromptNeedsSuperExecution(%q) = %v, want %v", tc.prompt, got, tc.wantSuper)
 			}
 		})
+	}
+}
+
+func TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt(t *testing.T) {
+	prompt := "research what mud brick architecture means and write a tiny shell command that would create a notes file for it"
+	if !vtextPromptExplicitlyAsksResearchFirst(prompt) {
+		t.Fatalf("expected explicit research-first marker for %q", prompt)
+	}
+	if !vtextPromptNeedsResearchContinuation(prompt) || !vtextPromptNeedsSuperExecution(prompt) {
+		t.Fatalf("mixed prompt should classify as both research and super-capable")
 	}
 }
