@@ -133,7 +133,7 @@ export async function deleteDocument(docId) {
   return res.json();
 }
 
-export async function createRevision(docId, { content, authorKind, authorLabel, citations, metadata, parentRevisionId }) {
+export async function createRevision(docId, { content, authorKind, authorLabel, citations, metadata, parentRevisionId, allowRebase = false }) {
   const body = {
     content,
     author_kind: authorKind,
@@ -147,6 +147,9 @@ export async function createRevision(docId, { content, authorKind, authorLabel, 
   }
   if (parentRevisionId) {
     body.parent_revision_id = parentRevisionId;
+  }
+  if (allowRebase) {
+    body.allow_rebase = true;
   }
 
   const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/revisions`), {

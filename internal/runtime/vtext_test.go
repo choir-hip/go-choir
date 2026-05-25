@@ -3431,6 +3431,68 @@ func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
 	}
 }
 
+func TestVTextCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	docID, baseRevisionID := createDocWithUserRevision(t, h)
+
+	headReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+		Content:          "Initial content.\n\nAgent-added latest head detail.",
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "alice",
+		ParentRevisionID: baseRevisionID,
+	})
+	headW := httptest.NewRecorder()
+	h.HandleVTextRevisions(headW, headReq)
+	if headW.Code != http.StatusCreated {
+		t.Fatalf("create newer head revision: status = %d, want %d; body: %s", headW.Code, http.StatusCreated, headW.Body.String())
+	}
+	var headResp vtextRevisionResponse
+	if err := json.NewDecoder(headW.Body).Decode(&headResp); err != nil {
+		t.Fatalf("decode head response: %v", err)
+	}
+
+	staleReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", vtextCreateRevisionRequest{
+		Content:          "Initial content.\n\nUser dirty draft detail.",
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "alice",
+		ParentRevisionID: baseRevisionID,
+		AllowRebase:      true,
+		Metadata:         json.RawMessage(`{"autosaved":true}`),
+	})
+	staleW := httptest.NewRecorder()
+	h.HandleVTextRevisions(staleW, staleReq)
+	if staleW.Code != http.StatusCreated {
+		t.Fatalf("rebased stale revision: status = %d, want %d; body: %s", staleW.Code, http.StatusCreated, staleW.Body.String())
+	}
+	var rebasedResp vtextRevisionResponse
+	if err := json.NewDecoder(staleW.Body).Decode(&rebasedResp); err != nil {
+		t.Fatalf("decode rebased response: %v", err)
+	}
+	if rebasedResp.ParentRevisionID != headResp.RevisionID {
+		t.Fatalf("rebased parent = %q, want latest head %q", rebasedResp.ParentRevisionID, headResp.RevisionID)
+	}
+	for _, want := range []string{"Agent-added latest head detail.", "User dirty draft detail."} {
+		if !strings.Contains(rebasedResp.Content, want) {
+			t.Fatalf("rebased content missing %q:\n%s", want, rebasedResp.Content)
+		}
+	}
+	meta := decodeRevisionMetadata(rebasedResp.Metadata)
+	if got, _ := meta["rebased_from_revision_id"].(string); got != baseRevisionID {
+		t.Fatalf("rebased_from_revision_id = %q, want %q; metadata=%+v", got, baseRevisionID, meta)
+	}
+	if got, _ := meta["rebase_onto_revision_id"].(string); got != headResp.RevisionID {
+		t.Fatalf("rebase_onto_revision_id = %q, want %q; metadata=%+v", got, headResp.RevisionID, meta)
+	}
+
+	doc, err := s.GetDocument(context.Background(), docID, "user-1")
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	if doc.CurrentRevisionID != rebasedResp.RevisionID {
+		t.Fatalf("current head = %q, want rebased revision %q", doc.CurrentRevisionID, rebasedResp.RevisionID)
+	}
+}
+
 func TestVTextDocumentStreamSendsSnapshot(t *testing.T) {
 	h, s := vtextAPISetup(t)
 	docID, _ := createDocWithUserRevision(t, h)

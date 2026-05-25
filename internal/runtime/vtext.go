@@ -34,6 +34,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	diffmatchpatch "github.com/sergi/go-diff/diffmatchpatch"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
@@ -127,6 +128,7 @@ type vtextCreateRevisionRequest struct {
 	Citations        json.RawMessage  `json:"citations,omitempty"`
 	Metadata         json.RawMessage  `json:"metadata,omitempty"`
 	ParentRevisionID string           `json:"parent_revision_id,omitempty"`
+	AllowRebase      bool             `json:"allow_rebase,omitempty"`
 }
 
 // vtextRevisionResponse is the JSON response for revision-related endpoints.
@@ -736,6 +738,15 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
 		log.Printf("vtext api: create revision: %v", err)
 		if errors.Is(err, store.ErrStaleDocumentHead) {
+			if req.AllowRebase && parentID != "" {
+				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
+				if rebaseErr == nil {
+					h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rebased)
+					writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rebased))
+					return
+				}
+				log.Printf("vtext api: rebase stale user revision: %v", rebaseErr)
+			}
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before saving"})
 			return
 		}
@@ -744,7 +755,95 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 	}
 	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
 
-	writeAPIJSON(w, http.StatusCreated, vtextRevisionResponse{
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+}
+
+func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, ownerID string, req vtextCreateRevisionRequest, staleParentID string, citations, metadata json.RawMessage, now time.Time) (types.Revision, error) {
+	currentDoc, err := h.rt.Store().GetDocument(ctx, docID, ownerID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("load current document for rebase: %w", err)
+	}
+	if strings.TrimSpace(currentDoc.CurrentRevisionID) == "" || strings.TrimSpace(currentDoc.CurrentRevisionID) == staleParentID {
+		return types.Revision{}, fmt.Errorf("document head is not rebaseable")
+	}
+	baseRev, err := h.rt.Store().GetRevision(ctx, staleParentID, ownerID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("load stale base revision: %w", err)
+	}
+	headRev, err := h.rt.Store().GetRevision(ctx, currentDoc.CurrentRevisionID, ownerID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("load current head revision: %w", err)
+	}
+
+	mergedContent, strategy, clean := rebaseUserDraftContent(baseRev.Content, headRev.Content, req.Content, staleParentID)
+	mergedMetadata := mergeVTextRevisionMetadata(metadata, map[string]any{
+		"rebased_from_revision_id": staleParentID,
+		"rebase_onto_revision_id":  headRev.RevisionID,
+		"rebase_strategy":          strategy,
+		"rebase_clean":             clean,
+	})
+
+	rev := types.Revision{
+		RevisionID:       uuid.New().String(),
+		DocID:            docID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      ownerID,
+		Content:          mergedContent,
+		Citations:        citations,
+		Metadata:         mergedMetadata,
+		ParentRevisionID: headRev.RevisionID,
+		CreatedAt:        now,
+	}
+	if err := h.rt.Store().CreateRevision(ctx, rev); err != nil {
+		return types.Revision{}, fmt.Errorf("create rebased user revision: %w", err)
+	}
+	return rev, nil
+}
+
+func rebaseUserDraftContent(baseContent, headContent, userContent, staleParentID string) (string, string, bool) {
+	if userContent == baseContent {
+		return headContent, "no_user_change", true
+	}
+	if headContent == baseContent {
+		return userContent, "head_unchanged", true
+	}
+	dmp := diffmatchpatch.New()
+	patches := dmp.PatchMake(baseContent, userContent)
+	merged, applied := dmp.PatchApply(patches, headContent)
+	clean := len(applied) > 0
+	for _, ok := range applied {
+		if !ok {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return merged, "diff_match_patch", true
+	}
+	recovered := strings.TrimRight(headContent, "\n") +
+		"\n\n---\n\nRecovered user draft based on revision " + staleParentID + ":\n\n" +
+		strings.TrimSpace(userContent) + "\n"
+	return recovered, "append_recovered_draft", false
+}
+
+func mergeVTextRevisionMetadata(raw json.RawMessage, additions map[string]any) json.RawMessage {
+	out := map[string]any{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
+	}
+	for key, value := range additions {
+		out[key] = value
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return raw
+	}
+	return encoded
+}
+
+func revisionResponseFromRecord(rev types.Revision) vtextRevisionResponse {
+	return vtextRevisionResponse{
 		RevisionID:       rev.RevisionID,
 		DocID:            rev.DocID,
 		OwnerID:          rev.OwnerID,
@@ -755,7 +854,7 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		Metadata:         rev.Metadata,
 		ParentRevisionID: rev.ParentRevisionID,
 		CreatedAt:        rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
+	}
 }
 
 func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Request, docID string) {

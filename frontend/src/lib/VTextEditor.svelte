@@ -277,8 +277,8 @@
     return (root.innerText || '').replace(/\u00a0/g, ' ').trimEnd();
   }
 
-  function syncEditorSurface(html) {
-    if (!editorSurface || surfaceFocused) return;
+  function syncEditorSurface(html, { force = false } = {}) {
+    if (!editorSurface || (surfaceFocused && !force)) return;
     if (editorSurface.innerHTML !== html) {
       editorSurface.innerHTML = html;
     }
@@ -651,6 +651,7 @@
       authorLabel: getAuthorLabel(),
       metadata: buildRevisionMetadata(),
       parentRevisionId: currentRevision?.revision_id || '',
+      allowRebase: true,
     });
 
     await reloadDocument(revision.revision_id);
@@ -688,6 +689,9 @@
 
     if (editorValue === contentAtSave) {
       editorValue = revision.content || '';
+      if (revision.content !== contentAtSave) {
+        syncEditorSurface(renderMarkdown(editorValue), { force: true });
+      }
     }
   }
 
@@ -714,6 +718,7 @@
           autosaved: true,
         },
         parentRevisionId: currentRevision?.revision_id || '',
+        allowRebase: true,
       });
       await recordSavedRevision(revision, contentAtSave);
       saveStatus = 'Saved';

@@ -161,12 +161,12 @@ test('vtext auto-follows latest head when the editor is clean', async ({ page, a
   await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
 });
 
-test('vtext keeps dirty edits and offers latest-head jump instead of auto-clobbering', async ({ page, authenticator }) => {
+test('vtext rebases dirty autosave over a moved head instead of losing the draft', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
-  const fileName = `dirty-protection-${Date.now()}.txt`;
+  const fileName = `dirty-rebase-${Date.now()}.txt`;
   const initialContent = 'Seed content from file open';
-  const dirtyContent = 'Local unsaved draft that must stay put';
-  const externalContent = 'External update should not auto-overwrite local draft';
+  const dirtyContent = 'Local dirty draft that must persist over the moved head';
+  const externalContent = 'External moved-head update that must survive rebase';
 
   await seedTextFile(page, fileName, initialContent);
   const opened = await openFileInVText(page, fileName);
@@ -176,13 +176,26 @@ test('vtext keeps dirty edits and offers latest-head jump instead of auto-clobbe
 
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
 
-  const updateButton = page.locator('[data-vtext-new-version]');
-  await expect(updateButton).toBeVisible({ timeout: 10000 });
   await expect(editor).toContainText(dirtyContent);
 
-  await updateButton.click();
+  const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
+  const currentDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`failed to get document: ${res.status}`);
+    }
+    return res.json();
+  }, opened.doc_id);
+  const latestRevision = revisions.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
+  expect(latestRevision?.content || '').toContain(dirtyContent);
+  expect(latestRevision?.content || '').toContain(externalContent);
+  expect(latestRevision?.metadata?.rebased_from_revision_id).toBe(opened.current_revision_id);
+  await expect(editor).toContainText(dirtyContent, { timeout: 10000 });
   await expect(editor).toContainText(externalContent, { timeout: 10000 });
-  await expect(updateButton).toHaveCount(0);
+  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
 });
 
 test('reopening the same file path resolves to the same canonical vtext doc', async ({ page, authenticator }) => {
