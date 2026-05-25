@@ -686,14 +686,17 @@ func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSample
 	r.pressureSampler = sampler
 }
 
-// StartIdleSweeper periodically hibernates idle active VMs. It runs an
-// immediate sweep first so a vmctl restart can reclaim persisted stale VMs
-// before fresh desktop bootstrap requests compete for host capacity.
+// StartIdleSweeper periodically hibernates idle active VMs. It schedules an
+// immediate background sweep so vmctl can bind its health/control port before
+// potentially slow retention pruning walks old VM state directories.
 func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Minute
 	}
+	var sweepMu sync.Mutex
 	sweep := func() {
+		sweepMu.Lock()
+		defer sweepMu.Unlock()
 		if warmed := r.WarmAlwaysOnDesktops(); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)
 		}
@@ -717,9 +720,9 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}
 	}
-	sweep()
 
 	go func() {
+		sweep()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
