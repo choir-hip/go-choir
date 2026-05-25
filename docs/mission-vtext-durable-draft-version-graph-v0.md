@@ -470,18 +470,17 @@ last checkpoint:
 
 current artifact state:
 
-- Existing runtime appears to have stale-head guards, user-authored revision
-  creation, clean auto-follow, dirty no-clobber UI, autosave user revisions, and
-  worker-update batching, but the durable draft/merge semantics are not yet
-  specified or broadly proven.
-- Working tree now contains an unlanded contract-preserving candidate fix:
+- Staging now includes the first contract-preserving durable-draft fix:
   explicit `allow_rebase` user revision saves can rebase stale dirty drafts onto
-  the current head while ordinary stale writes still return conflict. This must
-  be committed, pushed, deployed, and verified before it counts as shipped.
+  the current head while ordinary stale writes still return conflict.
+- The behavior is deployed at
+  `b2252fe4ecc9f05f827ca3c86e2703ada68d4820` and product-path proven for the
+  dirty-over-moved-head API path.
 
 what shipped:
 
-- Nothing yet.
+- `b5d72c1` `Checkpoint VText durable draft version graph`
+- `b2252fe` `Rebase stale VText user drafts`
 
 what was proven:
 
@@ -491,6 +490,18 @@ what was proven:
 - Local product-path browser proof:
   `pnpm exec playwright test tests/vtext-document-stream.spec.js --project=chromium --grep 'auto-follows|rebases dirty|reopening the same file|restores on reload' --reporter=line`
   passed against the local service stack.
+- Local frontend build:
+  `pnpm build` passed.
+- CI run `26423509844` passed, including runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, frontend build, and staging deploy.
+- FlakeHub publish run `26423509853` passed.
+- Staging `/health` reported proxy and sandbox deployed at
+  `b2252fe4ecc9f05f827ca3c86e2703ada68d4820`.
+- Deployed dirty-draft proof:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-staging-b2252fe-20260525T232239Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --reporter=line`
+  passed.
+- Model-suite eval report created:
+  `docs/vtext-durable-draft-version-graph-eval-report-2026-05-25.md`.
 
 unproven or partial claims:
 
@@ -509,11 +520,15 @@ belief-state changes:
 
 remaining error field:
 
-- Need commit separation, CI, staging deploy, staging product-path proof, and
-  model-suite eval report for Kimi low, v4-flash medium, and GPT-5.5 low.
+- Need cross-device UI draft sync proof before `Revise`; current proof is
+  product API persistence plus local UI rebase behavior.
 - Need broader long-content/many-version/concurrent-worker evaluation; current
-  local proof only covers the first dirty-head rebase edge plus existing stream
-  behavior.
+  model suite covers research/coding/long prompts but does not yet deterministically
+  combine user dirty edits with a worker-update storm.
+- Need improve/monitor long-prompt coordination: v4-flash medium required a
+  longer 180s observation window and showed malformed delegation noise; GPT-5.5
+  low still produced duplicate side-effect attempts; Kimi low was clean but slow
+  on long V1.
 
 highest-impact remaining uncertainty:
 
@@ -522,9 +537,13 @@ highest-impact remaining uncertainty:
 
 next executable probe:
 
-- Commit this mission checkpoint before the behavior fix, then commit the
-  rebase implementation and tests. Push through the staging landing loop and run
-  deployed dirty-head proof before expanding to the model-suite report.
+- Build the next deterministic product-path eval for two browser sessions:
+  dirty direct edit in session A, canonical head move or VText revision in
+  session B, then verify session A and session B converge without losing the
+  draft before `Revise`.
+- Add a deterministic worker-update storm plus dirty user edit scenario without
+  `/api/test/*` acceptance shortcuts, or explicitly document the smallest product
+  surface needed to make that worker concurrency observable.
 
 suggested resume goal string:
 
@@ -534,6 +553,16 @@ evidence artifact refs:
 
 - Local Playwright result: `frontend/test-results/vtext-document-stream-vtex-d34e2-instead-of-losing-the-draft-chromium/`
   captured the pre-refresh-gap failure.
+- Deployed dirty-draft evidence:
+  `test-results/vtext-durable-draft-staging-b2252fe-20260525T232239Z/dirty-rebase-product-path.json`.
+- Model-suite evidence:
+  `test-results/vtext-model-suite-durable-draft-b2252fe-20260525T232318Z/`.
+- Model-suite long rerun evidence:
+  `test-results/vtext-model-suite-durable-draft-b2252fe-long-rerun-20260525T233946Z/`.
+- v4 long 180s rerun evidence:
+  `test-results/vtext-model-suite-durable-draft-b2252fe-v4-long-180s-20260525T234456Z/`.
+- Eval report:
+  `docs/vtext-durable-draft-version-graph-eval-report-2026-05-25.md`.
 
 rollback refs:
 
