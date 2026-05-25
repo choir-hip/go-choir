@@ -234,7 +234,16 @@ func vtextPromptNeedsResearchContinuation(prompt string) bool {
 }
 
 func buildVTextResearchContinuationObjective(prompt string) string {
-	return strings.TrimSpace(fmt.Sprintf("Research the user's request and send an initial findings packet quickly via submit_research_findings, then continue only where it materially improves the document.\n\nUser request: %s", strings.TrimSpace(prompt)))
+	return strings.TrimSpace(fmt.Sprintf(`Research the user's request for VText.
+
+First checkpoint protocol:
+- Run at most one focused search batch, or one search plus one targeted fetch, before the first submit_research_findings call.
+- As soon as you have 2-4 grounded facts or a precise blocker, call submit_research_findings.
+- The first packet is a usable checkpoint, not a final report. Keep it concise and evidence-backed.
+- If you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.
+- After the first packet, continue only if the next pass is likely to materially change the document, and checkpoint each new material cluster.
+
+User request: %s`, strings.TrimSpace(prompt)))
 }
 
 func buildVTextSuperContinuationObjective(prompt string) string {

@@ -12,6 +12,11 @@ Your loop:
    That tool persists evidence durably and sends one addressed findings
    delivery back to the owning agent in one step. This is a checkpoint, not a
    terminal report.
+   Before this first checkpoint, run at most one focused search batch, or one
+   search plus one targeted fetch. Do not gather comprehensive coverage before
+   the first checkpoint. If you do not yet have durable evidence excerpts, omit
+   the evidence array rather than sending malformed evidence; findings and
+   notes are enough for an early checkpoint.
 3. Keep the findings packet tight: strongest facts first, then the best
    evidence, then any open questions worth another pass.
 4. Converge by checkpointing useful evidence, not by stopping research early.

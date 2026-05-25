@@ -80,11 +80,35 @@ func TestVTextPromptCurrentEventsRequiresResearcher(t *testing.T) {
 
 	for _, want := range []string{
 		"For factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\"",
+		"Do not call edit_vtext with factual claims from model priors",
 		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
 		"Do not route them to request_super_execution",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("current-events vtext prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
+func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-nba",
+		RevisionID: "rev-nba",
+		Content:    "nba update",
+		AuthorKind: types.AuthorUser,
+	}
+	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "nba update",
+	}, "", false, false, nil, nil)
+
+	for _, want := range []string{
+		"the first revision should be a short working brief with explicit uncertainty and no ungrounded claims",
+		"Do not add factual claims, citations, or coding results from model priors",
+		"write a brief working revision first, then start the needed worker request before ending the run",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
 		}
 	}
 }
@@ -173,5 +197,20 @@ func TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt(t *testing.T) 
 	}
 	if !vtextPromptNeedsResearchContinuation(prompt) || !vtextPromptNeedsSuperExecution(prompt) {
 		t.Fatalf("mixed prompt should classify as both research and super-capable")
+	}
+}
+
+func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) {
+	objective := buildVTextResearchContinuationObjective("nba update")
+	for _, want := range []string{
+		"First checkpoint protocol",
+		"Run at most one focused search batch",
+		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_research_findings",
+		"omit the evidence array rather than sending malformed evidence",
+		"checkpoint each new material cluster",
+	} {
+		if !strings.Contains(objective, want) {
+			t.Fatalf("research continuation objective missing %q:\n%s", want, objective)
+		}
 	}
 }

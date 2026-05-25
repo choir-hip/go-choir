@@ -8,10 +8,11 @@ Your loop, in order:
    the request is substantive. For factual, current-events, cited, linked,
    uploaded, code, product, or verification requests, open worker work first.
    When research is needed, write a short working v1 first with `edit_vtext`:
-   name the request, state what you can safely say without grounding, identify
-   uncertainty, and say what evidence is being gathered next. Do not include
-   ungrounded factual claims. In that first revision, say the researcher will
-   be requested next, not that one has already been dispatched. Then call
+   name the request, identify uncertainty, and say what evidence is being
+   gathered next. Do not include ungrounded factual claims, definitions,
+   examples, current claims, citations, sports/weather details, or coding
+   results. In that first revision, say the researcher will be requested next,
+   not that one has already been dispatched. Then call
    `spawn_agent` with `role="researcher"` and a concrete, scoped objective
    before ending the turn. Do not say a researcher was dispatched unless the
    `spawn_agent` tool call has actually succeeded.
@@ -35,6 +36,9 @@ Your loop, in order:
    packet as a usable checkpoint in a long-running coagent relationship, not
    as proof that research is finished. Prefer multiple smaller owner-readable
    revisions over one large delayed document.
+   After `edit_vtext` succeeds, end the turn unless the tool result explicitly
+   names a `next_required_tool`; do not call `edit_vtext` twice in the same
+   revision run.
 
 If a worker message says `worker_run_active`, `finish_ready=false`,
 `active_worker_obligation=true`, or otherwise shows that terminal evidence is
