@@ -110,7 +110,6 @@
       event.preventDefault();
       dispatch('promptsubmit', { text: promptValue.trim() });
       promptValue = '';
-      event.target.blur();
       tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
       event.target.blur();
@@ -215,6 +214,8 @@
     return 'Disconnected';
   })();
 
+  $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
+
   onMount(() => {
     publishBottomBarHeight();
     resizePromptInput();
@@ -241,16 +242,6 @@
   data-desk-menu-open={menuOpen ? 'true' : 'false'}
   bind:this={bottomBarEl}
 >
-  {#if chyronItems.length > 0 && !promptFocused && !menuOpen}
-    <div class="shelf-chyron" data-shelf-chyron aria-live="polite">
-      <div class="shelf-chyron-track">
-        {#each chyronItems as item (item.id)}
-          <span class="shelf-chyron-item">{item.text}</span>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
   <!-- Left section: Desk menu + open windows -->
   <div class="bar-left">
     <button
@@ -371,6 +362,21 @@
   <!-- Center section: prompt bar -->
   <div class="bar-center">
     <div class="prompt-bar">
+      {#if chyronTickerItems.length > 0 && !menuOpen}
+        <div
+          class:prompt-chyron-focused={promptFocused}
+          class="prompt-chyron"
+          data-shelf-chyron
+          data-prompt-chyron
+          aria-live="polite"
+        >
+          <div class="prompt-chyron-track">
+            {#each chyronTickerItems as item, index (`${item.id}-${index}`)}
+              <span class="prompt-chyron-item">{item.text}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
       {#if promptStatus}
         <div class="prompt-status" data-prompt-status aria-live="polite">{promptStatus}</div>
       {/if}
@@ -430,43 +436,6 @@
 
   .bottom-bar.menu-open {
     z-index: 10000;
-  }
-
-  .shelf-chyron {
-    position: absolute;
-    left: max(10px, env(safe-area-inset-left, 0px));
-    right: max(10px, env(safe-area-inset-right, 0px));
-    bottom: calc(100% + 3px);
-    height: 1.35rem;
-    overflow: hidden;
-    pointer-events: none;
-    mask-image: linear-gradient(90deg, transparent, black 9%, black 91%, transparent);
-  }
-
-  .shelf-chyron-track {
-    display: inline-flex;
-    min-width: 100%;
-    gap: 1.25rem;
-    align-items: center;
-    white-space: nowrap;
-    color: rgba(219, 234, 254, 0.74);
-    font-size: 0.72rem;
-    font-weight: 650;
-    text-shadow: 0 1px 10px rgba(2, 6, 23, 0.84);
-    animation: shelf-chyron-flow 22s linear infinite;
-  }
-
-  .shelf-chyron-item {
-    border: 1px solid rgba(96, 165, 250, 0.18);
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.34);
-    padding: 0.14rem 0.5rem;
-    backdrop-filter: blur(8px);
-  }
-
-  @keyframes shelf-chyron-flow {
-    from { transform: translateX(-18%); }
-    to { transform: translateX(18%); }
   }
 
   .bar-left {
@@ -819,13 +788,59 @@
   }
 
   .prompt-bar {
+    position: relative;
     width: 100%;
     max-width: none;
     display: grid;
     gap: 0.35rem;
+    overflow: hidden;
+    border-radius: 20px;
+  }
+
+  .prompt-chyron {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.34;
+    mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+    transition: opacity 0.16s ease;
+  }
+
+  .prompt-chyron.prompt-chyron-focused {
+    opacity: 0.085;
+  }
+
+  .prompt-chyron-track {
+    display: inline-flex;
+    min-width: max-content;
+    gap: 1.65rem;
+    align-items: center;
+    white-space: nowrap;
+    color: rgba(219, 234, 254, 0.92);
+    font-size: 0.78rem;
+    font-weight: 720;
+    text-transform: none;
+    text-shadow: 0 1px 12px rgba(2, 6, 23, 0.9);
+    animation: prompt-chyron-flow 38s linear infinite;
+    will-change: transform;
+  }
+
+  .prompt-chyron-item {
+    opacity: 0.96;
+  }
+
+  @keyframes prompt-chyron-flow {
+    from { transform: translateX(-50%); }
+    to { transform: translateX(0); }
   }
 
   .prompt-status {
+    position: relative;
+    z-index: 3;
     min-height: 1rem;
     color: #93c5fd;
     font-size: 0.74rem;
@@ -835,12 +850,14 @@
   }
 
   .prompt-input {
+    position: relative;
+    z-index: 2;
     width: 100%;
     height: 44px;
     min-height: 44px;
     max-height: min(8rem, 22dvh);
     padding: 9px 12px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.045);
     border: 1px solid #333;
     border-radius: 20px;
     color: #e0e0e0;
@@ -859,7 +876,7 @@
 
   .prompt-input:focus {
     border-color: #3b82f6;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.82);
   }
 
   .bar-right {

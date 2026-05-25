@@ -7,7 +7,7 @@
 ## One-Line Goal String
 
 ```text
-/goal Run docs/mission-vtext-chyron-progressive-observability-v0.md as a Codex-operated MissionGradient mission: make Choir's prompt-bar runs progressively observable and faster to trust. Preserve VText as the single canonical document writer, but make it produce useful early and frequent revisions: v1 should be a short owner-readable working response, v2 should land as soon as initial findings or first agent progress exists, and later versions should refine in small coherent increments instead of waiting for all researchers/super work to finish. Put conductor routing notes, tool-call activity, agent-to-agent messages, and interim worker/research progress into the Shelf Chyron rather than fake VText drafts, with Chyron history visible from Trace. In Trace, show each agent role's resolved provider/model/reasoning/tool-profile configuration. Fix Markdown table rendering in VText. Use Playwright against staging across prompts requiring search, coding, both, and neither, including “hey” and “nba update”, to prove prompt-to-v1 latency, prompt-to-v2 latency, continuing revisions, Chyron streaming, Trace model config visibility, and readable tables. Land through git/CI/deploy, verify staging identity, and finish with screenshots/video/DOM timing evidence, Trace/VText/run-acceptance refs, rollback refs, residual risks, and the next realism axis. Do not let conductor write canonical VText, hide progress only in Trace, spam VText with tiny tool events, fake Chyron text, use local-only proof, or claim completion without deployed product-path evidence.
+/goal Run docs/mission-vtext-chyron-progressive-observability-v0.md as a Codex-operated MissionGradient mission: make Choir's prompt-bar runs progressively observable and faster to trust. Preserve VText as the single canonical document writer, but make it produce useful early and frequent revisions: v1 should be a short owner-readable working response, v2 should land as soon as initial findings or first agent progress exists, and later versions should refine in small coherent increments instead of waiting for all researchers/super work to finish. Put conductor routing notes, tool-call activity, agent-to-agent messages, and interim worker/research progress into a translucent prompt-bar Chyron ticker rather than fake VText drafts, with Chyron history visible from Trace. In Trace, show each agent role's resolved provider/model/reasoning/tool-profile configuration. Fix Markdown table rendering in VText. Use Playwright against staging across prompts requiring search, coding, both, and neither, including “hey” and “nba update”, to prove prompt-to-v1 latency, prompt-to-v2 latency, full VText revision timing where present, continuing revisions during long-running work, Chyron streaming, Trace model config visibility, and readable tables. Land through git/CI/deploy, verify staging identity, and finish with screenshots/video/DOM timing evidence, Trace/VText/run-acceptance refs, rollback refs, residual risks, and the next realism axis. Do not let conductor write canonical VText, hide progress only in Trace, spam VText with tiny tool events, fake Chyron text, use local-only proof, or claim completion without deployed product-path evidence.
 ```
 
 ## Mission Frame
@@ -29,7 +29,7 @@ The real artifact is a progressive observability loop:
 
 ```text
 prompt bar submit
-  -> conductor routes and emits Chyron status, not canonical prose
+  -> conductor routes and emits prompt-bar Chyron status, not canonical prose
   -> VText writes a concise v1 answer quickly
   -> researchers/super send substantive early updates to VText and granular events to Chyron
   -> VText writes v2 as soon as first findings exist
@@ -87,11 +87,13 @@ and improve.
   orientation, or "working answer" from VText.
 - `v2`: should appear after initial findings/progress, not only after all
   researchers or super tasks complete.
-- Later versions: should be smaller coherent updates, not one giant late dump.
+- Later versions: are not required for every prompt, but long-running work should
+  prefer smaller coherent updates over one giant late dump.
 - Researchers and super: should send concise substantive progress messages to
   VText at meaningful milestones and granular tool/agent messages to Chyron.
 - Chyron: should stream conductor routing, tool calls, tool results summaries,
-  and agent messages without blocking Shelf controls or prompt input.
+  and agent messages as a translucent left-to-right ticker inside the prompt bar,
+  becoming very faint while the user is typing so input remains dominant.
 - Trace: should show role, provider, model, reasoning effort, tool profile, and
   model-policy source for each agent where available.
 - VText Markdown: tables must render as tables or be normalized into readable
@@ -105,6 +107,8 @@ Use product-path Playwright against `https://draft.choir-ip.com` and record:
 
 - prompt-to-v1 latency;
 - prompt-to-v2 latency;
+- complete appagent VText revision timeline, with inter-revision gaps and
+  v3/v4/v5 timing when long-running work produces them;
 - number and size of revisions;
 - which agents spawned;
 - when researchers/super send messages;
@@ -150,11 +154,11 @@ Do not solve this by making conductor write VText.
 
 ### 4. Build Chyron As Product Observability
 
-The Chyron should be a Shelf layer that:
+The Chyron should be a prompt-bar ticker layer that:
 
-- streams granular progress text left-to-right or otherwise visibly, without
-  blocking Shelf buttons or prompt input;
-- hides or pauses when the prompt input is focused;
+- streams granular progress text left-to-right without blocking Shelf buttons
+  or prompt input;
+- remains visible but becomes very faint when prompt input is focused;
 - has an inspectable history visible from Trace;
 - receives real events from runtime/Trace, not fake seed text;
 - can be proven with Playwright video.
@@ -211,8 +215,9 @@ Record each nontrivial claim with:
 
 Complete only when staging evidence shows:
 
-- across the prompt matrix, VText creates a useful early revision and at least
-  one prompt shows continued smaller revisions from ongoing work;
+- across the prompt matrix, VText creates a useful early revision and long-running
+  prompts show continued smaller revisions from ongoing work when more evidence
+  is still arriving;
 - `nba update` or equivalent search prompt writes initial useful content sooner
   than the previous all-at-end behavior;
 - Chyron streams real conductor/tool/agent activity and remains non-blocking;
