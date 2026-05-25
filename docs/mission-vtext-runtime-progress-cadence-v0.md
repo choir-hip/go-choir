@@ -195,6 +195,88 @@ For each prompt class, record:
 - staging commit identity;
 - Playwright command and result.
 
+## 2026-05-25 Checkpoint: Prompt Guidance Improved But Did Not Finish Cadence
+
+Status: `checkpoint_incomplete`.
+
+Patch `d7a4b0b6468ddbfa9b329393be16100e61acb43e` shipped and staging
+`/health` reported both proxy and sandbox at that deployed commit. CI and
+FlakeHub publish workflows for the commit completed successfully.
+
+Focused staging probe:
+
+```text
+PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com \
+  npx playwright test tests/vtext-cadence-diagnostics.tmp.spec.js --reporter=line
+```
+
+Evidence artifact:
+
+```text
+frontend/test-results/vtext-cadence-diagnostics.-16b88-t-cadence-for-search-prompt-chromium/attachments/nba-update-cadence-664770f7c2af344f9f69cfd981d8025141e2e3f6.json
+```
+
+Observed `nba update` timeline:
+
+```text
+v0 user prompt:        2026-05-25T15:24:44Z
+v1 working brief:      2026-05-25T15:24:49Z  (+5s)
+researcher first tool: 2026-05-25T15:24:55Z
+first findings packet: 2026-05-25T15:25:26Z
+second findings packet:2026-05-25T15:25:36Z
+v2 grounded brief:     2026-05-25T15:25:37Z  (+53s from v1)
+v3 update:             2026-05-25T15:26:07Z
+```
+
+Broad staging matrix:
+
+```text
+PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com \
+  npx playwright test tests/vtext-chyron-progressive-observability.tmp.spec.js --reporter=line
+```
+
+Evidence artifact:
+
+```text
+frontend/test-results/vtext-chyron-progressive-o-92d7c-bservable-and-model-labeled-chromium/attachments/vtext-chyron-summary-234fe6edb8e04182f8ec00ada2520e39d8ddc42b.json
+```
+
+Observed prompt classes:
+
+```text
+simple: first VText 9.8s, one revision
+search: first VText 5.6s, second VText 58.6s, gap 53s
+coding: first VText 12.0s, second VText 40.6s, gap 29s
+mixed:  first VText 12.2s, second VText 45.2s, gap 33s
+```
+
+Belief-state update:
+
+- VText wake/debounce is not the primary delay for search. Once researcher
+  findings were submitted, VText wrote promptly.
+- The moderate prompt guidance eliminated the malformed early
+  `submit_research_findings` error seen before the patch.
+- The researcher still issued too many searches before the first findings
+  packet, despite prompt guidance that said to checkpoint after one focused
+  batch. This remains the largest search-cadence gap.
+- VText still attempted a redundant `edit_vtext` after one successful grounded
+  revision in the focused probe; this is noisy and should be discouraged in
+  VText role guidance rather than enforced through a generic tool-loop rule.
+
+Constraint update:
+
+Do not bluntly enforce the researcher checkpoint by changing the shared tool
+loop. The shared loop should stay uniform across agents. The next probe should
+try stronger role/tool-description guidance first:
+
+- make "first checkpoint" a terminal obligation of the first evidence pass;
+- state that after a non-empty first `web_search`, the usual next tool is
+  `submit_research_findings`, not another broad search;
+- make `submit_research_findings` the researcher communication primitive for
+  early findings, not only a final report;
+- tell VText to stop after one successful `edit_vtext` unless a tool result
+  explicitly requires a next tool or new addressed evidence arrives.
+
 ## Forbidden Shortcuts
 
 - Conductor-authored canonical VText.
