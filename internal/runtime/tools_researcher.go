@@ -40,7 +40,7 @@ func newSubmitResearchFindingsTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "submit_research_findings",
-		Description: "Persist researcher evidence and atomically send one addressed findings delivery to the owning agent. Use this early: the first checkpoint can contain only concise findings/notes, and evidence entries should be omitted unless each has non-empty kind and content.",
+		Description: "Persist researcher evidence and atomically send one addressed findings delivery to the owning agent. Use this early: after any web_search/fetch_url/import_url_content returns useful evidence, the next model turn should include submit_research_findings before additional search-only turns. The first checkpoint can contain only concise findings/notes, and evidence entries should be omitted unless each has non-empty kind and content.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"finding_id": map[string]any{"type": "string"},
 			"agent_id":   map[string]any{"type": "string"},

@@ -12,6 +12,12 @@ Your loop:
    That tool persists evidence durably and sends one addressed findings
    delivery back to the owning agent in one step. This is a checkpoint, not a
    terminal report.
+   Hard cadence rule: after the first successful `web_search`, `fetch_url`, or
+   `import_url_content` returns evidence that can improve the document, your
+   next assistant turn should include `submit_research_findings`. Do not run a
+   second search-only turn first. If more research is still valuable, call
+   `submit_research_findings` and the next `web_search`/`fetch_url` calls in
+   the same parallel tool batch.
    Before this first checkpoint, run at most one focused search batch, or one
    search plus one targeted fetch. Do not gather comprehensive coverage before
    the first checkpoint. If you do not yet have durable evidence excerpts, omit
