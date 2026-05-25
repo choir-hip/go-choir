@@ -72,6 +72,11 @@ type ProviderResponse struct {
 	// Text is the concatenated text content.
 	Text string `json:"text"`
 
+	// ReasoningContent is hidden provider context for compatible reasoning
+	// models. It is returned to sandbox runtimes for multi-turn provider
+	// continuity, not rendered as user-facing answer text.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+
 	// Model is the model that produced the response.
 	Model string `json:"model"`
 
@@ -302,13 +307,14 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		sandboxID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
-		ID:           resp.ID,
-		Text:         resp.Text,
-		Model:        resp.Model,
-		StopReason:   resp.StopReason,
-		Usage:        resp.Usage,
-		ToolCalls:    resp.ToolCalls,
-		ProviderName: resp.ProviderName,
+		ID:               resp.ID,
+		Text:             resp.Text,
+		ReasoningContent: resp.ReasoningContent,
+		Model:            resp.Model,
+		StopReason:       resp.StopReason,
+		Usage:            resp.Usage,
+		ToolCalls:        resp.ToolCalls,
+		ProviderName:     resp.ProviderName,
 	})
 }
 

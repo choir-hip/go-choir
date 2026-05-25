@@ -116,13 +116,14 @@ func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*pro
 
 	// Convert gateway response to provider LLMResponse.
 	result := &provider.LLMResponse{
-		ID:           gwResp.ID,
-		Text:         gwResp.Text,
-		Model:        gwResp.Model,
-		StopReason:   gwResp.StopReason,
-		Usage:        gwResp.Usage,
-		ToolCalls:    gwResp.ToolCalls,
-		ProviderName: gwResp.ProviderName,
+		ID:               gwResp.ID,
+		Text:             gwResp.Text,
+		ReasoningContent: gwResp.ReasoningContent,
+		Model:            gwResp.Model,
+		StopReason:       gwResp.StopReason,
+		Usage:            gwResp.Usage,
+		ToolCalls:        gwResp.ToolCalls,
+		ProviderName:     gwResp.ProviderName,
 	}
 
 	log.Printf("gateway client: inference succeeded (provider=%s tokens=%d+%d text_len=%d)",
@@ -240,6 +241,9 @@ func parseGatewaySSE(body io.Reader, onChunk func(provider.StreamChunk)) (*provi
 		}
 		if chunk.Delta != "" {
 			accumulated.Text += chunk.Delta
+		}
+		if chunk.ReasoningDelta != "" {
+			accumulated.ReasoningContent += chunk.ReasoningDelta
 		}
 		if chunk.StopReason != "" {
 			accumulated.StopReason = chunk.StopReason

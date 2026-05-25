@@ -80,6 +80,11 @@ type ToolLoopResponse struct {
 	// if the model only produced tool calls.
 	Text string `json:"text"`
 
+	// ReasoningContent is hidden provider context returned by reasoning models.
+	// Some OpenAI-compatible tool loops require this field to be passed back on
+	// the next assistant turn. It is not user-facing answer text.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+
 	// ToolCalls contains the tool invocation requests from the provider.
 	// Non-empty only when StopReason is "tool_use".
 	ToolCalls []types.ToolCall `json:"tool_calls,omitempty"`
@@ -211,14 +216,18 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		}
 		return nil
 	}
-	appendAssistantText := func(text string) error {
+	appendAssistantText := func(text string, reasoningContent string) error {
 		if text == "" {
 			return nil
 		}
-		assistantMsg, _ := json.Marshal(map[string]any{
+		msg := map[string]any{
 			"role":    "assistant",
 			"content": buildAssistantContent(text, nil),
-		})
+		}
+		if strings.TrimSpace(reasoningContent) != "" {
+			msg["reasoning_content"] = reasoningContent
+		}
+		assistantMsg, _ := json.Marshal(msg)
 		return appendMessage("assistant", assistantMsg)
 	}
 
@@ -306,10 +315,14 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			}
 
 			// Append the assistant's response (with tool calls) to conversation.
-			assistantMsg, _ := json.Marshal(map[string]any{
+			assistantPayload := map[string]any{
 				"role":    "assistant",
 				"content": buildAssistantContent(resp.Text, resp.ToolCalls),
-			})
+			}
+			if strings.TrimSpace(resp.ReasoningContent) != "" {
+				assistantPayload["reasoning_content"] = resp.ReasoningContent
+			}
+			assistantMsg, _ := json.Marshal(assistantPayload)
 			if err := appendMessage("assistant", assistantMsg); err != nil {
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
 			}
@@ -344,7 +357,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					return "", totalUsage, fmt.Errorf("tool loop final inbox checkpoint: %w", err)
 				}
 				if len(injected) > 0 {
-					if err := appendAssistantText(resp.Text); err != nil {
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 					}
 					if err := appendInjected(injected); err != nil {
@@ -353,7 +366,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					continue
 				}
 			}
-			if err := appendAssistantText(resp.Text); err != nil {
+			if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant final message: %w", err)
 			}
 			// Normal completion — return the text.

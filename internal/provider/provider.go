@@ -90,8 +90,9 @@ type LLMRequest struct {
 
 // Message is a single message in the conversation history.
 type Message struct {
-	Role    string  `json:"role"`
-	Content []Block `json:"content"`
+	Role             string  `json:"role"`
+	Content          []Block `json:"content"`
+	ReasoningContent string  `json:"reasoning_content,omitempty"`
 }
 
 // ToolDef is a tool definition for inclusion in LLM requests. The
@@ -142,6 +143,11 @@ type LLMResponse struct {
 
 	// Text is the concatenated text content from the response.
 	Text string `json:"text"`
+
+	// ReasoningContent is provider-returned hidden reasoning state that some
+	// OpenAI-compatible reasoning models require on subsequent tool-loop turns.
+	// It is provider context, not user-facing answer text.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 
 	// Model is the model that produced the response (may differ from request
 	// if the provider resolved an alias).
@@ -196,6 +202,10 @@ type StreamChunk struct {
 
 	// Delta is the incremental text content from text_delta events.
 	Delta string `json:"delta,omitempty"`
+
+	// ReasoningDelta is provider-returned hidden reasoning state. Consumers may
+	// accumulate it for provider context, but should not render it as user text.
+	ReasoningDelta string `json:"reasoning_delta,omitempty"`
 
 	// ToolCallDelta is partial JSON for tool_use input_json_delta events.
 	ToolCallDelta string `json:"tool_call_delta,omitempty"`
@@ -984,10 +994,11 @@ type openAIChatCompletionRequest struct {
 }
 
 type openAIChatMessage struct {
-	Role       string               `json:"role"`
-	Content    any                  `json:"content,omitempty"`
-	ToolCallID string               `json:"tool_call_id,omitempty"`
-	ToolCalls  []openAIChatToolCall `json:"tool_calls,omitempty"`
+	Role             string               `json:"role"`
+	Content          any                  `json:"content,omitempty"`
+	ReasoningContent string               `json:"reasoning_content,omitempty"`
+	ToolCallID       string               `json:"tool_call_id,omitempty"`
+	ToolCalls        []openAIChatToolCall `json:"tool_calls,omitempty"`
 }
 
 type openAIChatTool struct {
@@ -1116,10 +1127,14 @@ func convertOpenAIChatMessages(system string, messages []Message) []openAIChatMe
 			if len(textParts) == 0 && len(multimodal) == 0 {
 				return
 			}
+			reasoningContent := ""
+			if msg.Role == "assistant" {
+				reasoningContent = strings.TrimSpace(msg.ReasoningContent)
+			}
 			if len(multimodal) > 0 {
-				out = append(out, openAIChatMessage{Role: msg.Role, Content: multimodal})
+				out = append(out, openAIChatMessage{Role: msg.Role, Content: multimodal, ReasoningContent: reasoningContent})
 			} else {
-				out = append(out, openAIChatMessage{Role: msg.Role, Content: strings.Join(textParts, "\n")})
+				out = append(out, openAIChatMessage{Role: msg.Role, Content: strings.Join(textParts, "\n"), ReasoningContent: reasoningContent})
 			}
 			textParts = nil
 			multimodal = nil
@@ -1172,7 +1187,7 @@ func convertOpenAIChatMessages(system string, messages []Message) []openAIChatMe
 		}
 		if len(assistantToolCalls) > 0 {
 			content := strings.Join(textParts, "\n")
-			out = append(out, openAIChatMessage{Role: "assistant", Content: content, ToolCalls: assistantToolCalls})
+			out = append(out, openAIChatMessage{Role: "assistant", Content: content, ReasoningContent: strings.TrimSpace(msg.ReasoningContent), ToolCalls: assistantToolCalls})
 			continue
 		}
 		flushText()
@@ -1642,6 +1657,7 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 	if content, ok := choice.Message.Content.(string); ok {
 		result.Text = content
 	}
+	result.ReasoningContent = choice.Message.ReasoningContent
 	switch choice.FinishReason {
 	case "tool_calls":
 		result.StopReason = "tool_use"
@@ -1741,8 +1757,9 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 			Model   string `json:"model"`
 			Choices []struct {
 				Delta struct {
-					Content   any `json:"content"`
-					ToolCalls []struct {
+					Content          any    `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
+					ToolCalls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Function struct {
@@ -1769,6 +1786,10 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 			if text := chatDeltaText(choice.Delta.Content); text != "" {
 				result.Text += text
 				onChunk(StreamChunk{Type: "content_block_delta", Delta: text})
+			}
+			if choice.Delta.ReasoningContent != "" {
+				result.ReasoningContent += choice.Delta.ReasoningContent
+				onChunk(StreamChunk{Type: "reasoning_delta", ReasoningDelta: choice.Delta.ReasoningContent})
 			}
 			for _, call := range choice.Delta.ToolCalls {
 				tool := tools[call.Index]

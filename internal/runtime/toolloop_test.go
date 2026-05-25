@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -64,10 +65,14 @@ type capturingToolChoiceProvider struct {
 	responses []*ToolLoopResponse
 	choices   *[]string
 	maxTokens *[]int
+	requests  *[]ToolLoopRequest
 	callCount int
 }
 
 func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	if p.requests != nil {
+		*p.requests = append(*p.requests, req)
+	}
 	if p.choices != nil {
 		*p.choices = append(*p.choices, req.ToolChoice)
 	}
@@ -245,6 +250,89 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 	if choices[1] != "" {
 		t.Fatalf("second tool choice = %q, want empty", choices[1])
 	}
+}
+
+func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "record_status",
+		Description: "Record status.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"ok":true}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register tool: %v", err)
+	}
+
+	var requests []ToolLoopRequest
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason:       "tool_use",
+			ReasoningContent: "hidden plan before tool",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-1",
+				Name:      "record_status",
+				Arguments: json.RawMessage(`{"status":"ok"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, requests: &requests}
+
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+		"You are helpful.",
+		0,
+		func(types.EventKind, string, json.RawMessage) {},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want done", text)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("provider calls = %d, want 2", len(requests))
+	}
+	var assistant struct {
+		Role             string `json:"role"`
+		ReasoningContent string `json:"reasoning_content"`
+	}
+	foundAssistant := false
+	for _, raw := range requests[1].Messages {
+		if err := json.Unmarshal(raw, &assistant); err != nil {
+			continue
+		}
+		if assistant.Role == "assistant" {
+			foundAssistant = true
+			break
+		}
+	}
+	if !foundAssistant {
+		t.Fatalf("second request messages did not include assistant turn: %s", rawMessagesForTest(requests[1].Messages))
+	}
+	if assistant.ReasoningContent != "hidden plan before tool" {
+		t.Fatalf("reasoning_content = %q, want hidden plan before tool", assistant.ReasoningContent)
+	}
+}
+
+func rawMessagesForTest(messages []json.RawMessage) string {
+	parts := make([][]byte, 0, len(messages))
+	for _, msg := range messages {
+		parts = append(parts, []byte(msg))
+	}
+	return string(bytes.Join(parts, []byte("\n")))
 }
 
 func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T) {

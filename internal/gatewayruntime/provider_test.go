@@ -23,11 +23,12 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		writeJSON(t, w, llmResponse{
-			ID:         "resp-1",
-			Text:       "using a tool",
-			Model:      gotReq.Model,
-			StopReason: "tool_use",
-			Usage:      tokenUsage{InputTokens: 11, OutputTokens: 7},
+			ID:               "resp-1",
+			Text:             "using a tool",
+			ReasoningContent: "hidden provider state",
+			Model:            gotReq.Model,
+			StopReason:       "tool_use",
+			Usage:            tokenUsage{InputTokens: 11, OutputTokens: 7},
 			ToolCalls: []contentToolCall{{
 				ID:        "tool-1",
 				Name:      "lookup",
@@ -73,6 +74,9 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	if resp.StopReason != "tool_use" || len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "lookup" {
 		t.Fatalf("tool response = %+v", resp)
 	}
+	if resp.ReasoningContent != "hidden provider state" {
+		t.Fatalf("reasoning_content = %q", resp.ReasoningContent)
+	}
 }
 
 func TestExecuteStreamsGatewayDeltas(t *testing.T) {
@@ -107,6 +111,42 @@ func TestExecuteStreamsGatewayDeltas(t *testing.T) {
 	}
 	if got := len(deltas); got != 2 {
 		t.Fatalf("delta count = %d, want 2 (%v)", got, deltas)
+	}
+}
+
+func TestExecuteStreamsGatewayReasoningWithoutRendering(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"type":"message_start","id":"resp-3","model":"m"}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"reasoning_delta","reasoning_delta":"hidden "}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"reasoning_delta","reasoning_delta":"state"}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"content_block_delta","delta":"visible"}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"message_delta","stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":2}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	provider := New(server.URL, "sandbox-token")
+	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/kimi-k2p6", "medium")
+	run := &types.RunRecord{RunID: "run-1", Prompt: "tell me a story"}
+	var deltas []string
+	err := provider.Execute(context.Background(), run, func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunDelta {
+			return
+		}
+		var body map[string]string
+		if err := json.Unmarshal(payload, &body); err == nil {
+			deltas = append(deltas, body["text"])
+		}
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if run.Result != "visible" {
+		t.Fatalf("run result = %q, want visible", run.Result)
+	}
+	if len(deltas) != 1 || deltas[0] != "visible" {
+		t.Fatalf("visible deltas = %#v", deltas)
 	}
 }
 

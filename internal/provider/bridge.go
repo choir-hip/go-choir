@@ -209,9 +209,10 @@ func (b *BridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoop
 
 	// Build the tool-loop response from the LLM response.
 	tlr := &runtime.ToolLoopResponse{
-		ID:         resp.ID,
-		StopReason: convertStopReason(resp.StopReason),
-		Text:       resp.Text,
+		ID:               resp.ID,
+		StopReason:       convertStopReason(resp.StopReason),
+		Text:             resp.Text,
+		ReasoningContent: resp.ReasoningContent,
 		Usage: runtime.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
@@ -277,8 +278,9 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 	out := make([]Message, 0, len(raw))
 	for _, r := range raw {
 		var msg struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
+			Role             string          `json:"role"`
+			Content          json.RawMessage `json:"content"`
+			ReasoningContent string          `json:"reasoning_content,omitempty"`
 		}
 		if err := json.Unmarshal(r, &msg); err != nil {
 			continue
@@ -301,8 +303,9 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 			var text string
 			if err := json.Unmarshal(msg.Content, &text); err == nil {
 				out = append(out, Message{
-					Role:    msg.Role,
-					Content: []Block{{Type: "text", Text: text}},
+					Role:             msg.Role,
+					Content:          []Block{{Type: "text", Text: text}},
+					ReasoningContent: msg.ReasoningContent,
 				})
 			}
 			continue
@@ -345,8 +348,9 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 
 		if len(content) > 0 {
 			out = append(out, Message{
-				Role:    msg.Role,
-				Content: content,
+				Role:             msg.Role,
+				Content:          content,
+				ReasoningContent: msg.ReasoningContent,
 			})
 		}
 	}
@@ -511,9 +515,10 @@ func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req runtime.T
 	}
 
 	tlr := &runtime.ToolLoopResponse{
-		ID:         resp.ID,
-		StopReason: convertStopReason(resp.StopReason),
-		Text:       resp.Text,
+		ID:               resp.ID,
+		StopReason:       convertStopReason(resp.StopReason),
+		Text:             resp.Text,
+		ReasoningContent: resp.ReasoningContent,
 		Usage: runtime.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,

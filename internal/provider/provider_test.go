@@ -2048,6 +2048,61 @@ func TestFireworksProviderCallOmitsMaxTokensWhenUnset(t *testing.T) {
 	}
 }
 
+func TestFireworksProviderPreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body openAIChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(body.Messages) != 3 {
+			t.Fatalf("messages = %#v", body.Messages)
+		}
+		if body.Messages[2].ReasoningContent != "previous hidden reasoning" {
+			t.Fatalf("request reasoning_content = %q", body.Messages[2].ReasoningContent)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_reasoning",
+			"model":"accounts/fireworks/models/kimi-k2p6",
+			"choices":[{
+				"finish_reason":"stop",
+				"message":{
+					"role":"assistant",
+					"reasoning_content":"new hidden reasoning",
+					"content":"visible answer"
+				}
+			}],
+			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/kimi-k2p6",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		System: "system",
+		Messages: []Message{
+			{Role: "user", Content: []Block{{Type: "text", Text: "continue"}}},
+			{Role: "assistant", ReasoningContent: "previous hidden reasoning", Content: []Block{{Type: "text", Text: "previous answer"}}},
+		},
+		ReasoningEffort: "medium",
+	})
+	if err != nil {
+		t.Fatalf("fireworks call: %v", err)
+	}
+	if resp.Text != "visible answer" {
+		t.Fatalf("text = %q", resp.Text)
+	}
+	if resp.ReasoningContent != "new hidden reasoning" {
+		t.Fatalf("reasoning_content = %q", resp.ReasoningContent)
+	}
+}
+
 func TestFireworksProviderStreamUsesOpenAIChatCompletionsChunks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
@@ -2100,6 +2155,44 @@ func TestFireworksProviderStreamUsesOpenAIChatCompletionsChunks(t *testing.T) {
 	}
 	if delta != resp.Text {
 		t.Fatalf("streamed delta = %q, want %q", delta, resp.Text)
+	}
+}
+
+func TestFireworksProviderStreamPreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream_reasoning\",\"model\":\"accounts/fireworks/models/kimi-k2p6\",\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream_reasoning\",\"model\":\"accounts/fireworks/models/kimi-k2p6\",\"choices\":[{\"delta\":{\"reasoning_content\":\"hidden \"}}]}\n\n")
+		fmt.Fprintf(w, "data: {\"id\":\"chatcmpl_stream_reasoning\",\"model\":\"accounts/fireworks/models/kimi-k2p6\",\"choices\":[{\"delta\":{\"reasoning_content\":\"reasoning\",\"content\":\"answer\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":3,\"total_tokens\":8}}\n\n")
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/kimi-k2p6",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+	var reasoningDeltas []string
+	resp, err := p.Stream(context.Background(), LLMRequest{
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hi"}}}},
+	}, func(chunk StreamChunk) {
+		if chunk.ReasoningDelta != "" {
+			reasoningDeltas = append(reasoningDeltas, chunk.ReasoningDelta)
+		}
+	})
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if resp.Text != "answer" {
+		t.Fatalf("text = %q", resp.Text)
+	}
+	if resp.ReasoningContent != "hidden reasoning" {
+		t.Fatalf("reasoning_content = %q", resp.ReasoningContent)
+	}
+	if got := strings.Join(reasoningDeltas, ""); got != "hidden reasoning" {
+		t.Fatalf("reasoning deltas = %q", got)
 	}
 }
 

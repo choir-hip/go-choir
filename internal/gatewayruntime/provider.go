@@ -142,9 +142,10 @@ func (p *Provider) CallWithTools(ctx context.Context, req runtime.ToolLoopReques
 	}
 
 	out := &runtime.ToolLoopResponse{
-		ID:         resp.ID,
-		StopReason: convertStopReason(resp.StopReason),
-		Text:       resp.Text,
+		ID:               resp.ID,
+		StopReason:       convertStopReason(resp.StopReason),
+		Text:             resp.Text,
+		ReasoningContent: resp.ReasoningContent,
 		Usage: runtime.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
@@ -261,6 +262,9 @@ func parseGatewaySSE(body io.Reader, onChunk func(streamChunk)) (*llmResponse, e
 		if chunk.Delta != "" {
 			accumulated.Text += chunk.Delta
 		}
+		if chunk.ReasoningDelta != "" {
+			accumulated.ReasoningContent += chunk.ReasoningDelta
+		}
 		if chunk.StopReason != "" {
 			accumulated.StopReason = chunk.StopReason
 		}
@@ -280,8 +284,9 @@ func convertRawMessages(raw []json.RawMessage) []message {
 	out := make([]message, 0, len(raw))
 	for _, r := range raw {
 		var msg struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
+			Role             string          `json:"role"`
+			Content          json.RawMessage `json:"content"`
+			ReasoningContent string          `json:"reasoning_content,omitempty"`
 		}
 		if err := json.Unmarshal(r, &msg); err != nil {
 			continue
@@ -300,7 +305,7 @@ func convertRawMessages(raw []json.RawMessage) []message {
 		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
 			var text string
 			if err := json.Unmarshal(msg.Content, &text); err == nil {
-				out = append(out, message{Role: msg.Role, Content: []block{{Type: "text", Text: text}}})
+				out = append(out, message{Role: msg.Role, Content: []block{{Type: "text", Text: text}}, ReasoningContent: msg.ReasoningContent})
 			}
 			continue
 		}
@@ -322,7 +327,7 @@ func convertRawMessages(raw []json.RawMessage) []message {
 			}
 		}
 		if len(content) > 0 {
-			out = append(out, message{Role: msg.Role, Content: content})
+			out = append(out, message{Role: msg.Role, Content: content, ReasoningContent: msg.ReasoningContent})
 		}
 	}
 	return out
@@ -398,8 +403,9 @@ type llmRequest struct {
 }
 
 type message struct {
-	Role    string  `json:"role"`
-	Content []block `json:"content"`
+	Role             string  `json:"role"`
+	Content          []block `json:"content"`
+	ReasoningContent string  `json:"reasoning_content,omitempty"`
 }
 
 type block struct {
@@ -428,13 +434,14 @@ type toolDef struct {
 }
 
 type llmResponse struct {
-	ID           string            `json:"id"`
-	Text         string            `json:"text"`
-	Model        string            `json:"model"`
-	StopReason   string            `json:"stop_reason"`
-	Usage        tokenUsage        `json:"usage"`
-	ToolCalls    []contentToolCall `json:"tool_calls,omitempty"`
-	ProviderName string            `json:"provider_name"`
+	ID               string            `json:"id"`
+	Text             string            `json:"text"`
+	ReasoningContent string            `json:"reasoning_content,omitempty"`
+	Model            string            `json:"model"`
+	StopReason       string            `json:"stop_reason"`
+	Usage            tokenUsage        `json:"usage"`
+	ToolCalls        []contentToolCall `json:"tool_calls,omitempty"`
+	ProviderName     string            `json:"provider_name"`
 }
 
 type tokenUsage struct {
@@ -449,16 +456,17 @@ type contentToolCall struct {
 }
 
 type streamChunk struct {
-	Type          string       `json:"type"`
-	Delta         string       `json:"delta,omitempty"`
-	ToolCallDelta string       `json:"tool_call_delta,omitempty"`
-	ToolCallID    string       `json:"tool_call_id,omitempty"`
-	ToolCallName  string       `json:"tool_call_name,omitempty"`
-	StopReason    string       `json:"stop_reason,omitempty"`
-	Usage         *streamUsage `json:"usage,omitempty"`
-	Index         int          `json:"index,omitempty"`
-	Model         string       `json:"model,omitempty"`
-	ID            string       `json:"id,omitempty"`
+	Type           string       `json:"type"`
+	Delta          string       `json:"delta,omitempty"`
+	ReasoningDelta string       `json:"reasoning_delta,omitempty"`
+	ToolCallDelta  string       `json:"tool_call_delta,omitempty"`
+	ToolCallID     string       `json:"tool_call_id,omitempty"`
+	ToolCallName   string       `json:"tool_call_name,omitempty"`
+	StopReason     string       `json:"stop_reason,omitempty"`
+	Usage          *streamUsage `json:"usage,omitempty"`
+	Index          int          `json:"index,omitempty"`
+	Model          string       `json:"model,omitempty"`
+	ID             string       `json:"id,omitempty"`
 }
 
 type streamUsage struct {
