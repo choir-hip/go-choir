@@ -231,6 +231,7 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse) (m
 		"full_evidence":         "stored in Trace tool.result full_output/full_output_sha256",
 		"projection_policy":     "top bounded result cards with compact snippets",
 		"provider_health_owner": "gateway",
+		"cadence_next_step":     "If submit_research_findings is available and these results can improve a VText document, call submit_research_findings on the next assistant turn before any additional search-only turn. If continuing research, call submit_research_findings and the next search/fetch in the same parallel tool batch.",
 	}
 	if degraded {
 		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"

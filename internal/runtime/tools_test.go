@@ -466,6 +466,27 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 }
 
+func TestCompactWebSearchProjectionCarriesResearchCadenceHint(t *testing.T) {
+	resp := &webSearchResponse{
+		Query:    "nba update",
+		Provider: "mock",
+		Results: []map[string]any{{
+			"title":    "NBA result",
+			"url":      "https://example.com/nba",
+			"snippet":  "A grounded update.",
+			"provider": "mock",
+		}},
+	}
+	model, _ := compactWebSearchProjection(map[string]any{"results": resp.Results}, resp)
+	hint := fmt.Sprint(model["cadence_next_step"])
+	if !strings.Contains(hint, "submit_research_findings") || !strings.Contains(hint, "before any additional search-only turn") {
+		t.Fatalf("cadence_next_step = %q", hint)
+	}
+	if strings.Contains(hint, "provider health") {
+		t.Fatalf("cadence hint should not ask researcher to manage provider health: %q", hint)
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := NewToolRegistry()
 
