@@ -185,7 +185,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-3ANGi/rdojZHRBEbcp/n/ns5gsqhCTCnktJTkREWJMU=";
+          vendorHash = "sha256-EKND/igipnszR8cAOxBGeH9w4KX5p+zrk5IwEOZiYSE=";
           internalDirs = [
             "internal/buildinfo"
             "internal/platform"
@@ -198,7 +198,7 @@
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
-          vendorHash = "sha256-Zi7CIbMdCmTj2ZhP0J+kNARQAG24v/88KlN5l3S7urE=";
+          vendorHash = "sha256-dqBHF0LSI8L52jtgRZct1h8pw2C/boJsqBwsM1Z9ayE=";
           internalDirs = [
             "internal/buildinfo"
             "internal/server"
