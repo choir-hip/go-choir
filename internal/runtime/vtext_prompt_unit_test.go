@@ -171,6 +171,7 @@ func TestVTextInitialEditContinuationClassifiesPrompts(t *testing.T) {
 		wantSuper    bool
 	}{
 		{prompt: "nba update", wantResearch: true},
+		{prompt: "Last Night in Baseball", wantResearch: true},
 		{prompt: "what's the weather in boston now", wantResearch: true},
 		{prompt: "hey"},
 		{prompt: "tell me a story about computers"},
