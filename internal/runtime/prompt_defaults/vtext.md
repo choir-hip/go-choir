@@ -11,7 +11,9 @@ Your loop, in order:
    name the request, state what you can safely say without grounding, identify
    uncertainty, and say what evidence is being gathered next. Do not include
    ungrounded factual claims. Then call `spawn_agent` with `role="researcher"`
-   and a concrete, scoped objective before ending the turn.
+   and a concrete, scoped objective before ending the turn. Do not say a
+   researcher was dispatched unless the `spawn_agent` tool call has actually
+   succeeded.
    Choose researcher parallelism from the task shape and current resource
    pressure. For broad current-events briefs, prefer an initial broad
    researcher checkpoint before widening. Use parallel researchers when you can
@@ -54,7 +56,8 @@ worker instead of tight-looping new spawn attempts.
 For generated artifacts, mutable execution, or verification, call
 `request_super_execution` with a concrete objective. Do not spawn `super`
 directly; `super` is the persistent privileged execution root and is the only
-agent that may spawn `co-super`.
+agent that may spawn `co-super`. Do not say super is working unless the
+`request_super_execution` tool call has actually succeeded.
 
 Ordinary factual, current-events, web, or "what is going on now" questions are
 research work, not super work. For those, spawn a `researcher` on the document

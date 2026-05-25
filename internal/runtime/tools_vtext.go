@@ -90,14 +90,140 @@ func newEditVTextTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"doc_id":           rev.DocID,
 				"revision_id":      rev.RevisionID,
 				"base_revision_id": rev.ParentRevisionID,
 				"status":           "stored",
-			})
+			}
+			if continuation, ok := rt.requiredContinuationAfterInitialVTextEdit(context.Background(), rec, in); ok {
+				result["next_required_tool"] = continuation.Tool
+				result["next_required_args"] = continuation.Args
+				result["next_instruction"] = continuation.Instruction
+			}
+			return toolResultJSON(result)
 		},
 	}
+}
+
+type vtextRequiredContinuation struct {
+	Tool        string
+	Args        map[string]any
+	Instruction string
+}
+
+func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs) (vtextRequiredContinuation, bool) {
+	if rt == nil || rt.store == nil || rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+		return vtextRequiredContinuation{}, false
+	}
+	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
+		return vtextRequiredContinuation{}, false
+	}
+	docID := strings.TrimSpace(in.DocID)
+	baseRevisionID := strings.TrimSpace(in.BaseRevisionID)
+	if docID == "" || baseRevisionID == "" {
+		return vtextRequiredContinuation{}, false
+	}
+	baseRevision, err := rt.store.GetRevision(ctx, baseRevisionID, rec.OwnerID)
+	if err != nil || baseRevision.AuthorKind != types.AuthorUser {
+		return vtextRequiredContinuation{}, false
+	}
+	grounded, err := rt.channelHasGroundedHistory(ctx, rec.OwnerID, docID, time.Time{})
+	if err != nil || grounded {
+		return vtextRequiredContinuation{}, false
+	}
+	prompt := strings.TrimSpace(firstNonEmpty(
+		metadataStringValue(rec.Metadata, "original_prompt"),
+		metadataStringValue(rec.Metadata, "request_intent"),
+		metadataStringValue(rec.Metadata, "seed_prompt"),
+	))
+	if prompt == "" {
+		prompt = strings.TrimSpace(baseRevision.Content)
+	}
+	if prompt == "" || vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+		return vtextRequiredContinuation{}, false
+	}
+	if vtextPromptNeedsSuperExecution(prompt) {
+		return vtextRequiredContinuation{
+			Tool: "request_super_execution",
+			Args: map[string]any{
+				"channel_id": docID,
+				"objective":  buildVTextSuperContinuationObjective(prompt),
+			},
+			Instruction: "The first VText revision is now stored. Request super execution for the actual execution/coding work before ending this run. Do not claim work is underway unless this tool call succeeds.",
+		}, true
+	}
+	if vtextPromptNeedsResearchContinuation(prompt) {
+		return vtextRequiredContinuation{
+			Tool: "spawn_agent",
+			Args: map[string]any{
+				"role":       AgentProfileResearcher,
+				"channel_id": docID,
+				"objective":  buildVTextResearchContinuationObjective(prompt),
+			},
+			Instruction: "The first VText revision is now stored. Spawn a researcher before ending this run so evidence can wake the next VText revision. Do not say a researcher was dispatched unless this tool call succeeds.",
+		}, true
+	}
+	return vtextRequiredContinuation{}, false
+}
+
+func vtextPromptNeedsResearchContinuation(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	researchMarkers := []string{
+		"latest",
+		"current",
+		"now",
+		"today",
+		"yesterday",
+		"news",
+		"update",
+		"what's up",
+		"whats up",
+		"what is going on",
+		"what's going on",
+		"research",
+		"look up",
+		"search",
+		"cite",
+		"citation",
+		"source",
+		"sources",
+		"weather",
+		"score",
+		"scores",
+		"nba",
+		"nfl",
+		"mlb",
+		"nhl",
+	}
+	for _, marker := range researchMarkers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildVTextResearchContinuationObjective(prompt string) string {
+	return strings.TrimSpace(fmt.Sprintf("Research the user's request and send an initial findings packet quickly via submit_research_findings, then continue only where it materially improves the document.\n\nUser request: %s", strings.TrimSpace(prompt)))
+}
+
+func buildVTextSuperContinuationObjective(prompt string) string {
+	return strings.TrimSpace(fmt.Sprintf("Execute or coordinate the user's request, send significant progress back to VText, and preserve concrete evidence for the next document revision.\n\nUser request: %s", strings.TrimSpace(prompt)))
+}
+
+func (rt *Runtime) vtextRunHasPendingMutation(ctx context.Context, runID string) bool {
+	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return false
+	}
+	mutation, err := rt.store.GetAgentMutationByRun(ctx, strings.TrimSpace(runID))
+	if err != nil || mutation == nil {
+		return false
+	}
+	return mutation.State == "pending"
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {
@@ -161,7 +287,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 					loopID = superRun.RunID
 					state = string(superRun.State)
 				}
-				return toolResultJSON(map[string]any{
+				result := map[string]any{
 					"agent_id":            superAgent.AgentID,
 					"loop_id":             loopID,
 					"channel_id":          channelID,
@@ -175,9 +301,12 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 					"request_source":      "super_inbox",
 					"deduped":             true,
 					"dedupe_reason":       "vtext_run_already_requested_super",
-					"next_required_tool":  "edit_vtext",
-					"next_instruction":    "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next.",
-				})
+				}
+				if rt.vtextRunHasPendingMutation(context.Background(), requesterRunID) {
+					result["next_required_tool"] = "edit_vtext"
+					result["next_instruction"] = "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next."
+				}
+				return toolResultJSON(result)
 			}
 			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
 			if err != nil {
@@ -193,7 +322,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 				loopID = superRun.RunID
 				state = string(superRun.State)
 			}
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"agent_id":            superAgent.AgentID,
 				"loop_id":             loopID,
 				"channel_id":          channelID,
@@ -205,9 +334,12 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 				"persistent":          true,
 				"state":               state,
 				"request_source":      "super_inbox",
-				"next_required_tool":  "edit_vtext",
-				"next_instruction":    "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next.",
-			})
+			}
+			if rt.vtextRunHasPendingMutation(context.Background(), requesterRunID) {
+				result["next_required_tool"] = "edit_vtext"
+				result["next_instruction"] = "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next."
+			}
+			return toolResultJSON(result)
 		},
 	}
 }

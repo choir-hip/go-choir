@@ -139,3 +139,28 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 		})
 	}
 }
+
+func TestVTextInitialEditContinuationClassifiesPrompts(t *testing.T) {
+	tests := []struct {
+		prompt       string
+		wantResearch bool
+		wantSuper    bool
+	}{
+		{prompt: "nba update", wantResearch: true},
+		{prompt: "what's the weather in boston now", wantResearch: true},
+		{prompt: "hey"},
+		{prompt: "tell me a story about computers"},
+		{prompt: "write a tiny bash command that counts files", wantSuper: true},
+		{prompt: "debug and fix the runtime gateway", wantSuper: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.prompt, func(t *testing.T) {
+			if got := vtextPromptNeedsResearchContinuation(tc.prompt); got != tc.wantResearch {
+				t.Fatalf("vtextPromptNeedsResearchContinuation(%q) = %v, want %v", tc.prompt, got, tc.wantResearch)
+			}
+			if got := vtextPromptNeedsSuperExecution(tc.prompt); got != tc.wantSuper {
+				t.Fatalf("vtextPromptNeedsSuperExecution(%q) = %v, want %v", tc.prompt, got, tc.wantSuper)
+			}
+		})
+	}
+}

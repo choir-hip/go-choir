@@ -3916,6 +3916,107 @@ func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestEditVTextInitialWorkingRevisionRequiresActualContinuation(t *testing.T) {
+	_, s, rt := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	doc := types.Document{
+		DocID:     "doc-initial-continuation",
+		OwnerID:   "user-1",
+		Title:     "NBA update",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	userRev := types.Revision{
+		RevisionID:  "rev-user-continuation",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "nba update",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := s.CreateRevision(ctx, userRev); err != nil {
+		t.Fatalf("create user revision: %v", err)
+	}
+	run := types.RunRecord{
+		RunID:        "run-vtext-continuation",
+		AgentID:      "vtext:" + doc.DocID,
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunRunning,
+		Prompt:       "Revise the document",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Metadata: map[string]any{
+			"type":                      "vtext_agent_revision",
+			"doc_id":                    doc.DocID,
+			"current_revision_id":       userRev.RevisionID,
+			"original_prompt":           "nba update",
+			"requires_worker_grounding": false,
+			runMetadataAgentID:          "vtext:" + doc.DocID,
+			runMetadataChannelID:        doc.DocID,
+			runMetadataAgentRole:        AgentProfileVText,
+			runMetadataAgentProfile:     AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     run.RunID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create mutation: %v", err)
+	}
+
+	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+		"doc_id":"doc-initial-continuation",
+		"base_revision_id":"rev-user-continuation",
+		"operation":"replace_all",
+		"content":"# NBA update\n\nI am preparing a short working update and checking current evidence next."
+	}`))
+	if err != nil {
+		t.Fatalf("edit_vtext: %v", err)
+	}
+	var editResult map[string]any
+	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
+		t.Fatalf("decode edit result: %v", err)
+	}
+	if editResult["next_required_tool"] != "spawn_agent" {
+		t.Fatalf("next_required_tool = %v, want spawn_agent; result=%s", editResult["next_required_tool"], editRaw)
+	}
+	args, _ := editResult["next_required_args"].(map[string]any)
+	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
+		t.Fatalf("next_required_args = %+v, want researcher on doc channel", args)
+	}
+
+	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{
+		"objective":"Research the user's NBA update request and send initial findings quickly.",
+		"role":"researcher",
+		"channel_id":"doc-initial-continuation"
+	}`))
+	if err != nil {
+		t.Fatalf("spawn_agent after initial edit: %v", err)
+	}
+	var spawnResult map[string]any
+	if err := json.Unmarshal([]byte(spawnRaw), &spawnResult); err != nil {
+		t.Fatalf("decode spawn result: %v", err)
+	}
+	if _, ok := spawnResult["next_required_tool"]; ok {
+		t.Fatalf("spawn_agent after completed edit must not require a second edit_vtext; result=%s", spawnRaw)
+	}
+}
+
 func TestVTextApplyEditsRejectsAmbiguousReplace(t *testing.T) {
 	current := types.Revision{
 		RevisionID: "rev-1",

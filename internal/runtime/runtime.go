@@ -1696,6 +1696,13 @@ func vtextInitialRequestNeedsSuper(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
+	return vtextPromptNeedsSuperExecution(vtextPromptTextFromRun(rec))
+}
+
+func vtextPromptTextFromRun(rec *types.RunRecord) string {
+	if rec == nil {
+		return ""
+	}
 	var parts []string
 	for _, key := range []string{"original_prompt", "request_intent", "seed_prompt"} {
 		if value := metadataStringValue(rec.Metadata, key); value != "" {
@@ -1705,7 +1712,11 @@ func vtextInitialRequestNeedsSuper(rec *types.RunRecord) bool {
 	if strings.TrimSpace(rec.Prompt) != "" {
 		parts = append(parts, rec.Prompt)
 	}
-	text := strings.ToLower(strings.Join(parts, "\n"))
+	return strings.Join(parts, "\n")
+}
+
+func vtextPromptNeedsSuperExecution(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
 	}
@@ -1738,6 +1749,13 @@ func vtextInitialRequestNeedsSuper(rec *types.RunRecord) bool {
 		"benchmark",
 		"artifact",
 		"execution",
+		"execute",
+		"bash",
+		"shell",
+		"terminal",
+		"script",
+		"run a command",
+		"write a command",
 	}
 	for _, marker := range superMarkers {
 		if strings.Contains(text, marker) {

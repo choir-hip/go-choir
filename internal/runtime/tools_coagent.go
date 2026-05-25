@@ -156,7 +156,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if metadataBoolValue(child.Metadata, runMetadataSpawnReused) {
 				result["reused_existing_child"] = true
 			}
-			if callerProfile == AgentProfileVText {
+			if callerProfile == AgentProfileVText && rt.vtextRunHasPendingMutation(context.Background(), parentID) {
 				result["next_required_tool"] = "edit_vtext"
 				result["next_instruction"] = "Write a brief interim VText revision now. Name the active worker, the evidence being gathered, and what the next revision should contain. Do not include ungrounded factual claims."
 			}
