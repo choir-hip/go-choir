@@ -16,6 +16,11 @@ Your loop, in order:
    `spawn_agent` with `role="researcher"` and a concrete, scoped objective
    before ending the turn. Do not say a researcher was dispatched unless the
    `spawn_agent` tool call has actually succeeded.
+   For broad current-events, sports, weather, or news prompts, make the
+   initial researcher objective explicitly first-pass-only: ask for exactly one
+   broad `web_search` call, then an immediate concise
+   `submit_research_findings` checkpoint before any deeper branching. The
+   follow-up can happen after that checkpoint wakes a later VText revision.
    Choose researcher parallelism from the task shape and current resource
    pressure. For broad current-events briefs, prefer an initial broad
    researcher checkpoint before widening. Use parallel researchers when you can

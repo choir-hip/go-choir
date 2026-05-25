@@ -86,7 +86,7 @@ func newWebSearchTool(searchClient webSearchClient) Tool {
 	}
 	return Tool{
 		Name:        "web_search",
-		Description: "Search the web using the configured multi-provider search client.",
+		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then submit_research_findings on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
