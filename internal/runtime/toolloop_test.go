@@ -335,7 +335,7 @@ func rawMessagesForTest(messages []json.RawMessage) string {
 	return string(bytes.Join(parts, []byte("\n")))
 }
 
-func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T) {
+func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "record_status",
@@ -358,7 +358,7 @@ func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T)
 		{
 			StopReason: "max_tokens",
 			Text:       strings.Repeat("runaway prose ", 100),
-			Usage:      TokenUsage{InputTokens: 1, OutputTokens: requiredToolTurnMaxTokens},
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 131072},
 			Model:      "test-model",
 		},
 		{
@@ -407,8 +407,8 @@ func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T)
 	if len(choices) != 3 || choices[0] != "required" || choices[1] != "required" || choices[2] != "" {
 		t.Fatalf("choices = %#v, want required retry then normal completion", choices)
 	}
-	if len(maxTokens) != 3 || maxTokens[0] != requiredToolTurnMaxTokens || maxTokens[1] != requiredToolTurnMaxTokens || maxTokens[2] != 131072 {
-		t.Fatalf("maxTokens = %#v, want bounded required turns then full content budget", maxTokens)
+	if len(maxTokens) != 3 || maxTokens[0] != 131072 || maxTokens[1] != 131072 || maxTokens[2] != 131072 {
+		t.Fatalf("maxTokens = %#v, want selected model budget preserved", maxTokens)
 	}
 }
 
@@ -500,11 +500,84 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 	if len(choices) != 3 || choices[0] != "" || choices[1] != "required" || choices[2] != "" {
 		t.Fatalf("choices = %#v, want second call required", choices)
 	}
-	if len(maxTokens) != 3 || maxTokens[0] != 131072 || maxTokens[1] != requiredToolTurnMaxTokens || maxTokens[2] != 131072 {
-		t.Fatalf("maxTokens = %#v, want bounded required next-tool turn", maxTokens)
+	if len(maxTokens) != 3 || maxTokens[0] != 131072 || maxTokens[1] != 131072 || maxTokens[2] != 131072 {
+		t.Fatalf("maxTokens = %#v, want selected model budget preserved", maxTokens)
 	}
 	if len(requests) < 2 || !strings.Contains(rawMessagesForTest(requests[1].Messages), "Runtime-required continuation: call start_worker_delegation now") {
 		t.Fatalf("second request missing required-next-tool reminder: %s", rawMessagesForTest(requests[1].Messages))
+	}
+}
+
+func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "request_worker_vm",
+		Description: "Request worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"worker_requested","delegation_required":true,"next_tool":"start_worker_delegation","next_required_args":{"worker_sandbox_url":"http://worker"}}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_worker_vm: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "start_worker_delegation",
+		Description: "Start worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"worker_run_started"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register start_worker_delegation: %v", err)
+	}
+
+	var choices []string
+	var retryAttempts []int
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-request",
+				Name:      "request_worker_vm",
+				Arguments: json.RawMessage(`{"purpose":"build"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "max_tokens",
+			Text:       strings.Repeat("thinking ", 100),
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+		"You are helpful.",
+		131072,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind != types.EventRunRetry || phase != "required_tool_call" {
+				return
+			}
+			var decoded map[string]any
+			if json.Unmarshal(payload, &decoded) == nil {
+				retryAttempts = append(retryAttempts, intMapValue(decoded, "attempt"))
+			}
+		},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), `required next tool "start_worker_delegation" was not called after 2 retries`) {
+		t.Fatalf("err = %v, want bounded required next tool retry error", err)
+	}
+	if len(choices) != 4 || choices[0] != "" || choices[1] != "required" || choices[2] != "required" || choices[3] != "required" {
+		t.Fatalf("choices = %#v, want required until bounded failure", choices)
+	}
+	if len(retryAttempts) != 2 || retryAttempts[0] != 1 || retryAttempts[1] != 2 {
+		t.Fatalf("retryAttempts = %#v, want [1 2]", retryAttempts)
 	}
 }
 

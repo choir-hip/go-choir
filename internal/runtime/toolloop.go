@@ -166,10 +166,6 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 // toward longer or budget-governed execution.
 const (
 	maxToolLoopIterations = 200
-
-	// requiredToolTurnMaxTokens bounds control turns whose only job is to pick
-	// a tool. Normal content turns still use the selected model's output budget.
-	requiredToolTurnMaxTokens = 4096
 )
 
 var providerRateLimitRetryDelays = []time.Duration{
@@ -274,9 +270,6 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			req.ToolChoice = options.initialToolChoice
 		}
-		if req.ToolChoice != "" && (req.MaxTokens == 0 || req.MaxTokens > requiredToolTurnMaxTokens) {
-			req.MaxTokens = requiredToolTurnMaxTokens
-		}
 		forceInitialToolChoiceRetry = false
 
 		if emit != nil {
@@ -286,8 +279,8 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"messages":             len(messages),
 				"tools":                len(toolDefs),
 				"system_chars":         len(systemPrompt),
-				"max_tokens":           maxTokens,
-				"max_tokens_requested": maxTokens > 0,
+				"max_tokens":           req.MaxTokens,
+				"max_tokens_requested": req.MaxTokens > 0,
 				"llm_provider":         options.llmConfig.Provider,
 				"llm_model":            options.llmConfig.Model,
 				"llm_reasoning_effort": options.llmConfig.ReasoningEffort,
@@ -453,12 +446,21 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 
 		case "max_tokens":
 			if req.ToolChoice != "" && len(resp.ToolCalls) == 0 && i < maxToolLoopIterations-1 {
+				var retryAttempt int
+				if requiredNextTool != nil {
+					requiredNextTool.Attempts++
+					retryAttempt = requiredNextTool.Attempts
+					if requiredNextTool.Attempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required next tool %q was not called after %d retries", requiredNextTool.Name, maxRequiredNextToolRetries)
+					}
+				}
 				if emit != nil {
 					retryPayload, _ := json.Marshal(map[string]any{
 						"iteration":   i + 1,
 						"reason":      "required_tool_not_called",
 						"tool_choice": req.ToolChoice,
 						"max_tokens":  req.MaxTokens,
+						"attempt":     retryAttempt,
 					})
 					emit(types.EventRunRetry, "required_tool_call", retryPayload)
 				}
