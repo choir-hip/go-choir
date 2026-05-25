@@ -412,6 +412,194 @@ func TestRunToolLoopRequiredToolTurnIsBoundedAndRetriesMissingTool(t *testing.T)
 	}
 }
 
+func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
+	var calls []string
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "request_worker_vm",
+		Description: "Request worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			calls = append(calls, "request_worker_vm")
+			return `{"status":"worker_requested","delegation_required":true,"next_tool":"start_worker_delegation","next_required_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","profile":"vsuper"},"next_instruction":"Call start_worker_delegation next with start_args plus the full execution objective."}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_worker_vm: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "start_worker_delegation",
+		Description: "Start worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			calls = append(calls, "start_worker_delegation")
+			return `{"status":"worker_run_started","worker_run_id":"run-1"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register start_worker_delegation: %v", err)
+	}
+
+	var choices []string
+	var maxTokens []int
+	var requests []ToolLoopRequest
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-request",
+				Name:      "request_worker_vm",
+				Arguments: json.RawMessage(`{"purpose":"build"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-start",
+				Name:      "start_worker_delegation",
+				Arguments: json.RawMessage(`{"worker_sandbox_url":"http://worker","objective":"build"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "started",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices, maxTokens: &maxTokens, requests: &requests}
+
+	var retrySeen bool
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+		"You are helpful.",
+		131072,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind == types.EventRunRetry && phase == "required_next_tool" {
+				retrySeen = true
+			}
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "started" {
+		t.Fatalf("text = %q, want started", text)
+	}
+	if !retrySeen {
+		t.Fatal("missing required_next_tool event")
+	}
+	if diff := strings.Join(calls, ","); diff != "request_worker_vm,start_worker_delegation" {
+		t.Fatalf("calls = %s", diff)
+	}
+	if len(choices) != 3 || choices[0] != "" || choices[1] != "required" || choices[2] != "" {
+		t.Fatalf("choices = %#v, want second call required", choices)
+	}
+	if len(maxTokens) != 3 || maxTokens[0] != 131072 || maxTokens[1] != requiredToolTurnMaxTokens || maxTokens[2] != 131072 {
+		t.Fatalf("maxTokens = %#v, want bounded required next-tool turn", maxTokens)
+	}
+	if len(requests) < 2 || !strings.Contains(rawMessagesForTest(requests[1].Messages), "Runtime-required continuation: call start_worker_delegation now") {
+		t.Fatalf("second request missing required-next-tool reminder: %s", rawMessagesForTest(requests[1].Messages))
+	}
+}
+
+func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "request_worker_vm",
+		Description: "Request worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"worker_requested","delegation_required":true,"next_tool":"start_worker_delegation","next_required_args":{"worker_sandbox_url":"http://worker"}}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register request_worker_vm: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "start_worker_delegation",
+		Description: "Start worker.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"worker_run_started"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register start_worker_delegation: %v", err)
+	}
+
+	var choices []string
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-request",
+				Name:      "request_worker_vm",
+				Arguments: json.RawMessage(`{"purpose":"build"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "worker requested",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-start",
+				Name:      "start_worker_delegation",
+				Arguments: json.RawMessage(`{"worker_sandbox_url":"http://worker","objective":"build"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "started",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, choices: &choices}
+
+	var retryReasons []string
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+		"You are helpful.",
+		131072,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind != types.EventRunRetry || phase != "required_next_tool" {
+				return
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(payload, &decoded); err == nil {
+				retryReasons = append(retryReasons, stringMapValue(decoded, "reason"))
+			}
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "started" {
+		t.Fatalf("text = %q, want started", text)
+	}
+	if len(choices) != 4 || choices[1] != "required" || choices[2] != "required" {
+		t.Fatalf("choices = %#v, want required on retry turns", choices)
+	}
+	if !containsString(retryReasons, "model_ended_turn_without_required_tool") {
+		t.Fatalf("retry reasons = %#v, missing end-turn retry", retryReasons)
+	}
+}
+
 func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 	provider := newMockToolLoopProvider(&ToolLoopResponse{
 		StopReason: "end_turn",

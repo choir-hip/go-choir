@@ -122,6 +122,14 @@ type toolLoopOptions struct {
 	initialToolChoice string
 }
 
+type pendingRequiredTool struct {
+	Name        string
+	Instruction string
+	Attempts    int
+}
+
+const maxRequiredNextToolRetries = 2
+
 // ToolLoopOption configures optional tool-loop behavior.
 type ToolLoopOption func(*toolLoopOptions)
 
@@ -198,6 +206,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
 	}
 	forceInitialToolChoiceRetry := false
+	var requiredNextTool *pendingRequiredTool
 
 	appendMessage := func(role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
@@ -230,6 +239,17 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		assistantMsg, _ := json.Marshal(msg)
 		return appendMessage("assistant", assistantMsg)
 	}
+	appendRequiredNextToolReminder := func(required pendingRequiredTool, reason string) error {
+		text := requiredNextToolReminderText(required, reason)
+		msg, _ := json.Marshal(map[string]any{
+			"role": "user",
+			"content": []map[string]string{{
+				"type": "text",
+				"text": text,
+			}},
+		})
+		return appendMessage("user", msg)
+	}
 
 	for i := 0; i < maxToolLoopIterations; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
@@ -249,7 +269,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			ToolDefinitions: toolDefs,
 			MaxTokens:       maxTokens,
 		}
-		if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
+		if len(toolDefs) > 0 && requiredNextTool != nil {
+			req.ToolChoice = "required"
+		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			req.ToolChoice = options.initialToolChoice
 		}
 		if req.ToolChoice != "" && (req.MaxTokens == 0 || req.MaxTokens > requiredToolTurnMaxTokens) {
@@ -327,6 +349,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
 			}
 
+			activeRequired := requiredNextTool
+			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
+
 			// Execute tools and collect results.
 			toolResults := executeTools(ctx, registry, resp.ToolCalls, emit)
 
@@ -347,10 +372,64 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					return "", totalUsage, fmt.Errorf("tool loop persist injected turns after tools: %w", err)
 				}
 			}
+			if activeRequired != nil && requiredCalled {
+				requiredNextTool = nil
+			}
+			if next, ok := extractRequiredNextTool(toolResults); ok {
+				requiredNextTool = &next
+				if err := appendRequiredNextToolReminder(next, "tool_result_declared_required_next_tool"); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool reminder: %w", err)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"required_tool": next.Name,
+						"reason":        "tool_result_declared_required_next_tool",
+					})
+					emit(types.EventRunRetry, "required_next_tool", payload)
+				}
+			} else if activeRequired != nil && !requiredCalled {
+				activeRequired.Attempts++
+				if activeRequired.Attempts > maxRequiredNextToolRetries {
+					return "", totalUsage, fmt.Errorf("tool loop: required next tool %q was not called after %d retries", activeRequired.Name, maxRequiredNextToolRetries)
+				}
+				requiredNextTool = activeRequired
+				if err := appendRequiredNextToolReminder(*activeRequired, "model_called_different_tool"); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool retry: %w", err)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"required_tool": activeRequired.Name,
+						"attempt":       activeRequired.Attempts,
+						"reason":        "model_called_different_tool",
+					})
+					emit(types.EventRunRetry, "required_next_tool", payload)
+				}
+			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
 
 		case "end_turn", "":
+			if requiredNextTool != nil && len(toolDefs) > 0 {
+				requiredNextTool.Attempts++
+				if requiredNextTool.Attempts > maxRequiredNextToolRetries {
+					return "", totalUsage, fmt.Errorf("tool loop: required next tool %q was not called after %d retries", requiredNextTool.Name, maxRequiredNextToolRetries)
+				}
+				if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist assistant ignored required-next-tool text: %w", err)
+				}
+				if err := appendRequiredNextToolReminder(*requiredNextTool, "model_ended_turn_without_required_tool"); err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool retry: %w", err)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"required_tool": requiredNextTool.Name,
+						"attempt":       requiredNextTool.Attempts,
+						"reason":        "model_ended_turn_without_required_tool",
+					})
+					emit(types.EventRunRetry, "required_next_tool", payload)
+				}
+				continue
+			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(true)
 				if err != nil {
@@ -404,6 +483,78 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 
 	return "", totalUsage, fmt.Errorf("tool loop: exceeded %d iterations without end_turn", maxToolLoopIterations)
+}
+
+func requiredToolCalled(required *pendingRequiredTool, calls []types.ToolCall) bool {
+	if required == nil || strings.TrimSpace(required.Name) == "" {
+		return false
+	}
+	for _, call := range calls {
+		if call.Name == required.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, bool) {
+	for _, result := range results {
+		if result.IsError {
+			continue
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(result.Output), &decoded); err != nil {
+			continue
+		}
+		name := firstNonEmpty(
+			stringMapValue(decoded, "next_required_tool"),
+			stringMapValue(decoded, "next_tool"),
+		)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if required, ok := decoded["delegation_required"].(bool); ok && !required {
+			continue
+		}
+		instruction := strings.TrimSpace(firstNonEmpty(
+			stringMapValue(decoded, "next_instruction"),
+			requiredNextToolArgsInstruction(decoded),
+		))
+		return pendingRequiredTool{Name: name, Instruction: instruction}, true
+	}
+	return pendingRequiredTool{}, false
+}
+
+func requiredNextToolArgsInstruction(decoded map[string]any) string {
+	args, _ := decoded["next_required_args"].(map[string]any)
+	if args == nil {
+		args, _ = decoded["start_args"].(map[string]any)
+	}
+	if len(args) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	return "Use these required arguments as the base: " + string(encoded)
+}
+
+func requiredNextToolReminderText(required pendingRequiredTool, reason string) string {
+	var b strings.Builder
+	b.WriteString("Runtime-required continuation: call ")
+	b.WriteString(required.Name)
+	b.WriteString(" now. Do not end the turn and do not write a prose summary before this tool call.")
+	if strings.TrimSpace(required.Instruction) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(strings.TrimSpace(required.Instruction))
+	}
+	if strings.TrimSpace(reason) != "" {
+		b.WriteString("\n\nReason: ")
+		b.WriteString(reason)
+	}
+	return b.String()
 }
 
 func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit EventEmitFunc) (*ToolLoopResponse, error) {
