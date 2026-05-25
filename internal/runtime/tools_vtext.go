@@ -250,17 +250,6 @@ func buildVTextSuperContinuationObjective(prompt string) string {
 	return strings.TrimSpace(fmt.Sprintf("Execute or coordinate the user's request, send significant progress back to VText, and preserve concrete evidence for the next document revision.\n\nUser request: %s", strings.TrimSpace(prompt)))
 }
 
-func (rt *Runtime) vtextRunHasPendingMutation(ctx context.Context, runID string) bool {
-	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
-		return false
-	}
-	mutation, err := rt.store.GetAgentMutationByRun(ctx, strings.TrimSpace(runID))
-	if err != nil || mutation == nil {
-		return false
-	}
-	return mutation.State == "pending"
-}
-
 func newRequestSuperExecutionTool(rt *Runtime) Tool {
 	type args struct {
 		Objective string `json:"objective"`
@@ -337,10 +326,6 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 					"deduped":             true,
 					"dedupe_reason":       "vtext_run_already_requested_super",
 				}
-				if rt.vtextRunHasPendingMutation(context.Background(), requesterRunID) {
-					result["next_required_tool"] = "edit_vtext"
-					result["next_instruction"] = "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next."
-				}
 				return toolResultJSON(result)
 			}
 			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
@@ -369,10 +354,6 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 				"persistent":          true,
 				"state":               state,
 				"request_source":      "super_inbox",
-			}
-			if rt.vtextRunHasPendingMutation(context.Background(), requesterRunID) {
-				result["next_required_tool"] = "edit_vtext"
-				result["next_instruction"] = "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next."
 			}
 			return toolResultJSON(result)
 		},

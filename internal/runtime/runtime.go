@@ -1045,6 +1045,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
+		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
+			"edit_vtext",
+			"spawn_agent",
+			"request_super_execution",
+		))
 	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {

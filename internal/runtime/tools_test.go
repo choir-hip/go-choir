@@ -418,6 +418,44 @@ func TestExecuteTools(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
+	registry := NewToolRegistry()
+	var executed int
+	if err := registry.Register(Tool{
+		Name: "edit_vtext",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			executed++
+			return `{"status":"stored","revision_id":"rev-2"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+
+	run := &types.RunRecord{
+		RunID:        "run-vtext",
+		OwnerID:      "owner-1",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+	}
+	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+		{ID: "call-edit-1", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
+		{ID: "call-edit-2", Name: "edit_vtext", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"again"}`)},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if executed != 1 {
+		t.Fatalf("executed edit_vtext %d times, want 1", executed)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+	if results[0].IsError {
+		t.Fatalf("first edit result = %#v, want success", results[0])
+	}
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate edit_vtext") {
+		t.Fatalf("second edit result = %#v, want non-error duplicate notice", results[1])
+	}
+}
+
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{

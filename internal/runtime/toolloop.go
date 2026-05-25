@@ -122,6 +122,7 @@ type toolLoopOptions struct {
 	memoryHooks       ToolLoopMemoryHooks
 	llmConfig         LLMSelection
 	initialToolChoice string
+	terminalTools     map[string]bool
 }
 
 type pendingRequiredTool struct {
@@ -158,6 +159,26 @@ func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
 func WithInitialToolChoice(choice string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.initialToolChoice = strings.TrimSpace(choice)
+	}
+}
+
+// WithTerminalToolSuccesses makes successful tool calls terminal for this loop
+// unless a tool result explicitly declares a next_required_tool. This is for
+// side-effect tools whose successful execution is the run's observable result.
+func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if len(names) == 0 {
+			return
+		}
+		if opts.terminalTools == nil {
+			opts.terminalTools = make(map[string]bool, len(names))
+		}
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				opts.terminalTools[name] = true
+			}
+		}
 	}
 }
 
@@ -382,16 +403,37 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				requiredNextTool = nil
 			}
 			if next, ok := extractRequiredNextTool(toolResults); ok {
-				requiredNextTool = &next
-				if err := appendRequiredNextToolReminder(next, "tool_result_declared_required_next_tool"); err != nil {
-					return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool reminder: %w", err)
-				}
-				if emit != nil {
-					payload, _ := json.Marshal(map[string]any{
-						"required_tool": next.Name,
-						"reason":        "tool_result_declared_required_next_tool",
-					})
-					emit(types.EventRunRetry, "required_next_tool", payload)
+				if requiredToolSucceeded(next.Name, resp.ToolCalls, toolResults) {
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_tool": next.Name,
+							"reason":        "tool_result_declared_required_next_tool_satisfied_in_batch",
+						})
+						emit(types.EventRunProgress, "required_next_tool_satisfied", payload)
+					}
+					if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+						if emit != nil {
+							payload, _ := json.Marshal(map[string]any{
+								"iteration": i + 1,
+								"tools":     terminalTools,
+								"reason":    "terminal_tool_success",
+							})
+							emit(types.EventRunProgress, "terminal_tool_success", payload)
+						}
+						return resp.Text, totalUsage, nil
+					}
+				} else {
+					requiredNextTool = &next
+					if err := appendRequiredNextToolReminder(next, "tool_result_declared_required_next_tool"); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool reminder: %w", err)
+					}
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_tool": next.Name,
+							"reason":        "tool_result_declared_required_next_tool",
+						})
+						emit(types.EventRunRetry, "required_next_tool", payload)
+					}
 				}
 			} else if activeRequired != nil && !requiredCalled {
 				activeRequired.Attempts++
@@ -410,6 +452,16 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					})
 					emit(types.EventRunRetry, "required_next_tool", payload)
 				}
+			} else if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"iteration": i + 1,
+						"tools":     terminalTools,
+						"reason":    "terminal_tool_success",
+					})
+					emit(types.EventRunProgress, "terminal_tool_success", payload)
+				}
+				return resp.Text, totalUsage, nil
 			}
 
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
@@ -512,6 +564,23 @@ func requiredToolCalled(required *pendingRequiredTool, calls []types.ToolCall) b
 	return false
 }
 
+func requiredToolSucceeded(name string, calls []types.ToolCall, results []types.ToolResult) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	limit := len(calls)
+	if len(results) < limit {
+		limit = len(results)
+	}
+	for i := 0; i < limit; i++ {
+		if calls[i].Name == name && !results[i].IsError {
+			return true
+		}
+	}
+	return false
+}
+
 func exactRequiredToolChoice(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -547,6 +616,34 @@ func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, b
 		return pendingRequiredTool{Name: name, Instruction: instruction}, true
 	}
 	return pendingRequiredTool{}, false
+}
+
+func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool) []string {
+	if len(terminalTools) == 0 {
+		return nil
+	}
+	limit := len(calls)
+	if len(results) < limit {
+		limit = len(results)
+	}
+	names := make([]string, 0, limit)
+	seen := make(map[string]bool, limit)
+	for i := 0; i < limit; i++ {
+		name := strings.TrimSpace(calls[i].Name)
+		if name == "" || !terminalTools[name] || results[i].IsError || !isStructuredToolSuccess(results[i].Output) {
+			continue
+		}
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func isStructuredToolSuccess(output string) bool {
+	var decoded map[string]any
+	return json.Unmarshal([]byte(strings.TrimSpace(output)), &decoded) == nil && len(decoded) > 0
 }
 
 func requiredNextToolArgsInstruction(decoded map[string]any) string {

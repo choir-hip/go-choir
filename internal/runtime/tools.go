@@ -663,9 +663,19 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
 	seenDelegateWorker := map[string]int{}
+	firstVTextEdit := -1
 
 	for i, call := range calls {
 		switch call.Name {
+		case "edit_vtext":
+			if profile != AgentProfileVText {
+				continue
+			}
+			if firstVTextEdit != -1 {
+				setSkip(i, fmt.Sprintf("tool_notice:duplicate edit_vtext in this VText turn skipped after call %s; one canonical document mutation is allowed per revision run", calls[firstVTextEdit].ID))
+				continue
+			}
+			firstVTextEdit = i
 		case "bash":
 			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 				continue

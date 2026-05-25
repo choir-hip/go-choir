@@ -141,6 +141,124 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name: "edit_vtext",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"stored","revision_id":"rev-2"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-edit",
+				Name:      "edit_vtext",
+				Arguments: json.RawMessage(`{"doc_id":"doc-1"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 4},
+			Model: "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "should not be requested",
+			Usage:      TokenUsage{InputTokens: 10, OutputTokens: 4},
+			Model:      "test-model",
+		},
+	)
+
+	var terminalProgress bool
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"revise"}`)},
+		"You are VText.",
+		0,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind == types.EventRunProgress && phase == "terminal_tool_success" {
+				terminalProgress = true
+			}
+		},
+		nil,
+		WithTerminalToolSuccesses("edit_vtext"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty terminal tool result", text)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.CallCount())
+	}
+	if !terminalProgress {
+		t.Fatal("missing terminal_tool_success progress event")
+	}
+}
+
+func TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name: "edit_vtext",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"stored","revision_id":"rev-2","next_required_tool":"spawn_agent"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register edit_vtext: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name: "spawn_agent",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"state":"pending","loop_id":"run-researcher"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register spawn_agent: %v", err)
+	}
+
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{ID: "call-edit", Name: "edit_vtext", Arguments: json.RawMessage(`{}`)},
+				{ID: "call-spawn", Name: "spawn_agent", Arguments: json.RawMessage(`{}`)},
+			},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 4},
+			Model: "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{ID: "call-duplicate-spawn", Name: "spawn_agent", Arguments: json.RawMessage(`{}`)},
+			},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 4},
+			Model: "test-model",
+		},
+	)
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"revise"}`)},
+		"You are VText.",
+		0,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {},
+		nil,
+		WithTerminalToolSuccesses("edit_vtext", "spawn_agent"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.CallCount())
+	}
+}
+
 func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 	provider := newMockToolLoopProvider(&ToolLoopResponse{
 		StopReason: "end_turn",
