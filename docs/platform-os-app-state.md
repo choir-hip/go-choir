@@ -87,6 +87,41 @@ platform docs record the common baseline and the desired divergence semantics.
   allows; configured always-on primaries have a protected lane. Candidate and
   worker computers hibernate first. See [vm-priority-policy.md](vm-priority-policy.md).
 
+## Runtime Model Policy State
+
+Choir's current model assignments are defaults, not architecture. The platform
+catalog owns provider/model capability facts: provider family, model id, context
+and output limits, text/image/tool support, reasoning controls, request schema,
+deadline class, and any provider-specific carry-forward fields such as
+reasoning content. A user computer's model policy owns the effective routing
+preference for its roles and tasks.
+
+The target state is:
+
+- any configured compatible model can serve conductor, VText, researcher,
+  super, vsuper, co-super, verifier, or future roles;
+- ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later
+  catalog models are selectable by policy wherever the current turn's
+  modality, tool, context, latency, and cost requirements match;
+- Fireworks DeepSeek V4 Flash/Pro are text-only but valid for orchestration,
+  writing, research, coding, and verifier work that does not require media
+  input;
+- Kimi K2.6 and ChatGPT multimodal paths are required only when a turn actually
+  carries screenshots, images, video frames, or other media inputs;
+- per-computer model policy is durable computer-owned state, editable through
+  product paths and eventually by `super` in response to an owner prompt;
+- platform deploys or Node B environment edits are not required merely to
+  change which configured model a computer uses for a role;
+- Trace and run evidence record the resolved provider/model/reasoning for each
+  run without exposing provider secrets or turning ordinary UI into a provider
+  dashboard.
+
+This policy model deliberately separates "recommended defaults" from
+"compatible execution." A strong coding model may be the default for `super` or
+`vsuper`, and a fast writing model may be the default for VText, but those are
+computer policy choices. They must remain changeable without creating
+role-specific provider assumptions in the runtime.
+
 ## Desktop Shell State
 
 The shell is a web desktop with floating windows, freely placed desktop icons,

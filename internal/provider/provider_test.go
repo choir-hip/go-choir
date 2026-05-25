@@ -2010,6 +2010,53 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleExactToolChoiceSerialization(t *testing.T) {
+	chatBody, err := json.Marshal(openAIChatCompletionRequest{
+		Model:      "accounts/fireworks/models/deepseek-v4-pro",
+		Messages:   []openAIChatMessage{{Role: "user", Content: "start"}},
+		ToolChoice: openAIChatToolChoice("function:start_worker_delegation"),
+	})
+	if err != nil {
+		t.Fatalf("marshal chat body: %v", err)
+	}
+	var chatRaw map[string]any
+	if err := json.Unmarshal(chatBody, &chatRaw); err != nil {
+		t.Fatalf("unmarshal chat body: %v", err)
+	}
+	chatChoice, ok := chatRaw["tool_choice"].(map[string]any)
+	if !ok {
+		t.Fatalf("chat tool_choice = %#v, want object", chatRaw["tool_choice"])
+	}
+	if chatChoice["type"] != "function" {
+		t.Fatalf("chat tool_choice.type = %#v, want function", chatChoice["type"])
+	}
+	fn, ok := chatChoice["function"].(map[string]any)
+	if !ok || fn["name"] != "start_worker_delegation" {
+		t.Fatalf("chat tool_choice.function = %#v, want start_worker_delegation", chatChoice["function"])
+	}
+
+	responsesBody, err := json.Marshal(openAIRequest{
+		Model:      "gpt-5.5",
+		Input:      []openAIItem{{Role: "user", Content: "start"}},
+		ToolChoice: openAIResponsesToolChoice("function:start_worker_delegation"),
+		Store:      false,
+	})
+	if err != nil {
+		t.Fatalf("marshal responses body: %v", err)
+	}
+	var responsesRaw map[string]any
+	if err := json.Unmarshal(responsesBody, &responsesRaw); err != nil {
+		t.Fatalf("unmarshal responses body: %v", err)
+	}
+	responsesChoice, ok := responsesRaw["tool_choice"].(map[string]any)
+	if !ok {
+		t.Fatalf("responses tool_choice = %#v, want object", responsesRaw["tool_choice"])
+	}
+	if responsesChoice["type"] != "function" || responsesChoice["name"] != "start_worker_delegation" {
+		t.Fatalf("responses tool_choice = %#v, want exact function", responsesChoice)
+	}
+}
+
 func TestFireworksProviderCallOmitsMaxTokensWhenUnset(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any

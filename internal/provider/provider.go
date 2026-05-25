@@ -73,7 +73,10 @@ type LLMRequest struct {
 	Tools []ToolDef `json:"tools,omitempty"`
 
 	// ToolChoice optionally constrains tool selection for compatible
-	// providers. The shared string modes are "auto", "none", and "required".
+	// providers. The shared string modes are "auto", "none", and "required";
+	// "function:<name>" is the gateway/runtime wire form for an exact tool
+	// choice, translated by OpenAI-compatible adapters into their provider
+	// object shape.
 	ToolChoice string `json:"tool_choice,omitempty"`
 
 	// MaxTokens is the maximum number of output tokens.
@@ -751,7 +754,7 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		Model:           modelID,
 		Messages:        convertOpenAIChatMessages(req.System, req.Messages),
 		Tools:           tools,
-		ToolChoice:      strings.TrimSpace(req.ToolChoice),
+		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          false,
 		ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
 	}
@@ -924,7 +927,7 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		Instructions:    req.System,
 		Input:           convertOpenAIInput(req.Messages),
 		Tools:           convertOpenAITools(req.Tools),
-		ToolChoice:      strings.TrimSpace(req.ToolChoice),
+		ToolChoice:      openAIResponsesToolChoice(req.ToolChoice),
 		MaxOutputTokens: defaultMaxTokens(req.MaxTokens),
 		Store:           false,
 		Stream:          req.Stream,
@@ -949,12 +952,51 @@ func effectiveModel(requested, fallback string) string {
 	return fallback
 }
 
+func openAIChatToolChoice(choice string) any {
+	choice = strings.TrimSpace(choice)
+	if choice == "" {
+		return nil
+	}
+	if name, ok := exactToolChoiceName(choice); ok {
+		return map[string]any{
+			"type": "function",
+			"function": map[string]string{
+				"name": name,
+			},
+		}
+	}
+	return choice
+}
+
+func openAIResponsesToolChoice(choice string) any {
+	choice = strings.TrimSpace(choice)
+	if choice == "" {
+		return nil
+	}
+	if name, ok := exactToolChoiceName(choice); ok {
+		return map[string]string{
+			"type": "function",
+			"name": name,
+		}
+	}
+	return choice
+}
+
+func exactToolChoiceName(choice string) (string, bool) {
+	name, ok := strings.CutPrefix(strings.TrimSpace(choice), "function:")
+	if !ok {
+		return "", false
+	}
+	name = strings.TrimSpace(name)
+	return name, name != ""
+}
+
 type openAIRequest struct {
 	Model           string           `json:"model"`
 	Instructions    string           `json:"instructions,omitempty"`
 	Input           []openAIItem     `json:"input,omitempty"`
 	Tools           []openAITool     `json:"tools,omitempty"`
-	ToolChoice      string           `json:"tool_choice,omitempty"`
+	ToolChoice      any              `json:"tool_choice,omitempty"`
 	MaxOutputTokens int              `json:"max_output_tokens,omitempty"`
 	Store           bool             `json:"store"`
 	Stream          bool             `json:"stream,omitempty"`
@@ -986,7 +1028,7 @@ type openAIChatCompletionRequest struct {
 	Model           string              `json:"model"`
 	Messages        []openAIChatMessage `json:"messages"`
 	Tools           []openAIChatTool    `json:"tools,omitempty"`
-	ToolChoice      string              `json:"tool_choice,omitempty"`
+	ToolChoice      any                 `json:"tool_choice,omitempty"`
 	MaxTokens       *int                `json:"max_tokens,omitempty"`
 	Stream          bool                `json:"stream,omitempty"`
 	ReasoningEffort string              `json:"reasoning_effort,omitempty"`

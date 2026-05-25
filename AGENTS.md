@@ -159,12 +159,14 @@ and verification that does not need media input. Multimodal models are required
 only when the turn needs screenshots, images, video frames, files, or other
 media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
 that as the active computer's effective policy, not a hard-coded role boundary.
-Do not add new role-specific provider assumptions such as "super must be
-ChatGPT" or "verifier must be multimodal" unless the current turn's capability
-requirements actually imply that. The long-term target is dynamic, agentically
-editable per-computer model policy: an owner prompt may ask `super` to edit the
-computer's model policy, and subsequent runs should use that policy without a
-platform deploy or Node B environment edit.
+Do not add new role-specific provider assumptions such as "conductor must be
+ChatGPT", "super must be ChatGPT", "VText must be Fireworks", or "verifier must
+be multimodal" unless the current turn's capability requirements actually imply
+that. The long-term target is dynamic, agentically editable per-computer model
+policy: an owner prompt may ask `super` to edit the computer's model policy,
+and subsequent runs should use that policy without a platform deploy or Node B
+environment edit. The platform catalog records model capabilities and provider
+request semantics; per-computer policy selects among those capabilities.
 
 Provider request schemas must preserve modality. If a task needs screenshots,
 videos, files, or other media evidence, route through a model/provider path that

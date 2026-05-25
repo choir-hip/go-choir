@@ -57,8 +57,10 @@ type ToolLoopRequest struct {
 	ToolDefinitions []ToolDefinition `json:"tool_definitions"`
 
 	// ToolChoice optionally constrains provider tool selection for this call.
-	// Supported values are provider-dependent, but "auto", "none", and
-	// "required" are the shared OpenAI-compatible modes.
+	// Supported values are provider-dependent. Shared OpenAI-compatible modes
+	// are "auto", "none", and "required"; "function:<name>" means the next
+	// provider call must select that exact tool when the adapter supports exact
+	// tool choice.
 	ToolChoice string `json:"tool_choice,omitempty"`
 
 	// MaxTokens is the maximum output tokens for this call.
@@ -266,7 +268,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			MaxTokens:       maxTokens,
 		}
 		if len(toolDefs) > 0 && requiredNextTool != nil {
-			req.ToolChoice = "required"
+			req.ToolChoice = exactRequiredToolChoice(requiredNextTool.Name)
 		} else if len(toolDefs) > 0 && options.initialToolChoice != "" && (i == 0 || forceInitialToolChoiceRetry) {
 			req.ToolChoice = options.initialToolChoice
 		}
@@ -497,6 +499,14 @@ func requiredToolCalled(required *pendingRequiredTool, calls []types.ToolCall) b
 		}
 	}
 	return false
+}
+
+func exactRequiredToolChoice(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "required"
+	}
+	return "function:" + name
 }
 
 func extractRequiredNextTool(results []types.ToolResult) (pendingRequiredTool, bool) {

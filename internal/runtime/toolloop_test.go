@@ -497,8 +497,8 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 	if diff := strings.Join(calls, ","); diff != "request_worker_vm,start_worker_delegation" {
 		t.Fatalf("calls = %s", diff)
 	}
-	if len(choices) != 3 || choices[0] != "" || choices[1] != "required" || choices[2] != "" {
-		t.Fatalf("choices = %#v, want second call required", choices)
+	if len(choices) != 3 || choices[0] != "" || choices[1] != "function:start_worker_delegation" || choices[2] != "" {
+		t.Fatalf("choices = %#v, want second call to require exact start_worker_delegation", choices)
 	}
 	if len(maxTokens) != 3 || maxTokens[0] != 131072 || maxTokens[1] != 131072 || maxTokens[2] != 131072 {
 		t.Fatalf("maxTokens = %#v, want selected model budget preserved", maxTokens)
@@ -573,8 +573,8 @@ func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing
 	if err == nil || !strings.Contains(err.Error(), `required next tool "start_worker_delegation" was not called after 2 retries`) {
 		t.Fatalf("err = %v, want bounded required next tool retry error", err)
 	}
-	if len(choices) != 4 || choices[0] != "" || choices[1] != "required" || choices[2] != "required" || choices[3] != "required" {
-		t.Fatalf("choices = %#v, want required until bounded failure", choices)
+	if len(choices) != 4 || choices[0] != "" || choices[1] != "function:start_worker_delegation" || choices[2] != "function:start_worker_delegation" || choices[3] != "function:start_worker_delegation" {
+		t.Fatalf("choices = %#v, want exact required tool until bounded failure", choices)
 	}
 	if len(retryAttempts) != 2 || retryAttempts[0] != 1 || retryAttempts[1] != 2 {
 		t.Fatalf("retryAttempts = %#v, want [1 2]", retryAttempts)
@@ -665,8 +665,8 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 	if text != "started" {
 		t.Fatalf("text = %q, want started", text)
 	}
-	if len(choices) != 4 || choices[1] != "required" || choices[2] != "required" {
-		t.Fatalf("choices = %#v, want required on retry turns", choices)
+	if len(choices) != 4 || choices[1] != "function:start_worker_delegation" || choices[2] != "function:start_worker_delegation" {
+		t.Fatalf("choices = %#v, want exact required tool on retry turns", choices)
 	}
 	if !containsString(retryReasons, "model_ended_turn_without_required_tool") {
 		t.Fatalf("retry reasons = %#v, missing end-turn retry", retryReasons)
