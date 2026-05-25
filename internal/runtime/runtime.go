@@ -1328,7 +1328,7 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 			decision.SeedPrompt = seedPrompt
 		}
 		if decision.App == AgentProfileVText && decision.CreateInitialVersion == nil {
-			decision.CreateInitialVersion = ptrBool(true)
+			decision.CreateInitialVersion = ptrBool(false)
 		}
 		if rec != nil && rec.Metadata != nil {
 			if decision.SourceURL == "" {
@@ -1519,11 +1519,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	now := time.Now().UTC()
 	decision := fillConductorDecisionFromRun(rec, parsedDecision)
 	initialContent = strings.TrimSpace(initialContent)
-	if initialContent == "" {
+	createInitialVersion := decision.CreateInitialVersion != nil && *decision.CreateInitialVersion
+	if createInitialVersion && initialContent == "" {
 		initialContent = fallbackPromptBarInitialContent(rec, decision)
-	}
-	if initialContent == "" {
-		return conductorDecision{}, fmt.Errorf("conductor vtext route requires initial_content")
 	}
 	doc := types.Document{
 		DocID:     uuid.New().String(),
@@ -1564,32 +1562,36 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, userRev)
 
-	framingRevMeta, _ := json.Marshal(map[string]any{
-		"seed_prompt":       decision.SeedPrompt,
-		"conductor_loop_id": rec.RunID,
-		"created_from":      "conductor",
-		"source":            "initial_vtext_seed",
-		"vtext_version":     "v1",
-		"user_revision_id":  userRevisionID,
-	})
-	framingRev := types.Revision{
-		RevisionID:       framingRevisionID,
-		DocID:            doc.DocID,
-		OwnerID:          rec.OwnerID,
-		AuthorKind:       types.AuthorAppAgent,
-		AuthorLabel:      AgentProfileConductor,
-		Content:          initialContent,
-		Citations:        json.RawMessage("[]"),
-		Metadata:         framingRevMeta,
-		ParentRevisionID: userRevisionID,
-		CreatedAt:        now.Add(time.Nanosecond),
+	doc.CurrentRevisionID = userRev.RevisionID
+	if createInitialVersion && initialContent != "" {
+		framingRevMeta, _ := json.Marshal(map[string]any{
+			"seed_prompt":       decision.SeedPrompt,
+			"conductor_loop_id": rec.RunID,
+			"created_from":      "conductor",
+			"source":            "initial_vtext_seed",
+			"vtext_version":     "v1",
+			"user_revision_id":  userRevisionID,
+		})
+		framingRev := types.Revision{
+			RevisionID:       framingRevisionID,
+			DocID:            doc.DocID,
+			OwnerID:          rec.OwnerID,
+			AuthorKind:       types.AuthorAppAgent,
+			AuthorLabel:      AgentProfileConductor,
+			Content:          initialContent,
+			Citations:        json.RawMessage("[]"),
+			Metadata:         framingRevMeta,
+			ParentRevisionID: userRevisionID,
+			CreatedAt:        now.Add(time.Nanosecond),
+		}
+		if err := rt.store.CreateRevision(ctx, framingRev); err != nil {
+			return conductorDecision{}, fmt.Errorf("create initial vtext seed revision: %w", err)
+		}
+		rt.emitVTextDocumentRevisionEventForRun(ctx, rec, framingRev)
+		doc.CurrentRevisionID = framingRev.RevisionID
+		decision.FramingRevisionID = framingRev.RevisionID
+		decision.InitialRevisionID = framingRev.RevisionID
 	}
-	if err := rt.store.CreateRevision(ctx, framingRev); err != nil {
-		return conductorDecision{}, fmt.Errorf("create initial vtext seed revision: %w", err)
-	}
-	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, framingRev)
-
-	doc.CurrentRevisionID = framingRev.RevisionID
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
 		AgentID:   "vtext:" + doc.DocID,
 		OwnerID:   rec.OwnerID,
@@ -1608,9 +1610,10 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 
 	decision.DocID = doc.DocID
 	decision.UserRevisionID = userRev.RevisionID
-	decision.FramingRevisionID = framingRev.RevisionID
-	decision.InitialRevisionID = framingRev.RevisionID
 	decision.InitialContent = initialContent
+	if decision.InitialRevisionID == "" {
+		decision.InitialRevisionID = userRev.RevisionID
+	}
 
 	initialPrompt := strings.TrimSpace(objective)
 	if initialPrompt == "" {
@@ -1634,7 +1637,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 	rec.Metadata["doc_id"] = decision.DocID
 	rec.Metadata["user_revision_id"] = decision.UserRevisionID
-	rec.Metadata["framing_revision_id"] = decision.FramingRevisionID
+	if decision.FramingRevisionID != "" {
+		rec.Metadata["framing_revision_id"] = decision.FramingRevisionID
+	}
 	rec.Metadata["initial_revision_id"] = decision.InitialRevisionID
 	rec.Metadata["initial_loop_id"] = decision.InitialLoopID
 	if out, err := json.Marshal(decision); err == nil {

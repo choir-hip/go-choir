@@ -101,6 +101,17 @@
     return parts.length > 0 ? parts.join(' · ') : excerpt(agent.agent_id, 20);
   }
 
+  function agentModelCaption(agent) {
+    const provider = String(agent?.llm_provider || '').trim();
+    const model = String(agent?.llm_model || '').trim().split('/').pop();
+    const reasoning = String(agent?.llm_reasoning_effort || '').trim();
+    const policy = String(agent?.model_policy || '').trim();
+    const main = [provider, model].filter(Boolean).join(' / ');
+    const suffix = [reasoning, policy].filter(Boolean).join(' · ');
+    if (main && suffix) return `${main} · ${suffix}`;
+    return main || suffix || 'model config pending';
+  }
+
   function traceMetrics(trajectory) {
     return [
       { label: 'agents', value: trajectory?.agent_count || 0 },
@@ -1040,10 +1051,12 @@
                     style={`left: clamp(0px, calc(${agent.x}% - 84px), calc(100% - 168px)); top: clamp(0px, calc(${agent.y}% - 34px), calc(100% - 68px));`}
                     data-trace-agent-node
                     data-trace-agent-id={agent.agent_id}
+                    data-trace-agent-model={agentModelCaption(agent)}
                     on:click={() => toggleAgent(agent.agent_id)}
                   >
                     <span class="agent-node-title">{agent.label}</span>
                     <span class="agent-node-meta">{agentCaption(agent)}</span>
+                    <span class="agent-node-model">{agentModelCaption(agent)}</span>
                     <span class="agent-node-footer">
                       <span>{agent.run_count} runs</span>
                       <span>{agent.entry ? 'entry' : 'delegate'}</span>
@@ -1841,12 +1854,21 @@
   }
 
   .agent-node-meta,
+  .agent-node-model,
   .agent-node-footer {
     color: #94a3b8;
     font-size: 0.73rem;
     display: flex;
     justify-content: space-between;
     gap: 0.45rem;
+  }
+
+  .agent-node-model {
+    color: #bfdbfe;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ghost-btn {

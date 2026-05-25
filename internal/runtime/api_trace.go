@@ -103,6 +103,10 @@ type traceAgentNode struct {
 	Label            string         `json:"label"`
 	Profile          string         `json:"profile,omitempty"`
 	Role             string         `json:"role,omitempty"`
+	LLMProvider      string         `json:"llm_provider,omitempty"`
+	LLMModel         string         `json:"llm_model,omitempty"`
+	LLMReasoning     string         `json:"llm_reasoning_effort,omitempty"`
+	ModelPolicy      string         `json:"model_policy,omitempty"`
 	State            types.RunState `json:"state,omitempty"`
 	RunCount         int            `json:"run_count"`
 	FirstSeenAt      string         `json:"first_seen_at,omitempty"`
@@ -444,10 +448,14 @@ func formatTraceTrajectoryLog(bundle traceTrajectoryBundle) string {
 	if len(bundle.Agents) > 0 {
 		b.WriteString("Agents\n")
 		for _, agent := range bundle.Agents {
-			fmt.Fprintf(&b, "- %s role=%s profile=%s state=%s runs=%d agent_id=%s\n",
+			fmt.Fprintf(&b, "- %s role=%s profile=%s model=%s/%s reasoning=%s policy=%s state=%s runs=%d agent_id=%s\n",
 				traceNonEmpty(agent.Label, "agent"),
 				traceNonEmpty(agent.Role, "unknown"),
 				traceNonEmpty(agent.Profile, "unknown"),
+				traceNonEmpty(agent.LLMProvider, "unknown"),
+				traceNonEmpty(agent.LLMModel, "unknown"),
+				traceNonEmpty(agent.LLMReasoning, "default"),
+				traceNonEmpty(agent.ModelPolicy, "default"),
 				agent.State,
 				agent.RunCount,
 				agent.AgentID,
@@ -880,12 +888,16 @@ func buildTraceAgentNodes(runs []types.RunRecord) ([]traceAgentNode, map[string]
 		if !ok {
 			entry = &agg{
 				traceAgentNode: traceAgentNode{
-					AgentID:  agentID,
-					Label:    traceAgentLabel(run),
-					Profile:  traceRunProfile(run),
-					Role:     traceRunRole(run),
-					State:    run.State,
-					RunCount: 0,
+					AgentID:      agentID,
+					Label:        traceAgentLabel(run),
+					Profile:      traceRunProfile(run),
+					Role:         traceRunRole(run),
+					LLMProvider:  traceRunMetadataString(run, runMetadataLLMProvider),
+					LLMModel:     traceRunMetadataString(run, runMetadataLLMModel),
+					LLMReasoning: traceRunMetadataString(run, runMetadataLLMReasoningEffort),
+					ModelPolicy:  traceRunMetadataString(run, runMetadataLLMPolicySource),
+					State:        run.State,
+					RunCount:     0,
 				},
 				firstSeen: traceRunActivityTime(run),
 				latestAt:  traceRunActivityTime(run),
@@ -902,6 +914,10 @@ func buildTraceAgentNodes(runs []types.RunRecord) ([]traceAgentNode, map[string]
 			entry.Label = traceAgentLabel(run)
 			entry.Profile = traceRunProfile(run)
 			entry.Role = traceRunRole(run)
+			entry.LLMProvider = traceRunMetadataString(run, runMetadataLLMProvider)
+			entry.LLMModel = traceRunMetadataString(run, runMetadataLLMModel)
+			entry.LLMReasoning = traceRunMetadataString(run, runMetadataLLMReasoningEffort)
+			entry.ModelPolicy = traceRunMetadataString(run, runMetadataLLMPolicySource)
 		}
 		entry.RunCount++
 		if strings.TrimSpace(run.ParentRunID) != "" {

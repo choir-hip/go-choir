@@ -89,11 +89,13 @@
   }
 
   function renderMarkdown(value) {
-    const lines = String(value || '').split(/\r?\n/);
+    const normalized = String(value || '').replace(/\|\s+\|/g, '|\n|');
+    const lines = normalized.split(/\r?\n/);
     const blocks = [];
     let paragraph = [];
     let list = [];
     let quote = [];
+    let table = [];
 
     function flushParagraph() {
       if (paragraph.length === 0) return;
@@ -113,6 +115,33 @@
       quote = [];
     }
 
+    function parseTableRow(line) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null;
+      const cells = trimmed
+        .slice(1, -1)
+        .split('|')
+        .map((cell) => cell.trim());
+      return cells.length >= 2 ? cells : null;
+    }
+
+    function isTableSeparator(cells) {
+      return Array.isArray(cells) && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+    }
+
+    function flushTable() {
+      if (table.length === 0) return;
+      const parsed = table.map(parseTableRow).filter(Boolean);
+      if (parsed.length >= 2 && isTableSeparator(parsed[1])) {
+        const headers = parsed[0];
+        const rows = parsed.slice(2);
+        blocks.push(`<div class="table-scroll"><table><thead><tr>${headers.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      } else {
+        blocks.push(`<p>${renderInlineMarkdown(table.join(' '))}</p>`);
+      }
+      table = [];
+    }
+
     for (const rawLine of lines) {
       const line = rawLine.trimEnd();
       const trimmed = line.trim();
@@ -120,6 +149,7 @@
         flushParagraph();
         flushList();
         flushQuote();
+        flushTable();
         continue;
       }
 
@@ -128,8 +158,17 @@
         flushParagraph();
         flushList();
         flushQuote();
+        flushTable();
         const level = heading[1].length;
         blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+        continue;
+      }
+
+      if (parseTableRow(trimmed)) {
+        flushParagraph();
+        flushList();
+        flushQuote();
+        table.push(trimmed);
         continue;
       }
 
@@ -137,6 +176,7 @@
       if (bullet) {
         flushParagraph();
         flushQuote();
+        flushTable();
         list.push(bullet[1]);
         continue;
       }
@@ -145,18 +185,21 @@
       if (quoteLine) {
         flushParagraph();
         flushList();
+        flushTable();
         quote.push(quoteLine[1]);
         continue;
       }
 
       flushList();
       flushQuote();
+      flushTable();
       paragraph.push(trimmed);
     }
 
     flushParagraph();
     flushList();
     flushQuote();
+    flushTable();
     return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
   }
 
@@ -208,6 +251,16 @@
       return Array.from(node.children)
         .map((child) => `> ${serializeInlineMarkdown(child).trim()}`)
         .join('\n');
+    }
+    if (tag === 'table') {
+      const rows = Array.from(node.querySelectorAll('tr')).map((row) =>
+        `| ${Array.from(row.children).map((cell) => serializeInlineMarkdown(cell).trim()).join(' | ')} |`
+      );
+      if (rows.length > 1) {
+        const width = Array.from(node.querySelectorAll('tr:first-child > *')).length || 1;
+        rows.splice(1, 0, `| ${Array.from({ length: width }).map(() => '---').join(' | ')} |`);
+      }
+      return rows.join('\n');
     }
     return serializeInlineMarkdown(node).trimEnd();
   }
@@ -1590,6 +1643,36 @@
 
   .rendered-doc :global(blockquote p:last-child) {
     margin-bottom: 0;
+  }
+
+  .rendered-doc :global(.table-scroll) {
+    max-width: 100%;
+    margin: 0 0 1.15rem;
+    overflow-x: auto;
+  }
+
+  .rendered-doc :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+
+  .rendered-doc :global(th),
+  .rendered-doc :global(td) {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    padding: 0.48rem 0.58rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .rendered-doc :global(th) {
+    background: rgba(59, 130, 246, 0.12);
+    color: #dbeafe;
+    font-weight: 800;
+  }
+
+  .rendered-doc :global(td) {
+    background: rgba(15, 23, 42, 0.34);
   }
 
   .publication-panel {

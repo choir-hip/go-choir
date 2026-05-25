@@ -1825,13 +1825,12 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 		"objective":"create v0 and own the document",
 		"role":"vtext"
 	}`)); err == nil {
-		t.Fatal("conductor spawn vtext without initial_content should fail")
+		t.Fatal("conductor spawn vtext without channel_id should fail")
 	}
 	vtextSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"vtext",
-		"channel_id":"doc-work",
-		"initial_content":"# Routed document\n\nInitial conductor-authored abstract."
+		"channel_id":"doc-work"
 	}`))
 	if err != nil {
 		t.Fatalf("conductor spawn vtext: %v", err)
@@ -1864,7 +1863,7 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if vtextSpawn.State != "open" {
 		t.Fatalf("vtext spawn state = %q, want open", vtextSpawn.State)
 	}
-	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID == "" || vtextSpawn.InitialRevisionID != vtextSpawn.FramingRevisionID {
+	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID != "" || vtextSpawn.InitialRevisionID != vtextSpawn.UserRevisionID {
 		t.Fatalf("unexpected vtext spawn revision ids: %+v", vtextSpawn)
 	}
 	vtextAgent, err := s.GetAgent(context.Background(), vtextSpawn.AgentID)
@@ -1905,7 +1904,7 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if parentDecision.InitialRunID != vtextSpawn.RunID {
 		t.Fatalf("conductor result initial_loop_id = %q, want %q", parentDecision.InitialRunID, vtextSpawn.RunID)
 	}
-	if parentDecision.UserRevisionID != vtextSpawn.UserRevisionID || parentDecision.FramingRevisionID != vtextSpawn.FramingRevisionID || parentDecision.InitialRevisionID != vtextSpawn.FramingRevisionID {
+	if parentDecision.UserRevisionID != vtextSpawn.UserRevisionID || parentDecision.FramingRevisionID != "" || parentDecision.InitialRevisionID != vtextSpawn.UserRevisionID {
 		t.Fatalf("unexpected conductor result revision ids: %+v; spawn=%+v", parentDecision, vtextSpawn)
 	}
 

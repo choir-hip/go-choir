@@ -28,8 +28,12 @@ func seedTraceTrajectory(t *testing.T, rt *Runtime) (*types.RunRecord, *types.Ru
 		t.Fatalf("start parent run: %v", err)
 	}
 	child, err := rt.StartChildRun(context.Background(), parent.RunID, "Research the best conditions for moss", "user-alice", map[string]any{
-		runMetadataAgentProfile: "researcher",
-		runMetadataAgentRole:    "researcher",
+		runMetadataAgentProfile:       "researcher",
+		runMetadataAgentRole:          "researcher",
+		runMetadataLLMProvider:        "fireworks",
+		runMetadataLLMModel:           "accounts/fireworks/models/deepseek-v4-flash",
+		runMetadataLLMReasoningEffort: "low",
+		runMetadataLLMPolicySource:    "run_metadata",
 	})
 	if err != nil {
 		t.Fatalf("start child run: %v", err)
@@ -258,6 +262,18 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	}
 	if len(resp.Agents) < 2 {
 		t.Fatalf("agents: got %d, want at least 2", len(resp.Agents))
+	}
+	foundResearcherModel := false
+	for _, agent := range resp.Agents {
+		if agent.AgentID == child.AgentID {
+			foundResearcherModel = true
+			if agent.LLMProvider != "fireworks" || agent.LLMModel != "accounts/fireworks/models/deepseek-v4-flash" || agent.LLMReasoning != "low" || agent.ModelPolicy != "run_metadata" {
+				t.Fatalf("researcher agent model config = %+v", agent)
+			}
+		}
+	}
+	if !foundResearcherModel {
+		t.Fatalf("missing researcher agent model config for %s in %+v", child.AgentID, resp.Agents)
 	}
 	if len(resp.Edges) == 0 {
 		t.Fatal("expected at least one delegation edge")

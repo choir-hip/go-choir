@@ -114,9 +114,6 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 						AgentProfile: callerProfile,
 					}
 				}
-				if strings.TrimSpace(in.InitialContent) == "" {
-					return "", fmt.Errorf("conductor spawn_agent role=vtext requires initial_content containing the first document revision")
-				}
 				decision, err := rt.ensureConductorVTextRoute(ctx, parentRec, in.Objective, in.InitialContent)
 				if err != nil {
 					return "", err

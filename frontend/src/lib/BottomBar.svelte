@@ -27,6 +27,7 @@
     APP_REGISTRY,
     liveStatus as desktopLiveStatus,
   } from './stores/desktop.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -41,6 +42,9 @@
   let bottomBarEl = null;
   let bottomBarResizeObserver = null;
   let menuOpen = false;
+  let promptFocused = false;
+  let chyronItems = [];
+  let removeLiveListener = () => {};
 
   const launcherAppIds = [
     'files',
@@ -112,6 +116,62 @@
     }
   }
 
+  function chyronSummary(message) {
+    const kind = liveEventKind(message);
+    const payload = liveEventPayload(message);
+    const agent = String(message?.agent_id || payload.agent_id || payload.from || payload.role || 'agent')
+      .split(':')
+      .pop();
+    if (kind === 'tool.invoked') {
+      return `${agent} called ${payload.tool || 'tool'}`;
+    }
+    if (kind === 'tool.result') {
+      return `${agent} ${payload.tool || 'tool'} ${payload.is_error ? 'errored' : 'returned'}`;
+    }
+    if (kind === 'channel.message') {
+      const from = String(payload.from || agent || 'agent').split(':').pop();
+      const to = String(payload.to_agent_id || '').split(':').pop();
+      const content = String(payload.content || '').replace(/\s+/g, ' ').trim();
+      return `${from}${to ? ` → ${to}` : ''}: ${content.slice(0, 120)}`;
+    }
+    if (kind === 'loop.submitted') return `${agent} queued`;
+    if (kind === 'loop.started') return `${agent} started`;
+    if (kind === 'loop.completed') return `${agent} completed`;
+    if (kind === 'loop.failed') return `${agent} failed`;
+    if (kind === 'vtext.agent_revision.started') return 'VText revision started';
+    if (kind === 'vtext.agent_revision.completed') return 'VText revision completed';
+    if (kind === 'vtext.document_revision.created') return `VText wrote ${String(payload.revision_id || 'a new version').slice(0, 8)}`;
+    return '';
+  }
+
+  function shouldShowInChyron(message) {
+    return [
+      'tool.invoked',
+      'tool.result',
+      'channel.message',
+      'loop.submitted',
+      'loop.started',
+      'loop.completed',
+      'loop.failed',
+      'vtext.agent_revision.started',
+      'vtext.agent_revision.completed',
+      'vtext.document_revision.created',
+    ].includes(liveEventKind(message));
+  }
+
+  function handleLiveEvent(message) {
+    if (!shouldShowInChyron(message)) return;
+    const text = chyronSummary(message);
+    if (!text) return;
+    chyronItems = [
+      ...chyronItems,
+      {
+        id: `${message.stream_seq || Date.now()}-${Math.random().toString(16).slice(2)}`,
+        text,
+      },
+    ].slice(-10);
+  }
+
   function resizePromptInput() {
     if (!promptInputEl) return;
     const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
@@ -157,6 +217,7 @@
   onMount(() => {
     publishBottomBarHeight();
     resizePromptInput();
+    removeLiveListener = addLiveEventListener(handleLiveEvent);
     if (typeof ResizeObserver !== 'undefined' && bottomBarEl) {
       bottomBarResizeObserver = new ResizeObserver(publishBottomBarHeight);
       bottomBarResizeObserver.observe(bottomBarEl);
@@ -165,6 +226,7 @@
   });
 
   onDestroy(() => {
+    removeLiveListener();
     bottomBarResizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
   });
@@ -178,6 +240,16 @@
   data-desk-menu-open={menuOpen ? 'true' : 'false'}
   bind:this={bottomBarEl}
 >
+  {#if chyronItems.length > 0 && !promptFocused && !menuOpen}
+    <div class="shelf-chyron" data-shelf-chyron aria-live="polite">
+      <div class="shelf-chyron-track">
+        {#each chyronItems as item (item.id)}
+          <span class="shelf-chyron-item">{item.text}</span>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <!-- Left section: Desk menu + open windows -->
   <div class="bar-left">
     <button
@@ -309,6 +381,8 @@
         bind:value={promptValue}
         on:keydown={handlePromptKeydown}
         on:input={resizePromptInput}
+        on:focus={() => (promptFocused = true)}
+        on:blur={() => (promptFocused = false)}
         placeholder={promptPlaceholder}
         aria-label="Prompt input"
         disabled={promptDisabled}
@@ -355,6 +429,43 @@
 
   .bottom-bar.menu-open {
     z-index: 10000;
+  }
+
+  .shelf-chyron {
+    position: absolute;
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    bottom: calc(100% + 3px);
+    height: 1.35rem;
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: linear-gradient(90deg, transparent, black 9%, black 91%, transparent);
+  }
+
+  .shelf-chyron-track {
+    display: inline-flex;
+    min-width: 100%;
+    gap: 1.25rem;
+    align-items: center;
+    white-space: nowrap;
+    color: rgba(219, 234, 254, 0.74);
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-shadow: 0 1px 10px rgba(2, 6, 23, 0.84);
+    animation: shelf-chyron-flow 22s linear infinite;
+  }
+
+  .shelf-chyron-item {
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.34);
+    padding: 0.14rem 0.5rem;
+    backdrop-filter: blur(8px);
+  }
+
+  @keyframes shelf-chyron-flow {
+    from { transform: translateX(-18%); }
+    to { transform: translateX(18%); }
   }
 
   .bar-left {

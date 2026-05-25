@@ -1784,6 +1784,10 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\n---\n")
 	if current.AuthorKind == types.AuthorUser {
 		b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
+		b.WriteString("\nBecause VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.")
+		b.WriteString("\nFor greetings or simple non-factual prompts, answer directly and do not open workers.")
+		b.WriteString("\nFor factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.")
+		b.WriteString("\nFor coding/execution requests, the first revision should state the objective and evidence plan, followed by request_super_execution in the same run.")
 	}
 	if hasGroundedHistory {
 		b.WriteString("\nThis document already has grounded workflow history on the coordination channel.")
@@ -1795,22 +1799,24 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		if current.AuthorKind == types.AuthorUser {
 			b.WriteString("\nYou may edit user-provided text for structure, clarity, or formatting.")
 			b.WriteString("\nDo not add factual claims, citations, or coding results from model priors.")
-			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, start the needed worker request before ending the run.")
+			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, write a brief working revision first, then start the needed worker request before ending the run.")
 		} else if allowsUngroundedCreativeDraft {
 			b.WriteString("\nThe current conductor seed is for a creative/non-factual draft.")
 			b.WriteString("\nYou may call edit_vtext to produce the requested creative document without worker grounding.")
 			b.WriteString("\nDo not spawn researcher or request super for this creative draft unless the user asks for factual grounding, current events, citations, code execution, product mutation, or verification.")
 			b.WriteString("\nDo not add factual, current-events, citation, coding, or product claims unless worker evidence exists.")
 		} else {
-			b.WriteString("\nDo not call edit_vtext from model priors. The current conductor abstract is already the visible document seed.")
-			b.WriteString("\nFor factual/current claims, call spawn_agent with role=\"researcher\" on this document channel. Use parallel researchers when you can give each one a distinct branch; otherwise start with one broad researcher.")
+			b.WriteString("\nDo not call edit_vtext with factual claims from model priors.")
+			b.WriteString("\nFor factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\" on this document channel. Use parallel researchers when you can give each one a distinct branch; otherwise start with one broad researcher.")
 			b.WriteString("\nOrdinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work. Do not route them to request_super_execution unless the user also asks for code execution, product mutation, candidate-world work, or verifier contracts.")
 			b.WriteString("\nFor coding, generated artifacts, execution, or verification, call request_super_execution.")
-			b.WriteString("\nAfter starting the necessary worker request(s), write a brief interim revision instead of leaving the seed visible: name the objective, worker type, evidence being gathered, and next expected revision. Do not include ungrounded factual claims. Worker deliveries will wake later VText runs to create evidence-backed revisions.")
+			b.WriteString("\nAfter starting the necessary worker request(s), keep the interim revision short: name the objective, worker type, evidence being gathered, and next expected revision. Worker deliveries will wake later VText runs to create evidence-backed revisions.")
 		}
 	}
 	b.WriteString("\nTreat this run as one step in an ongoing document loop.")
 	b.WriteString("\nWorker messages can wake later vtext runs and trigger the next revision.")
+	b.WriteString("\nPrefer prompt-to-v1 speed and small subsequent revisions over waiting for exhaustive coverage.")
+	b.WriteString("\nWhen worker findings arrive, update the document as soon as the first packet can improve it; do not wait for every researcher or super thread to finish.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nDo not answer knowledge or coding requests from model weights. Depend on researcher messages for knowledge and super messages for coding/execution/verification.")

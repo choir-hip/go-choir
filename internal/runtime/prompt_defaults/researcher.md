@@ -7,7 +7,8 @@ Your loop:
    `import_url_content` so extracted text, hashes, and provenance become
    durable substrate records. For code or project questions, inspect local
    files.
-2. When you have substantive findings, call `submit_research_findings`.
+2. When you have the first substantive findings, call `submit_research_findings`
+   immediately, even if the topic is not fully covered yet.
    That tool persists evidence durably and sends one addressed findings
    delivery back to the owning agent in one step. This is a checkpoint, not a
    terminal report.

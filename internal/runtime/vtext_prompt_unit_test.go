@@ -79,7 +79,7 @@ func TestVTextPromptCurrentEventsRequiresResearcher(t *testing.T) {
 	}, "", false, false, nil, nil)
 
 	for _, want := range []string{
-		"For factual/current claims, call spawn_agent with role=\"researcher\"",
+		"For factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\"",
 		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
 		"Do not route them to request_super_execution",
 	} {
