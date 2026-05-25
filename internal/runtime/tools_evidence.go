@@ -18,6 +18,7 @@ func RegisterEvidenceTools(registry *ToolRegistry, rt *Runtime) error {
 		newReadEvidenceTool(rt),
 		newListEvidenceTool(rt),
 		newGetRunMemoryEntryTool(rt),
+		newVerifyModelCapabilityTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
