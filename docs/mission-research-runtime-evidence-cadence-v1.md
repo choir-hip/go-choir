@@ -415,6 +415,19 @@ evidence artifact refs: frontend/test-results/vtext-model-cadence-smoke-20260525
 rollback refs: v0 mission remains in docs/mission-vtext-runtime-progress-cadence-v0.md; platform rollback target before this run is f482da6.
 ```
 
+## Checkpoint: Required First Findings Helped, But Manual Stalls Remain
+
+```text
+status: checkpoint_incomplete
+checkpoint date: 2026-05-25
+deployed commit under review: 8c18016
+new evidence: the required-first-findings tool-contract path improved staging probes, including `nba update` on Fireworks DeepSeek V4 Flash: first VText in ~2.6s, first search result in ~11.6s, first findings in ~18.6s, v2 in ~29.6s, and no provider/tool failures in the captured probe. Breadth probes for simple, weather, linked-source, and mixed prompts mostly passed, though one long serial Playwright run hit a product API 401 while polling a mixed prompt; the mixed prompt passed when rerun alone.
+new user-reported failure: a manual staging prompt, `Last Night in Baseball`, stayed on the initial VText revision for several minutes and then surfaced `tool loop: model stopped at max_tokens (iteration 2)`. The screenshot shows VText had only written a status-style v1 saying evidence was being gathered and that a researcher had been requested.
+belief-state change: the `max_tokens` toast is probably not the root cause by itself. It appears after a long stall, so the first question is why the prompt did not search, emit findings, and write an interim VText revision before the model hit the output cap or provider timeout. The current probe suite may under-cover this because it measures the hard `nba update` path successfully but does not yet replay the exact stalled baseball prompt or older/per-computer model-policy states.
+remaining error field: manual broad sports prompts can still lose the user for minutes; VText may still write a "waiting for evidence" v1 and then fail instead of producing smaller interim revisions; a long serial Playwright probe can lose auth while polling; deployed traces must make it obvious whether the stall is in spawn, search provider call, researcher model turn, findings delivery, VText wakeup, edit_vtext, or provider output cap.
+next executable probe: reproduce the manual baseball failure on staging with product-path Playwright and Trace polling, then classify the exact stalled transition. Inspect request/response instrumentation for the VText and researcher turns: model/provider, max_tokens requested or omitted, tool_choice, available tools, tool calls, channel messages, and whether any successful search result or findings message arrived before the terminal error.
+```
+
 ## Sources And Prior Art
 
 - Parallel Search API docs describe ranked, LLM-optimized excerpts and fewer
