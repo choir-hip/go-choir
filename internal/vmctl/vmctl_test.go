@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1265,6 +1266,60 @@ func TestOwnershipRegistry_PruneRetentionRemovesEphemeralPrimaryOwnership(t *tes
 	}
 	if containsString(mgr.destroys, realOwn.VMID) {
 		t.Fatalf("real user VM %s must not be destroyed: %v", realOwn.VMID, mgr.destroys)
+	}
+}
+
+func TestOwnershipRegistry_RetentionPlanPrefersLargeSafeCandidates(t *testing.T) {
+	stateDir := t.TempDir()
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{
+		Mode:                  RetentionPruneModeDryRun,
+		StateDir:              stateDir,
+		EphemeralEmailDomains: []string{"example.com"},
+		OrphanMinAge:          time.Hour,
+		EphemeralMinAge:       time.Hour,
+		MaxDeletes:            1,
+		MaxBytes:              1024 * 1024 * 1024,
+	})
+	reg.setRetentionUserEmailsForTest(map[string]string{
+		"test-user": "playwright@example.com",
+	})
+	testOwn, err := reg.ResolveOrAssign("test-user")
+	if err != nil {
+		t.Fatalf("resolve test user: %v", err)
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.mu.Unlock()
+
+	smallOrphan := filepath.Join(stateDir, "vm-orphan-small")
+	largeEphemeral := filepath.Join(stateDir, testOwn.VMID)
+	for _, dir := range []string{smallOrphan, largeEphemeral} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(smallOrphan, "data"), []byte("small"), 0o600); err != nil {
+		t.Fatalf("write small orphan: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(largeEphemeral, "data"), bytes.Repeat([]byte("x"), 128*1024), 0o600); err != nil {
+		t.Fatalf("write large ephemeral: %v", err)
+	}
+	if err := os.Chtimes(smallOrphan, old, old); err != nil {
+		t.Fatalf("chtimes small orphan: %v", err)
+	}
+
+	plan := reg.RetentionPrunePlan()
+	if len(plan.Candidates) != 1 {
+		t.Fatalf("limited candidates = %d, want 1: %+v", len(plan.Candidates), plan)
+	}
+	if plan.Candidates[0].VMID != testOwn.VMID {
+		t.Fatalf("first candidate = %+v, want large ephemeral %s", plan.Candidates[0], testOwn.VMID)
+	}
+	if plan.Inventory.ProjectedDeleteBytes <= 8192 {
+		t.Fatalf("projected bytes = %d, want meaningful large candidate", plan.Inventory.ProjectedDeleteBytes)
 	}
 }
 

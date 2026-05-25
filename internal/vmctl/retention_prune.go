@@ -349,6 +349,9 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 func sortRetentionCandidates(candidates []RetentionPruneCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
+		if left.SizeBytes != right.SizeBytes {
+			return left.SizeBytes > right.SizeBytes
+		}
 		leftRank := retentionReasonRank(left.Reason)
 		rightRank := retentionReasonRank(right.Reason)
 		if leftRank != rightRank {
@@ -358,9 +361,6 @@ func sortRetentionCandidates(candidates []RetentionPruneCandidate) {
 		rightState := retentionStateRank(right.State)
 		if leftState != rightState {
 			return leftState < rightState
-		}
-		if left.SizeBytes != right.SizeBytes {
-			return left.SizeBytes > right.SizeBytes
 		}
 		if left.AgeSeconds != right.AgeSeconds {
 			return left.AgeSeconds > right.AgeSeconds
