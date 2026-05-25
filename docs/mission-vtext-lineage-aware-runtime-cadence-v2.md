@@ -353,6 +353,20 @@ direct endpoint probes: Node B probes against `https://chatgpt.com/backend-api/c
 root cause: Choir's runtime requests a catalog-derived positive output budget for ChatGPT foreground agent loops. `MaxInteractiveOutputTokensForSelection` currently omits max tokens for Fireworks but not ChatGPT, so VText sends `max_output_tokens=65536` to the ChatGPT Codex Responses endpoint. That parameter is unsupported by the deployed ChatGPT endpoint and causes the first required `edit_vtext` turn to fail before tools can run.
 candidate fix: treat ChatGPT like Fireworks for ordinary interactive loops: omit explicit max-output-token parameters unless a per-computer/model policy explicitly sets `max_tokens`. Keep explicit max token overrides available for future provider paths only if the endpoint supports them.
 
+### 2026-05-25 ChatGPT Max-Token Fix Proof
+
+commits: documentation checkpoint `c55c587`; code fix `8c97fab9163b5b914b915e8349729e0e0e8d475f`.
+CI/deploy: GitHub Actions CI run `26417709079` passed, including non-runtime tests, runtime shards 0-3, vet/build, and staging deploy. FlakeHub publish run `26417709068` passed. Staging `/health` reported proxy and sandbox deployed at commit `8c97fab9163b5b914b915e8349729e0e0e8d475f`, deployed at `2026-05-25T20:04:53Z`.
+local verification before push: `nix develop -c go test ./internal/provider ./internal/gatewayruntime -count=1` passed; focused runtime/provider checks for ChatGPT provider serialization, model-policy max-token selection, exact tool choice, and max-token loop behavior passed.
+deployed proof command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+deployed proof result: passed in 2.0m. Evidence file `/Users/wiz/go-choir/test-results/vtext-model-cadence-matrix-2026-05-25T20-05-32-837Z/chatgpt-gpt-5-5-low.json`.
+submission id: `45bf7bda-1e4d-4b6a-aff5-d028f77c7282`.
+document id: `b8b76621-74bd-4881-b497-232969355f60`.
+revision timeline: v1 `64ce1bd4-0588-4aa1-b2d5-daf3126c1951` at about 4.7s; v2 `d30016da-4b2a-48e3-bf6b-6577eeb68517` at about 41.7s; v3 `bf90fc53-ec7d-4f81-9fb6-2dc43e8e9a8e` at about 90.7s.
+worker/search timeline: researcher spawn at about 10.7s; first search result at about 13.7s; first findings at about 28.7s; first findings to next VText revision about 13.0s; 12 search queries and 49 search attempts.
+gateway evidence: after deploy, Node B gateway logs showed ChatGPT calls with `max_tokens=0`, including `tool_choice=function:edit_vtext` and `tool_choice=function:submit_research_findings`; the prior `400 Bad Request` failure did not recur.
+residual risks: the proof still recorded duplicate/stale `edit_vtext` tool-result errors with output length 52 while successful revisions were created. This is not the ChatGPT max-token root cause, but it remains part of the broader VText cadence cleanup field.
+
 ## Run Checkpoint And Resumption State
 
 ```text
