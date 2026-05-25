@@ -26,7 +26,7 @@ func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 		Name:        "verify_model_capability",
 		Description: "Run a bounded provider-backed verification prompt through a selected role/model policy, optionally with one image, and return evidence without mutating product state.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"role":             map[string]any{"type": "string", "description": "Optional model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, vsuper, co-super, or vtext."},
+			"role":             map[string]any{"type": "string", "description": "Required model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, vsuper, co-super, or vtext."},
 			"provider":         map[string]any{"type": "string", "description": "Optional explicit provider override from the configured model catalog."},
 			"model":            map[string]any{"type": "string", "description": "Optional explicit model override from the configured model catalog."},
 			"reasoning_effort": map[string]any{"type": "string", "description": "Optional provider reasoning setting."},
@@ -35,7 +35,7 @@ func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 			"image_base64":     map[string]any{"type": "string", "description": "Optional base64 image data for multimodal verification."},
 			"image_mime_type":  map[string]any{"type": "string", "description": "MIME type for image_base64, default image/png."},
 			"max_tokens":       map[string]any{"type": "integer", "description": "Optional explicit output budget. Omit for provider defaults."},
-		}, []string{"prompt"}, false),
+		}, []string{"role", "prompt"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in verifyModelCapabilityArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
