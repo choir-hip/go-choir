@@ -250,6 +250,88 @@ func TestSearchClient_Fallback(t *testing.T) {
 	}
 }
 
+func TestSearchClient_CoolsDownQuotaLimitedProviders(t *testing.T) {
+	quotaProvider := &mockSearchProvider{
+		name:      "quota",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return nil, errors.New("status 402 Payment Required: NO_MORE_CREDITS")
+		},
+	}
+	successProvider := &mockSearchProvider{
+		name:      "success",
+		available: true,
+		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+			return []SearchResult{{Title: "Success", URL: "http://example.com", Snippet: "success"}}, nil
+		},
+	}
+	client := &SearchClient{
+		providers:         []SearchProvider{quotaProvider, successProvider},
+		providersPerQuery: 2,
+		cooldownDuration:  time.Hour,
+	}
+
+	first, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
+	if err != nil {
+		t.Fatalf("first search: %v", err)
+	}
+	if first.Attempts[0].Status != "quota_limited" {
+		t.Fatalf("first attempt status = %q, want quota_limited", first.Attempts[0].Status)
+	}
+	if quotaProvider.searchCount != 1 {
+		t.Fatalf("quota provider search count after first = %d, want 1", quotaProvider.searchCount)
+	}
+
+	second, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
+	if err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	foundCooldown := false
+	for _, attempt := range second.Attempts {
+		if attempt.Provider == "quota" && attempt.Status == "cooling_down" {
+			foundCooldown = true
+		}
+	}
+	if !foundCooldown {
+		t.Fatalf("second attempts = %+v, want quota cooling_down attempt", second.Attempts)
+	}
+	if quotaProvider.searchCount != 1 {
+		t.Fatalf("quota provider search count after cooldown = %d, want still 1", quotaProvider.searchCount)
+	}
+}
+
+func TestParseParallelResults(t *testing.T) {
+	raw := []byte(`{
+		"search_id": "search_test",
+		"results": [
+			{
+				"url": "https://example.com/one",
+				"title": "Example One",
+				"publish_date": "2026-05-25",
+				"excerpts": ["First excerpt.", "Second excerpt."]
+			}
+		],
+		"session_id": "session_test"
+	}`)
+
+	results, err := parseParallelResults(raw)
+	if err != nil {
+		t.Fatalf("parseParallelResults: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Title != "Example One" || results[0].URL != "https://example.com/one" {
+		t.Fatalf("result = %+v, want parsed title/url", results[0])
+	}
+	if !strings.Contains(results[0].Snippet, "First excerpt.") || !strings.Contains(results[0].Snippet, "Second excerpt.") {
+		t.Fatalf("snippet = %q, want joined excerpts", results[0].Snippet)
+	}
+	if results[0].PublishedAt != "2026-05-25" {
+		t.Fatalf("published_at = %q, want date", results[0].PublishedAt)
+	}
+}
+
 func TestSearchClient_AllProvidersFail(t *testing.T) {
 	fail1 := &mockSearchProvider{
 		name:      "fail1",
@@ -617,10 +699,39 @@ func TestSerperProvider_Integration(t *testing.T) {
 	}
 }
 
+func TestParallelProvider_Integration(t *testing.T) {
+	apiKey := os.Getenv("PARALLEL_API_KEY")
+	if apiKey == "" {
+		t.Skip("PARALLEL_API_KEY not set, skipping integration test")
+	}
+
+	provider := &ParallelProvider{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results, err := provider.Search(ctx, "golang programming", 3)
+	if err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected at least one result")
+	}
+	for _, r := range results {
+		if r.Title == "" {
+			t.Error("expected non-empty title")
+		}
+		if r.URL == "" {
+			t.Error("expected non-empty URL")
+		}
+	}
+}
+
 func TestNewSearchClient_FromEnv(t *testing.T) {
 	// Save current env vars
 	tavilyKey := os.Getenv("TAVILY_API_KEY")
 	braveKey := os.Getenv("BRAVE_API_KEY")
+	parallelKey := os.Getenv("PARALLEL_API_KEY")
 	exaKey := os.Getenv("EXA_API_KEY")
 	serperKey := os.Getenv("SERPER_API_KEY")
 
@@ -628,6 +739,7 @@ func TestNewSearchClient_FromEnv(t *testing.T) {
 	defer func() {
 		os.Setenv("TAVILY_API_KEY", tavilyKey)
 		os.Setenv("BRAVE_API_KEY", braveKey)
+		os.Setenv("PARALLEL_API_KEY", parallelKey)
 		os.Setenv("EXA_API_KEY", exaKey)
 		os.Setenv("SERPER_API_KEY", serperKey)
 	}()
@@ -635,6 +747,7 @@ func TestNewSearchClient_FromEnv(t *testing.T) {
 	// Test with no keys set
 	os.Unsetenv("TAVILY_API_KEY")
 	os.Unsetenv("BRAVE_API_KEY")
+	os.Unsetenv("PARALLEL_API_KEY")
 	os.Unsetenv("EXA_API_KEY")
 	os.Unsetenv("SERPER_API_KEY")
 

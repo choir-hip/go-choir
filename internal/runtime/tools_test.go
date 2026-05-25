@@ -418,6 +418,54 @@ func TestExecuteTools(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name: "projected",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return toolProjectionResultJSON(
+				map[string]any{"summary": "compact result", "results": []string{"a"}},
+				map[string]any{"raw": strings.Repeat("full evidence ", 20)},
+				map[string]any{"type": "test_projection"},
+			)
+		},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	var resultPayload map[string]any
+	results := executeTools(context.Background(), registry, []types.ToolCall{
+		{ID: "call-projected", Name: "projected", Arguments: json.RawMessage(`{}`)},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventToolResult {
+			return
+		}
+		if err := json.Unmarshal(payload, &resultPayload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+	})
+
+	if len(results) != 1 || results[0].IsError {
+		t.Fatalf("results = %#v, want one successful projected result", results)
+	}
+	if strings.Contains(results[0].Output, "__choir_tool_projection") || strings.Contains(results[0].Output, "full evidence") {
+		t.Fatalf("model-visible output leaked envelope/full evidence: %s", results[0].Output)
+	}
+	if !strings.Contains(results[0].Output, "compact result") {
+		t.Fatalf("model-visible output = %s, want compact result", results[0].Output)
+	}
+	if resultPayload["full_output_sha256"] == "" || resultPayload["full_output"] == "" {
+		t.Fatalf("result payload missing durable evidence fields: %#v", resultPayload)
+	}
+	if got := resultPayload["output"]; got != results[0].Output {
+		t.Fatalf("event output = %#v, want model output %q", got, results[0].Output)
+	}
+	projection, ok := resultPayload["output_projection"].(map[string]any)
+	if !ok || projection["type"] != "test_projection" {
+		t.Fatalf("output_projection = %#v, want test_projection", resultPayload["output_projection"])
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := NewToolRegistry()
 

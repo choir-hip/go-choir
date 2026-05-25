@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -324,21 +326,38 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 		}
 	}
 
-	output = capToolOutput(output)
+	visibleOutput := output
+	var projection *toolOutputProjection
+	if !isError {
+		projection = parseToolOutputProjection(output)
+		if projection != nil {
+			visibleOutput = projection.ModelOutput
+		}
+	}
+	visibleOutput = capToolOutput(visibleOutput)
 
 	// Emit tool.result event after execution.
-	resultPayload, _ := json.Marshal(map[string]any{
+	resultPayloadData := map[string]any{
 		"tool":       call.Name,
 		"call_id":    call.ID,
 		"is_error":   isError,
-		"output_len": len(output),
-		"output":     output,
-	})
+		"output_len": len(visibleOutput),
+		"output":     visibleOutput,
+	}
+	if projection != nil {
+		resultPayloadData["output_projection"] = projection.Metadata
+		resultPayloadData["full_output_len"] = len(projection.DurableOutput)
+		resultPayloadData["full_output_sha256"] = toolOutputSHA256Hex(projection.DurableOutput)
+		fullOutput, truncated := capDurableToolOutput(projection.DurableOutput)
+		resultPayloadData["full_output"] = fullOutput
+		resultPayloadData["full_output_truncated"] = truncated
+	}
+	resultPayload, _ := json.Marshal(resultPayloadData)
 	emit(types.EventToolResult, "tool_call", resultPayload)
 
 	return types.ToolResult{
 		CallID:  call.ID,
-		Output:  output,
+		Output:  visibleOutput,
 		IsError: isError,
 	}
 }
@@ -397,6 +416,90 @@ func capToolOutput(output string) string {
 	return output[:maxToolOutput] + fmt.Sprintf(
 		"\n\n[output truncated — %d bytes total, showing first %d bytes]",
 		len(output), maxToolOutput)
+}
+
+type toolOutputProjection struct {
+	ModelOutput   string
+	DurableOutput string
+	Metadata      map[string]any
+}
+
+func toolProjectionResultJSON(modelOutput any, durableOutput any, metadata map[string]any) (string, error) {
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	return toolResultJSON(map[string]any{
+		"__choir_tool_projection": true,
+		"model_output":            modelOutput,
+		"durable_output":          durableOutput,
+		"projection":              metadata,
+	})
+}
+
+func parseToolOutputProjection(output string) *toolOutputProjection {
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
+		return nil
+	}
+	rawSentinel, ok := decoded["__choir_tool_projection"]
+	if !ok {
+		return nil
+	}
+	var sentinel bool
+	if err := json.Unmarshal(rawSentinel, &sentinel); err != nil || !sentinel {
+		return nil
+	}
+	modelOutput := marshalRawProjectionValue(decoded["model_output"])
+	if strings.TrimSpace(modelOutput) == "" {
+		modelOutput = output
+	}
+	durableOutput := marshalRawProjectionValue(decoded["durable_output"])
+	if strings.TrimSpace(durableOutput) == "" {
+		durableOutput = output
+	}
+	metadata := map[string]any{}
+	if raw := decoded["projection"]; len(raw) > 0 {
+		_ = json.Unmarshal(raw, &metadata)
+	}
+	return &toolOutputProjection{
+		ModelOutput:   modelOutput,
+		DurableOutput: durableOutput,
+		Metadata:      metadata,
+	}
+}
+
+func marshalRawProjectionValue(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	var compact any
+	if err := json.Unmarshal(raw, &compact); err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	data, err := json.Marshal(compact)
+	if err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	return string(data)
+}
+
+func capDurableToolOutput(output string) (string, bool) {
+	const maxDurableToolOutput = 512 * 1024
+	if len(output) <= maxDurableToolOutput {
+		return output, false
+	}
+	return output[:maxDurableToolOutput] + fmt.Sprintf(
+		"\n\n[durable output truncated — %d bytes total, showing first %d bytes]",
+		len(output), maxDurableToolOutput), true
+}
+
+func toolOutputSHA256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 type requiredWorkerDelegation struct {

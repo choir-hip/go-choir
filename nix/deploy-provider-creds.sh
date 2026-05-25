@@ -44,7 +44,10 @@ ENVS=()
 add_env_once() {
   local key="$1"
   local value="${!key:-}"
-  if [ -n "$value" ] && ! printf '%s\n' "${ENVS[@]}" | grep -q "^${key}="; then
+  if [ -z "$value" ]; then
+    return
+  fi
+  if [ ${#ENVS[@]} -eq 0 ] || ! printf '%s\n' "${ENVS[@]}" | grep -q "^${key}="; then
     ENVS+=("${key}=${value}")
   fi
 }
@@ -112,7 +115,7 @@ else
   echo "warning: $CODEX_AUTH not found; ChatGPT provider auth will not be deployed" >&2
 fi
 
-for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY; do
+for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY PARALLEL_API_KEY; do
   add_env_once "$key"
 done
 

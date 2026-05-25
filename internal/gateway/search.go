@@ -1,5 +1,6 @@
 // Package gateway implements web search functionality with multi-provider
-// rotation and fallback. Supports Tavily, Brave, Exa, and Serper search APIs.
+// rotation and fallback. Supports Tavily, Brave, Parallel, Exa, and Serper
+// search APIs.
 //
 // The SearchClient uses round-robin rotation across available providers and
 // queries more than one provider per request by default for result diversity.
@@ -16,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -105,6 +107,9 @@ type SearchClient struct {
 	providers         []SearchProvider
 	counter           atomic.Int64
 	providersPerQuery int
+	cooldownMu        sync.Mutex
+	cooldowns         map[string]time.Time
+	cooldownDuration  time.Duration
 }
 
 // NewSearchClient creates a SearchClient with all available providers.
@@ -115,6 +120,7 @@ func NewSearchClient() *SearchClient {
 	providers := []SearchProvider{
 		&TavilyProvider{},
 		&BraveProvider{},
+		&ParallelProvider{},
 		&ExaProvider{},
 		&SerperProvider{},
 	}
@@ -150,7 +156,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 	}
 
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, EXA_API_KEY, or SERPER_API_KEY)")
+		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, or SERPER_API_KEY)")
 	}
 
 	// Round-robin: get next starting position atomically.
@@ -164,6 +170,19 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 	for i := range c.providers {
 		idx := (start + i) % len(c.providers)
 		provider := c.providers[idx]
+		if until, ok := c.providerCoolingDown(provider.Name()); ok {
+			attempts = append(attempts, SearchProviderAttempt{
+				Provider:  provider.Name(),
+				Endpoint:  searchProviderEndpoint(provider.Name()),
+				Status:    "cooling_down",
+				LatencyMs: 0,
+				Error:     fmt.Sprintf("provider cooling down until %s", until.UTC().Format(time.RFC3339)),
+			})
+			if lastErr == nil {
+				lastErr = fmt.Errorf("%s cooling down", provider.Name())
+			}
+			continue
+		}
 
 		started := time.Now()
 		providerResults, err := provider.Search(ctx, req.Query, maxResults)
@@ -192,6 +211,9 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		attempt.Error = truncateSearchAttemptError(err)
 		attempts = append(attempts, attempt)
 		lastErr = fmt.Errorf("%s: %w", provider.Name(), err)
+		if shouldCooldownSearchError(err) {
+			c.cooldownProvider(provider.Name())
+		}
 		// Continue to next provider (fallback).
 	}
 
@@ -277,6 +299,56 @@ func (c *SearchClient) providerFanout() int {
 	return value
 }
 
+func (c *SearchClient) providerCoolingDown(provider string) (time.Time, bool) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return time.Time{}, false
+	}
+	c.cooldownMu.Lock()
+	defer c.cooldownMu.Unlock()
+	if c.cooldowns == nil {
+		return time.Time{}, false
+	}
+	until, ok := c.cooldowns[provider]
+	if !ok {
+		return time.Time{}, false
+	}
+	now := time.Now()
+	if !until.After(now) {
+		delete(c.cooldowns, provider)
+		return time.Time{}, false
+	}
+	return until, true
+}
+
+func (c *SearchClient) cooldownProvider(provider string) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return
+	}
+	duration := c.searchCooldownDuration()
+	if duration <= 0 {
+		return
+	}
+	c.cooldownMu.Lock()
+	defer c.cooldownMu.Unlock()
+	if c.cooldowns == nil {
+		c.cooldowns = map[string]time.Time{}
+	}
+	c.cooldowns[provider] = time.Now().Add(duration)
+}
+
+func (c *SearchClient) searchCooldownDuration() time.Duration {
+	if c.cooldownDuration > 0 {
+		return c.cooldownDuration
+	}
+	seconds := intFromEnv("CHOIR_SEARCH_PROVIDER_COOLDOWN_SECONDS", 10*60)
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func intFromEnv(name string, fallback int) int {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {
@@ -308,6 +380,8 @@ func searchProviderEndpoint(provider string) string {
 		return "https://api.tavily.com/search"
 	case "brave":
 		return "https://api.search.brave.com/res/v1/web/search"
+	case "parallel":
+		return "https://api.parallel.ai/v1/search"
 	case "exa":
 		return "https://api.exa.ai/search"
 	case "serper":
@@ -322,7 +396,19 @@ func searchAttemptStatus(err error) string {
 	if strings.Contains(msg, "429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "too many requests") {
 		return "rate_limited"
 	}
+	if strings.Contains(msg, "402") || strings.Contains(msg, "432") ||
+		strings.Contains(msg, "payment required") ||
+		strings.Contains(msg, "quota") ||
+		strings.Contains(msg, "credits") ||
+		strings.Contains(msg, "usage limit") {
+		return "quota_limited"
+	}
 	return "error"
+}
+
+func shouldCooldownSearchError(err error) bool {
+	status := searchAttemptStatus(err)
+	return status == "rate_limited" || status == "quota_limited"
 }
 
 func truncateSearchAttemptError(err error) string {
@@ -331,6 +417,98 @@ func truncateSearchAttemptError(err error) string {
 		return msg[:240] + "..."
 	}
 	return msg
+}
+
+// --- Parallel Provider ---
+
+// ParallelProvider implements search using Parallel's Search API. It uses only
+// the Search endpoint; generic paid extraction remains outside the ordinary
+// fast path.
+type ParallelProvider struct {
+	httpClient *http.Client
+}
+
+func (p *ParallelProvider) Name() string { return "parallel" }
+
+func (p *ParallelProvider) IsAvailable() bool {
+	return os.Getenv("PARALLEL_API_KEY") != ""
+}
+
+func (p *ParallelProvider) http() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
+func (p *ParallelProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	apiKey := os.Getenv("PARALLEL_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("PARALLEL_API_KEY not set")
+	}
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+	body := map[string]any{
+		"objective":       query,
+		"search_queries":  []string{query},
+		"mode":            "basic",
+		"max_chars_total": maxResults * 900,
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.parallel.ai/v1/search", strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+
+	resp, err := p.http().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
+	}
+	return parseParallelResults(bodyBytes)
+}
+
+func parseParallelResults(data []byte) ([]SearchResult, error) {
+	var result struct {
+		Results []struct {
+			Title       string   `json:"title"`
+			URL         string   `json:"url"`
+			PublishDate string   `json:"publish_date"`
+			Excerpts    []string `json:"excerpts"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	results := make([]SearchResult, 0, len(result.Results))
+	for _, r := range result.Results {
+		if r.URL == "" {
+			continue
+		}
+		results = append(results, SearchResult{
+			Title:       r.Title,
+			URL:         r.URL,
+			Snippet:     strings.Join(r.Excerpts, "\n\n"),
+			PublishedAt: r.PublishDate,
+		})
+	}
+	return results, nil
 }
 
 // --- Tavily Provider ---

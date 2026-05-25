@@ -141,7 +141,7 @@ Passed back into the researcher model after a tool call:
 - top bounded result cards;
 - bounded snippets/excerpts;
 - source reliability signals when available;
-- retrieval refs for deeper fetch/extract;
+- retrieval refs for deeper fetch/read steps;
 - explicit note if full evidence is larger than visible output.
 - concise gateway status only when degraded provider availability affects
   coverage, freshness, language, or confidence.
@@ -230,8 +230,9 @@ Expected roles:
   default fast VText path.
 
 Parallel is promising because its docs describe Search as returning ranked,
-LLM-optimized excerpts and reducing traditional search -> scrape -> extract
-loops. That claim must be measured in Choir rather than accepted.
+LLM-optimized excerpts and reducing traditional search -> fetch -> conversion
+loops. That claim must be measured in Choir rather than accepted; generic
+paid extraction is not part of the ordinary fast path.
 
 ## Prompt And Tool-Description Optimization
 
@@ -419,8 +420,9 @@ rollback refs: v0 mission remains in docs/mission-vtext-runtime-progress-cadence
 - Parallel Search API docs describe ranked, LLM-optimized excerpts and fewer
   traditional search/scrape/extract hops as a target worth testing in Choir.
 - Parallel overview distinguishes Search, Extract, and Task API usage; Choir
-  should start with Search/Extract for the fast path and leave Task API for
-  later deep research.
+  should start with Search only for the fast path, reserve Extract for a
+  future explicit paywalled-content pathway, and leave Task API for later deep
+  research.
 - Pi-style context pruning reinforces the split between durable history/full
   evidence and compact model-visible context.
 - DSPy-style prompt optimization suggests measuring prompt/tool-description

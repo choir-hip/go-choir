@@ -106,13 +106,15 @@ func newWebSearchTool(searchClient webSearchClient) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			full := map[string]any{
 				"query":     resp.Query,
 				"provider":  resp.Provider,
 				"providers": resp.Providers,
 				"attempts":  resp.Attempts,
 				"results":   resp.Results,
-			})
+			}
+			model, metadata := compactWebSearchProjection(full, resp)
+			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
 }
@@ -164,13 +166,145 @@ func newFetchURLTool(httpClient *http.Client) Tool {
 			if len(content) > maxChars {
 				content = content[:maxChars]
 			}
-			return toolResultJSON(map[string]any{
+			full := map[string]any{
 				"url":            target,
 				"status_code":    resp.StatusCode,
 				"content_type":   resp.Header.Get("Content-Type"),
 				"content_length": len(data),
 				"content":        content,
-			})
+			}
+			model, metadata := compactFetchURLProjection(full, content)
+			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
+}
+
+func compactWebSearchProjection(full map[string]any, resp *webSearchResponse) (map[string]any, map[string]any) {
+	const maxVisibleResults = 8
+	const maxSnippetChars = 700
+	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
+	for idx, result := range resp.Results {
+		if idx >= maxVisibleResults {
+			break
+		}
+		visible := map[string]any{
+			"rank":     idx + 1,
+			"title":    stringValue(result["title"]),
+			"url":      stringValue(result["url"]),
+			"snippet":  truncateString(stringValue(result["snippet"]), maxSnippetChars),
+			"provider": stringValue(result["provider"]),
+		}
+		if published := stringValue(result["published_at"]); published != "" {
+			visible["published_at"] = published
+		}
+		if score, ok := result["score"]; ok {
+			visible["score"] = score
+		}
+		visibleResults = append(visibleResults, visible)
+	}
+	attempts := make([]map[string]any, 0, len(resp.Attempts))
+	degraded := false
+	for _, attempt := range resp.Attempts {
+		compact := map[string]any{
+			"provider":   attempt["provider"],
+			"status":     attempt["status"],
+			"latency_ms": attempt["latency_ms"],
+			"results":    attempt["results"],
+		}
+		if status := stringValue(attempt["status"]); status != "" && status != "success" {
+			degraded = true
+			if errText := stringValue(attempt["error"]); errText != "" {
+				compact["error"] = truncateString(errText, 160)
+			}
+		}
+		attempts = append(attempts, compact)
+	}
+	model := map[string]any{
+		"query":                 resp.Query,
+		"provider":              resp.Provider,
+		"providers":             resp.Providers,
+		"result_count":          len(resp.Results),
+		"visible_result_count":  len(visibleResults),
+		"omitted_result_count":  researchMaxInt(0, len(resp.Results)-len(visibleResults)),
+		"results":               visibleResults,
+		"attempts":              attempts,
+		"full_evidence":         "stored in Trace tool.result full_output/full_output_sha256",
+		"projection_policy":     "top bounded result cards with compact snippets",
+		"provider_health_owner": "gateway",
+	}
+	if degraded {
+		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"
+	}
+	metadata := map[string]any{
+		"type":                 "web_search",
+		"full_result_count":    len(resp.Results),
+		"visible_result_count": len(visibleResults),
+		"full_output_bytes":    len(researchMustJSON(full)),
+		"model_output_bytes":   len(researchMustJSON(model)),
+	}
+	return model, metadata
+}
+
+func compactFetchURLProjection(full map[string]any, content string) (map[string]any, map[string]any) {
+	const maxContentChars = 4000
+	visibleContent := truncateString(content, maxContentChars)
+	model := map[string]any{
+		"url":               full["url"],
+		"status_code":       full["status_code"],
+		"content_type":      full["content_type"],
+		"content_length":    full["content_length"],
+		"content_chars":     len(content),
+		"visible_chars":     len(visibleContent),
+		"omitted_chars":     researchMaxInt(0, len(content)-len(visibleContent)),
+		"content":           visibleContent,
+		"full_evidence":     "stored in Trace tool.result full_output/full_output_sha256",
+		"projection_policy": "bounded excerpt; fetch/read deeper only when needed",
+	}
+	metadata := map[string]any{
+		"type":               "fetch_url",
+		"full_content_chars": len(content),
+		"visible_chars":      len(visibleContent),
+		"full_output_bytes":  len(researchMustJSON(full)),
+		"model_output_bytes": len(researchMustJSON(model)),
+	}
+	return model, metadata
+}
+
+func stringValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
+}
+
+func truncateString(value string, maxChars int) string {
+	value = strings.TrimSpace(value)
+	if maxChars <= 0 || len(value) <= maxChars {
+		return value
+	}
+	return strings.TrimSpace(value[:maxChars]) + "..."
+}
+
+func researchMustJSON(value any) string {
+	out, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+func researchMinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func researchMaxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
