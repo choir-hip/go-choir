@@ -96,6 +96,38 @@ func TestVerifyModelCapabilityRejectsImageForTextOnlyModel(t *testing.T) {
 	}
 }
 
+func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
+	provider := &capturingModelVerifyProvider{}
+	dir := t.TempDir()
+	rt := New(Config{
+		StorePath:       filepath.Join(dir, "runtime.db"),
+		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
+	}, nil, nil, provider)
+	tool := newVerifyModelCapabilityTool(rt)
+	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "run-verify-text-policy",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileSuper,
+	})
+
+	out, err := tool.Func(ctx, json.RawMessage(`{
+		"role":"verifier",
+		"prompt":"verify this text-only runtime evidence"
+	}`))
+	if err != nil {
+		t.Fatalf("verify_model_capability: %v", err)
+	}
+	if provider.req.Provider != "fireworks" || provider.req.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+		t.Fatalf("request provider/model = %s/%s", provider.req.Provider, provider.req.Model)
+	}
+	if strings.Contains(string(provider.req.Messages[0]), `"type":"image"`) {
+		t.Fatalf("text-only verifier message unexpectedly includes image: %s", string(provider.req.Messages[0]))
+	}
+	if !strings.Contains(out, `"role":"verifier"`) || !strings.Contains(out, `"image_input":false`) {
+		t.Fatalf("result missing text-only verifier evidence: %s", out)
+	}
+}
+
 func TestVerifyModelCapabilityUsesPolicyForKimiImage(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	dir := t.TempDir()

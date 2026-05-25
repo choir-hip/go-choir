@@ -69,6 +69,9 @@ That means:
 - every configured compatible model is eligible for every role, including
   conductor, VText, researcher, super, vsuper, co-super, verifier, and future
   roles;
+- current defaults such as "ChatGPT for conductor/super" or "Fireworks for
+  VText/researcher" are only the active computer's starting policy. They are
+  not proof that those roles belong to those providers;
 - compatibility is checked at the turn boundary from actual requirements:
   modality, tool calling, context length, output budget, reasoning controls,
   latency, cost, and provider deadline class;
@@ -77,8 +80,6 @@ That means:
   coding, writing, or research in general;
 - Kimi K2.6 or another multimodal model is required only for turns that carry
   screenshots, image artifacts, video frames, or other media inputs;
-- defaults such as "ChatGPT for conductor/super" or "Fireworks for
-  VText/researcher" are editable computer policy, not implementation topology;
 - the owner should be able to ask Choir to change policy in natural language,
   causing `super` to edit durable per-computer model policy through product
   state, after which later runs use the new effective policy without a platform
@@ -199,6 +200,33 @@ Current hypotheses, to be falsified or confirmed:
    spend the whole provider call drafting prose that never becomes a VText
    revision.
 
+## Current Provider-Doc Findings
+
+These findings are current working assumptions to verify against direct probes
+and staging behavior:
+
+- Fireworks' Chat Completions API is OpenAI-compatible but adds reasoning
+  controls. It documents DeepSeek V4 support for `reasoning_effort` values
+  `none`, `low`, `medium`, `high`, `xhigh`, and `max`; `low`/`medium` are
+  promoted to `high`, `xhigh` to `max`, and `none` disables thinking.
+- Fireworks documents `reasoning_history` as the control for preserving,
+  stripping, or interleaving historical `reasoning_content` in multi-turn
+  conversations. Choir must either preserve required reasoning fields or
+  deliberately disable/strip them where the provider/model supports that.
+- Fireworks tool calling supports `auto`, `none`, `required`, and exact
+  function-object `tool_choice` for compatible chat-completions models.
+- Kimi's own K2.6 docs say K2.6 is OpenAI-format compatible, supports text,
+  image, and video input, and emits `reasoning_content` when thinking is
+  enabled. They also warn that multi-step tool calls must keep assistant
+  `reasoning_content` in context, and recommend streaming for thinking models.
+- Kimi's own docs also constrain native Kimi `tool_choice` to `auto`/`none` in
+  thinking mode. Fireworks-hosted Kimi behavior must therefore be tested
+  directly before using exact required tool choice with Kimi; Kimi multimodal
+  verification can still run without tools.
+- DeepSeek's own API docs expose `reasoning_content` on DeepSeek V4 responses
+  and streaming deltas. These docs are secondary for this mission because Choir
+  calls DeepSeek V4 through Fireworks, but they support the carry-forward risk.
+
 ## Experiment Matrix
 
 Run the matrix at three layers:
@@ -274,6 +302,13 @@ The pass condition is not that every provider/model can do every possible turn.
 The pass condition is that incompatible turns fail or reroute at the capability
 boundary with clear evidence, while compatible turns are allowed for every role
 without code changes.
+
+The pass condition also includes negative proof against role lock-in: the
+system must not reject a model merely because a role has a different historical
+default. For example, a DeepSeek text-only model may serve `super`,
+`researcher`, `vtext`, or text-only `verifier` turns; it should be rejected only
+when the turn actually requires unsupported media input or another unsupported
+provider feature.
 
 ## Runtime Design Questions
 
@@ -420,6 +455,9 @@ On deployed staging, prove all of:
 - per-computer model policy changes take effect in later runs without platform
   redeploy or Node B env mutation, including at least one foreground role and
   one background/tool-heavy role;
+- role/model defaults are treated as editable policy: at least one proof should
+  move a role away from its current default provider family and back, or record
+  the exact unsupported capability that prevents that turn from moving;
 - Trace shows provider-call progress and completion/error evidence live.
 
 ## Rollback
@@ -443,9 +481,10 @@ protocol fix.
 status: checkpoint_incomplete
 last checkpoint: deployed reasoning-content carry-forward patch at e3bd495, followed by staging product-path smoke proofs on 2026-05-24
 current artifact state: commits 9a30124, 67cb492, and 0c4c0ff hardened Fireworks max-token handling, tool_choice propagation, and required-tool control turns. Commit 1001d05 fixed the deployed short-story/VText-only path by routing creative draft prompts to VText instead of forcing researcher/super. Commit 871ea7c documented the Fireworks/Kimi reasoning-content protocol gap. Commit e3bd495 preserved `reasoning_content` through provider, gateway, gatewayruntime, and runtime tool-loop assistant history without rendering it as visible user text. Commit f82b3fe preserved selected model token budgets while bounding required-tool misses. Commit 196ae15 converts runtime-required next tools from broad `tool_choice: required` to exact `function:<tool_name>` wire choices, serialized as OpenAI-compatible function-choice objects by ChatGPT/Fireworks adapters.
+current unlanded patch: plain `verifier` no longer aliases to `verifier_multimodal`. Generated and fallback model policy now declare `verifier` as Fireworks DeepSeek V4 Pro text-only and `verifier_multimodal` as Fireworks Kimi K2.6 image-capable. Model catalog hints now mark DeepSeek V4 Pro as eligible for text-only verification while preserving Kimi as the multimodal verifier hint.
 what shipped: 196ae15612985390bfdbef5fd35d2373a91bec43 reached staging; `/health` reported proxy and upstream deployed_commit at 196ae15 with deployed_at `2026-05-25T02:47:52Z`. GitHub Actions CI run 26380538907 succeeded, including Go test shards, Go vet/build, and 15s Deploy to Staging (Node B). FlakeHub publish run 26380538884 was triggered separately by the same push.
-what was proven: direct Fireworks probes on Node B show DeepSeek V4 Flash accepts omitted, 4096, and 131072 `max_tokens`; DeepSeek V4 Pro accepts reasoning_effort omitted/none/low/medium/high/max, with `none` suppressing reasoning_content and the other modes returning it; DeepSeek V4 Pro required-tool first turn returns tool_calls plus reasoning_content; a second turn succeeds when the assistant reasoning_content and tool_calls are passed back with the tool result; Fireworks-hosted Kimi K2.6 returns reasoning_content and processes a valid image URL. Focused local tests prove reasoning_content is preserved in Fireworks non-streaming responses, Fireworks streaming reasoning deltas, gatewayruntime response parsing, and runtime tool-loop assistant history. Local tests after 196ae15 prove exact required next tool choice is selected by the tool loop and serialized as OpenAI-compatible exact function choice for ChatGPT Responses and Fireworks Chat Completions. Deployed staging proof `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com npx playwright test tests/worker-required-next-tool-proof.tmp.spec.js --project=chromium --reporter=line` passed in 4.4m with marker `WORKER_REQUIRED_NEXT_TOOL_PROOF_1779677337507`, trajectory `fce533d3-1b8c-48f1-b08b-69eda055646c`, worker `worker-9a03a64c63e2a337`, worker run `54b77f9c-851d-4f70-8500-405b0f3e714f`, `startStatus=worker_run_started`, `finishStatus=worker_run_completed`, `finishState=completed`, and completed worker child runs `7b1bf544-2f8a-45ba-95e3-d7547dd8148e` and `ca535f3e-b8f5-476c-8baf-ef14381518e7`. Node B logs for the proof show Fireworks DeepSeek V4 Pro receiving `tool_choice=function:start_worker_delegation` and returning `stop=tool_use` rather than exhausting a long completion. Earlier staging proofs also include `tests/gateway-e2e-deployed.spec.js` passing in 10.4s, simple VText smoke `PROVIDER_SMOKE_1779668302525`, research smoke `RESEARCH_SMOKE_1779668370511`, product-path model-policy smoke `a21bdc6f-50fc-4384-9209-84f484b567d2`, and super smoke `98613774-e39a-4467-883c-1684d520266c`.
-unproven or partial claims: worker/vsuper model-path proof is now partial rather than absent: request/start/observe worked and the vsuper run executed a command, but `finish_worker_delegation`, terminal worker certificate, and co-super spawning remain unproven after e3bd495. Text-only verifier role selection is locally/catalog-proven but not yet product-path proven. Kimi multimodal is direct-provider proven, but there is not yet a product verifier path that passes an image/screenshot artifact through the gateway to Kimi; artifact_ref image inputs still block before provider call by design. ChatGPT comparison/fallback remains unproven in this checkpoint because current product-default proofs used Fireworks. The deployed live-search Playwright spec `tests/vtext-deployed-live-search.spec.js` timed out before prompt submission due a registration UI fill hang, so it is not provider evidence but does reveal that the spec should use the same robust product auth helper as the gateway proof. The first worker/vsuper smoke lost auth with a 401 while polling Trace, so long-running proof observers need session renewal even when the underlying run continues.
+what was proven: direct Fireworks probes on Node B show DeepSeek V4 Flash accepts omitted, 4096, and 131072 `max_tokens`; DeepSeek V4 Pro accepts reasoning_effort omitted/none/low/medium/high/max, with `none` suppressing reasoning_content and the other modes returning it; DeepSeek V4 Pro required-tool first turn returns tool_calls plus reasoning_content; a second turn succeeds when the assistant reasoning_content and tool_calls are passed back with the tool result; Fireworks-hosted Kimi K2.6 returns reasoning_content and processes a valid image URL. Focused local tests prove reasoning_content is preserved in Fireworks non-streaming responses, Fireworks streaming reasoning deltas, gatewayruntime response parsing, and runtime tool-loop assistant history. Local tests after 196ae15 prove exact required next tool choice is selected by the tool loop and serialized as OpenAI-compatible exact function choice for ChatGPT Responses and Fireworks Chat Completions. Local tests after the current verifier-policy patch prove `verifier` and `verifier_multimodal` are distinct policy roles, `verifier` resolves to DeepSeek V4 Pro, text-only verifier calls omit Fireworks `max_tokens`, and image input to a text-only model is blocked before provider call. Deployed staging proof `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com npx playwright test tests/worker-required-next-tool-proof.tmp.spec.js --project=chromium --reporter=line` passed in 4.4m with marker `WORKER_REQUIRED_NEXT_TOOL_PROOF_1779677337507`, trajectory `fce533d3-1b8c-48f1-b08b-69eda055646c`, worker `worker-9a03a64c63e2a337`, worker run `54b77f9c-851d-4f70-8500-405b0f3e714f`, `startStatus=worker_run_started`, `finishStatus=worker_run_completed`, `finishState=completed`, and completed worker child runs `7b1bf544-2f8a-45ba-95e3-d7547dd8148e` and `ca535f3e-b8f5-476c-8baf-ef14381518e7`. Node B logs for the proof show Fireworks DeepSeek V4 Pro receiving `tool_choice=function:start_worker_delegation` and returning `stop=tool_use` rather than exhausting a long completion. Earlier staging proofs also include `tests/gateway-e2e-deployed.spec.js` passing in 10.4s, simple VText smoke `PROVIDER_SMOKE_1779668302525`, research smoke `RESEARCH_SMOKE_1779668370511`, product-path model-policy smoke `a21bdc6f-50fc-4384-9209-84f484b567d2`, and super smoke `98613774-e39a-4467-883c-1684d520266c`.
+unproven or partial claims: worker/vsuper model-path proof is now partial rather than absent: request/start/observe worked and the vsuper run executed a command, but `finish_worker_delegation`, terminal worker certificate, and co-super spawning remain unproven after e3bd495. Text-only verifier role selection is locally/catalog-proven but not yet product-path proven on deployed staging. Kimi multimodal is direct-provider proven, but there is not yet a product verifier path that passes an image/screenshot artifact through the gateway to Kimi; artifact_ref image inputs still block before provider call by design. ChatGPT comparison/fallback remains unproven in this checkpoint because current product-default proofs used Fireworks. The deployed live-search Playwright spec `tests/vtext-deployed-live-search.spec.js` timed out before prompt submission due a registration UI fill hang, so it is not provider evidence but does reveal that the spec should use the same robust product auth helper as the gateway proof. The first worker/vsuper smoke lost auth with a 401 while polling Trace, so long-running proof observers need session renewal even when the underlying run continues.
 belief-state changes: Fireworks protocol is no longer globally broken. The sharp worker-required-next-tool failure was caused by broad required-tool selection, not by output budget alone. Exact provider tool choice turns `request_worker_vm -> start_worker_delegation` into a deterministic control transition while preserving long-output defaults for ordinary model calls. Gateway call deadlines are now 10 minutes end-to-end through both gateway handler and sandbox gateway client, so the prior five-minute concern is not the current configured limit. The remaining instability field shifts from "cannot start/finish worker-vsuper" to "can the same path reliably produce useful human evidence and verifier/co-super work for real experiment payloads?"
 remaining error field: product-path verifier model-routing proofs are still missing. The worker proof now reaches terminal finish evidence and completed child runs, but it does not yet prove rich experiment behavior, human-readable VText dashboards, screenshots/video, or text-only/multimodal verifier specialization. VText can still emit confusing transient tool errors before eventual success. The product model-policy path works through file APIs, but the higher-level UX/agentic edit path is not yet polished. Long product-path proofs can outlive a browser session unless the proof harness refreshes passkey auth.
 highest-impact remaining uncertainty: whether the now-working worker/vsuper/co-super path can be driven to useful feature evidence without Codex hand-coding the experiments, and whether verifier specialization can use DeepSeek text-only and Kimi multimodal turns through product policy rather than platform defaults.

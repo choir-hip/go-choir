@@ -71,7 +71,7 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:   131072,
 			Modalities:        []string{"text"},
 			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"vsuper", "cosuper_coding"},
+			RecommendedFor:    []string{"super", "vsuper", "cosuper_coding", "verifier"},
 		},
 		{
 			ID:                "accounts/fireworks/models/deepseek-v4-flash",
@@ -80,7 +80,7 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:   131072,
 			Modalities:        []string{"text"},
 			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"vtext", "researcher"},
+			RecommendedFor:    []string{"conductor", "vtext", "researcher"},
 		},
 		{
 			ID:                "accounts/fireworks/models/kimi-k2p6",

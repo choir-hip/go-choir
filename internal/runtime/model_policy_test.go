@@ -78,7 +78,7 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 }
 
-func TestFallbackModelPolicyKeepsForegroundRolesOffChatGPT(t *testing.T) {
+func TestFallbackModelPolicyUsesGeneratedFireworksDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
 	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "none" {
@@ -91,6 +91,29 @@ func TestFallbackModelPolicyKeepsForegroundRolesOffChatGPT(t *testing.T) {
 	vtext := policy.Resolve(AgentProfileVText)
 	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" || vtext.ReasoningEffort != "none" {
 		t.Fatalf("vtext selection = %+v", vtext)
+	}
+	verifier := policy.Resolve("verifier")
+	if verifier.Provider != "fireworks" || verifier.Model != "accounts/fireworks/models/deepseek-v4-pro" {
+		t.Fatalf("verifier selection = %+v", verifier)
+	}
+	multimodal := policy.Resolve("verifier_multimodal")
+	if multimodal.Provider != "fireworks" || multimodal.Model != "accounts/fireworks/models/kimi-k2p6" {
+		t.Fatalf("multimodal verifier selection = %+v", multimodal)
+	}
+	if verifier.Model == multimodal.Model {
+		t.Fatalf("text-only verifier should not alias to multimodal verifier: verifier=%+v multimodal=%+v", verifier, multimodal)
+	}
+}
+
+func TestNormalizeModelPolicyRoleSeparatesVerifierModalities(t *testing.T) {
+	if got := normalizeModelPolicyRole("verifier"); got != "verifier" {
+		t.Fatalf("verifier normalized to %q, want verifier", got)
+	}
+	if got := normalizeModelPolicyRole("verifier_text"); got != "verifier" {
+		t.Fatalf("verifier_text normalized to %q, want verifier", got)
+	}
+	if got := normalizeModelPolicyRole("verifier_multimodal"); got != "verifier_multimodal" {
+		t.Fatalf("verifier_multimodal normalized to %q", got)
 	}
 }
 

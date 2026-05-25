@@ -120,7 +120,17 @@ This policy model deliberately separates "recommended defaults" from
 "compatible execution." A strong coding model may be the default for `super` or
 `vsuper`, and a fast writing model may be the default for VText, but those are
 computer policy choices. They must remain changeable without creating
-role-specific provider assumptions in the runtime.
+role-specific provider assumptions in the runtime. The operational test is
+per-turn compatibility: if the next turn is text-only, a text-only model such as
+Fireworks DeepSeek V4 Flash/Pro remains eligible for any role, including
+verification; if the next turn carries a screenshot or other media input, policy
+must select a declared multimodal path such as Kimi K2.6 or ChatGPT multimodal,
+or record a precise capability blocker.
+
+Current generated policy declares separate verifier lanes: `verifier` defaults
+to Fireworks DeepSeek V4 Pro for text-only evidence checks, while
+`verifier_multimodal` defaults to Fireworks Kimi K2.6 for image/media-bearing
+checks. These names are policy roles, not privileged agent castes.
 
 ## Desktop Shell State
 

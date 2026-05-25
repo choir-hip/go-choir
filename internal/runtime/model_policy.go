@@ -27,7 +27,10 @@ const (
 	defaultConductorModel          = "accounts/fireworks/models/deepseek-v4-flash"
 	defaultSuperModel              = "accounts/fireworks/models/deepseek-v4-pro"
 	defaultResearcherVTextModel    = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultVerifierModel           = "accounts/fireworks/models/deepseek-v4-pro"
 	defaultMultimodalVerifierModel = "accounts/fireworks/models/kimi-k2p6"
+	modelPolicyRoleVerifier        = "verifier"
+	modelPolicyRoleVerifierMulti   = "verifier_multimodal"
 )
 
 // LLMSelection is the effective provider/model/reasoning tuple used for a run.
@@ -115,6 +118,11 @@ provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 reasoning = "none"
 
+[roles.verifier]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+requires = ["text", "tool_use"]
+
 [roles.verifier_multimodal]
 provider = "fireworks"
 model = "accounts/fireworks/models/kimi-k2p6"
@@ -166,6 +174,11 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 
+[roles.verifier]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+requires = ["text", "tool_use"]
+
 [roles.verifier_multimodal]
 provider = "fireworks"
 model = "accounts/fireworks/models/kimi-k2p6"
@@ -183,13 +196,14 @@ func fallbackModelPolicy(cfg Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:  {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none", Source: "platform_fallback"},
-			AgentProfileSuper:      {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
-			AgentProfileVSuper:     {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileCoSuper:    {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileResearcher: {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
-			AgentProfileVText:      {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
-			"verifier_multimodal":  {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
+			AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
+			AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
+			AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: defaultVerifierModel, Source: "platform_fallback"},
+			modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -457,8 +471,10 @@ func normalizeModelPolicyRole(role string) string {
 	switch strings.TrimSpace(strings.ToLower(role)) {
 	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
 		return AgentProfileCoSuper
-	case "verifier", "verifier-multimodal", "verifier_multimodal":
-		return "verifier_multimodal"
+	case "verifier", "verifier-text", "verifier_text":
+		return modelPolicyRoleVerifier
+	case "verifier-multimodal", "verifier_multimodal":
+		return modelPolicyRoleVerifierMulti
 	default:
 		return strings.TrimSpace(strings.ToLower(role))
 	}

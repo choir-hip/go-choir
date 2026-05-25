@@ -159,6 +159,7 @@ and verification that does not need media input. Multimodal models are required
 only when the turn needs screenshots, images, video frames, files, or other
 media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
 that as the active computer's effective policy, not a hard-coded role boundary.
+Capability is evaluated for the next turn, not permanently for the role.
 Do not add new role-specific provider assumptions such as "conductor must be
 ChatGPT", "super must be ChatGPT", "VText must be Fireworks", or "verifier must
 be multimodal" unless the current turn's capability requirements actually imply
