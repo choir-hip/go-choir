@@ -451,15 +451,26 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer test-access" {
 			t.Errorf("unexpected authorization header: %s", got)
 		}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("decode raw request: %v", err)
+		}
 		var body openAIRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(data, &body); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		if body.Model != "gpt-5.5" {
 			t.Errorf("model = %q, want gpt-5.5", body.Model)
 		}
-		if body.MaxOutputTokens != 64 {
-			t.Errorf("max_output_tokens = %d, want 64", body.MaxOutputTokens)
+		if body.MaxOutputTokens != 0 {
+			t.Errorf("max_output_tokens = %d, want omitted/0 for ChatGPT Codex endpoint", body.MaxOutputTokens)
+		}
+		if _, ok := raw["max_output_tokens"]; ok {
+			t.Errorf("max_output_tokens key present in ChatGPT request: %#v", raw["max_output_tokens"])
 		}
 		if body.Reasoning == nil || body.Reasoning.Effort != "low" {
 			t.Errorf("reasoning = %+v, want low", body.Reasoning)

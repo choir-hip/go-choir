@@ -51,14 +51,18 @@ func MaxOutputTokensForSelection(sel LLMSelection) int {
 // requested by foreground agent loops. This is intentionally separate from the
 // model catalog maximum: catalog limits describe capability, while request
 // budgets are provider protocol choices. Fireworks' OpenAI-compatible chat
-// completions path behaves best when ordinary agent loops omit max_tokens; a
-// positive per-computer policy override can still request an explicit budget for
-// bounded or long-output work.
+// completions path behaves best when ordinary agent loops omit max_tokens; the
+// ChatGPT Codex Responses endpoint rejects max_output_tokens, so ChatGPT loops
+// also omit explicit output budgets.
 func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
+	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
+	if provider == "chatgpt" {
+		return 0
+	}
 	if sel.MaxTokens > 0 {
 		return sel.MaxTokens
 	}
-	if strings.EqualFold(strings.TrimSpace(sel.Provider), defaultFireworksProvider) {
+	if provider == defaultFireworksProvider {
 		return 0
 	}
 	return MaxOutputTokensForSelection(sel)

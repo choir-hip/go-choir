@@ -70,6 +70,12 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileVText); got != 0 {
 		t.Fatalf("vtext interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
 	}
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5"}, AgentProfileVText); got != 0 {
+		t.Fatalf("ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
+	}
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5", MaxTokens: 32768}, AgentProfileSuper); got != 0 {
+		t.Fatalf("explicit ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
+	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", MaxTokens: 32768}, AgentProfileSuper); got != 32768 {
 		t.Fatalf("explicit Fireworks interactive tokens = %d, want 32768", got)
 	}

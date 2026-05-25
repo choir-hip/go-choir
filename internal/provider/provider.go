@@ -928,7 +928,6 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		Input:           convertOpenAIInput(req.Messages),
 		Tools:           convertOpenAITools(req.Tools),
 		ToolChoice:      openAIResponsesToolChoice(req.ToolChoice),
-		MaxOutputTokens: defaultMaxTokens(req.MaxTokens),
 		Store:           false,
 		Stream:          req.Stream,
 	}
