@@ -25,6 +25,12 @@ VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB=32768
 VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_PERCENT=10
 VMCTL_STALE_STATE_MIN_AGE=6h
 VMCTL_STALE_STATE_MAX_DELETES=25
+VMCTL_RETENTION_PRUNE_MODE=active
+VMCTL_RETENTION_EPHEMERAL_EMAIL_DOMAINS=example.com
+VMCTL_RETENTION_ORPHAN_MIN_AGE=6h
+VMCTL_RETENTION_EPHEMERAL_MIN_AGE=24h
+VMCTL_RETENTION_MAX_DELETES=100
+VMCTL_RETENTION_MAX_BYTES_MIB=122880
 ```
 
 Node B also loads optional operator priority overrides from:
@@ -128,6 +134,47 @@ delete disposable producer machine state after package/source/adoption evidence
 has moved into durable product ledgers. Owner review should use
 AppChangePackage and adoption refs, not stale source VM disks.
 
+## Ephemeral Test-Computer Retention
+
+The disk blowup found on 2026-05-25 was not primarily old Nix closures. It was
+hundreds of published primary computers created by Playwright/product-proof
+accounts using `example.com` email addresses. Those accounts look like ordinary
+published primaries to the generic VM registry, so the earlier stale-state
+reclaim correctly protected them. The missing model was an explicit ephemeral
+account class.
+
+The current staging retention policy therefore adds a separate bounded prune
+class:
+
+- accounts whose authenticated email domain is `example.com` are staging
+  ephemeral accounts;
+- only their published primary interactive computers are eligible;
+- only `stopped`, `hibernated`, or `failed` states are eligible;
+- active, booting, degraded, stopping, unknown-owner, non-ephemeral, and real
+  `choir-ip.com` primary computers remain protected;
+- each sweep is bounded by delete count and bytes;
+- auth rows are not deleted by vmctl in this pass; if a stale test account logs
+  in again, vmctl can assign a fresh computer;
+- the VM manager still refuses to delete live Firecracker processes or paths
+  outside the configured VM-state root.
+
+This policy is intentionally explicit. Test/proof account generators should use
+`example.com` or another configured ephemeral domain. Real manual QA accounts
+should not use an ephemeral domain if their computer state matters.
+
+Operator inspection endpoints:
+
+```text
+GET  /internal/vmctl/retention-plan
+POST /internal/vmctl/prune
+```
+
+Both require the internal caller header. `retention-plan` is the required
+preflight before manual pruning: inspect the candidate list and confirm it
+contains only orphan dirs or known ephemeral test users before calling `prune`.
+The ordinary `/internal/vmctl/reclaim` and idle sweeper also run the same
+bounded retention policy when enabled.
+
 ## Disk Retention And Rollback Minimum
 
 Node B needs two different rollback stores:
@@ -150,19 +197,20 @@ The minimum safe retention policy is therefore:
 - **Guest image closures:** retain images referenced by the current system and
   active/warm computers through normal Nix roots. Older unreferenced guest
   image closures are garbage, not product rollback state.
-- **Active or published primary computers:** retain. These are user computers,
-  not cache artifacts.
+- **Active or published real primary computers:** retain. These are user
+  computers, not cache artifacts.
+- **Published ephemeral test primaries:** retain briefly for diagnostics, then
+  prune when stopped, hibernated, or failed and older than the configured
+  ephemeral TTL.
 - **Always-on primary computers:** retain and keep warm while capacity allows.
 - **Worker and candidate VM disks:** retain only while active, recent, or
   needed for unresolved evidence. Once terminal and stale, the durable product
   evidence is the package/adoption/run record, not the disk.
 - **Failed disposable workers/candidates:** retain briefly for diagnostics, then
   reclaim under state-dir pressure.
-- **Failed primary computers:** do not delete automatically until the platform
-  can distinguish real users from synthetic/proof accounts and can preserve a
-  recovery packet. The intended v1 is to mark generated test/proof accounts as
-  ephemeral at creation and make only those primary VM disks reclaimable after a
-  short diagnostic TTL.
+- **Failed real primary computers:** do not delete automatically. The platform
+  now distinguishes explicitly ephemeral test/proof accounts from real users,
+  and only the ephemeral class is reclaimable after a short diagnostic TTL.
 
 This policy intentionally keeps real user data conservative while making build
 and producer cache cleanup aggressive.
@@ -175,6 +223,8 @@ The deployed cadence should be:
   preflight;
 - stale worker/candidate VM-state reclaim: every active pressure sweep when
   state-dir pressure is present;
+- ephemeral test-computer prune: every idle/pressure sweep when enabled, plus
+  manual `retention-plan`/`prune` operator calls during disk recovery;
 - deploy preflight: before checkout and before build, call vmctl reclaim, vacuum
   journals, delete old system generations, and run `nix store gc` only if root
   disk headroom is below the deploy threshold;

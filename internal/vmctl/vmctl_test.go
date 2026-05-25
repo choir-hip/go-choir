@@ -1144,6 +1144,139 @@ func TestOwnershipRegistry_ReclaimStaleVMStateDestroysOnlyTerminalWorkersAndUnpu
 	}
 }
 
+func TestOwnershipRegistry_RetentionPlanTargetsOnlyOrphansAndEphemeralPrimaries(t *testing.T) {
+	stateDir := t.TempDir()
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{
+		Mode:                  RetentionPruneModeDryRun,
+		StateDir:              stateDir,
+		EphemeralEmailDomains: []string{"example.com"},
+		OrphanMinAge:          time.Hour,
+		EphemeralMinAge:       time.Hour,
+		MaxDeletes:            10,
+		MaxBytes:              1024 * 1024 * 1024,
+	})
+	reg.setRetentionUserEmailsForTest(map[string]string{
+		"test-user":   "playwright@example.com",
+		"real-user":   "owner@choir-ip.com",
+		"active-user": "active@example.com",
+	})
+	testOwn, err := reg.ResolveOrAssign("test-user")
+	if err != nil {
+		t.Fatalf("resolve test user: %v", err)
+	}
+	realOwn, err := reg.ResolveOrAssign("real-user")
+	if err != nil {
+		t.Fatalf("resolve real user: %v", err)
+	}
+	activeOwn, err := reg.ResolveOrAssign("active-user")
+	if err != nil {
+		t.Fatalf("resolve active user: %v", err)
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].State = VMStateActive
+	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.mu.Unlock()
+
+	for _, vmID := range []string{testOwn.VMID, realOwn.VMID, activeOwn.VMID, "vm-orphan-old", "vm-orphan-recent"} {
+		dir := filepath.Join(stateDir, vmID)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", vmID, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("state"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", vmID, err)
+		}
+	}
+	oldTime := time.Now().Add(-3 * time.Hour)
+	if err := os.Chtimes(filepath.Join(stateDir, "vm-orphan-old"), oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes orphan old: %v", err)
+	}
+
+	plan := reg.RetentionPrunePlan()
+	if plan.Decision != "would_prune" {
+		t.Fatalf("decision = %s, want would_prune: %+v", plan.Decision, plan)
+	}
+	if !retentionPlanHasVM(plan, testOwn.VMID) {
+		t.Fatalf("plan missing ephemeral test primary %s: %+v", testOwn.VMID, plan.Candidates)
+	}
+	if !retentionPlanHasVM(plan, "vm-orphan-old") {
+		t.Fatalf("plan missing old orphan: %+v", plan.Candidates)
+	}
+	if retentionPlanHasVM(plan, realOwn.VMID) {
+		t.Fatalf("plan must not include real user primary %s: %+v", realOwn.VMID, plan.Candidates)
+	}
+	if retentionPlanHasVM(plan, activeOwn.VMID) {
+		t.Fatalf("plan must not include active ephemeral primary %s: %+v", activeOwn.VMID, plan.Candidates)
+	}
+	if retentionPlanHasVM(plan, "vm-orphan-recent") {
+		t.Fatalf("plan must not include recent orphan: %+v", plan.Candidates)
+	}
+}
+
+func TestOwnershipRegistry_PruneRetentionRemovesEphemeralPrimaryOwnership(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{
+		Mode:                  RetentionPruneModeActive,
+		StateDir:              t.TempDir(),
+		EphemeralEmailDomains: []string{"example.com"},
+		EphemeralMinAge:       time.Hour,
+		MaxDeletes:            10,
+		MaxBytes:              1024 * 1024 * 1024,
+	})
+	reg.setRetentionUserEmailsForTest(map[string]string{
+		"test-user": "playwright@example.com",
+		"real-user": "owner@choir-ip.com",
+	})
+	testOwn, err := reg.ResolveOrAssign("test-user")
+	if err != nil {
+		t.Fatalf("resolve test user: %v", err)
+	}
+	realOwn, err := reg.ResolveOrAssign("real-user")
+	if err != nil {
+		t.Fatalf("resolve real user: %v", err)
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].State = VMStateHibernated
+	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].LastActiveAt = old
+	reg.mu.Unlock()
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	result := reg.PruneRetention()
+	if result.Deleted != 1 {
+		t.Fatalf("deleted = %d, want 1: %+v", result.Deleted, result)
+	}
+	if !containsString(mgr.destroys, testOwn.VMID) {
+		t.Fatalf("destroyed VMs = %v, want %s", mgr.destroys, testOwn.VMID)
+	}
+	if reg.GetOwnership("test-user") != nil {
+		t.Fatalf("ephemeral test primary ownership should be removed")
+	}
+	if reg.GetOwnership("real-user") == nil {
+		t.Fatalf("real user primary ownership should remain")
+	}
+	if containsString(mgr.destroys, realOwn.VMID) {
+		t.Fatalf("real user VM %s must not be destroyed: %v", realOwn.VMID, mgr.destroys)
+	}
+}
+
+func retentionPlanHasVM(plan RetentionPrunePlan, vmID string) bool {
+	for _, candidate := range plan.Candidates {
+		if candidate.VMID == vmID {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOwnershipRegistry_ReclaimStaleVMStateRequiresStoragePressure(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
@@ -2414,6 +2547,12 @@ func TestEndpointURLs(t *testing.T) {
 	if got := ReclaimEndpoint(base); got != "http://localhost:8083/internal/vmctl/reclaim" {
 		t.Errorf("ReclaimEndpoint = %s", got)
 	}
+	if got := RetentionPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-plan" {
+		t.Errorf("RetentionPlanEndpoint = %s", got)
+	}
+	if got := PruneEndpoint(base); got != "http://localhost:8083/internal/vmctl/prune" {
+		t.Errorf("PruneEndpoint = %s", got)
+	}
 }
 
 // --- Lifecycle Tests (VAL-VM-008, VAL-VM-009, VAL-CROSS-116, VAL-CROSS-117) ---
@@ -3049,6 +3188,8 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 		{"/internal/vmctl/logout", "POST", `{"user_id":"user-1"}`},
 		{"/internal/vmctl/idle-check", "POST", ""},
 		{"/internal/vmctl/reclaim", "POST", ""},
+		{"/internal/vmctl/retention-plan", "GET", ""},
+		{"/internal/vmctl/prune", "POST", ""},
 	}
 
 	for _, ep := range endpoints {

@@ -102,12 +102,14 @@ type workerActionRequest struct {
 }
 
 type reclaimResponse struct {
-	Status            string              `json:"status"`
-	VMsReclaimed      int                 `json:"vms_reclaimed"`
-	StaleStateDeleted int                 `json:"stale_state_deleted"`
-	VMsStopped        int                 `json:"vms_stopped"`
-	ReclaimBefore     PressureReclaimPlan `json:"reclaim_before"`
-	ReclaimAfter      PressureReclaimPlan `json:"reclaim_after"`
+	Status            string               `json:"status"`
+	VMsReclaimed      int                  `json:"vms_reclaimed"`
+	StaleStateDeleted int                  `json:"stale_state_deleted"`
+	RetentionPruned   int                  `json:"retention_pruned"`
+	VMsStopped        int                  `json:"vms_stopped"`
+	ReclaimBefore     PressureReclaimPlan  `json:"reclaim_before"`
+	ReclaimAfter      PressureReclaimPlan  `json:"reclaim_after"`
+	Retention         RetentionPruneResult `json:"retention"`
 }
 
 // Handler provides HTTP handlers for the vmctl service.
@@ -749,14 +751,17 @@ func (h *Handler) runReclaimSweep() reclaimResponse {
 	before := h.registry.PressureReclaimPlan()
 	reclaimed := h.registry.ReclaimPressureVMs()
 	staleStateDeleted := h.registry.ReclaimStaleVMState()
+	retention := h.registry.PruneRetention()
 	stopped := h.registry.StopIdleVMs()
 	return reclaimResponse{
 		Status:            "ok",
 		VMsReclaimed:      reclaimed,
 		StaleStateDeleted: staleStateDeleted,
+		RetentionPruned:   retention.Deleted,
 		VMsStopped:        stopped,
 		ReclaimBefore:     before,
 		ReclaimAfter:      h.registry.PressureReclaimPlan(),
+		Retention:         retention,
 	}
 }
 
@@ -782,9 +787,11 @@ func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 		"status":              result.Status,
 		"vms_reclaimed":       result.VMsReclaimed,
 		"stale_state_deleted": result.StaleStateDeleted,
+		"retention_pruned":    result.RetentionPruned,
 		"vms_stopped":         result.VMsStopped,
 		"reclaim":             result.ReclaimAfter,
 		"reclaim_before":      result.ReclaimBefore,
+		"retention":           result.Retention,
 	})
 }
 
@@ -805,6 +812,42 @@ func (h *Handler) HandleReclaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, h.runReclaimSweep())
+}
+
+// HandleRetentionPlan handles GET /internal/vmctl/retention-plan. It returns a
+// dry-run inventory of VM state that matches the configured deletion policy.
+func (h *Handler) HandleRetentionPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionPrunePlan())
+}
+
+// HandlePrune handles POST /internal/vmctl/prune. It applies the bounded
+// retention policy for orphan and explicitly ephemeral VM state.
+func (h *Handler) HandlePrune(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, h.registry.PruneRetention())
 }
 
 // HandleList handles GET /internal/vmctl/list.
@@ -1051,6 +1094,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
+	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
+	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
 }
 
@@ -1142,4 +1187,16 @@ func IdleCheckEndpoint(baseURL string) string {
 // at the given base URL.
 func ReclaimEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/reclaim", baseURL)
+}
+
+// RetentionPlanEndpoint returns the full retention-plan endpoint URL for the
+// vmctl service at the given base URL.
+func RetentionPlanEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/retention-plan", baseURL)
+}
+
+// PruneEndpoint returns the full prune endpoint URL for the vmctl service at
+// the given base URL.
+func PruneEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/prune", baseURL)
 }

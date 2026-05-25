@@ -1,9 +1,9 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-23
-**Baseline checked:** Live computer sync driver-lease completion
-`8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`
+**Last updated:** 2026-05-25
+**Baseline checked:** VM retention/pruning policy hardening after deploy-speed
+and disk-pressure work.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -86,9 +86,12 @@ platform docs record the common baseline and the desired divergence semantics.
   protected ahead of candidate/worker computers. Ordinary primaries stay warm
   while capacity allows; configured always-on primaries have a protected lane.
   Candidate and worker computers hibernate first. Disposable worker/candidate
-  VM disks are reclaimable after evidence has moved into product records; real
-  primary computers are retained. Platform rollback keeps Git refs plus a small
-  NixOS generation tail, not every historical guest image. See
+  VM disks are reclaimable after evidence has moved into product records.
+  Staging test/proof primary computers are reclaimable only when they are
+  explicitly classified by ephemeral account policy, currently `example.com`
+  auth emails, and only after they are stopped, hibernated, or failed past the
+  diagnostic TTL. Real primary computers are retained. Platform rollback keeps
+  Git refs plus a small NixOS generation tail, not every historical guest image. See
   [vm-priority-policy.md](vm-priority-policy.md).
 
 ## Runtime Model Policy State

@@ -356,6 +356,11 @@ type OwnershipRegistry struct {
 	pressureReclaim PressureReclaimConfig
 	pressureSampler hostPressureSampler
 
+	// retentionPrune controls durable VM-state deletion for explicitly
+	// disposable computers such as staging Playwright accounts.
+	retentionPrune      RetentionPruneConfig
+	retentionUserEmails map[string]string
+
 	// warmnessPolicy controls under-capacity primary keepalive and future
 	// always-on tier modeling.
 	warmnessPolicy WarmnessPolicyConfig
@@ -404,6 +409,8 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
 		pressureSampler:            sampleHostPressure,
+		retentionPrune:             DefaultRetentionPruneConfig(),
+		retentionUserEmails:        make(map[string]string),
 		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
 		workerImageProfiles:        make(map[string]VMImageProfile),
 		epochCounter:               1,
@@ -646,6 +653,24 @@ func (r *OwnershipRegistry) SetPressureReclaimConfig(cfg PressureReclaimConfig) 
 	r.pressureReclaim = normalizePressureReclaimConfig(cfg)
 }
 
+// SetRetentionPruneConfig configures deletion of explicitly disposable VM
+// state. Real user primary computers remain protected unless the configured
+// classifier marks the owner as ephemeral.
+func (r *OwnershipRegistry) SetRetentionPruneConfig(cfg RetentionPruneConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.retentionPrune = normalizeRetentionPruneConfig(cfg)
+}
+
+func (r *OwnershipRegistry) setRetentionUserEmailsForTest(emails map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.retentionUserEmails = make(map[string]string, len(emails))
+	for userID, email := range emails {
+		r.retentionUserEmails[strings.TrimSpace(userID)] = strings.TrimSpace(email)
+	}
+}
+
 // SetWarmnessPolicyConfig configures adaptive keepalive policy. It currently
 // controls whether primary computers stay warm while the host is under
 // configured pressure thresholds, and models a future always-on class.
@@ -684,6 +709,9 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 			if destroyed := r.ReclaimStaleVMState(); destroyed > 0 {
 				log.Printf("vmctl: pressure reclaim destroyed %d stale worker/candidate VM state directories", destroyed)
 			}
+		}
+		if result := r.PruneRetention(); result.Deleted > 0 {
+			log.Printf("vmctl: retention prune deleted %d VM state directorie(s), reclaimed %.1f MiB", result.Deleted, float64(result.BytesDeleted)/(1024*1024))
 		}
 		if stopped := r.StopIdleVMs(); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)

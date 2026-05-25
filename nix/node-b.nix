@@ -334,6 +334,7 @@ in
       # (VAL-VM-011).
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" "/var/lib/go-choir/guest-playwright" ];
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
       # Optional runtime priority overrides. This is intentionally outside the
       # repo-tracked Nix closure so operators can add paid/real-user always-on
       # IDs without a platform rebuild:
@@ -395,6 +396,17 @@ in
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
         "VMCTL_STALE_STATE_MIN_AGE=6h"
         "VMCTL_STALE_STATE_MAX_DELETES=25"
+        # Staging Playwright/product-proof accounts are disposable and use
+        # example.com emails. Their hibernated primary VM state is not a
+        # rollback primitive, so vmctl may delete it after a day while keeping
+        # real-user computers protected.
+        "VMCTL_RETENTION_PRUNE_MODE=active"
+        "VMCTL_RETENTION_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
+        "VMCTL_RETENTION_EPHEMERAL_EMAIL_DOMAINS=example.com"
+        "VMCTL_RETENTION_ORPHAN_MIN_AGE=6h"
+        "VMCTL_RETENTION_EPHEMERAL_MIN_AGE=24h"
+        "VMCTL_RETENTION_MAX_DELETES=100"
+        "VMCTL_RETENTION_MAX_BYTES_MIB=122880"
         # Gateway URL for issuing sandbox credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"
