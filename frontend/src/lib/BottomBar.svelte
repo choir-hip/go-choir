@@ -110,6 +110,7 @@
       event.preventDefault();
       dispatch('promptsubmit', { text: promptValue.trim() });
       promptValue = '';
+      event.target.blur();
       tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
       event.target.blur();
