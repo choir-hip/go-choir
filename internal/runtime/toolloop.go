@@ -275,12 +275,20 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		forceInitialToolChoiceRetry = false
 
 		if emit != nil {
+			lastUserText := extractLastUserMessage(messages)
 			preCallPayload, _ := json.Marshal(map[string]any{
 				"iteration":            i + 1,
 				"phase":                "provider_call_started",
 				"messages":             len(messages),
 				"tools":                len(toolDefs),
+				"tool_names":           toolDefinitionNames(toolDefs),
 				"system_chars":         len(systemPrompt),
+				"system_sha256":        toolOutputSHA256Hex(systemPrompt),
+				"system_preview":       truncatePromptSnippet(systemPrompt, 2000),
+				"last_user_chars":      len(lastUserText),
+				"last_user_sha256":     toolOutputSHA256Hex(lastUserText),
+				"last_user_text":       truncatePromptSnippet(lastUserText, 4000),
+				"message_roles":        toolLoopMessageRoles(messages),
 				"max_tokens":           req.MaxTokens,
 				"max_tokens_requested": req.MaxTokens > 0,
 				"llm_provider":         options.llmConfig.Provider,
@@ -317,6 +325,9 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			"iteration":            i + 1,
 			"stop_reason":          resp.StopReason,
 			"tool_calls":           len(resp.ToolCalls),
+			"tool_call_names":      toolCallNames(resp.ToolCalls),
+			"response_text_chars":  len(resp.Text),
+			"response_text":        truncatePromptSnippet(resp.Text, 2000),
 			"model":                resp.Model,
 			"llm_provider":         options.llmConfig.Provider,
 			"llm_model":            options.llmConfig.Model,
@@ -619,6 +630,40 @@ func sleepContext(ctx context.Context, delay time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func toolDefinitionNames(defs []ToolDefinition) []string {
+	names := make([]string, 0, len(defs))
+	for _, def := range defs {
+		name := strings.TrimSpace(def.Name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func toolCallNames(calls []types.ToolCall) []string {
+	names := make([]string, 0, len(calls))
+	for _, call := range calls {
+		name := strings.TrimSpace(call.Name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func toolLoopMessageRoles(messages []json.RawMessage) []string {
+	roles := make([]string, 0, len(messages))
+	for _, raw := range messages {
+		role := runMemoryMessageRole(raw)
+		if role == "" {
+			role = "unknown"
+		}
+		roles = append(roles, role)
+	}
+	return roles
 }
 
 // buildAssistantContent constructs the content blocks for an assistant

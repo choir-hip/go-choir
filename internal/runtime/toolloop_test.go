@@ -185,6 +185,85 @@ func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 	if got := providerCallPayload["llm_provider"]; got != "fireworks" {
 		t.Fatalf("llm_provider = %v, want fireworks", got)
 	}
+	if got := providerCallPayload["last_user_text"]; got != "hi" {
+		t.Fatalf("last_user_text = %v, want hi", got)
+	}
+	if got := providerCallPayload["system_sha256"]; got == "" {
+		t.Fatalf("system_sha256 should be present")
+	}
+	if got := providerCallPayload["system_preview"]; !strings.Contains(fmt.Sprint(got), "You are helpful") {
+		t.Fatalf("system_preview = %v, want prompt excerpt", got)
+	}
+	if roles, ok := providerCallPayload["message_roles"].([]any); !ok || len(roles) != 1 || roles[0] != "user" {
+		t.Fatalf("message_roles = %#v, want [user]", providerCallPayload["message_roles"])
+	}
+}
+
+func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			Text:       "I found the first route.",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-1",
+				Name:      "echo",
+				Arguments: json.RawMessage(`{"message":"hello"}`),
+			}},
+			Model: "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "done",
+			Model:      "test-model",
+		},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "echo",
+		Description: "Echo a message.",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return string(args), nil
+		},
+	}); err != nil {
+		t.Fatalf("register echo: %v", err)
+	}
+
+	var toolLoopPayload map[string]any
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunProgress || phase != "tool_loop" || toolLoopPayload != nil {
+			return
+		}
+		if err := json.Unmarshal(payload, &toolLoopPayload); err != nil {
+			t.Fatalf("unmarshal tool_loop payload: %v", err)
+		}
+	}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		4096,
+		emit,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if toolLoopPayload == nil {
+		t.Fatal("missing tool_loop progress event")
+	}
+	if got := toolLoopPayload["response_text"]; got != "I found the first route." {
+		t.Fatalf("response_text = %v", got)
+	}
+	if got := int(toolLoopPayload["response_text_chars"].(float64)); got != len("I found the first route.") {
+		t.Fatalf("response_text_chars = %d", got)
+	}
+	names, ok := toolLoopPayload["tool_call_names"].([]any)
+	if !ok || len(names) != 1 || names[0] != "echo" {
+		t.Fatalf("tool_call_names = %#v, want [echo]", toolLoopPayload["tool_call_names"])
+	}
 }
 
 func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
