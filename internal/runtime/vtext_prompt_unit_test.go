@@ -88,3 +88,54 @@ func TestVTextPromptCurrentEventsRequiresResearcher(t *testing.T) {
 		}
 	}
 }
+
+func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		prompt   string
+		want     string
+	}{
+		{
+			name: "current factual work starts researcher",
+			metadata: map[string]any{
+				"type":                      "vtext_agent_revision",
+				"requires_worker_grounding": true,
+				"original_prompt":           "what is the weather in boston now",
+			},
+			want: "function:spawn_agent",
+		},
+		{
+			name: "mutable product work requests super",
+			metadata: map[string]any{
+				"type":                      "vtext_agent_revision",
+				"requires_worker_grounding": true,
+				"original_prompt":           "debug and fix the runtime gateway",
+			},
+			want: "function:request_super_execution",
+		},
+		{
+			name: "creative direct document work edits vtext",
+			metadata: map[string]any{
+				"type":                      "vtext_agent_revision",
+				"requires_worker_grounding": false,
+				"original_prompt":           "tell me a story about computers",
+			},
+			want: "function:edit_vtext",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := initialVTextToolChoice(&types.RunRecord{
+				Prompt:   tc.prompt,
+				Metadata: tc.metadata,
+			})
+			if got != tc.want {
+				t.Fatalf("initialVTextToolChoice = %q, want %q", got, tc.want)
+			}
+			if got == "required" {
+				t.Fatal("VText must not use broad required tool choice")
+			}
+		})
+	}
+}

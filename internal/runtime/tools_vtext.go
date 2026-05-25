@@ -175,6 +175,8 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 					"request_source":      "super_inbox",
 					"deduped":             true,
 					"dedupe_reason":       "vtext_run_already_requested_super",
+					"next_required_tool":  "edit_vtext",
+					"next_instruction":    "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next.",
 				})
 			}
 			cursor, err := rt.ChannelCast(ctx, channelID, superAgent.AgentID, "", requesterAgentID, AgentProfileVText, objective)
@@ -203,6 +205,8 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 				"persistent":          true,
 				"state":               state,
 				"request_source":      "super_inbox",
+				"next_required_tool":  "edit_vtext",
+				"next_instruction":    "Write a brief interim VText revision now. Name the persistent super request, current state, and what evidence is expected next.",
 			})
 		},
 	}

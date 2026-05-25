@@ -1044,7 +1044,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		WithToolLoopLLMConfig(llmConfig),
 	}
 	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
-		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice("required"))
+		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
 	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, func(finalCheckpoint bool) ([]json.RawMessage, error) {
@@ -1672,6 +1672,74 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	if _, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
 		log.Printf("runtime: conductor run %s: materialize decision: %v", rec.RunID, err)
 	}
+}
+
+func initialVTextToolChoice(rec *types.RunRecord) string {
+	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
+		return ""
+	}
+	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
+		if vtextInitialRequestNeedsSuper(rec) {
+			return exactRequiredToolChoice("request_super_execution")
+		}
+		return exactRequiredToolChoice("spawn_agent")
+	}
+	return exactRequiredToolChoice("edit_vtext")
+}
+
+func vtextInitialRequestNeedsSuper(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	var parts []string
+	for _, key := range []string{"original_prompt", "request_intent", "seed_prompt"} {
+		if value := metadataStringValue(rec.Metadata, key); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if strings.TrimSpace(rec.Prompt) != "" {
+		parts = append(parts, rec.Prompt)
+	}
+	text := strings.ToLower(strings.Join(parts, "\n"))
+	if text == "" {
+		return false
+	}
+	superMarkers := []string{
+		"app/harness",
+		"choir-in-choir",
+		"candidate-world",
+		"candidate world",
+		"worker vm",
+		"vsuper",
+		"co-super",
+		"cosuper",
+		"appchangepackage",
+		"app change package",
+		"promotion",
+		"promote",
+		"rollback",
+		"deploy",
+		"ci/cd",
+		"nixos",
+		"github",
+		"repo",
+		"code",
+		"coding",
+		"implement",
+		"fix",
+		"debug",
+		"test",
+		"verify",
+		"benchmark",
+		"artifact",
+		"execution",
+	}
+	for _, marker := range superMarkers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // handleRunCompletion processes feature-specific side effects after a run
