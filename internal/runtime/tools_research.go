@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type webSearchClient interface {
@@ -24,7 +26,7 @@ type webSearchResponse struct {
 
 func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
-		newWebSearchTool(searchClient),
+		newWebSearchTool(searchClient, rt),
 		newFetchURLTool(httpClient),
 		newImportURLContentTool(rt),
 	} {
@@ -79,7 +81,7 @@ func newImportURLContentTool(rt *Runtime) Tool {
 	}
 }
 
-func newWebSearchTool(searchClient webSearchClient) Tool {
+func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 	type args struct {
 		Query      string `json:"query"`
 		MaxResults int    `json:"max_results,omitempty"`
@@ -113,10 +115,49 @@ func newWebSearchTool(searchClient webSearchClient) Tool {
 				"attempts":  resp.Attempts,
 				"results":   resp.Results,
 			}
-			model, metadata := compactWebSearchProjection(full, resp)
+			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchFindingsAfterSearch(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
+}
+
+func shouldRequireResearchFindingsAfterSearch(ctx context.Context, rt *Runtime) bool {
+	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileResearcher {
+		return false
+	}
+	if rt == nil || rt.store == nil {
+		return false
+	}
+	runID := stringFromToolContext(ctx, toolCtxRunID)
+	if runID == "" {
+		return false
+	}
+	events, err := rt.store.ListEvents(ctx, runID, 200)
+	if err != nil {
+		return false
+	}
+	if researchRunHasSuccessfulTool(events, "submit_research_findings") {
+		return false
+	}
+	return !researchRunHasSuccessfulTool(events, "web_search")
+}
+
+func researchRunHasSuccessfulTool(events []types.EventRecord, toolName string) bool {
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		tool, _ := payload["tool"].(string)
+		isError, _ := payload["is_error"].(bool)
+		if tool == toolName && !isError {
+			return true
+		}
+	}
+	return false
 }
 
 func newFetchURLTool(httpClient *http.Client) Tool {
@@ -179,7 +220,7 @@ func newFetchURLTool(httpClient *http.Client) Tool {
 	}
 }
 
-func compactWebSearchProjection(full map[string]any, resp *webSearchResponse) (map[string]any, map[string]any) {
+func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
 	const maxVisibleResults = 8
 	const maxSnippetChars = 700
 	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
@@ -231,7 +272,10 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse) (m
 		"full_evidence":         "stored in Trace tool.result full_output/full_output_sha256",
 		"projection_policy":     "top bounded result cards with compact snippets",
 		"provider_health_owner": "gateway",
-		"cadence_next_step":     "If submit_research_findings is available and these results can improve a VText document, call submit_research_findings on the next assistant turn before any additional search-only turn. If continuing research, call submit_research_findings and the next search/fetch in the same parallel tool batch.",
+	}
+	if requireFindingsCheckpoint {
+		model["next_required_tool"] = "submit_research_findings"
+		model["next_instruction"] = "Submit concise first findings from this search result before any additional search-only turn. Include 2-4 grounded facts, notes, questions, or a precise blocker; evidence entries may be omitted until richer evidence is ready."
 	}
 	if degraded {
 		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"

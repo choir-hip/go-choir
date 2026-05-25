@@ -466,7 +466,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 }
 
-func TestCompactWebSearchProjectionCarriesResearchCadenceHint(t *testing.T) {
+func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testing.T) {
 	resp := &webSearchResponse{
 		Query:    "nba update",
 		Provider: "mock",
@@ -477,13 +477,55 @@ func TestCompactWebSearchProjectionCarriesResearchCadenceHint(t *testing.T) {
 			"provider": "mock",
 		}},
 	}
-	model, _ := compactWebSearchProjection(map[string]any{"results": resp.Results}, resp)
-	hint := fmt.Sprint(model["cadence_next_step"])
-	if !strings.Contains(hint, "submit_research_findings") || !strings.Contains(hint, "before any additional search-only turn") {
-		t.Fatalf("cadence_next_step = %q", hint)
+	model, _ := compactWebSearchProjection(map[string]any{"results": resp.Results}, resp, true)
+	if got := fmt.Sprint(model["next_required_tool"]); got != "submit_research_findings" {
+		t.Fatalf("next_required_tool = %q, want submit_research_findings", got)
 	}
-	if strings.Contains(hint, "provider health") {
-		t.Fatalf("cadence hint should not ask researcher to manage provider health: %q", hint)
+	instruction := fmt.Sprint(model["next_instruction"])
+	if !strings.Contains(instruction, "before any additional search-only turn") {
+		t.Fatalf("next_instruction = %q", instruction)
+	}
+	if strings.Contains(instruction, "provider health") {
+		t.Fatalf("cadence instruction should not ask researcher to manage provider health: %q", instruction)
+	}
+	model, _ = compactWebSearchProjection(map[string]any{"results": resp.Results}, resp, false)
+	if _, ok := model["next_required_tool"]; ok {
+		t.Fatalf("next_required_tool should be omitted when checkpoint is not required: %#v", model["next_required_tool"])
+	}
+}
+
+func TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	rec := &types.RunRecord{
+		RunID:        "research-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileResearcher,
+	}
+	if !shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, rec), rt) {
+		t.Fatalf("first researcher search should require a findings checkpoint")
+	}
+	superRec := &types.RunRecord{
+		RunID:        "super-run",
+		OwnerID:      "owner",
+		AgentProfile: AgentProfileSuper,
+	}
+	if shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, superRec), rt) {
+		t.Fatalf("super search should not require submit_research_findings")
+	}
+	if err := s.AppendEvent(ctx, &types.EventRecord{
+		EventID:   "ev-web-search",
+		RunID:     rec.RunID,
+		OwnerID:   rec.OwnerID,
+		Timestamp: time.Now().UTC(),
+		Kind:      types.EventToolResult,
+		Phase:     "tool_call",
+		Payload:   json.RawMessage(`{"tool":"web_search","is_error":false}`),
+	}); err != nil {
+		t.Fatalf("append web_search event: %v", err)
+	}
+	if shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, rec), rt) {
+		t.Fatalf("second researcher search before findings should not repeatedly require another first checkpoint")
 	}
 }
 
