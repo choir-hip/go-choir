@@ -390,6 +390,17 @@ remaining error field: VText tool-loop termination should become explicit for su
 
 candidate fix: add a generic tool-loop terminal-success option, enabled for VText runs with `edit_vtext`, `spawn_agent`, and `request_super_execution`. After a successful terminal tool batch with no `next_required_tool`, return from the loop instead of asking the model for another turn. Separately, skip additional `edit_vtext` calls in the same VText tool batch as a non-error duplicate notice so a model that emits two edits at once cannot turn the second one into a completed-mutation error.
 
+### 2026-05-25 Terminal-Tool Fix Acceptance Blocker
+
+commit under test: `3e064c319cfcfdaf13a60781c3cf013d96d843e6`.
+staging identity: `/health` reported proxy and sandbox deployed at `3e064c319cfcfdaf13a60781c3cf013d96d843e6`.
+acceptance command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium,fireworks-kimi-k2p6-low,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball,deep-research,coding-super npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+partial evidence artifact: `/Users/wiz/go-choir/test-results/vtext-model-cadence-matrix-2026-05-25T20-49-02-782Z/fireworks-deepseek-v4-flash-medium.json`.
+observed transition: after the terminal-tool fix, `fireworks-deepseek-v4-flash-medium` produced a clean first VText revision for `Last Night in Baseball` with no post-success mutation errors, but it did not open researcher work or produce v2 in the observation window.
+root cause: this is the previously observed research-classifier gap resurfacing once VText no longer asks the model for an extra free-form turn after `edit_vtext`. The prompt has current factual sports intent but does not contain the existing `mlb`/`score`/`update` markers.
+remaining error field: terminal VText runs need deterministic research continuation for baseball/current recap phrasing, not reliance on the model voluntarily calling `spawn_agent` after a successful edit.
+candidate fix: extend the VText research-continuation classifier to cover `baseball`, `last night`, and recap phrasing, with unit coverage for `Last Night in Baseball`.
+
 ## Run Checkpoint And Resumption State
 
 ```text
