@@ -82,10 +82,14 @@ platform docs record the common baseline and the desired divergence semantics.
 - **Public platform state:** host/platform services own accounts, routing,
   lifecycle, publication/public artifact records, and aggregate health. Browsers
   do not talk to Dolt directly.
-- **Computer lifecycle:** active primary computers are protected ahead of
-  candidate/worker computers. Ordinary primaries stay warm while capacity
-  allows; configured always-on primaries have a protected lane. Candidate and
-  worker computers hibernate first. See [vm-priority-policy.md](vm-priority-policy.md).
+- **Computer lifecycle and disk retention:** active primary computers are
+  protected ahead of candidate/worker computers. Ordinary primaries stay warm
+  while capacity allows; configured always-on primaries have a protected lane.
+  Candidate and worker computers hibernate first. Disposable worker/candidate
+  VM disks are reclaimable after evidence has moved into product records; real
+  primary computers are retained. Platform rollback keeps Git refs plus a small
+  NixOS generation tail, not every historical guest image. See
+  [vm-priority-policy.md](vm-priority-policy.md).
 
 ## Runtime Model Policy State
 

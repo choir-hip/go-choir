@@ -268,6 +268,9 @@ jobs:
             chmod 0644 /var/lib/go-choir/deploy.env
             note_phase "checkout"
 
+            scripts/node-b-deploy-disk-preflight
+            note_phase "disk preflight"
+
             systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
 
             echo "==> Building selected NixOS closure and guest images"
@@ -491,6 +494,12 @@ jobs:
               local service="$1"
               local src
               src=$(readlink -f "/tmp/go-choir-service-${service}-result")
+              install_service_pointer_from_src "$service" "$src"
+            }
+
+            install_service_pointer_from_src() {
+              local service="$1"
+              local src="$2"
               local root="/var/lib/go-choir/services"
               local current="$root/$service"
               local previous="$root/${service}-previous"
@@ -525,6 +534,9 @@ jobs:
                 systemctl is-active --quiet "go-choir-${service}.service"
                 echo "    Restarted go-choir-${service}.service"
               done
+            elif [ "${DEPLOY_HOST}" = "true" ]; then
+              echo "==> Synchronizing host service pointers from activated NixOS closure"
+              scripts/node-b-sync-service-pointers auth gateway platformd proxy sandbox vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -533,13 +545,12 @@ jobs:
             echo "==> Ensuring edge config and host services are live"
             if [ "${DEPLOY_HOST}" = "true" ] && [ "${service_pointer_deploy}" != "true" ]; then
               systemctl daemon-reload || true
-              systemctl start \
+              systemctl restart \
                 go-choir-auth \
                 go-choir-platformd \
                 go-choir-sandbox \
                 go-choir-gateway \
-                go-choir-proxy \
-                caddy
+                go-choir-proxy
               if systemctl is-active --quiet caddy; then
                 systemctl reload caddy || systemctl restart caddy
               else

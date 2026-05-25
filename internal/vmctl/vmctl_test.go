@@ -1553,8 +1553,9 @@ func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	var result struct {
-		Status  string              `json:"status"`
-		Reclaim PressureReclaimPlan `json:"reclaim"`
+		Status            string              `json:"status"`
+		StaleStateDeleted int                 `json:"stale_state_deleted"`
+		Reclaim           PressureReclaimPlan `json:"reclaim"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode idle-check: %v", err)
@@ -1564,6 +1565,9 @@ func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
 	}
 	if result.Reclaim.Mode != PressureReclaimModeDryRun {
 		t.Fatalf("reclaim mode = %s, want dry-run", result.Reclaim.Mode)
+	}
+	if result.StaleStateDeleted != 0 {
+		t.Fatalf("stale_state_deleted = %d, want 0 in dry-run mode", result.StaleStateDeleted)
 	}
 }
 
@@ -2407,6 +2411,9 @@ func TestEndpointURLs(t *testing.T) {
 	if got := IdleCheckEndpoint(base); got != "http://localhost:8083/internal/vmctl/idle-check" {
 		t.Errorf("IdleCheckEndpoint = %s", got)
 	}
+	if got := ReclaimEndpoint(base); got != "http://localhost:8083/internal/vmctl/reclaim" {
+		t.Errorf("ReclaimEndpoint = %s", got)
+	}
 }
 
 // --- Lifecycle Tests (VAL-VM-008, VAL-VM-009, VAL-CROSS-116, VAL-CROSS-117) ---
@@ -3041,6 +3048,7 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 		{"/internal/vmctl/recover", "POST", `{"user_id":"user-1"}`},
 		{"/internal/vmctl/logout", "POST", `{"user_id":"user-1"}`},
 		{"/internal/vmctl/idle-check", "POST", ""},
+		{"/internal/vmctl/reclaim", "POST", ""},
 	}
 
 	for _, ep := range endpoints {

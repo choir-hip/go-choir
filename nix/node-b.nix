@@ -44,6 +44,29 @@ let
     fi
     exec "${package}/bin/${name}" "$@"
   '';
+  diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
+    set -euo pipefail
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnugrep pkgs.nix pkgs.systemd ]}:$PATH"
+
+    min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-41943040}"
+    avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+    echo "go-choir disk retention: root_available_kib=''${avail_kib} min_required_kib=''${min_free_kib}"
+    df -h / /var/lib/go-choir 2>/dev/null || df -h /
+
+    curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim || true
+    journalctl --vacuum-size=256M || true
+    nix-env -p /nix/var/nix/profiles/system --delete-generations +8 || true
+
+    avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+    if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${min_free_kib}" ]; then
+      echo "go-choir disk retention: below headroom after generation pruning; running nix store gc"
+      nix store gc || true
+    else
+      echo "go-choir disk retention: preserving warm Nix cache because headroom is sufficient"
+    fi
+
+    df -h / /var/lib/go-choir 2>/dev/null || df -h /
+  '';
 
   # Common systemd service hardening options applied to all go-choir
   # services. These restrict what the service process can do at the
@@ -379,6 +402,30 @@ in
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
+    };
+  };
+
+  systemd.services.go-choir-disk-gc = {
+    description = "go-choir bounded disk retention sweep";
+    after = [ "go-choir-vmctl.service" ];
+    wants = [ "go-choir-vmctl.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = diskRetentionSweep;
+      Environment = [
+        # Keep about 40 GiB of deploy/build headroom during daily maintenance.
+        "GO_CHOIR_DISK_GC_MIN_FREE_KIB=41943040"
+      ];
+    };
+  };
+
+  systemd.timers.go-choir-disk-gc = {
+    description = "Daily go-choir disk retention sweep";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      RandomizedDelaySec = "1h";
+      Persistent = true;
     };
   };
 

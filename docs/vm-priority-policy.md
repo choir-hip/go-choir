@@ -1,7 +1,7 @@
 # VM And Computer Priority Policy
 
 **Status:** current policy and roadmap
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-25
 
 This document defines how Choir decides which VM-backed computers stay warm,
 which may hibernate, and what a future paid or reserved 24/7 uptime tier must
@@ -127,6 +127,64 @@ This is a substrate cleanup policy, not a product deletion action. It must only
 delete disposable producer machine state after package/source/adoption evidence
 has moved into durable product ledgers. Owner review should use
 AppChangePackage and adoption refs, not stale source VM disks.
+
+## Disk Retention And Rollback Minimum
+
+Node B needs two different rollback stores:
+
+1. **Platform rollback:** tracked Git refs plus a small tail of NixOS system
+   generations. Keeping the current generation and seven previous generations
+   is enough for ordinary staging rollback because the durable source of truth
+   is GitHub and every behavior-changing deploy can be rebuilt from a commit.
+   Hundreds of generations are not useful rollback state; they are deploy-risk
+   debt.
+2. **Computer rollback:** user computer state, AppChangePackage/adoption
+   records, VText/Trace/run-acceptance evidence, and route/rollback refs.
+   These are product records and must not be replaced by keeping old producer
+   VM disks forever.
+
+The minimum safe retention policy is therefore:
+
+- **NixOS generations:** retain current plus seven prior generations; run Nix
+  store GC when root free space is below deploy headroom.
+- **Guest image closures:** retain images referenced by the current system and
+  active/warm computers through normal Nix roots. Older unreferenced guest
+  image closures are garbage, not product rollback state.
+- **Active or published primary computers:** retain. These are user computers,
+  not cache artifacts.
+- **Always-on primary computers:** retain and keep warm while capacity allows.
+- **Worker and candidate VM disks:** retain only while active, recent, or
+  needed for unresolved evidence. Once terminal and stale, the durable product
+  evidence is the package/adoption/run record, not the disk.
+- **Failed disposable workers/candidates:** retain briefly for diagnostics, then
+  reclaim under state-dir pressure.
+- **Failed primary computers:** do not delete automatically until the platform
+  can distinguish real users from synthetic/proof accounts and can preserve a
+  recovery packet. The intended v1 is to mark generated test/proof accounts as
+  ephemeral at creation and make only those primary VM disks reclaimable after a
+  short diagnostic TTL.
+
+This policy intentionally keeps real user data conservative while making build
+and producer cache cleanup aggressive.
+
+## Garbage Collection Frequency
+
+The deployed cadence should be:
+
+- vmctl idle/pressure sweep: every `VMCTL_IDLE_SWEEP_INTERVAL` and during deploy
+  preflight;
+- stale worker/candidate VM-state reclaim: every active pressure sweep when
+  state-dir pressure is present;
+- deploy preflight: before checkout and before build, call vmctl reclaim, vacuum
+  journals, delete old system generations, and run `nix store gc` only if root
+  disk headroom is below the deploy threshold;
+- host housekeeping timer: daily Nix generation pruning plus `nix store gc`,
+  with the same current-plus-seven generation floor;
+- emergency pressure: if root or state-dir free space falls below deploy
+  headroom, reclaim before starting any expensive build.
+
+The deploy preflight exists because a full disk can prevent the next deploy
+from landing the code that would fix the full disk.
 
 ## Always-On Semantics
 

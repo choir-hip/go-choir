@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+min_free_kib="${DEPLOY_MIN_FREE_KIB:-20971520}"
+avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+
+echo "==> Deploy disk preflight"
+df -h / /var/lib/go-choir 2>/dev/null || df -h /
+echo "    root_available_kib=${avail_kib} min_required_kib=${min_free_kib}"
+
+if [ -n "$avail_kib" ] && [ "$avail_kib" -ge "$min_free_kib" ]; then
+  echo "    Disk preflight ok"
+  exit 0
+fi
+
+echo "    Low root disk headroom; running bounded reclaim before deploy build"
+if ! curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim; then
+  curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/idle-check || true
+fi
+journalctl --vacuum-size=256M || true
+nix-env -p /nix/var/nix/profiles/system --delete-generations +8 || true
+nix store gc || true
+
+avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+df -h / /var/lib/go-choir 2>/dev/null || df -h /
+echo "    root_available_kib_after_reclaim=${avail_kib}"
+
+if [ -z "$avail_kib" ] || [ "$avail_kib" -lt "$min_free_kib" ]; then
+  echo "Deploy disk preflight failed: root filesystem still below required headroom" >&2
+  exit 1
+fi

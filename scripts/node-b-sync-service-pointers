@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: $0 <service>..." >&2
+  exit 64
+fi
+
+install_service_pointer_from_src() {
+  local service="$1"
+  local src="$2"
+  local root="/var/lib/go-choir/services"
+  local current="$root/$service"
+  local previous="$root/${service}-previous"
+  local next="$root/.${service}-next"
+
+  if [ ! -x "$src/bin/$service" ]; then
+    echo "Host service package missing executable $service at $src" >&2
+    exit 1
+  fi
+
+  install -d -m 0755 "$root"
+  rm -rf "$next"
+  mkdir -p "$next"
+  cp -a "$src/." "$next/"
+  rm -rf "$previous"
+  if [ -e "$current" ]; then
+    mv "$current" "$previous"
+  fi
+  mv "$next" "$current"
+  echo "    Host service pointer updated from NixOS closure: $service -> $current"
+}
+
+for service in "$@"; do
+  unit="go-choir-${service}.service"
+  wrapper="$(
+    systemctl show "$unit" -p ExecStart --value |
+      sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
+      head -n 1
+  )"
+  if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
+    echo "Could not find readable ExecStart wrapper for $unit" >&2
+    exit 1
+  fi
+
+  bin="$(sed -n 's|^exec "\([^"]*\)".*|\1|p' "$wrapper" | tail -n 1)"
+  if [ -z "$bin" ]; then
+    echo "Could not find Nix fallback binary in wrapper $wrapper for $unit" >&2
+    exit 1
+  fi
+
+  install_service_pointer_from_src "$service" "$(dirname "$(dirname "$bin")")"
+done

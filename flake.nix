@@ -66,13 +66,14 @@
             let
               rel = relPath path;
               base = baseNameOf path;
+              isGoSource = pkgs.lib.hasSuffix ".go" path && !(pkgs.lib.hasSuffix "_test.go" path);
               inInternalDir = dir:
-                pkgs.lib.hasPrefix (dir + "/") rel && pkgs.lib.hasSuffix ".go" path;
+                pkgs.lib.hasPrefix (dir + "/") rel && isGoSource;
             in
               type == "directory" ||
               (base == "go.mod") ||
               (base == "go.sum") ||
-              (pkgs.lib.hasPrefix (subPackage + "/") rel && pkgs.lib.hasSuffix ".go" path) ||
+              (pkgs.lib.hasPrefix (subPackage + "/") rel && isGoSource) ||
               (pkgs.lib.any inInternalDir internalDirs) ||
               (pkgs.lib.elem "internal/runtime" internalDirs &&
                 pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
@@ -184,7 +185,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-+qN6OZMZuzyZeCmwdnQyzH3teNOY/ChJP1yRsEEiULQ=";
+          vendorHash = "sha256-3ANGi/rdojZHRBEbcp/n/ns5gsqhCTCnktJTkREWJMU=";
           internalDirs = [
             "internal/buildinfo"
             "internal/platform"
@@ -226,7 +227,7 @@
         platformd = mkGoService {
           pname = "platformd";
           subPackage = "cmd/platformd";
-          vendorHash = "sha256-LHIXwcHctefXm9MrSfqWB/4O+p8HXQi0VDT4NXt9xlg=";
+          vendorHash = "sha256-5PpkmU0U+dVrHV5scrQCp7V0ejMRlDOw9qVLp3wFxHA=";
           internalDirs = [
             "internal/buildinfo"
             "internal/platform"

@@ -101,6 +101,15 @@ type workerActionRequest struct {
 	WorkerID string `json:"worker_id"`
 }
 
+type reclaimResponse struct {
+	Status            string              `json:"status"`
+	VMsReclaimed      int                 `json:"vms_reclaimed"`
+	StaleStateDeleted int                 `json:"stale_state_deleted"`
+	VMsStopped        int                 `json:"vms_stopped"`
+	ReclaimBefore     PressureReclaimPlan `json:"reclaim_before"`
+	ReclaimAfter      PressureReclaimPlan `json:"reclaim_after"`
+}
+
 // Handler provides HTTP handlers for the vmctl service.
 type Handler struct {
 	registry                 *OwnershipRegistry
@@ -736,9 +745,25 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "stopped", "reason": "logout"})
 }
 
+func (h *Handler) runReclaimSweep() reclaimResponse {
+	before := h.registry.PressureReclaimPlan()
+	reclaimed := h.registry.ReclaimPressureVMs()
+	staleStateDeleted := h.registry.ReclaimStaleVMState()
+	stopped := h.registry.StopIdleVMs()
+	return reclaimResponse{
+		Status:            "ok",
+		VMsReclaimed:      reclaimed,
+		StaleStateDeleted: staleStateDeleted,
+		VMsStopped:        stopped,
+		ReclaimBefore:     before,
+		ReclaimAfter:      h.registry.PressureReclaimPlan(),
+	}
+}
+
 // HandleIdleCheck handles POST /internal/vmctl/idle-check.
-// Triggers an idle VM sweep, stopping or hibernating VMs that have
-// exceeded the idle timeout (VAL-VM-008).
+// Triggers the bounded lifecycle sweep used by deploy and operators: pressure
+// hibernation, stale disposable state reclaim, then ordinary idle hibernation
+// (VAL-VM-008).
 func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -752,12 +777,34 @@ func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stopped := h.registry.StopIdleVMs()
+	result := h.runReclaimSweep()
 	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
-		"status":      "ok",
-		"vms_stopped": stopped,
-		"reclaim":     h.registry.PressureReclaimPlan(),
+		"status":              result.Status,
+		"vms_reclaimed":       result.VMsReclaimed,
+		"stale_state_deleted": result.StaleStateDeleted,
+		"vms_stopped":         result.VMsStopped,
+		"reclaim":             result.ReclaimAfter,
+		"reclaim_before":      result.ReclaimBefore,
 	})
+}
+
+// HandleReclaim handles POST /internal/vmctl/reclaim.
+// It is an explicit operator/deploy alias for the same bounded reclaim sweep as
+// idle-check, with a more precise name for disk-pressure preflight calls.
+func (h *Handler) HandleReclaim(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
+			Error: "vmctl control endpoints are not publicly accessible",
+		})
+		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, h.runReclaimSweep())
 }
 
 // HandleList handles GET /internal/vmctl/list.
@@ -1003,6 +1050,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/refresh", h.HandleRefresh)
 	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
+	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
 }
 
@@ -1088,4 +1136,10 @@ func LogoutEndpoint(baseURL string) string {
 // service at the given base URL.
 func IdleCheckEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/idle-check", baseURL)
+}
+
+// ReclaimEndpoint returns the full reclaim endpoint URL for the vmctl service
+// at the given base URL.
+func ReclaimEndpoint(baseURL string) string {
+	return fmt.Sprintf("%s/internal/vmctl/reclaim", baseURL)
 }
