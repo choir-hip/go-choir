@@ -428,6 +428,16 @@ model-policy evidence: deployed runtime defaults still generate DeepSeek V4 Flas
 classification: the manual regression is probably a compound failure, not one model-quality issue. VM/bootstrap pressure is real at the proxy lifecycle layer, and VText/researcher quality is plausibly worsened by live/default policy still allowing V4 Flash `none` for the foreground research cadence roles.
 remaining error field: determine whether the current user's persistent `System/model-policy.toml` is a generated stale policy, a custom policy, or a fallback path; change generated/fallback policy so new and generated-default computers use V4 Flash `medium` for conductor/VText/researcher; decide whether stale generated policies should migrate to the new default without rewriting genuinely custom owner policy; then rerun a small staging proof before broader evals. Separately investigate VM route 502/resolve pressure and avoid long Playwright matrices while bootstrap lifecycle counters remain noisy.
 
+### 2026-05-26 Default-Policy Proof Revealed Temporal Grounding Gap
+
+behavior commit under test: `e537327d0b12ac65b24b84a41346c64ce9ab9ac6`.
+deployed proof command: `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DEFAULT_POLICY_EVIDENCE_DIR=../test-results/vtext-default-policy-staging-e537327-20260526T024846Z pnpm exec playwright test tests/vtext-default-policy-proof.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+evidence artifact: `frontend/test-results/vtext-default-policy-proof-b42d9-sh-medium-for-VText-cadence-chromium/attachments/default-policy-proof-e305f1048c113da50c80951bbeeae28465af1da0.json`.
+observed transition: fresh generated-default policy produced VText and researcher runs on `fireworks/accounts/fireworks/models/deepseek-v4-flash` with `reasoning=medium`, and the document reached two appagent revisions in about 46s.
+quality failure: the v2 content still claimed `Last Night in Baseball` covered a `May 12-13, 2026` date range, even though the staging proof ran on `May 26, 2026`. That reproduces the user's manual complaint that the system can progress past v1/v2 while still fetching wrong or useless time-sensitive information.
+root cause: neither the shared role system prompt nor `buildVTextResearchContinuationObjective` supplies an absolute current date/time or tells researchers how to anchor relative-date requests such as `last night`, `today`, `tonight`, `latest`, or `now`. The researcher objective only repeats the raw user prompt, so search/query selection can drift to stale snippets.
+remaining error field: add temporal context to agent prompts and researcher delegation objectives without adding deterministic routing. Then rerun a narrow default-policy baseball proof and require the first/second revisions not to mention stale May 12-13-style date ranges.
+
 ## Run Checkpoint And Resumption State
 
 ```text
