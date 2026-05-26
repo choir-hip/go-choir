@@ -51,6 +51,16 @@ type sourcePacketResponse struct {
 	Snippet        string `json:"snippet,omitempty"`
 }
 
+type recordIngressEventRequest struct {
+	SourcePacketID        string `json:"source_packet_id"`
+	ConductorSubmissionID string `json:"conductor_submission_id"`
+	Status                string `json:"status"`
+}
+
+type ingressEventsResponse struct {
+	Events []EmailIngressEvent `json:"events"`
+}
+
 // HandleMessages handles /api/email/messages and /api/email/messages/*.
 func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
@@ -89,6 +99,17 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleMessageSourcePacket(w, r, ownerID, messageID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "ingress-events" {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleMessageIngressEvents(w, r, ownerID, messageID)
+		case http.MethodPost:
+			h.handleRecordMessageIngressEvent(w, r, ownerID, messageID)
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
 		return
 	}
 	if len(parts) == 2 && parts[1] == "read" {
@@ -160,6 +181,62 @@ func (h *Handler) handleMessageSourcePacket(w http.ResponseWriter, r *http.Reque
 		Subject:        msg.Subject,
 		Snippet:        snippet(msg.TextBody),
 	})
+}
+
+func (h *Handler) handleMessageIngressEvents(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {
+	events, err := h.store.ListIngressEvents(r.Context(), ownerID, messageID, 50)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load ingress events"})
+		return
+	}
+	writeJSON(w, http.StatusOK, ingressEventsResponse{Events: events})
+}
+
+func (h *Handler) handleRecordMessageIngressEvent(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {
+	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+		return
+	}
+	var in recordIngressEventRequest
+	if err := decodeJSON(r, &in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	sourcePacketID := strings.TrimSpace(in.SourcePacketID)
+	submissionID := strings.TrimSpace(in.ConductorSubmissionID)
+	if sourcePacketID == "" || submissionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source packet and submission are required"})
+		return
+	}
+	packet, _, err := h.store.GetSourcePacketForMessage(r.Context(), ownerID, messageID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if packet.ID != sourcePacketID {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source packet does not match message"})
+		return
+	}
+	status := strings.TrimSpace(in.Status)
+	if status == "" {
+		status = "accepted"
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	event := EmailIngressEvent{
+		ID:                    ingressEventRowID(messageID, submissionID),
+		MessageID:             messageID,
+		SourcePacketID:        sourcePacketID,
+		OwnerID:               ownerID,
+		ConductorSubmissionID: submissionID,
+		Status:                status,
+		CreatedAt:             now,
+		CompletedAt:           now,
+	}
+	if err := h.store.RecordIngressEvent(r.Context(), event); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record ingress event"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, event)
 }
 
 func (h *Handler) handleMessageRead(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {

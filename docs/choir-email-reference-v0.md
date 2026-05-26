@@ -141,6 +141,10 @@ Implementation checkpoint, 2026-05-26:
   quarantine metadata, and source packet rows.
 - `internal/proxy` owns authenticated `/api/email/*` forwarding and the
   `/api/email/messages/:id/send-to-choir` compound operation.
+- Successful proxy-owned Send to Choir handoff records an owner/message-scoped
+  `email_ingress_events` row in `maild` after prompt-bar submission. This is
+  read-only operator evidence; `maild` still never receives sandbox credentials
+  or calls MAS directly.
 - Node B Nix config defines `go-choir-maild`, `/var/lib/go-choir/mail`, and a
   direct Caddy route for `/api/email/resend/webhook`.
 - `nix/deploy-mail-creds.sh` deploys `RESEND_API_KEY` and
@@ -152,6 +156,10 @@ Implementation checkpoint, 2026-05-26:
   domain/webhook status, Gandi mail-related records, public DNS, and Node B
   `maild` health. It redacts secret-shaped fields and does not mutate provider
   state.
+- `scripts/mail-acceptance-check` is the read-only post-provider acceptance
+  checker. It uses `maildctl` over SSH to verify a real message, attachment
+  quarantine, source-packet trust label, and expected owner/message ingress
+  event count.
 - `scripts/mail-resend-setup` inspects Resend domains/webhooks and can, with
   `--apply`, create/enable the `choir.news` domain and create the
   `email.received` webhook. It never prints webhook signing secrets; use
@@ -193,6 +201,7 @@ owner clicks "Send to Choir" or "Summarize with Choir"
   -> proxy asks maild for an owner-visible source packet
   -> maild enforces mailbox ownership and returns provenance/source refs
   -> proxy submits a conductor-style request to the resolved user computer
+  -> proxy records an owner/message-scoped email_ingress_events receipt in maild
   -> sandbox/conductor receives owner instruction plus untrusted source refs
 ```
 
@@ -603,6 +612,8 @@ V0 should ultimately prove:
   canonical state.
 - "Send to Choir" creates a traceable conductor-style submission where email is
   untrusted source material.
+- `scripts/mail-acceptance-check --expect-ingress-events 0` passes before owner
+  handoff, then `--expect-ingress-events 1` passes after owner handoff.
 - Reply/send from `000@choir.news` works only after explicit owner action and
   alias ownership validation.
 - No inbound message can trigger outbound send, tool execution, canonical state

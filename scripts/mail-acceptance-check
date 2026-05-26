@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# Read-only acceptance checker for real Choir Email v0 provider proof.
+set -euo pipefail
+
+OWNER_ID=""
+MESSAGE_ID=""
+SUBJECT_CONTAINS=""
+NODE_HOST="${CHOIR_MAIL_NODE_HOST:-node-b}"
+EXPECT_ATTACHMENT_QUARANTINE=0
+EXPECT_INGRESS_EVENTS=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/mail-acceptance-check --owner OWNER [--message ID | --subject TEXT] [options]
+
+Options:
+  --owner ID                         Mailbox owner id
+  --message ID                       Exact maild message id to verify
+  --subject TEXT                     Find newest inbox/quarantine message containing TEXT
+  --node-host HOST                   SSH host for Node B. Default: node-b
+  --expect-attachment-quarantine     Require at least one quarantined attachment
+  --expect-ingress-events N          Require exactly N owner/message ingress events
+  -h, --help                         Show this help
+
+This checker is read-only. It uses maildctl over SSH and does not submit the
+message to Choir. Use it before owner handoff with --expect-ingress-events 0,
+then after clicking Send to Choir with --expect-ingress-events 1.
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --owner)
+      OWNER_ID="${2:?missing value for --owner}"
+      shift 2
+      ;;
+    --message)
+      MESSAGE_ID="${2:?missing value for --message}"
+      shift 2
+      ;;
+    --subject)
+      SUBJECT_CONTAINS="${2:?missing value for --subject}"
+      shift 2
+      ;;
+    --node-host)
+      NODE_HOST="${2:?missing value for --node-host}"
+      shift 2
+      ;;
+    --expect-attachment-quarantine)
+      EXPECT_ATTACHMENT_QUARANTINE=1
+      shift
+      ;;
+    --expect-ingress-events)
+      EXPECT_INGRESS_EVENTS="${2:?missing value for --expect-ingress-events}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command jq
+require_command ssh
+
+if [ -z "$OWNER_ID" ]; then
+  echo "error: --owner is required" >&2
+  exit 2
+fi
+if [ -z "$MESSAGE_ID" ] && [ -z "$SUBJECT_CONTAINS" ]; then
+  echo "error: --message or --subject is required" >&2
+  exit 2
+fi
+if [ -n "$EXPECT_INGRESS_EVENTS" ] && ! [[ "$EXPECT_INGRESS_EVENTS" =~ ^[0-9]+$ ]]; then
+  echo "error: --expect-ingress-events must be a non-negative integer" >&2
+  exit 2
+fi
+
+maildctl_json() {
+  ssh "$NODE_HOST" maildctl "$@"
+}
+
+find_message() {
+  local folder="$1"
+  maildctl_json messages --owner "$OWNER_ID" "$folder" \
+    | jq --arg id "$MESSAGE_ID" --arg subject "$SUBJECT_CONTAINS" --arg folder "$folder" '
+      map(select(
+        (if $id != "" then .ID == $id else true end)
+        and (if $subject != "" then (.Subject // "" | contains($subject)) else true end)
+      ))
+      | .[0] // empty
+      | if type == "object" then . + {Folder: $folder} else empty end
+    '
+}
+
+stats="$(maildctl_json stats)"
+webhooks="$(maildctl_json webhooks --limit 5)"
+
+message="$(find_message inbox)"
+if [ -z "$message" ]; then
+  message="$(find_message quarantine)"
+fi
+if [ -z "$message" ]; then
+  echo "error: no matching inbox/quarantine message found" >&2
+  jq -n --arg owner "$OWNER_ID" --arg message "$MESSAGE_ID" --arg subject "$SUBJECT_CONTAINS" '{owner: $owner, message: $message, subject: $subject}'
+  exit 1
+fi
+
+MESSAGE_ID="$(jq -r '.ID' <<<"$message")"
+folder="$(jq -r '.Folder' <<<"$message")"
+detail="$(maildctl_json message --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+attachments="$(maildctl_json attachments --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+source_packet="$(maildctl_json source-packet --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+ingress_events="$(maildctl_json ingress-events --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+
+trust_label="$(jq -r '.source_packet.TrustLabel // empty' <<<"$source_packet")"
+if [ "$trust_label" != "UNTRUSTED_EXTERNAL_EMAIL" ]; then
+  echo "error: source packet trust label = ${trust_label}, want UNTRUSTED_EXTERNAL_EMAIL" >&2
+  exit 1
+fi
+
+if [ "$EXPECT_ATTACHMENT_QUARANTINE" -eq 1 ]; then
+  attachment_count="$(jq 'length' <<<"$attachments")"
+  quarantined_count="$(jq '[.[] | select(.Status == "quarantined")] | length' <<<"$attachments")"
+  if [ "$attachment_count" -eq 0 ] || [ "$attachment_count" -ne "$quarantined_count" ]; then
+    echo "error: expected all attachments to be quarantined; attachments=${attachment_count} quarantined=${quarantined_count}" >&2
+    exit 1
+  fi
+fi
+
+ingress_count="$(jq 'length' <<<"$ingress_events")"
+if [ -n "$EXPECT_INGRESS_EVENTS" ] && [ "$ingress_count" -ne "$EXPECT_INGRESS_EVENTS" ]; then
+  echo "error: ingress event count = ${ingress_count}, want ${EXPECT_INGRESS_EVENTS}" >&2
+  exit 1
+fi
+
+jq -n \
+  --arg status "ok" \
+  --arg owner "$OWNER_ID" \
+  --arg folder "$folder" \
+  --argjson stats "$stats" \
+  --argjson latest_webhooks "$webhooks" \
+  --argjson message "$message" \
+  --argjson detail "$detail" \
+  --argjson attachments "$attachments" \
+  --argjson source_packet "$source_packet" \
+  --argjson ingress_events "$ingress_events" \
+  '{
+    status: $status,
+    owner: $owner,
+    folder: $folder,
+    stats: $stats,
+    latest_webhooks: $latest_webhooks,
+    message: $message,
+    detail: $detail,
+    attachments: $attachments,
+    source_packet: $source_packet,
+    ingress_events: $ingress_events
+  }'

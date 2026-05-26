@@ -388,6 +388,11 @@ what was proven:
   - Resend setup helper read-only path reports restricted_api_key with current send-only key, and fake-curl success path writes webhook secret to mode 600 without printing it
   - mail credential deploy script can consume the generated webhook-secret file in redacted dry-run mode and still fails closed when the secret is absent
   - Gandi DNS plan and rollback helpers dry-run from Resend domain JSON without mutating records
+  - maildctl and maild expose owner/message-scoped ingress-event inspection;
+    proxy-owned Send to Choir records a local ingress event after prompt-bar
+    submission without giving maild MAS credentials
+  - scripts/mail-acceptance-check verifies real message, quarantine, source
+    packet trust, and expected ingress-event count through read-only maildctl
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -422,6 +427,7 @@ evidence artifact refs:
   - CHOIR_MAIL_WEBHOOK_SECRET_FILE=<tmp>/secret.env nix/deploy-mail-creds.sh --dry-run test-host
   - scripts/mail-gandi-plan-records --records <sample-resend-domain-json> --ttl 3600
   - scripts/mail-gandi-rollback-records --snapshot <sample-gandi-snapshot-json> --records <sample-resend-domain-json>
+  - PATH=<fake-ssh> scripts/mail-acceptance-check --owner owner-000 --subject Acceptance --expect-attachment-quarantine --expect-ingress-events 0
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
@@ -1158,6 +1164,47 @@ Belief-state update:
 - The deploy script still fails closed when the webhook secret is absent, which
   preserves the invariant that `maild` does not accept unsigned/unknown
   provider webhooks.
+
+## Tooling Checkpoint: mail acceptance evidence surface
+
+Recorded: 2026-05-26.
+
+Status:
+
+The real-mail acceptance path now has a read-only verifier and an ingress-event
+receipt surface. `maildctl ingress-events` lists owner/message-scoped MAS
+handoff records. `maild` records those rows only from an internal proxy call,
+and the proxy strips client-supplied `X-Internal-Caller` before normal maild
+forwarding. After successful owner-triggered Send to Choir, the proxy records
+the source packet id, owner id, message id, prompt-bar submission id, and status
+back in `maild`.
+
+Evidence:
+
+```text
+focused tests:
+  nix develop -c go test ./internal/maild ./internal/proxy ./cmd/maildctl ./cmd/maild
+coverage:
+  TestHandleMessageIngressEventsRequiresInternalCaller
+  TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar
+  TestRunIngressEventsPrintsOwnerScopedRows
+acceptance checker:
+  bash -n scripts/mail-acceptance-check
+  fake ssh/maildctl success path verifies:
+    folder: quarantine
+    attachment_count: 1
+    source_label: UNTRUSTED_EXTERNAL_EMAIL
+    ingress_count: 0
+```
+
+Belief-state update:
+
+- Final acceptance can now prove the negative condition "real inbound mail did
+  not trigger MAS handoff" by running `scripts/mail-acceptance-check
+  --expect-ingress-events 0` before owner action.
+- After owner action, final acceptance can prove the positive handoff receipt by
+  rerunning the same checker with `--expect-ingress-events 1` and correlating
+  the ingress event's `conductor_submission_id` with prompt-bar/Trace evidence.
 
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 

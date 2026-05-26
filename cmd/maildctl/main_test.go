@@ -126,3 +126,35 @@ func TestRunWebhooksPrintsEmptyArray(t *testing.T) {
 		t.Fatalf("webhooks output = %q, want []", stdout.String())
 	}
 }
+
+func TestRunIngressEventsPrintsOwnerScopedRows(t *testing.T) {
+	dbPath := setupMaildctlStore(t)
+	store, err := maild.OpenStore(dbPath)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	for _, event := range []maild.EmailIngressEvent{
+		{ID: "ingress-1", MessageID: "msg-1", SourcePacketID: "source-1", OwnerID: "owner-000", ConductorSubmissionID: "submission-1", Status: "accepted", CreatedAt: "2026-05-26T12:00:00Z"},
+		{ID: "ingress-2", MessageID: "msg-2", SourcePacketID: "source-2", OwnerID: "other-owner", ConductorSubmissionID: "submission-2", Status: "accepted", CreatedAt: "2026-05-26T12:01:00Z"},
+	} {
+		if err := store.RecordIngressEvent(context.Background(), event); err != nil {
+			t.Fatalf("RecordIngressEvent: %v", err)
+		}
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"ingress-events", "--db", dbPath, "--owner", "owner-000"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run ingress-events code=%d stderr=%s", code, stderr.String())
+	}
+	var events []maild.EmailIngressEvent
+	if err := json.Unmarshal(stdout.Bytes(), &events); err != nil {
+		t.Fatalf("decode ingress events: %v", err)
+	}
+	if len(events) != 1 || events[0].ID != "ingress-1" || events[0].ConductorSubmissionID != "submission-1" {
+		t.Fatalf("events = %+v", events)
+	}
+}

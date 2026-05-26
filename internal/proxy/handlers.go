@@ -32,6 +32,7 @@ var clientIdentityHeaders = []string{
 	"X-Forwarded-User",
 	"X-Remote-User",
 	"X-Auth-User",
+	"X-Internal-Caller",
 }
 
 var (

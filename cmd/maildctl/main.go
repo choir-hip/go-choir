@@ -79,6 +79,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		packet, msg, packetErr := store.GetSourcePacketForMessage(ctx, *ownerID, *messageID)
 		err = packetErr
 		out = map[string]any{"message": msg, "source_packet": packet}
+	case "ingress-events":
+		if strings.TrimSpace(*ownerID) == "" {
+			_, _ = fmt.Fprintln(stderr, "maildctl ingress-events: --owner is required")
+			return 2
+		}
+		out, err = store.ListIngressEvents(ctx, *ownerID, *messageID, *limit)
 	default:
 		printUsage(stderr)
 		return 2
@@ -146,6 +152,7 @@ commands:
   message --owner ID --message ID [--body]
   attachments --owner ID --message ID
   source-packet --owner ID --message ID
+  ingress-events --owner ID [--message ID] [--limit N]
 
 common flags:
   --db PATH                     maild SQLite database path`)

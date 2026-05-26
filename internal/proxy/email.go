@@ -85,6 +85,9 @@ func (h *Handler) HandleEmailSendToChoir(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to submit email source"})
 		return
 	}
+	if err := h.recordMailIngressEvent(r, authResult.UserID, source, promptResp); err != nil {
+		log.Printf("proxy: email send-to-choir record ingress event: %v", err)
+	}
 
 	writeJSON(w, http.StatusAccepted, emailSendToChoirResponse{
 		SourcePacketID: source.SourcePacketID,
@@ -95,6 +98,38 @@ func (h *Handler) HandleEmailSendToChoir(w http.ResponseWriter, r *http.Request)
 		StatusURL:      promptResp.StatusURL,
 	})
 	h.lifecycle.record("email_send_to_choir.total", "accepted", time.Since(started))
+}
+
+func (h *Handler) recordMailIngressEvent(r *http.Request, userID string, source emailSourcePacketResponse, promptResp promptBarProxyResponse) error {
+	target, err := joinBasePath(h.cfg.MaildURL, "/api/email/messages/"+source.MessageID+"/ingress-events")
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(map[string]string{
+		"source_packet_id":        source.SourcePacketID,
+		"conductor_submission_id": promptResp.SubmissionID,
+		"status":                  promptResp.State,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authenticated-User", userID)
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := h.maild.Do(req)
+	if err != nil {
+		return fmt.Errorf("call maild: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("maild status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Request) {

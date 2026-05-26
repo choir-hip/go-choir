@@ -31,11 +31,12 @@ func newEmailTestHandler(t *testing.T, maildURL, sandboxURL string) (*Handler, e
 func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"path":          r.URL.Path,
-			"user":          r.Header.Get("X-Authenticated-User"),
-			"x_user_id":     r.Header.Get("X-User-Id"),
-			"authorization": r.Header.Get("Authorization"),
-			"cookie":        r.Header.Get("Cookie"),
+			"path":            r.URL.Path,
+			"user":            r.Header.Get("X-Authenticated-User"),
+			"x_user_id":       r.Header.Get("X-User-Id"),
+			"authorization":   r.Header.Get("Authorization"),
+			"cookie":          r.Header.Get("Cookie"),
+			"internal_caller": r.Header.Get("X-Internal-Caller"),
 		})
 	}))
 	defer maild.Close()
@@ -48,6 +49,7 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer client-token")
 	req.Header.Set("X-Authenticated-User", "spoofed")
 	req.Header.Set("X-User-Id", "spoofed-user-id")
+	req.Header.Set("X-Internal-Caller", "true")
 	w := httptest.NewRecorder()
 
 	h.HandleAPI(w, req)
@@ -70,23 +72,40 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	if resp["authorization"] != "" || resp["cookie"] != "" {
 		t.Fatalf("client credential header leaked to maild: authorization=%q cookie=%q", resp["authorization"], resp["cookie"])
 	}
+	if resp["internal_caller"] != "" {
+		t.Fatalf("client X-Internal-Caller leaked to maild: %q", resp["internal_caller"])
+	}
 }
 
 func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
-	var maildUser string
+	var maildUser, recordUser, recordInternalCaller string
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/email/messages/msg-1/source-packet" {
+		switch r.URL.Path {
+		case "/api/email/messages/msg-1/source-packet":
+			maildUser = r.Header.Get("X-Authenticated-User")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"source_packet_id": "src-email-1",
+				"message_id":       "msg-1",
+				"trust_label":      "UNTRUSTED_EXTERNAL_EMAIL",
+				"from_address":     "sender@example.com",
+				"subject":          "Project update",
+				"snippet":          "Untrusted summary only",
+			})
+		case "/api/email/messages/msg-1/ingress-events":
+			recordUser = r.Header.Get("X-Authenticated-User")
+			recordInternalCaller = r.Header.Get("X-Internal-Caller")
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode ingress body: %v", err)
+			}
+			if payload["source_packet_id"] != "src-email-1" || payload["conductor_submission_id"] != "run-email-1" {
+				t.Fatalf("ingress payload = %+v", payload)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "ingress-1"})
+		default:
 			t.Fatalf("maild path = %s", r.URL.Path)
 		}
-		maildUser = r.Header.Get("X-Authenticated-User")
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"source_packet_id": "src-email-1",
-			"message_id":       "msg-1",
-			"trust_label":      "UNTRUSTED_EXTERNAL_EMAIL",
-			"from_address":     "sender@example.com",
-			"subject":          "Project update",
-			"snippet":          "Untrusted summary only",
-		})
 	}))
 	defer maild.Close()
 
@@ -122,6 +141,9 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	}
 	if maildUser != "user-real" {
 		t.Fatalf("maild user = %q, want user-real", maildUser)
+	}
+	if recordUser != "user-real" || recordInternalCaller != "true" {
+		t.Fatalf("record headers user=%q internal=%q", recordUser, recordInternalCaller)
 	}
 	if promptUser != "user-real" {
 		t.Fatalf("prompt user = %q, want user-real", promptUser)

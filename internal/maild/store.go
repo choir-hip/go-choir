@@ -85,12 +85,25 @@ type EmailSourcePacket struct {
 	CreatedAt      string
 }
 
+// EmailIngressEvent is a recorded owner-triggered MAS handoff.
+type EmailIngressEvent struct {
+	ID                    string
+	MessageID             string
+	SourcePacketID        string
+	OwnerID               string
+	ConductorSubmissionID string
+	Status                string
+	CreatedAt             string
+	CompletedAt           string
+}
+
 // StoreStats is a safe operational summary for health reporting.
 type StoreStats struct {
 	Aliases                int `json:"aliases"`
 	Messages               int `json:"messages"`
 	QuarantinedAttachments int `json:"quarantined_attachments"`
 	WebhookEvents          int `json:"webhook_events"`
+	IngressEvents          int `json:"ingress_events"`
 }
 
 // OpenStore opens a maild SQLite store.
@@ -399,6 +412,9 @@ func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&stats.WebhookEvents); err != nil {
 		return StoreStats{}, err
 	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_ingress_events`).Scan(&stats.IngressEvents); err != nil {
+		return StoreStats{}, err
+	}
 	return stats, nil
 }
 
@@ -504,6 +520,72 @@ func (s *Store) GetSourcePacketForMessage(ctx context.Context, ownerID, messageI
 		return EmailSourcePacket{}, EmailMessage{}, err
 	}
 	return packet, msg, nil
+}
+
+// ListIngressEvents returns read-only owner-visible MAS handoff records.
+func (s *Store) ListIngressEvents(ctx context.Context, ownerID, messageID string, limit int) ([]EmailIngressEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	where := "owner_id = ?"
+	args := []any{ownerID}
+	if strings.TrimSpace(messageID) != "" {
+		where += " AND message_id = ?"
+		args = append(args, messageID)
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT
+		id, message_id, coalesce(source_packet_id, ''), owner_id,
+		coalesce(conductor_submission_id, ''), status, created_at, coalesce(completed_at, '')
+		FROM email_ingress_events
+		WHERE `+where+`
+		ORDER BY created_at DESC
+		LIMIT ?`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list ingress events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	events := make([]EmailIngressEvent, 0)
+	for rows.Next() {
+		var event EmailIngressEvent
+		if err := rows.Scan(
+			&event.ID,
+			&event.MessageID,
+			&event.SourcePacketID,
+			&event.OwnerID,
+			&event.ConductorSubmissionID,
+			&event.Status,
+			&event.CreatedAt,
+			&event.CompletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan ingress event: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// RecordIngressEvent stores an owner-triggered MAS handoff receipt.
+func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent) error {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO email_ingress_events (
+		id, message_id, source_packet_id, owner_id, conductor_submission_id,
+		status, created_at, completed_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID,
+		event.MessageID,
+		nullString(event.SourcePacketID),
+		event.OwnerID,
+		nullString(event.ConductorSubmissionID),
+		event.Status,
+		event.CreatedAt,
+		nullString(event.CompletedAt),
+	); err != nil {
+		return fmt.Errorf("record ingress event: %w", err)
+	}
+	return nil
 }
 
 // MarkMessageRead marks a message read for its owner.

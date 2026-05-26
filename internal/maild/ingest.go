@@ -269,6 +269,10 @@ func attachmentRowID(messageID, attachmentID string) string {
 	return shaRowID("resend-attachment", messageID+":"+attachmentID)
 }
 
+func ingressEventRowID(messageID, submissionID string) string {
+	return shaRowID("email-ingress-event", messageID+":"+submissionID)
+}
+
 func recipientRowID(messageID, kind, address string) string {
 	return shaRowID("email-recipient", messageID+":"+kind+":"+address)
 }

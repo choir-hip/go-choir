@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,6 +90,45 @@ func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	}
 	if resp.SourcePacketID != "source-msg-1" || resp.TrustLabel != "UNTRUSTED_EXTERNAL_EMAIL" {
 		t.Fatalf("source response = %+v", resp)
+	}
+}
+
+func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {
+	store, cfg := newTestStore(t)
+	seedMessage(t, store, "user-1", "msg-1", "untrusted")
+	h := NewHandler(cfg, store)
+
+	body := `{"source_packet_id":"source-msg-1","conductor_submission_id":"submission-1","status":"accepted"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
+	req.Header.Set("X-Authenticated-User", "user-1")
+	req.Header.Set("X-Internal-Caller", "true")
+	w = httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1/ingress-events", nil)
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w = httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp ingressEventsResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode ingress response: %v", err)
+	}
+	if len(resp.Events) != 1 || resp.Events[0].ConductorSubmissionID != "submission-1" {
+		t.Fatalf("events = %+v", resp.Events)
 	}
 }
 
