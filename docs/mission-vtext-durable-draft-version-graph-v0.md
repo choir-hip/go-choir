@@ -456,6 +456,23 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
+- 2026-05-26 deployed commit `4cd61b24d619bea4518f2038bd8bd260fd42d534`
+  normalized duplicate same-turn VText researcher spawns through the existing
+  `plannedToolSkips` side-effect guard. The focused unit test passed locally,
+  CI/deploy/FlakeHub passed, staging `/health` reported proxy and sandbox at
+  that SHA, and the deployed sports-quality matrix showed v4-flash medium and
+  Kimi low producing visible v2/v3 checkpoints after researcher findings with
+  only one researcher spawn each. GPT-5.5 low produced no researcher findings
+  in the full matrix window, but a same-build GPT-only repeat produced v2-v4,
+  one researcher spawn, ten researcher updates, and one verified final-score
+  sentence from MLB StatsAPI evidence.
+- 2026-05-26 deployed commit `38a97898e1eed7b1d32065aaf54d6276a7522c40`
+  tightened VText and researcher prompts so VText worker-findings wakes prefer
+  an immediate visible partial/blocker checkpoint before opening more workers,
+  and sports researchers prefer accessible structured endpoints/snippet evidence
+  when HTML scoreboards block. The first post-fix matrix improved Kimi/V4
+  visible checkpoint behavior but exposed duplicate GPT VText researcher
+  spawns, which the later `4cd61b2` fix addressed.
 - 2026-05-26 follow-up design decision: normalize coagent reporting into one
   structured non-canonical update API rather than adding wrapper tools. The
   right shape is Go-like: one `submit_coagent_update` primitive used by
@@ -511,6 +528,14 @@ last checkpoint:
 
 current artifact state:
 
+- Staging now includes the VText worker-findings prompt contract and duplicate
+  VText researcher spawn guard at
+  `4cd61b24d619bea4518f2038bd8bd260fd42d534`.
+- The current sports/source-quality row is no longer dominated by VText
+  mutation-state or duplicate-spawn noise for V4/Kimi: both produce visible
+  follow-up revisions after worker findings. Source quality remains partial:
+  the accepted models still do not consistently produce a full verified
+  final-score recap under current provider/fetch conditions.
 - Staging now includes the first contract-preserving durable-draft fix:
   explicit `allow_rebase` user revision saves can rebase stale dirty drafts onto
   the current head while ordinary stale writes still return conflict.
@@ -522,6 +547,10 @@ current artifact state:
 
 what shipped:
 
+- `4cd61b2` `Skip duplicate VText researcher spawns`
+- `2c9402e` `Document duplicate VText spawn regression`
+- `38a9789` `Prefer VText checkpoints on worker findings`
+- `36d2e14` `Document sports integration quality failure`
 - `b5d72c1` `Checkpoint VText durable draft version graph`
 - `b2252fe` `Rebase stale VText user drafts`
 - `cbed84d` `Document VText worker concurrency probe failure`
@@ -1583,6 +1612,70 @@ next executable probe:
 - Add a narrow duplicate `spawn_agent` skip for VText researcher spawns in
   `plannedToolSkips`, with a unit test. Deploy and rerun the sports-quality
   matrix on the same three accepted models.
+
+checkpoint update, 2026-05-26 07:10 UTC:
+
+- Duplicate VText researcher spawn guard `4cd61b24d619bea4518f2038bd8bd260fd42d534`
+  landed and deployed. CI run `26437337540` passed, FlakeHub run `26437337509`
+  passed, and staging `/health` reported proxy and sandbox deployed at
+  `4cd61b24d619bea4518f2038bd8bd260fd42d534`, deployed at
+  `2026-05-26T06:59:15Z`.
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn|TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn|TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects|TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims|TestSystemPromptForResearcherForcesEarlyHandoff' -count=1`.
+- Deployed accepted sports-quality matrix command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-sports-quality-4cd61b2-20260526T065955Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Runner result: all three rows completed mechanically in about 5.9m. Evidence:
+  `test-results/vtext-model-cadence-sports-quality-4cd61b2-20260526T065955Z/`.
+- `fireworks-deepseek-v4-flash-medium`: v1 at about 10.6s, first findings at
+  about 50.6s, v2 at about 72.6s, v3 at about 100.6s, one researcher spawn,
+  three appagent revisions, and quality class `honest_blocker`. It surfaced
+  ESPN/MLB 403 blockers and partial matchup/snippet evidence.
+- `fireworks-kimi-k2p6-low`: v1 at about 11.5s, first findings at about 38.5s,
+  v2 at about 50.5s, v3 at about 91.5s, one researcher spawn, three appagent
+  revisions, and quality class `honest_blocker`. The final text included
+  "Cincinnati Reds 7, New York Mets 2" under a confirmed-final heading, but the
+  strict rubric did not count it as `score_answer` because the individual score
+  sentence lacked an explicit final cue.
+- `chatgpt-gpt-5-5-low`: full matrix row had one researcher spawn and no
+  researcher tool response before the capture window ended. A GPT-only repeat
+  on the same deployed build completed in about 2.0m with v1 at about 4.1s,
+  first findings at about 28.1s, v2/v3/v4 at about 40.1s/58.1s/77.1s, one
+  researcher spawn, ten researcher updates, and quality class `score_answer`.
+  Evidence:
+  `test-results/vtext-model-cadence-sports-quality-4cd61b2-gpt-repeat-20260526T070631Z/chatgpt-gpt-5-5-low.json`.
+
+belief-state changes:
+
+- The duplicate same-turn VText researcher spawn gap is fixed for exact
+  duplicate researcher/channel/objective spawns while preserving distinct
+  parallel research objectives.
+- V4 medium and Kimi low now meet the visible-worker-checkpoint cadence
+  expectation on this sports row in the latest deployed matrix.
+- GPT-5.5 low is capable of the desired cadence and one verified score answer,
+  but shows provider/model latency variance: it can fail the full matrix window
+  by leaving the first researcher provider call in-flight.
+- Source quality remains the largest unresolved axis. Even when cadence works,
+  official HTML scoreboard fetches often return 403/429 and search providers
+  enter cooldown/quota-limited states; the best successful GPT repeat used
+  official MLB StatsAPI evidence but still produced only a partial recap.
+
+remaining error field:
+
+- The accepted matrix is improved but not complete for the mission stopping
+  condition. Need to harden the source-quality rubric, especially "confirmed
+  final score" headings applying to following bullets, and run the broader
+  long multi-section/user-edit/multi-worker suite after the sports row has a
+  cleaner source-quality signal.
+- Need to decide whether GPT-5.5 low requires a longer researcher observation
+  window or provider-call timeout accounting in the eval report, versus treating
+  its full-matrix miss as provider latency variance.
+
+next executable probe:
+
+- Tighten the quality rubric false-negative for "confirmed final score" bullet
+  groups, then run the accepted matrix on a non-sports deep-research prompt and
+  the long multi-section research-plus-super prompt to verify that the prompt
+  and duplicate-spawn fixes did not regress mixed-worker coordination.
 
 suggested resume goal string:
 
