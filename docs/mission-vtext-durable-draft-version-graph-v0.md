@@ -1846,10 +1846,87 @@ remaining error field:
 
 next executable probe:
 
-- Change the researcher first checkpoint prompt from "one focused search
-  batch" to exactly one `web_search` call, or one `web_search` plus one
-  targeted `fetch_url` only when the URL is already known, before the first
-  `submit_coagent_update`. Then rerun V4-only long on staging.
+- Pause behavior changes at a stable checkpoint. The next continuation should
+  treat the one-search researcher prompt as an experimental probe, not a settled
+  product shape, and should reparameterize the model suite around
+  capability-aware routing before resuming the VText durable-draft gradient.
+
+checkpoint update, 2026-05-26 08:15 UTC:
+
+- Prompt probe `9b4cacfbc7eb6332219ff44b688f54af8954bfb0`
+  landed and deployed after docs checkpoint `5c8564c`. CI run `26440004925`
+  passed, FlakeHub run `26440004908` passed, and staging `/health` reported
+  proxy and sandbox deployed at `9b4cacfbc7eb6332219ff44b688f54af8954bfb0`,
+  deployed at `2026-05-26T08:01:34Z`, with `vmctl_status=ok`.
+- Local focused proof for `9b4cacfbc7eb6332219ff44b688f54af8954bfb0` passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextResearchContinuationObjectiveRequiresFastCheckpoint|TestSystemPromptForResearcherForcesEarlyHandoff|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate|TestVTextWorkerWakeRequeuesWhileMutationPending' -count=1`.
+- Deployed V4-only long row on `9b4cacfbc7eb6332219ff44b688f54af8954bfb0`:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-long-mixed-9b4cacf-v4-20260526T080213Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: the row passed as a harness run but did not produce the desired
+  workflow. Trace had one appagent revision at about 10.5s, researcher spawn at
+  about 21.5s, one `web_search` at about 23.5s, and then a
+  runtime-required `submit_coagent_update` provider call that started at about
+  25.5s and did not return before the 3.5 minute observation ended. There were
+  no finding events, no super request, and no second VText revision. Evidence:
+  `test-results/vtext-model-cadence-long-mixed-9b4cacf-v4-20260526T080213Z/fireworks-deepseek-v4-flash-medium.json`.
+
+reflection:
+
+- The one-search constraint is only a probe. It reduced search fan-out and
+  search-result volume, but it did not fix V4 Flash medium's ability to convert
+  first search evidence into the required coagent update on the hard long mixed
+  prompt. The stronger product shape is likely "first evidence packet should be
+  small, prompt-scoped, and early" rather than a universal hard limit of one
+  search before the first checkpoint.
+- The model-policy landscape has shifted: V4 Flash medium may still be useful
+  for conductor, first-version shaping, simple retrieval, and small API-style
+  work, but it should not be treated as the default model for hard coding,
+  candidate-world engineering, or self-development orchestration through
+  super/vsuper/co-super. Those rows should be evaluated with stronger
+  capability assignments such as GPT-5.5 medium, Kimi high, or V4 Pro high for
+  hard engineering turns, while preserving the same uniform harness and
+  authority boundaries.
+- The "four experiments" history remains the relevant realism target. Earlier
+  Chiron/Motion/Liquid/Python reruns failed because the self-development loop
+  lacked reliable verifier sequencing, browser-proof worker capability,
+  candidate evidence, owner-readable VText reports, and package/adoption proof.
+  The VText cadence work is a bridge toward that loop, not an endpoint.
+
+belief-state changes:
+
+- Prompt-only cadence work can reduce noise, but V4 Flash medium has now shown
+  repeated hard-prompt stalls in different places: VText post-worker
+  integration, researcher first-checkpoint synthesis, and long-context mixed
+  research-plus-execution coordination.
+- The requeue fix remains useful and deployed, but it needs a row where worker
+  evidence actually arrives under the deployed build before it can be credited
+  with fixing the post-super v2 gap.
+- Hard coding quality is now a first-class eval axis. The suite should include
+  research-only, mixed research-plus-execution, simple API/coding, and real
+  candidate-world engineering prompts with stronger models assigned to
+  super/vsuper/co-super for the hard rows.
+
+remaining error field:
+
+- The latest deployed product can still stall at v1 on hard long mixed work
+  with V4 Flash medium despite prompt cadence fixes.
+- The one-search researcher prompt may be too rigid as product policy. It
+  should be reconsidered as a softer "small first evidence packet" instruction
+  or replaced by capability-aware model routing after more evidence.
+- The eval suite still lacks robust user-edit concurrency cases with long
+  content, many versions, multiple concurrent workers, and user edits arriving
+  while VText is in flight.
+- Staging health still shows bootstrap/route 502 and resolve-error history; VM
+  pressure and boot latency need a separate resource/route probe before long
+  overnight product-path runs are trusted again.
+
+next executable probe:
+
+- Resume with a landscape brief rather than another immediate fix: define the
+  eval matrix for VText durable drafts plus self-development realism, including
+  model-policy rows for V4 Flash medium as conductor/simple work and GPT-5.5
+  medium, Kimi high, or V4 Pro high for hard super/vsuper/co-super coding. Then
+  decide whether to soften or revert the one-search prompt based on that matrix.
 
 suggested resume goal string:
 
