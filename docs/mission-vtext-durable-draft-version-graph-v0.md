@@ -1525,6 +1525,65 @@ next executable probe:
   live/pending caveats. Rerun the corrected sports-quality matrix before moving
   back to long multi-worker/user-edit evals.
 
+checkpoint update, 2026-05-26 06:58 UTC:
+
+- Prompt-only fix `38a97898e1eed7b1d32065aaf54d6276a7522c40` landed and
+  deployed. CI run `26436820271` passed, FlakeHub run `26436820273` passed, and
+  staging `/health` reported proxy and sandbox deployed at
+  `38a97898e1eed7b1d32065aaf54d6276a7522c40`, deployed at
+  `2026-05-26T06:46:29Z`.
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims|TestVTextResearchContinuationObjectiveRequiresFastCheckpoint|TestSystemPromptForResearcherForcesEarlyHandoff|TestVTextPromptCurrentEventsRequiresResearcher|TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent' -count=1`.
+- Deployed post-fix sports-quality command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-sports-quality-38a9789-20260526T064727Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Runner result: all three rows completed mechanically in about 6.0m. Evidence:
+  `test-results/vtext-model-cadence-sports-quality-38a9789-20260526T064727Z/`.
+- `fireworks-deepseek-v4-flash-medium`: v1 at about 15.0s, first researcher
+  findings at about 39.0s, v2 at about 62.0s, v3 at about 96.0s, and three
+  appagent revisions. Quality class: `honest_blocker`; it made visible partial
+  scoreboard progress and source blockers instead of staying on v1.
+- `fireworks-kimi-k2p6-low`: v1 at about 5.9s, first researcher findings at
+  about 32.9s, v2 at about 45.9s, v3 at about 57.9s, and three appagent
+  revisions. Quality class: `honest_blocker`; it included one apparent final
+  score but the rubric did not classify it as a verified final-score sentence
+  because the line lacked an explicit final cue.
+- `chatgpt-gpt-5-5-low`: v1 at about 7.7s, 12 researcher update tool results
+  by about 68.7s, but no v2 landed inside the observation window. Quality
+  class: `honest_blocker`. Trace shows the initial VText turn issued duplicate
+  side-effect calls: two `edit_vtext` calls, then two `spawn_agent` calls. The
+  duplicate edit was skipped by the existing same-turn mutation guard, but the
+  duplicate VText researcher spawn was not skipped, so two researchers ran and
+  produced a dense update stream.
+
+belief-state changes:
+
+- The prompt change improved the exact Kimi/V4 visible-checkpoint failure:
+  both models now revised after worker findings in this staging run.
+- GPT-5.5 low exposed a separate same-turn side-effect normalization gap:
+  VText duplicate `spawn_agent` calls are not guarded the way duplicate
+  `edit_vtext` calls and vsuper duplicate child spawns are guarded.
+- Dense concurrent researcher updates can still delay visible integration.
+  The next fix should prevent accidental duplicate VText researcher spawns
+  through the existing `plannedToolSkips` mechanism rather than creating a new
+  wrapper tool or role-specific loop.
+
+remaining error field:
+
+- Need to extend the existing duplicate side-effect guard so a VText turn can
+  spawn at most one researcher for the same document channel/role in a single
+  model response. This preserves one way to do side-effect normalization in the
+  harness and avoids duplicate worker storms from models that emit parallel
+  tool calls.
+- Need to rerun the sports-quality matrix after that fix. The source-quality
+  target is still not complete: no accepted model consistently produced a full
+  verified final-score recap in this row.
+
+next executable probe:
+
+- Add a narrow duplicate `spawn_agent` skip for VText researcher spawns in
+  `plannedToolSkips`, with a unit test. Deploy and rerun the sports-quality
+  matrix on the same three accepted models.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
