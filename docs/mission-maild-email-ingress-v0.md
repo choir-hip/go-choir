@@ -731,3 +731,47 @@ Required next change:
 
 - Initialize maild store list results as empty slices so JSON CLI output is
   stable `[]` for empty query results.
+
+## Deployed Checkpoint: maildctl inspection proof
+
+Recorded: 2026-05-26.
+
+Status:
+
+The read-only operator inspection surface is deployed. `maildctl` is installed
+through the Node B NixOS system path and can inspect safe stats, aliases, and
+webhook receipts without exposing a public admin endpoint. Empty list output is
+now stable JSON `[]`.
+
+Evidence:
+
+```text
+latest deployed commit: 11bf6e6e958a94a8344ab061ac9fc72036f2ca92
+local focused test: nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+Node B build: NixOS closure built maildctl-0.1.0 and activated it in environment.systemPackages
+deploy smoke probes: 8081, 8082, 8083, 8084, 8086, 8087 health ok
+public /health: proxy and sandbox report deployed_commit 11bf6e6e958a94a8344ab061ac9fc72036f2ca92
+maild /health:
+  resend_api_key_configured: true
+  webhook_secret_configured: false
+  root_owner_id_configured: true
+  stats.aliases: 1
+  stats.messages: 0
+  stats.quarantined_attachments: 0
+  stats.webhook_events: 0
+maildctl stats:
+  aliases: 1
+  messages: 0
+  quarantined_attachments: 0
+  webhook_events: 0
+maildctl aliases:
+  alias-choir-news-000 -> choir.news/000 -> user 5bd6de97-3b58-408c-bf89-c42c81b083de
+maildctl webhooks --limit 5: []
+```
+
+Remaining blocker:
+
+- Real inbound mail, source-packet MAS handoff from a real received message,
+  and real attachment quarantine still require Resend receiving/webhook
+  credentials and exact Resend MX records. The deployed health and CLI now make
+  that blocker explicit and verifiable instead of implicit.
