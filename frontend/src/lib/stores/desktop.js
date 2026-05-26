@@ -23,6 +23,7 @@ import { writable, derived } from 'svelte/store';
 export const APP_REGISTRY = [
   { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
   { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
+  { id: 'email', name: 'Email', icon: '✉️', description: 'Mail for your automatic computer', singleton: true, window: { desktop: { width: 1120, height: 720, minWidth: 760, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
   { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
   { id: 'apps-changes', name: 'Apps & Changes', icon: '🧩', description: 'Discover and manage computer changes', singleton: true, window: { desktop: { width: 1100, height: 760, minWidth: 760, minHeight: 540 }, compact: { minWidth: 280, minHeight: 420 } } },
   { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
@@ -49,7 +50,7 @@ export const APP_REGISTRY = [
 
 /** The main apps shown as floating desktop icons */
 export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
-  ['files', 'browser', 'compute-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
+  ['files', 'browser', 'email', 'compute-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
 );
 
 export const HEAVY_APP_IDS = new Set([

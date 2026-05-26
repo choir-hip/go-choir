@@ -46,6 +46,7 @@
   import { openFileDocument } from './vtext.js';
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
+  import EmailApp from './EmailApp.svelte';
   import AppsChangesApp from './AppsChangesApp.svelte';
   import TerminalApp from './TerminalApp.svelte';
   import ComputeMonitorApp from './ComputeMonitorApp.svelte';
@@ -1630,6 +1631,13 @@
                   {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
                   on:openvtext={handleOpenVTextFromContent}
+                />
+              </div>
+            {:else if win.appId === 'email'}
+              <div class="app-content email-content" data-email-window>
+                <EmailApp
+                  {authenticated}
+                  on:authexpired={() => dispatch('authexpired')}
                 />
               </div>
             {:else if win.appId === 'apps-changes'}

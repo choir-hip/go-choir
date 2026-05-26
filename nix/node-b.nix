@@ -22,6 +22,7 @@ let
   authSigningDir = "/var/lib/go-choir/auth-signing";
   frontendCurrent = "/var/www/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
+  mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
@@ -125,7 +126,7 @@ in
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHR2N41wH+Uw3BFTbgThe4f4PGnODEcm6nVI6aPN2ugf github-actions-deploy@go-choir"
   ];
 
-  # Firewall — ports 22, 80, 443 ONLY. Service ports (8081-8085) NOT open externally.
+  # Firewall — ports 22, 80, 443 ONLY. Service ports (8081-8087) NOT open externally.
   # This plus localhost-only binding (defense in depth) satisfies VAL-DEPLOY-007:
   # only the intended public edge (Caddy on 80/443) is internet-reachable.
   networking.firewall = {
@@ -148,6 +149,9 @@ in
         }
         handle /health {
           reverse_proxy 127.0.0.1:8082
+        }
+        handle /api/email/resend/webhook {
+          reverse_proxy 127.0.0.1:8087
         }
         handle /api/* {
           reverse_proxy 127.0.0.1:8082 {
@@ -246,8 +250,8 @@ in
   systemd.services.go-choir-proxy = {
     description = "go-choir Proxy Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-auth.service" "go-choir-sandbox.service" "go-choir-platformd.service" ];
-    wants = [ "network-online.target" "go-choir-sandbox.service" "go-choir-platformd.service" ];
+    after = [ "network-online.target" "go-choir-auth.service" "go-choir-sandbox.service" "go-choir-platformd.service" "go-choir-maild.service" ];
+    wants = [ "network-online.target" "go-choir-sandbox.service" "go-choir-platformd.service" "go-choir-maild.service" ];
     requires = [ "go-choir-auth.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "proxy" goChoirPackages.proxy}";
@@ -268,6 +272,28 @@ in
         # finish readiness probing instead of timing out in the proxy first.
         "PROXY_VMCTL_TIMEOUT=180s"
         "PROXY_PLATFORMD_URL=http://127.0.0.1:8086"
+        "PROXY_MAILD_URL=http://127.0.0.1:8087"
+      ];
+    };
+  };
+
+  systemd.services.go-choir-maild = {
+    description = "go-choir Mail Service";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = commonServiceHardening // {
+      ExecStart = "${serviceExec "maild" goChoirPackages.maild}";
+      Restart = "on-failure";
+      RestartSec = 3;
+      StateDirectory = "go-choir/mail";
+      EnvironmentFile = "-/var/lib/go-choir/maild.env";
+      ReadWritePaths = [ mailDir ];
+      Environment = [
+        "MAILD_PORT=8087"
+        "MAILD_DB_PATH=${mailDir}/mail.db"
+        "MAILD_STORAGE_ROOT=${mailDir}"
+        "MAILD_PRIMARY_DOMAIN=choir.news"
       ];
     };
   };
@@ -595,6 +621,10 @@ in
     "d /var/lib/go-choir/services 0755 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
+    "d ${mailDir} 0750 root root -"
+    "d ${mailDir}/raw 0750 root root -"
+    "d ${mailDir}/attachments 0750 root root -"
+    "d ${mailDir}/attachments/quarantine 0750 root root -"
     "d /var/lib/go-choir/guest 0750 root root -"
     "d /var/lib/go-choir/guest-playwright 0750 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"

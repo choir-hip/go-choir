@@ -97,6 +97,8 @@ type Handler struct {
 	upgrader     websocket.Upgrader
 	dialer       *websocket.Dialer
 	platformd    *http.Client
+	maild        *http.Client
+	sandboxHTTP  *http.Client
 	sandboxURL   *url.URL      // parsed sandbox URL for WS dial derivation
 	vmctlClient  *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle    *lifecycleRecorder
@@ -111,6 +113,9 @@ type Handler struct {
 func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if strings.TrimSpace(cfg.PlatformdURL) == "" {
 		cfg.PlatformdURL = DefaultPlatformdURL
+	}
+	if strings.TrimSpace(cfg.MaildURL) == "" {
+		cfg.MaildURL = DefaultMaildURL
 	}
 	sandboxURL, err := url.Parse(cfg.SandboxURL)
 	if err != nil {
@@ -197,6 +202,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		},
 		dialer:      websocket.DefaultDialer,
 		platformd:   &http.Client{Timeout: 30 * time.Second},
+		maild:       &http.Client{Timeout: 30 * time.Second},
+		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
 		sandboxURL:  sandboxURL,
 		vmctlClient: vmctlCli,
 		lifecycle:   newLifecycleRecorder(),
@@ -418,6 +425,12 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(path, "/api/platform/publications/") && strings.HasSuffix(path, "/proposals"):
 		h.HandlePublicationProposal(w, r)
+		return
+	case path == "/api/email/resend/webhook":
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	case strings.HasPrefix(path, "/api/email/"):
+		h.HandleEmailAPI(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and

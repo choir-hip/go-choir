@@ -195,6 +195,15 @@
             "internal/vmctl"
           ];
         };
+        maild = mkGoService {
+          pname = "maild";
+          subPackage = "cmd/maild";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/maild"
+            "internal/server"
+          ];
+        };
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";

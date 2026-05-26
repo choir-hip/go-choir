@@ -10,12 +10,19 @@ func TestLoadConfigDefaults(t *testing.T) {
 	// Clear all PROXY_* env vars to test defaults.
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	origPlatformdURL := os.Getenv("PROXY_PLATFORMD_URL")
+	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Unsetenv("PROXY_PORT")
 	_ = os.Unsetenv("PROXY_SANDBOX_URL")
 	_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
 	_ = os.Unsetenv("PROXY_PLATFORMD_URL")
+	_ = os.Unsetenv("PROXY_MAILD_URL")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	t.Cleanup(func() {
+		if origMaildURL == "" {
+			_ = os.Unsetenv("PROXY_MAILD_URL")
+		} else {
+			_ = os.Setenv("PROXY_MAILD_URL", origMaildURL)
+		}
 		if origPlatformdURL == "" {
 			_ = os.Unsetenv("PROXY_PLATFORMD_URL")
 		} else {
@@ -45,20 +52,30 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.PlatformdURL != DefaultPlatformdURL {
 		t.Errorf("PlatformdURL: got %q, want %q", cfg.PlatformdURL, DefaultPlatformdURL)
 	}
+	if cfg.MaildURL != DefaultMaildURL {
+		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, DefaultMaildURL)
+	}
 }
 
 func TestLoadConfigFromEnv(t *testing.T) {
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	origPlatformdURL := os.Getenv("PROXY_PLATFORMD_URL")
+	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Setenv("PROXY_PORT", "9999")
 	_ = os.Setenv("PROXY_SANDBOX_URL", "http://example.com:8085")
 	_ = os.Setenv("PROXY_AUTH_PUBLIC_KEY_PATH", "/tmp/test-pub.key")
 	_ = os.Setenv("PROXY_PLATFORMD_URL", "http://example.com:8086")
+	_ = os.Setenv("PROXY_MAILD_URL", "http://example.com:8087")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	defer func() {
 		_ = os.Unsetenv("PROXY_PORT")
 		_ = os.Unsetenv("PROXY_SANDBOX_URL")
 		_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
+		if origMaildURL == "" {
+			_ = os.Unsetenv("PROXY_MAILD_URL")
+		} else {
+			_ = os.Setenv("PROXY_MAILD_URL", origMaildURL)
+		}
 		if origPlatformdURL == "" {
 			_ = os.Unsetenv("PROXY_PLATFORMD_URL")
 		} else {
@@ -87,6 +104,9 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	}
 	if cfg.PlatformdURL != "http://example.com:8086" {
 		t.Errorf("PlatformdURL: got %q, want %q", cfg.PlatformdURL, "http://example.com:8086")
+	}
+	if cfg.MaildURL != "http://example.com:8087" {
+		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, "http://example.com:8087")
 	}
 }
 
