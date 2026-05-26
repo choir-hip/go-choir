@@ -1181,6 +1181,59 @@ next executable probe:
   add a wrapper API or let super write canonical text; it only reinforces the
   existing one-way evidence-reporting contract.
 
+checkpoint update, 2026-05-26 05:51 UTC:
+
+- Super reporting continuation fix `34941109e76c681fd8d5ef81ea1bf766cf16f34d`
+  landed and deployed. CI run `26434389749` passed, FlakeHub run
+  `26434389729` passed, and staging `/health` reported proxy deployed at
+  `34941109e76c681fd8d5ef81ea1bf766cf16f34d`, deployed at
+  `2026-05-26T05:37:21Z`, with `vmctl_status=ok`.
+- Local proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestPersistentSuperInboxBashRequiresCoagentUpdate|TestEditVTextInitialWorkingRevisionRequiresActualContinuation' -count=1`.
+- Local focused prompt proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptPreservesExplicitHardConstraints|TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery|TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate|TestVTextPromptCurrentEventsRequiresResearcher|TestInitialVTextToolChoiceUsesExactTools|TestVTextInitialEditContinuationClassifiesPrompts|TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt' -count=1`.
+- V4-only strict-wait staging command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-3494110-v4-strictwait-20260526T053808Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: v4 Flash medium still failed. Evidence:
+  `test-results/vtext-long-section-rubric-staging-3494110-v4-strictwait-20260526T053808Z/fireworks-deepseek-v4-flash-medium.json`.
+- Failure shape changed again: Trace showed one researcher, no super, search
+  activity, one researcher `submit_coagent_update`, and only one appagent
+  revision. VText spawned research but never requested super or wrote a
+  post-research revision before timeout.
+- The final visible document also regressed to using `[CMD]` as a target
+  placeholder in the v1 ledger, despite the previous prompt-shaping fix. The
+  stricter artifact analysis still rejects it because no source entries and no
+  super evidence reached a final revision.
+
+belief-state changes:
+
+- V4 Flash medium at `medium` is unstable across adjacent runs of the same
+  staging rubric: one run opened super repeatedly without evidence delivery;
+  the next opened only researcher and never requested super.
+- The current failure is no longer explained by one missing prompt sentence.
+  The model is failing to preserve the role topology across the multi-turn
+  VText loop under long-document hard requirements.
+- Kimi low and GPT-5.5 low remain the positive controls for this exact strict
+  rubric after `14431b5`; v4 remains the only model blocking the accepted
+  matrix.
+
+remaining error field:
+
+- V4 Flash medium can still stop after v1/researcher without opening super or
+  producing a source-grounded final revision.
+- Prompt-only coordination may be below the reliability threshold for v4 as a
+  VText owner on this long mixed research-plus-execution workload.
+
+next executable probe:
+
+- Before adding stronger deterministic control flow, run one final v4-focused
+  cognitive transform / root-cause pass over the trace: determine whether the
+  acceptable solution is (a) declare v4 medium unsuitable for VText owner on
+  this workload while still usable for narrower conductor/researcher roles, or
+  (b) introduce a narrowly scoped VText next-tool policy for open execution
+  obligations despite the preference for prompt-only coordination. If choosing
+  (b), document why prompt-only alternatives were falsified first.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
