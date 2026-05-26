@@ -982,6 +982,89 @@ next executable probe:
   be written without `[CMD]`. Tighten the long-section eval/audit to reject
   `[CMD]` rows containing pending/requested/target-only wording.
 
+checkpoint update, 2026-05-26 04:50 UTC:
+
+- Evidence-label fix `fdcfaad42257703ad33e01d9adedb5249b67b790` landed and
+  deployed. CI run `26431842186` passed, FlakeHub run `26431842166` passed,
+  and staging `/health` reported proxy deployed at
+  `fdcfaad42257703ad33e01d9adedb5249b67b790`, deployed at
+  `2026-05-26T04:14:37Z`, with `vmctl_status=ok`. Bootstrap counters still
+  showed the earlier pressure signature (`http_502=8`, `resolve_error=15`),
+  but the strict eval failures below are coordination/content-shape failures,
+  not fresh bootstrap-route failures.
+- The long-section eval was tightened so the command-evidence assertion rejects
+  pending/requested/target-only `[CMD]` rows. A loose strict audit before the
+  wait change showed GPT-5.5 low could satisfy this stronger command evidence
+  shape, while Kimi low and v4 Flash medium could still write pending `[CMD]`
+  rows.
+- Strict-wait staging command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-fdcfaad-strictwait-20260526T042507Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: GPT-5.5 low passed; Kimi low and DeepSeek v4 Flash medium failed.
+  Evidence:
+  `test-results/vtext-long-section-rubric-staging-fdcfaad-strictwait-20260526T042507Z/`.
+- GPT-5.5 low pass shape: 2 app revisions, researcher and super present,
+  `commandEvidenceSatisfied=true`, 4 searches, 8 researcher
+  `submit_coagent_update` calls, 8 VText `request_super_execution` calls,
+  4 super `bash` calls, and 4 super `submit_coagent_update` calls. The final
+  revision consumed researcher and super updates and preserved all exact long
+  rubric obligations.
+- Kimi low failure shape: 3 appagent revisions after the user marker, all via
+  source-only `edit_vtext` calls consuming researcher updates; no super agent
+  appeared in Trace, and the final document said command evidence was pending
+  without using a fake `[CMD]` label. This proves the label fix worked while
+  exposing a remaining execution-delegation priority failure.
+- v4 Flash medium failure shape: only the first appagent revision appeared
+  within the strict wait. Trace showed one researcher and no super. The initial
+  revision still used `[CMD]` for a pending ledger row, so v4 needs the
+  evidence-label discipline to apply to first-draft structure as well as final
+  revisions.
+
+cognitive transform update:
+
+- Label/authority transform: `[CMD]` is not a formatting token. It is an
+  authority claim that a super delivery exists. Pending command state must use
+  unlabelled prose or a non-evidence status row.
+- Obligation-debt transform: after a document has source grounding, an unmet
+  execution requirement is workflow debt with higher priority than another
+  source-only revision. VText should not converge to `completed` while that
+  obligation has no super request and no explicit blocker.
+- First-draft/final-draft split: a useful v1 may mention command evidence is
+  pending, but it must not pre-allocate the final `[CMD]` evidence label to that
+  pending state. The prompt needs to separate scaffold placeholders from final
+  evidence labels.
+- Model-contrast transform: GPT passing with the same tools proves the runtime
+  path is available; Kimi/v4 failures are robustness failures in prompt/tool
+  selection pressure, not missing capability.
+
+belief-state changes:
+
+- The stronger `[CMD]` prompt removed the fake pending label for Kimi's later
+  revisions, but not for v4's initial ledger scaffold.
+- The current strongest remaining loss is not search quality. It is VText's
+  ordering policy when both source-grounding and execution evidence are
+  required: weaker rows can keep improving source text while never opening or
+  completing the execution side channel.
+- GPT-5.5 low is now the positive control for the accepted mixed
+  researcher/super long-rubric path.
+
+remaining error field:
+
+- Kimi low can still finish its VText loop with no super agent when researcher
+  evidence has arrived and command evidence is still required.
+- v4 Flash medium can still use `[CMD]` as a pending scaffold in v1 and can
+  fail to advance beyond that v1 under strict wait.
+- The accepted matrix remains incomplete until Kimi low, v4 Flash medium, and
+  GPT-5.5 low all pass the stricter command-evidence rubric.
+
+next executable probe:
+
+- Strengthen the VText prompt and dynamic checklist so an open command/code/
+  browser/verification obligation with no super request has priority over
+  source-only edits after the first working draft, and so the initial draft can
+  describe pending command evidence only without using the final `[CMD]`
+  evidence label. Keep this as prompt/tool-surface shaping, not wrapper tools
+  or role-specific harness branching.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
