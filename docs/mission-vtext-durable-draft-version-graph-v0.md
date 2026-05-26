@@ -1677,6 +1677,112 @@ next executable probe:
   the long multi-section research-plus-super prompt to verify that the prompt
   and duplicate-spawn fixes did not regress mixed-worker coordination.
 
+checkpoint update, 2026-05-26 07:43 UTC:
+
+- Temporary eval harness rubric was tightened so a "confirmed final score"
+  heading can classify the following team-score bullet as a verified final
+  score. This is eval instrumentation only, not product behavior.
+- Deployed deep-research matrix command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=deep-research VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-deep-research-4cd61b2-20260526T071032Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Deep-research result: all three rows completed mechanically in about 6.1m.
+  Evidence:
+  `test-results/vtext-model-cadence-deep-research-4cd61b2-20260526T071032Z/`.
+- `fireworks-deepseek-v4-flash-medium` deep-research row: v1 at about 14.7s,
+  first findings at about 73.7s, no v2 inside the 90s observation window.
+  Trace shows VText started an `integrate_worker_findings` provider call at
+  about 76.7s, leaving too little window to distinguish slow integration from
+  a stuck call on that row.
+- `fireworks-kimi-k2p6-low` deep-research row: v1 at about 13.8s, first
+  findings at about 42.8s, v2/v3 at about 66.8s/91.8s, one researcher spawn,
+  three appagent revisions, and no duplicate/stale/mutation tool noise.
+- `chatgpt-gpt-5-5-low` deep-research row: v1 at about 5.9s, first findings
+  at about 34.9s, v2/v3 at about 48.9s/80.9s, one researcher spawn, three
+  appagent revisions, and no error noise.
+- Deployed long mixed research-plus-super command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-long-mixed-4cd61b2-20260526T071913Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Long mixed result: all three rows completed mechanically in about 11.1m.
+  Evidence:
+  `test-results/vtext-model-cadence-long-mixed-4cd61b2-20260526T071913Z/`.
+- `fireworks-deepseek-v4-flash-medium` long mixed row: v1 at about 11.6s,
+  first findings at about 42.6s, five researcher updates by about 120.6s, but
+  no v2 inside the 180s observation window. Trace shows VText did wake and
+  started an `integrate_worker_findings` provider call at about 45.6s, but no
+  stop/tool response was captured before the evidence read. No super was
+  requested and no command evidence reached the document.
+- `fireworks-kimi-k2p6-low` long mixed row: v1 at about 26.5s, first findings
+  at about 68.5s, VText requested super at about 101.5s, super ran
+  `echo -n 'durable draft' | sha256sum` at about 104.5s, VText wrote v2 at
+  about 177.5s, and the final document incorporated research/command evidence
+  into sections 1, 7, and 12. No duplicate/stale/mutation tool noise was
+  observed.
+- `chatgpt-gpt-5-5-low` long mixed row: v1 at about 8.0s, first findings at
+  about 30.0s, VText requested super starting about 37.0s, super ran
+  `printf 'durable draft' | sha256sum`, and VText wrote v2/v3 at about
+  109.0s/118.0s. Final content included the correct no-newline SHA256
+  `1f76e2cb9f63eb3b2842e20a12d05792b3891199fa84ff1d2c30c55b627e3a09` and
+  updated sections 1, 7, and 12. Residual noise: GPT's super emitted duplicate
+  same-turn `bash` calls twice; the duplicate-command guard returned tool
+  errors while the first bash calls succeeded and were reported.
+- Extended V4-only long probe command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=long-multi-section VTEXT_MODEL_LONG_OBSERVE_MS=360000 VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-long-mixed-4cd61b2-v4-extended-20260526T073220Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Extended V4 result: the harness failed after about 6.4m because the final
+  `/api/vtext/documents/{doc}/revisions` read returned `401 authentication
+  required`. The Playwright failure snapshot still showed the VText window on
+  v1 with `Revising...`, while activity had continued in the background. This
+  strengthens the V4 long-context cadence concern and also records an
+  authenticated long-observation eval-harness/session edge.
+- Staging health during this checkpoint: `/health` reported proxy and sandbox
+  deployed at `4cd61b24d619bea4518f2038bd8bd260fd42d534`, deployed at
+  `2026-05-26T06:59:15Z`, `vmctl_status: ok`, bootstrap totals
+  `http_200=359`, `http_502=8`, `resolve_error=15`, max bootstrap resolve
+  duration about 15.1s, and API total cumulative `http_502=17`.
+
+belief-state changes:
+
+- Medium reasoning is necessary but not sufficient for DeepSeek V4 Flash. It
+  fixed the earlier simple sports cadence row after prompt changes, but V4
+  still stalls or runs beyond useful latency on deeper/longer
+  `integrate_worker_findings` turns.
+- Kimi low currently has the best mixed-worker mechanics: it performed
+  research, requested super, integrated command evidence, and avoided duplicate
+  tool noise. Its content-quality risk remains that it can write broad
+  comparative claims from limited search evidence.
+- GPT-5.5 low has the strongest long-form integration quality and final
+  document completeness, but it still emits duplicate same-turn side effects
+  in richer tool contexts. Existing guards prevent duplicate canonical edits
+  and duplicate bash execution from corrupting state, but the visible tool
+  errors are coordination noise.
+- VM/bootstrap pressure is real in the cumulative health counters, though the
+  current `/health` state is `ok`. The user-visible 20s bootstrap/502 report
+  should stay in the error field until a targeted bootstrap route probe is run.
+
+remaining error field:
+
+- Root cause candidate for V4: long/deep worker integration creates an
+  in-flight VText provider call that does not return quickly enough to produce
+  a visible follow-up revision. The next evidence should distinguish provider
+  timeout/latency, context size, model tool-call indecision, and scheduler
+  starvation from concurrent researcher updates.
+- Need a prompt or policy improvement that reduces duplicate side-effect tool
+  calls for super/cosuper without adding wrapper tools or role-specific harness
+  branches. The current one-way path is still prompt guidance plus the existing
+  same-turn side-effect normalization guard.
+- Need an auth/session-aware eval harness change for long observations, or a
+  shorter polling loop that periodically records revisions and trace while the
+  browser session is still fresh.
+- Need a targeted staging bootstrap probe to quantify current vmctl route
+  latency and 502 behavior, rather than relying only on cumulative health
+  counters and screenshots.
+
+next executable probe:
+
+- Document this V4 long-context integration failure as the next problem target,
+  then choose between two prompt-only fixes: stronger VText instructions to
+  make the first worker-findings checkpoint small and immediate on heavy
+  prompts, and stronger super prompt guidance to avoid duplicate same-turn
+  command calls. Rerun V4-only long with incremental polling after the prompt
+  change, then rerun the three accepted models on the long mixed row.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
