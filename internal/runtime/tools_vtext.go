@@ -262,6 +262,7 @@ func buildVTextSuperContinuationObjective(prompt string) string {
 
 Reporting contract:
 - For bounded command/API/scratch work, run the requested work directly when safe.
+- Run each side-effectful command or tool payload at most once per model response; do not emit duplicate same-turn bash calls in parallel. Wait for the first result, then report it.
 - After any command result, call submit_coagent_update with kind="evidence" or kind="findings" before ending the run.
 - If the command fails, still call submit_coagent_update with the command, exit/error summary, stdout/stderr if available, and the precise blocker.
 - Do not leave VText to infer evidence from your local bash result; VText only consumes addressed coagent updates.

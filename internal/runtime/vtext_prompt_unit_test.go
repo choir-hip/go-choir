@@ -235,6 +235,8 @@ func TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T
 	for _, want := range []string{
 		"recent worker messages do not include a super delivery",
 		"next side-effectful action should be request_super_execution before another source-only edit",
+		"Do not attempt a full-document rewrite in this worker-wake turn before the super request exists",
+		"Keep the request_super_execution objective concise and concrete",
 		"must not use the final [CMD] evidence label before the super delivery arrives",
 		"Do not spend a worker-wake turn only improving source text while that execution obligation has no super request",
 	} {
@@ -248,6 +250,8 @@ func TestVTextSuperContinuationObjectiveRequiresCoagentUpdate(t *testing.T) {
 	objective := buildVTextSuperContinuationObjective("run printf test")
 	for _, want := range []string{
 		"Reporting contract",
+		"Run each side-effectful command or tool payload at most once per model response",
+		"do not emit duplicate same-turn bash calls in parallel",
 		"After any command result, call submit_coagent_update",
 		"If the command fails, still call submit_coagent_update",
 		"VText only consumes addressed coagent updates",
