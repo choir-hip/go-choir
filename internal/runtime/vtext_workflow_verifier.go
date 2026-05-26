@@ -141,25 +141,28 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 		guarantee("verification requirement has a successful command result")
 	}
 
-	findings, err := rt.store.ListResearchFindingsByTrajectory(ctx, ownerID, trajectoryID, 1000)
-	if err != nil {
-		return report, fmt.Errorf("list research findings: %w", err)
-	}
-	if opts.RequireResearchFindings {
-		if len(findings) == 0 {
-			return report, fmt.Errorf("missing structured research findings")
-		}
-		for _, finding := range findings {
-			if finding.TargetAgentID != "vtext:"+doc.DocID || finding.ChannelID != doc.DocID || finding.MessageSeq == 0 {
-				return report, fmt.Errorf("research finding %s is not routed to vtext document %s", finding.FindingID, doc.DocID)
-			}
-		}
-		guarantee("researchers emitted structured findings and evidence")
-	}
-
 	updates, err := rt.store.ListWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID, 1000)
 	if err != nil {
 		return report, fmt.Errorf("list worker updates: %w", err)
+	}
+	if opts.RequireResearchFindings {
+		researchUpdateCount := 0
+		for _, update := range updates {
+			if update.Role != AgentProfileResearcher {
+				continue
+			}
+			researchUpdateCount++
+			if update.TargetAgentID != "vtext:"+doc.DocID || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
+				return report, fmt.Errorf("research coagent update %s is not routed to vtext document %s", update.UpdateID, doc.DocID)
+			}
+			if len(update.Findings) == 0 && len(update.EvidenceIDs) == 0 && len(update.Notes) == 0 && len(update.Questions) == 0 && len(update.CapabilityRequests) == 0 {
+				return report, fmt.Errorf("research coagent update %s has no structured result fields", update.UpdateID)
+			}
+		}
+		if researchUpdateCount == 0 {
+			return report, fmt.Errorf("missing structured research coagent updates")
+		}
+		guarantee("researchers emitted structured findings and evidence")
 	}
 	if opts.RequireWorkerUpdates {
 		if len(updates) == 0 {

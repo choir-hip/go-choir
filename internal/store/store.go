@@ -343,6 +343,8 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	message_seq       BIGINT NOT NULL DEFAULT 0,
 	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
 	role              VARCHAR(64) NOT NULL DEFAULT '',
+	kind              VARCHAR(64) NOT NULL DEFAULT '',
+	summary           LONGTEXT NOT NULL DEFAULT '',
 	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
 	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
 	artifacts_json    LONGTEXT NOT NULL DEFAULT '[]',
@@ -350,6 +352,7 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	tests_json        LONGTEXT NOT NULL DEFAULT '[]',
 	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
 	proposals_json    LONGTEXT NOT NULL DEFAULT '[]',
+	capability_requests_json LONGTEXT NOT NULL DEFAULT '[]',
 	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
 	content           LONGTEXT NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
@@ -598,6 +601,9 @@ func (s *Store) bootstrap() error {
 		{"browser_sessions", "snapshot_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "source_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "candidate_trace_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"worker_updates", "kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
+		{"worker_updates", "summary", "LONGTEXT NOT NULL DEFAULT ''"},
+		{"worker_updates", "capability_requests_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -1552,7 +1558,7 @@ func (s *Store) ListResearchFindingsByTrajectory(ctx context.Context, ownerID, t
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.WorkerUpdateRecord, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
 		   FROM worker_updates
 		  WHERE owner_id = ? AND update_id = ?`,
 		ownerID, updateID,
@@ -1567,7 +1573,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
 		   FROM worker_updates
 		  WHERE owner_id = ?
 		    AND trajectory_id = ?
@@ -1734,7 +1740,7 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 	defer func() { _ = tx.Rollback() }()
 
 	existing, err := scanWorkerUpdate(tx.QueryRowContext(ctx,
-		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at
+		`SELECT owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at
 		   FROM worker_updates
 		  WHERE owner_id = ? AND update_id = ?`,
 		update.OwnerID, update.UpdateID,
@@ -1833,14 +1839,18 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 	if err != nil {
 		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update proposals: %w", err)
 	}
+	capabilityRequestsJSON, err := json.Marshal(update.CapabilityRequests)
+	if err != nil {
+		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update capability requests: %w", err)
+	}
 	notesJSON, err := marshalStringSliceJSON(update.Notes)
 	if err != nil {
 		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update notes: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, notes_json, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		update.OwnerID,
 		update.UpdateID,
 		update.AgentID,
@@ -1849,6 +1859,8 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		update.MessageSeq,
 		update.TrajectoryID,
 		update.Role,
+		update.Kind,
+		update.Summary,
 		string(findingsJSON),
 		string(evidenceIDsJSON),
 		string(artifactsJSON),
@@ -1856,6 +1868,7 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		string(testsJSON),
 		string(questionsJSON),
 		string(proposalsJSON),
+		string(capabilityRequestsJSON),
 		string(notesJSON),
 		update.Content,
 		update.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -2112,16 +2125,17 @@ func scanResearchFinding(row interface{ Scan(...any) error }) (types.ResearchFin
 
 func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRecord, error) {
 	var (
-		rec             types.WorkerUpdateRecord
-		findingsJSON    string
-		evidenceIDsJSON string
-		artifactsJSON   string
-		refsJSON        string
-		testsJSON       string
-		questionsJSON   string
-		proposalsJSON   string
-		notesJSON       string
-		createdAt       string
+		rec                    types.WorkerUpdateRecord
+		findingsJSON           string
+		evidenceIDsJSON        string
+		artifactsJSON          string
+		refsJSON               string
+		testsJSON              string
+		questionsJSON          string
+		proposalsJSON          string
+		capabilityRequestsJSON string
+		notesJSON              string
+		createdAt              string
 	)
 	err := row.Scan(
 		&rec.OwnerID,
@@ -2132,6 +2146,8 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		&rec.MessageSeq,
 		&rec.TrajectoryID,
 		&rec.Role,
+		&rec.Kind,
+		&rec.Summary,
 		&findingsJSON,
 		&evidenceIDsJSON,
 		&artifactsJSON,
@@ -2139,6 +2155,7 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		&testsJSON,
 		&questionsJSON,
 		&proposalsJSON,
+		&capabilityRequestsJSON,
 		&notesJSON,
 		&rec.Content,
 		&createdAt,
@@ -2166,6 +2183,12 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		if err := json.Unmarshal([]byte(item.raw), item.dst); err != nil {
 			return types.WorkerUpdateRecord{}, fmt.Errorf("decode worker update %s: %w", item.name, err)
 		}
+	}
+	if strings.TrimSpace(capabilityRequestsJSON) == "" {
+		capabilityRequestsJSON = "[]"
+	}
+	if err := json.Unmarshal([]byte(capabilityRequestsJSON), &rec.CapabilityRequests); err != nil {
+		return types.WorkerUpdateRecord{}, fmt.Errorf("decode worker update capability_requests: %w", err)
 	}
 	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {

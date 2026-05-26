@@ -206,7 +206,7 @@ func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) 
 	for _, want := range []string{
 		"First checkpoint protocol",
 		"Run at most one focused search batch",
-		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_research_findings",
+		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update",
 		"omit the evidence array rather than sending malformed evidence",
 		"checkpoint each new material cluster",
 	} {

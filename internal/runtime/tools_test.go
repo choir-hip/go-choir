@@ -529,8 +529,8 @@ func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testi
 		}},
 	}
 	model, _ := compactWebSearchProjection(map[string]any{"results": resp.Results}, resp, true)
-	if got := fmt.Sprint(model["next_required_tool"]); got != "submit_research_findings" {
-		t.Fatalf("next_required_tool = %q, want submit_research_findings", got)
+	if got := fmt.Sprint(model["next_required_tool"]); got != "submit_coagent_update" {
+		t.Fatalf("next_required_tool = %q, want submit_coagent_update", got)
 	}
 	instruction := fmt.Sprint(model["next_instruction"])
 	if !strings.Contains(instruction, "before any additional search-only turn") {
@@ -562,7 +562,7 @@ func TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch(t 
 		AgentProfile: AgentProfileSuper,
 	}
 	if shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, superRec), rt) {
-		t.Fatalf("super search should not require submit_research_findings")
+		t.Fatalf("super search should not require submit_coagent_update")
 	}
 	if err := s.AppendEvent(ctx, &types.EventRecord{
 		EventID:   "ev-web-search",

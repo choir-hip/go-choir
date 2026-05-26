@@ -123,7 +123,7 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 func buildPersistentSuperInboxPrompt(deliveries []types.InboxDelivery) string {
 	var b strings.Builder
 	b.WriteString("Process the pending inbox deliveries addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Use privileged tools only for the requested execution work. When you have artifacts, test results, references, questions, or proposals, report them back with submit_worker_update to the addressed vtext document.\n")
+	b.WriteString("Use privileged tools only for the requested execution work. When you have artifacts, test results, references, questions, or proposals, report them back with submit_coagent_update to the addressed vtext document.\n")
 	for i, delivery := range deliveries {
 		b.WriteString("\nDelivery ")
 		b.WriteString(fmt.Sprintf("%d", i+1))

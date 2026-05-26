@@ -416,7 +416,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		"start_worker_delegation` using the returned `start_args",
 		"observe_worker_delegation",
 		"finish_worker_delegation",
-		"Do not answer that class of request only with submit_worker_update",
+		"Do not answer that class of request only with submit_coagent_update",
 		"worker-small",
 	} {
 		if !strings.Contains(prompt, want) {
@@ -525,7 +525,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "Use web_search and fetch_url with the parallelism appropriate") {
 		t.Fatalf("researcher system prompt should make tool parallelism contextual, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "call submit_research_findings as a durable checkpoint") {
+	if !strings.Contains(prompt, "call submit_coagent_update as a durable checkpoint") {
 		t.Fatalf("researcher system prompt should require early findings handoff, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "persistent communicating coagent") {

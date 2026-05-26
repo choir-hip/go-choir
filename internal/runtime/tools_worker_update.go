@@ -12,45 +12,83 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func RegisterWorkerUpdateTools(registry *ToolRegistry, rt *Runtime) error {
-	return registry.Register(newSubmitWorkerUpdateTool(rt))
+func RegisterCoagentUpdateTools(registry *ToolRegistry, rt *Runtime) error {
+	return registry.Register(newSubmitCoagentUpdateTool(rt))
 }
 
-type submitWorkerUpdateArgs struct {
-	UpdateID    string   `json:"update_id"`
-	AgentID     string   `json:"agent_id,omitempty"`
-	ChannelID   string   `json:"channel_id,omitempty"`
-	Findings    []string `json:"findings,omitempty"`
-	EvidenceIDs []string `json:"evidence_ids,omitempty"`
-	Artifacts   []string `json:"artifacts,omitempty"`
-	Refs        []string `json:"refs,omitempty"`
-	Tests       []string `json:"tests,omitempty"`
-	Questions   []string `json:"questions,omitempty"`
-	Proposals   []string `json:"proposals,omitempty"`
-	Notes       []string `json:"notes,omitempty"`
+type submitCoagentUpdateArgs struct {
+	UpdateID           string                         `json:"update_id"`
+	Kind               string                         `json:"kind,omitempty"`
+	Summary            string                         `json:"summary,omitempty"`
+	AgentID            string                         `json:"agent_id,omitempty"`
+	ChannelID          string                         `json:"channel_id,omitempty"`
+	Findings           []string                       `json:"findings,omitempty"`
+	Evidence           []researchFindingEvidenceInput `json:"evidence,omitempty"`
+	EvidenceIDs        []string                       `json:"evidence_ids,omitempty"`
+	Artifacts          []string                       `json:"artifacts,omitempty"`
+	Refs               []string                       `json:"refs,omitempty"`
+	Tests              []string                       `json:"tests,omitempty"`
+	Questions          []string                       `json:"questions,omitempty"`
+	Proposals          []string                       `json:"proposals,omitempty"`
+	CapabilityRequests []types.CapabilityRequest      `json:"capability_requests,omitempty"`
+	Notes              []string                       `json:"notes,omitempty"`
 }
 
-func newSubmitWorkerUpdateTool(rt *Runtime) Tool {
+func newSubmitCoagentUpdateTool(rt *Runtime) Tool {
 	return Tool{
-		Name:        "submit_worker_update",
-		Description: "Persist a structured non-patch worker update and send one addressed delivery to the owning agent.",
+		Name:        "submit_coagent_update",
+		Description: "Persist one structured non-canonical coagent update and send one addressed delivery to the owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, questions, proposals, and typed capability_requests. A capability request is a signal to the owner/supervisor, not automatic routing.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"update_id":    map[string]any{"type": "string"},
+			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question"}},
+			"summary":      map[string]any{"type": "string"},
 			"agent_id":     map[string]any{"type": "string"},
 			"channel_id":   map[string]any{"type": "string"},
 			"findings":     stringArraySchema(),
 			"evidence_ids": stringArraySchema(),
-			"artifacts":    stringArraySchema(),
-			"refs":         stringArraySchema(),
-			"tests":        stringArraySchema(),
-			"questions":    stringArraySchema(),
-			"proposals":    stringArraySchema(),
-			"notes":        stringArraySchema(),
+			"evidence": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"kind":       map[string]any{"type": "string"},
+						"source_uri": map[string]any{"type": "string"},
+						"title":      map[string]any{"type": "string"},
+						"content":    map[string]any{"type": "string"},
+						"metadata":   map[string]any{"type": "object"},
+					},
+					"required":             []string{"kind", "content"},
+					"additionalProperties": false,
+				},
+			},
+			"artifacts": stringArraySchema(),
+			"refs":      stringArraySchema(),
+			"tests":     stringArraySchema(),
+			"questions": stringArraySchema(),
+			"proposals": stringArraySchema(),
+			"capability_requests": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"capability":           map[string]any{"type": "string"},
+						"requested_role":       map[string]any{"type": "string"},
+						"objective":            map[string]any{"type": "string"},
+						"why_needed":           map[string]any{"type": "string"},
+						"blocking":             map[string]any{"type": "boolean"},
+						"evidence_needed_for":  map[string]any{"type": "string"},
+						"suggested_next_owner": map[string]any{"type": "string"},
+					},
+					"required":             []string{"capability", "objective"},
+					"additionalProperties": false,
+				},
+			},
+			"notes": stringArraySchema(),
 		}, []string{"update_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			var in submitWorkerUpdateArgs
+			var in submitCoagentUpdateArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode submit_worker_update args: %w", err)
+				return "", fmt.Errorf("decode submit_coagent_update args: %w", err)
 			}
 			updateID := strings.TrimSpace(in.UpdateID)
 			if updateID == "" {
@@ -61,26 +99,38 @@ func newSubmitWorkerUpdateTool(rt *Runtime) Tool {
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			role := stringFromToolContext(ctx, toolCtxRole)
 			if ownerID == "" || agentID == "" || runID == "" {
-				return "", fmt.Errorf("submit_worker_update missing worker context")
+				return "", fmt.Errorf("submit_coagent_update missing coagent context")
+			}
+
+			evidenceIDs := trimNonEmpty(in.EvidenceIDs)
+			for idx, item := range in.Evidence {
+				rec, err := ensureFindingEvidence(ctx, rt.store, ownerID, agentID, updateID, idx, item)
+				if err != nil {
+					return "", err
+				}
+				evidenceIDs = append(evidenceIDs, rec.EvidenceID)
 			}
 
 			update := types.WorkerUpdateRecord{
-				UpdateID:    updateID,
-				OwnerID:     ownerID,
-				AgentID:     agentID,
-				Role:        nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
-				Findings:    trimNonEmpty(in.Findings),
-				EvidenceIDs: trimNonEmpty(in.EvidenceIDs),
-				Artifacts:   trimNonEmpty(in.Artifacts),
-				Refs:        trimNonEmpty(in.Refs),
-				Tests:       trimNonEmpty(in.Tests),
-				Questions:   trimNonEmpty(in.Questions),
-				Proposals:   trimNonEmpty(in.Proposals),
-				Notes:       trimNonEmpty(in.Notes),
-				CreatedAt:   time.Now().UTC(),
+				UpdateID:           updateID,
+				OwnerID:            ownerID,
+				AgentID:            agentID,
+				Role:               nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
+				Kind:               strings.TrimSpace(in.Kind),
+				Summary:            strings.TrimSpace(in.Summary),
+				Findings:           trimNonEmpty(in.Findings),
+				EvidenceIDs:        evidenceIDs,
+				Artifacts:          trimNonEmpty(in.Artifacts),
+				Refs:               trimNonEmpty(in.Refs),
+				Tests:              trimNonEmpty(in.Tests),
+				Questions:          trimNonEmpty(in.Questions),
+				Proposals:          trimNonEmpty(in.Proposals),
+				CapabilityRequests: normalizeCapabilityRequests(in.CapabilityRequests),
+				Notes:              trimNonEmpty(in.Notes),
+				CreatedAt:          time.Now().UTC(),
 			}
 			if workerUpdateEmpty(update) {
-				return "", fmt.Errorf("submit_worker_update requires findings, evidence_ids, artifacts, refs, tests, questions, proposals, or notes")
+				return "", fmt.Errorf("submit_coagent_update requires summary, findings, evidence, evidence_ids, artifacts, refs, tests, questions, proposals, capability_requests, or notes")
 			}
 
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
@@ -89,7 +139,7 @@ func newSubmitWorkerUpdateTool(rt *Runtime) Tool {
 			}
 			channelID := authoritativeDeliveryChannelID(targetChannelID, in.ChannelID, stringFromToolContext(ctx, toolCtxChannelID))
 			if channelID == "" {
-				return "", fmt.Errorf("submit_worker_update could not resolve channel_id")
+				return "", fmt.Errorf("submit_coagent_update could not resolve channel_id")
 			}
 
 			trajectoryID := ""
@@ -165,23 +215,34 @@ func ctxRunRecord(ctx context.Context) *types.RunRecord {
 }
 
 func workerUpdateEmpty(update types.WorkerUpdateRecord) bool {
-	return len(update.Findings) == 0 &&
+	return strings.TrimSpace(update.Summary) == "" &&
+		len(update.Findings) == 0 &&
 		len(update.EvidenceIDs) == 0 &&
 		len(update.Artifacts) == 0 &&
 		len(update.Refs) == 0 &&
 		len(update.Tests) == 0 &&
 		len(update.Questions) == 0 &&
 		len(update.Proposals) == 0 &&
+		len(update.CapabilityRequests) == 0 &&
 		len(update.Notes) == 0
 }
 
 func buildWorkerUpdateMessage(update types.WorkerUpdateRecord) string {
 	var b strings.Builder
-	b.WriteString("Worker update ready.")
+	b.WriteString("Coagent update ready.")
 	if strings.TrimSpace(update.Role) != "" {
 		b.WriteString("\nRole: ")
 		b.WriteString(strings.TrimSpace(update.Role))
 		b.WriteString(".")
+	}
+	if strings.TrimSpace(update.Kind) != "" {
+		b.WriteString("\nKind: ")
+		b.WriteString(strings.TrimSpace(update.Kind))
+		b.WriteString(".")
+	}
+	if strings.TrimSpace(update.Summary) != "" {
+		b.WriteString("\nSummary: ")
+		b.WriteString(strings.TrimSpace(update.Summary))
 	}
 	appendWorkerUpdateSection(&b, "Findings", update.Findings)
 	appendWorkerUpdateSection(&b, "Evidence", update.EvidenceIDs)
@@ -190,6 +251,7 @@ func buildWorkerUpdateMessage(update types.WorkerUpdateRecord) string {
 	appendWorkerUpdateSection(&b, "Tests", update.Tests)
 	appendWorkerUpdateSection(&b, "Questions", update.Questions)
 	appendWorkerUpdateSection(&b, "Proposals", update.Proposals)
+	appendCapabilityRequestSection(&b, update.CapabilityRequests)
 	appendWorkerUpdateSection(&b, "Notes", update.Notes)
 	return b.String()
 }
@@ -212,11 +274,46 @@ func appendWorkerUpdateSection(b *strings.Builder, title string, items []string)
 	}
 }
 
+func appendCapabilityRequestSection(b *strings.Builder, requests []types.CapabilityRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	b.WriteString("\n\nCapability requests:\n")
+	for _, request := range requests {
+		b.WriteString("- capability=")
+		b.WriteString(request.Capability)
+		if request.RequestedRole != "" {
+			b.WriteString(" requested_role=")
+			b.WriteString(request.RequestedRole)
+		}
+		if request.Blocking {
+			b.WriteString(" blocking=true")
+		}
+		if request.EvidenceNeededFor != "" {
+			b.WriteString(" evidence_needed_for=")
+			b.WriteString(request.EvidenceNeededFor)
+		}
+		if request.SuggestedNextOwner != "" {
+			b.WriteString(" suggested_next_owner=")
+			b.WriteString(request.SuggestedNextOwner)
+		}
+		b.WriteString("\n  objective: ")
+		b.WriteString(request.Objective)
+		if request.WhyNeeded != "" {
+			b.WriteString("\n  why_needed: ")
+			b.WriteString(request.WhyNeeded)
+		}
+		b.WriteString("\n")
+	}
+}
+
 func validateExistingWorkerUpdate(existing, want types.WorkerUpdateRecord) error {
 	if existing.AgentID != want.AgentID ||
 		existing.TargetAgentID != want.TargetAgentID ||
 		existing.ChannelID != want.ChannelID ||
 		existing.Role != want.Role ||
+		existing.Kind != want.Kind ||
+		existing.Summary != want.Summary ||
 		existing.Content != want.Content ||
 		!stringSlicesEqual(existing.Findings, want.Findings) ||
 		!stringSlicesEqual(existing.EvidenceIDs, want.EvidenceIDs) ||
@@ -225,8 +322,41 @@ func validateExistingWorkerUpdate(existing, want types.WorkerUpdateRecord) error
 		!stringSlicesEqual(existing.Tests, want.Tests) ||
 		!stringSlicesEqual(existing.Questions, want.Questions) ||
 		!stringSlicesEqual(existing.Proposals, want.Proposals) ||
+		!capabilityRequestsEqual(existing.CapabilityRequests, want.CapabilityRequests) ||
 		!stringSlicesEqual(existing.Notes, want.Notes) {
 		return fmt.Errorf("update_id %s already exists with different payload", want.UpdateID)
 	}
 	return nil
+}
+
+func normalizeCapabilityRequests(requests []types.CapabilityRequest) []types.CapabilityRequest {
+	out := make([]types.CapabilityRequest, 0, len(requests))
+	for _, request := range requests {
+		normalized := types.CapabilityRequest{
+			Capability:         strings.TrimSpace(request.Capability),
+			RequestedRole:      strings.TrimSpace(request.RequestedRole),
+			Objective:          strings.TrimSpace(request.Objective),
+			WhyNeeded:          strings.TrimSpace(request.WhyNeeded),
+			Blocking:           request.Blocking,
+			EvidenceNeededFor:  strings.TrimSpace(request.EvidenceNeededFor),
+			SuggestedNextOwner: strings.TrimSpace(request.SuggestedNextOwner),
+		}
+		if normalized.Capability == "" && normalized.Objective == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func capabilityRequestsEqual(a, b []types.CapabilityRequest) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

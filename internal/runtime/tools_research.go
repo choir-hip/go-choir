@@ -88,7 +88,7 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "web_search",
-		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then submit_research_findings on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
+		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then submit_coagent_update on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -136,7 +136,7 @@ func shouldRequireResearchFindingsAfterSearch(ctx context.Context, rt *Runtime) 
 	if err != nil {
 		return false
 	}
-	if researchRunHasSuccessfulTool(events, "submit_research_findings") {
+	if researchRunHasSuccessfulTool(events, "submit_coagent_update") {
 		return false
 	}
 	return !researchRunHasSuccessfulTool(events, "web_search")
@@ -274,7 +274,7 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		"provider_health_owner": "gateway",
 	}
 	if requireFindingsCheckpoint {
-		model["next_required_tool"] = "submit_research_findings"
+		model["next_required_tool"] = "submit_coagent_update"
 		model["next_instruction"] = "Submit concise first findings from this search result before any additional search-only turn. Include 2-4 grounded facts, notes, questions, or a precise blocker; evidence entries may be omitted until richer evidence is ready."
 	}
 	if degraded {

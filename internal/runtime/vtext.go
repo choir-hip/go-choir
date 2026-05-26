@@ -1448,7 +1448,8 @@ func (h *APIHandler) HandleTestVTextResearchFindings(w http.ResponseWriter, r *h
 	}
 
 	rawArgs, err := json.Marshal(map[string]any{
-		"finding_id": req.FindingID,
+		"update_id":  req.FindingID,
+		"kind":       "findings",
 		"agent_id":   targetAgentID,
 		"channel_id": req.DocID,
 		"findings":   req.Findings,
@@ -1461,7 +1462,7 @@ func (h *APIHandler) HandleTestVTextResearchFindings(w http.ResponseWriter, r *h
 		return
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), researcherRun), "submit_research_findings", rawArgs)
+	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), researcherRun), "submit_coagent_update", rawArgs)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
@@ -1569,6 +1570,7 @@ func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.
 
 	rawArgs, err := json.Marshal(map[string]any{
 		"update_id":    req.UpdateID,
+		"kind":         "status",
 		"agent_id":     targetAgentID,
 		"channel_id":   req.DocID,
 		"findings":     req.Findings,
@@ -1585,7 +1587,7 @@ func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "submit_worker_update", rawArgs)
+	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "submit_coagent_update", rawArgs)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return

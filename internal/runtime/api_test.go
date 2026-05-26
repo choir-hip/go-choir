@@ -339,7 +339,7 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 		"terminal_error":               "worker run run-worker-acceptance ended in state failed: tool loop: exceeded 200 iterations without end_turn",
 		"completion_blocker":           "vsuper_completed_without_export_or_worker_update",
 		"event_count":                  3,
-		"worker_event_summary":         []map[string]any{{"kind": "tool.result", "tool": "submit_worker_update", "output_excerpt": "precise blocker"}},
+		"worker_event_summary":         []map[string]any{{"kind": "tool.result", "tool": "submit_coagent_update", "output_excerpt": "precise blocker"}},
 		"worker_spawned_profiles":      []string{"co-super"},
 		"worker_child_run_ids":         []string{"run-implementation-acceptance"},
 		"worker_child_run_states":      map[string]string{"run-implementation-acceptance": "completed"},
@@ -870,7 +870,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 		"mirrored_worker_update_ids":   []string{"mirrored-worker-update-run-super-runtime-supervision-worker-direct-update"},
 		"worker_event_summary": []map[string]any{{
 			"kind":           "tool.result",
-			"tool":           "submit_worker_update",
+			"tool":           "submit_coagent_update",
 			"is_error":       false,
 			"output_excerpt": `{"status":"submitted","update_id":"worker-direct-update"}`,
 		}},

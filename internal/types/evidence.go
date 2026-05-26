@@ -40,27 +40,43 @@ type ResearchFindingRecord struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// CapabilityRequest is a typed signal that a coagent has reached the boundary
+// of its role and needs another capability. It is not an authority transfer or
+// automatic route; the receiving owner/supervisor decides what to do next.
+type CapabilityRequest struct {
+	Capability         string `json:"capability"`
+	RequestedRole      string `json:"requested_role,omitempty"`
+	Objective          string `json:"objective"`
+	WhyNeeded          string `json:"why_needed,omitempty"`
+	Blocking           bool   `json:"blocking,omitempty"`
+	EvidenceNeededFor  string `json:"evidence_needed_for,omitempty"`
+	SuggestedNextOwner string `json:"suggested_next_owner,omitempty"`
+}
+
 // WorkerUpdateRecord captures a structured non-canonical worker handoff to an
 // appagent or super. It is broader than researcher findings so execution roles
 // can report artifacts, refs, tests, questions, and proposals without sending
 // document patches.
 type WorkerUpdateRecord struct {
-	UpdateID      string    `json:"update_id"`
-	OwnerID       string    `json:"owner_id"`
-	AgentID       string    `json:"agent_id"`
-	TargetAgentID string    `json:"target_agent_id"`
-	ChannelID     string    `json:"channel_id"`
-	MessageSeq    int64     `json:"message_seq"`
-	TrajectoryID  string    `json:"trajectory_id,omitempty"`
-	Role          string    `json:"role,omitempty"`
-	Findings      []string  `json:"findings,omitempty"`
-	EvidenceIDs   []string  `json:"evidence_ids,omitempty"`
-	Artifacts     []string  `json:"artifacts,omitempty"`
-	Refs          []string  `json:"refs,omitempty"`
-	Tests         []string  `json:"tests,omitempty"`
-	Questions     []string  `json:"questions,omitempty"`
-	Proposals     []string  `json:"proposals,omitempty"`
-	Notes         []string  `json:"notes,omitempty"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"created_at"`
+	UpdateID           string              `json:"update_id"`
+	OwnerID            string              `json:"owner_id"`
+	AgentID            string              `json:"agent_id"`
+	TargetAgentID      string              `json:"target_agent_id"`
+	ChannelID          string              `json:"channel_id"`
+	MessageSeq         int64               `json:"message_seq"`
+	TrajectoryID       string              `json:"trajectory_id,omitempty"`
+	Role               string              `json:"role,omitempty"`
+	Kind               string              `json:"kind,omitempty"`
+	Summary            string              `json:"summary,omitempty"`
+	Findings           []string            `json:"findings,omitempty"`
+	EvidenceIDs        []string            `json:"evidence_ids,omitempty"`
+	Artifacts          []string            `json:"artifacts,omitempty"`
+	Refs               []string            `json:"refs,omitempty"`
+	Tests              []string            `json:"tests,omitempty"`
+	Questions          []string            `json:"questions,omitempty"`
+	Proposals          []string            `json:"proposals,omitempty"`
+	CapabilityRequests []CapabilityRequest `json:"capability_requests,omitempty"`
+	Notes              []string            `json:"notes,omitempty"`
+	Content            string              `json:"content"`
+	CreatedAt          time.Time           `json:"created_at"`
 }

@@ -133,7 +133,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 	}
 
 	researchRun, err := rt.StartChildRun(context.Background(), initialVTextID,
-		"Live verification: call web_search for cellular automata biological evolution toy model, then call submit_research_findings with finding_id live-research-ca and one concise evidence-backed checkpoint for the parent vtext agent.",
+		"Live verification: call web_search for cellular automata biological evolution toy model, then call submit_coagent_update with update_id live-research-ca and one concise evidence-backed checkpoint for the parent vtext agent.",
 		liveLLMOwnerID,
 		map[string]any{
 			"agent_profile": "researcher",
@@ -172,7 +172,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 		"objective":%q,
 		"channel_id":%q,
 		"model":%q
-	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call submit_worker_update with update_id "+superUpdateID+", artifacts ['artifacts/live-evolution-ca.txt'], tests ['test -f artifacts/live-evolution-ca.txt && grep -q verified artifacts/live-evolution-ca.txt'], and one proposal for the parent vtext agent. Do not finish until submit_worker_update returns.", decision.DocID, model)))
+	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call submit_coagent_update with update_id "+superUpdateID+", artifacts ['artifacts/live-evolution-ca.txt'], tests ['test -f artifacts/live-evolution-ca.txt && grep -q verified artifacts/live-evolution-ca.txt'], and one proposal for the parent vtext agent. Do not finish until submit_coagent_update returns.", decision.DocID, model)))
 	if err != nil {
 		t.Fatalf("request live super execution: %v", err)
 	}
@@ -231,6 +231,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 	}
 	if strings.Contains(finalContent, "Task completed successfully") ||
 		strings.Contains(finalContent, "Worker update ready.") ||
+		strings.Contains(finalContent, "Coagent update ready.") ||
 		strings.Contains(finalContent, "Research findings ready.") {
 		t.Fatalf("final vtext revision contains raw status/tool chatter: %s", finalContent)
 	}
@@ -242,11 +243,8 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperVText(t *testing.T) {
 	if !liveSuccessfulToolResult(eventsByTrajectory, "web_search") {
 		t.Fatalf("trace missing successful web_search tool result")
 	}
-	if !liveSuccessfulToolResult(eventsByTrajectory, "submit_research_findings") {
-		t.Fatalf("trace missing successful submit_research_findings tool result")
-	}
-	if !liveSuccessfulToolResult(eventsByTrajectory, "submit_worker_update") {
-		t.Fatalf("trace missing successful submit_worker_update tool result")
+	if !liveSuccessfulToolResult(eventsByTrajectory, "submit_coagent_update") {
+		t.Fatalf("trace missing successful submit_coagent_update tool result")
 	}
 	if !liveSuccessfulToolResult(eventsByTrajectory, "write_file") {
 		t.Fatalf("trace missing successful write_file tool result")

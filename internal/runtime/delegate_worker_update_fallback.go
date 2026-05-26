@@ -27,7 +27,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_worker_update") {
+	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
 		return nil
 	}
 	delegateEvent, delegateOutput, ok := latestSuccessfulToolResultOutput(eventsForRun, "delegate_worker_vm")
@@ -59,7 +59,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "submit_worker_update") {
+	if hasSuccessfulToolResult(eventsForRun, "submit_coagent_update") {
 		return nil
 	}
 	now := time.Now().UTC()
@@ -165,7 +165,7 @@ func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord
 	b.WriteString("Runtime supervision continuation required for an active worker delegation.\n")
 	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, redirect, cancel, or finish this worker.\n\n")
 	b.WriteString("Continue the existing worker; do not start a duplicate worker run.\n")
-	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with submit_worker_update.\n\n")
+	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, redirect the vsuper with a precise instruction. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate, then report back to VText with submit_coagent_update.\n\n")
 	b.WriteString("Worker refs:\n")
 	b.WriteString("- worker_run_id: ")
 	b.WriteString(workerRunID)
@@ -324,7 +324,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		Artifacts:     trimDedupeNonEmpty(artifacts),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_worker_update before delegate timeout.",
+			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or submit_coagent_update before delegate timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,
@@ -406,7 +406,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		Artifacts:     trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...)),
 		Refs:          trimDedupeNonEmpty(refs),
 		Proposals: []string{
-			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or submit_worker_update before delegate timeout.",
+			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or submit_coagent_update before delegate timeout.",
 		},
 		Notes:     trimDedupeNonEmpty(notes),
 		CreatedAt: now,

@@ -390,7 +390,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"finish_worker_delegation",
 		"cancel_worker_delegation",
 		"publish_app_change_package",
-		"submit_worker_update",
+		"submit_coagent_update",
 		"save_evidence":
 		return true
 	default:

@@ -69,12 +69,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -91,7 +91,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_worker_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -138,7 +138,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"read_file", "web_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_research_findings", "submit_worker_update"} {
+	for _, name := range []string{"read_file", "web_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
@@ -157,11 +157,8 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := vtext.Lookup("web_search"); ok {
 		t.Fatalf("vtext should not have web_search")
 	}
-	if _, ok := vtext.Lookup("submit_research_findings"); ok {
-		t.Fatalf("vtext should not have submit_research_findings")
-	}
-	if _, ok := vtext.Lookup("submit_worker_update"); ok {
-		t.Fatalf("vtext should not have submit_worker_update")
+	if _, ok := vtext.Lookup("submit_coagent_update"); ok {
+		t.Fatalf("vtext should not have submit_coagent_update")
 	}
 	if _, ok := vtext.Lookup("publish_app_change_package"); ok {
 		t.Fatalf("vtext should not have publish_app_change_package")
@@ -2584,7 +2581,7 @@ func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, 
 	}
 }
 
-func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T) {
+func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2609,8 +2606,9 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_research_findings", json.RawMessage(`{
-		"finding_id":"finding-001",
+	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_coagent_update", json.RawMessage(`{
+		"update_id":"finding-001",
+		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
 		"evidence":[
 			{
@@ -2624,11 +2622,11 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_research_findings: %v", err)
+		t.Fatalf("submit_coagent_update: %v", err)
 	}
 
 	var resp struct {
-		FindingID   string   `json:"finding_id"`
+		UpdateID    string   `json:"update_id"`
 		AgentID     string   `json:"agent_id"`
 		ChannelID   string   `json:"channel_id"`
 		Cursor      int64    `json:"cursor"`
@@ -2636,7 +2634,7 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 		Status      string   `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_research_findings: %v", err)
+		t.Fatalf("decode submit_coagent_update: %v", err)
 	}
 	if resp.Status != "submitted" {
 		t.Fatalf("status = %q, want submitted", resp.Status)
@@ -2656,16 +2654,20 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 		t.Fatalf("evidence title = %q, want %q", evidence.Title, "Release notes")
 	}
 
-	finding, err := s.GetResearchFinding(context.Background(), "user-alice", "finding-001")
+	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", "finding-001")
 	if err != nil {
-		t.Fatalf("get research finding: %v", err)
+		t.Fatalf("get coagent update: %v", err)
 	}
 	if finding.MessageSeq != resp.Cursor {
-		t.Fatalf("finding message_seq = %d, want %d", finding.MessageSeq, resp.Cursor)
+		t.Fatalf("update message_seq = %d, want %d", finding.MessageSeq, resp.Cursor)
+	}
+	if finding.Kind != "findings" || finding.Role != AgentProfileResearcher {
+		t.Fatalf("unexpected coagent update role/kind: %+v", finding)
 	}
 
-	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_research_findings", json.RawMessage(`{
-		"finding_id":"finding-001",
+	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "submit_coagent_update", json.RawMessage(`{
+		"update_id":"finding-001",
+		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
 		"evidence":[
 			{
@@ -2679,14 +2681,14 @@ func TestResearcherSubmitResearchFindingsPersistsEvidenceAndDedupes(t *testing.T
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
 	if err != nil {
-		t.Fatalf("repeat submit_research_findings: %v", err)
+		t.Fatalf("repeat submit_coagent_update: %v", err)
 	}
 	var respAgain struct {
 		Cursor int64  `json:"cursor"`
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(rawAgain), &respAgain); err != nil {
-		t.Fatalf("decode repeated submit_research_findings: %v", err)
+		t.Fatalf("decode repeated submit_coagent_update: %v", err)
 	}
 	if respAgain.Status != "existing" {
 		t.Fatalf("repeat status = %q, want existing", respAgain.Status)
@@ -2765,11 +2767,20 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		"tests":["node artifacts/evolution-ca.verify.js passed"],
 		"questions":["Should mutation rate be user-adjustable in the UI?"],
 		"proposals":["Expose generation count, population, and mean fitness as visible controls."],
+		"capability_requests":[{
+			"capability":"research",
+			"requested_role":"researcher",
+			"objective":"Ground whether the chosen mutation model has precedent in published toy-model literature.",
+			"why_needed":"Super should not invent source context while reporting execution evidence.",
+			"blocking":true,
+			"evidence_needed_for":"Source Ledger [S2]",
+			"suggested_next_owner":"vtext"
+		}],
 		"notes":["This is a structured worker update, not a document patch."]
 	}`)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", rawArgs)
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
 	if err != nil {
-		t.Fatalf("submit_worker_update: %v", err)
+		t.Fatalf("submit_coagent_update: %v", err)
 	}
 	var resp struct {
 		UpdateID     string `json:"update_id"`
@@ -2780,10 +2791,10 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		Status       string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_worker_update response: %v", err)
+		t.Fatalf("decode submit_coagent_update response: %v", err)
 	}
 	if resp.UpdateID != "super-update-1" || resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
-		t.Fatalf("unexpected submit_worker_update response: %+v", resp)
+		t.Fatalf("unexpected submit_coagent_update response: %+v", resp)
 	}
 	if resp.TrajectoryID != "traj-structured-worker-update" {
 		t.Fatalf("trajectory_id = %q, want traj-structured-worker-update", resp.TrajectoryID)
@@ -2802,7 +2813,10 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if len(update.Tests) != 1 || !strings.Contains(update.Tests[0], "passed") {
 		t.Fatalf("tests = %+v", update.Tests)
 	}
-	if !strings.Contains(update.Content, "Artifacts:") || !strings.Contains(update.Content, "Tests:") || !strings.Contains(update.Content, "Proposals:") {
+	if len(update.CapabilityRequests) != 1 || update.CapabilityRequests[0].Capability != "research" || !update.CapabilityRequests[0].Blocking {
+		t.Fatalf("capability_requests = %+v", update.CapabilityRequests)
+	}
+	if !strings.Contains(update.Content, "Artifacts:") || !strings.Contains(update.Content, "Tests:") || !strings.Contains(update.Content, "Proposals:") || !strings.Contains(update.Content, "Capability requests:") {
 		t.Fatalf("worker update content is not structured: %q", update.Content)
 	}
 
@@ -2816,7 +2830,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "vtext:"+docID || messages[0].Role != AgentProfileSuper {
 		t.Fatalf("unexpected channel message: %+v", messages[0])
 	}
-	if !strings.Contains(messages[0].Content, "Worker update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
+	if !strings.Contains(messages[0].Content, "Coagent update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
 		t.Fatalf("channel message should be a structured update, not a patch: %q", messages[0].Content)
 	}
 
@@ -2836,9 +2850,9 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("trajectory updates = %+v", updates)
 	}
 
-	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", rawArgs)
+	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", rawArgs)
 	if err != nil {
-		t.Fatalf("repeat submit_worker_update: %v", err)
+		t.Fatalf("repeat submit_coagent_update: %v", err)
 	}
 	var repeat struct {
 		Cursor int64  `json:"cursor"`
@@ -2858,7 +2872,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("repeat submit should not duplicate messages, got %+v", messages)
 	}
 
-	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
 		"update_id":"super-update-1",
 		"agent_id":"vtext:doc-structured-worker-update",
 		"tests":["different test payload"]
@@ -2913,7 +2927,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
 		"update_id":"super-authoritative-channel",
 		"agent_id":"vtext:doc-authoritative-channel",
 		"channel_id":"not-the-vtext-doc-channel",
@@ -2921,14 +2935,14 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 		"tests":["verified authoritative channel routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_worker_update: %v", err)
+		t.Fatalf("submit_coagent_update: %v", err)
 	}
 	var resp struct {
 		ChannelID string `json:"channel_id"`
 		Cursor    int64  `json:"cursor"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_worker_update response: %v", err)
+		t.Fatalf("decode submit_coagent_update response: %v", err)
 	}
 	if resp.ChannelID != docID || resp.Cursor == 0 {
 		t.Fatalf("response routed to channel %q cursor %d, want %q with cursor", resp.ChannelID, resp.Cursor, docID)
@@ -3014,21 +3028,21 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
 		"update_id":"super-authoritative-parent",
 		"agent_id":"researcher:decoy",
 		"artifacts":["artifacts/parent.txt"],
 		"tests":["verified parent target routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_worker_update: %v", err)
+		t.Fatalf("submit_coagent_update: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_worker_update response: %v", err)
+		t.Fatalf("decode submit_coagent_update response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
 		t.Fatalf("response target = %q channel = %q, want parent vtext target/channel", resp.AgentID, resp.ChannelID)
@@ -3115,21 +3129,21 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_worker_update", json.RawMessage(`{
+	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "submit_coagent_update", json.RawMessage(`{
 		"update_id":"super-requester-target",
 		"agent_id":"researcher:decoy-requester",
 		"artifacts":["artifacts/requester.txt"],
 		"tests":["verified requester target routing"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_worker_update: %v", err)
+		t.Fatalf("submit_coagent_update: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_worker_update response: %v", err)
+		t.Fatalf("decode submit_coagent_update response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
 		t.Fatalf("response target = %q channel = %q, want vtext requester target/channel", resp.AgentID, resp.ChannelID)
@@ -3168,13 +3182,13 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	}
 
 	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "submit_worker_update", json.RawMessage(`{
+	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "submit_coagent_update", json.RawMessage(`{
 		"update_id":"remote-worker-update",
 		"findings":["Remote worker update should route through inherited VText metadata."],
 		"tests":["metadata-only requester routing passed"]
 	}`))
 	if err != nil {
-		t.Fatalf("submit_worker_update should not require local requester agent row: %v", err)
+		t.Fatalf("submit_coagent_update should not require local requester agent row: %v", err)
 	}
 	var resp struct {
 		AgentID   string `json:"agent_id"`
@@ -3182,7 +3196,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 		Status    string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode submit_worker_update response: %v", err)
+		t.Fatalf("decode submit_coagent_update response: %v", err)
 	}
 	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
 		t.Fatalf("response target/channel/status = %+v, want inherited vtext target", resp)
@@ -3879,7 +3893,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-worker-update",
-				Name: "submit_worker_update",
+				Name: "submit_coagent_update",
 				Arguments: json.RawMessage(`{
 					"update_id":"worker-direct-update",
 					"findings":["WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint."],
@@ -4258,7 +4272,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 			Timestamp: now,
 			Kind:      types.EventToolResult,
 			Payload: json.RawMessage(`{
-				"tool":"submit_worker_update",
+				"tool":"submit_coagent_update",
 				"is_error":false,
 				"output":"{\"status\":\"completed\",\"summary\":\"implemented candidate work but did not publish\"}"
 			}`),
@@ -4781,7 +4795,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 			OwnerID:   "user-alice",
 			Timestamp: now.Add(2 * time.Second),
 			Kind:      types.EventToolResult,
-			Payload:   json.RawMessage(`{"tool":"submit_worker_update","is_error":false,"output":"{\"status\":\"blocked\",\"summary\":\"tool loop exhausted before export\"}"}`),
+			Payload:   json.RawMessage(`{"tool":"submit_coagent_update","is_error":false,"output":"{\"status\":\"blocked\",\"summary\":\"tool loop exhausted before export\"}"}`),
 		},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5352,8 +5366,8 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"exclusive writer for go-choir-candidate",
 		"do not run reset, clean, edit, or commit commands",
 		"verifier must inspect only after the implementation child has reported",
-		"missing tools, failed tests, or package publication failure must end in submit_worker_update",
-		"both child runs finish without publish_app_change_package or submit_worker_update",
+		"missing tools, failed tests, or package publication failure must end in submit_coagent_update",
+		"both child runs finish without publish_app_change_package or submit_coagent_update",
 		"publish_app_change_package",
 		"human proof is still evidence_pending",
 		"separate proof/adoption workers need a package id",

@@ -365,12 +365,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nAs soon as one grounded findings packet is enough to improve the document, call edit_vtext for the next revision instead of waiting for perfect coverage.")
 	}
 	if profile == AgentProfileSuper {
-		b.WriteString("\n\nSuper authority boundary: bounded local scratch work is allowed when it is read-only, ephemeral, or low-risk, including API calls, curl fetches, small data-processing scripts, and temporary inspection artifacts. Delegate work that changes Choir/app/harness behavior or crosses a durable/risky boundary. For repo edits, package installs, builds meant as candidate changes, runtime/app state mutation, Choir-in-Choir development, candidate-world exploration, worker/verifier loops, AppChangePackage/adoption work, or dangerous/privileged actions, first call request_worker_vm, then call start_worker_delegation. Use machine_class=\"worker-medium\" for repo/app/harness implementation work that may run Go/Svelte builds; reserve worker-small for lightweight non-build probes. The start call returns immediately; keep supervising by using observe_worker_delegation for checkpoints, answering VText clarifications, redirecting/cancelling only as super, and finish_worker_delegation for terminal evidence. Do not answer that class of request only with submit_worker_update unless the worker lease or delegation cannot start, and then report the exact blocker.")
+		b.WriteString("\n\nSuper authority boundary: bounded local scratch work is allowed when it is read-only, ephemeral, or low-risk, including API calls, curl fetches, small data-processing scripts, and temporary inspection artifacts. Delegate work that changes Choir/app/harness behavior or crosses a durable/risky boundary. For repo edits, package installs, builds meant as candidate changes, runtime/app state mutation, Choir-in-Choir development, candidate-world exploration, worker/verifier loops, AppChangePackage/adoption work, or dangerous/privileged actions, first call request_worker_vm, then call start_worker_delegation. Use machine_class=\"worker-medium\" for repo/app/harness implementation work that may run Go/Svelte builds; reserve worker-small for lightweight non-build probes. The start call returns immediately; keep supervising by using observe_worker_delegation for checkpoints, answering VText clarifications, redirecting/cancelling only as super, and finish_worker_delegation for terminal evidence. Do not answer that class of request only with submit_coagent_update unless the worker lease or delegation cannot start, and then report the exact blocker.")
 		b.WriteString("\nFor feature experiments and UX candidates, package/build receipts are not human proof. A worker-local Git commit is not transferable to another worker by itself. If screenshots/video or browser behavior evidence is required and the implementation worker cannot produce it, first ensure the candidate source delta has been published as an AppChangePackage, even if its human_proof_state is only evidence_pending. Lease a separate worker-playwright evidence worker only after package evidence exists; pass that proof worker the exact package id plus source/recipient context or a package-derived candidate/adoption route to inspect, never only an unreachable worker-local commit. The worker runtime preloads visible AppChangePackages referenced in the objective into the proof worker's runtime store; instruct the proof worker to inspect the preloaded package record/source deltas instead of probing its local Git clone or assuming GitHub contains per-computer candidate refs. If no package exists, redirect or finish with a precise source-transfer blocker. Vsuper cannot lease that second VM from inside the worker.")
 		b.WriteString("\nIf observe_worker_delegation or finish_worker_delegation for package/candidate work has no app_change_packages, or returns status worker_run_incomplete, worker_run_active, completion_blocker, or terminal_error, treat it as unfinished or blocked. Do not summarize it as completed work and do not claim owner-reviewable package evidence.")
 	}
 	if profile == AgentProfileVSuper {
-		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent, wait_agent, and channel messages to coordinate existing children; send substantive owner-readable checkpoints with submit_worker_update so VText and super can supervise while the worker run is still active. If the work cannot proceed, submit_worker_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
+		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use cast_agent, wait_agent, and channel messages to coordinate existing children; send substantive owner-readable checkpoints with submit_coagent_update so VText and super can supervise while the worker run is still active. If the work cannot proceed, submit_coagent_update with the precise blocker, evidence refs, rollback refs, and next safe probe.")
 		b.WriteString("\nSpawn the implementation co-super first with spawn_agent slot=\"implementation\" and put the implementation role plus terminal obligation directly in that objective. Do not spawn slot=\"verifier\" until the implementation child reports commit/package/blocker evidence. When you spawn the verifier, name the exact commit/package/evidence to inspect. If a verifier was accidentally started before implementation evidence, treat that result as stale and spawn at most one replacement verifier after implementation evidence exists.")
 		b.WriteString("\nAfter spawning a child or sending a corrective cast_agent, call wait_agent for that child before finalizing. Pass the cast_agent cursor when waiting for a reply to that message, or omit the cursor to inspect existing child results.")
 		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/package/blocker. Do not cancel a child that has produced publish_app_change_package evidence; incorporate that child package instead.")
@@ -379,10 +379,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString("\nWhen spawning or casting to the implementation co-super, include these repo_path/base_sha/bootstrap details verbatim. Child co-supers must not have to rediscover the candidate checkout from scratch.")
 		}
 		b.WriteString("\nOnce committed repo evidence and a focused verification check exist, call publish_app_change_package before further coordination, even if screenshots/video/benchmarks still need a separate evidence worker and the package is only evidence_pending. The package is the transferable source artifact; do not wait for external human proof while the source delta exists only as a worker-local commit. If an implementation child already published, do not publish again from the parent vsuper; immediately summarize the child package, verifier state, rollback refs, and residual risks, then finish the run. After package evidence exists, do not sleep, poll for narrative confirmation, or run broad discovery unless the package is invalid and you are performing one focused repair.")
-		b.WriteString("\nDo not end the run after only spawning children, casting assignments, or receiving acknowledgement-only child messages. End only after publish_app_change_package, submit_worker_update with a precise blocker, or child-provided commit/package/verifier evidence that you have incorporated after wait_agent or channel evidence.")
+		b.WriteString("\nDo not end the run after only spawning children, casting assignments, or receiving acknowledgement-only child messages. End only after publish_app_change_package, submit_coagent_update with a precise blocker, or child-provided commit/package/verifier evidence that you have incorporated after wait_agent or channel evidence.")
 	}
 	if profile == AgentProfileCoSuper {
-		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to publish_app_change_package, submit_worker_update, or a precise blocker instead of running open-ended tool loops.")
+		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to publish_app_change_package, submit_coagent_update, or a precise blocker instead of running open-ended tool loops.")
 		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
 			b.WriteString(repoContext)
 			b.WriteString("\nIf you are the implementation worker, run the bootstrap commands before repo work and then use repo_path \"go-choir-candidate\" with the listed base_sha for publish_app_change_package. If human proof needs external browser capture, publish an evidence_pending package after commit and focused verification rather than ending with a commit-only report. If you are the verifier, wait for implementation evidence before independent inspection; you may run commands and write scratch tests/logs/evidence, but you must not author candidate source, publish packages, promote/adopt, or grant capabilities.")
@@ -394,10 +394,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nSearch tool results and Trace expose provider endpoints, latency, errors, rate limits, and result counts; adapt your breadth from that feedback.")
 		b.WriteString("\nDo not keep issuing near-duplicate searches once you already have enough grounded material to checkpoint an improvement for the document.")
 		b.WriteString("\nTreat rate-limit errors as backpressure: narrow, wait, or checkpoint what you already learned rather than continuing to issue searches.")
-		b.WriteString("\nBefore the first submit_research_findings call, run at most one focused search batch, or one search plus one targeted fetch. Do not gather comprehensive coverage before the first checkpoint.")
-		b.WriteString("\nAs soon as you have 2-4 substantive grounded facts or a precise blocker, call submit_research_findings as a durable checkpoint.")
+		b.WriteString("\nBefore the first submit_coagent_update call, run at most one focused search batch, or one search plus one targeted fetch. Do not gather comprehensive coverage before the first checkpoint.")
+		b.WriteString("\nAs soon as you have 2-4 substantive grounded facts or a precise blocker, call submit_coagent_update as a durable checkpoint.")
 		b.WriteString("\nIf you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.")
-		b.WriteString("\nAfter submit_research_findings, either continue with the next best sequential query if it can improve the document, or end the turn if the current packet is enough.")
+		b.WriteString("\nAfter submit_coagent_update, either continue with the next best sequential query if it can improve the document, or end the turn if the current packet is enough.")
 		b.WriteString("\nYou are a persistent communicating coagent, not a one-shot subagent. Expect to support many vtext revisions over time.")
 	}
 	agentID := agentIDForRun(rec)
@@ -482,7 +482,7 @@ func workerRepoContextForRun(rec *types.RunRecord) string {
 	b.WriteString("\nUse the worker VM's direct PATH tools for repo checks: git, go, gofmt, python3, perl, node, npm, curl, make, gcc, pkg-config, the Obscura browser binary, and ICU libraries are expected. Do not use nix develop, nix build, or nix-store inside the worker VM; the guest Nix store is read-only.")
 	b.WriteString("\nIf Obscura is required and command -v obscura fails, check CHOIR_OBSCURA_BIN and OBSCURA_BIN and report PATH plus those env vars before concluding browser proof is unavailable.")
 	b.WriteString("\nFor UI/human-proof work, tests must mount the actual app/component or use the product path. Use Obscura for VM-local browser/extraction evidence when suitable; Chrome/Playwright is an external verifier, not a worker-VM dependency. A static fixture that hand-creates expected markup is diagnostic only and must not be treated as screenshot/video behavior proof.")
-	b.WriteString("\nIf a required tool, build, verification check, commit, or export fails, call submit_worker_update with exact diagnostics before finishing.")
+	b.WriteString("\nIf a required tool, build, verification check, commit, or export fails, call submit_coagent_update with exact diagnostics before finishing.")
 	return b.String()
 }
 
@@ -572,7 +572,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterVMControlTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}
-	if err := RegisterWorkerUpdateTools(superRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
 	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
@@ -582,7 +582,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterWorkerUpdateTools(coSuperRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(coSuperRegistry, rt); err != nil {
 		return err
 	}
 	if err := RegisterShipperTools(coSuperRegistry, rt, cwd); err != nil {
@@ -592,7 +592,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterWorkerUpdateTools(vSuperRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(vSuperRegistry, rt); err != nil {
 		return err
 	}
 	if err := RegisterShipperTools(vSuperRegistry, rt, cwd); err != nil {
@@ -602,10 +602,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterResearcherTools(researcherRegistry, rt); err != nil {
-		return err
-	}
-	if err := RegisterWorkerUpdateTools(researcherRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
 		return err
 	}
 	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileConductor), cwd, searchClient, httpClient)
