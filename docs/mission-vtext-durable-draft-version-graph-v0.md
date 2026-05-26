@@ -1130,6 +1130,57 @@ next executable probe:
   Keep the existing post-edit continuation guard intact and rerun the v4 row
   first before spending another full matrix run.
 
+checkpoint update, 2026-05-26 05:35 UTC:
+
+- V4-focused prompt fix `29186b6177ca2d73ae1c8e91e98c99d68ca2764a` landed and
+  deployed. CI run `26433850464` passed, FlakeHub run `26433850461` passed,
+  and staging `/health` reported proxy deployed at
+  `29186b6177ca2d73ae1c8e91e98c99d68ca2764a`, deployed at
+  `2026-05-26T05:21:09Z`, with `vmctl_status=ok`.
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptPreservesExplicitHardConstraints|TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery|TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate|TestVTextPromptCurrentEventsRequiresResearcher|TestInitialVTextToolChoiceUsesExactTools|TestVTextInitialEditContinuationClassifiesPrompts|TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt' -count=1`.
+- Local comprehensive continuation proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionRequiresActualContinuation' -count=1`.
+- V4-only strict-wait staging command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-29186b6-v4-strictwait-20260526T052154Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: v4 Flash medium failed, but the failure moved. Evidence:
+  `test-results/vtext-long-section-rubric-staging-29186b6-v4-strictwait-20260526T052154Z/fireworks-deepseek-v4-flash-medium.json`.
+- Positive movement: the initial v1 no longer used `[CMD]` as a pending
+  Source Ledger label. It used `Command evidence` for the pending command row,
+  preserving the final-only evidence-label distinction.
+- New failure shape: Trace showed 554 moments, two researcher agents, one
+  super agent, search activity, 19 VText `request_super_execution` calls, and
+  28 super `bash` calls. There were zero super `submit_coagent_update` calls.
+  VText therefore never received consumable command evidence and kept
+  re-requesting execution.
+
+belief-state changes:
+
+- V4 can now get past the initial scaffold label problem and open the
+  researcher/super topology.
+- The remaining v4 blocker is the super reporting contract: bounded command
+  execution happens, but the evidence does not cross the coagent update
+  boundary back to VText.
+- Prompt-only reporting language in the super role prompt and VText objective
+  is not strong enough for v4 Flash medium under this rubric.
+
+remaining error field:
+
+- V4 Flash medium can still run the requested command repeatedly without
+  delivering `submit_coagent_update`, leaving VText no authoritative `[CMD]`
+  evidence to consume.
+- The full accepted matrix is still incomplete because v4 has not passed the
+  strict command-evidence rubric.
+
+next executable probe:
+
+- Add the smallest uniform tool-result continuation hint for super bounded
+  `bash` results when the super run is serving a VText channel: after a bash
+  result, require or strongly name `submit_coagent_update` as the next tool so
+  command output crosses the existing coagent-update boundary. This should not
+  add a wrapper API or let super write canonical text; it only reinforces the
+  existing one-way evidence-reporting contract.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
