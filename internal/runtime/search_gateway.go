@@ -66,9 +66,15 @@ func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResul
 	if resp.StatusCode != http.StatusOK {
 		var errResp struct {
 			Error string `json:"error"`
+			Code  string `json:"code"`
 		}
-		if err := json.Unmarshal(body, &errResp); err == nil && strings.TrimSpace(errResp.Error) != "" {
-			return nil, fmt.Errorf("gateway search: %s", errResp.Error)
+		if err := json.Unmarshal(body, &errResp); err == nil {
+			if strings.TrimSpace(errResp.Code) == "search_outage" {
+				return nil, fmt.Errorf("gateway search: search_outage")
+			}
+			if strings.TrimSpace(errResp.Error) != "" {
+				return nil, fmt.Errorf("gateway search: %s", errResp.Error)
+			}
 		}
 		return nil, fmt.Errorf("gateway search: status %s", resp.Status)
 	}

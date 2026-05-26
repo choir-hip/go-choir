@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 )
 
 // --- Mock Search Provider for Testing ---
@@ -33,8 +35,27 @@ func (m *mockSearchProvider) Search(ctx context.Context, query string, maxResult
 
 // --- SearchClient Tests ---
 
+func testSearchClient(providers []SearchProvider, providersPerQuery int) *SearchClient {
+	if providersPerQuery <= 0 {
+		providersPerQuery = 1
+	}
+	return &SearchClient{
+		providers:         providers,
+		providersPerQuery: providersPerQuery,
+		healthStore:       searchplane.NewMemoryHealthStore(),
+		planeConfig: searchplane.Config{
+			ProvidersPerQuery: providersPerQuery,
+			MinMergedResults:  1,
+			MaxWaves:          1,
+			RequestTimeout:    5 * time.Second,
+		},
+	}
+}
+
+
+
 func TestSearchClient_NoProviders(t *testing.T) {
-	client := &SearchClient{providers: []SearchProvider{}}
+	client := testSearchClient([]SearchProvider{}, 1)
 	req := SearchRequest{Query: "test", MaxResults: 5}
 
 	_, err := client.Search(context.Background(), req)
@@ -54,7 +75,7 @@ func TestSearchClient_EmptyQuery(t *testing.T) {
 			return []SearchResult{{Title: "Test", URL: "http://example.com", Snippet: "test"}}, nil
 		},
 	}
-	client := &SearchClient{providers: []SearchProvider{mock}}
+	client := testSearchClient([]SearchProvider{mock}, 1)
 
 	req := SearchRequest{Query: "", MaxResults: 5}
 	_, err := client.Search(context.Background(), req)
@@ -82,7 +103,7 @@ func TestSearchClient_Rotation(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{mock1, mock2}}
+	client := testSearchClient([]SearchProvider{mock1, mock2}, 1)
 
 	// First request should go to mock1 (counter starts at 0, so start=0)
 	resp1, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
@@ -135,7 +156,7 @@ func TestSearchClient_DiversifiesAcrossProviders(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{mock1, mock2, mock3}, providersPerQuery: 2}
+	client := testSearchClient([]SearchProvider{mock1, mock2, mock3}, 2)
 
 	resp1, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 10})
 	if err != nil {
@@ -189,7 +210,7 @@ func TestSearchClient_MergesMaxResultsAcrossProviderFanout(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{mock1, mock2}, providersPerQuery: 2}
+	client := testSearchClient([]SearchProvider{mock1, mock2}, 2)
 	resp, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 4})
 	if err != nil {
 		t.Fatalf("search: %v", err)
@@ -227,7 +248,7 @@ func TestSearchClient_Fallback(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{failProvider, successProvider}}
+	client := testSearchClient([]SearchProvider{failProvider, successProvider}, 2)
 
 	resp, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
 	if err != nil {
@@ -239,11 +260,17 @@ func TestSearchClient_Fallback(t *testing.T) {
 	if len(resp.Attempts) != 2 {
 		t.Fatalf("attempts = %d, want failed provider plus success provider", len(resp.Attempts))
 	}
-	if resp.Attempts[0].Provider != "fail" || resp.Attempts[0].Status != "error" {
-		t.Fatalf("first attempt = %+v, want fail/error", resp.Attempts[0])
+	var sawFail, sawSuccess bool
+	for _, attempt := range resp.Attempts {
+		switch {
+		case attempt.Provider == "fail" && attempt.Status == "error":
+			sawFail = true
+		case attempt.Provider == "success" && attempt.Status == "success":
+			sawSuccess = true
+		}
 	}
-	if resp.Attempts[1].Provider != "success" || resp.Attempts[1].Status != "success" {
-		t.Fatalf("second attempt = %+v, want success/success", resp.Attempts[1])
+	if !sawFail || !sawSuccess {
+		t.Fatalf("attempts = %+v, want fail/error and success/success", resp.Attempts)
 	}
 	if len(resp.Results) != 1 {
 		t.Errorf("expected 1 result, got %d", len(resp.Results))
@@ -265,11 +292,8 @@ func TestSearchClient_CoolsDownQuotaLimitedProviders(t *testing.T) {
 			return []SearchResult{{Title: "Success", URL: "http://example.com", Snippet: "success"}}, nil
 		},
 	}
-	client := &SearchClient{
-		providers:         []SearchProvider{quotaProvider, successProvider},
-		providersPerQuery: 2,
-		cooldownDuration:  time.Hour,
-	}
+	client := testSearchClient([]SearchProvider{quotaProvider, successProvider}, 2)
+	client.planeConfig.MaxWaves = 2
 
 	first, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
 	if err != nil {
@@ -348,13 +372,13 @@ func TestSearchClient_AllProvidersFail(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{fail1, fail2}}
+	client := testSearchClient([]SearchProvider{fail1, fail2}, 2)
 
 	_, err := client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 5})
 	if err == nil {
 		t.Fatal("expected error when all providers fail")
 	}
-	if !strings.Contains(err.Error(), "all search providers failed") {
+	if !strings.Contains(err.Error(), "search_outage") {
 		t.Errorf("expected 'all search providers failed' error, got: %v", err)
 	}
 }
@@ -372,7 +396,7 @@ func TestSearchClient_MaxResultsClamping(t *testing.T) {
 		},
 	}
 
-	client := &SearchClient{providers: []SearchProvider{mock}}
+	client := testSearchClient([]SearchProvider{mock}, 1)
 
 	// Test zero (should default to 10)
 	client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 0})
@@ -385,7 +409,7 @@ func TestSearchClient_AvailableProviders(t *testing.T) {
 	mock1 := &mockSearchProvider{name: "mock1", available: true}
 	mock2 := &mockSearchProvider{name: "mock2", available: true}
 
-	client := &SearchClient{providers: []SearchProvider{mock1, mock2}}
+	client := testSearchClient([]SearchProvider{mock1, mock2}, 1)
 
 	names := client.AvailableProviders()
 	if len(names) != 2 {
@@ -472,6 +496,7 @@ func TestHandleSearch_EmptyQuery(t *testing.T) {
 func TestHandleSearch_NoProvidersConfigured(t *testing.T) {
 	registry := NewIdentityRegistry(time.Hour)
 	h := NewHandler(registry, nil)
+	h.searchClient = testSearchClient(nil, 1)
 
 	// Issue a valid credential
 	cred, err := registry.IssueCredential("test-sandbox")
@@ -508,7 +533,7 @@ func TestHandleSearch_Success(t *testing.T) {
 
 	h := &Handler{
 		registry:     registry,
-		searchClient: &SearchClient{providers: []SearchProvider{mock}},
+		searchClient: testSearchClient([]SearchProvider{mock}, 1),
 	}
 
 	// Issue a valid credential
@@ -560,7 +585,7 @@ func TestHandleSearch_DeniesExternalPeerWithValidToken(t *testing.T) {
 
 	h := &Handler{
 		registry:     registry,
-		searchClient: &SearchClient{providers: []SearchProvider{mock}},
+		searchClient: testSearchClient([]SearchProvider{mock}, 1),
 	}
 
 	cred, err := registry.IssueCredential("test-sandbox")
@@ -584,6 +609,9 @@ func TestHandleSearch_DeniesExternalPeerWithValidToken(t *testing.T) {
 // --- Provider Integration Tests (requires env vars, skipped by default) ---
 
 func TestTavilyProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
 	apiKey := os.Getenv("TAVILY_API_KEY")
 	if apiKey == "" {
 		t.Skip("TAVILY_API_KEY not set, skipping integration test")
@@ -613,6 +641,9 @@ func TestTavilyProvider_Integration(t *testing.T) {
 }
 
 func TestBraveProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
 	apiKey := os.Getenv("BRAVE_API_KEY")
 	if apiKey == "" {
 		t.Skip("BRAVE_API_KEY not set, skipping integration test")
@@ -642,6 +673,9 @@ func TestBraveProvider_Integration(t *testing.T) {
 }
 
 func TestExaProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
 	apiKey := os.Getenv("EXA_API_KEY")
 	if apiKey == "" {
 		t.Skip("EXA_API_KEY not set, skipping integration test")
@@ -671,6 +705,9 @@ func TestExaProvider_Integration(t *testing.T) {
 }
 
 func TestSerperProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
 	apiKey := os.Getenv("SERPER_API_KEY")
 	if apiKey == "" {
 		t.Skip("SERPER_API_KEY not set, skipping integration test")
@@ -700,6 +737,9 @@ func TestSerperProvider_Integration(t *testing.T) {
 }
 
 func TestParallelProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
 	apiKey := os.Getenv("PARALLEL_API_KEY")
 	if apiKey == "" {
 		t.Skip("PARALLEL_API_KEY not set, skipping integration test")

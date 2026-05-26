@@ -789,6 +789,11 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.searchClient.Search(ctx, req)
 	if err != nil {
+		if outage, ok := searchOutageResponse(err); ok {
+			log.Printf("gateway: search outage for sandbox %s (query=%q)", sandboxID, req.Query)
+			writeGatewayJSON(w, http.StatusServiceUnavailable, outage)
+			return
+		}
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: search failed for sandbox %s: %v", sandboxID, sanitized)
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
@@ -799,6 +804,74 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		sandboxID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
 
 	writeGatewayJSON(w, http.StatusOK, resp)
+}
+
+
+// HandleSearchHealth handles GET /provider/v1/search/health.
+func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if h.searchClient == nil {
+		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "search not configured"})
+		return
+	}
+	store, err := h.searchClient.HealthStore()
+	if err != nil {
+		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: sanitizeError(err)})
+		return
+	}
+	snapshot, err := store.Snapshot()
+	if err != nil {
+		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: sanitizeError(err)})
+		return
+	}
+	out := map[string]ProviderHealthSummary{}
+	for name, health := range snapshot {
+		summary := ProviderHealthSummary{
+			State:            health.State,
+			StrikeCount:      health.StrikeCount,
+			LastFailureClass: health.LastFailureClass,
+			LastErrorSummary: health.LastErrorSummary,
+		}
+		if health.CooldownUntil != nil {
+			summary.CooldownUntil = health.CooldownUntil.UTC().Format(time.RFC3339)
+		}
+		out[name] = summary
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_health": out})
+}
+
+type searchHealthResetRequest struct {
+	Provider string `json:"provider"`
+}
+
+// HandleSearchHealthReset handles POST /provider/v1/search/health/reset.
+func (h *Handler) HandleSearchHealthReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if h.searchClient == nil {
+		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "search not configured"})
+		return
+	}
+	var req searchHealthResetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		return
+	}
+	req.Provider = strings.TrimSpace(req.Provider)
+	if req.Provider == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "provider is required"})
+		return
+	}
+	if err := h.searchClient.ResetProviderHealth(req.Provider); err != nil {
+		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: sanitizeError(err)})
+		return
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]string{"status": "reset", "provider": req.Provider})
 }
 
 func rateLimitBucketKey(sandboxID, scope string) string {
@@ -815,6 +888,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/provider/v1/inference", h.HandleInference)
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)
+	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
+	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/revoke", h.HandleRevokeCredential)
 	s.HandleFunc("/provider/v1/credentials/rotate", h.HandleRotateCredential)

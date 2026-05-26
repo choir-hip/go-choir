@@ -17,9 +17,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 )
 
 // SearchResult represents a single search result item.
@@ -59,6 +59,18 @@ type SearchResponse struct {
 	// Attempts records every provider attempted for this request, including
 	// failures. It is safe for owner-scoped Trace and does not include secrets.
 	Attempts []SearchProviderAttempt `json:"attempts,omitempty"`
+
+	// ProviderHealth is the post-request health snapshot for configured providers.
+	ProviderHealth map[string]ProviderHealthSummary `json:"provider_health,omitempty"`
+
+	// MergedCount is the number of deduplicated hits returned.
+	MergedCount int `json:"merged_count,omitempty"`
+
+	// Waves is how many parallel provider waves executed.
+	Waves int `json:"waves,omitempty"`
+
+	// Degraded is true when some providers failed but merged results exist.
+	Degraded bool `json:"degraded,omitempty"`
 
 	// Query is the original search query.
 	Query string `json:"query"`
@@ -105,11 +117,10 @@ type SearchProvider interface {
 // with automatic fallback on failure.
 type SearchClient struct {
 	providers         []SearchProvider
-	counter           atomic.Int64
 	providersPerQuery int
-	cooldownMu        sync.Mutex
-	cooldowns         map[string]time.Time
-	cooldownDuration  time.Duration
+	healthStore       searchplane.HealthStore
+	planeConfig       searchplane.Config
+	plane             *searchplane.Router
 }
 
 // NewSearchClient creates a SearchClient with all available providers.
@@ -142,139 +153,6 @@ func NewSearchClient() *SearchClient {
 // It gathers results from a small provider fanout for diversity, falling back
 // across the configured provider list until at least one provider succeeds.
 // Returns an error if all providers fail.
-func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
-	if req.Query == "" {
-		return nil, fmt.Errorf("query is required")
-	}
-
-	maxResults := req.MaxResults
-	if maxResults <= 0 {
-		maxResults = 10
-	}
-	if maxResults > 50 {
-		maxResults = 50
-	}
-
-	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, or SERPER_API_KEY)")
-	}
-
-	// Round-robin: get next starting position atomically.
-	start := int(c.counter.Add(1)-1) % len(c.providers)
-	targetProviders := c.providerFanout()
-
-	var lastErr error
-	var providers []string
-	attempts := make([]SearchProviderAttempt, 0, len(c.providers))
-	batches := make([]searchProviderBatch, 0, targetProviders)
-	for i := range c.providers {
-		idx := (start + i) % len(c.providers)
-		provider := c.providers[idx]
-		if until, ok := c.providerCoolingDown(provider.Name()); ok {
-			attempts = append(attempts, SearchProviderAttempt{
-				Provider:  provider.Name(),
-				Endpoint:  searchProviderEndpoint(provider.Name()),
-				Status:    "cooling_down",
-				LatencyMs: 0,
-				Error:     fmt.Sprintf("provider cooling down until %s", until.UTC().Format(time.RFC3339)),
-			})
-			if lastErr == nil {
-				lastErr = fmt.Errorf("%s cooling down", provider.Name())
-			}
-			continue
-		}
-
-		started := time.Now()
-		providerResults, err := provider.Search(ctx, req.Query, maxResults)
-		attempt := SearchProviderAttempt{
-			Provider:  provider.Name(),
-			Endpoint:  searchProviderEndpoint(provider.Name()),
-			Status:    "success",
-			LatencyMs: time.Since(started).Milliseconds(),
-		}
-		if err == nil {
-			providerName := provider.Name()
-			providers = append(providers, providerName)
-			for _, result := range providerResults {
-				result.Provider = providerName
-				batches = appendSearchBatchResult(batches, providerName, result)
-			}
-			attempt.Results = len(providerResults)
-			attempts = append(attempts, attempt)
-			if len(providers) >= targetProviders {
-				break
-			}
-			continue
-		}
-
-		attempt.Status = searchAttemptStatus(err)
-		attempt.Error = truncateSearchAttemptError(err)
-		attempts = append(attempts, attempt)
-		lastErr = fmt.Errorf("%s: %w", provider.Name(), err)
-		if shouldCooldownSearchError(err) {
-			c.cooldownProvider(provider.Name())
-		}
-		// Continue to next provider (fallback).
-	}
-
-	if len(providers) == 0 {
-		return nil, fmt.Errorf("all search providers failed: %w", lastErr)
-	}
-	results := mergeSearchBatches(batches, maxResults)
-	return &SearchResponse{
-		Results:   results,
-		Provider:  providers[0],
-		Providers: providers,
-		Attempts:  attempts,
-		Query:     req.Query,
-	}, nil
-}
-
-func appendSearchBatchResult(batches []searchProviderBatch, provider string, result SearchResult) []searchProviderBatch {
-	for i := range batches {
-		if batches[i].provider == provider {
-			batches[i].results = append(batches[i].results, result)
-			return batches
-		}
-	}
-	return append(batches, searchProviderBatch{provider: provider, results: []SearchResult{result}})
-}
-
-func mergeSearchBatches(batches []searchProviderBatch, maxResults int) []SearchResult {
-	if maxResults <= 0 || len(batches) == 0 {
-		return nil
-	}
-	results := make([]SearchResult, 0, maxResults)
-	seenURLs := make(map[string]struct{})
-	positions := make([]int, len(batches))
-	for len(results) < maxResults {
-		advanced := false
-		for i := range batches {
-			for positions[i] < len(batches[i].results) {
-				result := batches[i].results[positions[i]]
-				positions[i]++
-				key := normalizeSearchResultURL(result.URL)
-				if key == "" {
-					continue
-				}
-				if _, exists := seenURLs[key]; exists {
-					continue
-				}
-				seenURLs[key] = struct{}{}
-				results = append(results, result)
-				advanced = true
-				break
-			}
-			if len(results) >= maxResults {
-				break
-			}
-		}
-		if !advanced {
-			break
-		}
-	}
-	return results
-}
 
 // AvailableProviders returns the names of configured search providers.
 func (c *SearchClient) AvailableProviders() []string {
@@ -285,68 +163,14 @@ func (c *SearchClient) AvailableProviders() []string {
 	return names
 }
 
-func (c *SearchClient) providerFanout() int {
-	value := c.providersPerQuery
-	if value <= 0 {
-		value = intFromEnv("CHOIR_SEARCH_PROVIDERS_PER_QUERY", 2)
+func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
+	if req.Query == "" {
+		return nil, fmt.Errorf("query is required")
 	}
-	if value < 1 {
-		value = 1
+	if len(c.providers) == 0 {
+		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, or SERPER_API_KEY)")
 	}
-	if value > len(c.providers) {
-		value = len(c.providers)
-	}
-	return value
-}
-
-func (c *SearchClient) providerCoolingDown(provider string) (time.Time, bool) {
-	provider = strings.TrimSpace(provider)
-	if provider == "" {
-		return time.Time{}, false
-	}
-	c.cooldownMu.Lock()
-	defer c.cooldownMu.Unlock()
-	if c.cooldowns == nil {
-		return time.Time{}, false
-	}
-	until, ok := c.cooldowns[provider]
-	if !ok {
-		return time.Time{}, false
-	}
-	now := time.Now()
-	if !until.After(now) {
-		delete(c.cooldowns, provider)
-		return time.Time{}, false
-	}
-	return until, true
-}
-
-func (c *SearchClient) cooldownProvider(provider string) {
-	provider = strings.TrimSpace(provider)
-	if provider == "" {
-		return
-	}
-	duration := c.searchCooldownDuration()
-	if duration <= 0 {
-		return
-	}
-	c.cooldownMu.Lock()
-	defer c.cooldownMu.Unlock()
-	if c.cooldowns == nil {
-		c.cooldowns = map[string]time.Time{}
-	}
-	c.cooldowns[provider] = time.Now().Add(duration)
-}
-
-func (c *SearchClient) searchCooldownDuration() time.Duration {
-	if c.cooldownDuration > 0 {
-		return c.cooldownDuration
-	}
-	seconds := intFromEnv("CHOIR_SEARCH_PROVIDER_COOLDOWN_SECONDS", 10*60)
-	if seconds <= 0 {
-		return 0
-	}
-	return time.Duration(seconds) * time.Second
+	return c.searchViaPlane(ctx, req)
 }
 
 func intFromEnv(name string, fallback int) int {
@@ -389,26 +213,6 @@ func searchProviderEndpoint(provider string) string {
 	default:
 		return ""
 	}
-}
-
-func searchAttemptStatus(err error) string {
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "too many requests") {
-		return "rate_limited"
-	}
-	if strings.Contains(msg, "402") || strings.Contains(msg, "432") ||
-		strings.Contains(msg, "payment required") ||
-		strings.Contains(msg, "quota") ||
-		strings.Contains(msg, "credits") ||
-		strings.Contains(msg, "usage limit") {
-		return "quota_limited"
-	}
-	return "error"
-}
-
-func shouldCooldownSearchError(err error) bool {
-	status := searchAttemptStatus(err)
-	return status == "rate_limited" || status == "quota_limited"
 }
 
 func truncateSearchAttemptError(err error) string {

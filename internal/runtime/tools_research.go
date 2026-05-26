@@ -17,11 +17,15 @@ type webSearchClient interface {
 }
 
 type webSearchResponse struct {
-	Query     string           `json:"query"`
-	Provider  string           `json:"provider"`
-	Providers []string         `json:"providers,omitempty"`
-	Attempts  []map[string]any `json:"attempts,omitempty"`
-	Results   []map[string]any `json:"results"`
+	Query          string           `json:"query"`
+	Provider       string           `json:"provider"`
+	Providers      []string         `json:"providers,omitempty"`
+	Attempts       []map[string]any `json:"attempts,omitempty"`
+	Results        []map[string]any `json:"results"`
+	MergedCount    int              `json:"merged_count,omitempty"`
+	Waves          int              `json:"waves,omitempty"`
+	Degraded       bool             `json:"degraded,omitempty"`
+	ProviderHealth map[string]any   `json:"provider_health,omitempty"`
 }
 
 func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client, rt *Runtime) error {
