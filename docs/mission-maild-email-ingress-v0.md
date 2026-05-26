@@ -1158,3 +1158,35 @@ Belief-state update:
 - The deploy script still fails closed when the webhook secret is absent, which
   preserves the invariant that `maild` does not accept unsigned/unknown
   provider webhooks.
+
+## Evidence Finding: MAS handoff acceptance needs an operator surface
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The final acceptance needs to prove two separate facts:
+
+1. Real inbound mail creates an untrusted source packet and quarantines
+   attachments without triggering privileged action.
+2. A later owner action can send that source packet to Choir through the
+   proxy-owned prompt-bar path.
+
+`maild` already has an `email_ingress_events` table for the handoff record, but
+`maildctl` cannot inspect those rows. This leaves an operator with message,
+attachment, and source-packet evidence, but no direct read-only evidence for
+"zero handoffs before owner action" or "handoff recorded after owner action."
+
+Evidence:
+
+```text
+schema: internal/maild/store.go creates email_ingress_events
+maildctl commands: stats, aliases, webhooks, messages, message, attachments, source-packet
+missing command: ingress-events/list handoff records
+```
+
+Required next change:
+
+- Add a read-only `maildctl ingress-events` command and store method so
+  acceptance can inspect owner/message-scoped MAS handoff records without
+  exposing a public admin endpoint or granting `maild` any agent authority.
