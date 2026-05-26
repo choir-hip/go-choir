@@ -2,7 +2,7 @@
  * Playwright tests for deployed-origin auth/shell contract assertions.
  *
  * These tests verify VAL-DEPLOY-002 and VAL-CROSS-101 through VAL-CROSS-108
- * against the real deployed public origin https://draft.choir-ip.com.
+ * against the real deployed public origin https://choir.news.
  *
  * VAL-DEPLOY-002: Signed-out visitors see the guest auth UI on the
  *   public origin without using alternate hosts or direct service ports.
@@ -26,7 +26,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const DEPLOYED_ORIGIN = 'https://draft.choir-ip.com';
+const DEPLOYED_ORIGIN = 'https://choir.news';
 
 // ---------------------------------------------------------------------------
 // VAL-DEPLOY-002: Signed-out visitors see guest auth on the public origin
@@ -319,7 +319,7 @@ test('deployed origin does not make direct service port calls', async ({
   // All browser requests should go to the deployed origin only —
   // never to internal service ports.
   for (const url of requestedUrls) {
-    const isDeployedOrigin = url.hostname === 'draft.choir-ip.com';
+    const isDeployedOrigin = url.hostname === 'choir.news';
     const isDataOrExtension =
       url.protocol === 'data:' || url.protocol === 'chrome-extension:';
 

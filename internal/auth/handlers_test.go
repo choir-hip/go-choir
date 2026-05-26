@@ -896,8 +896,8 @@ func TestRegisterBeginWithDeployedRPID(t *testing.T) {
 	cfg := &Config{
 		Port:              "0",
 		DBPath:            filepath.Join(t.TempDir(), "auth.db"),
-		RPID:              "draft.choir-ip.com",
-		RPOrigins:         []string{"https://draft.choir-ip.com"},
+		RPID:              "choir.news",
+		RPOrigins:         []string{"https://choir.news"},
 		JWTPrivateKeyPath: filepath.Join(t.TempDir(), "key"),
 		AccessTokenTTL:    5 * time.Minute,
 		RefreshTokenTTL:   720 * time.Hour,
@@ -940,8 +940,8 @@ func TestRegisterBeginWithDeployedRPID(t *testing.T) {
 	rp, _ := pk["rp"].(map[string]interface{})
 	rpID, _ := rp["id"].(string)
 
-	if rpID != "draft.choir-ip.com" {
-		t.Errorf("RP ID: got %q, want %q", rpID, "draft.choir-ip.com")
+	if rpID != "choir.news" {
+		t.Errorf("RP ID: got %q, want %q", rpID, "choir.news")
 	}
 
 	challenge, _ := pk["challenge"].(string)
@@ -2582,7 +2582,7 @@ func TestLogoutThenSessionReportsSignedOut(t *testing.T) {
 // ======================================================================
 
 // deployedHandlerEnv sets up a Handler configured for the deployed public
-// origin (draft.choir-ip.com, HTTPS, CookieSecure=true). This mirrors the
+// origin (choir.news, HTTPS, CookieSecure=true). This mirrors the
 // production NixOS service configuration in nix/node-b.nix.
 func deployedHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 	t.Helper()
@@ -2591,8 +2591,8 @@ func deployedHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 	cfg := &Config{
 		Port:              "0",
 		DBPath:            filepath.Join(t.TempDir(), "auth.db"),
-		RPID:              "draft.choir-ip.com",
-		RPOrigins:         []string{"https://draft.choir-ip.com"},
+		RPID:              "choir.news",
+		RPOrigins:         []string{"https://choir.news"},
 		JWTPrivateKeyPath: filepath.Join(t.TempDir(), "key"),
 		AccessTokenTTL:    5 * time.Minute,
 		RefreshTokenTTL:   720 * time.Hour,
@@ -2858,7 +2858,7 @@ func TestDeployedCookieContractOnLogout(t *testing.T) {
 
 // TestDeployedOriginSessionEndpointReachable verifies that the /auth/session
 // endpoint responds correctly with deployed-origin configuration (RP ID =
-// draft.choir-ip.com, HTTPS origins, CookieSecure=true). A signed-out
+// choir.news, HTTPS origins, CookieSecure=true). A signed-out
 // request should return {authenticated: false} with no 5xx error.
 //
 // VAL-DEPLOY-003: "Public auth API is reachable on the draft host"
@@ -2958,8 +2958,8 @@ func TestDeployedOriginRegisterBeginReachable(t *testing.T) {
 	}
 
 	rpID, _ := rp["id"].(string)
-	if rpID != "draft.choir-ip.com" {
-		t.Errorf("RP ID: got %q, want %q", rpID, "draft.choir-ip.com")
+	if rpID != "choir.news" {
+		t.Errorf("RP ID: got %q, want %q", rpID, "choir.news")
 	}
 
 	challenge, _ := pk["challenge"].(string)

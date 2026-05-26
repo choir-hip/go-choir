@@ -357,7 +357,7 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 	if err != nil {
 		return result, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir-ip.com)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir.news)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5")
 
 	fetchStarted := time.Now()

@@ -7,14 +7,14 @@ import { execSync } from 'child_process';
   const page = await context.newPage();
 
   // Navigate and set cookies
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
 
   // Set the authentication cookies
   await context.addCookies([
     {
       name: 'choir_refresh',
       value: 'd6d33153-5a0b-4dcf-828a-0db7c138bb75',
-      domain: 'draft.choir-ip.com',
+      domain: 'choir.news',
       path: '/auth',
       expires: 1778541526,
       httpOnly: true,
@@ -24,7 +24,7 @@ import { execSync } from 'child_process';
     {
       name: 'choir_access',
       value: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzU5NDk4MjYsImlhdCI6MTc3NTk0OTUyNiwic2NvcGUiOiJhY2Nlc3MiLCJzdWIiOiI2OWYyNmVmMC1mNmIyLTRmMWMtOTdkYS0wYjliYWFkZDIzYzcifQ.oH5ty2AA-4MN3GfKVaAqNnGwB7yETp3yVG-ZQ2gA7L18go62OXwmvE8U9FQym1nwxJZyrf1cGtLD00JWb2N7Cg',
-      domain: 'draft.choir-ip.com',
+      domain: 'choir.news',
       path: '/',
       expires: 1775949826,
       httpOnly: true,

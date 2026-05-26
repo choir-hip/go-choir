@@ -2,7 +2,7 @@
  * Gateway end-to-end test for VAL-GATEWAY-001
  * Tests: Authenticated requests receive a provider response through the gateway
  *
- * Target: https://draft.choir-ip.com (deployed origin)
+ * Target: https://choir.news (deployed origin)
  * Path: login -> proxy -> user runtime/VM -> gateway -> provider -> UI response
  */
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 import { registerPasskey, getSession } from './helpers/auth.js';
 
-const BASE_URL = 'https://draft.choir-ip.com';
+const BASE_URL = 'https://choir.news';
 const EVIDENCE_DIR = process.env.CHOIR_EVIDENCE_DIR || 'test-results/gateway-e2e-deployed';
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 

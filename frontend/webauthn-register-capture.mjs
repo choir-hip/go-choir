@@ -7,7 +7,7 @@ import fs from 'fs';
   const page = await context.newPage();
 
   // Navigate to the deployed origin
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
   await page.waitForLoadState('networkidle');
 
   // Add virtual authenticator via CDP

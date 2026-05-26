@@ -4,7 +4,7 @@ This file is the repo-level contract for coding agents working on Choir.
 
 ## Default Environment
 
-Staging is the acceptance environment: `https://draft.choir-ip.com`.
+Staging is the acceptance environment: `https://choir.news`.
 
 Use local development only for fast frontend visual iteration, focused unit shaping, or reproducing a staging failure after staging evidence identifies the transition that failed. Do not claim local proof for vmctl, live worker/candidate computers, gateway credentials, model/search calls, auth/session renewal, platform promotion, rollback, or Choir-in-Choir behavior.
 
@@ -236,7 +236,7 @@ If a behavior-changing commit is pushed:
 
 1. Monitor the GitHub Actions run for that SHA.
 2. Confirm Node B deploy/health reports that SHA or deployed commit.
-3. Run the relevant deployed Playwright/API acceptance proof against `draft.choir-ip.com`.
+3. Run the relevant deployed Playwright/API acceptance proof against `choir.news`.
 4. Record evidence in the final report.
 
 ## Safety

@@ -1,7 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
 
-const BASE_URL = process.env.BASE_URL || 'https://draft.choir-ip.com';
+const BASE_URL = process.env.BASE_URL || 'https://choir.news';
 
 async function registerUser(email) {
   const browser = await chromium.launch();

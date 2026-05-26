@@ -34,7 +34,7 @@ radio traversals, and citation/economic state.
 The operating stance is now staging-first. Meaningful claims about vmctl,
 gateway credentials, live model/search calls, background/candidate computers,
 platform promotion, rollback, auth/session renewal, and Choir-in-Choir must be proven on
-`https://draft.choir-ip.com` after commit, push, CI, deploy, and staging health
+`https://choir.news` after commit, push, CI, deploy, and staging health
 identity checks. Local development remains useful for fast frontend iteration
 and focused unit shaping, but local proof does not establish product readiness.
 
@@ -318,8 +318,8 @@ decision, not a reason to preserve shared workers now.
 Public viewing and mutation authority are separate.
 
 ```text
-choir-ip.com              -> public platform computer surface
-choir-ip.com/:handle      -> public user-selected handle surface
+choir.news              -> public platform computer surface
+choir.news/:handle      -> public user-selected handle surface
 custom-domain.example     -> verified alias to a selected public surface
 ```
 
@@ -327,7 +327,7 @@ Handles are chosen product identities, not privileged account names. A user may
 have multiple accounts during testing, and no account receives a special route
 because of who owns it. Custom domains are a roadmap value proposition: after a
 domain owner proves control, the domain can serve the same published personal
-desktop/newspaper surface that would otherwise live under `choir-ip.com/:handle`.
+desktop/newspaper surface that would otherwise live under `choir.news/:handle`.
 
 Anonymous users may inspect public surfaces. When they attempt to mutate, Choir
 should ask them to register or log in, then create or resume a user-owned active

@@ -12,8 +12,8 @@ by any custom domains they prove they control.
 Default platform routes:
 
 ```text
-choir-ip.com              -> public platform computer surface
-choir-ip.com/:handle      -> public surface for a user-selected handle
+choir.news              -> public platform computer surface
+choir.news/:handle      -> public surface for a user-selected handle
 ```
 
 Custom domain routes:
@@ -66,7 +66,7 @@ Verification should support at least:
 - later registrar/provider integrations where useful.
 
 Routing should use the request host header to resolve verified domains before
-falling back to `choir-ip.com` path routing.
+falling back to `choir.news` path routing.
 
 ## TLS And Operations
 

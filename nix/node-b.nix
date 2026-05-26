@@ -1,5 +1,5 @@
 # NixOS host configuration for go-choir Node B (OVH bare metal)
-# 147.135.70.196 — draft.choir-ip.com — us-east-vin
+# 147.135.70.196 — choir.news — us-east-vin
 # Adapted from choiros-rs nix/hosts/ovh-node.nix and ovh-node-b.nix
 #
 # Service hardening notes (VAL-DEPLOY-007 / VAL-DEPLOY-008 / VAL-CROSS-118):
@@ -31,7 +31,7 @@ let
     install -d -m 0750 "${platformDoltDir}" "${platformDoltDBDir}"
     cd "${platformDoltDBDir}"
     ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
-    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir-ip.com" >/dev/null 2>&1 || true
+    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir.news" >/dev/null 2>&1 || true
     if [ ! -d .dolt ]; then
       ${pkgs.dolt}/bin/dolt init
     fi
@@ -140,7 +140,7 @@ in
   # Caddy reverse proxy (TLS termination → Go services + frontend)
   services.caddy = {
     enable = true;
-    virtualHosts."draft.choir-ip.com" = {
+    virtualHosts."choir.news" = {
       extraConfig = ''
         handle /auth/* {
           reverse_proxy 127.0.0.1:8081
@@ -176,6 +176,16 @@ in
           try_files {path} /index.html
           file_server
         }
+      '';
+    };
+    virtualHosts."draft.choir-ip.com" = {
+      extraConfig = ''
+        redir https://choir.news{uri} permanent
+      '';
+    };
+    virtualHosts."choir-ip.com" = {
+      extraConfig = ''
+        redir https://choir.news{uri} permanent
       '';
     };
   };
@@ -222,8 +232,8 @@ in
       Environment = [
         "AUTH_PORT=8081"
         "AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
-        "AUTH_RP_ID=draft.choir-ip.com"
-        "AUTH_RP_ORIGINS=https://draft.choir-ip.com"
+        "AUTH_RP_ID=choir.news"
+        "AUTH_RP_ORIGINS=https://choir.news"
         "AUTH_JWT_PRIVATE_KEY_PATH=${authSigningDir}/ed25519-key"
         "AUTH_ACCESS_TOKEN_TTL=5m"
         "AUTH_REFRESH_TOKEN_TTL=720h"

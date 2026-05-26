@@ -4,7 +4,7 @@ import { test, expect } from './helpers/fixtures.js';
 import { getSession, loginPasskey, registerPasskey } from './helpers/auth.js';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://draft.choir-ip.com';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://choir.news';
 const PORTFOLIO_WAVE = process.env.GO_CHOIR_ALT_PORTFOLIO_WAVE
   || (process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE2 === '1' ? '2' : '1');
 const RUN_PORTFOLIO_WAVE = process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE1 === '1'

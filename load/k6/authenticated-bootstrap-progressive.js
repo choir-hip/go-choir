@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-const BASE_URL = (__ENV.CHOIR_BASE_URL || 'https://draft.choir-ip.com').replace(/\/$/, '');
+const BASE_URL = (__ENV.CHOIR_BASE_URL || 'https://choir.news').replace(/\/$/, '');
 const AUTH_STATE = __ENV.CHOIR_AUTH_STATE || '';
 
 function cookiesFromStorageState(path) {

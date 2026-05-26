@@ -13,7 +13,7 @@ import { chromium } from '@playwright/test';
   const page = await context.newPage();
 
   // Check shell content
-  await page.goto('https://draft.choir-ip.com/shell');
+  await page.goto('https://choir.news/shell');
   await page.waitForTimeout(5000);
 
   const shellHtml = await page.content();

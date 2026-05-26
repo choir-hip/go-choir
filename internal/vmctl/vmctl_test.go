@@ -833,7 +833,7 @@ func TestHandler_RuntimePackageDeniesExternalCaller(t *testing.T) {
 	handler.SetSandboxRuntimePackageDir(t.TempDir())
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
-	req.Host = "draft.choir-ip.com"
+	req.Host = "choir.news"
 	req.RemoteAddr = "203.0.113.10:4444"
 	rr := httptest.NewRecorder()
 	handler.HandleRuntimePackage(rr, req)

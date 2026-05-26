@@ -25,11 +25,11 @@ type Config struct {
 	// DBPath is the filesystem path to the SQLite database file.
 	DBPath string
 
-	// RPID is the WebAuthn relying-party ID (e.g. "draft.choir-ip.com").
+	// RPID is the WebAuthn relying-party ID (e.g. "choir.news").
 	RPID string
 
 	// RPOrigins is the list of allowed WebAuthn origins
-	// (e.g. ["https://draft.choir-ip.com"]).
+	// (e.g. ["https://choir.news"]).
 	RPOrigins []string
 
 	// JWTPrivateKeyPath is the path to the Ed25519 private key used to sign

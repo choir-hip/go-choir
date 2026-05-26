@@ -151,7 +151,7 @@ class:
 - only their published primary interactive computers are eligible;
 - only `stopped`, `hibernated`, or `failed` states are eligible;
 - active, booting, degraded, stopping, unknown-owner, non-ephemeral, and real
-  `choir-ip.com` primary computers remain protected;
+  `choir.news` primary computers remain protected;
 - each sweep is bounded by delete count and bytes;
 - auth rows are not deleted by vmctl in this pass; if a stale test account logs
   in again, vmctl can assign a fresh computer;

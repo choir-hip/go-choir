@@ -346,7 +346,7 @@ func searchPodcastProvider(ctx context.Context, client *http.Client, query strin
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "ChoirPodcastSearch/0.1 (+https://choir-ip.com)")
+	req.Header.Set("User-Agent", "ChoirPodcastSearch/0.1 (+https://choir.news)")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("podcast provider request failed: %w", err)

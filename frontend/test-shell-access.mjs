@@ -15,7 +15,7 @@ import { chromium } from '@playwright/test';
 
   // Navigate to shell directly
   console.log('Navigating to /shell...');
-  await page.goto('https://draft.choir-ip.com/shell');
+  await page.goto('https://choir.news/shell');
   await page.waitForTimeout(10000);
 
   const url = page.url();
@@ -39,7 +39,7 @@ import { chromium } from '@playwright/test';
 
   // Also try the root path with auth cookies
   console.log('\nNavigating to / with auth cookies...');
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
   await page.waitForTimeout(5000);
 
   console.log('Root URL:', page.url());

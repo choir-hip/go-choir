@@ -81,18 +81,18 @@ func TestLoadConfigFromEnv(t *testing.T) {
 		},
 		{
 			name: "custom_rp_id",
-			env:  map[string]string{"AUTH_RP_ID": "draft.choir-ip.com"},
+			env:  map[string]string{"AUTH_RP_ID": "choir.news"},
 			check: func(t *testing.T, cfg *Config) {
-				if cfg.RPID != "draft.choir-ip.com" {
-					t.Errorf("RPID: got %q, want %q", cfg.RPID, "draft.choir-ip.com")
+				if cfg.RPID != "choir.news" {
+					t.Errorf("RPID: got %q, want %q", cfg.RPID, "choir.news")
 				}
 			},
 		},
 		{
 			name: "custom_rp_origins",
-			env:  map[string]string{"AUTH_RP_ORIGINS": "https://draft.choir-ip.com,https://alt.choir-ip.com"},
+			env:  map[string]string{"AUTH_RP_ORIGINS": "https://choir.news,https://alt.choir.news"},
 			check: func(t *testing.T, cfg *Config) {
-				want := []string{"https://draft.choir-ip.com", "https://alt.choir-ip.com"}
+				want := []string{"https://choir.news", "https://alt.choir.news"}
 				if len(cfg.RPOrigins) != len(want) {
 					t.Fatalf("RPOrigins length: got %d, want %d", len(cfg.RPOrigins), len(want))
 				}
@@ -153,8 +153,8 @@ func TestLoadConfigFromEnv(t *testing.T) {
 			env: map[string]string{
 				"AUTH_PORT":                 "8081",
 				"AUTH_DB_PATH":              "/var/lib/go-choir/auth.db",
-				"AUTH_RP_ID":                "draft.choir-ip.com",
-				"AUTH_RP_ORIGINS":           "https://draft.choir-ip.com",
+				"AUTH_RP_ID":                "choir.news",
+				"AUTH_RP_ORIGINS":           "https://choir.news",
 				"AUTH_JWT_PRIVATE_KEY_PATH": "/var/lib/go-choir/auth-signing-key",
 				"AUTH_ACCESS_TOKEN_TTL":     "5m",
 				"AUTH_REFRESH_TOKEN_TTL":    "720h",
@@ -167,7 +167,7 @@ func TestLoadConfigFromEnv(t *testing.T) {
 				if cfg.DBPath != "/var/lib/go-choir/auth.db" {
 					t.Errorf("DBPath: got %q", cfg.DBPath)
 				}
-				if cfg.RPID != "draft.choir-ip.com" {
+				if cfg.RPID != "choir.news" {
 					t.Errorf("RPID: got %q", cfg.RPID)
 				}
 				if !cfg.CookieSecure {
@@ -297,8 +297,8 @@ func TestConfigValidationAcceptsValidConfig(t *testing.T) {
 	cfg := &Config{
 		Port:              "8081",
 		DBPath:            "/tmp/test.db",
-		RPID:              "draft.choir-ip.com",
-		RPOrigins:         []string{"https://draft.choir-ip.com"},
+		RPID:              "choir.news",
+		RPOrigins:         []string{"https://choir.news"},
 		JWTPrivateKeyPath: "/tmp/key",
 		AccessTokenTTL:    5 * time.Minute,
 		RefreshTokenTTL:   720 * time.Hour,

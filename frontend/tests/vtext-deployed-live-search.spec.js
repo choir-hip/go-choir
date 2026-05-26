@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 
-const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://draft.choir-ip.com';
+const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
 test.setTimeout(420_000);

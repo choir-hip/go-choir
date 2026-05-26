@@ -32,7 +32,7 @@ Dolt/app-state change may be promoted into that user's computer without global
 CI/deploy, provided the personal promotion records lineage, typed deltas,
 verifier evidence, and rollback.
 
-`https://draft.choir-ip.com` is the acceptance environment for vmctl, gateway,
+`https://choir.news` is the acceptance environment for vmctl, gateway,
 live model/search calls, background/candidate computers, platform promotion, rollback,
 auth/session, and Choir-in-Choir claims.
 

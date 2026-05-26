@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test, expect } from './helpers/fixtures.js';
 import { getSession, registerPasskey } from './helpers/auth.js';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://draft.choir-ip.com';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://choir.news';
 const RUN_WAVE0 = process.env.GO_CHOIR_RUN_ALT_PORTFOLIO_WAVE0 === '1';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });

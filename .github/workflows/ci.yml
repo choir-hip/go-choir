@@ -737,7 +737,7 @@ jobs:
               echo "Configured frontend root $configured_frontend_root did not resolve to a directory" >&2
               exit 1
             fi
-            served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors https://draft.choir-ip.com/ |
+            served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors --resolve choir.news:443:147.135.70.196 https://choir.news/ |
               sed -n "s/.*src=\"\\/assets\\/\\([^\"]*\\.js\\)\".*/\\1/p" |
               head -n 1)
             if [ -z "$served_asset" ]; then

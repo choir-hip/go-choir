@@ -9,7 +9,7 @@ import { chromium } from '@playwright/test';
   const page = await context.newPage();
 
   // Navigate to the deployed origin
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
   await page.waitForLoadState('networkidle');
 
   // Take initial screenshot

@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const args = parseArgs(process.argv.slice(2));
-const baseURL = args.baseUrl || process.env.CHOIR_DEPLOYED_BASE_URL || 'https://draft.choir-ip.com';
+const baseURL = args.baseUrl || process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 const defaultStatePath = path.join('playwright', '.auth', `${new URL(baseURL).hostname.replaceAll('.', '-')}.storage.json`);
 const statePath = path.resolve(args.out || process.env.CHOIR_AUTH_STATE || defaultStatePath);
 const metaPath = path.resolve(process.env.CHOIR_AUTH_META || statePath.replace(/\.json$/i, '.meta.json'));

@@ -1269,7 +1269,7 @@ func TestBrowserLikeCallerDenied(t *testing.T) {
 	// Simulate a browser request with no auth.
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(`{"messages":[]}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "https://draft.choir-ip.com")
+	req.Header.Set("Origin", "https://choir.news")
 	req.Header.Set("Cookie", "choir_access=some-access-jwt")
 
 	w := httptest.NewRecorder()

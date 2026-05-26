@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { logout } from './helpers/auth.js';
 import { removeVirtualAuthenticator, setupVirtualAuthenticator } from './helpers/webauthn.js';
 
-const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://draft.choir-ip.com';
+const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 const RUN_DEPLOYED = process.env.GO_CHOIR_RUN_DEPLOYED_LIFECYCLE === '1';
 
 test.skip(!RUN_DEPLOYED, 'set GO_CHOIR_RUN_DEPLOYED_LIFECYCLE=1 to run deployed lifecycle proof');

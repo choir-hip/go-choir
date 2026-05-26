@@ -11,15 +11,15 @@ import { chromium } from '@playwright/test';
   });
 
   const page = await context.newPage();
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
 
   // Check all relevant APIs with full URLs
   const endpoints = [
-    'https://draft.choir-ip.com/api/health',
-    'https://draft.choir-ip.com/api/sandbox/health',
-    'https://draft.choir-ip.com/api/shell/bootstrap',
-    'https://draft.choir-ip.com/api/vm/status',
-    'https://draft.choir-ip.com/api/trace/trajectories',
+    'https://choir.news/api/health',
+    'https://choir.news/api/sandbox/health',
+    'https://choir.news/api/shell/bootstrap',
+    'https://choir.news/api/vm/status',
+    'https://choir.news/api/trace/trajectories',
   ];
 
   for (const endpoint of endpoints) {
@@ -39,7 +39,7 @@ import { chromium } from '@playwright/test';
   console.log('\n\nTrying to submit prompt-bar intent...');
   const submissionResponse = await page.evaluate(async () => {
     try {
-      const res = await fetch('https://draft.choir-ip.com/api/prompt-bar', {
+      const res = await fetch('https://choir.news/api/prompt-bar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'Say hello world' })

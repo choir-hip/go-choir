@@ -146,8 +146,8 @@ candidate, publish, or promote.
 Default public routes should be:
 
 ```text
-choir-ip.com              -> platform/public surface
-choir-ip.com/:handle      -> user-selected public handle surface
+choir.news              -> platform/public surface
+choir.news/:handle      -> user-selected public handle surface
 ```
 
 No user receives a special path by personal identity. Handles are selected and

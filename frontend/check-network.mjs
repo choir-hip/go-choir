@@ -25,13 +25,13 @@ import { chromium } from '@playwright/test';
   });
 
   // Navigate and submit prompt-bar intent
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
   await page.waitForTimeout(3000);
 
   console.log('Submitting prompt-bar intent for network analysis...');
   const submissionResponse = await page.evaluate(async () => {
     try {
-      const res = await fetch('https://draft.choir-ip.com/api/prompt-bar', {
+      const res = await fetch('https://choir.news/api/prompt-bar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'What is 2+2?' })
@@ -55,24 +55,24 @@ import { chromium } from '@playwright/test';
     } catch (e) {
       return { error: e.message };
     }
-  }, `https://draft.choir-ip.com/api/prompt-bar/submissions/${submissionId}`);
+  }, `https://choir.news/api/prompt-bar/submissions/${submissionId}`);
   console.log('Prompt submission status:', JSON.stringify(statusResponse));
 
   // Analyze network traffic
   console.log('\n\n=== NETWORK TRAFFIC ANALYSIS ===');
 
-  const draftChoirIpRequests = networkRequests.filter(r => r.host === 'draft.choir-ip.com');
-  const otherHosts = networkRequests.filter(r => r.host !== 'draft.choir-ip.com');
+  const choirNewsRequests = networkRequests.filter(r => r.host === 'choir.news');
+  const otherHosts = networkRequests.filter(r => r.host !== 'choir.news');
 
   console.log(`\nTotal requests: ${networkRequests.length}`);
-  console.log(`Requests to draft.choir-ip.com: ${draftChoirIpRequests.length}`);
+  console.log(`Requests to choir.news: ${choirNewsRequests.length}`);
   console.log(`Requests to other hosts: ${otherHosts.length}`);
 
   if (otherHosts.length > 0) {
     console.log('\n⚠️ Requests to external hosts:');
     otherHosts.forEach(r => console.log(`  - ${r.method} ${r.url} (${r.resourceType})`));
   } else {
-    console.log('\n✓ All traffic stayed on draft.choir-ip.com');
+    console.log('\n✓ All traffic stayed on choir.news');
   }
 
   // Check for provider-specific domains

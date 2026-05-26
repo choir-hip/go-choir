@@ -6,7 +6,7 @@ internal routes.
 Common environment:
 
 ```sh
-export CHOIR_BASE_URL=https://draft.choir-ip.com
+export CHOIR_BASE_URL=https://choir.news
 ```
 
 For authenticated bootstrap load, first create a Playwright storage state:

@@ -78,7 +78,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "https://draft.choir-ip.com/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note"}`))
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2","slug":"my-note"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	req.Header.Set("X-Authenticated-User", "attacker")
 	w := httptest.NewRecorder()
@@ -101,7 +101,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.PublicURL != "https://draft.choir-ip.com/pub/vtext/my-note-pub1" {
+	if resp.PublicURL != "https://choir.news/pub/vtext/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
 	}
 }

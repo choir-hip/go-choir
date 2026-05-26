@@ -11,7 +11,7 @@ import { chromium } from '@playwright/test';
   });
 
   const page = await context.newPage();
-  await page.goto('https://draft.choir-ip.com/');
+  await page.goto('https://choir.news/');
 
   const submissionId = process.argv[2] || 'ee914e04-5add-423f-8a81-baaddf3d6b17';
 
@@ -25,7 +25,7 @@ import { chromium } from '@playwright/test';
       } catch (e) {
         return { error: e.message };
       }
-    }, `https://draft.choir-ip.com/api/prompt-bar/submissions/${submissionId}`);
+    }, `https://choir.news/api/prompt-bar/submissions/${submissionId}`);
 
     console.log(`Status check ${i + 1} (${(i + 1) * 5}s):`, JSON.stringify(statusResponse));
 
@@ -43,7 +43,7 @@ import { chromium } from '@playwright/test';
     } catch (e) {
       return { error: e.message };
     }
-  }, `https://draft.choir-ip.com/api/trace/trajectories/${submissionId}`);
+  }, `https://choir.news/api/trace/trajectories/${submissionId}`);
   console.log('Trace response:', JSON.stringify(traceResponse));
 
   await browser.close();
