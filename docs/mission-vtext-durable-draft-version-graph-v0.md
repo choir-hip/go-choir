@@ -871,6 +871,68 @@ next executable probe:
   Prefer prompt and tool-choice surface shaping over deterministic role-specific
   control flow; keep the agent harness uniform.
 
+checkpoint update, 2026-05-26 04:01 UTC:
+
+- Prompt/contract fix `9a7e533b4b4b9d95044fa30ccb062bd83db7cf02`
+  landed and deployed. CI run `26430553860` passed, FlakeHub run
+  `26430553844` passed, and staging `/health` reported proxy and sandbox on
+  deployed commit `9a7e533b4b4b9d95044fa30ccb062bd83db7cf02`, deployed at
+  `2026-05-26T03:30:21Z`.
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptPreservesExplicitHardConstraints|TestVTextPromptCurrentEventsRequiresResearcher|TestInitialVTextToolChoiceUsesExactTools|TestVTextInitialEditContinuationClassifiesPrompts|TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt|TestVTextInitialEditRequiresContinuationButSpawnDoesNotForceSecondEdit' -count=1`.
+- Local comprehensive continuation proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionRequiresActualContinuation' -count=1`.
+- Full long-section rubric rerun command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-9a7e533-full-20260526T033108Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Kimi low passed again. Evidence:
+  `test-results/vtext-long-section-rubric-staging-9a7e533-full-20260526T033108Z/fireworks-kimi-k2p6-low.json`.
+- DeepSeek v4 Flash medium failed, but the failure narrowed materially.
+  Trace showed researcher and super work completed, command hash present,
+  source ledger present, all 12 sections present, and marker preserved. The
+  only strict content assertion that failed was the required update sentence
+  prefixes: `SECTION 1 UPDATE:`, `SECTION 7 UPDATE:`, and
+  `SECTION 12 UPDATE:` were absent from the final replacement. Evidence:
+  `test-results/vtext-long-section-rubric-staging-9a7e533-full-20260526T033108Z/fireworks-deepseek-v4-flash-medium.json`.
+- GPT-5.5 low also changed failure shape. It no longer failed at "no workers":
+  Trace showed two researchers, one super, searches, `spawn_agent`, repeated
+  `request_super_execution`, and `super:bash`. However, no post-marker
+  appagent revision was written. VText produced the initial working draft,
+  the user marker became the head, and subsequent VText turns repeatedly
+  requested super instead of writing the final grounded revision. Super ran
+  `bash`, including one error result, but did not deliver a usable
+  `submit_coagent_update` before the strict timeout. Evidence:
+  `test-results/vtext-long-section-rubric-staging-9a7e533-full-20260526T033108Z/chatgpt-gpt-5-5-low.json`.
+
+cognitive transform update:
+
+- Checklist-to-prompt transform: "Preserve hard constraints" as prose is too
+  diffuse for v4 Flash. The next prompt should materialize a compact checklist
+  of exact required prefixes/markers already visible in the document/request,
+  so replace-all generation has nearby anchors.
+- Negative-space transform: GPT did perform the missing actions after the
+  previous fix. The remaining empty space is not "can GPT delegate" but "can
+  the super request lifecycle produce an addressed evidence packet and stop
+  VText from re-requesting instead of revising."
+- Signal routing transform: repeated `request_super_execution` calls are a
+  valuable signal for VText and the mission; they show an unresolved execution
+  obligation, but after a request exists they should not monopolize every
+  subsequent VText turn.
+
+remaining error field:
+
+- v4 Flash still needs stronger exact-prefix retention for long structured
+  replacements.
+- GPT-5.5 low still needs a clearer super-result contract and VText behavior
+  for "super already requested / evidence not yet delivered" states.
+
+next executable probe:
+
+- Add dynamic prompt materialization for exact hard requirements already present
+  in the document/request, especially `SECTION n UPDATE:` prefixes and
+  `USER_*MARKER*` strings, and strengthen the super continuation objective so
+  bounded command work must report through `submit_coagent_update` whether the
+  command succeeds or fails.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
