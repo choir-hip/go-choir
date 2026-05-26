@@ -1234,6 +1234,72 @@ next executable probe:
   obligations despite the preference for prompt-only coordination. If choosing
   (b), document why prompt-only alternatives were falsified first.
 
+checkpoint update, 2026-05-26 06:08 UTC:
+
+- Manual QA reproduced two visible product failures: mobile bootstrap sometimes
+  waits about 20s and reports `VM route returned 502`, while simple baseball
+  prompts can remain stuck in weak v1/v2 research-in-progress states instead of
+  converging to a useful next version.
+- Staging `/health` during the investigation still reported `vmctl_status=ok`,
+  but lifecycle counters showed real route pressure: `bootstrap.total` had 23
+  errors out of 238 attempts, with `http_502=8` and `resolve_error=15`;
+  `bootstrap.resolve` max duration was 15098ms.
+- Fresh-account default-policy proof command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DEFAULT_POLICY_EVIDENCE_DIR=../test-results/vtext-default-policy-current-20260526T055414Z npx playwright test tests/vtext-default-policy-proof.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- The default-policy proof produced evidence despite a Playwright artifact
+  timeout: VText and researcher both resolved to
+  `fireworks/accounts/fireworks/models/deepseek-v4-flash` with
+  `reasoning=medium`, and the document reached v2 after about 176s. Evidence:
+  `test-results/vtext-default-policy-current-20260526T055414Z/default-policy-proof.json`.
+- The v2 was still weak: it incorporated only partial baseball findings and
+  explicitly said final scores were still being gathered. This falsifies the
+  simple theory that the manual problem is only stale `low`/`none` model policy.
+- Explicit low-control command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-low VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-current-low-control-20260526T055414Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Low-control result: v1 at about 3.4s, a researcher was spawned, one
+  `web_search` ran, but no findings reached VText within the observation
+  window. Evidence:
+  `test-results/vtext-model-cadence-current-low-control-20260526T055414Z/fireworks-deepseek-v4-flash-low.json`.
+- Explicit medium-control command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-current-medium-control-20260526T055912Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Medium-control result: v1 at about 6.8s, first researcher update at about
+  19.8s, v2 at about 29.8s, then the researcher kept issuing search/fetch calls
+  through the rest of the 90s observation window without another
+  `submit_coagent_update`, so no v3 arrived. Evidence:
+  `test-results/vtext-model-cadence-current-medium-control-20260526T055912Z/fireworks-deepseek-v4-flash-medium.json`.
+
+belief-state changes:
+
+- New computers are no longer stuck on generated V4 Flash `low`/`none` policy;
+  the deployed default path is using `medium` for VText/researcher.
+- V4 Flash `low` remains unsuitable for this product path because it can spawn
+  research and still fail to deliver the first findings update.
+- V4 Flash `medium` is better, but still starves the revision cadence after the
+  first partial checkpoint. The visible v2 may promise follow-up research or
+  comprehensive completion even when no new VText-driving update is actually
+  delivered.
+- The next prompt-only fix should tighten the coagent communication contract:
+  researchers that continue past the first checkpoint must send incremental
+  updates before another search batch, and VText must not write "follow-up
+  researcher dispatched" or equivalent future-tense coordination claims unless
+  it actually uses `spawn_agent` in that turn.
+
+remaining error field:
+
+- Bootstrap route pressure is real and should be tracked separately from model
+  quality; manual mobile UX can look broken even when vmctl aggregate health is
+  `ok`.
+- V4 `medium` simple sports cadence still lacks reliable v3 convergence.
+- Prompt-only coordination has not yet been exhausted for this simple sports
+  failure; unlike the long mixed command rubric, this can still plausibly be
+  improved without a role-specific harness branch.
+
+next executable probe:
+
+- Strengthen only role/tool prompt contracts for researcher incremental
+  checkpoints and VText truthful coordination language. Then rerun the two
+  focused controls before returning to the strict long-section matrix.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
