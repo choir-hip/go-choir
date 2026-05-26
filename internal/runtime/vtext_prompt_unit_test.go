@@ -214,6 +214,9 @@ func TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt(t *testing.T) 
 func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) {
 	objective := buildVTextResearchContinuationObjective("nba update")
 	for _, want := range []string{
+		"Temporal grounding",
+		"Current UTC date/time at delegation",
+		"For relative-date requests",
 		"First checkpoint protocol",
 		"Run at most one focused search batch",
 		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update",

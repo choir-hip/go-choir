@@ -239,6 +239,11 @@ func vtextPromptNeedsResearchContinuation(prompt string) bool {
 func buildVTextResearchContinuationObjective(prompt string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Research the user's request for VText.
 
+Temporal grounding:
+- Current UTC date/time at delegation: %s.
+- For relative-date requests such as today, tonight, yesterday, last night, latest, current, or now, anchor search queries and findings to this date/time.
+- If the user's locale or sport timezone is uncertain, state that uncertainty instead of silently choosing a stale date range.
+
 First checkpoint protocol:
 - Run at most one focused search batch, or one search plus one targeted fetch, before the first submit_coagent_update call.
 - As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update with kind="findings".
@@ -247,7 +252,7 @@ First checkpoint protocol:
 - If research discovers that another role is needed, include a typed capability_requests entry instead of trying to exercise that capability yourself.
 - After the first packet, continue only if the next pass is likely to materially change the document, and checkpoint each new material cluster.
 
-User request: %s`, strings.TrimSpace(prompt)))
+User request: %s`, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(prompt)))
 }
 
 func buildVTextSuperContinuationObjective(prompt string) string {

@@ -311,6 +311,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 
 	var b strings.Builder
 	b.WriteString(corePrompt)
+	b.WriteString("\n\nCurrent UTC date/time: ")
+	b.WriteString(time.Now().UTC().Format(time.RFC3339))
+	b.WriteString(". Treat relative-date requests such as today, tonight, yesterday, last night, latest, current, or now as time-sensitive. Anchor searches, evidence, and claims to this date/time, and state timezone uncertainty when the user's locale is not known.")
 	if strings.TrimSpace(rolePrompt) != "" {
 		b.WriteString("\n\nRole-specific instructions:\n")
 		b.WriteString(rolePrompt)

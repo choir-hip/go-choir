@@ -1544,6 +1544,9 @@ func TestVTextSystemPromptSharesChoirCoreContext(t *testing.T) {
 	if !strings.Contains(prompt, "You are one agent inside Choir, a multiagent writing, research, and execution system.") {
 		t.Fatalf("system prompt missing shared Choir context: %q", prompt)
 	}
+	if !strings.Contains(prompt, "Current UTC date/time:") || !strings.Contains(prompt, "Treat relative-date requests") {
+		t.Fatalf("system prompt missing temporal grounding context: %q", prompt)
+	}
 	if !strings.Contains(prompt, "VText is a durable document owner, not a one-shot answerer.") {
 		t.Fatalf("system prompt missing vtext wake semantics: %q", prompt)
 	}
