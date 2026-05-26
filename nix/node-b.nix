@@ -138,6 +138,7 @@ in
   };
 
   # Caddy reverse proxy (TLS termination → Go services + frontend)
+  # Primary public/staging host is choir.news; old domains redirect here.
   services.caddy = {
     enable = true;
     virtualHosts."choir.news" = {
