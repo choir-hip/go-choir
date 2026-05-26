@@ -198,6 +198,7 @@
         maild = mkGoService {
           pname = "maild";
           subPackage = "cmd/maild";
+          vendorHash = "sha256-dqBHF0LSI8L52jtgRZct1h8pw2C/boJsqBwsM1Z9ayE=";
           internalDirs = [
             "internal/buildinfo"
             "internal/maild"
