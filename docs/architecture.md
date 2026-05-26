@@ -8,9 +8,11 @@
 > `docs/current-architecture.md`, `docs/north-star.md`,
 > `docs/runtime-invariants.md`, and `docs/implementation-scope.md`. Those files
 > define the current product north star, vtext contract, active/background VM
-> model, Dolt boundaries, and phase boundaries. Where this older sketch
-> over-focuses local runtime mechanics, scheduler abstractions, shared-worker
-> assumptions, or stale authority/lease ideas, the newer docs take precedence.
+> model, Dolt boundaries, phase boundaries, and current deployed domain
+> (`https://choir.news`). Where this older sketch over-focuses local runtime
+> mechanics, scheduler abstractions, shared-worker assumptions, stale
+> authority/lease ideas, or old `draft.choir-ip.com` / `choir-ip.com` deployment
+> wording, the newer docs take precedence.
 
 ---
 
@@ -601,8 +603,8 @@ Note: Dolt supports normal SQL writes without committing. You can INSERT/UPDATE 
 #### Future: Published E-Texts (not in v1 scope)
 
 The architecture supports a future publishing path for vtexts:
-- Users publish vtexts to choir-ip.com where they are viewable without login
-- Publishing uses Dolt's native push/pull: the sandbox's embedded Dolt pushes a branch/snapshot to a platform-level Dolt instance on choir-ip.com
+- Users publish vtexts to `choir.news` where they are viewable without login
+- Publishing uses Dolt's native push/pull: the sandbox's embedded Dolt pushes a branch/snapshot to a platform-level Dolt instance behind `choir.news`
 - The platform-level Dolt serves as a read-only public database for published content
 - This is a natural fit because Dolt is literally Git-for-data — push/pull between instances is a first-class operation
 - Architecture implication: the per-sandbox Dolt schema must be designed so that publishable content can be cleanly extracted (the current table design with `documents` + `content` + `citations` supports this)
@@ -1933,16 +1935,20 @@ Each service can be built and tested incrementally. The real distributed archite
 | systemd template layer | vmctl manages VMs directly via firecracker-go-sdk |
 | vfkit-runtime-ctl scripts | vmctl manages VMs directly via firecracker-go-sdk |
 
-### 8.5 Deployment Target: OVH Node B (draft.choir-ip.com)
+### 8.5 Deployment Target: OVH Node B (`choir.news`)
 
-go-choir deploys to **OVH node B** (draft.choir-ip.com) while choiros-rs stays on node A (choir-ip.com). After both systems are validated, go-choir promotes to node A.
+go-choir deploys to **OVH node B** and is served publicly at
+`https://choir.news`. The old `draft.choir-ip.com` host redirects to
+`https://choir.news`. The old `choir-ip.com` apex is legacy DNS and still needs
+Cloudflare authority/credentials before it can redirect reliably to the current
+primary domain.
 
 OVH deployment credentials and SSH details are stored in the choiros-rs cogent private notes database at `/Users/wiz/choiros-rs/.cogent/cogent-private.db`. Access via: `cogent work private-note` CLI in the choiros-rs repo, or directly query the `private_notes` table. Deploy mission workers will need to extract: SSH endpoints, deploy procedures, node B NixOS configuration, Caddy setup.
 
 #### Deployment Architecture on Node B
 
 ```
-draft.choir-ip.com (OVH Node B, NixOS)
+choir.news (OVH Node B, NixOS)
 ├── Caddy (TLS, static assets, reverse proxy)
 ├── auth service (Go binary, systemd unit)
 ├── proxy service (Go binary, systemd unit)

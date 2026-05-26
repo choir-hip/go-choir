@@ -1,9 +1,9 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-25
-**Baseline checked:** VM retention/pruning policy hardening after deploy-speed
-and disk-pressure work.
+**Last updated:** 2026-05-26
+**Baseline checked:** `choir.news` primary-domain cutover, WebAuthn hard reset,
+VM retention/pruning policy hardening, deploy-speed, and disk-pressure work.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -51,7 +51,7 @@ platform substrate
   NixOS deploy, Go proxy/runtime services, Svelte frontend, `vmctl`,
   Firecracker/NixOS VM support, host auth/session state, and platform APIs.
 - **Platform/default computer state** is the official app/desktop experience
-  currently projected by `draft.choir-ip.com` and used as the conceptual base
+  currently projected by `https://choir.news` and used as the conceptual base
   for new user computers.
 - **User active computers** are persistent private machine-worlds with their own
   files, embedded Dolt state, desktop state, app state, prompts, and eventual
@@ -72,10 +72,13 @@ platform docs record the common baseline and the desired divergence semantics.
 
 ## Substrate State
 
-- **Acceptance environment:** `https://draft.choir-ip.com`.
+- **Acceptance environment:** `https://choir.news`.
 - **Source of truth:** GitHub `origin/main` for tracked platform files.
 - **Deploy model:** GitHub Actions deploys tracked platform changes to Node B.
   Documentation-only commits intentionally skip CI/CD.
+- **Legacy domains:** `draft.choir-ip.com` redirects to `choir.news`.
+  `choir-ip.com` is legacy DNS and still needs Cloudflare authority/credentials
+  before it can redirect reliably to the current primary domain.
 - **Runtime shape:** Go proxy/runtime services, Svelte frontend, `vmctl`, NixOS
   host services, Firecracker-backed user computers, and embedded per-user Dolt
   for runtime/control product state.
@@ -258,6 +261,31 @@ Known gaps:
   they preserve stronger revision/trajectory catch-up semantics.
 
 ## Current Proof Anchors
+
+The current primary staging origin is `https://choir.news`. Older proof commands
+below that name `https://draft.choir-ip.com` are historical evidence from before
+the 2026-05-26 domain cutover, not current instructions for new acceptance runs.
+
+Recent deployed platform proof for the primary-domain cutover:
+
+- behavior/deploy commits:
+  `84ad8d0d0c87e36cd329bca226b17432c43b57d7`,
+  `7fd49beee9b1ed517e73bc0885a6f3f8a2d1e6a5`, and
+  `2b2243394ce86cc8a79d62e615fc6039c8c658a9`;
+- final evidence checkpoint:
+  `a077efa` in `docs/mission-move-to-choir-news-v0.md`;
+- CI/deploy run:
+  `https://github.com/choir-hip/go-choir/actions/runs/26441752735`;
+- staging health reported proxy and sandbox commit/deployed_commit
+  `2b2243394ce86cc8a79d62e615fc6039c8c658a9`, deployed at
+  `2026-05-26T08:40:19Z`;
+- deployed browser proof used real origin `https://choir.news`, registered a
+  fresh account after the WebAuthn RP-ID hard reset, logged out, logged back in,
+  and observed a virtual authenticator credential for RP ID `choir.news`;
+- auth database backup before the hard reset:
+  `/var/lib/go-choir/auth/auth.db.pre-choir-news-20260526T084548Z`;
+- residual blocker: `choir-ip.com` remains pointed at legacy DNS until
+  Cloudflare credentials/record authority are available.
 
 Recent deployed platform proof for live multi-device computer sync:
 

@@ -1,6 +1,6 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-05-20
+Last reviewed: 2026-05-26
 
 This directory contains canonical architecture docs, active MissionGradient
 missions, proof artifacts, and a small number of historical pointers. Do not
@@ -124,6 +124,9 @@ Use these buckets when reading or editing docs:
 - `docs/mission-platform-dolt-publication-retrieval-citation-v0.md` -
   active/landing substrate mission for platform Dolt publication/retrieval/
   citation.
+- `docs/mission-move-to-choir-news-v0.md` - completed primary-domain cutover
+  record for `choir.news`, including Gandi DNS, WebAuthn hard reset, deployed
+  acceptance, and the remaining `choir-ip.com` Cloudflare blocker.
 - `docs/mission-run-acceptance-verification-v0.md` - historical run acceptance
   mission and evidence record.
 - `docs/mission-embedded-dolt-runtime-migration-v0.md` - completed embedded

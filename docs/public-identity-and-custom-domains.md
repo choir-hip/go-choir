@@ -1,7 +1,7 @@
 # Public Identity And Custom Domains
 
 **Status:** roadmap direction; not the current implementation mission
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-26
 
 Choir's public identity model should not privilege any particular person or
 account. A user's public surface is addressed by a handle they choose, and later
@@ -15,6 +15,11 @@ Default platform routes:
 choir.news              -> public platform computer surface
 choir.news/:handle      -> public surface for a user-selected handle
 ```
+
+`choir.news` is also the current deployed staging/primary domain. Legacy
+`draft.choir-ip.com` traffic redirects to it. Legacy `choir-ip.com` is not a
+reliable alias yet because its DNS still requires Cloudflare
+authority/credentials before it can be pointed at Node B and certified.
 
 Custom domain routes:
 
