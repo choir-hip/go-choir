@@ -2464,6 +2464,61 @@ func TestVTextWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 	}
 }
 
+func TestVTextWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
+	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated after pending mutation cleared."))
+	clock := &fakeVTextWakeClock{}
+
+	h, s, rt := vtextAPISetupWithProviderAndOptions(t, provider, true, withVTextWakeAfterFuncForTest(clock.afterFunc))
+	docID, _ := createDocWithUserRevision(t, h)
+
+	blockingRunID := "blocking-vtext-mutation"
+	if err := s.CreateAgentMutation(context.Background(), store.AgentMutation{
+		DocID:     docID,
+		RunID:     blockingRunID,
+		OwnerID:   "user-1",
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+
+	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Research while vtext mutation is pending", "user-1", map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    docID,
+	})
+	if err != nil {
+		t.Fatalf("start research run: %v", err)
+	}
+	if _, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "vtext:"+docID, "", "researcher-1", "researcher", "Evidence while a previous VText mutation is still pending."); err != nil {
+		t.Fatalf("post worker message: %v", err)
+	}
+
+	clock.fireAll()
+	runs, err := rt.Store().ListRunsByChannel(context.Background(), "user-1", docID, 20)
+	if err != nil {
+		t.Fatalf("list channel runs after blocked wake: %v", err)
+	}
+	for _, run := range runs {
+		if agentProfileForRun(&run) == AgentProfileVText && run.ParentRunID == researchRun.RunID {
+			t.Fatalf("wake run should wait for pending mutation to clear, got %+v", run)
+		}
+	}
+
+	if err := s.DeferAgentMutation(context.Background(), blockingRunID); err != nil {
+		t.Fatalf("defer blocking mutation: %v", err)
+	}
+	clock.fireAll()
+
+	revs := waitForRevisionCount(t, s, docID, "user-1", 2, 5*time.Second)
+	for _, rev := range revs {
+		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "Integrated after pending mutation cleared.") {
+			return
+		}
+	}
+	t.Fatalf("expected requeued wake revision after pending mutation cleared, got %+v", revs)
+}
+
 func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	provider := newVTextEditToolProvider(vtextReplaceAllResult("Integrated persisted findings into the next revision."))
 	provider.delay = 500 * time.Millisecond
