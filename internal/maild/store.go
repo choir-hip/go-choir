@@ -273,6 +273,40 @@ func (s *Store) ResolveAlias(ctx context.Context, domain, localPart string) (Ema
 	return alias, nil
 }
 
+// ListAliases returns configured aliases for operator inspection.
+func (s *Store) ListAliases(ctx context.Context) ([]EmailAlias, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT
+		id, domain, local_part, coalesce(canonical_number, 0), target_type,
+		target_id, visibility, receive_policy_id
+		FROM email_aliases
+		ORDER BY domain, local_part`)
+	if err != nil {
+		return nil, fmt.Errorf("list aliases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var aliases []EmailAlias
+	for rows.Next() {
+		var alias EmailAlias
+		if err := rows.Scan(
+			&alias.ID,
+			&alias.Domain,
+			&alias.LocalPart,
+			&alias.CanonicalNumber,
+			&alias.TargetType,
+			&alias.TargetID,
+			&alias.Visibility,
+			&alias.ReceivePolicyID,
+		); err != nil {
+			return nil, fmt.Errorf("scan alias: %w", err)
+		}
+		aliases = append(aliases, alias)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return aliases, nil
+}
+
 // RecordWebhookEvent stores a verified webhook event idempotently.
 func (s *Store) RecordWebhookEvent(ctx context.Context, event WebhookEvent) (bool, error) {
 	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO email_webhook_events (
@@ -303,6 +337,50 @@ func (s *Store) CountWebhookEvents(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// ListWebhookEvents returns recent provider webhook receipts without raw payloads.
+func (s *Store) ListWebhookEvents(ctx context.Context, limit int) ([]WebhookEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT
+		id, provider, provider_event_id, coalesce(provider_message_id, ''), event_type, '', received_at
+		FROM email_webhook_events
+		ORDER BY received_at DESC
+		LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list webhook events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var events []WebhookEvent
+	for rows.Next() {
+		var event WebhookEvent
+		var receivedAt string
+		if err := rows.Scan(
+			&event.ID,
+			&event.Provider,
+			&event.ProviderEventID,
+			&event.ProviderMessageID,
+			&event.EventType,
+			&event.RawPayload,
+			&receivedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan webhook event: %w", err)
+		}
+		if receivedAt != "" {
+			parsed, err := time.Parse(time.RFC3339Nano, receivedAt)
+			if err != nil {
+				return nil, fmt.Errorf("parse webhook received_at: %w", err)
+			}
+			event.ReceivedAt = parsed
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 // Stats returns non-sensitive mailbox counters for service health.

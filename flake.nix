@@ -205,6 +205,15 @@
             "internal/server"
           ];
         };
+        maildctl = mkGoService {
+          pname = "maildctl";
+          subPackage = "cmd/maildctl";
+          vendorHash = "sha256-dqBHF0LSI8L52jtgRZct1h8pw2C/boJsqBwsM1Z9ayE=";
+          internalDirs = [
+            "internal/maild"
+            "internal/server"
+          ];
+        };
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";

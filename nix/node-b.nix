@@ -668,6 +668,7 @@ in
     pkg-config
     icu
     icu.dev
+    goChoirPackages.maildctl
     procps
     ripgrep
     vim
