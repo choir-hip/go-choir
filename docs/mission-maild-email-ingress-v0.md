@@ -512,3 +512,56 @@ Required next change:
 
 - Make the default `000@choir.news` seed upsert `target_id` from the configured
   `MAILD_ROOT_OWNER_ID` while leaving non-default aliases untouched.
+
+## Deployed Checkpoint: maild ready, Resend receiving blocked on credentials
+
+Recorded: 2026-05-26.
+
+Status:
+
+`maild` v0 is deployed on Node B and the host-side mailbox state is now private.
+The service is configured with the send-only Resend API key and
+`000@choir.news` resolves to the inferred founder auth user id. Real receiving
+is not yet enabled because the available Resend key is restricted to sending and
+there is no Resend webhook signing secret yet.
+
+Evidence:
+
+```text
+latest deployed commit: 76c5d18a7fb705c5befcf35abadd2df3b9132fbb
+deploy method: manual source-truth deploy from origin/main after GitHub Actions did not emit runs for post-9192f37 pushes
+focused local tests: nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
+staging /health: proxy and sandbox report deployed_commit 76c5d18a7fb705c5befcf35abadd2df3b9132fbb
+maild route proof: GET https://choir.news/api/email/resend/webhook -> 405 method not allowed
+webhook guard proof: unsigned POST -> 503 webhook_secret_not_configured
+mail state modes:
+  600 root root /var/lib/go-choir/maild.env
+  700 root root /var/lib/go-choir/mail
+  600 root root /var/lib/go-choir/mail/mail.db
+alias proof:
+  choir.news|000|user|5bd6de97-3b58-408c-bf89-c42c81b083de
+Gandi LiveDNS status: choir.news is on LiveDNS
+current root MX: 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
+current root TXT SPF: "v=spf1 include:_mailcust.gandi.net ?all"
+Resend API probe with local key: 401 restricted_api_key, "restricted to only send emails"
+```
+
+Remaining blocker:
+
+- Need a Resend API key with domain/webhook/receiving permissions, or a
+  dashboard-created webhook endpoint plus its one-time signing secret, before
+  DNS can safely be changed.
+- Need the exact Resend receiving MX record for `choir.news` before replacing
+  the current Gandi MX records. Do not guess it from generic docs.
+
+Next safe operation:
+
+1. Create or provide a Resend key with receiving/domain/webhook access.
+2. Register webhook endpoint
+   `https://choir.news/api/email/resend/webhook` for `email.received`.
+3. Store the returned signing secret as `RESEND_WEBHOOK_SECRET` in
+   `/var/lib/go-choir/maild.env`.
+4. Enable receiving for `choir.news` in Resend and copy the exact required MX
+   record.
+5. Snapshot current Gandi DNS, then replace root MX only after accepting that
+   root-domain inbound mail will leave Gandi mailbox delivery and go to Resend.
