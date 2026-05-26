@@ -477,3 +477,38 @@ Required next change:
 
 - Add explicit mode repair for the mail state paths and set a restrictive
   `go-choir-maild` umask so future mailbox files are not created world-readable.
+
+## Staging Config Finding: default alias owner reconciliation
+
+Recorded: 2026-05-26.
+
+Problem:
+
+`maild` was first started before `/var/lib/go-choir/maild.env` existed. That
+means the initial schema seed created `000@choir.news` with the fallback
+`MAILD_ROOT_OWNER_ID` value `root`. The current seed path uses
+`INSERT OR IGNORE` for the default alias, so deploying the real
+`MAILD_ROOT_OWNER_ID` later would not update the already-created row.
+
+Evidence:
+
+```text
+staging commit with first active maild: 9192f378aa547ad93088b547b6213c285dc8fa67
+maild env file at first start: missing
+maild default RootOwnerID without env: root
+seed behavior: INSERT OR IGNORE INTO email_aliases for alias-choir-news-000
+auth users include real owner candidate: 5bd6de97-3b58-408c-bf89-c42c81b083de / yusefnathanson@me.com
+```
+
+Belief-state update:
+
+- Configuration can legitimately arrive after first service boot; bootstrap
+  must reconcile platform-owned seed rows that are intended to track config.
+- Numeric addresses are still not auth secrets, but an incorrect seed owner
+  would make the real founder mailbox invisible and could route mail to a
+  non-principal.
+
+Required next change:
+
+- Make the default `000@choir.news` seed upsert `target_id` from the configured
+  `MAILD_ROOT_OWNER_ID` while leaving non-default aliases untouched.
