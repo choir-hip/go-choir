@@ -1440,6 +1440,35 @@ Belief-state update:
 - Real outbound acceptance still depends on Resend domain verification and a
   sufficiently scoped/provider-valid key.
 
+## Evidence Finding: message list attachment indicator is absent
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The v0 UI scope requires a message-row attachment indicator. `maild` stores
+attachment metadata and the detail API sets `has_attachments` only after loading
+the selected message's attachment list, but the list API does not currently
+compute `has_attachments` for each row. The Email app therefore cannot show an
+attachment signal in Inbox/Sent/Quarantine before opening a message.
+
+Evidence:
+
+```text
+reference: docs/choir-email-reference-v0.md requires message-list attachment indicator
+scope: docs/mission-maild-email-ingress-v0.md V0 UI Scope requires attachment indicator
+API type: internal/maild/api.go messageSummary has HasAttachments
+list path: internal/maild/api.go handleMessageList uses summarizeMessage(msg)
+store path: internal/maild/store.go ListMessages does not include attachment existence
+UI: frontend/src/lib/EmailApp.svelte message rows render sender/time/subject/snippet/trust only
+```
+
+Required next change:
+
+- Compute attachment existence for owner-visible message list rows and render a
+  compact attachment indicator in the Email app row without loading or
+  processing attachment content.
+
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 
 Recorded: 2026-05-26.
