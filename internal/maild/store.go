@@ -232,6 +232,13 @@ func (s *Store) seedDefaults(cfg *Config) error {
 		DefaultRootAliasID, cfg.PrimaryDomain, cfg.RootOwnerID, DefaultPublicPolicyID, now); err != nil {
 		return fmt.Errorf("seed 000 alias: %w", err)
 	}
+	if _, err := s.db.Exec(`UPDATE email_aliases
+		SET domain = ?, local_part = '000', canonical_number = 0, target_type = 'user',
+			target_id = ?, visibility = 'public', receive_policy_id = ?, disabled_at = NULL
+		WHERE id = ?`,
+		cfg.PrimaryDomain, cfg.RootOwnerID, DefaultPublicPolicyID, DefaultRootAliasID); err != nil {
+		return fmt.Errorf("reconcile 000 alias: %w", err)
+	}
 	return nil
 }
 

@@ -47,6 +47,21 @@ func TestEnsureSchemaSeedsRootAlias(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaReconcilesRootAliasOwner(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.RootOwnerID = "real-founder"
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema second pass: %v", err)
+	}
+	alias, err := store.ResolveAlias(context.Background(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	if alias.TargetID != "real-founder" {
+		t.Fatalf("TargetID = %q, want real-founder", alias.TargetID)
+	}
+}
+
 func TestRecordWebhookEventIdempotent(t *testing.T) {
 	store, _ := newTestStore(t)
 	event := WebhookEvent{
