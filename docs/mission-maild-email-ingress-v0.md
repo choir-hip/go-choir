@@ -612,3 +612,60 @@ Required next change:
 - Include `8087` in staging health probes.
 - Add a manual `workflow_dispatch` path that can force a host/frontend staging
   deploy from `main` without requiring an extra source edit.
+
+## Deployed Checkpoint: direct maild health proof
+
+Recorded: 2026-05-26.
+
+Status:
+
+The `maild` health evidence gap is closed for the deployed service. The
+workflow file now includes a manual dispatch path and the deploy smoke loop now
+checks port `8087`, but GitHub Actions still did not create a push run for the
+behavior commit and the first manual dispatch attempt returned an API 500.
+Staging was therefore advanced again through the manual source-truth Node B
+deploy path.
+
+Evidence:
+
+```text
+behavior commit: 2beec3c1f811d565fa1b78dfcb9f734998efba41
+local focused test: nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
+workflow YAML parse check: ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml")'
+push run evidence: no Actions run/check suite appeared for 2beec3c
+manual workflow dispatch attempt: gh workflow run CI --ref main -f force_staging_deploy=true -> HTTP 500
+deploy method: Node B /opt/go-choir fast-forward to origin/main, NixOS build/switch, service restart
+staging /health: proxy and sandbox report deployed_commit 2beec3c1f811d565fa1b78dfcb9f734998efba41
+maild local health probe:
+  status: ok
+  service: maild
+  primary_domain: choir.news
+  resend_api_key_configured: true
+  webhook_secret_configured: false
+  root_owner_id_configured: true
+  storage_root_configured: true
+  webhook_max_bytes_configured: true
+  stats.aliases: 1
+  stats.messages: 0
+  stats.quarantined_attachments: 0
+  stats.webhook_events: 0
+maild deploy smoke probes: 8081, 8082, 8083, 8084, 8086, 8087 all returned health
+public route proof: GET https://choir.news/api/email/resend/webhook -> 405 method not allowed
+mail state modes:
+  600 root root /var/lib/go-choir/maild.env
+  700 root root /var/lib/go-choir/mail
+  600 root root /var/lib/go-choir/mail/mail.db
+```
+
+Remaining blocker:
+
+- The final real inbound acceptance path still requires a Resend key or
+  dashboard action that can create/inspect receiving domains and webhook
+  endpoints. The available key remains send-only; `RESEND_WEBHOOK_SECRET` is
+  intentionally absent and health now reports that directly.
+
+Residual platform risk:
+
+- GitHub Actions did not emit runs for several post-`9192f37` pushes and manual
+  dispatch returned an API 500. The workflow now contains a recovery trigger,
+  but GitHub's event/run creation path remains unproven in this session.
