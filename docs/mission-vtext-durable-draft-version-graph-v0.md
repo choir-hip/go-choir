@@ -456,6 +456,14 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
+- 2026-05-25 staging product-path worker-concurrency probe exposed a separate
+  coordination failure before worker-update integration could be evaluated:
+  v4-flash medium wrote a useful VText v1, the injected user revision preserved
+  the exact marker text, then VText attempted `spawn_agent` and the call errored.
+  The document stayed at one appagent revision plus the user marker revision for
+  the full observation window. This matches the earlier v4 long-row malformed
+  delegation noise and must be treated as a tool-argument normalization problem,
+  not as proof that worker updates can be integrated over dirty user edits.
 - 2026-05-25 local product-path probe identified the first concrete dirty-head
   failure surface: current autosave creates durable user revisions when the head
   is stable, but a dirty editor based on revision `A` can race with a newer
@@ -500,6 +508,14 @@ what was proven:
 - Deployed dirty-draft proof:
   `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-staging-b2252fe-20260525T232239Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --reporter=line`
   passed.
+- Deployed worker-concurrency probe:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-worker-concurrency-staging-b2252fe-20260525T235603Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'worker-driven VText follow-up' --reporter=line`
+  failed: the exact user marker persisted in a durable user revision, but
+  `spawn_agent` errored and no second appagent revision appeared within the
+  observation window. Evidence: doc
+  `b3cdb2d6-3ac8-4fad-8632-65ce5418072b`, submission
+  `8ad567dd-cd0f-4dda-b6dd-ee3f8eebf50a`, failed trace artifact
+  `frontend/test-results/vtext-durable-draft-versio-0f3ac-rker-driven-VText-follow-up-chromium/trace.zip`.
 - Model-suite eval report created:
   `docs/vtext-durable-draft-version-graph-eval-report-2026-05-25.md`.
 
@@ -525,6 +541,9 @@ remaining error field:
 - Need broader long-content/many-version/concurrent-worker evaluation; current
   model suite covers research/coding/long prompts but does not yet deterministically
   combine user dirty edits with a worker-update storm.
+- Need harden spawn/delegation argument normalization without weakening role
+  allowlists: v4-flash medium can emit malformed wrapper text around a role value,
+  causing `spawn_agent` to error after a successful VText edit.
 - Need improve/monitor long-prompt coordination: v4-flash medium required a
   longer 180s observation window and showed malformed delegation noise; GPT-5.5
   low still produced duplicate side-effect attempts; Kimi low was clean but slow

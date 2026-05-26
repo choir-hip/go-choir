@@ -110,6 +110,13 @@ but this is still coordination noise.
 - This report does not yet prove a two-device UI draft sync workflow before
   `Revise`; it proves VM-backed product API persistence and local browser dirty
   rebase behavior.
+- A staging product-path probe for dirty user edit plus worker follow-up
+  preserved the user marker, but did not reach worker integration: v4-flash
+  medium wrote v1, then its `spawn_agent` call errored, leaving no researcher
+  update and no second appagent revision within the observation window.
+  Evidence: submission `8ad567dd-cd0f-4dda-b6dd-ee3f8eebf50a`, document
+  `b3cdb2d6-3ac8-4fad-8632-65ce5418072b`, failed Playwright trace
+  `frontend/test-results/vtext-durable-draft-versio-0f3ac-rker-driven-VText-follow-up-chromium/trace.zip`.
 - The long multi-section prompt is still a coarse content-quality check. It does
   not yet assert section-by-section obligations beyond revision timing and trace
   noise.
