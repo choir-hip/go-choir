@@ -711,6 +711,50 @@ next executable probe:
   obligation is present, and must not use `[CMD]` as evidence unless a super
   update returned it. Do not add deterministic wrapper/control-flow tools.
 
+checkpoint update, 2026-05-26 02:25 UTC:
+
+- Prompt-only fix `d7921ec86258a08da97fde0242a6f2f371614a2a` landed and
+  deployed. CI run `26428490820` passed; staging `/health` reported proxy and
+  sandbox deployed at `d7921ec86258a08da97fde0242a6f2f371614a2a`, deployed at
+  `2026-05-26T02:19:04Z`, with `vmctl_status=ok`.
+- Focused local prompt proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPrompt|TestInitialVTextToolChoiceUsesExactTools|TestVTextPromptStoryWithCurrentFactsRequiresGrounding' -count=1`.
+- Post-fix long-section Kimi row command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-d7921ec-full-20260526T021939Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Kimi low still failed `traceHasSuper=false`, but it now reached final rubric
+  shape quickly: marker preserved, all 12 sections present, source ledger and
+  section update sentences present. Evidence:
+  `test-results/vtext-long-section-rubric-staging-d7921ec-full-20260526T021939Z/fireworks-kimi-k2p6-low.json`.
+
+new problem evidence:
+
+- The static VText prompt now says not to claim super was requested without the
+  tool result, but the dynamic revision prompt still creates a conflicting
+  incentive: after a researcher packet arrives, it says to update the document
+  as soon as the packet can improve it.
+- In the Kimi row, VText consumed researcher updates, wrote a complete final
+  shape, and left command execution as pending, but did not call
+  `request_super_execution`.
+
+belief-state changes:
+
+- The next fix should still avoid wrapper tools and new routing APIs, but it
+  must remove the prompt conflict inside the dynamic VText revision prompt:
+  researcher evidence is enough to improve source sections, not enough to
+  advance command/evidence sections when a super obligation is open.
+
+remaining error field:
+
+- Prompt-only static wording is insufficient while dynamic revision instructions
+  prioritize immediate `edit_vtext` after worker findings.
+
+next executable probe:
+
+- Strengthen the dynamic VText revision prompt and role prompt so an open
+  command/code/browser/verification obligation has priority over another
+  source-grounded edit: call `request_super_execution` first, or write only an
+  explicit blocked state that does not satisfy `[CMD]`.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
