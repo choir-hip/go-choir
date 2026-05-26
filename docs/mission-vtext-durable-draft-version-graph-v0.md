@@ -456,6 +456,14 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
+- 2026-05-26 follow-up design decision: normalize coagent reporting into one
+  structured non-canonical update API rather than adding wrapper tools. The
+  right shape is Go-like: one `submit_coagent_update` primitive used by
+  researcher, super, vsuper, and co-super. Role differences belong in system
+  prompts and authority policy. The API should carry findings, evidence,
+  artifacts, questions, proposals, blockers, and typed `capability_requests`
+  symmetrically; those requests are signals for the owning supervisor/VText, not
+  deterministic auto-routing.
 - 2026-05-26 staging product-path long-section rubric probe failed across the
   accepted model set on deployed commit `2cf7253`. All rows preserved the dirty
   user marker and used researcher/search evidence, but none produced a super
