@@ -10,9 +10,9 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 status: checkpoint_incomplete
 current artifact state: deployed maild/proxy/frontend slice exists on Node B at d749fdc; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
-next executable probe: get exact Resend domain/receiving/webhook records and secret, install RESEND_WEBHOOK_SECRET, then update Gandi DNS only from provider truth and run real inbound/outbound acceptance
+next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
 
 ## Mission Frame
@@ -382,6 +382,7 @@ what was proven:
   - local Playwright visual harness renders Email app on desktop and mobile-sized windows with fixture mail and no `undefined` text
   - NixOS eval exposes go-choir-maild and Caddy webhook route before generic /api/*
   - Node B deployed commit identity and service health report d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+  - read-only provider readiness probe reports Resend/Gandi/Node B state without mutating DNS or printing secrets
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -398,8 +399,8 @@ remaining error field:
   - v0 does not yet expose raw headers/details in the UI
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
-next executable probe: fetch or enter exact Resend verification/MX/webhook data, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint d749fdc; configure Resend domain verification/receiving/webhook with exact provider records, update Gandi DNS only from provider truth, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint d749fdc; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -410,6 +411,7 @@ evidence artifact refs:
   - nix eval .#nixosConfigurations.go-choir-b.config.services.caddy.virtualHosts."choir.news".extraConfig
   - public /health deployed_commit d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
   - maild /health status ok with resend_api_key_configured true and webhook_secret_configured false
+  - scripts/mail-provider-readiness
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
@@ -955,3 +957,63 @@ Remaining blocker:
 - Real inbound, real outbound, and real reply threading require exact Resend
   domain verification, receiving/webhook setup, and Gandi DNS changes from
   provider-sourced records. `RESEND_WEBHOOK_SECRET` is still absent on Node B.
+
+## Provider Readiness Finding: available Resend key is send-only
+
+Recorded: 2026-05-26.
+
+Status:
+
+A read-only provider readiness probe now exists at
+`scripts/mail-provider-readiness`. It checks local credential presence, Resend
+domains, Resend webhooks, Gandi LiveDNS mail-related records, public DNS, and
+Node B `maild` health. It does not create domains, create webhooks, deploy
+secrets, or mutate DNS.
+
+Evidence:
+
+```text
+command: scripts/mail-provider-readiness
+mode: read-only
+local credentials:
+  RESEND_API_KEY: configured
+  RESEND_WEBHOOK_SECRET: missing
+  GANDI_PAT: configured
+Resend /domains:
+  http_status: 401
+  provider_error.name: restricted_api_key
+  provider_error.message: This API key is restricted to only send emails
+Resend /webhooks:
+  http_status: 401
+  provider_error.name: restricted_api_key
+  provider_error.message: This API key is restricted to only send emails
+Gandi LiveDNS mail state:
+  @ MX: 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
+  @ TXT: "v=spf1 include:_mailcust.gandi.net ?all"
+  no _dmarc TXT
+public DNS:
+  MX remains Gandi mail defaults
+  root TXT remains Gandi SPF
+Node B maild health:
+  status: ok
+  resend_api_key_configured: true
+  webhook_secret_configured: false
+  stats.messages: 0
+  stats.webhook_events: 0
+```
+
+Belief-state update:
+
+- The remaining blocker is external/provider-authority, not local service
+  readiness: the currently available Resend key can send API requests but cannot
+  read the domain records or webhooks needed for safe DNS configuration.
+- Gandi can be inspected and later mutated with the available PAT, but the
+  mission invariant still forbids DNS mutation until Resend supplies exact
+  provider records and a webhook signing secret.
+
+Next executable probe:
+
+- Use a broader temporary Resend API key or authenticated dashboard session to
+  create/retrieve `choir.news`, enable receiving, create/retrieve the
+  `email.received` webhook for `https://choir.news/api/email/resend/webhook`,
+  and capture exact DNS records plus `RESEND_WEBHOOK_SECRET`.

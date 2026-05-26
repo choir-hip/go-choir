@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Read-only readiness probe for Choir Email provider setup.
+#
+# This script intentionally does not create Resend domains/webhooks, deploy
+# secrets, or mutate Gandi DNS. It reports the exact external-provider state
+# needed before running the real maild inbound/outbound acceptance path.
+set -euo pipefail
+
+DOMAIN="${1:-choir.news}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CHOIR_MAIL_ENV_FILE:-${REPO_ROOT}/.env}"
+NODE_HOST="${CHOIR_MAIL_NODE_HOST:-node-b}"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command curl
+require_command jq
+
+sanitize_json() {
+  jq '
+    def scrub:
+      if type == "object" then
+        with_entries(
+          if (.key | test("(?i)(secret|token|api.?key|authorization)")) then
+            .value = "<redacted>"
+          else
+            .value |= scrub
+          end
+        )
+      elif type == "array" then
+        map(scrub)
+      else
+        .
+      end;
+    scrub
+  '
+}
+
+resend_get() {
+  local path="$1"
+  local tmp status
+  tmp="$(mktemp)"
+  status="$(curl -sS -o "$tmp" -w '%{http_code}' \
+    -H "Authorization: Bearer ${RESEND_API_KEY:-}" \
+    "https://api.resend.com${path}" || true)"
+  jq -n \
+    --arg status "$status" \
+    --argjson body "$(sanitize_json < "$tmp" 2>/dev/null || jq -Rs . < "$tmp")" \
+    '{http_status: ($status | tonumber), body: $body}'
+  rm -f "$tmp"
+}
+
+echo "== Choir Email Provider Readiness (${DOMAIN}) =="
+echo "mode: read-only"
+echo
+
+echo "== Local Credential Presence =="
+jq -n \
+  --arg resend_api_key "$(if [ -n "${RESEND_API_KEY:-}" ]; then echo configured; else echo missing; fi)" \
+  --arg resend_webhook_secret "$(if [ -n "${RESEND_WEBHOOK_SECRET:-}" ]; then echo configured; else echo missing; fi)" \
+  --arg gandi_pat "$(if [ -n "${GANDI_PAT:-}" ]; then echo configured; else echo missing; fi)" \
+  '{resend_api_key: $resend_api_key, resend_webhook_secret: $resend_webhook_secret, gandi_pat: $gandi_pat}'
+echo
+
+echo "== Resend Domains =="
+if [ -z "${RESEND_API_KEY:-}" ]; then
+  echo '{"status":"skipped","reason":"RESEND_API_KEY missing"}'
+else
+  resend_get "/domains" | jq --arg domain "$DOMAIN" '
+    if .http_status == 200 then
+      {
+        http_status,
+        status: "ok",
+        matching_domains: [
+          (.body.data // [])
+          | .[]
+          | select(.name == $domain)
+          | {id, name, status, region, capabilities}
+        ],
+        domain_count: ((.body.data // []) | length)
+      }
+    else
+      {
+        http_status,
+        status: "not_ready",
+        provider_error: {
+          name: .body.name,
+          message: .body.message,
+          statusCode: .body.statusCode
+        }
+      }
+    end'
+fi
+echo
+
+echo "== Resend Webhooks =="
+if [ -z "${RESEND_API_KEY:-}" ]; then
+  echo '{"status":"skipped","reason":"RESEND_API_KEY missing"}'
+else
+  resend_get "/webhooks?limit=100" | jq '
+    if .http_status == 200 then
+      {
+        http_status,
+        status: "ok",
+        receive_webhooks: [
+          (.body.data // [])
+          | .[]
+          | select((.events // []) | index("email.received"))
+          | {id, status, endpoint, events}
+        ],
+        webhook_count: ((.body.data // []) | length)
+      }
+    else
+      {
+        http_status,
+        status: "not_ready",
+        provider_error: {
+          name: .body.name,
+          message: .body.message,
+          statusCode: .body.statusCode
+        }
+      }
+    end'
+fi
+echo
+
+echo "== Gandi LiveDNS Mail Records =="
+if [ -z "${GANDI_PAT:-}" ]; then
+  echo '{"status":"skipped","reason":"GANDI_PAT missing"}'
+else
+  curl -fsS -H "Authorization: Bearer ${GANDI_PAT}" \
+    "https://api.gandi.net/v5/livedns/domains/${DOMAIN}/records" \
+    | jq '
+      [
+        .[]
+        | select(
+          .rrset_type == "MX"
+          or .rrset_type == "TXT"
+          or .rrset_name == "_dmarc"
+          or (.rrset_name | test("(?i)(resend|send|links|domainkey|webmail)"))
+        )
+        | {name: .rrset_name, type: .rrset_type, ttl: .rrset_ttl, values: .rrset_values}
+      ]'
+fi
+echo
+
+if command -v dig >/dev/null 2>&1; then
+  echo "== Public DNS Snapshot =="
+  jq -n \
+    --argjson mx "$(dig +short MX "$DOMAIN" | jq -R . | jq -s .)" \
+    --argjson txt "$(dig +short TXT "$DOMAIN" | jq -R . | jq -s .)" \
+    --argjson dmarc "$(dig +short TXT "_dmarc.${DOMAIN}" | jq -R . | jq -s .)" \
+    '{mx: $mx, txt: $txt, dmarc_txt: $dmarc}'
+  echo
+fi
+
+echo "== Node B maild Health =="
+if command -v ssh >/dev/null 2>&1; then
+  ssh "$NODE_HOST" \
+    'curl -fsS http://127.0.0.1:8087/health | jq "{status, resend_api_key_configured, webhook_secret_configured, root_owner_id_configured, stats}"' \
+    || echo '{"status":"unavailable","reason":"ssh or maild health probe failed"}'
+else
+  echo '{"status":"skipped","reason":"ssh missing"}'
+fi

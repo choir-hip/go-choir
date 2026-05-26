@@ -145,6 +145,10 @@ Implementation checkpoint, 2026-05-26:
   direct Caddy route for `/api/email/resend/webhook`.
 - `nix/deploy-mail-creds.sh` deploys `RESEND_API_KEY` and
   `RESEND_WEBHOOK_SECRET` to `/var/lib/go-choir/maild.env`.
+- `scripts/mail-provider-readiness` is the read-only provider probe for Resend
+  domain/webhook status, Gandi mail-related records, public DNS, and Node B
+  `maild` health. It redacts secret-shaped fields and does not mutate provider
+  state.
 - DNS/MX, real Resend setup, attachment content download, and real staging proof
   are still future steps.
 
@@ -444,6 +448,19 @@ External setup after code deploy:
    https://choir.news/api/email/resend/webhook
 6. Store RESEND_API_KEY and RESEND_WEBHOOK_SECRET in /var/lib/go-choir/maild.env.
 ```
+
+Before any DNS mutation, run:
+
+```bash
+scripts/mail-provider-readiness
+```
+
+Expected pre-mutation output should show Resend domain/webhook records available
+from a sufficiently scoped Resend key, Gandi's current mail records, public DNS,
+and Node B `maild` health. If Resend returns `restricted_api_key`, the available
+key cannot retrieve exact DNS records or the webhook signing secret; use a
+broader temporary Resend API key or the dashboard to obtain provider truth
+first.
 
 Root-domain receiving is intentional for the numeric-address product model. If
 human IMAP-style mailboxes are later required on the root domain, that is a
