@@ -452,10 +452,17 @@ For every model/scenario row, report:
 
 ## Run Checkpoint & Resumption State
 
-status: checkpoint_incomplete
+status: current_deliverable_complete_with_residual_risks
 
 last checkpoint:
 
+- 2026-05-26 deployed commit `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`
+  completed the current deliverable: staging has the durable dirty-draft rebase
+  behavior, cross-session pre-`Revise` autosave visibility, a passing dirty user
+  edit plus researcher worker-follow-up proof, and a final model-suite rerun
+  across v4-flash medium, Kimi low, and GPT-5.5 low. This is not the end of all
+  VText version-graph work; remaining realism axes are many-version long
+  documents, multi-worker storms, and source-grounded content quality.
 - 2026-05-25 staging product-path worker-concurrency probe exposed a separate
   coordination failure before worker-update integration could be evaluated:
   v4-flash medium wrote a useful VText v1, the injected user revision preserved
@@ -489,6 +496,8 @@ what shipped:
 
 - `b5d72c1` `Checkpoint VText durable draft version graph`
 - `b2252fe` `Rebase stale VText user drafts`
+- `cbed84d` `Document VText worker concurrency probe failure`
+- `2cf7253` `Tolerate noisy delegate role values`
 
 what was proven:
 
@@ -518,13 +527,36 @@ what was proven:
   `frontend/test-results/vtext-durable-draft-versio-0f3ac-rker-driven-VText-follow-up-chromium/trace.zip`.
 - Model-suite eval report created:
   `docs/vtext-durable-draft-version-graph-eval-report-2026-05-25.md`.
+- Noisy-delegation fix local proof:
+  `nix develop -c go test ./internal/runtime -run TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget -count=1`
+  passed.
+- Focused VText regression proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextCreateRevisionRejectsStaleHead|TestVTextCreateRevisionRebasesAllowedStaleUserDraft|TestVTextStaleAgentRevisionRejectsEditAfterUserEdit|TestVTextInitialEditToolResultRequiresResearchContinuation' -count=1`
+  passed.
+- CI run `26424849935` passed, including runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, and staging deploy.
+- FlakeHub publish run `26424849948` passed.
+- Staging `/health` reported proxy and sandbox deployed at
+  `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`.
+- Deployed dirty user edit plus worker-follow-up proof:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'worker-driven VText follow-up' --reporter=line`
+  passed. Evidence:
+  `test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z/dirty-user-edit-worker-followup.json`.
+- Final deployed model-suite rerun:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=deep-research,coding-super,long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z pnpm exec playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`
+  passed. Evidence:
+  `test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z/`.
 
-unproven or partial claims:
+residual or partial claims:
 
-- durable cross-device draft sync before `Revise`;
-- merge/rebase behavior when head changes while user is dirty;
-- long-content/many-version/concurrent-worker robustness;
-- whether autosave-as-canonical-user-version is the correct durable draft model.
+- two-browser cross-session draft visibility before `Revise` is proven; two
+  physical devices are not separately proven;
+- one researcher worker update arriving after a dirty user revision is proven;
+  deterministic multi-worker storms are not;
+- long-content model rows are covered, but not yet with a strict
+  section-obligation/content-quality rubric;
+- whether autosave-as-canonical-user-version is the final durable draft model
+  remains open.
 
 belief-state changes:
 
@@ -536,18 +568,16 @@ belief-state changes:
 
 remaining error field:
 
-- Need cross-device UI draft sync proof before `Revise`; current proof is
-  product API persistence plus local UI rebase behavior.
-- Need broader long-content/many-version/concurrent-worker evaluation; current
-  model suite covers research/coding/long prompts but does not yet deterministically
-  combine user dirty edits with a worker-update storm.
-- Need harden spawn/delegation argument normalization without weakening role
-  allowlists: v4-flash medium can emit malformed wrapper text around a role value,
-  causing `spawn_agent` to error after a successful VText edit.
-- Need improve/monitor long-prompt coordination: v4-flash medium required a
-  longer 180s observation window and showed malformed delegation noise; GPT-5.5
-  low still produced duplicate side-effect attempts; Kimi low was clean but slow
-  on long V1.
+- v4-flash medium no longer fails noisy researcher delegation, but its final
+  deep-research row still did not produce a second VText revision inside the
+  observation window.
+- GPT-5.5 low still produced duplicate side-effect attempts; runtime guards
+  skipped or contained them.
+- Kimi low remains the cleanest coordination row, but model/content quality still
+  needs a stricter rubric than revision cadence.
+- Current-events content quality remains a real risk: the Artemis worker proof
+  preserved lineage and consumed worker evidence, but the final content included
+  contradictory launch-status claims that need source-truth gates.
 
 highest-impact remaining uncertainty:
 
@@ -556,13 +586,12 @@ highest-impact remaining uncertainty:
 
 next executable probe:
 
-- Build the next deterministic product-path eval for two browser sessions:
-  dirty direct edit in session A, canonical head move or VText revision in
-  session B, then verify session A and session B converge without losing the
-  draft before `Revise`.
-- Add a deterministic worker-update storm plus dirty user edit scenario without
-  `/api/test/*` acceptance shortcuts, or explicitly document the smallest product
-  surface needed to make that worker concurrency observable.
+- Build the next deterministic product-path multi-worker storm: dirty direct edit
+  plus two or more researcher/super updates before and during VText wake, with
+  consumed/pending metadata checked per worker update.
+- Add a section-level long-document rubric that checks required sections,
+  source grounding, no contradictory current-events claims, user-marker
+  preservation, and lineage metadata.
 
 suggested resume goal string:
 
@@ -582,6 +611,10 @@ evidence artifact refs:
   `test-results/vtext-model-suite-durable-draft-b2252fe-v4-long-180s-20260525T234456Z/`.
 - Eval report:
   `docs/vtext-durable-draft-version-graph-eval-report-2026-05-25.md`.
+- Deployed worker-follow-up evidence:
+  `test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z/dirty-user-edit-worker-followup.json`.
+- Final deployed model-suite evidence:
+  `test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z/`.
 
 rollback refs:
 

@@ -1,17 +1,24 @@
 # VText Durable Draft Version Graph Eval Report
 
 **Date:** 2026-05-25  
-**Deployed commit:** `b2252fe4ecc9f05f827ca3c86e2703ada68d4820`  
+**Deployed commit:** `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`  
 **Target:** `https://draft.choir-ip.com`
 
 ## Summary
 
-The first durable-draft behavior change is deployed and staging-proven:
+The durable-draft behavior change is deployed and staging-proven:
 stale user draft saves can now rebase over a moved VText head when the client
 explicitly sends `allow_rebase`, while ordinary stale writes still return
 conflict. The deployed proof shows a user draft based on revision `A` rebasing
 onto newer head `B`, preserving both the incoming head update and the dirty
 draft text, with lineage metadata on the resulting user revision.
+
+The follow-up deployed fix tolerates noisy provider wrapper text around
+`spawn_agent` role/profile values only when the value unambiguously contains one
+allowed delegate target. This repaired the v4-flash medium worker-follow-up
+probe: after a dirty user marker was injected, a researcher update woke VText,
+VText produced a second appagent revision, and the final head preserved the
+exact user marker while recording consumed worker-update metadata.
 
 The model suite was run on staging for:
 
@@ -19,14 +26,18 @@ The model suite was run on staging for:
 - `fireworks-kimi-k2p6-low`
 - `chatgpt-gpt-5-5-low`
 
-The suite covered deep research, coding/super, and a long multi-section VText
-prompt. All three models completed the deep research and coding/super rows. The
-long row required reruns because the first long observation hit auth expiry for
-v4-flash and Kimi; reruns produced usable long-row evidence.
+The final suite covered deep research, coding/super, and a long multi-section
+VText prompt on deployed commit `2cf7253`. All three model rows completed the
+Playwright harness. The result is usable for landscape comparison, but not a
+clean product-quality certificate: v4-flash did not produce a second deep
+research VText revision inside the observation window, v4-flash long hit one
+external fetch timeout, and GPT-5.5 low still made duplicate side-effect
+attempts.
 
-This is a strong checkpoint, not mission completion. Remaining work includes
-cross-device UI draft sync proof, more realistic user-edit-plus-worker
-concurrency, and a denser long-document quality rubric.
+This completes the current deliverable: deployed behavior plus a model-suite
+eval report. Remaining work should focus on denser long-document quality
+rubrics, many-version stress, and source-truth checking for current-events
+content.
 
 ## Deployed Dirty-Draft Proof
 
@@ -52,14 +63,37 @@ Assertions proven by that artifact:
 - metadata records `rebased_from_revision_id`;
 - metadata records `rebase_onto_revision_id`.
 
+Additional deployed proof after the noisy-delegation fix:
+
+- Behavior commit: `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`.
+- CI run: `26424849935`, success.
+- FlakeHub publish run: `26424849948`, success.
+- Staging health: proxy and sandbox both reported
+  `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`, deployed
+  `2026-05-26T00:06:30Z`.
+- Worker-concurrency command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'worker-driven VText follow-up' --reporter=line`
+- Result: `1 passed`.
+- Evidence artifact:
+  `test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z/dirty-user-edit-worker-followup.json`
+
+Assertions proven by that artifact:
+
+- final head preserved the exact user marker;
+- at least two appagent revisions existed;
+- one researcher worker update was recorded as consumed;
+- Trace contained researcher and VText agents using v4-flash medium from
+  `/mnt/persistent/files/System/model-policy.toml`.
+
 ## Model Suite Results
 
 Primary evidence directory:
 
+- `test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z/`
+
+Earlier supplemental reruns retained for comparison:
+
 - `test-results/vtext-model-suite-durable-draft-b2252fe-20260525T232318Z/`
-
-Supplemental reruns:
-
 - `test-results/vtext-model-suite-durable-draft-b2252fe-long-rerun-20260525T233946Z/`
 - `test-results/vtext-model-suite-durable-draft-b2252fe-v4-long-180s-20260525T234456Z/`
 
@@ -67,37 +101,38 @@ Supplemental reruns:
 
 | Model | Status | V1 | V2 | Revision Count | Tool Errors | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| v4-flash medium | ok | 3.0s | 26.0s | 2 | 0 | Cleanest row; one researcher spawn, no edit errors. |
-| Kimi low | ok | 4.3s | 41.3s | 3 | 0 | Produced an extra follow-up revision; no coordination noise. |
-| GPT-5.5 low | ok | 5.3s | 50.3s | 2 | 4 | Useful output, but duplicate evidence/finding submissions remain. |
+| v4-flash medium | partial | 22.8s | not captured | 1 | 0 | Spawned researcher and got findings, but no second VText revision inside the observation window. |
+| Kimi low | ok | 4.8s | 35.8s | 2 | 0 | Clean coordination and a timely follow-up revision. |
+| GPT-5.5 low | ok | 5.3s | 51.3s | 2 | 1 | Useful follow-up; one duplicate evidence submission. |
 
 ### Coding/Super
 
 | Model | Status | V1 | V2 | Super Requests | Tool Errors | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| v4-flash medium | ok | 3.0s | 15.0s | 1 | 0 | Fastest and cleanest coding/super row. |
-| Kimi low | ok | 3.4s | 17.4s | 1 | 0 | Clean, slightly slower than v4-flash. |
-| GPT-5.5 low | ok | 3.5s | 40.5s | 2 | 1 | Completed, but duplicate bash planning was skipped by guard. |
+| v4-flash medium | ok | 18.4s | 89.4s | 2 | 0 | Clean tool behavior, slower than the earlier run. |
+| Kimi low | ok | 3.6s | 15.6s | 2 | 0 | Cleanest and fastest coding/super row in the final run. |
+| GPT-5.5 low | ok | 3.8s | 23.8s | 4 | 1 | Completed; duplicate bash planning was skipped by guard. |
 
 ### Long Multi-Section
 
 | Model | Status | V1 | V2 | Revision Count | Tool Errors | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| v4-flash medium | ok on 180s rerun | 24.4s | 146.4s | 2 | 3 | Needed longer observation window; malformed researcher-delegation noise appeared. |
-| Kimi low | ok on fresh rerun | 48.3s | 109.3s | 2 | 0 | Slow V1, but clean coordination and no tool noise. |
-| GPT-5.5 low | ok | 18.6s | 93.6s | 2 | 2 | Best long-row content volume; duplicate cast messages were skipped. |
+| v4-flash medium | ok | 30.4s | 159.4s | 2 | 1 | No malformed delegation after the fix; one external `fetch_url` timeout. |
+| Kimi low | ok | 39.5s | 73.5s | 3 | 0 | Clean coordination; shorter V2 latency than v4 and GPT in the final run. |
+| GPT-5.5 low | ok | 7.0s | 89.0s | 4 | 4 | Richest revision volume, but duplicate cast/evidence submissions remain. |
 
 ## Current Comparison
 
-For this checkpoint, `fireworks-deepseek-v4-flash-medium` remains the best
-default conductor/VText/research cadence candidate for shorter research and
-coding/super tasks: it is fast and usually clean. Its long multi-section row
-needs more work: it eventually produced a second revision with a longer wait,
-but showed malformed delegation noise and less rich long-form synthesis.
+For this deployed state, `fireworks-deepseek-v4-flash-medium` remains viable as
+the default latency/cost baseline and now survives the noisy role-wrapper case
+that previously blocked researcher spawn. It is not the clean winner: in the
+final deep-research row it spawned a researcher and got findings but did not
+produce a second VText revision inside the observation window, and its long row
+needed 159.4s for V2.
 
 `fireworks-kimi-k2p6-low` is the cleanest coordination model in this suite. It
-had no tool errors across the successful rows and handled long multi-section
-work cleanly, but its first long revision was slow.
+had no tool errors across the final rows, handled long multi-section work
+cleanly, and produced the best final coding/super cadence.
 
 `chatgpt-gpt-5-5-low` produced the richest long multi-section output and worked
 again after account auth was restored, but it still creates duplicate side-effect
@@ -107,32 +142,30 @@ but this is still coordination noise.
 
 ## Residual Risks
 
-- This report does not yet prove a two-device UI draft sync workflow before
-  `Revise`; it proves VM-backed product API persistence and local browser dirty
-  rebase behavior.
-- A staging product-path probe for dirty user edit plus worker follow-up
-  preserved the user marker, but did not reach worker integration: v4-flash
-  medium wrote v1, then its `spawn_agent` call errored, leaving no researcher
-  update and no second appagent revision within the observation window.
-  Evidence: submission `8ad567dd-cd0f-4dda-b6dd-ee3f8eebf50a`, document
-  `b3cdb2d6-3ac8-4fad-8632-65ce5418072b`, failed Playwright trace
-  `frontend/test-results/vtext-durable-draft-versio-0f3ac-rker-driven-VText-follow-up-chromium/trace.zip`.
+- Cross-session draft visibility before `Revise` is now staging-proven through
+  two authenticated browser contexts, but not yet through two physical devices.
 - The long multi-section prompt is still a coarse content-quality check. It does
   not yet assert section-by-section obligations beyond revision timing and trace
   noise.
-- Worker-update concurrency was exercised through model behavior, not through a
-  deterministic product-path worker storm with user dirty edits at the same time.
+- Worker-update concurrency is proven for one researcher update arriving after a
+  dirty user revision, not for a deterministic multi-worker storm.
 - The model-suite harness can still hit auth expiry on long serial runs; fresh
   reruns mitigated this, but the observer should renew sessions before the final
   full mission pass.
+- Current-events content quality still needs source-truth checking. The worker
+  proof preserved the user marker and consumed worker evidence correctly, but
+  the final Artemis II content included contradictory launch-status claims that
+  should not be treated as verified factual output.
 
 ## Recommendation
 
 Keep `fireworks-deepseek-v4-flash-medium`, `fireworks-kimi-k2p6-low`, and
 `chatgpt-gpt-5-5-low` in the next eval round.
 
-Use v4-flash medium as the default latency baseline, Kimi low as the clean
-coordination baseline, and GPT-5.5 low as the long-form quality comparator. Do
-not optimize conductor cost/latency yet; the next mission pressure should be on
-dirty user edit plus worker-update concurrency and long-document section-level
-correctness.
+Use Kimi low as the clean coordination baseline, v4-flash medium as the
+cost/latency baseline that still needs cadence tuning, and GPT-5.5 low as the
+long-form quality comparator with duplicate side-effect guards kept on.
+
+Do not spend effort on conductor micro-optimization yet. The next mission
+pressure should be many-version long documents, multi-worker storms, and
+source-grounded current-events quality gates.
