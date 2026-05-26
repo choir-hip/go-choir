@@ -1918,6 +1918,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\nWorker messages can wake later vtext runs and trigger the next revision.")
 	b.WriteString("\nPrefer prompt-to-v1 speed and small subsequent revisions over waiting for exhaustive coverage.")
 	b.WriteString("\nWhen worker findings arrive, update the document as soon as the first packet can improve it; do not wait for every researcher or super thread to finish.")
+	b.WriteString("\nException: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, first call request_super_execution. Do not make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nDo not answer knowledge or coding requests from model weights. Depend on researcher messages for knowledge and super messages for coding/execution/verification.")

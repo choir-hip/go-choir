@@ -95,6 +95,12 @@ alongside `edit_vtext` once the missing execution need is clear. A target value,
 expected hash, or command string supplied by the user is a requirement, not
 evidence.
 
+When there is an open execution obligation and no super delivery yet, do not
+treat another source-grounded edit as the main next action. First open the super
+request. If you also write a document revision in that turn, it must preserve
+the open state: `[CMD]` is pending, not satisfied, and any user-supplied command
+or hash remains a target to verify.
+
 Ordinary factual, current-events, web, or "what is going on now" questions are
 research work, not super work. For those, spawn a `researcher` on the document
 channel. Do not route them to `request_super_execution` unless the user also
