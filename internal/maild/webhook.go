@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -135,6 +136,9 @@ func (h *Handler) ingestReceivedEmail(ctx context.Context, providerEventID, prov
 	if err != nil {
 		return err
 	}
+	if err := h.enforceReceivePolicy(ctx, email, alias); err != nil {
+		return err
+	}
 	return h.store.StoreInboundMessage(ctx, providerEventID, email, alias, recipient)
 }
 
@@ -153,6 +157,37 @@ func (h *Handler) resolveReceivedAlias(ctx context.Context, recipients []string)
 		}
 	}
 	return EmailAlias{}, "", sql.ErrNoRows
+}
+
+var errReceivePolicyRejected = errors.New("receive policy rejected inbound email")
+
+func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceivedEmail, alias EmailAlias) error {
+	policy, err := h.store.GetReceivePolicy(ctx, alias.ReceivePolicyID)
+	if err != nil {
+		return fmt.Errorf("load receive policy: %w", err)
+	}
+	if policy.RequireSecretAlias && (alias.Visibility == "public" || !strings.Contains(alias.LocalPart, "+")) {
+		return fmt.Errorf("%w: secret alias required", errReceivePolicyRejected)
+	}
+
+	senderAddress, _ := parseSender(email.From, email.Headers["from"])
+	whitelisted := false
+	if policy.RequireSenderWhitelist {
+		whitelisted, err = h.store.IsSenderWhitelisted(ctx, alias.TargetID, alias.ID, senderAddress)
+		if err != nil {
+			return err
+		}
+		if !whitelisted {
+			return fmt.Errorf("%w: sender whitelist required", errReceivePolicyRejected)
+		}
+	}
+	if !policy.AllowPublicInbound && !whitelisted {
+		return fmt.Errorf("%w: public inbound disabled", errReceivePolicyRejected)
+	}
+	if len(email.Attachments) > 0 && !policy.AllowAttachments && !policy.QuarantineByDefault {
+		return fmt.Errorf("%w: attachments disabled", errReceivePolicyRejected)
+	}
+	return nil
 }
 
 func verifyWebhook(payload []byte, headers http.Header, secret string) error {

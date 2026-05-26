@@ -9,8 +9,8 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 ```text
 status: checkpoint_incomplete
 current artifact state: mission ledger is current through this repo-local reconciliation checkpoint; maild/proxy/frontend behavior slice is deployed on Node B at ae8cb7f through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+what shipped: maild service, SQLite mailbox, webhook verifier, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 deployed proven: GitHub Actions run 26450002582 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, frontend build, and Deploy to Staging; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
@@ -372,11 +372,12 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 ```text
 status: checkpoint_incomplete
 last checkpoint: mission-ledger/provider-readiness and repo-local reconciliation checkpoint on 2026-05-26; latest behavior deploy remains ae8cb7f
-current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit ae8cb7f; Resend receiving/webhook and Gandi DNS are not configured
-what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
+current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit ae8cb7f; receive-policy enforcement is locally implemented and awaiting behavior deploy; Resend receiving/webhook and Gandi DNS are not configured
+what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, receive-policy gates, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
   - fake Resend retrieval stores inbound message, quarantines attachment metadata, and creates UNTRUSTED_EXTERNAL_EMAIL source packet
+  - trusted-upload-style receive policy rejects unwhitelisted sender before storing the message and accepts a whitelisted sender on an unlisted exact plus alias
   - owner-only outbound send through fake Resend stores Sent row
   - owned reply targets preserve provider message_id and emit In-Reply-To/References headers in the Resend send payload
   - proxy forwards authenticated /api/email/* to maild while stripping spoofed identity and Cookie headers
@@ -1798,3 +1799,29 @@ Required next change:
   public/whitelist/secret-alias gates before storing inbound messages, preserve
   quarantine-by-default behavior for attachments, and add focused tests proving
   unwhitelisted trusted-upload-style aliases are not stored.
+
+Resolution checkpoint:
+
+- Implemented in `internal/maild`: `email_sender_whitelist` is part of the
+  schema, `Store.GetReceivePolicy` loads policy booleans,
+  `Store.IsSenderWhitelisted` checks owner/alias/sender rows, and the Resend
+  webhook ingest path enforces public, whitelist, secret-alias, and attachment
+  gates before calling `StoreInboundMessage`.
+- Focused tests prove a trusted-upload-style exact plus alias rejects an
+  unwhitelisted sender without storing a message, while the same alias accepts
+  a whitelisted sender.
+
+Verification:
+
+```text
+nix develop -c go test ./internal/maild
+nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+```
+
+Belief-state update:
+
+- `maild` now matches the policy-gated ingress shape more closely before real
+  provider traffic arrives.
+- The remaining blocker is still external provider/DNS proof: Resend domain and
+  webhook truth plus `RESEND_WEBHOOK_SECRET` are required before root MX
+  mutation and real inbound acceptance.

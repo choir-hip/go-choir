@@ -32,6 +32,20 @@ type EmailAlias struct {
 	ReceivePolicyID string
 }
 
+// EmailReceivePolicy controls whether a resolved alias accepts inbound mail.
+type EmailReceivePolicy struct {
+	ID                     string
+	Name                   string
+	AllowPublicInbound     bool
+	AllowAttachments       bool
+	RequireSenderWhitelist bool
+	RequireSecretAlias     bool
+	AllowAutoAgentRead     bool
+	AllowAutoAgentWrite    bool
+	AllowAutoOutboundSend  bool
+	QuarantineByDefault    bool
+}
+
 // WebhookEvent is the durable receipt record for a verified provider webhook.
 type WebhookEvent struct {
 	ID                string
@@ -165,6 +179,15 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			unique(domain, local_part),
 			foreign key(receive_policy_id) references email_receive_policies(id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS email_sender_whitelist (
+			id text primary key,
+			owner_id text not null,
+			alias_id text not null,
+			sender_address text not null,
+			created_at text not null,
+			disabled_at text,
+			unique(alias_id, sender_address)
+		)`,
 		`CREATE TABLE IF NOT EXISTS email_webhook_events (
 			id text primary key,
 			provider text not null,
@@ -293,6 +316,59 @@ func (s *Store) ResolveAlias(ctx context.Context, domain, localPart string) (Ema
 		return EmailAlias{}, err
 	}
 	return alias, nil
+}
+
+// GetReceivePolicy returns the receive policy attached to an alias.
+func (s *Store) GetReceivePolicy(ctx context.Context, policyID string) (EmailReceivePolicy, error) {
+	var policy EmailReceivePolicy
+	var allowPublicInbound, allowAttachments, requireSenderWhitelist int
+	var requireSecretAlias, allowAutoAgentRead, allowAutoAgentWrite int
+	var allowAutoOutboundSend, quarantineByDefault int
+	err := s.db.QueryRowContext(ctx, `SELECT
+		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
+		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
+		allow_auto_outbound_send, quarantine_by_default
+		FROM email_receive_policies
+		WHERE id = ?`, policyID).Scan(
+		&policy.ID,
+		&policy.Name,
+		&allowPublicInbound,
+		&allowAttachments,
+		&requireSenderWhitelist,
+		&requireSecretAlias,
+		&allowAutoAgentRead,
+		&allowAutoAgentWrite,
+		&allowAutoOutboundSend,
+		&quarantineByDefault,
+	)
+	if err != nil {
+		return EmailReceivePolicy{}, err
+	}
+	policy.AllowPublicInbound = allowPublicInbound != 0
+	policy.AllowAttachments = allowAttachments != 0
+	policy.RequireSenderWhitelist = requireSenderWhitelist != 0
+	policy.RequireSecretAlias = requireSecretAlias != 0
+	policy.AllowAutoAgentRead = allowAutoAgentRead != 0
+	policy.AllowAutoAgentWrite = allowAutoAgentWrite != 0
+	policy.AllowAutoOutboundSend = allowAutoOutboundSend != 0
+	policy.QuarantineByDefault = quarantineByDefault != 0
+	return policy, nil
+}
+
+// IsSenderWhitelisted reports whether sender may use alias for trusted ingress.
+func (s *Store) IsSenderWhitelisted(ctx context.Context, ownerID, aliasID, senderAddress string) (bool, error) {
+	senderAddress = strings.ToLower(strings.TrimSpace(senderAddress))
+	if senderAddress == "" {
+		return false, nil
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*)
+		FROM email_sender_whitelist
+		WHERE owner_id = ? AND alias_id = ? AND sender_address = ? AND disabled_at IS NULL`,
+		ownerID, aliasID, senderAddress).Scan(&count); err != nil {
+		return false, fmt.Errorf("check sender whitelist: %w", err)
+	}
+	return count > 0, nil
 }
 
 // ListAliases returns configured aliases for operator inspection.

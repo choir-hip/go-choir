@@ -1,6 +1,7 @@
 package maild
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -144,6 +145,96 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	}
 }
 
+func TestHandleResendWebhookRejectsUnwhitelistedTrustedUploadAlias(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	seedTrustedUploadAlias(t, store, false)
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-upload-1",
+			"to":["000+upload-secret@choir.news"],
+			"from":"sender@example.com",
+			"created_at":"2026-05-26T10:00:00Z",
+			"subject":"Trusted upload",
+			"text":"Please file this.",
+			"headers":{"from":"Sender <sender@example.com>"},
+			"bcc":[],
+			"cc":[],
+			"reply_to":[],
+			"message_id":"<email-upload-1@example.com>",
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-upload-1","type":"email.received","data":{"email_id":"email-upload-1"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-upload-1", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "accepted_ingest_failed") {
+		t.Fatalf("body = %s, want accepted_ingest_failed", w.Body.String())
+	}
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.Messages != 0 {
+		t.Fatalf("messages = %d, want 0", stats.Messages)
+	}
+}
+
+func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	seedTrustedUploadAlias(t, store, true)
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-upload-2",
+			"to":["000+upload-secret@choir.news"],
+			"from":"sender@example.com",
+			"created_at":"2026-05-26T10:00:00Z",
+			"subject":"Trusted upload",
+			"text":"Please file this.",
+			"headers":{"from":"Sender <sender@example.com>"},
+			"bcc":[],
+			"cc":[],
+			"reply_to":[],
+			"message_id":"<email-upload-2@example.com>",
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-upload-2","type":"email.received","data":{"email_id":"email-upload-2"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-upload-2", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	messages, err := store.ListMessages(req.Context(), "user-root", "inbox", 10)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].Subject != "Trusted upload" {
+		t.Fatalf("messages = %+v, want whitelisted trusted upload", messages)
+	}
+}
+
 func TestHandleResendWebhookRejectsMutatedBody(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
@@ -170,6 +261,32 @@ func TestHandleResendWebhookRejectsMissingHeaders(t *testing.T) {
 	h.HandleResendWebhook(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func seedTrustedUploadAlias(t *testing.T, store *Store, whitelist bool) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`INSERT INTO email_receive_policies (
+		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
+		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
+		allow_auto_outbound_send, quarantine_by_default, created_at
+	) VALUES ('policy-trusted-upload-test', 'trusted upload test', 0, 1, 1, 1, 1, 0, 0, 1, ?)`, now); err != nil {
+		t.Fatalf("insert trusted policy: %v", err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO email_aliases (
+		id, domain, local_part, canonical_number, target_type, target_id,
+		visibility, receive_policy_id, created_at
+	) VALUES ('alias-trusted-upload-test', 'choir.news', '000+upload-secret', 0, 'user', 'user-root', 'unlisted', 'policy-trusted-upload-test', ?)`, now); err != nil {
+		t.Fatalf("insert trusted alias: %v", err)
+	}
+	if !whitelist {
+		return
+	}
+	if _, err := store.db.Exec(`INSERT INTO email_sender_whitelist (
+		id, owner_id, alias_id, sender_address, created_at
+	) VALUES ('whitelist-trusted-upload-test', 'user-root', 'alias-trusted-upload-test', 'sender@example.com', ?)`, now); err != nil {
+		t.Fatalf("insert sender whitelist: %v", err)
 	}
 }
 
