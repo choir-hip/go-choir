@@ -8,7 +8,7 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend slice is deployed on Node B at ae8cb7f through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
+current artifact state: mission ledger is current through this repo-local reconciliation checkpoint; maild/proxy/frontend behavior slice is deployed on Node B at ae8cb7f through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
 locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 deployed proven: GitHub Actions run 26450002582 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, frontend build, and Deploy to Staging; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
@@ -371,8 +371,8 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: deployed attachment-indicator checkpoint on 2026-05-26 at ae8cb7f
-current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions; Resend receiving/webhook and Gandi DNS are not configured
+last checkpoint: mission-ledger/provider-readiness and repo-local reconciliation checkpoint on 2026-05-26; latest behavior deploy remains ae8cb7f
+current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit ae8cb7f; Resend receiving/webhook and Gandi DNS are not configured
 what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
@@ -429,7 +429,7 @@ remaining error field:
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed attachment-indicator checkpoint ae8cb7f; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from the current mission-ledger checkpoint and deployed behavior checkpoint ae8cb7f; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -629,6 +629,15 @@ Required next change:
 - Add explicit mode repair for the mail state paths and set a restrictive
   `go-choir-maild` umask so future mailbox files are not created world-readable.
 
+Resolution checkpoint:
+
+- Resolved in `nix/node-b.nix`: `go-choir-maild` now runs with `UMask =
+  "0077"`, `StateDirectory = "go-choir/mail"`, and tmpfiles repair rules for
+  `/var/lib/go-choir/mail`, `mail.db`, `raw`, `attachments`, and
+  `attachments/quarantine`.
+- Later deployed evidence in this mission records `/var/lib/go-choir/mail` as
+  `0700`, `mail.db` as `0600`, and `/var/lib/go-choir/maild.env` as `0600`.
+
 ## Staging Config Finding: default alias owner reconciliation
 
 Recorded: 2026-05-26.
@@ -663,6 +672,16 @@ Required next change:
 
 - Make the default `000@choir.news` seed upsert `target_id` from the configured
   `MAILD_ROOT_OWNER_ID` while leaving non-default aliases untouched.
+
+Resolution checkpoint:
+
+- Resolved in `internal/maild/store.go`: the default alias is inserted if
+  missing and then explicitly reconciled by `DefaultRootAliasID` to the
+  configured domain, `MAILD_ROOT_OWNER_ID`, public visibility, and public
+  receive policy.
+- Focused store coverage exists for reseeding the default alias with a changed
+  root owner id, and later deployed evidence records `000@choir.news` mapped to
+  the inferred founder auth user id.
 
 ## Deployed Checkpoint: maild ready, Resend receiving blocked on credentials
 
@@ -766,6 +785,16 @@ Required next change:
 - Add a manual `workflow_dispatch` path that can force a host/frontend staging
   deploy from `main` without requiring an extra source edit.
 
+Resolution checkpoint:
+
+- Resolved by the direct `maild` health checkpoint and later Actions recovery.
+  `internal/maild/health.go` reports safe credential/configuration booleans and
+  mailbox counters; `.github/workflows/ci.yml` probes `8087`; and the workflow
+  now has `workflow_dispatch` with `force_staging_deploy`.
+- The historical manual deploys remain a protocol violation and are recorded as
+  such above; subsequent accepted behavior proof used GitHub Actions deploy
+  evidence instead of manual Node B deployment.
+
 ## Deployed Checkpoint: direct maild health proof
 
 Recorded: 2026-05-26.
@@ -859,6 +888,14 @@ Required next change:
   events.
 - Package `maildctl` in Nix so it is available on Node B after deploy.
 
+Resolution checkpoint:
+
+- Resolved by `cmd/maildctl`, the `maildctl` package in `flake.nix`, and
+  `environment.systemPackages` inclusion in `nix/node-b.nix`.
+- The CLI now exposes read-only `stats`, `aliases`, `webhooks`, `messages`,
+  `message`, `attachments`, `source-packet`, and `ingress-events` commands for
+  final acceptance evidence without creating a public admin endpoint.
+
 ## Deployed Finding: maildctl empty list output
 
 Recorded: 2026-05-26.
@@ -884,6 +921,13 @@ Required next change:
 
 - Initialize maild store list results as empty slices so JSON CLI output is
   stable `[]` for empty query results.
+
+Resolution checkpoint:
+
+- Resolved in the store list methods used by `maildctl`; empty list output is
+  stable JSON `[]`.
+- Focused coverage includes `TestRunWebhooksPrintsEmptyArray`, and deployed
+  mission evidence records `maildctl webhooks --limit 5: []`.
 
 ## Deployed Checkpoint: maildctl inspection proof
 
@@ -1647,3 +1691,35 @@ Next executable probe:
 - Obtain a Resend key/session that can read domain and webhook configuration,
   rerun `scripts/mail-provider-readiness`, then configure webhook secret and
   DNS only from verified provider records.
+
+## Mission Ledger Reconciliation Checkpoint
+
+Recorded: 2026-05-26.
+
+Status:
+
+Historical "Required next change" findings for private mail state modes,
+default alias owner reconciliation, direct `maild` health proof,
+`workflow_dispatch`, `maildctl`, and empty-list CLI output have explicit
+resolution checkpoints. This does not change deployed behavior; it makes the
+mission ledger match the already-shipped service and keeps future resumptions
+focused on the real remaining provider/DNS acceptance gap.
+
+Verification:
+
+```text
+nix develop -c go test ./internal/maild ./cmd/maildctl ./cmd/maild
+nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-maild.serviceConfig.UMask
+  -> "0077"
+nix eval .#nixosConfigurations.go-choir-b.config.environment.systemPackages --apply 'pkgs: builtins.any (p: (p.pname or "") == "maildctl") pkgs'
+  -> true
+rg -n '^  workflow_dispatch:|force_staging_deploy|for port in 8081 8082 8083 8084 8086 8087' .github/workflows/ci.yml
+  -> workflow_dispatch, force_staging_deploy, and 8087 smoke probe present
+```
+
+Belief-state update:
+
+- No new behavior gap was found in these repo-local surfaces.
+- The highest-impact remaining uncertainty is still external Resend
+  domain/webhook truth plus webhook signing secret; DNS/MX must remain
+  unchanged until that evidence is available.
