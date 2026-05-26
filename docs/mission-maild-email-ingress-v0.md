@@ -10,7 +10,7 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 status: checkpoint_incomplete
 current artifact state: deployed maild/proxy/frontend slice exists on Node B at 73beb6e; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers API/UI details surface; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -394,6 +394,8 @@ what was proven:
     submission without giving maild MAS credentials
   - scripts/mail-acceptance-check verifies real message, quarantine, source
     packet trust, and expected ingress-event count through read-only maildctl
+  - message detail API exposes stored raw headers to the authenticated owner,
+    and the Email app renders them behind a collapsed Details section
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -407,7 +409,7 @@ belief-state changes:
   - outbound reaches Resend, but the current Resend account state rejects 000@choir.news because choir.news is not verified
 remaining error field:
   - real provider/DNS proof is still untouched because exact Resend verification/receiving records and webhook secret are missing
-  - v0 does not yet expose raw headers/details in the UI
+  - raw headers/details are locally implemented but not deployed until the next behavior checkpoint
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
@@ -434,6 +436,8 @@ evidence artifact refs:
   - public /health deployed_commit 73beb6e127199ea77c035e3729a76f23c8d03a16
   - maild /health status ok with stats.ingress_events 0, resend_api_key_configured true, and webhook_secret_configured false
   - maildctl ingress-events --owner 5bd6de97-3b58-408c-bf89-c42c81b083de --limit 5 -> []
+  - nix develop -c go test ./internal/maild ./internal/proxy ./cmd/maildctl ./cmd/maild
+  - npm run build in frontend
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified

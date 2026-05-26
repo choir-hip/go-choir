@@ -64,6 +64,34 @@ func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 	}
 }
 
+func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
+	store, cfg := newTestStore(t)
+	seedMessage(t, store, "user-1", "msg-1", "untrusted")
+	if _, err := store.db.Exec(`UPDATE email_messages SET raw_headers_json = ? WHERE id = ?`,
+		`{"message_id":"<provider@example.com>","authentication-results":"spf=pass"}`, "msg-1"); err != nil {
+		t.Fatalf("update raw headers: %v", err)
+	}
+	h := NewHandler(cfg, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1", nil)
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp messageDetailResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.RawHeaders["message_id"] != "<provider@example.com>" {
+		t.Fatalf("raw headers = %+v", resp.RawHeaders)
+	}
+	if resp.RawHeaders["authentication-results"] != "spf=pass" {
+		t.Fatalf("raw headers = %+v", resp.RawHeaders)
+	}
+}
+
 func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")

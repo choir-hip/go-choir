@@ -31,6 +31,7 @@ type messageDetailResponse struct {
 	Message     messageSummary       `json:"message"`
 	TextBody    string               `json:"text_body,omitempty"`
 	HTMLBody    string               `json:"html_body,omitempty"`
+	RawHeaders  map[string]string    `json:"raw_headers,omitempty"`
 	Attachments []attachmentResponse `json:"attachments,omitempty"`
 }
 
@@ -163,6 +164,7 @@ func (h *Handler) handleMessageDetail(w http.ResponseWriter, r *http.Request, ow
 		Message:     summary,
 		TextBody:    msg.TextBody,
 		HTMLBody:    msg.HTMLBody,
+		RawHeaders:  parseRawHeaders(msg.RawHeadersJSON),
 		Attachments: outAttachments,
 	})
 }
@@ -269,6 +271,20 @@ func snippet(text string) string {
 		return text
 	}
 	return text[:117] + "..."
+}
+
+func parseRawHeaders(rawHeadersJSON string) map[string]string {
+	if strings.TrimSpace(rawHeadersJSON) == "" {
+		return nil
+	}
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(rawHeadersJSON), &headers); err != nil {
+		return nil
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {

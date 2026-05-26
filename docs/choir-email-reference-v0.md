@@ -139,6 +139,9 @@ Implementation checkpoint, 2026-05-26:
 - `cmd/maild` and `internal/maild` own the SQLite schema, Resend webhook
   verification, Resend received-message fetch, outbound send, attachment
   quarantine metadata, and source packet rows.
+- The authenticated message-detail API includes stored raw headers for
+  owner-visible inspection. The Email app renders those headers only inside a
+  collapsed Details section; plain text remains the primary v0 body surface.
 - `internal/proxy` owns authenticated `/api/email/*` forwarding and the
   `/api/email/messages/:id/send-to-choir` compound operation.
 - Successful proxy-owned Send to Choir handoff records an owner/message-scoped

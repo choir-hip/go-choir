@@ -27,6 +27,7 @@
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = '000@choir.news';
+  $: detailHeaderEntries = headerEntries(detail?.raw_headers);
 
   onMount(() => {
     if (authenticated) {
@@ -165,6 +166,13 @@
     return 'Untrusted source';
   }
 
+  function headerEntries(rawHeaders) {
+    if (!rawHeaders || typeof rawHeaders !== 'object') return [];
+    return Object.entries(rawHeaders)
+      .filter(([key, value]) => key && value !== null && value !== undefined && String(value).trim())
+      .sort(([left], [right]) => left.localeCompare(right));
+  }
+
   function formatTime(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -256,6 +264,30 @@
       </div>
 
       <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
+
+      <details class="message-details" data-email-headers>
+        <summary>Details</summary>
+        <dl>
+          <div>
+            <dt>From</dt>
+            <dd>{detail.message.from_address}</dd>
+          </div>
+          <div>
+            <dt>To</dt>
+            <dd>{activeAddress}</dd>
+          </div>
+          <div>
+            <dt>Trust</dt>
+            <dd>{trustLabel(detail.message.trust_status)}</dd>
+          </div>
+          {#each detailHeaderEntries as [key, value]}
+            <div>
+              <dt>{key}</dt>
+              <dd>{value}</dd>
+            </div>
+          {/each}
+        </dl>
+      </details>
 
       {#if detail.attachments?.length}
         <div class="attachments">
@@ -490,6 +522,7 @@
 
   .metadata,
   .body-text,
+  .message-details,
   .attachments,
   .actions,
   .reply-box,
@@ -507,6 +540,41 @@
   .body-text {
     white-space: pre-wrap;
     line-height: 1.55;
+  }
+
+  .message-details {
+    border: 1px solid rgba(118, 151, 194, 0.18);
+    border-radius: 8px;
+    color: #cbd8ea;
+  }
+
+  .message-details summary {
+    cursor: pointer;
+    padding: 10px 12px;
+    color: #edf4ff;
+  }
+
+  .message-details dl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0 12px 12px;
+  }
+
+  .message-details dl div {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.32fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .message-details dt {
+    color: #91a4bf;
+    overflow-wrap: anywhere;
+  }
+
+  .message-details dd {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
 
   .attachments {
