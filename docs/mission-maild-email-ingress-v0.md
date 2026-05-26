@@ -8,10 +8,10 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: mission ledger is current through this repo-local reconciliation checkpoint; maild/proxy/frontend behavior slice is deployed on Node B at ae8cb7f through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
+current artifact state: maild/proxy/frontend behavior slice is deployed on Node B at 7de363e through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
 locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions run 26450002582 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, frontend build, and Deploy to Staging; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
+deployed proven: GitHub Actions run 26451498114 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 7de363e05cfb102fcfec44303955b3c525870711; maild webhook route still fails closed without RESEND_WEBHOOK_SECRET
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -371,8 +371,8 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: mission-ledger/provider-readiness and repo-local reconciliation checkpoint on 2026-05-26; latest behavior deploy remains ae8cb7f
-current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit ae8cb7f; receive-policy enforcement is locally implemented and awaiting behavior deploy; Resend receiving/webhook and Gandi DNS are not configured
+last checkpoint: receive-policy enforcement deployed on 2026-05-26 at 7de363e
+current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit 7de363e; Resend receiving/webhook and Gandi DNS are not configured
 what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, receive-policy gates, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
@@ -407,6 +407,8 @@ what was proven:
     From fixed to `000@choir.news`
   - message list API computes owner-visible attachment existence without loading
     attachment content, and the Email app renders a compact row indicator
+  - receive-policy gates are deployed; public, sender-whitelist, secret-alias,
+    and attachment gates run before inbound message storage
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -417,6 +419,7 @@ unproven or partial claims:
   - public health after the recovered Actions deploy reports proxy and sandbox deployed_commit 33de426201825ba42215e929b9366c2b351b85ab, a docs-only head on top of the behavior slice
   - scripts/mail-provider-readiness now reports Resend domains/webhooks not ready because the configured Resend key is restricted to sending only, Gandi MX/SPF still point at Gandi defaults, no DMARC exists, and Node B maild health is ok with webhook_secret_configured false
   - GitHub Actions run 26450002582 deployed ae8cb7f after passing all Go/frontend gates; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
+  - GitHub Actions run 26451498114 deployed 7de363e after passing all Go gates; public health reports proxy/sandbox deployed_commit 7de363e05cfb102fcfec44303955b3c525870711; Resend remains restricted_api_key and webhook_secret_configured false
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
@@ -430,7 +433,7 @@ remaining error field:
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from the current mission-ledger checkpoint and deployed behavior checkpoint ae8cb7f; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed receive-policy checkpoint 7de363e; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -1816,6 +1819,24 @@ Verification:
 ```text
 nix develop -c go test ./internal/maild
 nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+GitHub Actions CI run 26451498114:
+  Go Vet + Build: success
+  Go Test non-runtime: success
+  runtime shards 0-3: success
+  integration smoke: success
+  Go Vet + Test + Build: success
+  Deploy to Staging (Node B): success
+public /health:
+  proxy deployed_commit: 7de363e05cfb102fcfec44303955b3c525870711
+  sandbox deployed_commit: 7de363e05cfb102fcfec44303955b3c525870711
+  deployed_at: 2026-05-26T13:39:17Z
+webhook route:
+  GET https://choir.news/api/email/resend/webhook -> 405 method not allowed
+  unsigned POST -> 503 {"status":"webhook_secret_not_configured"}
+scripts/mail-provider-readiness:
+  Resend Domains/Webhooks: 401 restricted_api_key
+  Gandi MX/SPF/DKIM: still Gandi defaults
+  Node B maild health: status ok, webhook_secret_configured false, messages 0
 ```
 
 Belief-state update:
