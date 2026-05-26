@@ -1351,6 +1351,57 @@ next executable probe:
   control and inspect whether a second researcher update and v3 appear without
   a search loop.
 
+checkpoint update, 2026-05-26 06:26 UTC:
+
+- Researcher follow-up reporting contract `52e199737acb003f5840617cab3aaec146b6962d`
+  landed and deployed. CI run `26435606338` passed, FlakeHub run
+  `26435606320` passed, and staging `/health` reported proxy and sandbox
+  deployed at `52e199737acb003f5840617cab3aaec146b6962d`, deployed at
+  `2026-05-26T06:14:07Z`.
+- Local proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint|TestShouldRequireResearchFindingsAfterResearchToolBatches|TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims|TestPersistentSuperInboxBashRequiresCoagentUpdate' -count=1`.
+- Focused deployed V4 medium command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-52e1997-medium-control-20260526T061509Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: the revision cadence failure is fixed for this focused V4 medium
+  sports row. Evidence:
+  `test-results/vtext-model-cadence-52e1997-medium-control-20260526T061509Z/fireworks-deepseek-v4-flash-medium.json`.
+- Observed transition: VText produced 4 appagent revisions instead of stalling
+  after v2. Researcher produced 5 coagent updates and only 3 search queries,
+  instead of running a long silent search/fetch loop. There were zero
+  duplicate-tool, stale-VText, mutation-state, or edit_vtext errors.
+- Remaining quality issue: the row still did not reach final baseball scores.
+  Researcher reported that ESPN and MLB.com scoreboard fetches were blocked
+  with 403 responses and CBS Sports returned 404, then shifted to recap search.
+  The final observed v4 document was honest but incomplete:
+  "Scoreboard sources blocked; searching news recaps for final scores and
+  storylines."
+
+belief-state changes:
+
+- The manual "stuck on v1/v2 and fails to get to v3" symptom was a real
+  researcher-reporting cadence bug, not just a reasoning-level setting. The
+  existing `next_required_tool` continuation contract fixed that shape without
+  adding wrapper tools or allowing researchers to write canonical VText.
+- V4 Flash medium can now keep VText moving through multiple sports revisions,
+  but source acquisition quality remains a separate frontier. Current search
+  and fetch paths may not reliably recover live scoreboard data when
+  authoritative scoreboard pages block extraction.
+
+remaining error field:
+
+- Need a source-quality probe across V4 medium, Kimi low, and GPT-5.5 low:
+  determine whether final-score failure is model-specific, provider/search
+  substrate-specific, or a prompt/source-strategy issue.
+- VM/bootstrap lifecycle counters remain noisy even while aggregate
+  `vmctl_status=ok`: latest health still showed bootstrap `http_502=8` and
+  `resolve_error=15` cumulatively.
+
+next executable probe:
+
+- Run the accepted comparison set on the focused sports row, then return to the
+  strict long-section research-plus-super rubric only if the sports row shows
+  stable v3+ cadence across Kimi low, V4 medium, and GPT-5.5 low.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
