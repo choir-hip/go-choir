@@ -146,6 +146,10 @@ Implementation checkpoint, 2026-05-26:
   rows. The Email app renders those stored recipients instead of assuming the
   active root alias, which keeps plus-alias, forwarded-mail, and Sent-message
   inspection honest.
+- The Email app includes a minimal owner-initiated Compose panel that sends
+  plain text through the existing authenticated `/api/email/send` route with
+  From fixed to `000@choir.news`. It does not add drafts, rich HTML, aliases,
+  or automation.
 - `internal/proxy` owns authenticated `/api/email/*` forwarding and the
   `/api/email/messages/:id/send-to-choir` compound operation.
 - Successful proxy-owned Send to Choir handoff records an owner/message-scoped

@@ -9,8 +9,8 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 ```text
 status: checkpoint_incomplete
 current artifact state: deployed maild/proxy/frontend slice exists on Node B at 843ec90; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with collapsed raw-header and stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers and stored recipient API/UI details surface; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -1391,6 +1391,38 @@ Required next change:
 - Add a minimal Compose panel to the Email app using the existing authenticated
   `/api/email/send` route. Keep it owner-initiated, fixed to `000@choir.news`,
   plain text only, and independent of inbound message content.
+
+## UI Checkpoint: minimal Compose surface
+
+Recorded: 2026-05-26.
+
+Status:
+
+The Email app now has a minimal owner-initiated Compose panel. It uses fixed
+From `000@choir.news`, accepts To, Subject, and plain text body, and posts to
+the existing authenticated `/api/email/send` route. It does not add drafts,
+rich HTML, alias management, or automation.
+
+Evidence:
+
+```text
+local tests:
+  npm run build in frontend
+local Playwright component render:
+  screenshot: /tmp/choir-email-compose.png
+  captured send payload:
+    from_address: 000@choir.news
+    to_addresses: [friend@example.com, second@example.com]
+    subject: Compose proof
+    text_body: Owner composed message.
+```
+
+Belief-state update:
+
+- The v0 UI now covers both new owner-initiated compose and selected-message
+  reply through the same backend send route.
+- Real outbound acceptance still depends on Resend domain verification and a
+  sufficiently scoped/provider-valid key.
 
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 

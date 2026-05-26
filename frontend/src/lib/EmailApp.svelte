@@ -22,6 +22,10 @@
   let actionStatus = '';
   let replyOpen = false;
   let replyBody = '';
+  let composeOpen = false;
+  let composeTo = '';
+  let composeSubject = '';
+  let composeBody = '';
   let sending = false;
   let loadedOnce = false;
 
@@ -32,6 +36,7 @@
   $: detailCcRecipients = detail?.recipients?.cc || [];
   $: detailBccRecipients = detail?.recipients?.bcc || [];
   $: detailToLine = addressListLabel(detailToRecipients) || activeAddress;
+  $: composeRecipients = parseAddressList(composeTo);
 
   onMount(() => {
     if (authenticated) {
@@ -75,6 +80,7 @@
     detailLoading = true;
     actionStatus = '';
     replyOpen = false;
+    composeOpen = false;
     try {
       const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(id)}`);
       if (!res.ok) {
@@ -154,6 +160,45 @@
     }
   }
 
+  async function sendCompose() {
+    if (!composeRecipients.length || !composeBody.trim()) return;
+    sending = true;
+    actionStatus = '';
+    try {
+      const res = await fetchWithRenewal('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_address: activeAddress,
+          to_addresses: composeRecipients,
+          subject: composeSubject.trim(),
+          text_body: composeBody.trim(),
+        }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error('Could not send message');
+      }
+      composeTo = '';
+      composeSubject = '';
+      composeBody = '';
+      composeOpen = false;
+      actionStatus = 'Message sent';
+      await loadMessages('sent');
+    } catch (err) {
+      handleError(err);
+    } finally {
+      sending = false;
+    }
+  }
+
+  function openCompose() {
+    composeOpen = true;
+    replyOpen = false;
+    actionStatus = '';
+    error = '';
+  }
+
   function handleError(err) {
     if (err instanceof AuthRequiredError) {
       dispatch('authexpired');
@@ -189,6 +234,13 @@
   function addressListLabel(recipients) {
     if (!Array.isArray(recipients)) return '';
     return recipients.map(addressLabel).filter(Boolean).join(', ');
+  }
+
+  function parseAddressList(value) {
+    return String(value || '')
+      .split(/[,;\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
   function formatTime(value) {
@@ -229,7 +281,10 @@
         <h2>{folders.find((folder) => folder.id === activeFolder)?.label || 'Inbox'}</h2>
         <p>{messages.length} messages</p>
       </div>
-      <button type="button" class="icon-button" title="Refresh" on:click={() => loadMessages(activeFolder)}>↻</button>
+      <div class="list-actions">
+        <button type="button" on:click={openCompose} data-email-compose>Compose</button>
+        <button type="button" class="icon-button" title="Refresh" on:click={() => loadMessages(activeFolder)}>↻</button>
+      </div>
     </header>
 
     {#if error}
@@ -263,7 +318,32 @@
   </main>
 
   <section class="message-detail" data-email-message-detail>
-    {#if detailLoading}
+    {#if composeOpen}
+      <div class="compose-box" data-email-compose-panel>
+        <header class="compose-header">
+          <div>
+            <h2>New message</h2>
+            <p>From {activeAddress}</p>
+          </div>
+          <button type="button" class="icon-button" title="Close" on:click={() => (composeOpen = false)}>×</button>
+        </header>
+        <label>
+          <span>To</span>
+          <input bind:value={composeTo} type="text" autocomplete="email" data-email-compose-to />
+        </label>
+        <label>
+          <span>Subject</span>
+          <input bind:value={composeSubject} type="text" data-email-compose-subject />
+        </label>
+        <label>
+          <span>Message</span>
+          <textarea bind:value={composeBody} rows="9" data-email-compose-body></textarea>
+        </label>
+        <div class="compose-actions">
+          <button type="button" disabled={sending || !composeRecipients.length || !composeBody.trim()} on:click={sendCompose}>Send</button>
+        </div>
+      </div>
+    {:else if detailLoading}
       <div class="empty-state">Opening message...</div>
     {:else if !detail?.message}
       <div class="empty-state">Select a message</div>
@@ -347,9 +427,9 @@
         </div>
       {/if}
 
-      {#if actionStatus}
-        <p class="action-status">{actionStatus}</p>
-      {/if}
+    {/if}
+    {#if actionStatus}
+      <p class="action-status">{actionStatus}</p>
     {/if}
   </section>
 </section>
@@ -424,6 +504,8 @@
   .folder-list button,
   .actions button,
   .reply-box button,
+  .compose-actions button,
+  .list-actions button,
   .icon-button {
     border: 1px solid rgba(121, 147, 194, 0.24);
     background: rgba(21, 35, 58, 0.72);
@@ -457,6 +539,12 @@
     gap: 14px;
     padding: 18px 20px;
     border-bottom: 1px solid rgba(118, 151, 194, 0.18);
+  }
+
+  .list-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
   }
 
   .list-header h2,
@@ -556,6 +644,7 @@
   .attachments,
   .actions,
   .reply-box,
+  .compose-box,
   .action-status,
   .mail-error,
   .empty-state {
@@ -637,7 +726,8 @@
   }
 
   .actions button,
-  .reply-box button {
+  .reply-box button,
+  .compose-actions button {
     padding: 9px 13px;
   }
 
@@ -646,21 +736,56 @@
     gap: 10px;
   }
 
-  .reply-box label {
+  .compose-box {
+    display: grid;
+    gap: 12px;
+  }
+
+  .compose-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .compose-header h2 {
+    font-size: 18px;
+  }
+
+  .compose-header p {
+    color: #9ba9bf;
+  }
+
+  .reply-box label,
+  .compose-box label {
     display: grid;
     gap: 8px;
     color: #9ba9bf;
   }
 
+  input,
   textarea {
-    resize: vertical;
-    min-height: 110px;
     border: 1px solid rgba(121, 147, 194, 0.3);
     background: rgba(5, 11, 20, 0.8);
     color: #edf4ff;
     border-radius: 8px;
     padding: 10px;
     font: inherit;
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 110px;
+  }
+
+  .compose-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .mail-error {
