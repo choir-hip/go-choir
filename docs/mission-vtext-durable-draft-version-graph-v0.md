@@ -755,6 +755,45 @@ next executable probe:
   source-grounded edit: call `request_super_execution` first, or write only an
   explicit blocked state that does not satisfy `[CMD]`.
 
+checkpoint update, 2026-05-26 02:35 UTC:
+
+- Dynamic prompt fix `fe00a14` landed and deployed. CI run `26428732241`
+  passed; staging `/health` reported proxy and sandbox deployed at
+  `fe00a1412313869018457eb828620d6521d5ab2f`, deployed at
+  `2026-05-26T02:27:31Z`, with `vmctl_status=ok`.
+- Clean post-deploy Kimi row still failed `traceHasSuper=false`. Evidence:
+  `test-results/vtext-long-section-rubric-staging-fe00a14-full-20260526T022928Z/fireworks-kimi-k2p6-low.json`.
+
+new problem evidence:
+
+- Kimi reached the final content shape quickly but still never opened super.
+  Trace showed only two VText runs: initial `edit_vtext` -> `spawn_agent`, then
+  worker-wake `edit_vtext`. No `request_super_execution` was available in the
+  observed trace.
+- Code inspection shows why prompt-only pressure is weak here:
+  `initialVTextToolChoice` returns exact `edit_vtext` whenever a VText run does
+  not require first worker grounding. A researcher delivery makes the document
+  have grounded history, so the worker-wake VText run is biased toward the
+  document-write path even when the original prompt still has an unmet super
+  obligation.
+
+cognitive transform update:
+
+- Constraint inversion: the problem is not lack of semantic instruction. The
+  instruction exists, but the tool-choice prior narrows the action surface at
+  the moment when VText must decide between writing and opening super.
+- Minimalism lens: the fix should not add wrapper tools or route execution
+  automatically. It should remove the over-specific exact tool choice for
+  worker-wake VText runs, letting the existing VText prompt and existing
+  `request_super_execution` tool compete normally.
+
+next executable probe:
+
+- For VText runs woken by addressed worker messages, stop forcing exact
+  `edit_vtext` as the first tool choice. Keep exact tool choice for initial
+  first-version shaping where it protects prompt-to-v1 cadence. Rerun the long
+  rubric on the three accepted models after deploy.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
