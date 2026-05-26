@@ -1913,6 +1913,11 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(truncatePromptSnippet(message.Content, 800))
 			b.WriteString("\n")
 		}
+		if strings.EqualFold(intent, "integrate_worker_findings") && !vtextPromptNeedsSuperExecution(metadataString(metadata, "seed_prompt")+" "+req.Prompt) {
+			b.WriteString("\nThis VText run was woken by worker findings. Make those findings visible with edit_vtext as this turn's next document revision before spawning additional workers.")
+			b.WriteString("\nIf the worker evidence is partial, blocked, or inconclusive, still write an honest partial/blocker checkpoint instead of leaving the visible document at the pre-findings state.")
+			b.WriteString("\nOnly spawn another researcher before editing if the worker message is unusable for any visible checkpoint; if so, name the precise blocker in the run output.")
+		}
 		if vtextPromptNeedsSuperExecution(metadataString(metadata, "seed_prompt")+" "+req.Prompt) && !vtextWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper) {
 			b.WriteString("\nThe original request still has an execution/code/browser/verification obligation, but these recent worker messages do not include a super delivery.")
 			b.WriteString("\nThis VText turn's next side-effectful action should be request_super_execution before another source-only edit, unless you can name a precise blocker.")
@@ -1971,7 +1976,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nReuse the informed context already present in the current document and prior worker messages.")
 		b.WriteString("\nOpen new researcher work when this follow-up needs facts or evidence beyond what the workflow has already grounded.")
 		b.WriteString("\nUse request_super_execution when the follow-up needs generated artifacts, execution, or verification.")
-		b.WriteString("\nIf recent worker findings are only partial and the document needs more evidence, either call spawn_agent for the next focused research branch or write an honest partial revision. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.")
+		b.WriteString("\nIf recent worker findings are only partial and the document needs more evidence, write an honest partial revision first unless there is no usable checkpoint at all. A later turn can open the next focused research branch. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.")
 	} else {
 		b.WriteString("\nThis document does not yet have grounded workflow history.")
 		if current.AuthorKind == types.AuthorUser {

@@ -134,7 +134,10 @@ func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 	}, "", true, false, recent, nil)
 
 	for _, want := range []string{
+		"This VText run was woken by worker findings",
+		"Make those findings visible with edit_vtext as this turn's next document revision before spawning additional workers",
 		"If recent worker findings are only partial and the document needs more evidence",
+		"write an honest partial revision first",
 		"Do not write that a follow-up researcher was dispatched",
 		"Never describe coordination as already done unless the tool action really happened",
 		"Phrases such as \"researcher dispatched\"",
@@ -365,6 +368,8 @@ func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) 
 		"omit the evidence array rather than sending malformed evidence",
 		"For live scores, schedules, current rankings, weather, or similar time-sensitive lookups",
 		"prefer official league/event/source pages or established scoreboards",
+		"do not treat blocked HTML scoreboard pages as terminal by themselves",
+		"verified final, live/pending, scheduled, or snippet-only",
 		"after that batch, call submit_coagent_update again with the new material cluster or blocker",
 	} {
 		if !strings.Contains(objective, want) {

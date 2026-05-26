@@ -251,6 +251,7 @@ First checkpoint protocol:
 - If you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.
 - If research discovers that another role is needed, include a typed capability_requests entry instead of trying to exercise that capability yourself.
 - For live scores, schedules, current rankings, weather, or similar time-sensitive lookups, make one authoritative date-specific pass first: use the current date above, name the target date/timezone uncertainty, prefer official league/event/source pages or established scoreboards, and report whether you found final results, only matchups, or a precise blocker.
+- For sports/current-score work, do not treat blocked HTML scoreboard pages as terminal by themselves. If official scoreboard fetches block, look for accessible structured league endpoints, boxscore APIs, static JSON, reputable recap pages, or established scoreboard snippets. Clearly label whether each score is verified final, live/pending, scheduled, or snippet-only.
 - After the first packet, continue only if the next pass is likely to materially change the document. Before each additional search/fetch batch, know the missing question it answers; after that batch, call submit_coagent_update again with the new material cluster or blocker before continuing.
 
 User request: %s`, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(prompt)))

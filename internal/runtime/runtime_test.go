@@ -540,6 +540,12 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "For live scores, schedules, rankings, weather") {
 		t.Fatalf("researcher system prompt should anchor time-sensitive lookups, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "do not treat blocked HTML scoreboard pages as the only possible source") {
+		t.Fatalf("researcher system prompt should encourage structured sports source fallback, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "verified final scores from live, pending, scheduled, or snippet-only states") {
+		t.Fatalf("researcher system prompt should distinguish final sports evidence from partial states, got %q", prompt)
+	}
 	if !strings.Contains(prompt, "send another submit_coagent_update after each additional search/fetch batch") {
 		t.Fatalf("researcher system prompt should require incremental checkpoints after continued research, got %q", prompt)
 	}
