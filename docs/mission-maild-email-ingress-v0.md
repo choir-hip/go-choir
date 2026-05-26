@@ -1588,3 +1588,62 @@ Resolution checkpoint:
 - Final real-mail acceptance can use `scripts/mail-acceptance-check
   --expect-ingress-events 0` before owner action, then rerun with
   `--expect-ingress-events 1` after explicit Send to Choir.
+
+## Provider Readiness Recheck: Resend receiving still externally blocked
+
+Recorded: 2026-05-26 after commit `600371a`.
+
+Status:
+
+The provider readiness probe still fails before the DNS/MX realism step because
+the available Resend key is restricted to sending only. `maild` remains deployed
+and healthy, but it has no webhook signing secret, so real Resend inbound
+webhooks must remain disabled until the provider state can be inspected and the
+secret can be installed through `/var/lib/go-choir/maild.env`.
+
+Evidence:
+
+```text
+command: scripts/mail-provider-readiness
+local credential presence:
+  resend_api_key: configured
+  resend_webhook_secret: missing
+  gandi_pat: configured
+Resend Domains:
+  http_status: 401
+  provider_error.name: restricted_api_key
+  provider_error.message: This API key is restricted to only send emails
+Resend Webhooks:
+  http_status: 401
+  provider_error.name: restricted_api_key
+  provider_error.message: This API key is restricted to only send emails
+Gandi LiveDNS:
+  MX: 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
+  SPF TXT: "v=spf1 include:_mailcust.gandi.net ?all"
+  DKIM CNAMEs: gm1/gm2/gm3._domainkey -> gandimail
+  DMARC: no public _dmarc TXT observed
+Node B maild health:
+  status: ok
+  resend_api_key_configured: true
+  webhook_secret_configured: false
+  root_owner_id_configured: true
+  stats.messages: 0
+  stats.quarantined_attachments: 0
+  stats.webhook_events: 0
+  stats.ingress_events: 0
+```
+
+Belief-state update:
+
+- The external blocker is unchanged: we need either a broader Resend API key or
+  dashboard access to verify domain/webhook records and retrieve/install the
+  webhook signing secret.
+- The no-DNS-mutation invariant remains satisfied. Gandi is still routing mail
+  to Gandi, and `choir.news` must not be switched to Resend MX until the exact
+  Resend records and rollback plan are known.
+
+Next executable probe:
+
+- Obtain a Resend key/session that can read domain and webhook configuration,
+  rerun `scripts/mail-provider-readiness`, then configure webhook secret and
+  DNS only from verified provider records.
