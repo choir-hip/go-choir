@@ -775,3 +775,39 @@ Remaining blocker:
   and real attachment quarantine still require Resend receiving/webhook
   credentials and exact Resend MX records. The deployed health and CLI now make
   that blocker explicit and verifiable instead of implicit.
+
+## Staging Finding: outbound provider failure is opaque
+
+Recorded: 2026-05-26.
+
+Problem:
+
+A low-impact outbound proof through deployed `maild` failed with HTTP 502 and
+did not store a Sent row. This was expected to exercise the send-only Resend key
+without touching DNS/MX. The failure response is intentionally generic for the
+browser, but the service also does not currently record enough bounded provider
+evidence to distinguish key scope, sender-domain verification, payload shape,
+or provider outage.
+
+Evidence:
+
+```text
+deployed commit: 11bf6e6e958a94a8344ab061ac9fc72036f2ca92
+request path: POST http://127.0.0.1:8087/api/email/send
+authenticated owner header: X-Authenticated-User: 5bd6de97-3b58-408c-bf89-c42c81b083de
+from alias: 000@choir.news
+test recipient: delivered@resend.dev
+result: HTTP 502 {"error":"failed to send email"}
+post-check: maildctl messages --owner 5bd6de97-3b58-408c-bf89-c42c81b083de sent -> []
+```
+
+Belief-state update:
+
+- Outbound remains unproven with the deployed Resend key.
+- `maild` should keep browser responses generic, but operator evidence needs a
+  bounded provider status/reason that does not expose secrets or message body.
+
+Required next change:
+
+- Add bounded provider error classification/logging for outbound sends, then
+  retry the outbound proof and record the actual provider reason.
