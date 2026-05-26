@@ -260,13 +260,13 @@ func TestHandleInference_RateLimited(t *testing.T) {
 
 func TestSearchRateLimitDoesNotConsumeInferenceBudget(t *testing.T) {
 	h, reg, _ := setupHandlerWithRateLimit(t, 1, 1*time.Minute)
-	h.searchClient = &SearchClient{providers: []SearchProvider{&mockSearchProvider{
+	h.searchClient = testSearchClient([]SearchProvider{&mockSearchProvider{
 		name:      "search",
 		available: true,
 		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
 			return []SearchResult{{Title: "Result", URL: "http://example.com", Snippet: "snippet"}}, nil
 		},
-	}}}
+	}}, 1)
 
 	cred, err := reg.IssueCredential("sandbox-mixed-rate")
 	if err != nil {

@@ -1,6 +1,6 @@
 # MissionGradient: Search Provider Plane v1
 
-**Status:** draft — ready for long-running execution  
+**Status:** checkpoint_incomplete — Gate A green; staging deploy proof pending  
 **Date:** 2026-05-26  
 **Approved design:** [design-search-provider-plane-v1.md](./design-search-provider-plane-v1.md)  
 **Supersedes:** ad-hoc search fixes and prompt-side workarounds in `mission-research-runtime-evidence-cadence-v1.md` (gateway slice)  
@@ -245,31 +245,40 @@ Otherwise: **`checkpoint_incomplete`** (resume with next executable probe) or **
 ## Run Checkpoint & Resumption State
 
 ```text
-status: draft
-last checkpoint:
+status: checkpoint_incomplete
+last checkpoint: 2026-05-26 — Gate A (local tests) green after ratelimit/search-plane test fix
 current artifact state:
-  - Code: searchplane implemented locally, not deployed on staging (health 404 on node-b as of 2026-05-26).
-  - Keys: present on staging gateway.
+  - Code: searchplane + gateway routes committed locally (a1040f7); not yet on origin/main or staging.
+  - Staging gateway binary still predates search plane (GET /provider/v1/search/health → 404 as of 2026-05-26).
+  - Keys: present on staging gateway (node-b, prior session).
 what shipped:
+  - a1040f7 feat(gateway): deploy Search Provider Plane v1 (local only until push)
+  - pending: test fix for SearchClient health store in rate-limit integration test
 what was proven:
-  - node-b direct search works with sandbox token (pre-plane binary).
+  - Gate A: nix develop -c go test ./internal/gateway/searchplane/... ./internal/gateway/... -short (pass 2026-05-26)
+  - node-b direct POST /provider/v1/search with sandbox token returned hits (pre-plane binary, prior session)
 unproven or partial claims:
-  - Parallel fan-out on staging.
-  - Durable health across restart on staging.
-  - Product-path empty-result elimination.
+  - origin/main contains search plane commits
+  - CI green for gateway closure
+  - Staging /provider/v1/search/health 200 with provider states
+  - Parallel fan-out, durable health across restart, ops reset on staging
+  - Product-path researcher web_search merged_count > 0 (P-product)
 belief-state changes:
+  - Gate A was blocked by TestSearchRateLimitDoesNotConsumeInferenceBudget using bare SearchClient without in-memory health store; fixed via testSearchClient().
 remaining error field:
-  - Deploy lag; VText/researcher pain attributed to search infra not yet live.
+  - Deploy lag: code not pushed/deployed; downstream still compensates for missing control plane.
 highest-impact remaining uncertainty:
-  Whether next push triggers gateway-only host deploy without unrelated churn.
+  Deployed SHA on choir.news matches pushed commit and /provider/v1/search/health is live.
 next executable probe:
-  Push merge commit; verify CI; verify staging /provider/v1/search/health .
+  Push a1040f7 + test fix to origin/main → monitor CI → confirm staging deploy SHA → curl /provider/v1/search/health on node-b (Gate B).
 suggested resume goal string:
-  /goal Continue docs/mission-search-provider-plane-v1.md: complete staging deploy proof (Gates B–D) and update mission status to complete or blocked_incomplete with evidence.
+  /goal Continue docs/mission-search-provider-plane-v1.md: push search plane to origin/main, complete landing loop (CI + staging deploy identity), then run Gates B–D staging probes (P-healthy through P-product). Record evidence in the mission ledger. Do not start VText or mail work. Set status complete only when acceptance criteria met.
 evidence artifact refs:
+  - docs/omp-session-resume-search-provider-plane-2026-05-26.md
+  - Gate A command output (local, 2026-05-26)
 rollback refs:
-  - Revert deploy via normal git revert + redeploy previous gateway closure if Gate D fails.
-```
+  - Revert deploy via git revert of search plane commit(s) + redeploy previous gateway closure if Gate D fails.
+``````
 
 ---
 
@@ -305,5 +314,5 @@ supports_promotion: yes | no
 For a fresh agent session:
 
 ```text
-/goal Continue docs/mission-search-provider-plane-v1.md as a Codex-operated MissionGradient mission. Read Run Checkpoint & Resumption State first. Execute the next executable probe only. Descend the loss landscape: deploy search plane to staging if not done, then run Gates B–D and record evidence in the mission ledger. Do not start VText or mail work. Update mission status when stopping.
+/goal Continue docs/mission-search-provider-plane-v1.md as a Codex-operated MissionGradient mission. Read Run Checkpoint & Resumption State and Evidence Ledger first. Gate A is green locally. Execute landing loop: push origin/main → monitor CI → verify staging deploy SHA → run Gates B–D (curl probes P-healthy..P-restart on node-b, then P-product via product path). Forbidden: prompt/VText fixes, bypassing gateway merge, claiming staging from local tests only. Update mission checkpoint and status (complete | checkpoint_incomplete | blocked_incomplete) with cited evidence before stopping.
 ```
