@@ -287,6 +287,8 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/mail";
+      StateDirectoryMode = "0700";
+      UMask = "0077";
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
       ReadWritePaths = [ mailDir ];
       Environment = [
@@ -621,10 +623,15 @@ in
     "d /var/lib/go-choir/services 0755 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
-    "d ${mailDir} 0750 root root -"
-    "d ${mailDir}/raw 0750 root root -"
-    "d ${mailDir}/attachments 0750 root root -"
-    "d ${mailDir}/attachments/quarantine 0750 root root -"
+    "d ${mailDir} 0700 root root -"
+    "d ${mailDir}/raw 0700 root root -"
+    "d ${mailDir}/attachments 0700 root root -"
+    "d ${mailDir}/attachments/quarantine 0700 root root -"
+    "z ${mailDir} 0700 root root -"
+    "z ${mailDir}/mail.db 0600 root root -"
+    "z ${mailDir}/raw 0700 root root -"
+    "z ${mailDir}/attachments 0700 root root -"
+    "z ${mailDir}/attachments/quarantine 0700 root root -"
     "d /var/lib/go-choir/guest 0750 root root -"
     "d /var/lib/go-choir/guest-playwright 0750 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
