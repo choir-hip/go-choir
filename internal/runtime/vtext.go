@@ -1941,7 +1941,15 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("(empty document)")
 	}
 	b.WriteString("\n---\n")
-	if hardRequirements := vtextHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content); len(hardRequirements) > 0 {
+	hardRequirements := vtextHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
+	hasSuperDelivery := vtextWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper)
+	if !hasSuperDelivery {
+		hardRequirements = vtextFilterFinalCommandEvidenceRequirements(hardRequirements)
+		if strings.Contains(metadataString(metadata, "seed_prompt")+req.Prompt+current.Content, "[CMD]") {
+			hardRequirements = append(hardRequirements, "Pending command evidence rule: before a super delivery exists, do not include a Source Ledger row, status row, or placeholder whose label is [CMD]; describe command evidence as pending without that label.")
+		}
+	}
+	if len(hardRequirements) > 0 {
 		b.WriteString("\nHard requirements checklist for the next canonical revision:\n")
 		for _, requirement := range hardRequirements {
 			b.WriteString("- ")
@@ -2010,6 +2018,20 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\",\"operation\":\"replace_all\",\"content\":\"complete current-state document\"}.")
 	b.WriteString("\nIf you end the run without edit_vtext, no canonical document revision will be created.")
 	return b.String()
+}
+
+func vtextFilterFinalCommandEvidenceRequirements(requirements []string) []string {
+	if len(requirements) == 0 {
+		return requirements
+	}
+	filtered := requirements[:0]
+	for _, requirement := range requirements {
+		if strings.HasPrefix(requirement, "Final command evidence label: [CMD]") {
+			continue
+		}
+		filtered = append(filtered, requirement)
+	}
+	return filtered
 }
 
 func vtextWorkerMessagesContainRole(messages []ChannelMessage, role string) bool {

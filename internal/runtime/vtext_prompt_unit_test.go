@@ -131,7 +131,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"Required sentence prefix: SECTION 7 UPDATE:",
 		"Required sentence prefix: SECTION 12 UPDATE:",
 		"Preserve exact marker line: USER_LONG_RUBRIC_MARKER: preserve this exact marker.",
-		"Final command evidence label: [CMD] (final-only:",
+		"Pending command evidence rule: before a super delivery exists",
 		"Preserve explicit hard requirements from the original user request and current document across every revision",
 		"exact marker strings",
 		"required headings or section counts",
@@ -144,6 +144,37 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		if !strings.Contains(request, want) {
 			t.Fatalf("hard-constraint prompt missing %q:\n%s", want, request)
 		}
+	}
+}
+
+func TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-long-rubric-super",
+		RevisionID: "rev-long-rubric-super",
+		Content:    "1. Direct user edits\nEvidence pending.\n\nUSER_LONG_RUBRIC_MARKER: preserve this exact marker.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	recent := []ChannelMessage{{
+		Role:    AgentProfileSuper,
+		From:    "super:one",
+		Content: "Worker update ready.\n\nFindings:\n- [CMD] command exited 0 and printed the expected hash.",
+	}}
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"seed_prompt": "The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
+	}, vtextAgentRevisionRequest{
+		Intent: "integrate_super_evidence",
+	}, "", true, false, recent, nil)
+
+	for _, want := range []string{
+		"Final command evidence label: [CMD] (final-only:",
+		"[CMD] command exited 0",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("super-evidence prompt missing %q:\n%s", want, request)
+		}
+	}
+	if strings.Contains(request, "Pending command evidence rule: before a super delivery exists") {
+		t.Fatalf("super-evidence prompt should not retain pending-only command rule:\n%s", request)
 	}
 }
 
