@@ -642,6 +642,75 @@ next executable probe:
   has been recorded, then rerun the long-section rubric across the accepted
   model set.
 
+checkpoint update, 2026-05-26 02:13 UTC:
+
+- Landed normalized coagent update direction through code commit
+  `92896a2ae8069f58f42e60c7587f97ec7a808913` after docs checkpoint
+  `776dc94`.
+- Local proof passed:
+  `nix develop -c scripts/go-test-runtime-shards`.
+- CI run `26427881056` passed, including runtime shards, non-runtime tests,
+  integration smoke, Go vet/build, and staging deploy.
+- Staging `/health` reported proxy and sandbox deployed at
+  `92896a2ae8069f58f42e60c7587f97ec7a808913`, deployed at
+  `2026-05-26T01:57:16Z`, with `vmctl_status=ok`.
+- Deployed long-section rubric rerun command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-92896a2-full-20260526T015800Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Kimi low row failed the strict final-rubric timeout. Evidence:
+  `test-results/vtext-long-section-rubric-staging-92896a2-full-20260526T015800Z/fireworks-kimi-k2p6-low.json`.
+- Important positive signal: the normalized primitive worked for researcher
+  cadence. Trace shows repeated successful `web_search` and
+  `submit_coagent_update` calls; VText consumed `Coagent update ready` channel
+  messages and produced multiple app revisions from those updates.
+- New problem evidence: VText wrote that super execution was pending/requested
+  and carried a `[CMD]` ledger row, but Trace showed no `super` agent and no
+  `request_super_execution` tool result. The document advanced through
+  researcher-grounded revisions while the execution obligation remained only a
+  narrative placeholder.
+
+cognitive transform pass:
+
+- Depth extraction: the load-bearing variable is not "can researchers report
+  findings" anymore; it is whether VText treats unmet capability obligations as
+  durable workflow debt instead of prose state.
+- Boundary inversion: a capability request or prompt obligation must be treated
+  as "not done until a role-appropriate update arrives"; writing "pending" is
+  useful only if paired with the side-effect that creates the pending work.
+- Evidence-substitution lens: the expected command hash in the prompt is a
+  verifier bait. A passing document must distinguish target/expected values
+  from evidence returned by super.
+- State-machine lens: the minimal prompt-level invariant is "if the user asked
+  for command/code/browser/verification evidence and no successful super update
+  exists, the next VText turn must either call `request_super_execution` or
+  explicitly say the execution obligation is still blocked without claiming the
+  evidence."
+
+belief-state changes:
+
+- Normalizing researcher/super/vsuper/co-super updates into
+  `submit_coagent_update` reduced API surface noise without requiring wrapper
+  tools, and it preserved VText wakeup from incoming worker messages.
+- The long-rubric failure has narrowed from "research plus execution
+  coordination is generally noisy" to "VText does not reliably convert an
+  outstanding execution obligation into `request_super_execution` after
+  researcher updates arrive."
+
+remaining error field:
+
+- The system can still create polished long VText revisions with a false
+  workflow state: command execution described as pending/requested even though
+  no super request has been made.
+- Strict model-suite pass remains incomplete until Kimi low, v4-flash medium,
+  and GPT-5.5 low each show researcher grounding plus successful super evidence
+  on the long-section rubric.
+
+next executable probe:
+
+- Tighten only VText prompt/policy language so it must call
+  `request_super_execution` when an unmet execution/code/browser/verification
+  obligation is present, and must not use `[CMD]` as evidence unless a super
+  update returned it. Do not add deterministic wrapper/control-flow tools.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
