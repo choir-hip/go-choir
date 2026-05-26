@@ -1,6 +1,13 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      force_staging_deploy:
+        description: Force a host/frontend staging deploy from main
+        type: boolean
+        required: false
+        default: true
   push:
     branches: [main]
     paths-ignore:
@@ -149,7 +156,7 @@ jobs:
   deploy-impact:
     name: Detect Staging Deploy Impact
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     outputs:
       deploy_needed: ${{ steps.detect.outputs.deploy_needed }}
       deploy_host: ${{ steps.detect.outputs.deploy_host }}
@@ -171,6 +178,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_staging_deploy }}" == "true" ]]; then
+            {
+              echo "deploy_needed=true"
+              echo "deploy_host=true"
+              echo "deploy_frontend=true"
+              echo "deploy_host_service=false"
+              echo "deploy_ordinary_guest=false"
+              echo "deploy_playwright_guest=false"
+              echo "deploy_host_os=true"
+              echo "deploy_vmctl_restart=false"
+              echo "host_services="
+              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy"
+            } >> "$GITHUB_OUTPUT"
+            echo "Staging deploy forced by manual workflow_dispatch."
+            exit 0
+          fi
+
           before="${{ github.event.before }}"
           after="${{ github.sha }}"
 
@@ -738,7 +762,7 @@ jobs:
             note_phase "active computer refresh"
 
             echo "==> Smoke test: health endpoints"
-            for port in 8081 8082 8083 8084 8086; do
+            for port in 8081 8082 8083 8084 8086 8087; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done

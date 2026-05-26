@@ -49,6 +49,7 @@ func NewHandler(cfg *Config, store *Store) *Handler {
 
 // RegisterRoutes registers maild routes.
 func RegisterRoutes(s *server.Server, h *Handler) {
+	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/email/resend/webhook", h.HandleResendWebhook)
 	s.HandleFunc("/api/email/send", h.HandleSend)
 	s.HandleFunc("/api/email/messages", h.HandleMessages)

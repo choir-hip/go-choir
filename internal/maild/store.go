@@ -84,6 +84,14 @@ type EmailSourcePacket struct {
 	CreatedAt      string
 }
 
+// StoreStats is a safe operational summary for health reporting.
+type StoreStats struct {
+	Aliases                int `json:"aliases"`
+	Messages               int `json:"messages"`
+	QuarantinedAttachments int `json:"quarantined_attachments"`
+	WebhookEvents          int `json:"webhook_events"`
+}
+
 // OpenStore opens a maild SQLite store.
 func OpenStore(dbPath string) (*Store, error) {
 	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
@@ -295,6 +303,24 @@ func (s *Store) CountWebhookEvents(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// Stats returns non-sensitive mailbox counters for service health.
+func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
+	var stats StoreStats
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_aliases`).Scan(&stats.Aliases); err != nil {
+		return StoreStats{}, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_messages`).Scan(&stats.Messages); err != nil {
+		return StoreStats{}, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_attachments WHERE status = 'quarantined'`).Scan(&stats.QuarantinedAttachments); err != nil {
+		return StoreStats{}, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&stats.WebhookEvents); err != nil {
+		return StoreStats{}, err
+	}
+	return stats, nil
 }
 
 // ListMessages returns owner-visible messages for a simple v0 folder.
