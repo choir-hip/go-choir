@@ -8,9 +8,9 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: deployed maild/proxy/frontend slice exists on Node B at d749fdc; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling
+current artifact state: deployed maild/proxy/frontend slice exists on Node B at 73beb6e; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -398,7 +398,7 @@ unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
   - real inbox appearance, real reply/send, and real Send to Choir trace
-  - GitHub Actions emitted runs for 73beb6e again, but CI failed during external action setup/download before project code gates; deploy proof for this checkpoint is manual Node B source-truth deploy proof
+  - GitHub Actions emitted runs for 73beb6e again, but CI failed before project code gates; rerun evidence includes GitHub checkout 403 "Your account is suspended" and action archive download failures, so deploy proof for this checkpoint is manual Node B source-truth deploy proof
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
@@ -429,7 +429,7 @@ evidence artifact refs:
   - scripts/mail-gandi-plan-records --records <sample-resend-domain-json> --ttl 3600
   - scripts/mail-gandi-rollback-records --snapshot <sample-gandi-snapshot-json> --records <sample-resend-domain-json>
   - PATH=<fake-ssh> scripts/mail-acceptance-check --owner owner-000 --subject Acceptance --expect-attachment-quarantine --expect-ingress-events 0
-  - GitHub Actions CI run 26447497910 for 73beb6e failed during setup/action download before project gates
+  - GitHub Actions CI run 26447497910 for 73beb6e failed during setup/action download before project gates; rerun shows checkout 403 "Your account is suspended"
   - manual Node B deploy from /opt/go-choir at 73beb6e127199ea77c035e3729a76f23c8d03a16
   - public /health deployed_commit 73beb6e127199ea77c035e3729a76f23c8d03a16
   - maild /health status ok with stats.ingress_events 0, resend_api_key_configured true, and webhook_secret_configured false
@@ -470,6 +470,37 @@ The service code passed normal Go tests, and the deploy failure is a packaging
 hash mismatch isolated to the new `maild` derivation. The smallest safe fix is
 to set `maild`'s package-specific `vendorHash` to the hash reported by the Node
 B Linux Nix builder, then rerun the normal push/deploy loop.
+
+## CI Finding: GitHub account checkout failure
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The CI rerun for behavior commit `73beb6e127199ea77c035e3729a76f23c8d03a16`
+still fails before any project code is checked out or tested. Some jobs cannot
+download GitHub Action archives, and the checkout job now receives HTTP 403
+from GitHub with an account suspension message.
+
+Evidence:
+
+```text
+CI run: 26447497910
+rerun timestamp: 2026-05-26T12:21:13Z
+Go Test / Go Vet setup: failed to download actions/setup-go@v6 archive
+Detect Staging Deploy Impact checkout:
+  git fetch -> HTTP 403
+  remote: Your account is suspended. Please visit https://support.github.com for more information.
+result: project tests, frontend build, and deploy jobs did not run in CI
+```
+
+Belief-state update:
+
+- This checkpoint cannot use GitHub Actions as acceptance evidence until the
+  GitHub account/repository access issue is resolved.
+- Manual Node B deploy identity and local/dev-shell test evidence remain the
+  best available proof path for maild behavior changes, but they are weaker than
+  the normal CI/deploy loop.
 
 ## Staging Security Finding: mail State File Modes
 
