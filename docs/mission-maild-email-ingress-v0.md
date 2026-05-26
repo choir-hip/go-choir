@@ -8,11 +8,11 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: local maild/proxy/frontend/deploy slice exists; no commit, deploy, Resend setup, or DNS/MX changes yet
-what shipped: none
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval
-unproven claims: deployed Node B service, real Resend webhook, Gandi DNS/MX, staging auth route, real MAS handoff, real inbound/outbound mail
-next executable probe: visual check the minimal Email app, then commit/push/deploy and prove maild route identity on staging before touching DNS/MX
+current artifact state: deployed maild/proxy/frontend slice exists on Node B at d749fdc; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval
+unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
+next executable probe: get exact Resend domain/receiving/webhook records and secret, install RESEND_WEBHOOK_SECRET, then update Gandi DNS only from provider truth and run real inbound/outbound acceptance
 ```
 
 ## Mission Frame
@@ -368,46 +368,51 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: local implementation/deploy wiring checkpoint on 2026-05-26
-current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, and mail credential deploy script are present locally
-what shipped: nothing yet
+last checkpoint: deployed reply-threading checkpoint on 2026-05-26 at d749fdc
+current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed; Resend receiving/webhook and Gandi DNS are not configured
+what shipped: maild service, minimal Email app, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, and RFC reply threading headers for owner replies
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
   - fake Resend retrieval stores inbound message, quarantines attachment metadata, and creates UNTRUSTED_EXTERNAL_EMAIL source packet
   - owner-only outbound send through fake Resend stores Sent row
+  - owned reply targets preserve provider message_id and emit In-Reply-To/References headers in the Resend send payload
   - proxy forwards authenticated /api/email/* to maild while stripping spoofed identity and Cookie headers
   - proxy-owned Send to Choir fetches a source packet and submits guarded prompt-bar text to the resolved user computer
   - frontend production build succeeds
   - local Playwright visual harness renders Email app on desktop and mobile-sized windows with fixture mail and no `undefined` text
   - NixOS eval exposes go-choir-maild and Caddy webhook route before generic /api/*
+  - Node B deployed commit identity and service health report d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
 unproven or partial claims:
-  - frontend visual/browser proof
-  - x86_64 Linux package build/vendor hashes on Node B/CI
-  - deployed systemd service health
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
   - real inbox appearance, real reply/send, and real Send to Choir trace
+  - GitHub Actions no longer emits runs for recent pushes; deploy proof is manual Node B source-truth deploy proof
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
   - 000@choir.news must be seeded to the real auth user id through MAILD_ROOT_OWNER_ID; Nix must not bake in a placeholder owner
   - plus aliases should not implicitly fall back to 000 because that weakens secret-alias policy
+  - outbound reaches Resend, but the current Resend account state rejects 000@choir.news because choir.news is not verified
 remaining error field:
-  - deployed proof and real provider/DNS proof are still untouched
+  - real provider/DNS proof is still untouched because exact Resend verification/receiving records and webhook secret are missing
   - v0 does not yet expose raw headers/details in the UI
   - attachment content download/extraction remains intentionally deferred
-highest-impact remaining uncertainty: deployed route/auth/provider behavior under real staging conditions
-next executable probe: run frontend visual check, then commit/push and let CI/deploy prove x86_64 service packaging before configuring Resend/Gandi
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from the local implementation checkpoint; visual-check Email app, commit/push, monitor CI/deploy, verify maild staging route, then configure Resend/Gandi only after rollback evidence
+highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
+next executable probe: fetch or enter exact Resend verification/MX/webhook data, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint d749fdc; configure Resend domain verification/receiving/webhook with exact provider records, update Gandi DNS only from provider truth, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
+  - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
   - npm run build in frontend
   - local Playwright screenshots: /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/choir-email-visual/email-desktop.png and /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/choir-email-visual/email-mobile-narrow.png
   - nix eval .#packages.x86_64-linux.maild.pname
   - nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-maild.description
   - nix eval .#nixosConfigurations.go-choir-b.config.services.caddy.virtualHosts."choir.news".extraConfig
+  - public /health deployed_commit d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+  - maild /health status ok with resend_api_key_configured true and webhook_secret_configured false
 rollback refs:
-  - do not add MX until deployed route is proven
+  - do not add MX until exact Resend records and webhook secret are available
+  - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
   - stop go-choir-maild and remove Caddy webhook route if staging regresses
   - preserve /var/lib/go-choir/mail for forensics unless explicitly purging
 ```
@@ -895,3 +900,58 @@ Required next change:
 - When `reply_to_message_id` is provided, require that the current owner can
   read the target message, extract its RFC `message_id`, and set
   `In-Reply-To` and `References` in the Resend send payload.
+
+## Deployed Checkpoint: owner reply threading wired
+
+Recorded: 2026-05-26.
+
+Status:
+
+The documented reply-threading gap is fixed and deployed. Inbound records now
+preserve Resend's received RFC `message_id` in raw message metadata, and
+owner-initiated replies resolve `reply_to_message_id` through the current
+owner's message visibility before adding `In-Reply-To` and `References` to the
+Resend Send Email payload. Missing RFC message ids fail before any provider
+send, and unowned reply targets are rejected.
+
+Evidence:
+
+```text
+behavior commit: d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+local focused test: nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+test coverage:
+  TestHandleResendWebhookFetchesAndStoresInboundMessage asserts stored message_id
+  TestHandleSendAddsReplyHeadersForOwnedReplyTarget asserts In-Reply-To and References
+  TestHandleSendRejectsReplyTargetMissingMessageID asserts no send without RFC id
+  TestHandleSendRejectsUnownedReplyTarget asserts owner boundary before send
+GitHub Actions: no new run emitted for d749fdc; newest run remains 9192f37
+deploy method: Node B /opt/go-choir fast-forward to origin/main, NixOS build/switch, maild/proxy restart
+deploy smoke probes: 8081, 8082, 8083, 8084, 8086, 8087 health ok
+public /health:
+  proxy deployed_commit: d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+  sandbox deployed_commit: d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+maild /health:
+  status: ok
+  resend_api_key_configured: true
+  webhook_secret_configured: false
+  root_owner_id_configured: true
+  stats.aliases: 1
+  stats.messages: 0
+  stats.quarantined_attachments: 0
+  stats.webhook_events: 0
+systemd: go-choir-maild active; go-choir-proxy active
+```
+
+Belief-state update:
+
+- The owner reply code path is production-shaped, but real provider reply proof
+  still waits on Resend domain verification because outbound currently fails at
+  provider setup.
+- `maild` still does not need direct MAS authority for email replies; replies
+  remain explicit owner sends through the authenticated Email app/proxy path.
+
+Remaining blocker:
+
+- Real inbound, real outbound, and real reply threading require exact Resend
+  domain verification, receiving/webhook setup, and Gandi DNS changes from
+  provider-sourced records. `RESEND_WEBHOOK_SECRET` is still absent on Node B.
