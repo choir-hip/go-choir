@@ -669,3 +669,39 @@ Residual platform risk:
 - GitHub Actions did not emit runs for several post-`9192f37` pushes and manual
   dispatch returned an API 500. The workflow now contains a recovery trigger,
   but GitHub's event/run creation path remains unproven in this session.
+
+## Evidence Finding: admin inspection surface absent
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The reference doc requires admin/dev inspection through a CLI command or a
+localhost-only endpoint, and specifically forbids unauthenticated public raw
+message/admin inspection. The current deployed slice has a minimal authenticated
+Email app and safe health counters, but no operator inspection tool for
+messages, quarantined attachments, source packets, aliases, or webhook events.
+Once real Resend inbound is enabled, this would make the acceptance proof rely
+too heavily on browser UI and ad hoc SQLite commands on Node B.
+
+Evidence:
+
+```text
+reference invariant: docs/choir-email-reference-v0.md says admin/dev inspection should be a CLI command or localhost-only endpoint
+current implementation: no cmd/maildctl package exists
+available deployed evidence: /health counters only; no message/source-packet listing command
+```
+
+Belief-state update:
+
+- A read-only `maildctl` CLI is the right small addition: it keeps admin
+  inspection off the public edge, avoids exposing raw data through Caddy, and
+  gives the final real inbound/quarantine/source-packet acceptance proof a
+  repeatable command.
+
+Required next change:
+
+- Add `cmd/maildctl` with read-only subcommands for safe stats, aliases,
+  message lists, message details, attachments, source packets, and webhook
+  events.
+- Package `maildctl` in Nix so it is available on Node B after deploy.
