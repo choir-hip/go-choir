@@ -858,3 +858,40 @@ Remaining blocker:
 - Need Resend domain verification access/records for `choir.news`, plus
   receiving/webhook setup. Do not change Gandi MX/SPF/DKIM/DMARC records from
   guesses; fetch exact records from Resend first.
+
+## Evidence Finding: reply threading metadata not wired
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The Email app sends `reply_to_message_id` when the owner replies, and Resend's
+receiving docs recommend using the received email's RFC `message_id` as
+`In-Reply-To` so mail clients can thread replies. `maild` currently accepts
+`reply_to_message_id` in the request shape but ignores it when building the
+Resend Send Email payload. Inbound records also store the Resend received email
+id as `provider_message_id`, but do not expose the RFC `message_id` through the
+typed message record used by the send path.
+
+Evidence:
+
+```text
+frontend/src/lib/EmailApp.svelte sends reply_to_message_id: selectedMessage.id
+internal/maild/send.go buildResendSendRequest does not read ReplyToMessageID
+internal/maild/ingest.go receives resendReceivedEmail.MessageID but current EmailMessage struct does not expose raw_headers_json/message_id
+official Resend receiving docs: use webhook data.message_id as In-Reply-To for replies
+```
+
+Belief-state update:
+
+- Reply/send is still owner-initiated, but v0 reply behavior is incomplete
+  until `maild` maps an owned reply target to `In-Reply-To`/`References`.
+- This can be fixed without changing public authority boundaries or requiring
+  provider credentials.
+
+Required next change:
+
+- Preserve received RFC `message_id` in stored message metadata.
+- When `reply_to_message_id` is provided, require that the current owner can
+  read the target message, extract its RFC `message_id`, and set
+  `In-Reply-To` and `References` in the Resend send payload.
