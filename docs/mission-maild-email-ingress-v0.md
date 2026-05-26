@@ -1757,3 +1757,44 @@ Belief-state update:
 - The highest-impact remaining uncertainty is still external Resend
   domain/webhook truth plus webhook signing secret; DNS/MX must remain
   unchanged until that evidence is available.
+
+## Evidence Finding: receive policy fields are not enforced on inbound ingest
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The reference model describes Choir Email as policy-gated ingress. The SQLite
+schema already includes `email_receive_policies` fields such as
+`allow_public_inbound`, `require_sender_whitelist`, `require_secret_alias`,
+`allow_auto_agent_read`, `allow_auto_agent_write`,
+`allow_auto_outbound_send`, and `quarantine_by_default`. However, the current
+webhook ingest path resolves an alias and immediately stores the message. It
+does not load the alias's receive policy, check a sender whitelist, or fail
+closed for future non-public aliases.
+
+Evidence:
+
+```text
+reference: docs/choir-email-reference-v0.md says maild owns alias and receive/send policy enforcement
+schema: internal/maild/store.go creates email_receive_policies and aliases reference receive_policy_id
+seed: DefaultPublicPolicyID has require_sender_whitelist=0 and quarantine_by_default=1
+ingest path: internal/maild/webhook.go ingestReceivedEmail resolves alias then calls StoreInboundMessage
+missing path: no GetReceivePolicy, no email_sender_whitelist table, no sender whitelist check
+current tests: webhook tests prove public alias ingest/quarantine, but not deny/allow policy behavior
+```
+
+Belief-state update:
+
+- The default public `000@choir.news` path is still acceptable for v0 public
+  inbound, but the service boundary is weaker than the reference once trusted
+  upload or private aliases are introduced.
+- This can be fixed locally without provider access: add receive-policy loading
+  and fail-closed enforcement before `StoreInboundMessage`.
+
+Required next change:
+
+- Add a read-side receive-policy model, create `email_sender_whitelist`, enforce
+  public/whitelist/secret-alias gates before storing inbound messages, preserve
+  quarantine-by-default behavior for attachments, and add focused tests proving
+  unwhitelisted trusted-upload-style aliases are not stored.
