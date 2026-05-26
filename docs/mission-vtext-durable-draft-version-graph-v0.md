@@ -794,6 +794,83 @@ next executable probe:
   first-version shaping where it protects prompt-to-v1 cadence. Rerun the long
   rubric on the three accepted models after deploy.
 
+checkpoint update, 2026-05-26 03:24 UTC:
+
+- Tool-choice fix `f3d48e7` later landed, followed by default-policy and
+  temporal-grounding fixes through deployed commit
+  `4e3080ba3dbb3f7dc5c64396f0fd597e22ea1488`. CI run `26429507417`
+  passed; staging `/health` reported proxy and sandbox deployed at
+  `4e3080ba3dbb3f7dc5c64396f0fd597e22ea1488`, deployed at
+  `2026-05-26T02:53:48Z`.
+- Manual mobile QA before these fixes showed two distinct staging problems:
+  bootstrap route instability with repeated `502` responses around the
+  15-20 second mark, and simple current-events VText runs that stalled or used
+  stale/irrelevant baseball information.
+- Default-policy proof after `4e3080b` passed for the simple current-events
+  case. Evidence:
+  `test-results/vtext-default-policy-staging-4e3080b-20260526T025423Z/default-policy-proof.json`.
+  The generated policy used DeepSeek v4 Flash at `medium` reasoning for both
+  VText and researcher, and the document anchored "last night" to Monday,
+  2026-05-25 instead of the earlier stale May 12-13 range.
+- Full long-section rubric rerun command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-4e3080b-full-20260526T025808Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Kimi low passed the strict long-section rubric. Evidence:
+  `test-results/vtext-long-section-rubric-staging-4e3080b-full-20260526T025808Z/fireworks-kimi-k2p6-low.json`.
+- DeepSeek v4 Flash medium failed the strict final-rubric timeout, but not with
+  the old no-super symptom. Trace showed 262 moments, two researcher agents,
+  one super agent, 15 search queries, successful `request_super_execution`, one
+  `super:bash`, one super `submit_coagent_update`, and five VText edits. The
+  final content incorporated the command hash and researcher/super evidence but
+  abandoned the exact requested numbered-section shape and omitted the required
+  `SECTION 1 UPDATE:`, `SECTION 7 UPDATE:`, and `SECTION 12 UPDATE:` sentences.
+  Evidence:
+  `test-results/vtext-long-section-rubric-staging-4e3080b-full-20260526T025808Z/fireworks-deepseek-v4-flash-medium.json`.
+- GPT-5.5 low failed earlier in the pipeline. Trace showed only one VText
+  agent run, no researcher, no super, no search, and two `edit_vtext` tool
+  calls at the same timestamp. The current document head was the user marker
+  revision over the initial appagent v1, so no source-grounded follow-up
+  arrived after the dirty user edit. Evidence:
+  `test-results/vtext-long-section-rubric-staging-4e3080b-full-20260526T025808Z/chatgpt-gpt-5-5-low.json`.
+- Staging health after the long run still reported deployed `4e3080b`.
+  Bootstrap counters increased in total volume during the run, but the recorded
+  bootstrap error counts did not increase from the previously observed
+  `http_502=8` and `resolve_error=15`, so the long-rubric failures should be
+  treated as VText coordination/content-shape failures rather than fresh VM
+  boot failures.
+
+belief-state changes:
+
+- The worker-wake exact-tool-choice fix did unblock the old execution bridge
+  for at least Kimi low and v4 Flash medium: VText can now request super and
+  consume returned super evidence on the long rubric.
+- The remaining v4 Flash problem is a long-document obligation-retention
+  problem. Once enough worker evidence arrives, VText can replace the document
+  with a coherent research brief while losing the user's exact section and
+  update-sentence contract.
+- The remaining GPT-5.5 problem appears to be a continuation/action-selection
+  problem before delegation: the model produced an initial working draft and
+  repeated `edit_vtext`, but did not open researcher or super work before the
+  dirty user marker became the head.
+- VM pressure remains an operational risk, but this evidence does not show new
+  bootstrap errors as the direct cause of the long-rubric failures.
+
+remaining error field:
+
+- VText still does not robustly preserve explicit long-document obligations
+  across worker-update integration for every accepted model.
+- GPT-5.5 low can still satisfy the first-draft surface while failing to launch
+  the requested researcher/super pipeline.
+- The accepted suite is not complete until Kimi low, v4 Flash medium, and
+  GPT-5.5 low all pass the long-section mixed researcher/super/user-edit
+  rubric with durable marker preservation and exact obligation satisfaction.
+
+next executable probe:
+
+- Root-cause the GPT duplicate-edit/no-delegation trace and the v4
+  obligation-retention trace against the VText prompts and first-tool policy.
+  Prefer prompt and tool-choice surface shaping over deterministic role-specific
+  control flow; keep the agent harness uniform.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
