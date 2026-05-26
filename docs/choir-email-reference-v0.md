@@ -149,6 +149,13 @@ Implementation checkpoint, 2026-05-26:
   domain/webhook status, Gandi mail-related records, public DNS, and Node B
   `maild` health. It redacts secret-shaped fields and does not mutate provider
   state.
+- `scripts/mail-gandi-plan-records` plans or applies Gandi LiveDNS records from
+  a Resend domain JSON response. It is dry-run by default, snapshots current
+  Gandi records before apply, and requires `--allow-root-mx --apply` before
+  replacing the apex MX RRset.
+- `scripts/mail-gandi-rollback-records` uses the same Resend domain JSON plus a
+  pre-apply Gandi snapshot to restore or delete affected RRsets. It is also
+  dry-run by default and requires `--allow-root-mx --apply` for root MX rollback.
 - DNS/MX, real Resend setup, attachment content download, and real staging proof
   are still future steps.
 
@@ -462,9 +469,33 @@ key cannot retrieve exact DNS records or the webhook signing secret; use a
 broader temporary Resend API key or the dashboard to obtain provider truth
 first.
 
-Root-domain receiving is intentional for the numeric-address product model. If
-human IMAP-style mailboxes are later required on the root domain, that is a
-deliberate product architecture change, not a split-brain MX assumption.
+Once exact provider records are available, first dry-run the Gandi plan:
+
+```bash
+scripts/mail-gandi-plan-records --records resend-domain.json
+```
+
+If the plan includes the apex `@/MX` RRset, applying requires the intentional
+root-mail cutover flags:
+
+```bash
+scripts/mail-gandi-plan-records --records resend-domain.json --allow-root-mx --apply
+```
+
+The apply command writes a pre-apply Gandi snapshot. Keep that path for rollback:
+
+```bash
+scripts/mail-gandi-rollback-records \
+  --snapshot /path/to/gandi-choir.news-YYYYMMDDTHHMMSSZ.json \
+  --records resend-domain.json \
+  --allow-root-mx
+```
+
+Root-domain receiving is intentional for the numeric-address product model. The
+owner has explicitly accepted replacing Gandi root-domain mail routing because
+Gandi mailboxes are not in use for Choir. If human IMAP-style mailboxes are
+later required on the root domain, that is a deliberate product architecture
+change, not a split-brain MX assumption.
 
 DNS/MX mutation should happen late, after service health, webhook verification,
 secret deployment, and rollback evidence are ready.

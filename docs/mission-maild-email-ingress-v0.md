@@ -10,7 +10,7 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 status: checkpoint_incomplete
 current artifact state: deployed maild/proxy/frontend slice exists on Node B at d749fdc; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Gandi DNS plan/rollback tooling
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -94,7 +94,9 @@ Current beliefs:
   MAS ingress. Local proxy tests now prove the first contract shape without
   giving `maild` sandbox credentials.
 - Root-domain MX for `choir.news` is acceptable for the numeric-address product
-  model, but must be treated as a late, reversible operations step.
+  model, and the owner has explicitly accepted replacing Gandi mail routing
+  because Gandi mailboxes are not in use. It still must be treated as a late,
+  reversible operations step based on exact Resend records.
 - The mockups give useful visual direction, but v0 must cut search, rules,
   alias management, storage meters, bulk actions, automation, rich compose, and
   threading.
@@ -383,6 +385,7 @@ what was proven:
   - NixOS eval exposes go-choir-maild and Caddy webhook route before generic /api/*
   - Node B deployed commit identity and service health report d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
   - read-only provider readiness probe reports Resend/Gandi/Node B state without mutating DNS or printing secrets
+  - Gandi DNS plan and rollback helpers dry-run from Resend domain JSON without mutating records
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -412,9 +415,13 @@ evidence artifact refs:
   - public /health deployed_commit d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
   - maild /health status ok with resend_api_key_configured true and webhook_secret_configured false
   - scripts/mail-provider-readiness
+  - scripts/mail-gandi-plan-records --records <sample-resend-domain-json> --ttl 3600
+  - scripts/mail-gandi-rollback-records --snapshot <sample-gandi-snapshot-json> --records <sample-resend-domain-json>
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
+  - scripts/mail-gandi-plan-records snapshots Gandi records before apply
+  - scripts/mail-gandi-rollback-records restores/deletes affected RRsets from that snapshot
   - stop go-choir-maild and remove Caddy webhook route if staging regresses
   - preserve /var/lib/go-choir/mail for forensics unless explicitly purging
 ```
@@ -551,6 +558,7 @@ Gandi LiveDNS status: choir.news is on LiveDNS
 current root MX: 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
 current root TXT SPF: "v=spf1 include:_mailcust.gandi.net ?all"
 Resend API probe with local key: 401 restricted_api_key, "restricted to only send emails"
+owner decision: replacing Gandi root MX is acceptable because Gandi mailboxes are not in use
 ```
 
 Remaining blocker:
@@ -570,8 +578,9 @@ Next safe operation:
    `/var/lib/go-choir/maild.env`.
 4. Enable receiving for `choir.news` in Resend and copy the exact required MX
    record.
-5. Snapshot current Gandi DNS, then replace root MX only after accepting that
-   root-domain inbound mail will leave Gandi mailbox delivery and go to Resend.
+5. Snapshot current Gandi DNS, then replace root MX with exact Resend records.
+   The owner has accepted that root-domain inbound mail will leave Gandi
+   mailbox delivery and go to Resend.
 
 ## Staging Evidence Finding: maild health and manual deploy path
 
@@ -1010,6 +1019,9 @@ Belief-state update:
 - Gandi can be inspected and later mutated with the available PAT, but the
   mission invariant still forbids DNS mutation until Resend supplies exact
   provider records and a webhook signing secret.
+- Owner authorization for the Gandi mail-routing cutover is now explicit:
+  replacing root-domain Gandi MX is acceptable because Gandi mailboxes are not
+  in use for Choir.
 
 Next executable probe:
 
@@ -1017,3 +1029,41 @@ Next executable probe:
   create/retrieve `choir.news`, enable receiving, create/retrieve the
   `email.received` webhook for `https://choir.news/api/email/resend/webhook`,
   and capture exact DNS records plus `RESEND_WEBHOOK_SECRET`.
+
+## Tooling Checkpoint: reversible Gandi DNS application path
+
+Recorded: 2026-05-26.
+
+Status:
+
+The Gandi DNS cutover path now has dry-run-first operator tooling:
+`scripts/mail-gandi-plan-records` converts a Resend domain JSON response into
+Gandi LiveDNS RRset operations, and `scripts/mail-gandi-rollback-records`
+restores or deletes the same affected RRsets from a pre-apply Gandi snapshot.
+Both scripts refuse to apply root `@/MX` changes unless `--allow-root-mx` is
+provided with `--apply`.
+
+Evidence:
+
+```text
+bash -n scripts/mail-gandi-plan-records scripts/mail-gandi-rollback-records
+sample dry-run plan:
+  input: sample Resend records with send MX/TXT, DKIM TXT, and receiving apex MX
+  result: planned @/MX, send/MX, send/TXT, resend._domainkey/TXT
+  Gandi read: current @/MX shown as 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
+  mutation: none
+  root MX guard: dry-run warns; apply would require --allow-root-mx --apply
+sample dry-run rollback:
+  input: sample Gandi snapshot plus same sample Resend records
+  result: restores @/MX from snapshot and deletes absent send/TXT
+  mutation: none
+```
+
+Belief-state update:
+
+- The Gandi side is now ready for a controlled cutover once exact Resend
+  provider records are available. Remaining risk is not record application
+  mechanics; it is obtaining provider truth and webhook secret from Resend.
+- The owner has accepted the root MX cutover. The scripts still require an
+  explicit operator flag so accidental root mail-routing changes remain
+  unlikely.

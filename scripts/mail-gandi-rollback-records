@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Plan or apply rollback of Gandi LiveDNS RRsets touched by a Resend record plan.
+#
+# Use the Gandi snapshot written by scripts/mail-gandi-plan-records --apply and
+# the same Resend domain JSON input. Default mode is dry-run.
+set -euo pipefail
+
+DOMAIN="choir.news"
+RECORDS_FILE=""
+SNAPSHOT_FILE=""
+APPLY=0
+ALLOW_ROOT_MX=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/mail-gandi-rollback-records --snapshot gandi-snapshot.json --records resend-domain.json [options]
+
+Options:
+  --domain DOMAIN       Domain to configure. Default: choir.news
+  --snapshot FILE      Pre-apply Gandi records snapshot
+  --records FILE       Resend domain JSON used for the original plan
+  --allow-root-mx      Permit rollback touching the apex @/MX RRset
+  --apply              Apply rollback to Gandi LiveDNS. Default is dry-run
+  -h, --help           Show this help
+
+Environment:
+  GANDI_PAT            Required for apply; optional for dry-run
+  CHOIR_MAIL_ENV_FILE  Optional env file. Default: ./.env
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain)
+      DOMAIN="${2:?missing value for --domain}"
+      shift 2
+      ;;
+    --snapshot)
+      SNAPSHOT_FILE="${2:?missing value for --snapshot}"
+      shift 2
+      ;;
+    --records)
+      RECORDS_FILE="${2:?missing value for --records}"
+      shift 2
+      ;;
+    --allow-root-mx)
+      ALLOW_ROOT_MX=1
+      shift
+      ;;
+    --apply)
+      APPLY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CHOIR_MAIL_ENV_FILE:-${REPO_ROOT}/.env}"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command curl
+require_command jq
+
+if [ -z "$SNAPSHOT_FILE" ] || [ -z "$RECORDS_FILE" ]; then
+  echo "error: --snapshot and --records are required" >&2
+  usage >&2
+  exit 2
+fi
+if [ ! -f "$SNAPSHOT_FILE" ]; then
+  echo "error: snapshot file not found: $SNAPSHOT_FILE" >&2
+  exit 2
+fi
+if [ ! -f "$RECORDS_FILE" ]; then
+  echo "error: records file not found: $RECORDS_FILE" >&2
+  exit 2
+fi
+if [ "$APPLY" -eq 1 ] && [ -z "${GANDI_PAT:-}" ]; then
+  echo "error: GANDI_PAT is required for rollback apply" >&2
+  exit 2
+fi
+
+AFFECTED_FILE="$(mktemp)"
+ROLLBACK_FILE="$(mktemp)"
+trap 'rm -f "$AFFECTED_FILE" "$ROLLBACK_FILE"' EXIT
+
+jq -e --arg domain "$DOMAIN" '
+  def strip_dot: sub("\\.$"; "");
+  def normalize_name($domain):
+    (. // "@") as $name
+    | ($name | strip_dot) as $clean
+    | if $clean == "" or $clean == "@" or $clean == ($domain | strip_dot) then "@"
+      elif ($clean | endswith("." + ($domain | strip_dot))) then
+        $clean | sub("\\." + (($domain | strip_dot) | gsub("\\."; "\\\\.")) + "$"; "")
+      else
+        $clean
+      end;
+  [
+    .records[]
+    | select(.type == "MX" or .type == "TXT" or .type == "CNAME")
+    | {rrset_name: (.name | normalize_name($domain)), rrset_type: .type}
+  ]
+  | unique
+  | sort_by(.rrset_name, .rrset_type)
+' "$RECORDS_FILE" > "$AFFECTED_FILE"
+
+jq -n --slurpfile affected "$AFFECTED_FILE" --argjson snapshot "$(cat "$SNAPSHOT_FILE")" '
+  $affected[0]
+  | map(. as $target
+    | {
+        rrset_name: $target.rrset_name,
+        rrset_type: $target.rrset_type,
+        restore: (
+          [ $snapshot[]
+            | select(.rrset_name == $target.rrset_name and .rrset_type == $target.rrset_type)
+            | {rrset_values, rrset_ttl}
+          ][0] // null
+        )
+      }
+  )
+' > "$ROLLBACK_FILE"
+
+echo "== Gandi DNS Rollback Plan (${DOMAIN}) =="
+echo "mode: $(if [ "$APPLY" -eq 1 ]; then echo apply; else echo dry-run; fi)"
+echo
+jq . "$ROLLBACK_FILE"
+echo
+
+ROOT_MX_COUNT="$(jq '[.[] | select(.rrset_name == "@" and .rrset_type == "MX")] | length' "$ROLLBACK_FILE")"
+if [ "$ROOT_MX_COUNT" -gt 0 ] && [ "$ALLOW_ROOT_MX" -ne 1 ]; then
+  if [ "$APPLY" -eq 1 ]; then
+    cat >&2 <<'MSG'
+refusing to apply rollback touching apex @/MX.
+Re-run with --allow-root-mx only when intentionally restoring root-domain mail routing.
+MSG
+    exit 3
+  fi
+  cat >&2 <<'MSG'
+warning: dry-run rollback touches apex @/MX.
+Applying this rollback requires --allow-root-mx --apply.
+MSG
+fi
+
+if [ "$APPLY" -ne 1 ]; then
+  echo "dry-run complete; no Gandi records were changed."
+  exit 0
+fi
+
+jq -c '.[]' "$ROLLBACK_FILE" | while IFS= read -r item; do
+  name="$(jq -r '.rrset_name' <<<"$item")"
+  type="$(jq -r '.rrset_type' <<<"$item")"
+  if jq -e '.restore == null' >/dev/null <<<"$item"; then
+    echo "deleting ${name}/${type}"
+    curl -fsS -X DELETE \
+      -H "Authorization: Bearer ${GANDI_PAT}" \
+      "https://api.gandi.net/v5/livedns/domains/${DOMAIN}/records/${name}/${type}" \
+      >/dev/null
+  else
+    body="$(jq '.restore | {rrset_values, rrset_ttl}' <<<"$item")"
+    echo "restoring ${name}/${type}"
+    curl -fsS -X PUT \
+      -H "Authorization: Bearer ${GANDI_PAT}" \
+      -H "Content-Type: application/json" \
+      --data "$body" \
+      "https://api.gandi.net/v5/livedns/domains/${DOMAIN}/records/${name}/${type}" \
+      | jq .
+  fi
+done
+
+echo "rollback apply complete."

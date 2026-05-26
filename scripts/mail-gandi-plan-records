@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# Plan or apply Gandi LiveDNS records from a Resend domain JSON response.
+#
+# Default mode is dry-run. Applying requires --apply, GANDI_PAT, and an explicit
+# --allow-root-mx flag if the plan would replace choir.news apex MX records.
+set -euo pipefail
+
+DOMAIN="choir.news"
+RECORDS_FILE=""
+APPLY=0
+ALLOW_ROOT_MX=0
+TTL=10800
+SNAPSHOT_DIR=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/mail-gandi-plan-records --records resend-domain.json [options]
+
+Options:
+  --domain DOMAIN       Domain to configure. Default: choir.news
+  --records FILE       Resend domain retrieve/create JSON containing .records[]
+  --ttl SECONDS        TTL for planned Gandi records. Default: 10800
+  --snapshot-dir DIR   Directory for pre-apply Gandi snapshots. Default: mktemp
+  --allow-root-mx      Permit replacing the apex @/MX RRset
+  --apply              Apply the plan to Gandi LiveDNS. Default is dry-run
+  -h, --help           Show this help
+
+Environment:
+  GANDI_PAT            Required to read current Gandi records and to apply
+  CHOIR_MAIL_ENV_FILE  Optional env file. Default: ./.env
+
+The input must be provider truth from Resend, for example:
+  curl -H "Authorization: Bearer $RESEND_API_KEY" \
+    https://api.resend.com/domains/<domain_id> > resend-domain.json
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain)
+      DOMAIN="${2:?missing value for --domain}"
+      shift 2
+      ;;
+    --records)
+      RECORDS_FILE="${2:?missing value for --records}"
+      shift 2
+      ;;
+    --ttl)
+      TTL="${2:?missing value for --ttl}"
+      shift 2
+      ;;
+    --snapshot-dir)
+      SNAPSHOT_DIR="${2:?missing value for --snapshot-dir}"
+      shift 2
+      ;;
+    --allow-root-mx)
+      ALLOW_ROOT_MX=1
+      shift
+      ;;
+    --apply)
+      APPLY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CHOIR_MAIL_ENV_FILE:-${REPO_ROOT}/.env}"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command curl
+require_command jq
+
+if [ -z "$RECORDS_FILE" ]; then
+  echo "error: --records is required" >&2
+  usage >&2
+  exit 2
+fi
+
+if [ ! -f "$RECORDS_FILE" ]; then
+  echo "error: records file not found: $RECORDS_FILE" >&2
+  exit 2
+fi
+
+if ! [[ "$TTL" =~ ^[0-9]+$ ]] || [ "$TTL" -lt 300 ] || [ "$TTL" -gt 2592000 ]; then
+  echo "error: --ttl must be an integer between 300 and 2592000" >&2
+  exit 2
+fi
+
+if [ -z "${GANDI_PAT:-}" ]; then
+  echo "error: GANDI_PAT is required for Gandi read/apply planning" >&2
+  exit 2
+fi
+
+PLAN_FILE="$(mktemp)"
+CURRENT_FILE="$(mktemp)"
+trap 'rm -f "$PLAN_FILE" "$CURRENT_FILE"' EXIT
+
+jq -e --arg domain "$DOMAIN" --argjson ttl "$TTL" '
+  def strip_dot: sub("\\.$"; "");
+  def normalize_name($domain):
+    (. // "@") as $name
+    | ($name | strip_dot) as $clean
+    | if $clean == "" or $clean == "@" or $clean == ($domain | strip_dot) then "@"
+      elif ($clean | endswith("." + ($domain | strip_dot))) then
+        $clean | sub("\\." + (($domain | strip_dot) | gsub("\\."; "\\\\.")) + "$"; "")
+      else
+        $clean
+      end;
+  def normalize_value:
+    if .type == "MX" then
+      ((.priority // 10) | tostring) + " " + (.value | tostring)
+    else
+      (.value | tostring)
+    end;
+  if (.records | type) != "array" then
+    error("input must contain .records[]")
+  else
+    [
+      .records[]
+      | select(.type == "MX" or .type == "TXT" or .type == "CNAME")
+      | {
+          rrset_name: (.name | normalize_name($domain)),
+          rrset_type: .type,
+          rrset_ttl: $ttl,
+          rrset_value: normalize_value,
+          resend_record: (.record // null),
+          resend_status: (.status // null)
+        }
+    ]
+    | group_by(.rrset_name + "\u0000" + .rrset_type)
+    | map({
+        rrset_name: .[0].rrset_name,
+        rrset_type: .[0].rrset_type,
+        rrset_ttl: .[0].rrset_ttl,
+        rrset_values: (map(.rrset_value) | unique),
+        resend_records: (map({record: .resend_record, status: .resend_status}) | unique)
+      })
+    | sort_by(.rrset_name, .rrset_type)
+  end
+' "$RECORDS_FILE" > "$PLAN_FILE"
+
+if [ "$(jq 'length' "$PLAN_FILE")" -eq 0 ]; then
+  echo "error: no MX/TXT/CNAME records found in Resend input" >&2
+  exit 2
+fi
+
+curl -fsS -H "Authorization: Bearer ${GANDI_PAT}" \
+  "https://api.gandi.net/v5/livedns/domains/${DOMAIN}/records" > "$CURRENT_FILE"
+
+echo "== Gandi DNS Plan (${DOMAIN}) =="
+echo "mode: $(if [ "$APPLY" -eq 1 ]; then echo apply; else echo dry-run; fi)"
+echo
+
+echo "== Planned RRsets =="
+jq . "$PLAN_FILE"
+echo
+
+echo "== Current Matching RRsets =="
+jq --slurpfile plan "$PLAN_FILE" '
+  [ .[]
+    | . as $current
+    | select(
+        any($plan[0][]; .rrset_name == $current.rrset_name and .rrset_type == $current.rrset_type)
+      )
+    | {rrset_name, rrset_type, rrset_ttl, rrset_values}
+  ]
+' "$CURRENT_FILE"
+echo
+
+ROOT_MX_COUNT="$(jq '[.[] | select(.rrset_name == "@" and .rrset_type == "MX")] | length' "$PLAN_FILE")"
+if [ "$ROOT_MX_COUNT" -gt 0 ] && [ "$ALLOW_ROOT_MX" -ne 1 ]; then
+  if [ "$APPLY" -eq 1 ]; then
+    cat >&2 <<'MSG'
+refusing to apply plan with apex @/MX record.
+Re-run with --allow-root-mx only after confirming Resend receiving should own
+root-domain inbound mail for choir.news and rollback evidence is ready.
+MSG
+    exit 3
+  fi
+  cat >&2 <<'MSG'
+warning: dry-run plan includes apex @/MX record.
+Applying this would replace root-domain inbound mail routing. Apply requires
+--allow-root-mx --apply after rollback evidence is ready.
+MSG
+fi
+
+if [ "$APPLY" -ne 1 ]; then
+  echo "dry-run complete; no Gandi records were changed."
+  if [ "$ROOT_MX_COUNT" -gt 0 ]; then
+    echo "note: plan includes apex @/MX; apply requires --allow-root-mx --apply."
+  fi
+  exit 0
+fi
+
+if [ -z "$SNAPSHOT_DIR" ]; then
+  SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/choir-mail-gandi-snapshot.XXXXXX")"
+else
+  mkdir -p "$SNAPSHOT_DIR"
+fi
+SNAPSHOT_FILE="${SNAPSHOT_DIR}/gandi-${DOMAIN}-$(date -u +%Y%m%dT%H%M%SZ).json"
+cp "$CURRENT_FILE" "$SNAPSHOT_FILE"
+echo "snapshot: $SNAPSHOT_FILE"
+
+jq -c '.[]' "$PLAN_FILE" | while IFS= read -r rrset; do
+  name="$(jq -r '.rrset_name' <<<"$rrset")"
+  type="$(jq -r '.rrset_type' <<<"$rrset")"
+  body="$(jq '{rrset_values, rrset_ttl}' <<<"$rrset")"
+  echo "applying ${name}/${type}"
+  curl -fsS -X PUT \
+    -H "Authorization: Bearer ${GANDI_PAT}" \
+    -H "Content-Type: application/json" \
+    --data "$body" \
+    "https://api.gandi.net/v5/livedns/domains/${DOMAIN}/records/${name}/${type}" \
+    | jq .
+done
+
+echo "apply complete; snapshot saved for rollback."
