@@ -122,7 +122,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 	}
 	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
-		Prompt: "The final brief must have exactly these numbered section headings and sections 1, 7, and 12 must contain sentences beginning SECTION 1 UPDATE:, SECTION 7 UPDATE:, and SECTION 12 UPDATE:.",
+		Prompt: "The final brief must have exactly these numbered section headings and sections 1, 7, and 12 must contain sentences beginning SECTION 1 UPDATE:, SECTION 7 UPDATE:, and SECTION 12 UPDATE:. The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
 	}, "", false, false, nil, nil)
 
 	for _, want := range []string{
@@ -131,6 +131,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"Required sentence prefix: SECTION 7 UPDATE:",
 		"Required sentence prefix: SECTION 12 UPDATE:",
 		"Preserve exact marker line: USER_LONG_RUBRIC_MARKER: preserve this exact marker.",
+		"Final command evidence label: [CMD] (use only after a super delivery reports command evidence",
 		"Preserve explicit hard requirements from the original user request and current document across every revision",
 		"exact marker strings",
 		"required headings or section counts",
@@ -138,6 +139,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"target hashes",
 		"Before a replace_all edit, audit the complete replacement against those hard requirements",
 		"Do not replace a requested numbered/sectioned document with a different report outline",
+		"Never use `[CMD]` as a pending/requested/target-only label",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("hard-constraint prompt missing %q:\n%s", want, request)

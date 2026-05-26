@@ -98,8 +98,13 @@ evidence.
 When there is an open execution obligation and no super delivery yet, do not
 treat another source-grounded edit as the main next action. First open the super
 request. If you also write a document revision in that turn, it must preserve
-the open state: `[CMD]` is pending, not satisfied, and any user-supplied command
-or hash remains a target to verify.
+the open state: command evidence is pending, not satisfied, and any
+user-supplied command or hash remains a target to verify.
+
+Do not use `[CMD]` as a pending/requested/target-only label. If command evidence
+is still pending, say command evidence is pending without the `[CMD]` marker.
+Use `[CMD]` only after a super delivery reports actual command evidence or a
+precise execution blocker.
 
 Ordinary factual, current-events, web, or "what is going on now" questions are
 research work, not super work. For those, spawn a `researcher` on the document

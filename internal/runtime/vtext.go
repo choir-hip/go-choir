@@ -1825,10 +1825,13 @@ func vtextHardRequirementHints(parts ...string) []string {
 		for _, match := range vtextSHA256RequirementRE.FindAllString(text, -1) {
 			add("Required hash/value: " + match)
 		}
-		for _, label := range []string{"[S1]", "[S2]", "[S3]", "[CMD]"} {
+		for _, label := range []string{"[S1]", "[S2]", "[S3]"} {
 			if strings.Contains(text, label) {
 				add("Required evidence label: " + label)
 			}
+		}
+		if strings.Contains(text, "[CMD]") {
+			add("Final command evidence label: [CMD] (use only after a super delivery reports command evidence; pending/requested/target-only command state must not use [CMD])")
 		}
 	}
 	if len(out) > 32 {
@@ -1978,6 +1981,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\nPrefer prompt-to-v1 speed and small subsequent revisions over waiting for exhaustive coverage.")
 	b.WriteString("\nWhen worker findings arrive, update the document as soon as the first packet can improve it; do not wait for every researcher or super thread to finish.")
 	b.WriteString("\nException: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, first call request_super_execution. Do not make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.")
+	b.WriteString("\nNever use `[CMD]` as a pending/requested/target-only label. If command evidence is still pending, write \"command evidence pending\" without the `[CMD]` marker. Use `[CMD]` only when a super delivery reports the actual command result or precise execution blocker.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nPreserve explicit hard requirements from the original user request and current document across every revision. These include exact marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hashes, and text the user said to preserve.")
