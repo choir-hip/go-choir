@@ -26,18 +26,23 @@ The model suite was run on staging for:
 - `fireworks-kimi-k2p6-low`
 - `chatgpt-gpt-5-5-low`
 
-The final suite covered deep research, coding/super, and a long multi-section
-VText prompt on deployed commit `2cf7253`. All three model rows completed the
-Playwright harness. The result is usable for landscape comparison, but not a
-clean product-quality certificate: v4-flash did not produce a second deep
-research VText revision inside the observation window, v4-flash long hit one
-external fetch timeout, and GPT-5.5 low still made duplicate side-effect
-attempts.
+The final cadence suite covered deep research, coding/super, and a long
+multi-section VText prompt on deployed commit `2cf7253`. All three model rows
+completed that Playwright harness. The result is usable for landscape
+comparison, but not a clean product-quality certificate: v4-flash did not
+produce a second deep-research VText revision inside the observation window,
+v4-flash long hit one external `fetch_url` timeout, and GPT-5.5 low still made
+duplicate side-effect attempts.
 
-This completes the current deliverable: deployed behavior plus a model-suite
-eval report. Remaining work should focus on denser long-document quality
-rubrics, many-version stress, and source-truth checking for current-events
-content.
+A stricter long-section rubric added after that suite exposed a coordination
+gap that the cadence suite did not catch: mixed research-plus-execution prompts
+can be routed into researcher-first VText loops where later VText revisions
+integrate researcher findings but never deterministically call
+`request_super_execution`. Kimi low prematurely satisfied the text rubric
+without a super trace. v4-flash medium and GPT-5.5 low were more conservative,
+leaving command evidence pending, but they also produced no super agent in
+Trace. The mission therefore remains `checkpoint_incomplete` rather than
+complete.
 
 ## Deployed Dirty-Draft Proof
 
@@ -155,6 +160,41 @@ Earlier supplemental reruns retained for comparison:
 | v4-flash medium | ok | 30.4s | 159.4s | 2 | 1 | No malformed delegation after the fix; one external `fetch_url` timeout. |
 | Kimi low | ok | 39.5s | 73.5s | 3 | 0 | Clean coordination; shorter V2 latency than v4 and GPT in the final run. |
 | GPT-5.5 low | ok | 7.0s | 89.0s | 4 | 4 | Richest revision volume, but duplicate cast/evidence submissions remain. |
+
+## Long Section Rubric
+
+Evidence directory:
+
+- `test-results/vtext-long-section-rubric-staging-2cf7253-full-20260526T010650Z/`
+
+Command:
+
+`PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-2cf7253-full-20260526T010650Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`
+
+The prompt asked VText to create a 12-section source-grounded brief, preserve a
+dirty user marker inserted after v1, use researcher grounding, and request
+super to run `printf "durable draft" | shasum -a 256`. The expected SHA256 was
+included as a rubric target, but the row only counts as passing when Trace shows
+super execution and the final document contains the required section-update
+sentences and command evidence.
+
+| Model | Status | App Revisions | Trace Researchers | Trace Supers | Rubric Shape | Notes |
+|---|---:|---:|---:|---:|---|---|
+| Kimi low | failed | 2 | 1 | 0 | 12/12 sections, marker preserved, `[S1]`-`[S3]` and `[CMD]`, section updates present | Prematurely wrote the expected hash and command marker from prompt text without a super trace. |
+| v4-flash medium | failed | 5 | 2 | 0 | 12/12 sections, marker preserved, no source markers, no command hash, no section-update sentences | Produced many grounded revisions and consumed researcher updates, but super stayed pending and no `request_super_execution` trace appeared. |
+| GPT-5.5 low | failed | 4 | 2 | 0 | 10/12 detected sections, marker preserved, source markers present, no section-update sentences | Strong source-grounded content and batching, but command evidence stayed pending and no super trace appeared. |
+
+Root-cause hypothesis from trace evidence:
+
+- The first mixed research-plus-execution turn prefers researcher-first
+  continuation.
+- Later VText turns wake from researcher deliveries and keep editing from
+  research evidence.
+- Researchers sometimes try to `cast_agent` or ask for super themselves, but
+  the authority boundary expects VText to call `request_super_execution`.
+- No tested model reliably bridges that handoff in the strict long-document
+  prompt, so the runtime/prompt contract needs an explicit "research complete
+  enough, super still required" continuation guard.
 
 ## Current Comparison
 

@@ -456,6 +456,15 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
+- 2026-05-26 staging product-path long-section rubric probe failed across the
+  accepted model set on deployed commit `2cf7253`. All rows preserved the dirty
+  user marker and used researcher/search evidence, but none produced a super
+  agent in Trace for the required command-evidence step. Kimi low completed the
+  text rubric prematurely without actual super execution; v4-flash medium and
+  GPT-5.5 low stayed more conservative and left command evidence pending. This
+  exposes a mixed research-plus-execution coordination gap: researcher-first
+  VText loops can keep integrating researcher deliveries without a deterministic
+  later `request_super_execution` call.
 - 2026-05-26 staging product-path multi-worker storm probe passed against the
   deployed behavior commit. Using Kimi low for conductor/VText/researcher, VText
   spawned two researcher agents on distinct branches, a dirty user marker was
@@ -565,6 +574,10 @@ what was proven:
   `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'two researcher worker updates' --reporter=line`
   passed. Evidence:
   `test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z/dirty-user-edit-two-worker-updates.json`.
+- Deployed long-section rubric probe:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-2cf7253-full-20260526T010650Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`
+  failed across Kimi low, v4-flash medium, and GPT-5.5 low. Evidence:
+  `test-results/vtext-long-section-rubric-staging-2cf7253-full-20260526T010650Z/`.
 
 residual or partial claims:
 
@@ -575,7 +588,7 @@ residual or partial claims:
   marker preservation, including eventual pending-drain to an empty latest
   pending set in the stricter rerun;
 - long-content model rows are covered, but not yet with a strict
-  section-obligation/content-quality rubric;
+  section-obligation/content-quality rubric that passes;
 - whether autosave-as-canonical-user-version is the final durable draft model
   remains open.
 
@@ -586,9 +599,16 @@ belief-state changes:
   focused-editor refresh after a successful rebase response. WebSocket remains a
   possible later transport for lower-latency draft replication, but not the
   current load-bearing uncertainty.
+- Mixed research-plus-execution prompts need an explicit continuation guard.
+  The existing model contract can route the first turn to researcher and later
+  wake VText from researcher findings, but the observed models do not reliably
+  remember that super execution is still required once research evidence begins
+  arriving.
 
 remaining error field:
 
+- No accepted model reliably completes the strict long-section
+  research-plus-super rubric. Trace showed zero super agents for all three rows.
 - v4-flash medium no longer fails noisy researcher delegation, but its final
   deep-research row still did not produce a second VText revision inside the
   observation window.
@@ -602,14 +622,17 @@ remaining error field:
 
 highest-impact remaining uncertainty:
 
-- Durable draft state model between keystrokes and canonical user-authored
-  versions.
+- Whether the runtime should enforce a pending-super continuation for mixed
+  research-plus-execution VText documents after the first researcher delivery,
+  rather than relying on the model to remember and call `request_super_execution`.
 
 next executable probe:
 
-- Add a section-level long-document rubric that checks required sections,
-  source grounding, no contradictory current-events claims, user-marker
-  preservation, and lineage metadata.
+- Add the smallest runtime/prompt guard that makes a VText document whose
+  original request needs both research and execution call
+  `request_super_execution` once research grounding exists and no super request
+  has been recorded, then rerun the long-section rubric across the accepted
+  model set.
 
 suggested resume goal string:
 
@@ -637,6 +660,8 @@ evidence artifact refs:
   `test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z/dirty-user-edit-two-worker-updates.json`.
 - Deployed two-researcher pending-drain evidence:
   `test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z/dirty-user-edit-two-worker-updates.json`.
+- Deployed long-section rubric evidence:
+  `test-results/vtext-long-section-rubric-staging-2cf7253-full-20260526T010650Z/`.
 
 rollback refs:
 
