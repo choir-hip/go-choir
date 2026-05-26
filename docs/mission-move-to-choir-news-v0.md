@@ -172,9 +172,9 @@ on `https://choir.news`.
    - `dig +short A draft.choir-ip.com`
    - `dig +short A choir-ip.com`
    - `curl -fsS https://draft.choir-ip.com/health`
-3. Code: make source changes above, including `choir.news` Caddy host, old-domain redirects, and deployed auth RP config.
-4. Push to `origin/main`; monitor CI and Node B deploy.
-5. DNS: Set `choir.news` A record → `147.135.70.196` via Gandi LiveDNS API.
+3. DNS: Set `choir.news` A record -> `147.135.70.196` via Gandi LiveDNS API. This is safe before the code deploy because `draft.choir-ip.com` still serves the current platform until the redirecting Caddy config lands.
+4. Code: make source changes above, including `choir.news` Caddy host, old-domain redirects, and deployed auth RP config.
+5. Push to `origin/main`; monitor CI and Node B deploy.
 6. DNS: Update `choir-ip.com` → `147.135.70.196` via Cloudflare. This remains underspecified until Cloudflare zone id, DNS record id, token, and proxied/DNS-only choice are confirmed.
 7. Wait for DNS and Caddy certificate readiness.
 8. Reset deployed auth database with backup as described above.
