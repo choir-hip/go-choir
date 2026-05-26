@@ -8,10 +8,10 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend slice is deployed on Node B at docs-only head 33de426 through a recovered GitHub Actions deploy path; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions run 26448967008 rerun passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, frontend build, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 33de426201825ba42215e929b9366c2b351b85ab
+current artifact state: maild/proxy/frontend slice is deployed on Node B at ae8cb7f through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+deployed proven: GitHub Actions run 26450002582 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, frontend build, and Deploy to Staging; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -371,7 +371,7 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: recovered GitHub Actions deploy checkpoint on 2026-05-26 at 33de426
+last checkpoint: deployed attachment-indicator checkpoint on 2026-05-26 at ae8cb7f
 current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions; Resend receiving/webhook and Gandi DNS are not configured
 what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
 what was proven:
@@ -404,6 +404,8 @@ what was proven:
     owner, and the Email app renders them instead of assuming the active alias
   - Compose posts a plain owner-send payload through `/api/email/send` with
     From fixed to `000@choir.news`
+  - message list API computes owner-visible attachment existence without loading
+    attachment content, and the Email app renders a compact row indicator
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -413,6 +415,7 @@ unproven or partial claims:
   - GitHub Actions rerun 26448967008 recovered the landing loop: Go Vet + Build, Go Test non-runtime, runtime shards 0-3, integration smoke, frontend build, aggregate Go gate, and Deploy to Staging all passed
   - public health after the recovered Actions deploy reports proxy and sandbox deployed_commit 33de426201825ba42215e929b9366c2b351b85ab, a docs-only head on top of the behavior slice
   - scripts/mail-provider-readiness now reports Resend domains/webhooks not ready because the configured Resend key is restricted to sending only, Gandi MX/SPF still point at Gandi defaults, no DMARC exists, and Node B maild health is ok with webhook_secret_configured false
+  - GitHub Actions run 26450002582 deployed ae8cb7f after passing all Go/frontend gates; public health reports proxy/sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
@@ -426,7 +429,7 @@ remaining error field:
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from recovered Actions deploy checkpoint 33de426; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed attachment-indicator checkpoint ae8cb7f; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -471,6 +474,13 @@ evidence artifact refs:
   - public /health on choir.news reports proxy and sandbox deployed_commit 33de426201825ba42215e929b9366c2b351b85ab, deployed_at 2026-05-26T13:05:20Z
   - maild health in deploy log reports status ok, primary_domain choir.news, resend_api_key_configured true, webhook_secret_configured false, root_owner_id_configured true, stats aliases 1/messages 0/quarantined_attachments 0/webhook_events 0/ingress_events 0
   - scripts/mail-provider-readiness reports Resend domains/webhooks 401 restricted_api_key, Gandi MX still spool/fb.mail.gandi.net, SPF still Gandi, no DMARC, and Node B maild health ok
+  - nix develop -c go test ./internal/maild ./cmd/maild
+  - npm run build in frontend
+  - commit ae8cb7f7f80a3944998549991227cd559832d150
+  - GitHub Actions CI run 26450002582 passed Go Vet + Build, Go Test non-runtime, runtime shards 0-3, integration smoke, Build Frontend, aggregate Go gate, and Deploy to Staging
+  - FlakeHub publish run 26450002782 succeeded
+  - public /health on choir.news reports proxy and sandbox deployed_commit ae8cb7f7f80a3944998549991227cd559832d150, deployed_at 2026-05-26T13:12:27Z
+  - scripts/mail-provider-readiness after deploy still reports Resend domains/webhooks 401 restricted_api_key, Gandi MX still Gandi defaults, no DMARC, and Node B maild health ok with webhook_secret_configured false
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
@@ -1523,6 +1533,22 @@ Required next change:
 - Compute attachment existence for owner-visible message list rows and render a
   compact attachment indicator in the Email app row without loading or
   processing attachment content.
+
+Resolution checkpoint:
+
+```text
+commit: ae8cb7f7f80a3944998549991227cd559832d150
+store: internal/maild/store.go ListMessages/GetMessage compute HasAttachments with EXISTS over email_attachments
+api: internal/maild/api.go summarizeMessage propagates HasAttachments
+test: internal/maild/api_test.go TestHandleMessagesListsAttachmentIndicator
+ui: frontend/src/lib/EmailApp.svelte renders a paperclip row indicator when message.has_attachments is true
+local proof:
+  nix develop -c go test ./internal/maild ./cmd/maild
+  npm run build
+deployed proof:
+  GitHub Actions CI run 26450002582 passed all Go/frontend gates and Deploy to Staging
+  public /health deployed_commit ae8cb7f7f80a3944998549991227cd559832d150
+```
 
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 
