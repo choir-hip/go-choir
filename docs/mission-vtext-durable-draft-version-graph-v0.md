@@ -1783,6 +1783,74 @@ next executable probe:
   command calls. Rerun V4-only long with incremental polling after the prompt
   change, then rerun the three accepted models on the long mixed row.
 
+checkpoint update, 2026-05-26 08:00 UTC:
+
+- Prompt cadence fix `3f800115f01e93c0d96b514722eaf53a826d4165`
+  landed and deployed. CI run `26439201522` passed, FlakeHub run
+  `26439201523` passed, and staging `/health` reported proxy and sandbox
+  deployed at `3f800115f01e93c0d96b514722eaf53a826d4165`, deployed at
+  `2026-05-26T07:43:33Z`.
+- Local focused proof for `3f800115f01e93c0d96b514722eaf53a826d4165` passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate|TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims|TestSystemPromptForResearcherForcesEarlyHandoff|TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn|TestExecuteToolsSkipsDuplicateBashCommandsInSameTurn' -count=1`.
+- Deployed V4-only long row on `3f800115f01e93c0d96b514722eaf53a826d4165`:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-long-mixed-3f80011-v4-20260526T074421Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: V4 improved from "no super request" to "super requested and command
+  evidence delivered", but still did not produce v2. Trace: v1 at about 12.7s,
+  first researcher update at about 44.7s, VText requested super at about
+  54.7s and again at about 68.7s, super returned SHA256 evidence at about
+  74.7s and 84.7s, but no post-super VText provider call or appagent revision
+  appeared before evidence capture ended. This exposed a likely wake-loss edge:
+  a worker wake can be flushed while a VText run/mutation is active or pending
+  and then not retried after the blocker clears.
+- Runtime requeue fix `86489f16f5b4e396797c2dce519112f3b43760e8`
+  landed and deployed. CI run `26439635208` passed, FlakeHub run
+  `26439635213` passed, and staging `/health` reported proxy and sandbox
+  deployed at `86489f16f5b4e396797c2dce519112f3b43760e8`, deployed at
+  `2026-05-26T07:53:20Z`.
+- Local focused proof for `86489f16f5b4e396797c2dce519112f3b43760e8` passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextWorkerWakeRequeuesWhileMutationPending|TestVTextWorkerMessageDuringActiveRevisionTriggersLaterFollowUp|TestSubmitWorkerUpdateWakeUsesSameDebouncedPath|TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate' -count=1`.
+- Deployed V4-only long row on `86489f16f5b4e396797c2dce519112f3b43760e8`:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-long-mixed-86489f1-v4-20260526T075404Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: this row did not exercise the requeue fix because the researcher did
+  not submit a findings packet. Trace: v1 at about 9.3s, researcher spawned at
+  about 24.3s, two `web_search` calls completed at about 32.3s, then the
+  runtime-required `submit_coagent_update` provider call started at about
+  33.3s and never returned before capture ended. Search provider health was
+  degraded: Brave rate-limited, Exa/Serper/Tavily quota-limited, Parallel
+  succeeded.
+
+belief-state changes:
+
+- V4 medium now has two separate long-row failure modes: VText can stall after
+  worker/super evidence, and the researcher can stall while converting search
+  results into the required first checkpoint. The first prompt fix addressed
+  request ordering but not overall V4 reliability.
+- The controller requeue fix is still valid because it closes a demonstrated
+  lost-wake class and has local proof, but the latest V4 row was blocked before
+  the wake path had eligible worker evidence to consume.
+- Search-provider degradation increases V4's context and retry burden. On this
+  row, four providers were rate/quota limited and only Parallel supplied usable
+  results, making the first checkpoint more dependent on concise result
+  handling.
+
+remaining error field:
+
+- Need to reduce first-checkpoint load for researchers before the first
+  `submit_coagent_update`, especially for V4. The current wording permits a
+  broad search batch; V4 used two parallel web searches, then hung when asked
+  to summarize the large result context into a structured coagent update.
+- Need to rerun V4-only long after tightening the researcher first-pass prompt
+  to one web_search call before the first update. If that produces worker
+  evidence, then the deployed requeue fix can be evaluated against the original
+  post-super v2 failure.
+
+next executable probe:
+
+- Change the researcher first checkpoint prompt from "one focused search
+  batch" to exactly one `web_search` call, or one `web_search` plus one
+  targeted `fetch_url` only when the URL is already known, before the first
+  `submit_coagent_update`. Then rerun V4-only long on staging.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
