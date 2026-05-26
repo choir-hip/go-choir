@@ -149,6 +149,10 @@ Implementation checkpoint, 2026-05-26:
   domain/webhook status, Gandi mail-related records, public DNS, and Node B
   `maild` health. It redacts secret-shaped fields and does not mutate provider
   state.
+- `scripts/mail-resend-setup` inspects Resend domains/webhooks and can, with
+  `--apply`, create/enable the `choir.news` domain and create the
+  `email.received` webhook. It never prints webhook signing secrets; use
+  `--write-webhook-secret-file` to save one with mode `600`.
 - `scripts/mail-gandi-plan-records` plans or applies Gandi LiveDNS records from
   a Resend domain JSON response. It is dry-run by default, snapshots current
   Gandi records before apply, and requires `--allow-root-mx --apply` before
@@ -468,6 +472,27 @@ and Node B `maild` health. If Resend returns `restricted_api_key`, the available
 key cannot retrieve exact DNS records or the webhook signing secret; use a
 broader temporary Resend API key or the dashboard to obtain provider truth
 first.
+
+To retrieve provider truth or create the missing Resend objects with a
+sufficiently scoped key:
+
+```bash
+scripts/mail-resend-setup \
+  --write-domain-json /tmp/resend-domain.json \
+  --write-webhook-secret-file /tmp/resend-webhook-secret.env
+
+scripts/mail-resend-setup \
+  --apply \
+  --ensure-domain \
+  --ensure-webhook \
+  --write-domain-json /tmp/resend-domain.json \
+  --write-webhook-secret-file /tmp/resend-webhook-secret.env
+```
+
+After reviewing `/tmp/resend-webhook-secret.env`, deploy it into
+`/var/lib/go-choir/maild.env` with `nix/deploy-mail-creds.sh` or an equivalent
+host-only secret deployment path. Do not commit the generated JSON or secret
+files.
 
 Once exact provider records are available, first dry-run the Gandi plan:
 

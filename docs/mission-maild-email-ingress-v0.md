@@ -10,7 +10,7 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 status: checkpoint_incomplete
 current artifact state: deployed maild/proxy/frontend slice exists on Node B at d749fdc; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app, proxy auth forwarding, proxy-owned Send to Choir, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Gandi DNS plan/rollback tooling
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; dry-run Gandi DNS plan/rollback tooling
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -385,6 +385,7 @@ what was proven:
   - NixOS eval exposes go-choir-maild and Caddy webhook route before generic /api/*
   - Node B deployed commit identity and service health report d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
   - read-only provider readiness probe reports Resend/Gandi/Node B state without mutating DNS or printing secrets
+  - Resend setup helper read-only path reports restricted_api_key with current send-only key, and fake-curl success path writes webhook secret to mode 600 without printing it
   - Gandi DNS plan and rollback helpers dry-run from Resend domain JSON without mutating records
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
@@ -415,6 +416,8 @@ evidence artifact refs:
   - public /health deployed_commit d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
   - maild /health status ok with resend_api_key_configured true and webhook_secret_configured false
   - scripts/mail-provider-readiness
+  - scripts/mail-resend-setup --write-domain-json /tmp/choir-resend-domain-test.json --write-webhook-secret-file /tmp/choir-resend-webhook-secret-test.env
+  - fake-curl success test for scripts/mail-resend-setup --apply --ensure-domain --ensure-webhook
   - scripts/mail-gandi-plan-records --records <sample-resend-domain-json> --ttl 3600
   - scripts/mail-gandi-rollback-records --snapshot <sample-gandi-snapshot-json> --records <sample-resend-domain-json>
 rollback refs:
@@ -1067,3 +1070,50 @@ Belief-state update:
 - The owner has accepted the root MX cutover. The scripts still require an
   explicit operator flag so accidental root mail-routing changes remain
   unlikely.
+
+## Tooling Checkpoint: Resend setup helper
+
+Recorded: 2026-05-26.
+
+Status:
+
+`scripts/mail-resend-setup` now wraps the current Resend domain and webhook API
+surface needed for the remaining provider-authority step. It defaults to
+read-only inspection. Mutating operations require `--apply` plus explicit
+`--ensure-domain`, `--ensure-webhook`, or `--verify-domain`. Webhook signing
+secrets are redacted from stdout and written only when
+`--write-webhook-secret-file` is provided.
+
+Evidence:
+
+```text
+official Resend API docs checked:
+  POST /domains accepts capabilities.sending and capabilities.receiving
+  PATCH /domains/:domain_id can update capabilities.receiving
+  GET /domains/:domain_id returns DNS records
+  POST /webhooks accepts endpoint and events
+  GET /webhooks/:webhook_id returns signing_secret
+local current-key run:
+  command: scripts/mail-resend-setup --write-domain-json /tmp/choir-resend-domain-test.json --write-webhook-secret-file /tmp/choir-resend-webhook-secret-test.env
+  result: GET /domains -> 401 restricted_api_key
+  mutation: none
+  generated files: none
+fake-curl success-path run:
+  command: scripts/mail-resend-setup --apply --ensure-domain --ensure-webhook --write-domain-json <tmp>/domain.json --write-webhook-secret-file <tmp>/webhook.env
+  result: domain JSON saved; webhook secret saved with mode 600
+  stdout: signing_secret redacted/not printed
+```
+
+Belief-state update:
+
+- The remaining provider step can now be executed through a repeatable script
+  once a sufficiently scoped Resend key is available.
+- The current key still cannot retrieve provider truth, so no Resend/Gandi
+  production state was changed in this checkpoint.
+
+Next executable probe:
+
+- Run `scripts/mail-resend-setup --apply --ensure-domain --ensure-webhook`
+  with a sufficiently scoped Resend key, save the domain JSON and webhook
+  secret file, deploy `RESEND_WEBHOOK_SECRET` to Node B, then dry-run and apply
+  Gandi from the saved Resend domain JSON.

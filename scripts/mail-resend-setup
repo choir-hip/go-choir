@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# Read, and optionally prepare, Resend domain/webhook setup for Choir Email.
+#
+# Default mode is read-only. Mutations require --apply plus an explicit
+# --ensure-* flag. Webhook signing secrets are never printed; provide
+# --write-webhook-secret-file to save one with chmod 600.
+set -euo pipefail
+
+DOMAIN="choir.news"
+ENDPOINT="https://choir.news/api/email/resend/webhook"
+REGION="us-east-1"
+APPLY=0
+ENSURE_DOMAIN=0
+ENSURE_WEBHOOK=0
+VERIFY_DOMAIN=0
+WRITE_DOMAIN_JSON=""
+WRITE_WEBHOOK_SECRET_FILE=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/mail-resend-setup [options]
+
+Options:
+  --domain DOMAIN                 Domain to inspect or prepare. Default: choir.news
+  --endpoint URL                  Webhook endpoint URL. Default: https://choir.news/api/email/resend/webhook
+  --region REGION                 Region for new domains. Default: us-east-1
+  --write-domain-json FILE        Save retrieved/created Resend domain JSON
+  --write-webhook-secret-file FILE Save retrieved/created webhook signing secret, chmod 600
+  --ensure-domain                 Create domain if missing and enable sending+receiving
+  --ensure-webhook                Create email.received webhook if missing
+  --verify-domain                 Trigger Resend domain verification
+  --apply                         Permit mutations requested by --ensure-* or --verify-domain
+  -h, --help                      Show this help
+
+Environment:
+  RESEND_API_KEY       Required
+  CHOIR_MAIL_ENV_FILE  Optional env file. Default: ./.env
+
+Recommended sequence once a sufficiently scoped Resend key is available:
+  scripts/mail-resend-setup --write-domain-json /tmp/resend-domain.json
+  scripts/mail-resend-setup --apply --ensure-domain --ensure-webhook \
+    --write-domain-json /tmp/resend-domain.json \
+    --write-webhook-secret-file /tmp/resend-webhook-secret.env
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain)
+      DOMAIN="${2:?missing value for --domain}"
+      shift 2
+      ;;
+    --endpoint)
+      ENDPOINT="${2:?missing value for --endpoint}"
+      shift 2
+      ;;
+    --region)
+      REGION="${2:?missing value for --region}"
+      shift 2
+      ;;
+    --write-domain-json)
+      WRITE_DOMAIN_JSON="${2:?missing value for --write-domain-json}"
+      shift 2
+      ;;
+    --write-webhook-secret-file)
+      WRITE_WEBHOOK_SECRET_FILE="${2:?missing value for --write-webhook-secret-file}"
+      shift 2
+      ;;
+    --ensure-domain)
+      ENSURE_DOMAIN=1
+      shift
+      ;;
+    --ensure-webhook)
+      ENSURE_WEBHOOK=1
+      shift
+      ;;
+    --verify-domain)
+      VERIFY_DOMAIN=1
+      shift
+      ;;
+    --apply)
+      APPLY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CHOIR_MAIL_ENV_FILE:-${REPO_ROOT}/.env}"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command curl
+require_command jq
+
+if [ -z "${RESEND_API_KEY:-}" ]; then
+  echo "error: RESEND_API_KEY is required" >&2
+  exit 2
+fi
+
+if [ "$APPLY" -ne 1 ] && { [ "$ENSURE_DOMAIN" -eq 1 ] || [ "$ENSURE_WEBHOOK" -eq 1 ] || [ "$VERIFY_DOMAIN" -eq 1 ]; }; then
+  echo "error: mutating flags require --apply" >&2
+  exit 2
+fi
+
+tmp_files=()
+cleanup() {
+  for file in "${tmp_files[@]}"; do
+    rm -f "$file"
+  done
+}
+trap cleanup EXIT
+
+new_tmp() {
+  local file
+  file="$(mktemp)"
+  tmp_files+=("$file")
+  printf '%s\n' "$file"
+}
+
+sanitize_json() {
+  jq '
+    def scrub:
+      if type == "object" then
+        with_entries(
+          if (.key | test("(?i)(secret|token|api.?key|authorization)")) then
+            .value = "<redacted>"
+          else
+            .value |= scrub
+          end
+        )
+      elif type == "array" then
+        map(scrub)
+      else
+        .
+      end;
+    scrub
+  '
+}
+
+request() {
+  local method="$1"
+  local path="$2"
+  local body="${3:-}"
+  local out
+  out="$(new_tmp)"
+  if [ -n "$body" ]; then
+    status="$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer ${RESEND_API_KEY}" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      --data "$body" \
+      "https://api.resend.com${path}" || true)"
+  else
+    status="$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer ${RESEND_API_KEY}" \
+      -H "Accept: application/json" \
+      "https://api.resend.com${path}" || true)"
+  fi
+  jq -n \
+    --arg status "$status" \
+    --arg body_file "$out" \
+    '{http_status: ($status | tonumber), body_file: $body_file}'
+}
+
+read_body() {
+  local result="$1"
+  jq -r '.body_file' <<<"$result" | xargs cat
+}
+
+body_json_arg() {
+  local result="$1"
+  local file
+  file="$(jq -r '.body_file' <<<"$result")"
+  if jq empty "$file" >/dev/null 2>&1; then
+    cat "$file"
+  else
+    jq -Rs . < "$file"
+  fi
+}
+
+print_response_summary() {
+  local label="$1"
+  local result="$2"
+  local body
+  body="$(body_json_arg "$result")"
+  jq -n \
+    --arg lbl "$label" \
+    --argjson status "$(jq '.http_status' <<<"$result")" \
+    --argjson body "$body" \
+    '{
+      label: $lbl,
+      http_status: $status,
+      body: (
+        if ($status >= 200 and $status < 300) then
+          ($body | if type == "object" then del(.signing_secret) else . end)
+        else
+          {
+            name: $body.name,
+            message: $body.message,
+            statusCode: $body.statusCode
+          }
+        end
+      )
+    }' | sanitize_json
+}
+
+find_domain_id() {
+  local domains_result="$1"
+  local file
+  file="$(jq -r '.body_file' <<<"$domains_result")"
+  jq -r --arg domain "$DOMAIN" '(.data // [])[] | select(.name == $domain) | .id' "$file" | head -1
+}
+
+find_receive_webhook_id() {
+  local webhooks_result="$1"
+  local file
+  file="$(jq -r '.body_file' <<<"$webhooks_result")"
+  jq -r --arg endpoint "$ENDPOINT" '
+    (.data // [])
+    | map(select(.endpoint == $endpoint and ((.events // []) | index("email.received"))))
+    | .[0].id // empty
+  ' "$file"
+}
+
+write_secret_file() {
+  local secret="$1"
+  local path="$2"
+  if [ -z "$path" ] || [ -z "$secret" ] || [ "$secret" = "null" ]; then
+    return 0
+  fi
+  umask 077
+  printf 'RESEND_WEBHOOK_SECRET=%s\n' "$secret" > "$path"
+  chmod 600 "$path"
+  echo "webhook secret written: $path"
+}
+
+save_domain_json() {
+  local result="$1"
+  if [ -z "$WRITE_DOMAIN_JSON" ]; then
+    return 0
+  fi
+  read_body "$result" > "$WRITE_DOMAIN_JSON"
+  chmod 600 "$WRITE_DOMAIN_JSON"
+  echo "domain JSON written: $WRITE_DOMAIN_JSON"
+}
+
+echo "== Resend Mail Setup (${DOMAIN}) =="
+echo "mode: $(if [ "$APPLY" -eq 1 ]; then echo apply; else echo read-only; fi)"
+echo "endpoint: $ENDPOINT"
+echo
+
+domains_result="$(request GET "/domains")"
+print_response_summary "list domains" "$domains_result"
+domain_id=""
+domain_result=""
+
+if [ "$(jq '.http_status' <<<"$domains_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$domains_result")" -lt 300 ]; then
+  domain_id="$(find_domain_id "$domains_result")"
+else
+  echo "Resend domain list failed; cannot continue provider setup."
+  exit 0
+fi
+
+if [ -z "$domain_id" ] && [ "$ENSURE_DOMAIN" -eq 1 ]; then
+  create_body="$(jq -n --arg name "$DOMAIN" --arg region "$REGION" '{
+    name: $name,
+    region: $region,
+    capabilities: {sending: "enabled", receiving: "enabled"}
+  }')"
+  domain_result="$(request POST "/domains" "$create_body")"
+  print_response_summary "create domain" "$domain_result"
+  if [ "$(jq '.http_status' <<<"$domain_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$domain_result")" -lt 300 ]; then
+    domain_id="$(jq -r '.id // empty' "$(jq -r '.body_file' <<<"$domain_result")")"
+  fi
+fi
+
+if [ -n "$domain_id" ]; then
+  domain_result="$(request GET "/domains/${domain_id}")"
+  print_response_summary "retrieve domain" "$domain_result"
+  if [ "$(jq '.http_status' <<<"$domain_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$domain_result")" -lt 300 ]; then
+    receiving_status="$(jq -r '.capabilities.receiving // empty' "$(jq -r '.body_file' <<<"$domain_result")")"
+    if [ "$receiving_status" != "enabled" ] && [ "$ENSURE_DOMAIN" -eq 1 ]; then
+      update_body='{"capabilities":{"sending":"enabled","receiving":"enabled"}}'
+      update_result="$(request PATCH "/domains/${domain_id}" "$update_body")"
+      print_response_summary "enable domain receiving" "$update_result"
+      domain_result="$(request GET "/domains/${domain_id}")"
+      print_response_summary "retrieve updated domain" "$domain_result"
+    fi
+    save_domain_json "$domain_result"
+  fi
+else
+  echo "domain not found. Re-run with --apply --ensure-domain when ready to create it."
+fi
+echo
+
+webhooks_result="$(request GET "/webhooks?limit=100")"
+print_response_summary "list webhooks" "$webhooks_result"
+webhook_id=""
+webhook_result=""
+
+if [ "$(jq '.http_status' <<<"$webhooks_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$webhooks_result")" -lt 300 ]; then
+  webhook_id="$(find_receive_webhook_id "$webhooks_result")"
+  if [ -z "$webhook_id" ] && [ "$ENSURE_WEBHOOK" -eq 1 ]; then
+    webhook_body="$(jq -n --arg endpoint "$ENDPOINT" '{endpoint: $endpoint, events: ["email.received"]}')"
+    webhook_result="$(request POST "/webhooks" "$webhook_body")"
+    print_response_summary "create webhook" "$webhook_result"
+    if [ "$(jq '.http_status' <<<"$webhook_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$webhook_result")" -lt 300 ]; then
+      webhook_id="$(jq -r '.id // empty' "$(jq -r '.body_file' <<<"$webhook_result")")"
+      secret="$(jq -r '.signing_secret // empty' "$(jq -r '.body_file' <<<"$webhook_result")")"
+      write_secret_file "$secret" "$WRITE_WEBHOOK_SECRET_FILE"
+    fi
+  fi
+fi
+
+if [ -n "$webhook_id" ]; then
+  webhook_result="$(request GET "/webhooks/${webhook_id}")"
+  print_response_summary "retrieve webhook" "$webhook_result"
+  if [ "$(jq '.http_status' <<<"$webhook_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$webhook_result")" -lt 300 ]; then
+    secret="$(jq -r '.signing_secret // empty' "$(jq -r '.body_file' <<<"$webhook_result")")"
+    write_secret_file "$secret" "$WRITE_WEBHOOK_SECRET_FILE"
+    if [ -z "$WRITE_WEBHOOK_SECRET_FILE" ] && [ -n "$secret" ]; then
+      echo "webhook signing secret is available but was not printed; pass --write-webhook-secret-file to save it."
+    fi
+  fi
+elif [ "$(jq '.http_status' <<<"$webhooks_result")" -ge 200 ] && [ "$(jq '.http_status' <<<"$webhooks_result")" -lt 300 ]; then
+  echo "email.received webhook not found. Re-run with --apply --ensure-webhook when ready to create it."
+fi
+echo
+
+if [ "$VERIFY_DOMAIN" -eq 1 ]; then
+  if [ -z "$domain_id" ]; then
+    echo "cannot verify domain because domain id is missing"
+  else
+    verify_result="$(request POST "/domains/${domain_id}/verify")"
+    print_response_summary "verify domain" "$verify_result"
+  fi
+fi
+
+echo "complete."
