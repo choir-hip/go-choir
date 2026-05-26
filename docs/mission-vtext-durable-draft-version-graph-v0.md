@@ -452,10 +452,19 @@ For every model/scenario row, report:
 
 ## Run Checkpoint & Resumption State
 
-status: current_deliverable_complete_with_residual_risks
+status: checkpoint_incomplete
 
 last checkpoint:
 
+- 2026-05-26 staging product-path multi-worker storm probe passed against the
+  deployed behavior commit. Using Kimi low for conductor/VText/researcher, VText
+  spawned two researcher agents on distinct branches, a dirty user marker was
+  inserted after v1, and later VText revisions preserved the marker while
+  recording two consumed worker updates from two distinct researcher senders.
+  A stricter rerun waited for pending late updates to drain: the final head had
+  no pending worker updates, four consumed worker updates across revisions, two
+  distinct researcher senders, five appagent revisions, and the exact dirty
+  marker still present.
 - 2026-05-26 deployed commit `2cf7253954aa5f67f7251fd22f4946ed0adb40ec`
   completed the current deliverable: staging has the durable dirty-draft rebase
   behavior, cross-session pre-`Revise` autosave visibility, a passing dirty user
@@ -489,8 +498,10 @@ current artifact state:
   explicit `allow_rebase` user revision saves can rebase stale dirty drafts onto
   the current head while ordinary stale writes still return conflict.
 - The behavior is deployed at
-  `b2252fe4ecc9f05f827ca3c86e2703ada68d4820` and product-path proven for the
-  dirty-over-moved-head API path.
+  `2cf7253954aa5f67f7251fd22f4946ed0adb40ec` and product-path proven for the
+  dirty-over-moved-head API path, cross-session pre-`Revise` autosave
+  visibility, one-researcher dirty worker follow-up, and two-researcher
+  consumed/pending worker-update metadata.
 
 what shipped:
 
@@ -546,13 +557,23 @@ what was proven:
   `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=deep-research,coding-super,long-multi-section VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z pnpm exec playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`
   passed. Evidence:
   `test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z/`.
+- Deployed two-researcher dirty worker-update storm proof:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'two researcher worker updates' --reporter=line`
+  passed. Evidence:
+  `test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z/dirty-user-edit-two-worker-updates.json`.
+- Deployed two-researcher pending-drain proof:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'two researcher worker updates' --reporter=line`
+  passed. Evidence:
+  `test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z/dirty-user-edit-two-worker-updates.json`.
 
 residual or partial claims:
 
 - two-browser cross-session draft visibility before `Revise` is proven; two
   physical devices are not separately proven;
 - one researcher worker update arriving after a dirty user revision is proven;
-  deterministic multi-worker storms are not;
+  a two-researcher storm is now proven for consumed/pending metadata and dirty
+  marker preservation, including eventual pending-drain to an empty latest
+  pending set in the stricter rerun;
 - long-content model rows are covered, but not yet with a strict
   section-obligation/content-quality rubric;
 - whether autosave-as-canonical-user-version is the final durable draft model
@@ -586,9 +607,6 @@ highest-impact remaining uncertainty:
 
 next executable probe:
 
-- Build the next deterministic product-path multi-worker storm: dirty direct edit
-  plus two or more researcher/super updates before and during VText wake, with
-  consumed/pending metadata checked per worker update.
 - Add a section-level long-document rubric that checks required sections,
   source grounding, no contradictory current-events claims, user-marker
   preservation, and lineage metadata.
@@ -615,6 +633,10 @@ evidence artifact refs:
   `test-results/vtext-durable-draft-worker-concurrency-staging-2cf7253-20260526T000659Z/dirty-user-edit-worker-followup.json`.
 - Final deployed model-suite evidence:
   `test-results/vtext-model-suite-durable-draft-2cf7253-20260526T000948Z/`.
+- Deployed two-researcher storm evidence:
+  `test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z/dirty-user-edit-two-worker-updates.json`.
+- Deployed two-researcher pending-drain evidence:
+  `test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z/dirty-user-edit-two-worker-updates.json`.
 
 rollback refs:
 

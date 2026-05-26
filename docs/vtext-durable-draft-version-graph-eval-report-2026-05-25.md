@@ -85,6 +85,41 @@ Assertions proven by that artifact:
 - Trace contained researcher and VText agents using v4-flash medium from
   `/mnt/persistent/files/System/model-policy.toml`.
 
+Additional two-researcher worker storm proof:
+
+- Command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'two researcher worker updates' --reporter=line`
+- Result: `1 passed`.
+- Evidence artifact:
+  `test-results/vtext-durable-draft-multi-worker-staging-a2fe62f-20260526T003647Z/dirty-user-edit-two-worker-updates.json`
+
+Assertions proven by that artifact:
+
+- final head preserved the exact user marker;
+- three appagent revisions existed;
+- Trace contained two researcher agents using Kimi low;
+- two worker updates from two distinct researcher senders were consumed across
+  VText revisions;
+- final revision recorded later worker updates as pending instead of hiding or
+  dropping them.
+
+Additional pending-drain rerun:
+
+- Command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_DURABLE_DRAFT_EVIDENCE_DIR=../test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z pnpm exec playwright test tests/vtext-durable-draft-version-graph.tmp.spec.js --project=chromium --grep 'two researcher worker updates' --reporter=line`
+- Result: `1 passed`.
+- Evidence artifact:
+  `test-results/vtext-durable-draft-multi-worker-drain-staging-a2fe62f-20260526T005412Z/dirty-user-edit-two-worker-updates.json`
+
+Assertions proven by that artifact:
+
+- final head preserved the exact user marker;
+- five appagent revisions existed;
+- Trace contained two researcher agents using Kimi low;
+- four worker updates from two distinct researcher senders were consumed across
+  VText revisions;
+- latest head had `worker_updates_pending: []`.
+
 ## Model Suite Results
 
 Primary evidence directory:
@@ -148,7 +183,9 @@ but this is still coordination noise.
   not yet assert section-by-section obligations beyond revision timing and trace
   noise.
 - Worker-update concurrency is proven for one researcher update arriving after a
-  dirty user revision, not for a deterministic multi-worker storm.
+  dirty user revision and for a two-researcher storm with consumed/pending
+  metadata. The stricter rerun also proves eventual drain of the latest pending
+  set for that two-researcher storm.
 - The model-suite harness can still hit auth expiry on long serial runs; fresh
   reruns mitigated this, but the observer should renew sessions before the final
   full mission pass.
