@@ -91,3 +91,38 @@ func TestRunMessagesRequiresOwner(t *testing.T) {
 		t.Fatalf("stderr missing owner requirement: %s", stderr.String())
 	}
 }
+
+func TestRunWebhooksPrintsEmptyArray(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &maild.Config{
+		Port:            maild.DefaultPort,
+		DBPath:          filepath.Join(dir, "mail.db"),
+		StorageRoot:     filepath.Join(dir, "mail"),
+		PrimaryDomain:   "choir.news",
+		RootOwnerID:     "owner-000",
+		ResendBaseURL:   maild.DefaultResendBaseURL,
+		WebhookMaxBytes: maild.DefaultWebhookMaxBody,
+	}
+	if err := cfg.EnsureDirs(); err != nil {
+		t.Fatalf("EnsureDirs: %v", err)
+	}
+	store, err := maild.OpenStore(cfg.DBPath)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"webhooks", "--db", cfg.DBPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run webhooks code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "[]" {
+		t.Fatalf("webhooks output = %q, want []", stdout.String())
+	}
+}

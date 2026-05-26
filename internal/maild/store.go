@@ -284,7 +284,7 @@ func (s *Store) ListAliases(ctx context.Context) ([]EmailAlias, error) {
 		return nil, fmt.Errorf("list aliases: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var aliases []EmailAlias
+	aliases := make([]EmailAlias, 0)
 	for rows.Next() {
 		var alias EmailAlias
 		if err := rows.Scan(
@@ -353,7 +353,7 @@ func (s *Store) ListWebhookEvents(ctx context.Context, limit int) ([]WebhookEven
 		return nil, fmt.Errorf("list webhook events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var events []WebhookEvent
+	events := make([]WebhookEvent, 0)
 	for rows.Next() {
 		var event WebhookEvent
 		var receivedAt string
@@ -432,7 +432,7 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var messages []EmailMessage
+	messages := make([]EmailMessage, 0)
 	for rows.Next() {
 		msg, err := scanMessage(rows)
 		if err != nil {
@@ -472,7 +472,7 @@ func (s *Store) ListAttachments(ctx context.Context, ownerID, messageID string) 
 		return nil, fmt.Errorf("list attachments: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var attachments []EmailAttachment
+	attachments := make([]EmailAttachment, 0)
 	for rows.Next() {
 		var a EmailAttachment
 		if err := rows.Scan(&a.ID, &a.MessageID, &a.ProviderAttachmentID, &a.Filename, &a.ContentType, &a.SizeBytes, &a.StorageRef, &a.Status, &a.CreatedAt); err != nil {
