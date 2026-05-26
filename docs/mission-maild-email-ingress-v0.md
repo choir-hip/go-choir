@@ -811,3 +811,50 @@ Required next change:
 
 - Add bounded provider error classification/logging for outbound sends, then
   retry the outbound proof and record the actual provider reason.
+
+## Deployed Checkpoint: outbound blocked on Resend domain verification
+
+Recorded: 2026-05-26.
+
+Status:
+
+The outbound provider failure is now explained. Deployed `maild` logs a bounded
+provider status/reason while keeping the browser response generic. Retrying the
+same low-impact outbound proof produced a Resend `403` explaining that
+`choir.news` is not verified in Resend.
+
+Evidence:
+
+```text
+behavior commit: 30b0196
+local focused test: nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+deploy method: Node B /opt/go-choir fast-forward to origin/main, NixOS build/switch, maild/proxy restart
+deploy smoke probes: 8081, 8082, 8083, 8084, 8086, 8087 health ok
+outbound retry:
+  request path: POST http://127.0.0.1:8087/api/email/send
+  owner: 5bd6de97-3b58-408c-bf89-c42c81b083de
+  from: 000@choir.news
+  recipient: delivered@resend.dev
+  response: HTTP 502 {"error":"failed to send email"}
+  sent folder after retry: []
+bounded provider log:
+  status=403
+  detail="{\"statusCode\":403,\"message\":\"The choir.news domain is not verified. Please, add and verify your domain on https://resend.com/domains\",\"name\":\"validation_error\"}"
+```
+
+Belief-state update:
+
+- Outbound code path reached Resend and failed for provider/domain setup, not
+  alias ownership, request shape, or local storage.
+- The send-only Resend key is usable enough to call `POST /emails`, but
+  `choir.news` must be verified in Resend before any real outbound proof can
+  pass.
+- The remaining provider work is now both inbound and outbound:
+  verify `choir.news` in Resend, create/configure receiving and webhook secret,
+  then only after exact Resend DNS records are known update Gandi DNS.
+
+Remaining blocker:
+
+- Need Resend domain verification access/records for `choir.news`, plus
+  receiving/webhook setup. Do not change Gandi MX/SPF/DKIM/DMARC records from
+  guesses; fetch exact records from Resend first.
