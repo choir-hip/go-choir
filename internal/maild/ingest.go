@@ -35,6 +35,7 @@ type inboundMessageRecord struct {
 	Attachments            []resendAttachmentMeta
 	SourcePacketID         string
 	SourcePacketProvenance string
+	SourcePacketTextRef    string
 }
 
 // StoreInboundMessage stores a normalized received email and its untrusted
@@ -113,10 +114,11 @@ func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string,
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO email_source_packets (
 		id, message_id, trust_label, provenance_json, text_ref, created_at
-	) VALUES (?, ?, 'UNTRUSTED_EXTERNAL_EMAIL', ?, NULL, ?)`,
+	) VALUES (?, ?, 'UNTRUSTED_EXTERNAL_EMAIL', ?, ?, ?)`,
 		record.SourcePacketID,
 		record.ID,
 		record.SourcePacketProvenance,
+		nullString(record.SourcePacketTextRef),
 		record.CreatedAt,
 	); err != nil {
 		return fmt.Errorf("insert source packet: %w", err)
@@ -188,6 +190,7 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 		Attachments:            email.Attachments,
 		SourcePacketID:         sourcePacketRowID(providerMessageID),
 		SourcePacketProvenance: string(provenance),
+		SourcePacketTextRef:    "message:" + messageRowID(providerMessageID),
 	}, nil
 }
 

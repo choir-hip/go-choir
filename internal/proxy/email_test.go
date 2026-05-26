@@ -90,6 +90,9 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 				"from_address":     "sender@example.com",
 				"subject":          "Project update",
 				"snippet":          "Untrusted summary only",
+				"provenance_json":  `{"provider":"resend","resolved_recipient":"000@choir.news"}`,
+				"text_ref":         "message:msg-1",
+				"text_body":        "Hi Yusef,\n\nPlease review the attached update and summarize the next steps.\n\n- Sender",
 			})
 		case "/api/email/messages/msg-1/ingress-events":
 			recordUser = r.Header.Get("X-Authenticated-User")
@@ -148,7 +151,15 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	if promptUser != "user-real" {
 		t.Fatalf("prompt user = %q, want user-real", promptUser)
 	}
-	for _, want := range []string{"UNTRUSTED_EXTERNAL_EMAIL", "src-email-1", "msg-1", "Project update"} {
+	for _, want := range []string{
+		"UNTRUSTED_EXTERNAL_EMAIL",
+		"src-email-1",
+		"msg-1",
+		"Project update",
+		`{"provider":"resend","resolved_recipient":"000@choir.news"}`,
+		"message:msg-1",
+		"Please review the attached update and summarize the next steps.",
+	} {
 		if !strings.Contains(promptText, want) {
 			t.Fatalf("prompt text missing %q:\n%s", want, promptText)
 		}
@@ -159,6 +170,19 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	}
 	if resp.SubmissionID != "run-email-1" || resp.SourcePacketID != "src-email-1" {
 		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestBuildEmailSourcePromptTruncatesBody(t *testing.T) {
+	body := strings.Repeat("A", 8100)
+	prompt := buildEmailSourcePrompt(emailSourcePacketResponse{
+		SourcePacketID: "src-email-1",
+		MessageID:      "msg-1",
+		TrustLabel:     "UNTRUSTED_EXTERNAL_EMAIL",
+		TextBody:       body,
+	})
+	if !strings.Contains(prompt, "[truncated for bounded prompt delivery]") {
+		t.Fatalf("prompt missing bounded-delivery marker:\n%s", prompt)
 	}
 }
 

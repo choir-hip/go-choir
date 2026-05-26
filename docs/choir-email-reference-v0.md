@@ -162,6 +162,11 @@ Implementation checkpoint, 2026-05-26:
   `email_ingress_events` row in `maild` after prompt-bar submission. This is
   read-only operator evidence; `maild` still never receives sandbox credentials
   or calls MAS directly.
+- The authenticated source-packet route returns provenance, a stable normalized
+  text ref, and the normalized plain-text email body. The proxy submits a
+  bounded copy of that body into the existing prompt-bar path under explicit
+  `UNTRUSTED_EXTERNAL_EMAIL` framing, while leaving attachments quarantined and
+  provider-only raw-message refs out of browser-visible state.
 - Node B Nix config defines `go-choir-maild`, `/var/lib/go-choir/mail`, and a
   direct Caddy route for `/api/email/resend/webhook`.
 - `nix/deploy-mail-creds.sh` deploys `RESEND_API_KEY` and
@@ -216,10 +221,11 @@ owner clicks "Send to Choir" or "Summarize with Choir"
   -> browser POSTs /api/email/messages/:id/send-to-choir through proxy
   -> proxy validates owner session
   -> proxy asks maild for an owner-visible source packet
-  -> maild enforces mailbox ownership and returns provenance/source refs
+  -> maild enforces mailbox ownership and returns provenance, normalized text ref,
+     and normalized plain-text source content
   -> proxy submits a conductor-style request to the resolved user computer
   -> proxy records an owner/message-scoped email_ingress_events receipt in maild
-  -> sandbox/conductor receives owner instruction plus untrusted source refs
+  -> sandbox/conductor receives owner instruction plus bounded untrusted source content
 ```
 
 Outbound:

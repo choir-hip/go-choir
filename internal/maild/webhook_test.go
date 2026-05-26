@@ -218,6 +218,9 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	if packet.TrustLabel != "UNTRUSTED_EXTERNAL_EMAIL" {
 		t.Fatalf("TrustLabel = %q", packet.TrustLabel)
 	}
+	if packet.TextRef != "message:"+msg.ID {
+		t.Fatalf("TextRef = %q, want %q", packet.TextRef, "message:"+msg.ID)
+	}
 }
 
 func TestHandleResendWebhookRejectsUnwhitelistedTrustedUploadAlias(t *testing.T) {

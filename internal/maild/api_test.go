@@ -177,6 +177,15 @@ func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	if resp.SourcePacketID != "source-msg-1" || resp.TrustLabel != "UNTRUSTED_EXTERNAL_EMAIL" {
 		t.Fatalf("source response = %+v", resp)
 	}
+	if resp.TextRef != "message:msg-1" {
+		t.Fatalf("text ref = %q, want message:msg-1", resp.TextRef)
+	}
+	if !strings.Contains(resp.TextBody, "external content") {
+		t.Fatalf("text body = %q, want stored message body", resp.TextBody)
+	}
+	if resp.ProvenanceJSON != `{"provider":"resend"}` {
+		t.Fatalf("provenance = %q", resp.ProvenanceJSON)
+	}
 }
 
 func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {

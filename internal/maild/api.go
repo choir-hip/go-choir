@@ -62,6 +62,10 @@ type sourcePacketResponse struct {
 	FromAddress    string `json:"from_address,omitempty"`
 	Subject        string `json:"subject,omitempty"`
 	Snippet        string `json:"snippet,omitempty"`
+	ProvenanceJSON string `json:"provenance_json,omitempty"`
+	TextRef        string `json:"text_ref,omitempty"`
+	TextBody       string `json:"text_body,omitempty"`
+	HasAttachments bool   `json:"has_attachments,omitempty"`
 }
 
 type recordIngressEventRequest struct {
@@ -200,6 +204,10 @@ func (h *Handler) handleMessageSourcePacket(w http.ResponseWriter, r *http.Reque
 		FromAddress:    msg.FromAddress,
 		Subject:        msg.Subject,
 		Snippet:        snippet(msg.TextBody),
+		ProvenanceJSON: packet.ProvenanceJSON,
+		TextRef:        packet.TextRef,
+		TextBody:       msg.TextBody,
+		HasAttachments: msg.HasAttachments,
 	})
 }
 
