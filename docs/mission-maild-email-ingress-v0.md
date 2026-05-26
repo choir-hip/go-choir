@@ -1009,6 +1009,14 @@ Required next change:
 - Add bounded provider error classification/logging for outbound sends, then
   retry the outbound proof and record the actual provider reason.
 
+Resolution checkpoint:
+
+- Resolved by bounded outbound provider logging. The browser response remains
+  generic, while operator logs captured the provider status and bounded JSON
+  reason showing Resend rejected the send because `choir.news` is not verified.
+- The remaining outbound blocker is provider/domain verification, not an
+  unexplained local send-path failure.
+
 ## Deployed Checkpoint: outbound blocked on Resend domain verification
 
 Recorded: 2026-05-26.
@@ -1092,6 +1100,15 @@ Required next change:
 - When `reply_to_message_id` is provided, require that the current owner can
   read the target message, extract its RFC `message_id`, and set
   `In-Reply-To` and `References` in the Resend send payload.
+
+Resolution checkpoint:
+
+- Resolved in `internal/maild/send.go` and covered by
+  `internal/maild/send_test.go`: owner-visible reply targets now populate
+  `In-Reply-To` and `References`; missing RFC ids fail before provider send;
+  unowned reply targets are rejected.
+- The Email app still initiates reply explicitly from the owner action, so the
+  fix does not grant inbound content any send authority.
 
 ## Deployed Checkpoint: owner reply threading wired
 
@@ -1448,6 +1465,13 @@ Required next change:
   message-detail API, and render those stored recipients in the Email app
   Details block without trusting them as instructions.
 
+Resolution checkpoint:
+
+- Resolved by `Store.ListRecipients`, the authenticated message-detail
+  `recipients` response, and Email app rendering for To/Cc/Bcc in the detail
+  header/Details block.
+- Focused coverage exists in `TestHandleMessageDetailIncludesStoredRecipients`.
+
 ## UI Checkpoint: stored-recipient Details surface
 
 Recorded: 2026-05-26.
@@ -1507,6 +1531,14 @@ Required next change:
 - Add a minimal Compose panel to the Email app using the existing authenticated
   `/api/email/send` route. Keep it owner-initiated, fixed to `000@choir.news`,
   plain text only, and independent of inbound message content.
+
+Resolution checkpoint:
+
+- Resolved in `frontend/src/lib/EmailApp.svelte`: the Email app exposes a
+  minimal Compose panel with fixed From `000@choir.news`, To, Subject, plain
+  text body, and an explicit Send action through `/api/email/send`.
+- The feature remains inside the owner-authenticated UI path and does not let
+  inbound email trigger outbound sending.
 
 ## UI Checkpoint: minimal Compose surface
 
@@ -1700,15 +1732,17 @@ Status:
 
 Historical "Required next change" findings for private mail state modes,
 default alias owner reconciliation, direct `maild` health proof,
-`workflow_dispatch`, `maildctl`, and empty-list CLI output have explicit
-resolution checkpoints. This does not change deployed behavior; it makes the
-mission ledger match the already-shipped service and keeps future resumptions
-focused on the real remaining provider/DNS acceptance gap.
+`workflow_dispatch`, `maildctl`, empty-list CLI output, bounded provider
+logging, owner reply threading, stored recipients, and minimal Compose have
+explicit resolution checkpoints. This does not change deployed behavior; it
+makes the mission ledger match the already-shipped service and keeps future
+resumptions focused on the real remaining provider/DNS acceptance gap.
 
 Verification:
 
 ```text
 nix develop -c go test ./internal/maild ./cmd/maildctl ./cmd/maild
+npm run build in frontend
 nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-maild.serviceConfig.UMask
   -> "0077"
 nix eval .#nixosConfigurations.go-choir-b.config.environment.systemPackages --apply 'pkgs: builtins.any (p: (p.pname or "") == "maildctl") pkgs'
