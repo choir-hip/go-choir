@@ -543,9 +543,13 @@ func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testi
 	if _, ok := model["next_required_tool"]; ok {
 		t.Fatalf("next_required_tool should be omitted when checkpoint is not required: %#v", model["next_required_tool"])
 	}
+	fetchModel, _ := compactFetchURLProjection(map[string]any{"url": "https://example.com"}, "body", true)
+	if got := fmt.Sprint(fetchModel["next_required_tool"]); got != "submit_coagent_update" {
+		t.Fatalf("fetch next_required_tool = %q, want submit_coagent_update", got)
+	}
 }
 
-func TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch(t *testing.T) {
+func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	rec := &types.RunRecord{
@@ -553,7 +557,8 @@ func TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch(t 
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileResearcher,
 	}
-	if !shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, rec), rt) {
+	toolCtx := WithToolExecutionContext(ctx, rec)
+	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("first researcher search should require a findings checkpoint")
 	}
 	superRec := &types.RunRecord{
@@ -561,22 +566,44 @@ func TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch(t 
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 	}
-	if shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, superRec), rt) {
+	if shouldRequireResearchFindingsAfterTool(WithToolExecutionContext(ctx, superRec), rt) {
 		t.Fatalf("super search should not require submit_coagent_update")
 	}
-	if err := s.AppendEvent(ctx, &types.EventRecord{
-		EventID:   "ev-web-search",
-		RunID:     rec.RunID,
-		OwnerID:   rec.OwnerID,
-		Timestamp: time.Now().UTC(),
-		Kind:      types.EventToolResult,
-		Phase:     "tool_call",
-		Payload:   json.RawMessage(`{"tool":"web_search","is_error":false}`),
-	}); err != nil {
-		t.Fatalf("append web_search event: %v", err)
+
+	appendToolResult := func(eventID, tool string) {
+		t.Helper()
+		payload, err := json.Marshal(map[string]any{"tool": tool, "is_error": false})
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		if err := s.AppendEvent(ctx, &types.EventRecord{
+			EventID:   eventID,
+			RunID:     rec.RunID,
+			OwnerID:   rec.OwnerID,
+			Timestamp: time.Now().UTC(),
+			Kind:      types.EventToolResult,
+			Phase:     "tool_call",
+			Payload:   payload,
+		}); err != nil {
+			t.Fatalf("append %s event: %v", tool, err)
+		}
 	}
-	if shouldRequireResearchFindingsAfterSearch(WithToolExecutionContext(ctx, rec), rt) {
+
+	appendToolResult("ev-web-search", "web_search")
+	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("second researcher search before findings should not repeatedly require another first checkpoint")
+	}
+	appendToolResult("ev-submit-1", "submit_coagent_update")
+	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+		t.Fatalf("first research batch after a checkpoint should require the next findings update")
+	}
+	appendToolResult("ev-fetch-1", "fetch_url")
+	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+		t.Fatalf("additional research before the next findings update should not stack repeated required-tool reminders")
+	}
+	appendToolResult("ev-submit-2", "submit_coagent_update")
+	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+		t.Fatalf("another post-checkpoint research batch should require another findings update")
 	}
 }
 

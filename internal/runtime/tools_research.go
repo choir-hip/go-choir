@@ -27,7 +27,7 @@ type webSearchResponse struct {
 func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newWebSearchTool(searchClient, rt),
-		newFetchURLTool(httpClient),
+		newFetchURLTool(httpClient, rt),
 		newImportURLContentTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
@@ -65,7 +65,7 @@ func newImportURLContentTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			result := map[string]any{
 				"content_id":    item.ContentID,
 				"source_type":   item.SourceType,
 				"media_type":    item.MediaType,
@@ -76,7 +76,9 @@ func newImportURLContentTool(rt *Runtime) Tool {
 				"content_hash":  item.ContentHash,
 				"text_chars":    len(item.TextContent),
 				"provenance":    item.Provenance,
-			})
+			}
+			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			return toolResultJSON(result)
 		},
 	}
 }
@@ -115,13 +117,13 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 				"attempts":  resp.Attempts,
 				"results":   resp.Results,
 			}
-			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchFindingsAfterSearch(ctx, rt))
+			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
 }
 
-func shouldRequireResearchFindingsAfterSearch(ctx context.Context, rt *Runtime) bool {
+func shouldRequireResearchFindingsAfterTool(ctx context.Context, rt *Runtime) bool {
 	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileResearcher {
 		return false
 	}
@@ -136,10 +138,12 @@ func shouldRequireResearchFindingsAfterSearch(ctx context.Context, rt *Runtime) 
 	if err != nil {
 		return false
 	}
-	if researchRunHasSuccessfulTool(events, "submit_coagent_update") {
-		return false
+	latestSubmit := latestSuccessfulResearchToolSeq(events, "submit_coagent_update")
+	latestResearch := latestSuccessfulResearchToolSeq(events, "web_search", "fetch_url", "import_url_content")
+	if latestSubmit == 0 {
+		return latestResearch == 0
 	}
-	return !researchRunHasSuccessfulTool(events, "web_search")
+	return latestResearch <= latestSubmit
 }
 
 func researchRunHasSuccessfulTool(events []types.EventRecord, toolName string) bool {
@@ -160,7 +164,40 @@ func researchRunHasSuccessfulTool(events []types.EventRecord, toolName string) b
 	return false
 }
 
-func newFetchURLTool(httpClient *http.Client) Tool {
+func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...string) int64 {
+	wanted := make(map[string]bool, len(toolNames))
+	for _, toolName := range toolNames {
+		if strings.TrimSpace(toolName) != "" {
+			wanted[toolName] = true
+		}
+	}
+	var latest int64
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		tool, _ := payload["tool"].(string)
+		isError, _ := payload["is_error"].(bool)
+		if wanted[tool] && !isError && ev.Seq > latest {
+			latest = ev.Seq
+		}
+	}
+	return latest
+}
+
+func addResearchFindingsCheckpointRequirement(ctx context.Context, rt *Runtime, result map[string]any) {
+	if !shouldRequireResearchFindingsAfterTool(ctx, rt) {
+		return
+	}
+	result["next_required_tool"] = "submit_coagent_update"
+	result["next_instruction"] = "Submit a concise findings update from this latest research batch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the batch only proved that final/current evidence is unavailable, report that blocker."
+}
+
+func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
 	type args struct {
 		URL      string `json:"url"`
 		MaxChars int    `json:"max_chars,omitempty"`
@@ -214,7 +251,7 @@ func newFetchURLTool(httpClient *http.Client) Tool {
 				"content_length": len(data),
 				"content":        content,
 			}
-			model, metadata := compactFetchURLProjection(full, content)
+			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchFindingsAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
@@ -290,7 +327,7 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 	return model, metadata
 }
 
-func compactFetchURLProjection(full map[string]any, content string) (map[string]any, map[string]any) {
+func compactFetchURLProjection(full map[string]any, content string, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
 	const maxContentChars = 4000
 	visibleContent := truncateString(content, maxContentChars)
 	model := map[string]any{
@@ -304,6 +341,10 @@ func compactFetchURLProjection(full map[string]any, content string) (map[string]
 		"content":           visibleContent,
 		"full_evidence":     "stored in Trace tool.result full_output/full_output_sha256",
 		"projection_policy": "bounded excerpt; fetch/read deeper only when needed",
+	}
+	if requireFindingsCheckpoint {
+		model["next_required_tool"] = "submit_coagent_update"
+		model["next_instruction"] = "Submit a concise findings update from this latest fetch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the fetch only proved that final/current evidence is unavailable, report that blocker."
 	}
 	metadata := map[string]any{
 		"type":               "fetch_url",
