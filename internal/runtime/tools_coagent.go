@@ -73,12 +73,12 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if parentID == "" || ownerID == "" {
 				return "", fmt.Errorf("spawn_agent missing run context")
 			}
-			role := canonicalAgentProfile(strings.TrimSpace(in.Role))
+			role := normalizeDelegateTargetValue(in.Role, allowedTargets)
 			if role == "" {
 				return "", fmt.Errorf("role must not be empty")
 			}
 			callerProfile := stringFromToolContext(ctx, toolCtxProfile)
-			profile := canonicalAgentProfile(strings.TrimSpace(in.Profile))
+			profile := normalizeDelegateTargetValue(in.Profile, allowedTargets)
 			if profile == "" {
 				profile = role
 			}
@@ -159,6 +159,53 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			return toolResultJSON(result)
 		},
 	}
+}
+
+func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	direct := canonicalAgentProfile(raw)
+	if delegateTargetAllowed(direct, allowedTargets) {
+		return direct
+	}
+	if !looksLikeNoisyToolArg(raw) {
+		return direct
+	}
+	seen := map[string]bool{}
+	var match string
+	for _, token := range strings.FieldsFunc(raw, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_')
+	}) {
+		candidate := canonicalAgentProfile(token)
+		if !delegateTargetAllowed(candidate, allowedTargets) || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		if match != "" {
+			return direct
+		}
+		match = candidate
+	}
+	if match != "" {
+		return match
+	}
+	return direct
+}
+
+func delegateTargetAllowed(candidate string, allowedTargets []string) bool {
+	candidate = canonicalAgentProfile(candidate)
+	for _, allowed := range allowedTargets {
+		if candidate == canonicalAgentProfile(allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeNoisyToolArg(raw string) bool {
+	return strings.ContainsAny(raw, "<>{}[]()/\\\n\r\t")
 }
 
 func normalizeVSuperCoSuperSlot(raw string) string {

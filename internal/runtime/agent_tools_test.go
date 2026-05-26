@@ -1960,6 +1960,25 @@ func TestConductorCanSpawnVTextAndVTextCanSpawnResearcher(t *testing.T) {
 	if researchAliasSpawn.Role != AgentProfileResearcher || researchAliasSpawn.Profile != AgentProfileResearcher {
 		t.Fatalf("research alias spawn = role %q profile %q, want researcher/researcher", researchAliasSpawn.Role, researchAliasSpawn.Profile)
 	}
+
+	noisyResearchSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+		"objective":"research current facts despite provider wrapper noise",
+		"role":"researcher</parameter> </invoke>",
+		"channel_id":"`+vtextSpawn.ChannelID+`"
+	}`))
+	if err != nil {
+		t.Fatalf("vtext spawn noisy researcher role: %v", err)
+	}
+	var noisyResearchSpawn struct {
+		Role    string `json:"role"`
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal([]byte(noisyResearchSpawnRaw), &noisyResearchSpawn); err != nil {
+		t.Fatalf("decode noisy researcher spawn: %v", err)
+	}
+	if noisyResearchSpawn.Role != AgentProfileResearcher || noisyResearchSpawn.Profile != AgentProfileResearcher {
+		t.Fatalf("noisy research spawn = role %q profile %q, want researcher/researcher", noisyResearchSpawn.Role, noisyResearchSpawn.Profile)
+	}
 }
 
 func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {

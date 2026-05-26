@@ -15,6 +15,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T) {
+	allowed := []string{AgentProfileResearcher}
+	if got := normalizeDelegateTargetValue("researcher</parameter> </invoke>", allowed); got != AgentProfileResearcher {
+		t.Fatalf("noisy researcher target = %q, want %q", got, AgentProfileResearcher)
+	}
+	if got := normalizeDelegateTargetValue("researcher and vtext</invoke>", []string{AgentProfileResearcher, AgentProfileVText}); got == AgentProfileResearcher || got == AgentProfileVText {
+		t.Fatalf("ambiguous noisy target recovered as %q, want unrecovered value", got)
+	}
+	if got := normalizeDelegateTargetValue("researcher please", allowed); got == AgentProfileResearcher {
+		t.Fatalf("plain non-enum text recovered as %q, want allowlist rejection later", got)
+	}
+}
+
 // --- Tool Registry Tests ---
 
 func TestToolRegistryRegister(t *testing.T) {
