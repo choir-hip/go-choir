@@ -3,7 +3,9 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,6 +61,12 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 	}
 	sent, err := h.resend.sendEmail(r.Context(), payload)
 	if err != nil {
+		var providerErr *resendHTTPError
+		if errors.As(err, &providerErr) {
+			log.Printf("maild: outbound send provider failure owner=%s alias=%s status=%d detail=%q", ownerID, alias.ID, providerErr.StatusCode, providerErr.Detail)
+		} else {
+			log.Printf("maild: outbound send failure owner=%s alias=%s: %v", ownerID, alias.ID, err)
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send email"})
 		return
 	}

@@ -1,7 +1,9 @@
 package maild
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,5 +73,42 @@ func TestHandleSendRejectsUnownedFromAlias(t *testing.T) {
 	h.HandleSend(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestResendSendEmailReturnsBoundedProviderError(t *testing.T) {
+	cfg := &Config{
+		ResendAPIKey:  "re_test",
+		ResendBaseURL: "http://unused",
+	}
+	longDetail := strings.Repeat("x", maxProviderErrorDetail+50)
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, longDetail, http.StatusForbidden)
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	client := newResendClient(cfg, resend.Client())
+
+	_, err := client.sendEmail(context.Background(), resendSendRequest{
+		From:    "000@choir.news",
+		To:      []string{"delivered@resend.dev"},
+		Subject: "test",
+		Text:    "test",
+	})
+	if err == nil {
+		t.Fatalf("sendEmail error = nil")
+	}
+	var providerErr *resendHTTPError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("error type = %T, want *resendHTTPError", err)
+	}
+	if providerErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("StatusCode = %d, want %d", providerErr.StatusCode, http.StatusForbidden)
+	}
+	if len(providerErr.Detail) <= maxProviderErrorDetail {
+		t.Fatalf("Detail length = %d, want bounded detail with ellipsis", len(providerErr.Detail))
+	}
+	if len(providerErr.Detail) > maxProviderErrorDetail+3 {
+		t.Fatalf("Detail length = %d, want <= %d", len(providerErr.Detail), maxProviderErrorDetail+3)
 	}
 }

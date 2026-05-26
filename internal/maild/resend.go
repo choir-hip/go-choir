@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const maxProviderErrorDetail = 512
+
 type resendClient struct {
 	baseURL string
 	apiKey  string
@@ -63,6 +65,22 @@ type resendSendResponse struct {
 	ID string `json:"id"`
 }
 
+type resendHTTPError struct {
+	Operation  string
+	StatusCode int
+	Detail     string
+}
+
+func (e *resendHTTPError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Detail == "" {
+		return fmt.Sprintf("%s status %d", e.Operation, e.StatusCode)
+	}
+	return fmt.Sprintf("%s status %d: %s", e.Operation, e.StatusCode, e.Detail)
+}
+
 func newResendClient(cfg *Config, client *http.Client) resendClient {
 	if client == nil {
 		client = http.DefaultClient
@@ -95,8 +113,7 @@ func (c resendClient) retrieveReceivedEmail(ctx context.Context, emailID string)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return resendReceivedEmail{}, fmt.Errorf("retrieve received email status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return resendReceivedEmail{}, readProviderHTTPError("retrieve received email", resp)
 	}
 	var email resendReceivedEmail
 	if err := json.NewDecoder(resp.Body).Decode(&email); err != nil {
@@ -127,8 +144,7 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return resendSendResponse{}, fmt.Errorf("send email status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return resendSendResponse{}, readProviderHTTPError("send email", resp)
 	}
 	var out resendSendResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -138,4 +154,17 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 		return resendSendResponse{}, fmt.Errorf("send email response missing id")
 	}
 	return out, nil
+}
+
+func readProviderHTTPError(operation string, resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxProviderErrorDetail+1))
+	detail := strings.TrimSpace(string(body))
+	if len(detail) > maxProviderErrorDetail {
+		detail = detail[:maxProviderErrorDetail] + "..."
+	}
+	return &resendHTTPError{
+		Operation:  operation,
+		StatusCode: resp.StatusCode,
+		Detail:     detail,
+	}
 }
