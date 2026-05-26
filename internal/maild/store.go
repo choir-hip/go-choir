@@ -62,6 +62,13 @@ type EmailMessage struct {
 	CreatedAt      string
 }
 
+// EmailRecipient is a normalized message recipient visible to the mailbox owner.
+type EmailRecipient struct {
+	Kind    string
+	Address string
+	Display string
+}
+
 // EmailAttachment is message attachment metadata.
 type EmailAttachment struct {
 	ID                   string
@@ -473,6 +480,31 @@ func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (Emai
 		FROM email_messages
 		WHERE mailbox_owner_id = ? AND id = ?`, ownerID, messageID)
 	return scanMessage(row)
+}
+
+// ListRecipients returns stored recipients for an owner-visible message.
+func (s *Store) ListRecipients(ctx context.Context, ownerID, messageID string) ([]EmailRecipient, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT r.kind, r.address, coalesce(r.display, '')
+		FROM email_message_recipients r
+		JOIN email_messages m ON m.id = r.message_id
+		WHERE m.mailbox_owner_id = ? AND r.message_id = ?
+		ORDER BY CASE r.kind WHEN 'to' THEN 0 WHEN 'cc' THEN 1 WHEN 'bcc' THEN 2 ELSE 3 END, r.address`, ownerID, messageID)
+	if err != nil {
+		return nil, fmt.Errorf("list recipients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	recipients := make([]EmailRecipient, 0)
+	for rows.Next() {
+		var recipient EmailRecipient
+		if err := rows.Scan(&recipient.Kind, &recipient.Address, &recipient.Display); err != nil {
+			return nil, fmt.Errorf("scan recipient: %w", err)
+		}
+		recipients = append(recipients, recipient)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return recipients, nil
 }
 
 // ListAttachments returns attachment metadata for an owner-visible message.

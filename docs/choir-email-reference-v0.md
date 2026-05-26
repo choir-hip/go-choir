@@ -142,6 +142,10 @@ Implementation checkpoint, 2026-05-26:
 - The authenticated message-detail API includes stored raw headers for
   owner-visible inspection. The Email app renders those headers only inside a
   collapsed Details section; plain text remains the primary v0 body surface.
+- The authenticated message-detail API also returns stored To/Cc/Bcc recipient
+  rows. The Email app renders those stored recipients instead of assuming the
+  active root alias, which keeps plus-alias, forwarded-mail, and Sent-message
+  inspection honest.
 - `internal/proxy` owns authenticated `/api/email/*` forwarding and the
   `/api/email/messages/:id/send-to-choir` compound operation.
 - Successful proxy-owned Send to Choir handoff records an owner/message-scoped

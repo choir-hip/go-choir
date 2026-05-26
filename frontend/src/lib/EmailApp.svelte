@@ -28,6 +28,10 @@
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = '000@choir.news';
   $: detailHeaderEntries = headerEntries(detail?.raw_headers);
+  $: detailToRecipients = detail?.recipients?.to || [];
+  $: detailCcRecipients = detail?.recipients?.cc || [];
+  $: detailBccRecipients = detail?.recipients?.bcc || [];
+  $: detailToLine = addressListLabel(detailToRecipients) || activeAddress;
 
   onMount(() => {
     if (authenticated) {
@@ -173,6 +177,20 @@
       .sort(([left], [right]) => left.localeCompare(right));
   }
 
+  function addressLabel(recipient) {
+    if (!recipient) return '';
+    const address = String(recipient.address || '').trim();
+    const display = String(recipient.display || '').trim();
+    if (!display) return address;
+    if (!address) return display;
+    return `${display} <${address}>`;
+  }
+
+  function addressListLabel(recipients) {
+    if (!Array.isArray(recipients)) return '';
+    return recipients.map(addressLabel).filter(Boolean).join(', ');
+  }
+
   function formatTime(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -253,7 +271,7 @@
       <header class="detail-header">
         <div>
           <h2>{detail.message.subject || '(no subject)'}</h2>
-          <p>{detail.message.from_address} → {activeAddress}</p>
+          <p>{detail.message.from_address} → {detailToLine}</p>
         </div>
         <span class="detail-trust">{trustLabel(detail.message.trust_status)}</span>
       </header>
@@ -274,8 +292,20 @@
           </div>
           <div>
             <dt>To</dt>
-            <dd>{activeAddress}</dd>
+            <dd>{detailToLine}</dd>
           </div>
+          {#if detailCcRecipients.length}
+            <div>
+              <dt>Cc</dt>
+              <dd>{addressListLabel(detailCcRecipients)}</dd>
+            </div>
+          {/if}
+          {#if detailBccRecipients.length}
+            <div>
+              <dt>Bcc</dt>
+              <dd>{addressListLabel(detailBccRecipients)}</dd>
+            </div>
+          {/if}
           <div>
             <dt>Trust</dt>
             <dd>{trustLabel(detail.message.trust_status)}</dd>

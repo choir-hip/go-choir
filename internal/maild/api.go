@@ -32,7 +32,19 @@ type messageDetailResponse struct {
 	TextBody    string               `json:"text_body,omitempty"`
 	HTMLBody    string               `json:"html_body,omitempty"`
 	RawHeaders  map[string]string    `json:"raw_headers,omitempty"`
+	Recipients  recipientsResponse   `json:"recipients"`
 	Attachments []attachmentResponse `json:"attachments,omitempty"`
+}
+
+type recipientsResponse struct {
+	To  []addressResponse `json:"to,omitempty"`
+	Cc  []addressResponse `json:"cc,omitempty"`
+	Bcc []addressResponse `json:"bcc,omitempty"`
+}
+
+type addressResponse struct {
+	Address string `json:"address"`
+	Display string `json:"display,omitempty"`
 }
 
 type attachmentResponse struct {
@@ -143,6 +155,11 @@ func (h *Handler) handleMessageDetail(w http.ResponseWriter, r *http.Request, ow
 		writeStoreError(w, err)
 		return
 	}
+	recipients, err := h.store.ListRecipients(r.Context(), ownerID, messageID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load recipients"})
+		return
+	}
 	attachments, err := h.store.ListAttachments(r.Context(), ownerID, messageID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load attachments"})
@@ -165,6 +182,7 @@ func (h *Handler) handleMessageDetail(w http.ResponseWriter, r *http.Request, ow
 		TextBody:    msg.TextBody,
 		HTMLBody:    msg.HTMLBody,
 		RawHeaders:  parseRawHeaders(msg.RawHeadersJSON),
+		Recipients:  groupRecipients(recipients),
 		Attachments: outAttachments,
 	})
 }
@@ -285,6 +303,26 @@ func parseRawHeaders(rawHeadersJSON string) map[string]string {
 		return nil
 	}
 	return headers
+}
+
+func groupRecipients(recipients []EmailRecipient) recipientsResponse {
+	var out recipientsResponse
+	for _, recipient := range recipients {
+		address := strings.TrimSpace(recipient.Address)
+		if address == "" {
+			continue
+		}
+		item := addressResponse{Address: address, Display: strings.TrimSpace(recipient.Display)}
+		switch strings.ToLower(strings.TrimSpace(recipient.Kind)) {
+		case "to":
+			out.To = append(out.To, item)
+		case "cc":
+			out.Cc = append(out.Cc, item)
+		case "bcc":
+			out.Bcc = append(out.Bcc, item)
+		}
+	}
+	return out
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {

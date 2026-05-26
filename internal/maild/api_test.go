@@ -92,6 +92,37 @@ func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
 	}
 }
 
+func TestHandleMessageDetailIncludesStoredRecipients(t *testing.T) {
+	store, cfg := newTestStore(t)
+	seedMessage(t, store, "user-1", "msg-1", "untrusted")
+	_, err := store.db.Exec(`INSERT INTO email_message_recipients (id, message_id, kind, address, display)
+		VALUES
+		('recipient-to-1', 'msg-1', 'to', '000+read@choir.news', ''),
+		('recipient-cc-1', 'msg-1', 'cc', 'copy@example.com', 'Copy Person')`)
+	if err != nil {
+		t.Fatalf("insert recipients: %v", err)
+	}
+	h := NewHandler(cfg, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1", nil)
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp messageDetailResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Recipients.To) != 1 || resp.Recipients.To[0].Address != "000+read@choir.news" {
+		t.Fatalf("to recipients = %+v", resp.Recipients.To)
+	}
+	if len(resp.Recipients.Cc) != 1 || resp.Recipients.Cc[0].Address != "copy@example.com" || resp.Recipients.Cc[0].Display != "Copy Person" {
+		t.Fatalf("cc recipients = %+v", resp.Recipients.Cc)
+	}
+}
+
 func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")
