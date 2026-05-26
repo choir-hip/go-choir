@@ -1846,3 +1846,46 @@ Belief-state update:
 - The remaining blocker is still external provider/DNS proof: Resend domain and
   webhook truth plus `RESEND_WEBHOOK_SECRET` are required before root MX
   mutation and real inbound acceptance.
+
+## Evidence Finding: duplicate webhook path does not retry failed ingest
+
+Recorded: 2026-05-26.
+
+Problem:
+
+`maild` records a verified Resend webhook event before fetching and storing the
+received email. If the first `email.received` handling records the webhook but
+fails during provider fetch, alias resolution, receive-policy enforcement, or
+message storage, later delivery of the same Resend event currently returns
+`duplicate` immediately. That prevents a transient provider/API/store failure
+from being repaired by Resend retrying the webhook.
+
+Evidence:
+
+```text
+internal/maild/webhook.go:
+  HandleResendWebhook -> RecordWebhookEvent(...)
+  if !created { return duplicate }
+  ingestReceivedEmail(...) may then fail with status accepted_ingest_failed
+internal/maild/store.go:
+  email_messages rows are keyed from provider_message_id, and StoreInboundMessage uses INSERT OR IGNORE
+current tests:
+  TestHandleResendWebhookStoresVerifiedEventIdempotently proves duplicate event count stays 1
+missing test:
+  duplicate email.received after first ingest failure retries storing the message
+```
+
+Belief-state update:
+
+- Webhook idempotency is present, but retry semantics are too brittle for real
+  provider traffic.
+- A safe local fix is possible because inbound storage is already idempotent by
+  provider message id. The duplicate path can retry ingest for `email.received`
+  only when the message is not already stored.
+
+Required next change:
+
+- Add a store read to detect whether a provider message id is already stored,
+  retry duplicate `email.received` ingest when it is missing, and add a focused
+  test where the first provider fetch fails and the duplicate delivery stores
+  the message.
