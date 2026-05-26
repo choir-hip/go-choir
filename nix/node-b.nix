@@ -287,6 +287,7 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/mail";
+      # Mail state contains private message bodies and provider metadata.
       StateDirectoryMode = "0700";
       UMask = "0077";
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
