@@ -1366,6 +1366,32 @@ Belief-state update:
 - Final real-mail acceptance still needs provider-backed messages before this
   can be proven with actual Resend recipient payloads.
 
+## Evidence Finding: compose surface is absent
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The reference doc's v0 UI direction includes owner-initiated compose/reply with
+fixed `000@choir.news` From, To, Subject, body, and Send. The current Email app
+supports reply from a selected message, but it has no standalone Compose action.
+That means outbound can be locally proven through `maild` API tests, but the
+minimal Email app cannot yet initiate a new explicit owner send.
+
+Evidence:
+
+```text
+reference: docs/choir-email-reference-v0.md says Compose/reply includes fixed From, To, Subject, body, Send
+backend: internal/maild/send.go already supports POST /api/email/send with to_addresses/subject/text_body
+frontend: frontend/src/lib/EmailApp.svelte sendReply posts /api/email/send, but no compose state or Compose button exists
+```
+
+Required next change:
+
+- Add a minimal Compose panel to the Email app using the existing authenticated
+  `/api/email/send` route. Keep it owner-initiated, fixed to `000@choir.news`,
+  plain text only, and independent of inbound message content.
+
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 
 Recorded: 2026-05-26.
