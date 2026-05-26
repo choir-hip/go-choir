@@ -1295,6 +1295,35 @@ Belief-state update:
 - Final real-mail acceptance still needs provider-backed messages before this
   can be proven with real Resend payload headers.
 
+## Evidence Finding: message detail recipients are not surfaced
+
+Recorded: 2026-05-26.
+
+Problem:
+
+`maild` stores normalized `to`, `cc`, and `bcc` rows in
+`email_message_recipients`, but the authenticated message-detail response does
+not return those rows. The Email app currently displays the active alias
+`000@choir.news` as the detail recipient. That is acceptable for the seeded root
+alias demo but is weaker than the v0 inspection model once plus aliases,
+forwarded mail, CCs, and outbound Sent rows exist.
+
+Evidence:
+
+```text
+schema: internal/maild/store.go creates email_message_recipients
+ingest: internal/maild/ingest.go inserts to/cc/bcc rows for inbound mail
+send: internal/maild/send.go inserts to/cc/bcc rows for outbound mail
+API: internal/maild/api.go messageDetailResponse lacks recipients
+UI: frontend/src/lib/EmailApp.svelte detail header renders activeAddress as To
+```
+
+Required next change:
+
+- Add an owner-scoped recipient read path to `maild`, include To/Cc/Bcc in the
+  message-detail API, and render those stored recipients in the Email app
+  Details block without trusting them as instructions.
+
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 
 Recorded: 2026-05-26.
