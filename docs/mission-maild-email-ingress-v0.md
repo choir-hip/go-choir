@@ -705,3 +705,29 @@ Required next change:
   message lists, message details, attachments, source packets, and webhook
   events.
 - Package `maildctl` in Nix so it is available on Node B after deploy.
+
+## Deployed Finding: maildctl empty list output
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The first deployed `maildctl` proof worked, but `maildctl webhooks --limit 5`
+printed JSON `null` when no webhook rows existed. That is technically valid for
+a nil Go slice, but it is a weak operator evidence format. Empty collections
+should print `[]` so acceptance scripts can distinguish "query succeeded and
+there are no rows" from "field absent/null".
+
+Evidence:
+
+```text
+deployed commit: 1c4a8d9
+maildctl stats -> {"aliases":1,"messages":0,"quarantined_attachments":0,"webhook_events":0}
+maildctl aliases -> one 000@choir.news alias mapped to 5bd6de97-3b58-408c-bf89-c42c81b083de
+maildctl webhooks --limit 5 -> null
+```
+
+Required next change:
+
+- Initialize maild store list results as empty slices so JSON CLI output is
+  stable `[]` for empty query results.
