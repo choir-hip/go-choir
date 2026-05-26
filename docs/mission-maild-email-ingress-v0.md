@@ -8,10 +8,10 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend behavior slice is deployed on Node B at 7de363e through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions run 26451498114 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 7de363e05cfb102fcfec44303955b3c525870711; maild webhook route still fails closed without RESEND_WEBHOOK_SECRET
+current artifact state: maild/proxy/frontend behavior slice is deployed on Node B at 8c0348c through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+deployed proven: GitHub Actions run 26461534834 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 8c0348cf15f2c7d555dbaf549ebc929f98a50bff at 2026-05-26T16:36:14Z; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters; POST /api/email/resend/webhook still fails closed with 503 {"status":"webhook_secret_not_configured"}
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
 ```
@@ -1972,10 +1972,24 @@ Belief-state update:
 - But the MAS handoff is only partially real. It is an owner-triggered metadata
   handoff, not yet a usable handoff of the normalized untrusted email source.
 
-Required next change:
+Resolution evidence, 2026-05-26:
 
-- Make the proxy-owned handoff carry bounded normalized email source content,
-  not just identifiers and a snippet. The source-packet surface should expose
-  the owner-visible source material needed for MAS review under explicit
-  `UNTRUSTED_EXTERNAL_EMAIL` framing, while preserving provenance and avoiding
-  raw provider secrets/temporary download URLs.
+- Commit `8c0348c` extends the authenticated source-packet response with
+  provenance JSON, normalized `text_ref`, normalized plain-text body, and
+  attachment presence.
+- `internal/maild/ingest.go` now stores `text_ref = message:<message-id>` for
+  real inbound source packets instead of `NULL`.
+- `internal/proxy/email.go` now builds the prompt-bar payload from provenance,
+  `text_ref`, and a bounded copy of the normalized plain-text email body under
+  explicit `UNTRUSTED_EXTERNAL_EMAIL` framing.
+- Focused tests cover the expanded source-packet API, real-ingest `text_ref`,
+  prompt-body inclusion, and bounded truncation behavior.
+- GitHub Actions run `26461534834` deployed `8c0348c` to Node B, and public
+  health now reports proxy/sandbox `deployed_commit =
+  8c0348cf15f2c7d555dbaf549ebc929f98a50bff`.
+
+Residual risk:
+
+- This closes the local metadata-only handoff gap, but the mission still lacks
+  a real received-email -> Send to Choir staging proof because Resend domain,
+  webhook-secret, and Gandi MX/provider access remain blocked.
