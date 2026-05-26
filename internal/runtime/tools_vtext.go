@@ -250,7 +250,8 @@ First checkpoint protocol:
 - The first packet is a usable checkpoint, not a final report. Keep it concise and evidence-backed.
 - If you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.
 - If research discovers that another role is needed, include a typed capability_requests entry instead of trying to exercise that capability yourself.
-- After the first packet, continue only if the next pass is likely to materially change the document, and checkpoint each new material cluster.
+- For live scores, schedules, current rankings, weather, or similar time-sensitive lookups, make one authoritative date-specific pass first: use the current date above, name the target date/timezone uncertainty, prefer official league/event/source pages or established scoreboards, and report whether you found final results, only matchups, or a precise blocker.
+- After the first packet, continue only if the next pass is likely to materially change the document. Before each additional search/fetch batch, know the missing question it answers; after that batch, call submit_coagent_update again with the new material cluster or blocker before continuing.
 
 User request: %s`, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(prompt)))
 }

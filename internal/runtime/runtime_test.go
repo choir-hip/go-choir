@@ -537,6 +537,12 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "rate-limit errors as backpressure") {
 		t.Fatalf("researcher system prompt should treat rate limits as backpressure, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "For live scores, schedules, rankings, weather") {
+		t.Fatalf("researcher system prompt should anchor time-sensitive lookups, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "send another submit_coagent_update after each additional search/fetch batch") {
+		t.Fatalf("researcher system prompt should require incremental checkpoints after continued research, got %q", prompt)
+	}
 }
 
 func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {

@@ -106,9 +106,42 @@ func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T
 		"the first revision should be a short working brief with explicit uncertainty and no ungrounded claims",
 		"Do not add factual claims, citations, or coding results from model priors",
 		"write a brief working revision first, then start the needed worker request before ending the run",
+		"Never describe coordination as already done unless the tool action really happened",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
+func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-baseball",
+		RevisionID: "rev-baseball-v2",
+		Content:    "# Baseball\n\nPartial findings received; final scores are still missing.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	recent := []ChannelMessage{{
+		Role:    AgentProfileResearcher,
+		From:    "researcher:one",
+		Content: "Findings: identified matchups, but final scores are still unavailable from this packet.",
+	}}
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"seed_prompt": "Last Night in Baseball",
+	}, vtextAgentRevisionRequest{
+		Intent: "integrate_worker_findings",
+		Prompt: "Last Night in Baseball",
+	}, "", true, false, recent, nil)
+
+	for _, want := range []string{
+		"If recent worker findings are only partial and the document needs more evidence",
+		"Do not write that a follow-up researcher was dispatched",
+		"Never describe coordination as already done unless the tool action really happened",
+		"Phrases such as \"researcher dispatched\"",
+		"If you only edit_vtext, phrase remaining work as \"next needed\" or \"still unresolved\"",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("partial-findings prompt missing %q:\n%s", want, request)
 		}
 	}
 }
@@ -330,7 +363,9 @@ func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) 
 		"Run at most one focused search batch",
 		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update",
 		"omit the evidence array rather than sending malformed evidence",
-		"checkpoint each new material cluster",
+		"For live scores, schedules, current rankings, weather, or similar time-sensitive lookups",
+		"prefer official league/event/source pages or established scoreboards",
+		"after that batch, call submit_coagent_update again with the new material cluster or blocker",
 	} {
 		if !strings.Contains(objective, want) {
 			t.Fatalf("research continuation objective missing %q:\n%s", want, objective)

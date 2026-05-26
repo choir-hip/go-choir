@@ -403,7 +403,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nBefore the first submit_coagent_update call, run at most one focused search batch, or one search plus one targeted fetch. Do not gather comprehensive coverage before the first checkpoint.")
 		b.WriteString("\nAs soon as you have 2-4 substantive grounded facts or a precise blocker, call submit_coagent_update as a durable checkpoint.")
 		b.WriteString("\nIf you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.")
-		b.WriteString("\nAfter submit_coagent_update, either continue with the next best sequential query if it can improve the document, or end the turn if the current packet is enough.")
+		b.WriteString("\nFor live scores, schedules, rankings, weather, or other time-sensitive lookup work, anchor the target date/time explicitly, prefer official or established scoreboard/source pages, and say whether the result is final, only partial, or blocked.")
+		b.WriteString("\nAfter submit_coagent_update, either continue with one clearly named missing question if it can improve the document, or end the turn if the current packet is enough.")
+		b.WriteString("\nIf you continue after a checkpoint, send another submit_coagent_update after each additional search/fetch batch that changes the answer or proves a blocker. Do not run open-ended search loops while VText waits for a next revision.")
 		b.WriteString("\nYou are a persistent communicating coagent, not a one-shot subagent. Expect to support many vtext revisions over time.")
 	}
 	agentID := agentIDForRun(rec)
