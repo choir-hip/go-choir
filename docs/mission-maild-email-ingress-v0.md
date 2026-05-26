@@ -1576,8 +1576,15 @@ maildctl commands: stats, aliases, webhooks, messages, message, attachments, sou
 missing command: ingress-events/list handoff records
 ```
 
-Required next change:
+Resolution checkpoint:
 
-- Add a read-only `maildctl ingress-events` command and store method so
-  acceptance can inspect owner/message-scoped MAS handoff records without
-  exposing a public admin endpoint or granting `maild` any agent authority.
+- Resolved by the later tooling checkpoint above. `maildctl ingress-events`
+  now reads owner/message-scoped handoff records through
+  `Store.ListIngressEvents`, and `maild` records those rows only through the
+  internal proxy callback at `/api/email/messages/:id/ingress-events`.
+- Focused coverage exists in `TestRunIngressEventsPrintsOwnerScopedRows`,
+  `TestHandleMessageIngressEventsRequiresInternalCaller`, and
+  `TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar`.
+- Final real-mail acceptance can use `scripts/mail-acceptance-check
+  --expect-ingress-events 0` before owner action, then rerun with
+  `--expect-ingress-events 1` after explicit Send to Choir.
