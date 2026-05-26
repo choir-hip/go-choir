@@ -64,6 +64,33 @@ func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 	}
 }
 
+func TestHandleMessagesListsAttachmentIndicator(t *testing.T) {
+	store, cfg := newTestStore(t)
+	seedMessage(t, store, "user-1", "msg-1", "quarantined")
+	if _, err := store.db.Exec(`INSERT INTO email_attachments (
+		id, message_id, filename, content_type, size_bytes, status, created_at
+	) VALUES ('att-1', 'msg-1', 'brief.pdf', 'application/pdf', 1024, 'quarantined', ?)`,
+		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("insert attachment: %v", err)
+	}
+	h := NewHandler(cfg, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=quarantine", nil)
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp messageListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Messages) != 1 || !resp.Messages[0].HasAttachments {
+		t.Fatalf("messages = %+v, want attachment indicator", resp.Messages)
+	}
+}
+
 func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")

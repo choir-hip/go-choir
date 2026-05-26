@@ -60,6 +60,7 @@ type EmailMessage struct {
 	ReceivedAt     string
 	SentAt         string
 	CreatedAt      string
+	HasAttachments bool
 }
 
 // EmailRecipient is a normalized message recipient visible to the mailbox owner.
@@ -447,7 +448,8 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
 		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
-		coalesce(received_at, ''), coalesce(sent_at, ''), created_at
+		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
+		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
 		WHERE `+where+`
 		ORDER BY coalesce(received_at, sent_at, created_at) DESC
@@ -476,7 +478,8 @@ func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (Emai
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
 		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
-		coalesce(received_at, ''), coalesce(sent_at, ''), created_at
+		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
+		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
 		WHERE mailbox_owner_id = ? AND id = ?`, ownerID, messageID)
 	return scanMessage(row)
@@ -658,6 +661,7 @@ func scanMessage(row messageScanner) (EmailMessage, error) {
 		&msg.ReceivedAt,
 		&msg.SentAt,
 		&msg.CreatedAt,
+		&msg.HasAttachments,
 	); err != nil {
 		return EmailMessage{}, err
 	}

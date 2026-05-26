@@ -269,17 +269,18 @@ func (h *Handler) handleMessageRead(w http.ResponseWriter, r *http.Request, owne
 
 func summarizeMessage(msg EmailMessage) messageSummary {
 	return messageSummary{
-		ID:          msg.ID,
-		Direction:   msg.Direction,
-		FromAddress: msg.FromAddress,
-		FromDisplay: msg.FromDisplay,
-		Subject:     msg.Subject,
-		Snippet:     snippet(msg.TextBody),
-		TrustStatus: msg.TrustStatus,
-		ReadAt:      msg.ReadAt,
-		ReceivedAt:  msg.ReceivedAt,
-		SentAt:      msg.SentAt,
-		CreatedAt:   msg.CreatedAt,
+		ID:             msg.ID,
+		Direction:      msg.Direction,
+		FromAddress:    msg.FromAddress,
+		FromDisplay:    msg.FromDisplay,
+		Subject:        msg.Subject,
+		Snippet:        snippet(msg.TextBody),
+		TrustStatus:    msg.TrustStatus,
+		ReadAt:         msg.ReadAt,
+		ReceivedAt:     msg.ReceivedAt,
+		SentAt:         msg.SentAt,
+		CreatedAt:      msg.CreatedAt,
+		HasAttachments: msg.HasAttachments,
 	}
 }
 

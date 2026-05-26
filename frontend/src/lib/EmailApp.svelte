@@ -311,6 +311,9 @@
             <span class="subject">{message.subject || '(no subject)'}</span>
             <span class="snippet">{message.snippet}</span>
             <span class="trust">{trustLabel(message.trust_status)}</span>
+            {#if message.has_attachments}
+              <span class="attachment-indicator" title="Has attachments" aria-label="Has attachments">📎</span>
+            {/if}
           </button>
         {/each}
       </div>
@@ -565,12 +568,12 @@
   .message-row {
     width: 100%;
     display: grid;
-    grid-template-columns: 12px 1fr auto;
+    grid-template-columns: 12px minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "dot sender time"
-      "dot subject subject"
-      "dot snippet snippet"
-      "dot trust trust";
+      "dot sender sender time"
+      "dot subject subject subject"
+      "dot snippet snippet snippet"
+      "dot trust trust attachment";
     gap: 4px 10px;
     text-align: left;
     padding: 13px 12px;
@@ -620,6 +623,14 @@
     grid-area: trust;
     color: #86b4ff;
     font-size: 12px;
+  }
+
+  .attachment-indicator {
+    grid-area: attachment;
+    color: #c7d4e8;
+    font-size: 14px;
+    line-height: 1;
+    justify-self: end;
   }
 
   .message-detail {
