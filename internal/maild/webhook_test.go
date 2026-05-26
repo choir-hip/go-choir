@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -45,7 +46,7 @@ func TestHandleResendWebhookStoresVerifiedEventIdempotently(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
 	h := NewHandler(cfg, store)
-	body := `{"id":"evt-1","type":"email.received","data":{"email_id":"email-1"}}`
+	body := `{"id":"evt-1","type":"domain.updated"}`
 
 	req := signedResendRequest(t, cfg.WebhookSecret, "msg-1", body)
 	w := httptest.NewRecorder()
@@ -62,6 +63,80 @@ func TestHandleResendWebhookStoresVerifiedEventIdempotently(t *testing.T) {
 	}
 
 	count, err := store.CountWebhookEvents(req.Context())
+	if err != nil {
+		t.Fatalf("CountWebhookEvents: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("webhook count = %d, want 1", count)
+	}
+}
+
+func TestHandleResendWebhookDuplicateRetriesMissingInboundMessage(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	var calls int32
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			http.Error(w, "temporary provider failure", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-retry-1",
+			"to":["000@choir.news"],
+			"from":"sender@example.com",
+			"created_at":"2026-05-26T10:00:00Z",
+			"subject":"Retry me",
+			"text":"This should store after retry.",
+			"headers":{"from":"Sender <sender@example.com>"},
+			"bcc":[],
+			"cc":[],
+			"reply_to":[],
+			"message_id":"<email-retry-1@example.com>",
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-retry-1","type":"email.received","data":{"email_id":"email-retry-1"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-retry-1", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("first status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "accepted_ingest_failed") {
+		t.Fatalf("first body = %s, want accepted_ingest_failed", w.Body.String())
+	}
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("Stats after first delivery: %v", err)
+	}
+	if stats.Messages != 0 || stats.WebhookEvents != 1 {
+		t.Fatalf("stats after first delivery = %+v, want one event and no message", stats)
+	}
+
+	req = signedResendRequest(t, cfg.WebhookSecret, "msg-retry-1", body)
+	w = httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("retry status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "duplicate_ingested") {
+		t.Fatalf("retry body = %s, want duplicate_ingested", w.Body.String())
+	}
+	messages, err := store.ListMessages(req.Context(), "user-root", "inbox", 10)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].Subject != "Retry me" {
+		t.Fatalf("messages = %+v, want retried message", messages)
+	}
+	count, err := store.CountWebhookEvents(context.Background())
 	if err != nil {
 		t.Fatalf("CountWebhookEvents: %v", err)
 	}

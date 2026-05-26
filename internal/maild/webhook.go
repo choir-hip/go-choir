@@ -114,17 +114,45 @@ func (h *Handler) HandleResendWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !created {
+		if shouldIngestEmail(eventType, event.Data.EmailID) {
+			if retried, err := h.retryMissingReceivedEmail(r.Context(), providerEventID, strings.TrimSpace(event.Data.EmailID)); err != nil {
+				log.Printf("maild: retry duplicate ingest event=%s email=%s: %v", providerEventID, event.Data.EmailID, err)
+				writeJSON(w, http.StatusAccepted, webhookResponse{Status: "duplicate_ingest_failed", EventID: providerEventID})
+				return
+			} else if retried {
+				writeJSON(w, http.StatusAccepted, webhookResponse{Status: "duplicate_ingested", EventID: providerEventID})
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, webhookResponse{Status: "duplicate", EventID: providerEventID})
 		return
 	}
 	status := "accepted"
-	if eventType == "email.received" && strings.TrimSpace(event.Data.EmailID) != "" {
+	if shouldIngestEmail(eventType, event.Data.EmailID) {
 		if err := h.ingestReceivedEmail(r.Context(), providerEventID, strings.TrimSpace(event.Data.EmailID)); err != nil {
 			log.Printf("maild: ingest received email event=%s email=%s: %v", providerEventID, event.Data.EmailID, err)
 			status = "accepted_ingest_failed"
 		}
 	}
 	writeJSON(w, http.StatusAccepted, webhookResponse{Status: status, EventID: providerEventID})
+}
+
+func shouldIngestEmail(eventType, providerMessageID string) bool {
+	return strings.TrimSpace(eventType) == "email.received" && strings.TrimSpace(providerMessageID) != ""
+}
+
+func (h *Handler) retryMissingReceivedEmail(ctx context.Context, providerEventID, providerMessageID string) (bool, error) {
+	exists, err := h.store.HasProviderMessage(ctx, providerResend, providerMessageID)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		return false, nil
+	}
+	if err := h.ingestReceivedEmail(ctx, providerEventID, providerMessageID); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (h *Handler) ingestReceivedEmail(ctx context.Context, providerEventID, providerMessageID string) error {

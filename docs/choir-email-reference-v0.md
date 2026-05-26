@@ -142,6 +142,9 @@ Implementation checkpoint, 2026-05-26:
 - `maild` enforces alias receive policies before storing inbound messages. The
   v0 public alias accepts public inbound, while future trusted-upload-style
   aliases can require exact unlisted plus aliases and sender whitelist rows.
+- Duplicate `email.received` webhook deliveries retry ingest if the provider
+  message was not stored after an earlier transient failure; stored messages
+  remain idempotent by provider message id.
 - The authenticated message-detail API includes stored raw headers for
   owner-visible inspection. The Email app renders those headers only inside a
   collapsed Details section; plain text remains the primary v0 body surface.

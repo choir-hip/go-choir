@@ -9,8 +9,8 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 ```text
 status: checkpoint_incomplete
 current artifact state: maild/proxy/frontend behavior slice is deployed on Node B at 7de363e through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 deployed proven: GitHub Actions run 26451498114 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 7de363e05cfb102fcfec44303955b3c525870711; maild webhook route still fails closed without RESEND_WEBHOOK_SECRET
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
@@ -373,10 +373,11 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 status: checkpoint_incomplete
 last checkpoint: receive-policy enforcement deployed on 2026-05-26 at 7de363e
 current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed through GitHub Actions at behavior commit 7de363e; Resend receiving/webhook and Gandi DNS are not configured
-what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, receive-policy gates, and a read-only mail acceptance checker
+what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, duplicate webhook ingest retry, receive-policy gates, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
   - fake Resend retrieval stores inbound message, quarantines attachment metadata, and creates UNTRUSTED_EXTERNAL_EMAIL source packet
+  - duplicate `email.received` delivery after a transient provider fetch failure retries ingest and stores the missing message while keeping one webhook event row
   - trusted-upload-style receive policy rejects unwhitelisted sender before storing the message and accepts a whitelisted sender on an unlisted exact plus alias
   - owner-only outbound send through fake Resend stores Sent row
   - owned reply targets preserve provider message_id and emit In-Reply-To/References headers in the Resend send payload
@@ -1889,3 +1890,30 @@ Required next change:
   retry duplicate `email.received` ingest when it is missing, and add a focused
   test where the first provider fetch fails and the duplicate delivery stores
   the message.
+
+Resolution checkpoint:
+
+- Implemented in `internal/maild`: duplicate `email.received` webhooks now call
+  `retryMissingReceivedEmail`, which checks `Store.HasProviderMessage` before
+  retrying provider fetch and inbound storage.
+- Already-stored provider message ids continue to return `duplicate` without
+  refetching. Missing messages can be repaired by a duplicate provider delivery,
+  and `StoreInboundMessage` remains idempotent by provider message id.
+- Focused coverage exists in
+  `TestHandleResendWebhookDuplicateRetriesMissingInboundMessage`.
+
+Verification:
+
+```text
+nix develop -c go test ./internal/maild
+nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+```
+
+Belief-state update:
+
+- The webhook path is more realistic for provider retries: a transient first
+  fetch/store failure no longer permanently strands the received message behind
+  a duplicate event receipt.
+- This still is not real Resend proof. Final acceptance still needs the Resend
+  webhook signing secret, exact provider records, DNS cutover, and live inbound
+  messages.

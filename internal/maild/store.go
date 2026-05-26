@@ -437,6 +437,22 @@ func (s *Store) CountWebhookEvents(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// HasProviderMessage reports whether a provider message was already stored.
+func (s *Store) HasProviderMessage(ctx context.Context, provider, providerMessageID string) (bool, error) {
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	if providerMessageID == "" {
+		return false, nil
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*)
+		FROM email_messages
+		WHERE provider = ? AND provider_message_id = ?`,
+		provider, providerMessageID).Scan(&count); err != nil {
+		return false, fmt.Errorf("check provider message: %w", err)
+	}
+	return count > 0, nil
+}
+
 // ListWebhookEvents returns recent provider webhook receipts without raw payloads.
 func (s *Store) ListWebhookEvents(ctx context.Context, limit int) ([]WebhookEvent, error) {
 	if limit <= 0 || limit > 100 {
