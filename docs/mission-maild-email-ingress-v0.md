@@ -8,8 +8,8 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: deployed maild/proxy/frontend slice exists on Node B at 1e3d54a; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with collapsed raw-header Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
+current artifact state: deployed maild/proxy/frontend slice exists on Node B at 843ec90; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with collapsed raw-header and stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
 locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers and stored recipient API/UI details surface; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
@@ -370,9 +370,9 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: deployed raw-header details checkpoint on 2026-05-26 at 1e3d54a
+last checkpoint: deployed stored-recipient details checkpoint on 2026-05-26 at 843ec90
 current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed; Resend receiving/webhook and Gandi DNS are not configured
-what shipped: maild service, minimal Email app with collapsed raw-header Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
+what shipped: maild service, minimal Email app with collapsed raw-header and stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
   - fake Resend retrieval stores inbound message, quarantines attachment metadata, and creates UNTRUSTED_EXTERNAL_EMAIL source packet
@@ -386,6 +386,7 @@ what was proven:
   - Node B deployed commit identity and service health reported d749fdcfb329226f73ce4717b86f1ac0eba5e1a0 at the reply-threading checkpoint
   - Node B deployed commit identity and service health report 73beb6e127199ea77c035e3729a76f23c8d03a16 at the ingress-event evidence checkpoint
   - Node B deployed commit identity and service health report 1e3d54ae3ebcdfb00646fca6a4645ee18d2ccac2 at the raw-header details checkpoint
+  - Node B deployed commit identity and service health report 843ec907117e26ef741b7b1a62d58f689839dd79 at the stored-recipient details checkpoint
   - read-only provider readiness probe reports Resend/Gandi/Node B state without mutating DNS or printing secrets
   - Resend setup helper read-only path reports restricted_api_key with current send-only key, and fake-curl success path writes webhook secret to mode 600 without printing it
   - mail credential deploy script can consume the generated webhook-secret file in redacted dry-run mode and still fails closed when the secret is absent
@@ -397,6 +398,8 @@ what was proven:
     packet trust, and expected ingress-event count through read-only maildctl
   - message detail API exposes stored raw headers to the authenticated owner,
     and the Email app renders them behind a collapsed Details section
+  - message detail API exposes stored To/Cc/Bcc rows to the authenticated
+    owner, and the Email app renders them instead of assuming the active alias
 unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
@@ -413,7 +416,7 @@ remaining error field:
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint 1e3d54a; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint 843ec90; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -442,6 +445,11 @@ evidence artifact refs:
   - GitHub Actions CI run 26448039030 for 1e3d54a failed before project gates; staging deploy job skipped
   - manual Node B deploy from /opt/go-choir at 1e3d54ae3ebcdfb00646fca6a4645ee18d2ccac2
   - public /health deployed_commit 1e3d54ae3ebcdfb00646fca6a4645ee18d2ccac2
+  - maild /health status ok with stats.ingress_events 0, resend_api_key_configured true, and webhook_secret_configured false
+  - local Playwright component render: /tmp/choir-email-recipient-details.png; header and Details show stored To, Cc, and Bcc recipients
+  - GitHub Actions CI run 26448505213 for 843ec90 failed before project gates; staging deploy job skipped
+  - manual Node B deploy from /opt/go-choir at 843ec907117e26ef741b7b1a62d58f689839dd79
+  - public /health deployed_commit 843ec907117e26ef741b7b1a62d58f689839dd79
   - maild /health status ok with stats.ingress_events 0, resend_api_key_configured true, and webhook_secret_configured false
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
@@ -1323,6 +1331,40 @@ Required next change:
 - Add an owner-scoped recipient read path to `maild`, include To/Cc/Bcc in the
   message-detail API, and render those stored recipients in the Email app
   Details block without trusting them as instructions.
+
+## UI Checkpoint: stored-recipient Details surface
+
+Recorded: 2026-05-26.
+
+Status:
+
+The authenticated message-detail API now returns stored To/Cc/Bcc recipient
+rows, and the Email app renders those recipients in the detail header and
+collapsed Details block. This removes the prior assumption that every selected
+message was addressed only to the active root alias.
+
+Evidence:
+
+```text
+commit: 843ec907117e26ef741b7b1a62d58f689839dd79
+local tests:
+  nix develop -c go test ./internal/maild ./internal/proxy ./cmd/maildctl ./cmd/maild
+  npm run build in frontend
+local Playwright component render:
+  screenshot: /tmp/choir-email-recipient-details.png
+  header shows sender@example.com -> 000+read@choir.news
+  Details shows To 000+read@choir.news, Cc Copy Person <copy@example.com>, and Bcc blind@example.com
+deployed proof:
+  public /health deployed_commit 843ec907117e26ef741b7b1a62d58f689839dd79
+  maild /health status ok
+```
+
+Belief-state update:
+
+- Message inspection is now more faithful for plus aliases, forwarded mail,
+  copied recipients, and outbound Sent rows.
+- Final real-mail acceptance still needs provider-backed messages before this
+  can be proven with actual Resend recipient payloads.
 
 ## Evidence Finding: MAS handoff acceptance needs an operator surface
 
