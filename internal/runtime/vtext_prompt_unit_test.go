@@ -113,6 +113,33 @@ func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T
 	}
 }
 
+func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-long-rubric",
+		RevisionID: "rev-long-rubric",
+		Content:    "1. Direct user edits\nEvidence pending.\n\nUSER_LONG_RUBRIC_MARKER: preserve this exact marker.",
+		AuthorKind: types.AuthorUser,
+	}
+	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "The final brief must have exactly these numbered section headings and sections 1, 7, and 12 must contain sentences beginning SECTION 1 UPDATE:, SECTION 7 UPDATE:, and SECTION 12 UPDATE:.",
+	}, "", false, false, nil, nil)
+
+	for _, want := range []string{
+		"Preserve explicit hard requirements from the original user request and current document across every revision",
+		"exact marker strings",
+		"required headings or section counts",
+		"required labels or sentence prefixes",
+		"target hashes",
+		"Before a replace_all edit, audit the complete replacement against those hard requirements",
+		"Do not replace a requested numbered/sectioned document with a different report outline",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("hard-constraint prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
 func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 	tests := []struct {
 		name     string

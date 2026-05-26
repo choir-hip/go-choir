@@ -153,7 +153,7 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 				"channel_id": docID,
 				"objective":  buildVTextResearchContinuationObjective(prompt),
 			},
-			Instruction: "The first VText revision is now stored. Spawn a researcher before ending this run so evidence can wake the next VText revision. Do not say a researcher was dispatched unless this tool call succeeds.",
+			Instruction: "The first VText revision is now stored. Call spawn_agent next with the provided researcher arguments before ending this run. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
 		}, true
 	}
 	if needsSuper {
@@ -163,7 +163,7 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 				"channel_id": docID,
 				"objective":  buildVTextSuperContinuationObjective(prompt),
 			},
-			Instruction: "The first VText revision is now stored. Request super execution for the actual execution/coding work before ending this run. Do not claim work is underway unless this tool call succeeds.",
+			Instruction: "The first VText revision is now stored. Call request_super_execution next with the provided arguments before ending this run. Do not call edit_vtext again in this revision run. Do not claim work is underway unless this tool call succeeds.",
 		}, true
 	}
 	if needsResearch {
@@ -174,7 +174,7 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 				"channel_id": docID,
 				"objective":  buildVTextResearchContinuationObjective(prompt),
 			},
-			Instruction: "The first VText revision is now stored. Spawn a researcher before ending this run so evidence can wake the next VText revision. Do not say a researcher was dispatched unless this tool call succeeds.",
+			Instruction: "The first VText revision is now stored. Call spawn_agent next with the provided researcher arguments before ending this run. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
 		}, true
 	}
 	return vtextRequiredContinuation{}, false

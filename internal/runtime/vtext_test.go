@@ -4064,6 +4064,15 @@ func TestEditVTextInitialWorkingRevisionRequiresActualContinuation(t *testing.T)
 	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
 		t.Fatalf("next_required_args = %+v, want researcher on doc channel", args)
 	}
+	instruction, _ := editResult["next_instruction"].(string)
+	for _, want := range []string{
+		"Call spawn_agent next",
+		"Do not call edit_vtext again in this revision run",
+	} {
+		if !strings.Contains(instruction, want) {
+			t.Fatalf("next_instruction missing %q: %q", want, instruction)
+		}
+	}
 
 	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{
 		"objective":"Research the user's NBA update request and send initial findings quickly.",

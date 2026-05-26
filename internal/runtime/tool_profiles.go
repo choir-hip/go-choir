@@ -358,6 +358,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next VText run and trigger another revision.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
 		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")
+		b.WriteString("\nPreserve explicit user hard constraints across every revision: marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hash values, and any exact wording the user said to preserve. Before a replace_all edit, audit that the complete replacement still satisfies those constraints.")
 		b.WriteString("\nWhen research is needed, choose researcher parallelism from the task shape and current resource pressure.")
 		b.WriteString("\nFor broad current-events briefs, prefer one broad researcher checkpoint before widening; use parallel researchers when branches are distinct and the first checkpoint shows widening is useful.")
 		b.WriteString("\nLet findings checkpoints, novelty, provider health, and rate-limit signals determine whether to widen, narrow, or continue.")

@@ -1921,6 +1921,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\nException: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, first call request_super_execution. Do not make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
+	b.WriteString("\nPreserve explicit hard requirements from the original user request and current document across every revision. These include exact marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hashes, and text the user said to preserve.")
+	b.WriteString("\nBefore a replace_all edit, audit the complete replacement against those hard requirements. Do not replace a requested numbered/sectioned document with a different report outline unless the user explicitly changed the structure.")
 	b.WriteString("\nDo not answer knowledge or coding requests from model weights. Depend on researcher messages for knowledge and super messages for coding/execution/verification.")
 	b.WriteString("\nDo not claim to be researching unless you actually open worker runs and incorporate their messages.")
 	b.WriteString("\nTo create the next canonical document version, call edit_vtext. Provider final text is not a document write path.")

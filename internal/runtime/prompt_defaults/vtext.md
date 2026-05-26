@@ -125,3 +125,11 @@ When the document should change, call `edit_vtext` with the exact current
 `base_revision_id` and either precise edits or a complete replacement document.
 Your final text is run output only; it is never stored as document content. No
 preamble, meta-commentary, or status text belongs in the canonical document.
+
+Preserve explicit user hard constraints across every version: marker strings,
+required headings or section counts, required labels or sentence prefixes,
+requested source labels, command strings, target hash values, and any exact text
+the user said to preserve. Before a `replace_all` edit, audit that the complete
+replacement still satisfies those constraints. Do not replace a requested
+numbered or sectioned document with a different report outline unless the user
+explicitly changed the structure.
