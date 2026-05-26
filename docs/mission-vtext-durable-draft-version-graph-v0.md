@@ -1454,6 +1454,77 @@ next executable probe:
   degradation separately from revision cadence. Do not return to the long
   mixed rubric until this current-facts row has a clean quality signal.
 
+checkpoint update, 2026-05-26 06:48 UTC:
+
+- A source-quality rubric was added to the ad hoc model-cadence probe to record
+  final-score presence, honest blocker presence, provider degradation, blocked
+  fetches, snippet score hints, researcher update count, and appagent revision
+  count separately from the mechanical Playwright pass/fail result.
+- The first rubric run completed mechanically but revealed an eval false
+  positive: pitcher records and live "7-2 in the 9th" snippets could be counted
+  as score answers. The rubric was tightened to distinguish any score-like text
+  from verified final-score sentences.
+- Corrected deployed sports-quality command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-sports-quality-rubric2-20260526T063449Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Runner result: all three rows completed mechanically in about 6.3m. Evidence:
+  `test-results/vtext-model-cadence-sports-quality-rubric2-20260526T063449Z/`.
+- `fireworks-deepseek-v4-flash-medium`: v1 at about 16.8s, first researcher
+  findings at about 48.8s, three researcher updates by about 100.8s, but no
+  v2 landed inside the observation window. Trace shows an
+  `integrate_worker_findings` VText provider call started at about 51.8s with
+  no observed tool response before evidence capture ended. Quality class:
+  `source_degraded_without_clear_blocker`; snippets contained score-like hints,
+  and MLB/ESPN/Reuters fetches returned 403/401.
+- `fireworks-kimi-k2p6-low`: v1 at about 8.5s, first researcher findings at
+  about 32.5s, five researcher updates by about 98.5s, but no v2 landed.
+  Trace shows VText resumed on worker findings, but one later VText turn chose
+  `spawn_agent` instead of `edit_vtext`, creating a second researcher while the
+  visible document remained at the initial pending-research draft. Quality
+  class: `honest_blocker`.
+- `chatgpt-gpt-5-5-low`: v1 at about 4.3s, v2/v3/v4 at about 40.3s/60.3s/84.3s,
+  19 researcher updates, and four appagent revisions. Quality class:
+  `honest_blocker`; it discovered that the public MLB Stats API schedule
+  endpoint reported `totalGames=13` and `totalGamesInProgress=0`, but still did
+  not put verified final-score sentences into the document. MLB.com fetches
+  repeatedly returned 403.
+
+belief-state changes:
+
+- The sports row now has two separate remaining failures. Source acquisition is
+  degraded because most search providers are cooling down and direct scoreboard
+  fetches are blocked, but coordination is also still noisy: VText can receive
+  worker updates without producing a visible follow-up revision promptly.
+- The Kimi trace demonstrates a prompt/policy failure more clearly than a
+  scheduler failure: on worker-findings integration, VText is allowed to spawn a
+  more focused researcher before making the partial evidence visible in the
+  document.
+- The V4 trace suggests a latency or in-flight integration failure: the worker
+  update did wake VText, but the model/provider call did not complete with a
+  tool result during the probe window.
+- GPT-5.5 low remains the strongest coordinator on this row, but it also
+  produces an honest-but-incomplete blocker instead of the requested final
+  scores.
+
+remaining error field:
+
+- Need a VText prompt contract for `integrate_worker_findings`: after any new
+  researcher/coagent update, make the next visible revision first, even if the
+  revision is an honest partial/blocker, before spawning further workers.
+- Need a current-sports research strategy that tells researchers to use
+  accessible structured endpoints and snippet evidence carefully, and to report
+  final scores only when the evidence itself marks them final.
+- Need the next eval to assert or at least flag "worker update with no
+  subsequent appagent revision" as a coordination-quality failure, not only a
+  low revision count.
+
+next executable probe:
+
+- Patch VText and researcher prompts only: VText should prefer an immediate
+  visible checkpoint on worker updates, and researchers should explicitly
+  report accessible structured sports endpoints/snippet evidence with final vs
+  live/pending caveats. Rerun the corrected sports-quality matrix before moving
+  back to long multi-worker/user-edit evals.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
