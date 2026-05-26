@@ -126,6 +126,11 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 	}, "", false, false, nil, nil)
 
 	for _, want := range []string{
+		"Hard requirements checklist for the next canonical revision:",
+		"Required sentence prefix: SECTION 1 UPDATE:",
+		"Required sentence prefix: SECTION 7 UPDATE:",
+		"Required sentence prefix: SECTION 12 UPDATE:",
+		"Preserve exact marker line: USER_LONG_RUBRIC_MARKER: preserve this exact marker.",
 		"Preserve explicit hard requirements from the original user request and current document across every revision",
 		"exact marker strings",
 		"required headings or section counts",
@@ -136,6 +141,20 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("hard-constraint prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
+func TestVTextSuperContinuationObjectiveRequiresCoagentUpdate(t *testing.T) {
+	objective := buildVTextSuperContinuationObjective("run printf test")
+	for _, want := range []string{
+		"Reporting contract",
+		"After any command result, call submit_coagent_update",
+		"If the command fails, still call submit_coagent_update",
+		"VText only consumes addressed coagent updates",
+	} {
+		if !strings.Contains(objective, want) {
+			t.Fatalf("super continuation objective missing %q:\n%s", want, objective)
 		}
 	}
 }

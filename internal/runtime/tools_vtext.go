@@ -256,7 +256,15 @@ User request: %s`, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(prom
 }
 
 func buildVTextSuperContinuationObjective(prompt string) string {
-	return strings.TrimSpace(fmt.Sprintf("Execute or coordinate the user's request, send significant progress back to VText, and preserve concrete evidence for the next document revision.\n\nUser request: %s", strings.TrimSpace(prompt)))
+	return strings.TrimSpace(fmt.Sprintf(`Execute or coordinate the user's request, send significant progress back to VText, and preserve concrete evidence for the next document revision.
+
+Reporting contract:
+- For bounded command/API/scratch work, run the requested work directly when safe.
+- After any command result, call submit_coagent_update with kind="evidence" or kind="findings" before ending the run.
+- If the command fails, still call submit_coagent_update with the command, exit/error summary, stdout/stderr if available, and the precise blocker.
+- Do not leave VText to infer evidence from your local bash result; VText only consumes addressed coagent updates.
+
+User request: %s`, strings.TrimSpace(prompt)))
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {

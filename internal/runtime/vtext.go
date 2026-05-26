@@ -29,6 +29,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -40,6 +41,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+var (
+	vtextMarkerLineRE          = regexp.MustCompile(`(?im)^.*USER_[A-Z0-9_]*MARKER[A-Z0-9_]*.*$`)
+	vtextNumberedHeadingRE     = regexp.MustCompile(`(?m)^\s*(?:#{1,6}\s*)?(\d{1,2}\.\s+[^\n:]{2,100})\s*$`)
+	vtextSectionUpdatePrefixRE = regexp.MustCompile(`\bSECTION\s+\d+\s+UPDATE:`)
+	vtextSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 )
 
 // ----- Request/Response types -----
@@ -1787,6 +1795,48 @@ func vtextRevisionRequiresWorkerGrounding(hasGroundedHistory bool, authorKind ty
 	return !hasGroundedHistory && authorKind != types.AuthorUser && !allowsUngroundedCreativeDraft
 }
 
+func vtextHardRequirementHints(parts ...string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	for _, part := range parts {
+		text := strings.TrimSpace(part)
+		if text == "" {
+			continue
+		}
+		for _, match := range vtextMarkerLineRE.FindAllString(text, -1) {
+			add("Preserve exact marker line: " + truncatePromptSnippet(match, 180))
+		}
+		for _, match := range vtextSectionUpdatePrefixRE.FindAllString(text, -1) {
+			add("Required sentence prefix: " + strings.Join(strings.Fields(match), " "))
+		}
+		for _, match := range vtextNumberedHeadingRE.FindAllStringSubmatch(text, -1) {
+			if len(match) > 1 {
+				add("Required numbered heading: " + strings.TrimSpace(match[1]))
+			}
+		}
+		for _, match := range vtextSHA256RequirementRE.FindAllString(text, -1) {
+			add("Required hash/value: " + match)
+		}
+		for _, label := range []string{"[S1]", "[S2]", "[S3]", "[CMD]"} {
+			if strings.Contains(text, label) {
+				add("Required evidence label: " + label)
+			}
+		}
+	}
+	if len(out) > 32 {
+		return out[:32]
+	}
+	return out
+}
+
 // buildAgentRevisionRequest constructs the backend-owned vtext revision
 // request sent as the user turn for the vtext appagent.
 func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, allowsUngroundedCreativeDraft bool, recentWorkerMessages []ChannelMessage, userRevisionDiffs []string) string {
@@ -1883,6 +1933,15 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("(empty document)")
 	}
 	b.WriteString("\n---\n")
+	if hardRequirements := vtextHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content); len(hardRequirements) > 0 {
+		b.WriteString("\nHard requirements checklist for the next canonical revision:\n")
+		for _, requirement := range hardRequirements {
+			b.WriteString("- ")
+			b.WriteString(requirement)
+			b.WriteString("\n")
+		}
+		b.WriteString("Treat this checklist as acceptance criteria for any replace_all edit; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
+	}
 	if current.AuthorKind == types.AuthorUser {
 		b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
 		b.WriteString("\nBecause VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.")
