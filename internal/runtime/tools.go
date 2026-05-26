@@ -663,6 +663,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
 	seenDelegateWorker := map[string]int{}
+	seenVTextResearcherSpawn := map[string]int{}
 	firstVTextEdit := -1
 
 	for i, call := range calls {
@@ -690,18 +691,28 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 			}
 			seenBash[key] = i
 		case "spawn_agent":
-			if profile != AgentProfileVSuper {
-				continue
+			switch profile {
+			case AgentProfileVText:
+				key, ok := toolCallVTextResearcherSpawnKey(call)
+				if !ok {
+					continue
+				}
+				if previous, exists := seenVTextResearcherSpawn[key]; exists {
+					setSkip(i, fmt.Sprintf("tool_notice: duplicate vtext researcher spawn for %s already planned in this turn at call %s; one worker for this exact objective is enough", key, calls[previous].ID))
+					continue
+				}
+				seenVTextResearcherSpawn[key] = i
+			case AgentProfileVSuper:
+				key, ok := toolCallVSuperCoSuperSpawnKey(call)
+				if !ok {
+					continue
+				}
+				if previous, exists := seenVSuperSpawn[key]; exists {
+					setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
+					continue
+				}
+				seenVSuperSpawn[key] = i
 			}
-			key, ok := toolCallVSuperCoSuperSpawnKey(call)
-			if !ok {
-				continue
-			}
-			if previous, exists := seenVSuperSpawn[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
-				continue
-			}
-			seenVSuperSpawn[key] = i
 		case "cast_agent":
 			key := normalizedToolCallArgs(call)
 			if key == "" {
@@ -776,6 +787,31 @@ func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 		return "", false
 	}
 	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
+}
+
+func toolCallVTextResearcherSpawnKey(call types.ToolCall) (string, bool) {
+	var in struct {
+		Role      string `json:"role"`
+		Profile   string `json:"profile"`
+		ChannelID string `json:"channel_id"`
+		Objective string `json:"objective"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return "", false
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	if profile != AgentProfileResearcher {
+		return "", false
+	}
+	channelID := strings.TrimSpace(in.ChannelID)
+	objective := strings.Join(strings.Fields(strings.TrimSpace(in.Objective)), " ")
+	if objective == "" {
+		return "", false
+	}
+	return profile + ":" + channelID + ":" + objective, true
 }
 
 func normalizedToolCallArgs(call types.ToolCall) string {

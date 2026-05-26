@@ -469,6 +469,55 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn(t *testing.T) {
+	registry := NewToolRegistry()
+	var executed []string
+	if err := registry.Register(Tool{
+		Name: "spawn_agent",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			var in struct {
+				Role      string `json:"role"`
+				Objective string `json:"objective"`
+			}
+			if err := json.Unmarshal(args, &in); err != nil {
+				return "", err
+			}
+			executed = append(executed, in.Role+":"+in.Objective)
+			return in.Role, nil
+		},
+	}); err != nil {
+		t.Fatalf("register spawn_agent: %v", err)
+	}
+
+	run := &types.RunRecord{
+		RunID:        "run-vtext",
+		OwnerID:      "owner-1",
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+	}
+	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research current scores"}`)},
+		{ID: "research-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research   current   scores"}`)},
+		{ID: "research-3", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research injury notes"}`)},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if len(executed) != 2 {
+		t.Fatalf("executed spawns = %#v, want duplicate skipped but distinct objective allowed", executed)
+	}
+	if len(results) != 3 {
+		t.Fatalf("results = %d, want 3", len(results))
+	}
+	if results[0].IsError || results[0].Output != AgentProfileResearcher {
+		t.Fatalf("first spawn result = %#v, want success", results[0])
+	}
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate vtext researcher spawn") {
+		t.Fatalf("second spawn result = %#v, want non-error duplicate notice", results[1])
+	}
+	if results[2].IsError || results[2].Output != AgentProfileResearcher {
+		t.Fatalf("third spawn result = %#v, want distinct-objective success", results[2])
+	}
+}
+
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
