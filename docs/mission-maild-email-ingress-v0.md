@@ -565,3 +565,50 @@ Next safe operation:
    record.
 5. Snapshot current Gandi DNS, then replace root MX only after accepting that
    root-domain inbound mail will leave Gandi mailbox delivery and go to Resend.
+
+## Staging Evidence Finding: maild health and manual deploy path
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The deployed service is active and reachable, but the evidence surface is still
+too weak for the final email ingress acceptance proof. `maild` only inherits the
+generic `/health` response from the shared server, so health does not report
+whether Resend API credentials, webhook signing, storage, and mailbox counters
+are in the expected state. The staging deploy smoke loop also probes ports
+`8081`, `8082`, `8083`, `8084`, and `8086`, but not `8087`, so CI/deploy logs
+would not directly prove that `maild` is healthy after future pushes.
+
+Related deploy evidence gap:
+
+After commit `9192f37`, multiple pushed non-doc commits reached `origin/main`
+but did not produce GitHub Actions runs visible through the Actions API. The
+mission therefore used a manual source-truth deploy from Node B's
+`/opt/go-choir` checkout. The CI workflow also has no `workflow_dispatch`
+trigger, so there is no explicit manual deploy recovery path when push runs do
+not materialize.
+
+Evidence:
+
+```text
+.github/workflows/ci.yml health loop before fix: 8081 8082 8083 8084 8086
+maild route proof used indirect GET /api/email/resend/webhook -> 405
+GitHub Actions latest visible CI run after several pushed commits: 26447116904 at 9192f37
+manual deployed commit: 76c5d18a7fb705c5befcf35abadd2df3b9132fbb
+```
+
+Belief-state update:
+
+- Final acceptance should have a direct `maild` health artifact that can be
+  checked locally, in CI deploy logs, and on Node B without exposing secrets.
+- The deployment path needs an operator-invokable workflow path for recovery
+  when ordinary push webhooks do not create Actions runs.
+
+Required next change:
+
+- Add a custom `maild` health handler that reports safe configuration booleans
+  and mailbox counters.
+- Include `8087` in staging health probes.
+- Add a manual `workflow_dispatch` path that can force a host/frontend staging
+  deploy from `main` without requiring an extra source edit.
