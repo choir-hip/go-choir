@@ -206,6 +206,81 @@ Final evidence must include:
 - deployed acceptance command/result proving fresh registration/login on `https://choir.news`;
 - rollback refs and residual risks.
 
+### Execution Evidence - 2026-05-26
+
+Status: `choir.news` cutover completed for the primary deployed staging path.
+`choir-ip.com` apex redirect remains blocked on DNS authority/credentials.
+
+Commits:
+
+- Docs checkpoint: `5994ac0` (`docs: document choir.news cutover decision`)
+- Docs order correction: `6ff1940` (`docs: correct choir.news cutover order`)
+- Behavior change: `84ad8d0` (`Move staging primary domain to choir.news`)
+- CI workflow fix: `7fd49be` (`Fix staging deploy workflow expression size`)
+- Deploy trigger: `2b22433` (`Trigger choir.news staging deploy`)
+
+Gandi DNS:
+
+- `choir.news` apex A record was updated through Gandi LiveDNS with Bearer
+  token auth.
+- Gandi API listed apex A `147.135.70.196` with TTL 300.
+- Authoritative nameservers `ns-18-a.gandi.net`, `ns-114-b.gandi.net`, and
+  `ns-100-c.gandi.net` all returned `147.135.70.196`.
+- Public resolvers `1.1.1.1`, `8.8.8.8`, and `9.9.9.9` returned
+  `147.135.70.196`.
+
+CI/deploy:
+
+- GitHub Actions CI run `26441752735` passed for
+  `2b2243394ce86cc8a79d62e615fc6039c8c658a9`.
+- Node B deploy job `77837877944` passed.
+- `/health` via `https://choir.news` with explicit resolver mapping reported
+  proxy and sandbox commit/deployed_commit
+  `2b2243394ce86cc8a79d62e615fc6039c8c658a9`, deployed at
+  `2026-05-26T08:40:19Z`.
+
+Auth reset:
+
+- Deployed auth database was backed up to
+  `/var/lib/go-choir/auth/auth.db.pre-choir-news-20260526T084548Z`.
+- `go-choir-auth` and `go-choir-proxy` restarted active.
+- Deployed auth environment after reset:
+  `AUTH_RP_ID=choir.news`, `AUTH_RP_ORIGINS=https://choir.news`.
+
+Deployed browser acceptance:
+
+- One-off Playwright verifier launched Chromium with
+  `--host-resolver-rules=MAP choir.news 147.135.70.196` while local macOS DNS
+  cache still returned the old Gandi parking IP.
+- Browser origin was `https://choir.news`.
+- Fresh registration succeeded for a new account, producing secure HttpOnly
+  `choir_access` and `choir_refresh` cookies.
+- Logout and returning login succeeded for the same account.
+- CDP virtual authenticator stored an RP credential for `choir.news` with
+  sign count 2.
+
+Redirect/DNS residuals:
+
+- `https://draft.choir-ip.com/` returned `301` with
+  `Location: https://choir.news/`.
+- `choir-ip.com` still resolved to `147.135.24.51` and returned the old site
+  with HTTP 200. No Cloudflare token/zone/record credentials were present in
+  local `.env`, so the apex DNS update could not be performed.
+- Forced HTTP to Node B for `choir-ip.com` reached Caddy's HTTP-to-HTTPS
+  redirect, but forced HTTPS failed certificate negotiation while DNS still
+  points away from Node B. Finish this by updating Cloudflare DNS for
+  `choir-ip.com` to `147.135.70.196` and letting Caddy obtain the certificate.
+
+Residual risks:
+
+- Local macOS resolver cache returned stale `choir.news -> 217.70.184.38`
+  during verification, even though authoritative and public resolvers had the
+  new value. Acceptance used an explicit browser host mapping for this reason.
+- The deployed frontend bundle still reported build commit
+  `b2252fe4ecc9f05f827ca3c86e2703ada68d4820`; proxy and sandbox were deployed
+  at `2b2243394ce86cc8a79d62e615fc6039c8c658a9`. The cutover proof passed, but
+  the next frontend-changing deploy should refresh frontend build identity.
+
 ## Prior Art
 
 This document replaces the session-level reasoning. The motivation is:
