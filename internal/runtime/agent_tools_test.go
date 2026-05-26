@@ -216,6 +216,37 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 	}
 }
 
+func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
+	ownerID := "owner-super-bash"
+	run := &types.RunRecord{
+		RunID:        "run-super-bash",
+		AgentID:      persistentSuperAgentID(ownerID),
+		OwnerID:      ownerID,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentID:      persistentSuperAgentID(ownerID),
+			"request_source":        "super_inbox",
+		},
+	}
+	raw, err := newBashTool("").Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{"command":"printf durable"}`))
+	if err != nil {
+		t.Fatalf("bash: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("decode bash result: %v", err)
+	}
+	if got := fmt.Sprint(payload["next_required_tool"]); got != "submit_coagent_update" {
+		t.Fatalf("next_required_tool = %q, want submit_coagent_update; payload=%#v", got, payload)
+	}
+	if instruction := fmt.Sprint(payload["next_instruction"]); !strings.Contains(instruction, "Report this command result to the addressed VText document") {
+		t.Fatalf("next_instruction = %q", instruction)
+	}
+}
+
 func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
