@@ -8,11 +8,11 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: deployed maild/proxy/frontend slice exists on Node B at 5378215; Resend domain/webhook setup and DNS/MX remain unconfigured
+current artifact state: maild/proxy/frontend slice exists on Node B at 5378215 via an invalid manual deploy path; GitHub Actions deploy proof is missing; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, quarantine metadata, source packets, Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
 locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir contract plus ingress receipt; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
-next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
+unproven claims: GitHub Actions deploy identity for the current behavior slice, real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
+next executable probe: rerun or repair the GitHub Actions CI/deploy path until staging is advanced by Actions, then verify deployed identity before any Resend/Gandi mutation
 ```
 
 ## Mission Frame
@@ -370,8 +370,8 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: deployed minimal compose checkpoint on 2026-05-26 at 5378215
-current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed; Resend receiving/webhook and Gandi DNS are not configured
+last checkpoint: invalid manual-deploy minimal compose checkpoint on 2026-05-26 at 5378215
+current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script exist locally and on Node B, but the latest Node B state came from manual source-truth deploys and is not valid acceptance evidence; Resend receiving/webhook and Gandi DNS are not configured
 what shipped: maild service, minimal Email app with Compose and collapsed raw-header/stored-recipient Details, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
@@ -407,7 +407,8 @@ unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
   - real inbox appearance, real reply/send, and real Send to Choir trace
-  - GitHub Actions emitted runs for 73beb6e again, but CI failed before project code gates; rerun evidence includes GitHub checkout 403 "Your account is suspended" and action archive download failures, so deploy proof for this checkpoint is manual Node B source-truth deploy proof
+  - GitHub Actions emitted runs for 73beb6e again, but CI failed before project code gates; rerun evidence includes GitHub checkout 403 "Your account is suspended" and action archive download failures
+  - manual Node B source-truth deploys advanced staging through 5378215, but those deploys violate the mission landing-loop invariant and must not be counted as acceptance proof
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
@@ -415,11 +416,12 @@ belief-state changes:
   - plus aliases should not implicitly fall back to 000 because that weakens secret-alias policy
   - outbound reaches Resend, but the current Resend account state rejects 000@choir.news because choir.news is not verified
 remaining error field:
+  - GitHub Actions deploy proof must be recovered before further behavior changes or provider/DNS mutation
   - real provider/DNS proof is still untouched because exact Resend verification/receiving records and webhook secret are missing
   - attachment content download/extraction remains intentionally deferred
-highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
-next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint 5378215; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+highest-impact remaining uncertainty: whether GitHub Actions token/access state has recovered enough to run project gates and deploy the current behavior slice to staging
+next executable probe: rerun the failed GitHub Actions CI run for 5378215, inspect whether setup/auth failures recur, and only proceed to Resend/Gandi after Actions deploys and staging health reports the expected behavior commit
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from the invalid manual-deploy checkpoint at 5378215; recover GitHub Actions CI/deploy proof, verify staging identity from Actions, then obtain Resend domain/webhook provider truth and prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -522,9 +524,51 @@ Belief-state update:
 
 - This checkpoint cannot use GitHub Actions as acceptance evidence until the
   GitHub account/repository access issue is resolved.
-- Manual Node B deploy identity and local/dev-shell test evidence remain the
-  best available proof path for maild behavior changes, but they are weaker than
-  the normal CI/deploy loop.
+- Manual Node B deploy identity and local/dev-shell test evidence can help
+  diagnose runtime behavior, but they are not acceptance proof for this mission.
+  The landing-loop invariant requires GitHub Actions CI, Actions staging deploy,
+  deployed identity, and product-path acceptance.
+
+## Protocol Finding: manual Node B deploy invalidates acceptance evidence
+
+Recorded: 2026-05-26.
+
+Problem:
+
+Several maild behavior checkpoints were advanced on Node B with manual
+source-truth deploys after GitHub Actions failed to complete or failed to emit
+runs. This violated the mission and repository landing-loop invariant:
+
+```text
+commit -> push origin main -> monitor CI -> monitor staging deploy
+-> verify staging commit identity -> run deployed acceptance proof
+```
+
+Evidence:
+
+```text
+CI run 26448039030 for 1e3d54a: failed before project gates; deploy skipped
+manual Node B deploy then reported public /health deployed_commit 1e3d54a
+
+CI run 26448505213 for 843ec90: failed before project gates; deploy skipped
+manual Node B deploy then reported public /health deployed_commit 843ec90
+
+CI run 26448967008 for 5378215: frontend build, non-runtime tests,
+integration smoke, and runtime shards 0/3 passed; Go Vet + Build and runtime
+shards 1/2 failed during setup while downloading actions/setup-go@v6; deploy
+skipped; manual Node B deploy then reported public /health deployed_commit
+5378215c341813dcec8d985c105c57c9f6181e3b
+```
+
+Belief-state update:
+
+- Current Node B behavior can be inspected for diagnostics, but it is tainted as
+  mission acceptance evidence.
+- The next safe probe is not Resend/Gandi setup. It is to rerun or repair the
+  GitHub Actions path until CI gates and the staging deploy job succeed for the
+  current behavior slice.
+- DNS/MX and real inbound mail must wait until staging identity has been proven
+  from the Actions deploy path.
 
 ## Staging Security Finding: mail State File Modes
 
