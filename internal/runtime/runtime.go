@@ -1688,6 +1688,9 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
 		return ""
 	}
+	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
+		return ""
+	}
 	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
 		if vtextInitialRequestNeedsSuper(rec) {
 			return exactRequiredToolChoice("request_super_execution")

@@ -147,6 +147,16 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 			},
 			want: "function:edit_vtext",
 		},
+		{
+			name: "worker wake leaves vtext free to choose",
+			metadata: map[string]any{
+				"type":                      "vtext_agent_revision",
+				"requires_worker_grounding": false,
+				"original_prompt":           "research the sources and run one command",
+				"scheduled_message_seq":     int64(3),
+			},
+			want: "",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
