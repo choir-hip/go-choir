@@ -1065,6 +1065,71 @@ next executable probe:
   evidence label. Keep this as prompt/tool-surface shaping, not wrapper tools
   or role-specific harness branching.
 
+checkpoint update, 2026-05-26 05:18 UTC:
+
+- Prompt/tool-surface fix `14431b525aded4b2faabad1394b21d786c439daa`
+  landed and deployed. CI run `26433038844` passed, FlakeHub run
+  `26433038861` passed, and staging `/health` reported proxy deployed at
+  `14431b525aded4b2faabad1394b21d786c439daa`, deployed at
+  `2026-05-26T04:54:48Z`, with `vmctl_status=ok`. Bootstrap counters remained
+  unchanged from the prior pressure signature (`http_502=8`,
+  `resolve_error=15`).
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptPreservesExplicitHardConstraints|TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation|TestVTextSuperContinuationObjectiveRequiresCoagentUpdate|TestVTextPromptCurrentEventsRequiresResearcher|TestInitialVTextToolChoiceUsesExactTools|TestVTextInitialEditContinuationClassifiesPrompts|TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt' -count=1`.
+- Local comprehensive continuation proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestEditVTextInitialWorkingRevisionRequiresActualContinuation' -count=1`.
+- Strict-wait staging command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-14431b5-strictwait-20260526T045536Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: Kimi low passed, GPT-5.5 low passed, v4 Flash medium failed.
+  Evidence:
+  `test-results/vtext-long-section-rubric-staging-14431b5-strictwait-20260526T045536Z/`.
+- Kimi low pass shape: 4 app revisions, 1 researcher, 1 super, 3 search
+  queries, one VText `request_super_execution`, one super `bash`, one super
+  `submit_coagent_update`, all exact section/update/marker obligations
+  preserved, and `commandEvidenceSatisfied=true`.
+- GPT-5.5 low pass shape: 2 app revisions, 2 researchers, 1 super, 4 search
+  queries, repeated VText `request_super_execution`, 4 super `bash` calls, 4
+  super `submit_coagent_update` calls, all exact obligations preserved, and
+  `commandEvidenceSatisfied=true`.
+- v4 Flash medium failure shape: only one appagent revision was created, the
+  VText agent ended in `failed` state after a single successful `edit_vtext`,
+  and Trace showed no researcher, no super, and no search. The initial v1 still
+  included `[CMD]` as a pending Source Ledger row:
+  `[CMD] | printf ... | Command evidence pending — super execution requested`.
+  This means v4 is still over-literal about final ledger requirements in the
+  initial scaffold, and it also did not perform the post-edit required
+  continuation.
+
+belief-state changes:
+
+- The same deployed runtime can now pass the strict mixed researcher/super
+  long-rubric path with Kimi low and GPT-5.5 low.
+- The remaining accepted-matrix blocker is narrowed to v4 Flash medium. Its
+  failure is no longer "cannot do the whole workflow" in all cases; on this
+  run it failed before delegation by treating the initial scaffold as if it
+  should already contain final `[CMD]` ledger shape and then stopping after
+  the first edit.
+- The prompt still exposes the literal `[CMD]` hard requirement too close to
+  the initial-v1 generation surface. For v4, "final-only" prose is weaker than
+  a prompt shape that withholds final-only evidence labels from the initial
+  scaffold acceptance checklist until super evidence exists.
+
+remaining error field:
+
+- v4 Flash medium can still write a pending `[CMD]` scaffold in v1 and fail to
+  continue to researcher/super after the first edit.
+- The accepted matrix remains incomplete until v4 Flash medium also passes the
+  strict command-evidence rubric.
+
+next executable probe:
+
+- Change hard-requirement materialization so `[CMD]` is not presented as an
+  immediate checklist item when no super delivery is present. Instead present a
+  pending-command rule for v1/interim revisions and reintroduce the literal
+  `[CMD]` requirement only once a super delivery or execution blocker exists.
+  Keep the existing post-edit continuation guard intact and rerun the v4 row
+  first before spending another full matrix run.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
