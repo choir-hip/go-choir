@@ -1300,6 +1300,57 @@ next executable probe:
   checkpoints and VText truthful coordination language. Then rerun the two
   focused controls before returning to the strict long-section matrix.
 
+checkpoint update, 2026-05-26 06:18 UTC:
+
+- Prompt-only cadence fix `3896d22424e9347a0eaa3768f40dfe0e4af3c145`
+  landed and deployed. CI run `26435347929` passed, FlakeHub run
+  `26435347931` passed, and staging `/health` reported proxy and sandbox
+  deployed at `3896d22424e9347a0eaa3768f40dfe0e4af3c145`, deployed at
+  `2026-05-26T06:06:06Z`.
+- Local focused proof passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent|TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims|TestVTextResearchContinuationObjectiveRequiresFastCheckpoint|TestSystemPromptForResearcherForcesEarlyHandoff|TestVTextPromptCurrentEventsRequiresResearcher|TestInitialVTextToolChoiceUsesExactTools|TestVTextInitialEditContinuationClassifiesPrompts|TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint|TestShouldRequireResearchFindingsAfterSearchOnlyForFirstResearcherSearch' -count=1`.
+- Focused deployed V4 medium command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-3896d22-medium-control-20260526T060706Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Result: the prompt-only fix did not solve the simple sports v3 starvation.
+  Evidence:
+  `test-results/vtext-model-cadence-3896d22-medium-control-20260526T060706Z/fireworks-deepseek-v4-flash-medium.json`.
+- Observed transition: V4 medium produced v1 at about 4.2s, a researcher was
+  spawned, the first researcher update arrived at about 38.2s, and v2 arrived
+  at about 49.2s. The researcher then continued search/fetch calls through the
+  rest of the observation window without sending another
+  `submit_coagent_update`, and no v3 arrived.
+- Improvement: the v2 no longer claimed that a follow-up researcher had already
+  been dispatched. It stayed closer to honest partial status.
+- Remaining failure: prompt guidance alone did not make the researcher produce
+  incremental updates after the first checkpoint, even while it continued
+  issuing additional search/fetch calls.
+
+belief-state changes:
+
+- For simple sports cadence, prompt-only is now falsified for the post-first
+  checkpoint researcher starvation transition on V4 Flash medium.
+- The existing `next_required_tool` mechanism already works for the first
+  researcher checkpoint and for super bash evidence. Extending that same
+  existing tool-result contract to later researcher search/fetch batches is now
+  the smallest plausible non-wrapper change. It does not grant researchers new
+  authority or let them write canonical text; it only requires them to report
+  the evidence they just gathered before continuing.
+
+remaining error field:
+
+- The next code change should use the existing uniform tool-loop
+  `next_required_tool` contract, not a new wrapper or role-specific core-loop
+  branch: after a researcher has already checkpointed once, any later successful
+  search/fetch batch that occurs after the latest `submit_coagent_update`
+  should require another `submit_coagent_update` before more searching.
+
+next executable probe:
+
+- Implement the narrow researcher post-checkpoint reporting contract through
+  existing search/fetch tool result metadata. Rerun the V4 medium baseball
+  control and inspect whether a second researcher update and v3 appear without
+  a search loop.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
