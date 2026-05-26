@@ -439,3 +439,41 @@ The service code passed normal Go tests, and the deploy failure is a packaging
 hash mismatch isolated to the new `maild` derivation. The smallest safe fix is
 to set `maild`'s package-specific `vendorHash` to the hash reported by the Node
 B Linux Nix builder, then rerun the normal push/deploy loop.
+
+## Staging Security Finding: mail State File Modes
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The first successful Node B deploy of `maild` created live mailbox state with
+permissions that are too broad for email content. The service was active and
+the Caddy route reached `maild`, but `/var/lib/go-choir/mail` was `0755` and
+`/var/lib/go-choir/mail/mail.db` was `0644`.
+
+Evidence:
+
+```text
+staging commit: 9192f378aa547ad93088b547b6213c285dc8fa67
+GitHub Actions run: 26447116904
+Node B services: go-choir-maild, go-choir-proxy, and caddy active
+route proof: GET https://choir.news/api/email/resend/webhook -> 405 method not allowed
+mode proof:
+  755 root root /var/lib/go-choir/mail
+  644 root root /var/lib/go-choir/mail/mail.db
+  750 root root /var/lib/go-choir/mail/raw
+  750 root root /var/lib/go-choir/mail/attachments
+  750 root root /var/lib/go-choir/mail/attachments/quarantine
+```
+
+Belief-state update:
+
+- `maild` as a separate service remains correct, but its host state must be
+  treated as private mailbox data from the first deploy.
+- Nix tmpfiles create rules alone are not enough evidence that existing paths
+  and service-created SQLite files have private modes.
+
+Required next change:
+
+- Add explicit mode repair for the mail state paths and set a restrictive
+  `go-choir-maild` umask so future mailbox files are not created world-readable.
