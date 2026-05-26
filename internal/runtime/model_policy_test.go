@@ -87,7 +87,7 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 func TestFallbackModelPolicyUsesGeneratedFireworksDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "none" {
+	if conductor.Provider != "fireworks" || conductor.Model != "accounts/fireworks/models/deepseek-v4-flash" || conductor.ReasoningEffort != "medium" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
@@ -95,7 +95,7 @@ func TestFallbackModelPolicyUsesGeneratedFireworksDefaults(t *testing.T) {
 		t.Fatalf("super selection = %+v", super)
 	}
 	vtext := policy.Resolve(AgentProfileVText)
-	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" || vtext.ReasoningEffort != "none" {
+	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" || vtext.ReasoningEffort != "medium" {
 		t.Fatalf("vtext selection = %+v", vtext)
 	}
 	verifier := policy.Resolve("verifier")
@@ -158,8 +158,83 @@ func TestDefaultModelPolicyIgnoresChatGPTProcessFallback(t *testing.T) {
 	if got := policy.Resolve("unknown-role"); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Fatalf("generated fallback selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "none" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("generated conductor selection = %+v", got)
+	}
+}
+
+func TestEnsureDefaultModelPolicyMigratesGeneratedFlashNoneForegroundPolicy(t *testing.T) {
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := `# Choir model policy
+# This computer-owned file maps agent roles to provider/model choices.
+# Provider secrets stay server-owned; this file names models only.
+# Optional max_tokens requests an explicit per-call budget. Omit it for provider
+# defaults, especially Fireworks chat completions.
+
+[defaults]
+fallback_provider = "fireworks"
+fallback_model = "accounts/fireworks/models/deepseek-v4-flash"
+
+[roles.conductor]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "none"
+
+[roles.super]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+reasoning = "medium"
+
+[roles.vsuper]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+
+[roles.co-super]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+
+[roles.researcher]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "none"
+
+[roles.vtext]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-flash"
+reasoning = "none"
+
+[roles.verifier]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v4-pro"
+requires = ["text", "tool_use"]
+
+[roles.verifier_multimodal]
+provider = "fireworks"
+model = "accounts/fireworks/models/kimi-k2p6"
+requires = ["image", "tool_use"]
+`
+	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
+		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
+	}
+	migrated, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := parseModelPolicy(string(migrated), policyPath)
+	if err != nil {
+		t.Fatalf("parse migrated policy: %v", err)
+	}
+	for _, role := range []string{AgentProfileConductor, AgentProfileResearcher, AgentProfileVText} {
+		got := policy.Resolve(role)
+		if got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
+			t.Fatalf("migrated %s selection = %+v", role, got)
+		}
 	}
 }
 
@@ -254,7 +329,7 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "none" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
 	if got := policy.Resolve(AgentProfileSuper); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-pro" || got.ReasoningEffort != "medium" {
@@ -295,10 +370,10 @@ reasoning = "none"
 	if err != nil {
 		t.Fatalf("parse migrated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "none" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "none" {
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "fireworks" || got.Model != "accounts/fireworks/models/deepseek-v4-flash" || got.ReasoningEffort != "medium" {
 		t.Fatalf("migrated researcher selection = %+v", got)
 	}
 }

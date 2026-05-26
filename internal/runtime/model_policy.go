@@ -23,14 +23,15 @@ const (
 
 	// Keep generated foreground defaults on broadly available gateway providers.
 	// Per-computer policy files may still override these roles through product state.
-	defaultFireworksProvider       = "fireworks"
-	defaultConductorModel          = "accounts/fireworks/models/deepseek-v4-flash"
-	defaultSuperModel              = "accounts/fireworks/models/deepseek-v4-pro"
-	defaultResearcherVTextModel    = "accounts/fireworks/models/deepseek-v4-flash"
-	defaultVerifierModel           = "accounts/fireworks/models/deepseek-v4-pro"
-	defaultMultimodalVerifierModel = "accounts/fireworks/models/kimi-k2p6"
-	modelPolicyRoleVerifier        = "verifier"
-	modelPolicyRoleVerifierMulti   = "verifier_multimodal"
+	defaultFireworksProvider        = "fireworks"
+	defaultConductorModel           = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultSuperModel               = "accounts/fireworks/models/deepseek-v4-pro"
+	defaultResearcherVTextModel     = "accounts/fireworks/models/deepseek-v4-flash"
+	defaultFlashForegroundReasoning = "medium"
+	defaultVerifierModel            = "accounts/fireworks/models/deepseek-v4-pro"
+	defaultMultimodalVerifierModel  = "accounts/fireworks/models/kimi-k2p6"
+	modelPolicyRoleVerifier         = "verifier"
+	modelPolicyRoleVerifierMulti    = "verifier_multimodal"
 )
 
 // LLMSelection is the effective provider/model/reasoning tuple used for a run.
@@ -82,7 +83,7 @@ func DefaultModelPolicyPath(filesRoot string) string {
 	return filepath.Join(root, filepath.FromSlash(defaultModelPolicyRelativePath))
 }
 
-func defaultModelPolicyText(cfg Config) string {
+func defaultModelPolicyText(_ Config) string {
 	return fmt.Sprintf(`# Choir model policy
 # This computer-owned file maps agent roles to provider/model choices.
 # Provider secrets stay server-owned; this file names models only.
@@ -92,12 +93,12 @@ func defaultModelPolicyText(cfg Config) string {
 [defaults]
 fallback_provider = %q
 fallback_model = %q
-reasoning = %q
+reasoning = "medium"
 
 [roles.conductor]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
+reasoning = "medium"
 
 [roles.super]
 provider = "fireworks"
@@ -115,12 +116,12 @@ model = "accounts/fireworks/models/deepseek-v4-pro"
 [roles.researcher]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
+reasoning = "medium"
 
 [roles.vtext]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
+reasoning = "medium"
 
 [roles.verifier]
 provider = "fireworks"
@@ -131,7 +132,7 @@ requires = ["text", "tool_use"]
 provider = "fireworks"
 model = "accounts/fireworks/models/kimi-k2p6"
 requires = ["image", "tool_use"]
-`, defaultFireworksProvider, defaultResearcherVTextModel, strings.TrimSpace(cfg.LLMReasoningEffort))
+`, defaultFireworksProvider, defaultResearcherVTextModel)
 }
 
 func legacyGeneratedModelPolicyText(cfg Config) string {
@@ -190,22 +191,22 @@ requires = ["image", "tool_use"]
 `, fallbackProvider, fallbackModel, strings.TrimSpace(cfg.LLMReasoningEffort))
 }
 
-func fallbackModelPolicy(cfg Config) ModelPolicy {
+func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
 		Provider:        defaultFireworksProvider,
 		Model:           defaultResearcherVTextModel,
-		ReasoningEffort: strings.TrimSpace(cfg.LLMReasoningEffort),
+		ReasoningEffort: defaultFlashForegroundReasoning,
 		Source:          "platform_fallback",
 	}
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
 			AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium", Source: "platform_fallback"},
 			AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: defaultSuperModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
-			AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none", Source: "platform_fallback"},
+			AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
+			AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: defaultFlashForegroundReasoning, Source: "platform_fallback"},
 			modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: defaultVerifierModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
@@ -350,6 +351,9 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	if hasLegacyChatGPTFallback(policy) {
 		return true
 	}
+	if hasGeneratedFlashNoneForegroundPolicy(policy) {
+		return true
+	}
 	conductor, ok := policy.Roles[AgentProfileConductor]
 	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
 		return hasLegacyChatGPTForegroundPin(policy)
@@ -367,6 +371,42 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 		return false
 	}
 	return true
+}
+
+func hasGeneratedFlashNoneForegroundPolicy(policy ModelPolicy) bool {
+	if len(policy.Roles) != 8 {
+		return false
+	}
+	if !isModelPolicySelection(policy.Defaults, defaultFireworksProvider, defaultResearcherVTextModel, "") {
+		return false
+	}
+	expected := map[string]LLMSelection{
+		AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: defaultConductorModel, ReasoningEffort: "none"},
+		AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: defaultSuperModel, ReasoningEffort: "medium"},
+		AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: defaultSuperModel},
+		AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: defaultSuperModel},
+		AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none"},
+		AgentProfileVText:            {Provider: defaultFireworksProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "none"},
+		modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: defaultVerifierModel},
+		modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: defaultMultimodalVerifierModel},
+	}
+	for role, want := range expected {
+		got, ok := policy.Roles[role]
+		if !ok {
+			return false
+		}
+		if !isExactModelPolicySelection(got, want.Provider, want.Model, want.ReasoningEffort) {
+			return false
+		}
+	}
+	return true
+}
+
+func isExactModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
+	return strings.TrimSpace(sel.Provider) == provider &&
+		strings.TrimSpace(sel.Model) == model &&
+		strings.TrimSpace(sel.ReasoningEffort) == reasoning &&
+		sel.MaxTokens == 0
 }
 
 func hasLegacyChatGPTForegroundPin(policy ModelPolicy) bool {
