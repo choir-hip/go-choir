@@ -297,6 +297,9 @@ jobs:
               git clone https://github.com/choir-hip/go-choir.git /opt/go-choir
             fi
 
+            # CI SSH deploy runs as root; /opt/go-choir may be owned by another uid from prior deploys.
+            git config --global --add safe.directory /opt/go-choir
+
             cd /opt/go-choir
             git remote set-url origin https://github.com/choir-hip/go-choir.git
             echo "==> Pulling latest code"
