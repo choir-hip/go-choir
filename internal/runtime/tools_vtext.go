@@ -245,7 +245,7 @@ Temporal grounding:
 - If the user's locale or sport timezone is uncertain, state that uncertainty instead of silently choosing a stale date range.
 
 First checkpoint protocol:
-- Run at most one focused search batch, or one search plus one targeted fetch, before the first submit_coagent_update call.
+- Run exactly one web_search call before the first submit_coagent_update call. If the target URL is already known, you may run that one web_search plus one targeted fetch_url; otherwise do not issue parallel search calls before the first update.
 - As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update with kind="findings".
 - The first packet is a usable checkpoint, not a final report. Keep it concise and evidence-backed.
 - If you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.
