@@ -411,3 +411,31 @@ rollback refs:
   - stop go-choir-maild and remove Caddy webhook route if staging regresses
   - preserve /var/lib/go-choir/mail for forensics unless explicitly purging
 ```
+
+## Deploy Blocker: maild Vendor Hash
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The first pushed implementation commit `59600385939fc0969c253e67491a055539a70c6f`
+passed CI build/test gates, but the Node B staging deploy failed while building
+the NixOS host closure. The new `maild` package used the generic Go service
+vendor hash, but the Linux Nix build computed a different fixed-output hash.
+
+Evidence:
+
+```text
+GitHub Actions run: 26446912518
+failed job: Deploy to Staging (Node B), job id 77855699799
+failed derivation: maild-0.1.0-go-modules.drv
+specified hash: sha256-7sTVRCu7SWElqse4g82ERcaJAeWd9EAKmgAdmRa7Ezw=
+actual hash:    sha256-dqBHF0LSI8L52jtgRZct1h8pw2C/boJsqBwsM1Z9ayE=
+```
+
+Belief-state update:
+
+The service code passed normal Go tests, and the deploy failure is a packaging
+hash mismatch isolated to the new `maild` derivation. The smallest safe fix is
+to set `maild`'s package-specific `vendorHash` to the hash reported by the Node
+B Linux Nix builder, then rerun the normal push/deploy loop.
