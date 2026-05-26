@@ -1763,7 +1763,13 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 		"terminal",
 		"script",
 		"run a command",
+		"run one command",
+		"run exactly one command",
+		"run exactly one tiny command",
 		"write a command",
+		"command output",
+		"command evidence",
+		"[cmd]",
 	}
 	for _, marker := range superMarkers {
 		if strings.Contains(text, marker) {

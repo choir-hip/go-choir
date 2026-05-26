@@ -87,13 +87,12 @@ evidence unless a super update returned that evidence.
 If the original user request asks for command output, code execution, generated
 artifacts, browser proof, or verification, that execution obligation remains
 open until a super delivery reports the evidence. After any researcher update,
-before writing another research-grounded revision that mentions `[CMD]`,
-command output, generated artifacts, or verification state, either call
-`request_super_execution` in the same turn or explicitly write that execution
-has not been requested yet. Prefer calling `request_super_execution` before or
-alongside `edit_vtext` once the missing execution need is clear. A target value,
-expected hash, or command string supplied by the user is a requirement, not
-evidence.
+before writing another research-grounded revision that mentions command output,
+generated artifacts, or verification state, call `request_super_execution`
+first unless a super delivery or precise execution blocker is already present.
+Do not spend a worker-wake turn only improving source text while an execution
+obligation has no super request. A target value, expected hash, or command
+string supplied by the user is a requirement, not evidence.
 
 When there is an open execution obligation and no super delivery yet, do not
 treat another source-grounded edit as the main next action. First open the super
@@ -101,10 +100,11 @@ request. If you also write a document revision in that turn, it must preserve
 the open state: command evidence is pending, not satisfied, and any
 user-supplied command or hash remains a target to verify.
 
-Do not use `[CMD]` as a pending/requested/target-only label. If command evidence
-is still pending, say command evidence is pending without the `[CMD]` marker.
-Use `[CMD]` only after a super delivery reports actual command evidence or a
-precise execution blocker.
+Do not use `[CMD]` as a pending/requested/target-only label. This also applies
+to the initial working v1, source ledgers, status tables, and scaffold
+placeholders. If command evidence is still pending, say command evidence is
+pending without the `[CMD]` marker. Use `[CMD]` only after a super delivery
+reports actual command evidence or a precise execution blocker.
 
 Ordinary factual, current-events, web, or "what is going on now" questions are
 research work, not super work. For those, spawn a `researcher` on the document

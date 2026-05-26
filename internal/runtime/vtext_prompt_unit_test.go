@@ -131,7 +131,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"Required sentence prefix: SECTION 7 UPDATE:",
 		"Required sentence prefix: SECTION 12 UPDATE:",
 		"Preserve exact marker line: USER_LONG_RUBRIC_MARKER: preserve this exact marker.",
-		"Final command evidence label: [CMD] (use only after a super delivery reports command evidence",
+		"Final command evidence label: [CMD] (final-only:",
 		"Preserve explicit hard requirements from the original user request and current document across every revision",
 		"exact marker strings",
 		"required headings or section counts",
@@ -139,10 +139,40 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 		"target hashes",
 		"Before a replace_all edit, audit the complete replacement against those hard requirements",
 		"Do not replace a requested numbered/sectioned document with a different report outline",
-		"Never use `[CMD]` as a pending/requested/target-only label",
+		"Never use `[CMD]` as a pending/requested/target-only label, including in the initial v1 scaffold",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("hard-constraint prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
+func TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-mixed-obligation",
+		RevisionID: "rev-mixed-obligation",
+		Content:    "# Working brief\n\nCommand evidence pending.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	recent := []ChannelMessage{{
+		Role:    AgentProfileResearcher,
+		From:    "researcher:one",
+		Content: "Worker update ready.\n\nFindings:\n- [S1] VText documents have durable revisions.",
+	}}
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"seed_prompt": "Research VText durable drafts and run exactly one command: printf \"durable draft\" | shasum -a 256. The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
+	}, vtextAgentRevisionRequest{
+		Intent: "integrate_worker_findings",
+	}, "", true, false, recent, nil)
+
+	for _, want := range []string{
+		"recent worker messages do not include a super delivery",
+		"next side-effectful action should be request_super_execution before another source-only edit",
+		"must not use the final [CMD] evidence label before the super delivery arrives",
+		"Do not spend a worker-wake turn only improving source text while that execution obligation has no super request",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("mixed-obligation prompt missing %q:\n%s", want, request)
 		}
 	}
 }

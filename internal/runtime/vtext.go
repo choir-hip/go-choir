@@ -1831,7 +1831,7 @@ func vtextHardRequirementHints(parts ...string) []string {
 			}
 		}
 		if strings.Contains(text, "[CMD]") {
-			add("Final command evidence label: [CMD] (use only after a super delivery reports command evidence; pending/requested/target-only command state must not use [CMD])")
+			add("Final command evidence label: [CMD] (final-only: include it only after a super delivery reports command evidence or a precise execution blocker; do not use it for initial scaffolds, pending source ledger rows, requested state, target hashes, or placeholders)")
 		}
 	}
 	if len(out) > 32 {
@@ -1913,6 +1913,11 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(truncatePromptSnippet(message.Content, 800))
 			b.WriteString("\n")
 		}
+		if vtextPromptNeedsSuperExecution(metadataString(metadata, "seed_prompt")+" "+req.Prompt) && !vtextWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper) {
+			b.WriteString("\nThe original request still has an execution/code/browser/verification obligation, but these recent worker messages do not include a super delivery.")
+			b.WriteString("\nThis VText turn's next side-effectful action should be request_super_execution before another source-only edit, unless you can name a precise blocker.")
+			b.WriteString("\nA source-grounded revision may still say command evidence is pending, but it must not use the final [CMD] evidence label before the super delivery arrives.")
+		}
 		if workerMessagesContainActiveDelegation(recentWorkerMessages) {
 			b.WriteString("\nAt least one recent worker message says a delegated worker is still active or lacks terminal evidence.")
 			b.WriteString("\nFor this case, write the next dashboard revision from the evidence and call request_super_execution with a concrete continuation objective for persistent super.")
@@ -1951,6 +1956,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nFor greetings or simple non-factual prompts, answer directly and do not open workers.")
 		b.WriteString("\nFor factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.")
 		b.WriteString("\nFor coding/execution requests, the first revision should state the objective and evidence plan, followed by request_super_execution in the same run.")
+		b.WriteString("\nIf execution evidence is still pending in an initial or interim revision, do not include the final [CMD] evidence label yet; describe pending command evidence without that label.")
 	}
 	if hasGroundedHistory {
 		b.WriteString("\nThis document already has grounded workflow history on the coordination channel.")
@@ -1980,8 +1986,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\nWorker messages can wake later vtext runs and trigger the next revision.")
 	b.WriteString("\nPrefer prompt-to-v1 speed and small subsequent revisions over waiting for exhaustive coverage.")
 	b.WriteString("\nWhen worker findings arrive, update the document as soon as the first packet can improve it; do not wait for every researcher or super thread to finish.")
-	b.WriteString("\nException: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, first call request_super_execution. Do not make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.")
-	b.WriteString("\nNever use `[CMD]` as a pending/requested/target-only label. If command evidence is still pending, write \"command evidence pending\" without the `[CMD]` marker. Use `[CMD]` only when a super delivery reports the actual command result or precise execution blocker.")
+	b.WriteString("\nException: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, first call request_super_execution. Do not spend a worker-wake turn only improving source text while that execution obligation has no super request. Do not make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.")
+	b.WriteString("\nNever use `[CMD]` as a pending/requested/target-only label, including in the initial v1 scaffold, source ledger, status table, or placeholder. If command evidence is still pending, write \"command evidence pending\" without the `[CMD]` marker. Use `[CMD]` only when a super delivery reports the actual command result or precise execution blocker.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nPreserve explicit hard requirements from the original user request and current document across every revision. These include exact marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hashes, and text the user said to preserve.")
@@ -2004,6 +2010,19 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\",\"operation\":\"replace_all\",\"content\":\"complete current-state document\"}.")
 	b.WriteString("\nIf you end the run without edit_vtext, no canonical document revision will be created.")
 	return b.String()
+}
+
+func vtextWorkerMessagesContainRole(messages []ChannelMessage, role string) bool {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return false
+	}
+	for _, message := range messages {
+		if strings.EqualFold(strings.TrimSpace(message.Role), role) {
+			return true
+		}
+	}
+	return false
 }
 
 func workerMessagesContainActiveDelegation(messages []ChannelMessage) bool {
