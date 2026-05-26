@@ -370,9 +370,9 @@ If outbound is deferred, the mission may stop at `checkpoint_incomplete`, not
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: deployed reply-threading checkpoint on 2026-05-26 at d749fdc
+last checkpoint: deployed ingress-event evidence checkpoint on 2026-05-26 at 73beb6e
 current artifact state: cmd/maild, internal/maild, proxy forwarding/MAS handoff, Email app shell, Node B maild service route, maildctl, and mail credential deploy script are deployed; Resend receiving/webhook and Gandi DNS are not configured
-what shipped: maild service, minimal Email app, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, and RFC reply threading headers for owner replies
+what shipped: maild service, minimal Email app, proxy auth boundary, Send to Choir handoff, operator inspection CLI, bounded provider logging, RFC reply threading headers for owner replies, ingress-event handoff receipts, and a read-only mail acceptance checker
 what was proven:
   - signed fake Resend webhook verification, idempotency, missing-secret, missing-header, and mutated-body rejection
   - fake Resend retrieval stores inbound message, quarantines attachment metadata, and creates UNTRUSTED_EXTERNAL_EMAIL source packet
@@ -383,7 +383,8 @@ what was proven:
   - frontend production build succeeds
   - local Playwright visual harness renders Email app on desktop and mobile-sized windows with fixture mail and no `undefined` text
   - NixOS eval exposes go-choir-maild and Caddy webhook route before generic /api/*
-  - Node B deployed commit identity and service health report d749fdcfb329226f73ce4717b86f1ac0eba5e1a0
+  - Node B deployed commit identity and service health reported d749fdcfb329226f73ce4717b86f1ac0eba5e1a0 at the reply-threading checkpoint
+  - Node B deployed commit identity and service health report 73beb6e127199ea77c035e3729a76f23c8d03a16 at the ingress-event evidence checkpoint
   - read-only provider readiness probe reports Resend/Gandi/Node B state without mutating DNS or printing secrets
   - Resend setup helper read-only path reports restricted_api_key with current send-only key, and fake-curl success path writes webhook secret to mode 600 without printing it
   - mail credential deploy script can consume the generated webhook-secret file in redacted dry-run mode and still fails closed when the secret is absent
@@ -397,7 +398,7 @@ unproven or partial claims:
   - real Resend webhook and API payload compatibility
   - Gandi MX/SPF/DKIM/DMARC setup and rollback
   - real inbox appearance, real reply/send, and real Send to Choir trace
-  - GitHub Actions no longer emits runs for recent pushes; deploy proof is manual Node B source-truth deploy proof
+  - GitHub Actions emitted runs for 73beb6e again, but CI failed during external action setup/download before project code gates; deploy proof for this checkpoint is manual Node B source-truth deploy proof
 belief-state changes:
   - maild as separate microservice remains the right boundary
   - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
@@ -410,7 +411,7 @@ remaining error field:
   - attachment content download/extraction remains intentionally deferred
 highest-impact remaining uncertainty: exact Resend domain/receiving/webhook configuration needed to prove real inbound and outbound
 next executable probe: obtain a sufficiently scoped Resend key or dashboard session, run scripts/mail-provider-readiness until Resend domain/webhook records are visible, install RESEND_WEBHOOK_SECRET through /var/lib/go-choir/maild.env, update Gandi DNS from exact provider records, and run the real inbound/quarantine/source-packet/outbound acceptance
-suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint d749fdc; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
+suggested resume goal string: continue docs/mission-maild-email-ingress-v0.md from deployed checkpoint 73beb6e; obtain Resend domain/webhook provider truth, use scripts/mail-provider-readiness before DNS mutation, configure Gandi from exact records, then prove real inbound mail, quarantine, source-packet MAS handoff, and owner reply
 evidence artifact refs:
   - nix develop -c go test ./internal/maild ./cmd/maild ./internal/proxy
   - nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
@@ -428,6 +429,11 @@ evidence artifact refs:
   - scripts/mail-gandi-plan-records --records <sample-resend-domain-json> --ttl 3600
   - scripts/mail-gandi-rollback-records --snapshot <sample-gandi-snapshot-json> --records <sample-resend-domain-json>
   - PATH=<fake-ssh> scripts/mail-acceptance-check --owner owner-000 --subject Acceptance --expect-attachment-quarantine --expect-ingress-events 0
+  - GitHub Actions CI run 26447497910 for 73beb6e failed during setup/action download before project gates
+  - manual Node B deploy from /opt/go-choir at 73beb6e127199ea77c035e3729a76f23c8d03a16
+  - public /health deployed_commit 73beb6e127199ea77c035e3729a76f23c8d03a16
+  - maild /health status ok with stats.ingress_events 0, resend_api_key_configured true, and webhook_secret_configured false
+  - maildctl ingress-events --owner 5bd6de97-3b58-408c-bf89-c42c81b083de --limit 5 -> []
 rollback refs:
   - do not add MX until exact Resend records and webhook secret are available
   - current Gandi MX/SPF remains Gandi mail defaults until provider records are verified
@@ -1195,6 +1201,15 @@ acceptance checker:
     attachment_count: 1
     source_label: UNTRUSTED_EXTERNAL_EMAIL
     ingress_count: 0
+deployed checkpoint:
+  commit: 73beb6e127199ea77c035e3729a76f23c8d03a16
+  CI: run 26447497910 failed during external action setup/download before project code gates
+  deploy: manual Node B fast-forward, NixOS closure build, switch-to-configuration,
+          restart go-choir-maild/go-choir-proxy, reload Caddy
+  health: public /health reports deployed_commit 73beb6e127199ea77c035e3729a76f23c8d03a16
+  maild: /health reports stats.ingress_events 0 and webhook_secret_configured false
+  command: maildctl ingress-events --owner 5bd6de97-3b58-408c-bf89-c42c81b083de --limit 5
+  result: []
 ```
 
 Belief-state update:
