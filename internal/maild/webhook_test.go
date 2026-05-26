@@ -2,6 +2,7 @@ package maild
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -119,6 +120,13 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	msg := messages[0]
 	if msg.Subject != "Project files" || msg.FromDisplay != "Sender Name" || msg.TrustStatus != "quarantined" {
 		t.Fatalf("message = %+v", msg)
+	}
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(msg.RawHeadersJSON), &headers); err != nil {
+		t.Fatalf("unmarshal raw headers: %v", err)
+	}
+	if headers["message_id"] != "<email-1@example.com>" {
+		t.Fatalf("stored message_id = %q", headers["message_id"])
 	}
 	attachments, err := store.ListAttachments(req.Context(), "user-root", msg.ID)
 	if err != nil {

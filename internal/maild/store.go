@@ -54,6 +54,7 @@ type EmailMessage struct {
 	Subject        string
 	TextBody       string
 	HTMLBody       string
+	RawHeadersJSON string
 	TrustStatus    string
 	ReadAt         string
 	ReceivedAt     string
@@ -422,7 +423,7 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	rows, err := s.db.QueryContext(ctx, `SELECT
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
-		coalesce(html_body, ''), trust_status, coalesce(read_at, ''),
+		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at
 		FROM email_messages
 		WHERE `+where+`
@@ -451,7 +452,7 @@ func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (Emai
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
-		coalesce(html_body, ''), trust_status, coalesce(read_at, ''),
+		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at
 		FROM email_messages
 		WHERE mailbox_owner_id = ? AND id = ?`, ownerID, messageID)
@@ -537,6 +538,7 @@ func scanMessage(row messageScanner) (EmailMessage, error) {
 		&msg.Subject,
 		&msg.TextBody,
 		&msg.HTMLBody,
+		&msg.RawHeadersJSON,
 		&msg.TrustStatus,
 		&msg.ReadAt,
 		&msg.ReceivedAt,

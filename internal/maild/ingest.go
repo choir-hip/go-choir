@@ -138,7 +138,7 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 	if receivedAt == "" {
 		receivedAt = now
 	}
-	headersJSON, err := json.Marshal(email.Headers)
+	headersJSON, err := json.Marshal(headersWithProviderMessageID(email.Headers, email.MessageID))
 	if err != nil {
 		return inboundMessageRecord{}, fmt.Errorf("marshal headers: %w", err)
 	}
@@ -189,6 +189,17 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 		SourcePacketID:         sourcePacketRowID(providerMessageID),
 		SourcePacketProvenance: string(provenance),
 	}, nil
+}
+
+func headersWithProviderMessageID(headers map[string]string, messageID string) map[string]string {
+	out := make(map[string]string, len(headers)+1)
+	for key, value := range headers {
+		out[key] = value
+	}
+	if trimmed := strings.TrimSpace(messageID); trimmed != "" {
+		out["message_id"] = trimmed
+	}
+	return out
 }
 
 func insertRecipients(ctx context.Context, tx *sql.Tx, messageID, kind string, addresses []string) error {

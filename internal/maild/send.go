@@ -3,6 +3,7 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -59,6 +60,18 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if err := h.applyReplyHeaders(r.Context(), ownerID, in.ReplyToMessageID, &payload); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reply target is not owned by current user"})
+			return
+		}
+		if errors.Is(err, errMissingReplyMessageID) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reply target is missing message id"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load reply target"})
+		return
+	}
 	sent, err := h.resend.sendEmail(r.Context(), payload)
 	if err != nil {
 		var providerErr *resendHTTPError
@@ -91,6 +104,54 @@ func (h *Handler) resolveOwnedFromAlias(ctx context.Context, ownerID, fromAddres
 		return EmailAlias{}, sql.ErrNoRows
 	}
 	return alias, nil
+}
+
+var errMissingReplyMessageID = errors.New("reply target is missing message id")
+
+func (h *Handler) applyReplyHeaders(ctx context.Context, ownerID, replyToMessageID string, payload *resendSendRequest) error {
+	replyToMessageID = strings.TrimSpace(replyToMessageID)
+	if replyToMessageID == "" {
+		return nil
+	}
+	msg, err := h.store.GetMessage(ctx, ownerID, replyToMessageID)
+	if err != nil {
+		return err
+	}
+	rfcMessageID := extractRFCMessageID(msg.RawHeadersJSON)
+	if rfcMessageID == "" {
+		return errMissingReplyMessageID
+	}
+	if payload.Headers == nil {
+		payload.Headers = make(map[string]any)
+	}
+	payload.Headers["In-Reply-To"] = rfcMessageID
+	payload.Headers["References"] = rfcMessageID
+	return nil
+}
+
+func extractRFCMessageID(rawHeadersJSON string) string {
+	if strings.TrimSpace(rawHeadersJSON) == "" {
+		return ""
+	}
+	var headers map[string]any
+	if err := json.Unmarshal([]byte(rawHeadersJSON), &headers); err != nil {
+		return ""
+	}
+	for _, key := range []string{"message_id", "message-id", "Message-ID", "Message-Id"} {
+		if value, ok := headers[key]; ok {
+			if id := strings.TrimSpace(fmt.Sprint(value)); id != "" {
+				return id
+			}
+		}
+	}
+	for key, value := range headers {
+		if strings.EqualFold(key, "message-id") || strings.EqualFold(key, "message_id") {
+			if id := strings.TrimSpace(fmt.Sprint(value)); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
 }
 
 func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRequest, error) {

@@ -59,6 +59,106 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	}
 }
 
+func TestHandleSendAddsReplyHeadersForOwnedReplyTarget(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	alias, err := store.ResolveAlias(context.Background(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	inbound := resendReceivedEmail{
+		ID:        "email-inbound-1",
+		To:        []string{"000@choir.news"},
+		From:      "sender@example.com",
+		Subject:   "Project",
+		Text:      "Initial message.",
+		Headers:   map[string]string{"from": "Sender <sender@example.com>"},
+		MessageID: "<email-inbound-1@example.com>",
+	}
+	if err := store.StoreInboundMessage(context.Background(), "evt-inbound-1", inbound, alias, "000@choir.news"); err != nil {
+		t.Fatalf("StoreInboundMessage: %v", err)
+	}
+	replyTargetID := messageRowID("email-inbound-1")
+
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload resendSendRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		if got := payload.Headers["X-Choir-Maild"]; got != "v0-owner-send" {
+			t.Fatalf("X-Choir-Maild = %v", got)
+		}
+		if got := payload.Headers["In-Reply-To"]; got != "<email-inbound-1@example.com>" {
+			t.Fatalf("In-Reply-To = %v", got)
+		}
+		if got := payload.Headers["References"]; got != "<email-inbound-1@example.com>" {
+			t.Fatalf("References = %v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"sent-reply-1"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
+		"from_address":"000@choir.news",
+		"to_addresses":["sender@example.com"],
+		"subject":"Re: Project",
+		"text_body":"Received.",
+		"reply_to_message_id":"`+replyTargetID+`"
+	}`))
+	req.Header.Set("X-Authenticated-User", "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+}
+
+func TestHandleSendRejectsReplyTargetMissingMessageID(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	h := NewHandler(cfg, store)
+	seedMessage(t, store, "user-root", "msg-without-rfc-id", "untrusted")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
+		"from_address":"000@choir.news",
+		"to_addresses":["sender@example.com"],
+		"subject":"Re: Project",
+		"text_body":"Received.",
+		"reply_to_message_id":"msg-without-rfc-id"
+	}`))
+	req.Header.Set("X-Authenticated-User", "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestHandleSendRejectsUnownedReplyTarget(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	h := NewHandler(cfg, store)
+	seedMessage(t, store, "other-user", "other-msg", "untrusted")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
+		"from_address":"000@choir.news",
+		"to_addresses":["sender@example.com"],
+		"subject":"Re: Project",
+		"text_body":"Received.",
+		"reply_to_message_id":"other-msg"
+	}`))
+	req.Header.Set("X-Authenticated-User", "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
 func TestHandleSendRejectsUnownedFromAlias(t *testing.T) {
 	store, cfg := newTestStore(t)
 	h := NewHandler(cfg, store)
