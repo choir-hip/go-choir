@@ -1917,3 +1917,65 @@ Belief-state update:
 - This still is not real Resend proof. Final acceptance still needs the Resend
   webhook signing secret, exact provider records, DNS cutover, and live inbound
   messages.
+
+## Evidence Finding: Send to Choir hands MAS metadata, not the actual email source
+
+Recorded: 2026-05-26.
+
+Problem:
+
+The current proxy-owned Send to Choir path is traceable, but it does not yet
+hand the MAS a usable email source. `maild` stores an `email_source_packets`
+row for each inbound message, but the stored `text_ref` is `NULL`. The
+authenticated source-packet API returns only packet id, message id, trust
+label, sender, subject, and snippet. Proxy then builds the prompt-bar payload
+from that metadata. There is no runtime path that can dereference
+`source_packet_id` or `text_ref` into the normalized email body.
+
+That means the current handoff can tell Choir that an email exists and name its
+trust label, but it cannot reliably let Choir read the actual inbound source
+material beyond a short snippet. This falls short of "email is another ingress
+point into the MAS path" even though the ownership boundary and ingress-event
+receipt are correct.
+
+Evidence:
+
+```text
+source packet schema:
+  internal/maild/store.go: EmailSourcePacket has TextRef string
+ingest path:
+  internal/maild/ingest.go inserts email_source_packets with text_ref = NULL
+authenticated source-packet API:
+  internal/maild/api.go sourcePacketResponse exposes source_packet_id,
+  message_id, trust_label, from_address, subject, snippet only
+proxy handoff:
+  internal/proxy/email.go buildEmailSourcePrompt uses source packet id,
+  message id, trust label, from, subject, snippet
+runtime usage search:
+  no internal/runtime consumer dereferences source_packet_id or email source
+  text_ref
+tests:
+  internal/proxy/email_test.go asserts the prompt contains
+  UNTRUSTED_EXTERNAL_EMAIL, source packet id, message id, and subject, but not
+  the normalized email body
+reference contract:
+  docs/choir-email-reference-v0.md says proxy asks maild for an owner-visible
+  source packet, then sandbox/conductor receives owner instruction plus
+  untrusted source refs
+```
+
+Belief-state update:
+
+- The current Send to Choir path preserves the security boundary: maild still
+  cannot call agents or mutate canonical state, and the owner-triggered ingress
+  receipt is still correct.
+- But the MAS handoff is only partially real. It is an owner-triggered metadata
+  handoff, not yet a usable handoff of the normalized untrusted email source.
+
+Required next change:
+
+- Make the proxy-owned handoff carry bounded normalized email source content,
+  not just identifiers and a snippet. The source-packet surface should expose
+  the owner-visible source material needed for MAS review under explicit
+  `UNTRUSTED_EXTERNAL_EMAIL` framing, while preserving provenance and avoiding
+  raw provider secrets/temporary download URLs.
