@@ -1402,6 +1402,58 @@ next executable probe:
   strict long-section research-plus-super rubric only if the sports row shows
   stable v3+ cadence across Kimi low, V4 medium, and GPT-5.5 low.
 
+checkpoint update, 2026-05-26 06:34 UTC:
+
+- Focused deployed sports matrix command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_MODEL_VARIANTS=fireworks-kimi-k2p6-low,fireworks-deepseek-v4-flash-medium,chatgpt-gpt-5-5-low VTEXT_MODEL_PROMPTS=baseball VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-model-cadence-52e1997-sports-matrix-20260526T061805Z npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Runner result: all three Playwright rows passed mechanically in about 5.8m.
+  Evidence:
+  `test-results/vtext-model-cadence-52e1997-sports-matrix-20260526T061805Z/`.
+- `fireworks-deepseek-v4-flash-medium`: v1 at about 5.4s, first findings at
+  about 71.4s, v2 at about 87.4s, only 2 appagent revisions. Final observed
+  text remained partial: "scores still pending." Search had 2 queries, 6
+  attempts, 4 successes.
+- `fireworks-kimi-k2p6-low`: v1 at about 4.5s, first findings at about
+  30.5s, v2 at about 47.5s, 2 appagent revisions. Final observed text was best
+  of the three: it confirmed Reds 7, Mets 2 and correctly marked late West
+  Coast games as pending.
+- `chatgpt-gpt-5-5-low`: v1 at about 7.7s, first findings at about 31.7s,
+  v2/v3 by about 65.7s, 3 appagent revisions. Final observed text was partial
+  and explicitly said official/major scoreboard pages were partly blocked.
+- Provider/source substrate: all rows encountered degraded search/fetch
+  conditions. The GPT row had Brave/Exa/Serper/Tavily cooling down with only
+  Parallel succeeding; Kimi had Brave rate limit/cooldown plus Exa/Serper/Tavily
+  cooldown; V4 had Serper/Tavily cooldown. Scoreboard fetches in the prior V4
+  control hit ESPN/MLB.com 403 and CBS 404.
+
+belief-state changes:
+
+- The accepted models now generally open research and create later revisions,
+  but the simple sports row is not yet a reliable "answer the user with current
+  scores" path.
+- Kimi low currently appears strongest on this sports/source-quality row; V4
+  medium is slower and more likely to stop at a partial brief; GPT-5.5 low is
+  active but also source-limited.
+- The next frontier is source substrate and prompt/eval realism, not VText
+  mutation-state noise. Provider cooldowns, quota failures, and blocked
+  scoreboard fetches need first-class acceptance accounting.
+
+remaining error field:
+
+- Need an eval rubric that distinguishes cadence success from answer-quality
+  success: v1/v2/v3 timing, coagent update count, source/fetch blockers, and
+  whether the final text contains actual requested scores or an honest blocker.
+- Need a current-sports source strategy that can succeed when official
+  scoreboard fetches block direct extraction, without inventing scores from
+  stale snippets.
+
+next executable probe:
+
+- Tighten the sports/source-quality eval and rerun a narrower evidence probe
+  that records final-score presence, honest blocker presence, and provider
+  degradation separately from revision cadence. Do not return to the long
+  mixed rubric until this current-facts row has a clean quality signal.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
