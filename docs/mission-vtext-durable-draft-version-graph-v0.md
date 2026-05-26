@@ -933,6 +933,55 @@ next executable probe:
   bounded command work must report through `submit_coagent_update` whether the
   command succeeds or fails.
 
+checkpoint update, 2026-05-26 04:11 UTC:
+
+- Dynamic hard-requirement checklist fix
+  `679115abbbfdbc2027996bc593c147573b7bddee` landed and deployed. CI run
+  `26431436850` passed, FlakeHub run `26431436856` passed, and staging
+  `/health` reported proxy and sandbox on deployed commit
+  `679115abbbfdbc2027996bc593c147573b7bddee`, deployed at
+  `2026-05-26T04:00:32Z`.
+- Full long-section rubric command:
+  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com VTEXT_LONG_RUBRIC_EVIDENCE_DIR=../test-results/vtext-long-section-rubric-staging-679115a-full-20260526T040111Z pnpm exec playwright test tests/vtext-long-section-rubric.tmp.spec.js --project=chromium --workers=1 --reporter=line`.
+- Playwright reported `3 passed (8.1m)`. Evidence:
+  `test-results/vtext-long-section-rubric-staging-679115a-full-20260526T040111Z/`.
+- Important stricter audit: the rubric pass is not yet sufficient acceptance.
+  GPT-5.5 low included real super command evidence: `[CMD] Super command
+  evidence: ... exited 0 ... printed ...`.
+- Kimi low and v4 Flash medium passed the current rubric while still writing
+  `[CMD]` as pending/target state rather than actual command evidence:
+  Kimi wrote `[CMD] Pending super execution...`; v4 wrote
+  `[CMD] — pending (super execution requested)`.
+- Therefore the current eval rubric is too weak: it treats the presence of the
+  expected hash and `[CMD]` label as command evidence, even when the document
+  explicitly says the command is still pending.
+
+belief-state changes:
+
+- The dynamic hard-requirement checklist fixed the v4 exact-prefix loss:
+  v4 preserved all sections and the three `SECTION n UPDATE:` prefixes.
+- The super reporting contract fixed GPT's prior no-final-revision behavior in
+  this run: GPT received enough super evidence to write a real `[CMD]` row.
+- The remaining problem is evidence-label discipline. VText must not use the
+  `[CMD]` evidence label for pending command state, and the eval must reject
+  pending `[CMD]` rows.
+
+remaining error field:
+
+- Kimi low and v4 Flash medium can still produce a rubric-shaped document that
+  looks accepted while command evidence is pending.
+- The accepted matrix should not be considered complete until all three rows
+  satisfy a stricter command-evidence check: `[CMD]` must be backed by a super
+  delivery or explicitly successful command output, not pending text or a
+  user-supplied target hash.
+
+next executable probe:
+
+- Strengthen VText prompt language and hard-requirement hints so `[CMD]` is a
+  final evidence label only after super delivery. Pending command state should
+  be written without `[CMD]`. Tighten the long-section eval/audit to reject
+  `[CMD]` rows containing pending/requested/target-only wording.
+
 suggested resume goal string:
 
 - Use the `/goal` text above.
