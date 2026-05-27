@@ -2100,6 +2100,49 @@ Belief-state update:
   provider acceptance still waits on Resend authority, webhook signing secret,
   exact DNS records, and MX cutover.
 
+## Local Finding: outbound From is validated but not canonicalized
+
+Recorded: 2026-05-27 while provider readiness was still blocked on Resend
+authority.
+
+Problem:
+
+The Email app v0 intentionally presents a fixed numeric From address:
+`000@choir.news`. `maild` correctly validates that the requested from address
+resolves to an alias owned by the authenticated user, but after validation the
+outbound send payload and Sent row keep the caller-supplied `from_address`
+string. A caller could send a display-name variant such as
+`Founder <000@choir.news>` through the authenticated API. That still resolves to
+the owned numeric alias, but it weakens the product invariant that v0 sends from
+the canonical numeric endpoint rather than caller-shaped identity text.
+
+Evidence:
+
+```text
+docs/choir-email-reference-v0.md:
+  Compose/reply: From alias selector initially fixed to 000@choir.news.
+
+internal/maild/send.go:
+  resolveOwnedFromAlias validates the address by resolving the local/domain to
+  an owned alias.
+  buildResendSendRequest then uses strings.TrimSpace(in.FromAddress) as the
+  Resend From value.
+  StoreOutboundMessage stores strings.TrimSpace(in.FromAddress) in the Sent row.
+```
+
+Belief-state update:
+
+- This does not allow sending from an unowned local part, because alias
+  ownership validation still gates the send.
+- The v0 outbound identity should still be canonicalized after validation so
+  provider payloads and stored Sent evidence match the numeric alias exactly.
+
+Next executable probe:
+
+- Canonicalize outbound From from the resolved alias for the Resend payload and
+  Sent storage, and add a focused test proving display-name input still sends
+  and stores `000@choir.news`.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
