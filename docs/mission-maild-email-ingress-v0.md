@@ -652,6 +652,49 @@ Resolution checkpoint:
 - Later deployed evidence in this mission records `/var/lib/go-choir/mail` as
   `0700`, `mail.db` as `0600`, and `/var/lib/go-choir/maild.env` as `0600`.
 
+## Staging Security Finding: maild mailbox route identity boundary
+
+Recorded: 2026-05-27.
+
+Problem:
+
+`maild` mailbox and send routes trust the `X-Authenticated-User` header injected
+by the proxy, but the service does not require an internal-caller marker on
+those routes. Node B binds `maild` to `127.0.0.1:8087` and Caddy only routes the
+public Resend webhook directly to `maild`, so this is not browser-public.
+However, any host-local process that can reach `maild` can spoof mailbox owner
+identity by sending `X-Authenticated-User` directly. That weakens the mission
+invariant that authenticated mailbox access uses the existing proxy/session
+trust boundary.
+
+Evidence:
+
+```text
+code: internal/maild/api.go HandleMessages only checks X-Authenticated-User
+code: internal/maild/send.go HandleSend only checks X-Authenticated-User
+code: internal/proxy/email.go forwardMaildAuthenticated strips client identity
+      headers but does not mark the forwarded request as an internal caller
+staging: go-choir-maild listens on 127.0.0.1:8087; Caddy routes only
+      /api/email/resend/webhook directly to maild
+```
+
+Belief-state update:
+
+- The service boundary is still right: public traffic reaches mailbox APIs only
+  through proxy auth.
+- The host-local boundary should still be tightened so `maild` refuses mailbox
+  and send routes unless proxy has both validated the session and injected an
+  internal-caller marker.
+
+Required next change:
+
+- Require `X-Internal-Caller: true` on authenticated `maild` mailbox and send
+  routes.
+- Have proxy inject that marker after stripping any client-supplied identity
+  headers.
+- Keep the Resend webhook route independent of this marker, because Resend
+  cannot send proxy-authenticated internal headers.
+
 ## Staging Config Finding: default alias owner reconciliation
 
 Recorded: 2026-05-26.
