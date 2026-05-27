@@ -120,6 +120,14 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_explanation "$path -> proxy host service"
       ;;
+    cmd/maild/*|internal/maild/*)
+      add_host_service "maild"
+      add_explanation "$path -> maild host service"
+      ;;
+    cmd/maildctl/*)
+      mark_host_os_only
+      add_explanation "$path -> maildctl host package in Node B system environment"
+      ;;
     cmd/gateway/*)
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
@@ -175,10 +183,11 @@ for path in "${changed[@]}"; do
       ;;
     internal/buildinfo/*)
       add_host_service "gateway"
+      add_host_service "maild"
       add_host_service "platformd"
       add_host_service "proxy"
       add_host_service "sandbox"
-      add_explanation "$path -> build identity users: gateway/platformd/proxy/sandbox"
+      add_explanation "$path -> build identity users: gateway/maild/platformd/proxy/sandbox"
       ;;
     internal/events/*)
       add_host_service "gateway"
@@ -188,6 +197,7 @@ for path in "${changed[@]}"; do
     internal/server/*)
       add_host_service "auth"
       add_host_service "gateway"
+      add_host_service "maild"
       add_host_service "platformd"
       add_host_service "proxy"
       add_host_service "sandbox"
