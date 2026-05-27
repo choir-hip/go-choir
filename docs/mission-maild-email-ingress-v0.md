@@ -3305,10 +3305,77 @@ Belief-state update:
 
 Next executable probe:
 
-- Acquire or create a Resend API key/dashboard path with domain/webhook
-  management scope; rerun `scripts/mail-provider-readiness`; then deploy a real
-  `RESEND_WEBHOOK_SECRET` through the credential path and plan DNS/MX changes
+- Bound authenticated maild JSON API request bodies before decode, then acquire
+  or create a Resend API key/dashboard path with domain/webhook management
+  scope; rerun `scripts/mail-provider-readiness`; deploy a real
+  `RESEND_WEBHOOK_SECRET` through the credential path; and plan DNS/MX changes
   from exact Resend records before mutating Gandi.
+
+## Security Finding: authenticated maild API request bodies are not size-bounded
+
+Recorded: 2026-05-27 during pre-MX maild hardening.
+
+Problem:
+
+`maild` bounds public Resend webhook bodies with `MAILD_WEBHOOK_MAX_BYTES` and
+bounds Resend provider response bodies with `MAILD_PROVIDER_MAX_BYTES`. The
+authenticated internal JSON API path still decodes request bodies directly from
+`r.Body`:
+
+- `POST /api/email/send`, used by the proxy-authenticated owner compose/reply
+  path.
+- `POST /api/email/messages/:id/ingress-events`, used by the proxy to record
+  Send to Choir receipts after prompt-bar submission.
+
+These routes require `X-Authenticated-User` and `X-Internal-Caller:true` and
+are not public webhook routes, so this is not an external unauthenticated bypass.
+It is still a resource-boundary gap in a service that is about to receive real
+provider and owner traffic: a malformed or oversized authenticated/proxy-forwarded
+body can be decoded without a configured API request ceiling.
+
+Evidence:
+
+```text
+code:
+  internal/maild/api.go -> decodeJSON
+    - uses json.NewDecoder(r.Body) with DisallowUnknownFields.
+    - no LimitReader or MaxBytesReader.
+
+  internal/maild/send.go -> HandleSend
+    - calls decodeJSON for owner-authored outbound mail.
+
+  internal/maild/api.go -> handleRecordMessageIngressEvent
+    - calls decodeJSON for Send to Choir receipt recording.
+
+existing bounded paths:
+  internal/maild/webhook.go -> HandleResendWebhook
+    - reads through io.LimitReader(cfg.WebhookMaxBytes+1).
+
+  internal/maild/resend.go -> retrieveReceivedEmail/sendEmail
+    - reads successful provider responses through readProviderResponseBody.
+```
+
+Impact:
+
+- This does not let inbound email trigger agent work, outbound send, or
+  canonical state mutation by itself.
+- It does weaken the service-level resource invariant before real mail routing:
+  every maild ingress body that is decoded or stored should have a clear size
+  boundary.
+
+Belief-state update:
+
+- Add a distinct `MAILD_API_MAX_BYTES` ceiling for authenticated internal JSON
+  API requests rather than reusing the webhook/provider caps. The default should
+  be large enough for v0 plain-text compose/reply payloads but explicit enough
+  for tests and operators.
+
+Next executable probe:
+
+- Add `Config.APIMaxBytes`, load it from `MAILD_API_MAX_BYTES`, enforce it in
+  `decodeJSON` before JSON decode, return HTTP 413 for oversized API bodies,
+  and add focused tests for oversized owner-send and ingress-receipt requests
+  proving no outbound message or ingress event is recorded.
 
 ## Staging/Design Finding: owner-send lacks provider idempotency key
 
