@@ -1926,6 +1926,51 @@ Belief-state update:
   still externally blocked on Resend authority, webhook signing secret, exact
   DNS records, and MX cutover.
 
+## Local Finding: proxy should enforce email source-packet trust label
+
+Recorded: 2026-05-27 during the next receding-horizon audit while provider
+readiness remained blocked on Resend authority.
+
+Problem:
+
+The proxy-owned Send to Choir handoff gets a source packet from `maild`, builds
+the prompt-bar payload, and submits it to the user's sandbox under owner
+authority. `maild` currently emits `UNTRUSTED_EXTERNAL_EMAIL`, and the prompt
+body explicitly repeats that external email is source material rather than
+instruction. But the proxy accepts any non-empty trust label returned by
+`maild`; it only defaults a blank label to `UNTRUSTED_EXTERNAL_EMAIL`.
+
+This is not a current exploit with the existing `maild` source-packet writer,
+but it weakens the boundary that matters most for the mission. The component
+that turns email into MAS input should enforce the email ingress trust label,
+not merely describe it in prose.
+
+Evidence:
+
+```text
+internal/proxy/email.go:
+  fetchMailSourcePacket defaults an empty TrustLabel to
+  UNTRUSTED_EXTERNAL_EMAIL, but does not reject unexpected non-empty labels.
+
+internal/proxy/email_test.go:
+  TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar proves normal
+  source-packet handoff, but no test proves the proxy rejects a source packet
+  with a different trust label before prompt-bar submission.
+```
+
+Belief-state update:
+
+- `maild` still cannot directly call agents or mutate canonical state.
+- The prompt text still contains the correct untrusted-email warning.
+- The proxy should add a hard gate so future maild changes or corrupt source
+  packets cannot silently alter the trust frame used for MAS handoff.
+
+Next executable probe:
+
+- Make `fetchMailSourcePacket` reject any source packet whose trust label is not
+  exactly `UNTRUSTED_EXTERNAL_EMAIL`, and add a focused proxy test that verifies
+  no prompt-bar submission happens for an unexpected label.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
