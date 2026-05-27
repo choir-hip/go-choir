@@ -3318,3 +3318,53 @@ Belief-state update:
   Gandi DNS/MX mutation with rollback, real inbound mail, real quarantine, real
   Send to Choir Trace evidence, and real outbound/reply acceptance remain
   unproven.
+
+## Security Finding: malformed webhook secret can be treated as configured
+
+Recorded: 2026-05-27 during webhook-verifier hardening.
+
+Problem:
+
+`HandleResendWebhook` only checks whether `RESEND_WEBHOOK_SECRET` is a non-empty
+string before attempting Svix verification. `verifyWebhook` decodes the secret
+after trimming the `whsec_` prefix, but an accidental value of `whsec_` decodes
+to an empty HMAC key. That means a syntactically malformed deployed webhook
+secret would move `maild` out of the safe `webhook_secret_not_configured` state
+and into a verifier state whose effective signing key is empty.
+
+Evidence:
+
+```text
+code path:
+  internal/maild/webhook.go -> HandleResendWebhook
+  internal/maild/webhook.go -> verifyWebhook
+
+current behavior:
+  RESEND_WEBHOOK_SECRET=""      -> 503 webhook_secret_not_configured
+  RESEND_WEBHOOK_SECRET="whsec_" -> base64 decode succeeds as []byte{}
+
+provider docs:
+  Resend requires raw-body Svix signature verification:
+    https://resend.com/docs/webhooks/verify-webhooks-requests
+  Svix documents using the base64 portion after whsec_ as the HMAC-SHA256 key,
+  timestamp replay tolerance, and space-delimited signatures:
+    https://www.svix.com/guides/receiving/receive-webhooks-with-python/
+```
+
+Impact:
+
+- This does not affect the current Node B state because
+  `webhook_secret_configured=false` and the public webhook route fails closed.
+- It is a deploy-time footgun before real Resend setup: a malformed non-empty
+  secret should not be accepted as a configured webhook verifier.
+
+Belief-state update:
+
+- Before deploying a real `RESEND_WEBHOOK_SECRET`, `maild` should reject
+  malformed or empty decoded Svix secrets and keep the route fail-closed.
+
+Next executable probe:
+
+- Add verifier tests for malformed empty `whsec_`, stale timestamps, and
+  multiple space-delimited Svix signatures; then reject decoded empty signing
+  keys in `verifyWebhook`.
