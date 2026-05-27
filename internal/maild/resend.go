@@ -174,8 +174,12 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return resendSendResponse{}, readProviderHTTPError("send email", resp)
 	}
+	responseBody, err := readProviderResponseBody(resp.Body, c.maxResponseBytes)
+	if err != nil {
+		return resendSendResponse{}, fmt.Errorf("send email: %w", err)
+	}
 	var out resendSendResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal(responseBody, &out); err != nil {
 		return resendSendResponse{}, fmt.Errorf("decode send email: %w", err)
 	}
 	if strings.TrimSpace(out.ID) == "" {

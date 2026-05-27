@@ -277,3 +277,37 @@ func TestResendSendEmailReturnsBoundedProviderError(t *testing.T) {
 		t.Fatalf("Detail length = %d, want <= %d", len(providerErr.Detail), maxProviderErrorDetail+3)
 	}
 }
+
+func TestHandleSendRejectsOversizedProviderSuccessResponse(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	cfg.ProviderMaxBytes = 8
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"sent-oversized"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
+		"from_address":"000@choir.news",
+		"to_addresses":["friend@example.com"],
+		"subject":"oversized provider response",
+		"text_body":"This should not be stored."
+	}`))
+	setInternalOwner(req, "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadGateway, w.Body.String())
+	}
+	messages, err := store.ListMessages(req.Context(), "user-root", "sent", 10)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("sent messages = %+v, want none after oversized provider response", messages)
+	}
+}
