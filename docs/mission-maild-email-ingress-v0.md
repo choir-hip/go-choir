@@ -1729,6 +1729,106 @@ Next executable probe:
   rerun `scripts/mail-provider-readiness`, then configure webhook secret and
   DNS only from verified provider records.
 
+## Provider Readiness Recheck: clean deploy still blocked on Resend authority
+
+Recorded: 2026-05-27 after deploy cleanup commit `38ff631`.
+
+Status:
+
+The GitHub Actions deploy-cleanup recovery proved Node B is no longer running a
+dirty `/opt/go-choir` checkout, and the deployed `maild` service is healthy.
+The remaining provider/DNS blocker is unchanged: the available Resend key is
+restricted to send-only scope and cannot read domains or webhooks, so the
+mission still lacks exact Resend DNS records and a webhook signing secret.
+
+Official docs rechecked before any provider mutation:
+
+```text
+Resend create/retrieve/update domain docs:
+  - create/retrieve domain responses include capabilities and DNS records
+  - create/update domain accepts capabilities.sending and capabilities.receiving
+Resend webhook docs:
+  - create/retrieve/list webhook responses expose signing_secret
+  - webhook verification requires the raw request body and Svix headers
+Resend email.received docs:
+  - webhook contains metadata only; full message/attachments require Receiving
+    and Attachments APIs
+Resend receiving docs:
+  - root-domain MX is acceptable only if replacing existing mailbox routing is
+    intended; otherwise use a subdomain
+Gandi LiveDNS docs:
+  - v5 LiveDNS record APIs use Authorization: Bearer personal access token
+```
+
+Evidence:
+
+```text
+deployment identity:
+  public https://choir.news/health:
+    proxy/sandbox deployed_commit: 38ff631142bd13b02c59482007f9b68381eed811
+    deployed_at: 2026-05-27T18:12:16Z
+  node-b /var/lib/go-choir/deploy.env:
+    CHOIR_DEPLOYED_COMMIT=38ff631142bd13b02c59482007f9b68381eed811
+  node-b /opt/go-choir:
+    git HEAD: 38ff631142bd13b02c59482007f9b68381eed811
+    git status: ## main...origin/main
+
+command: scripts/mail-provider-readiness
+result:
+  local credentials:
+    RESEND_API_KEY configured
+    RESEND_WEBHOOK_SECRET missing
+    GANDI_PAT configured
+  Resend Domains:
+    http_status: 401
+    provider_error.name: restricted_api_key
+    provider_error.message: This API key is restricted to only send emails
+  Resend Webhooks:
+    http_status: 401
+    provider_error.name: restricted_api_key
+    provider_error.message: This API key is restricted to only send emails
+  Gandi LiveDNS:
+    @ MX: 10 spool.mail.gandi.net.; 50 fb.mail.gandi.net.
+    @ TXT: "v=spf1 include:_mailcust.gandi.net ?all"
+    gm1/gm2/gm3._domainkey CNAMEs still point at Gandi mail
+    _dmarc TXT absent
+  public DNS:
+    MX remains Gandi mail defaults
+    root TXT remains Gandi SPF
+    _dmarc TXT absent
+  node-b maild health:
+    status ok
+    resend_api_key_configured true
+    webhook_secret_configured false
+    root_owner_id_configured true
+    stats aliases=1 messages=0 quarantined_attachments=0 webhook_events=0 ingress_events=0
+
+command:
+  scripts/mail-resend-setup --write-domain-json /tmp/choir-resend-domain-20260527.json --write-webhook-secret-file /tmp/choir-resend-webhook-secret-20260527.env
+result:
+  GET /domains -> 401 restricted_api_key
+  no domain JSON file created
+  no webhook secret file created
+  mutation: none
+```
+
+Belief-state update:
+
+- The deployed service boundary is ready for real provider setup, but the
+  provider authority boundary is still closed.
+- The Gandi side remains safely unchanged, and DNS/MX mutation is still
+  forbidden until a scoped Resend key or dashboard session supplies exact domain
+  records plus `RESEND_WEBHOOK_SECRET`.
+- The root-domain MX cutover remains an intended late step because the owner
+  explicitly accepted replacing Gandi mail routing.
+
+Next executable probe:
+
+- Use a Resend dashboard session or broader temporary API key to create/retrieve
+  `choir.news`, enable receiving, create/retrieve the `email.received` webhook,
+  save the webhook signing secret, and save the exact domain JSON for dry-run
+  Gandi planning.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
