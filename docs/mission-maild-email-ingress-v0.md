@@ -2823,3 +2823,52 @@ Belief-state update:
 - The mission remains `checkpoint_incomplete`; real inbound mail, real
   source-packet MAS handoff, and owner reply still require provider/domain
   setup.
+
+## Local Finding: Send to Choir receipt failures are hidden from the owner
+
+Recorded: 2026-05-27 while continuing the owner-triggered source-packet MAS
+handoff audit after provider readiness still showed a restricted Resend key and
+missing webhook secret.
+
+Problem:
+
+`internal/proxy.HandleEmailSendToChoir` submits the email source packet to the
+prompt-bar path, then calls back into `maild` to record the
+`email_ingress_events` receipt. If receipt recording fails, the proxy only logs
+the error and still returns a normal `202 Accepted` response with the conductor
+submission id. That creates a partial-success state where the owner and UI see
+"Sent to Choir", but the final acceptance ledger cannot prove that the source
+packet handoff was durably correlated to the message.
+
+Evidence:
+
+```text
+internal/proxy/email.go:
+  HandleEmailSendToChoir logs recordMailIngressEvent errors and continues.
+
+frontend/src/lib/EmailApp.svelte:
+  sendToChoir reports success from data.submission_id only.
+
+scripts/mail-acceptance-check:
+  final source-packet proof depends on maild ingress_events count for the
+  selected message.
+```
+
+Belief-state update:
+
+- Prompt submission and ingress receipt recording are two different effects.
+  Once prompt submission succeeds, a retry by the owner can create duplicate MAS
+  work, so failing the whole request after the prompt-bar call is not obviously
+  safe.
+- The safer v0 repair is to make receipt recording retryable and visible:
+  bounded retry after prompt submission, plus an explicit response field that
+  tells the UI whether the durable receipt was recorded.
+- The invariant remains unchanged: `maild` does not call MAS and inbound email
+  cannot trigger agent/tool/outbound action by itself.
+
+Next executable probe:
+
+- Add bounded proxy retries for `recordMailIngressEvent`, expose
+  `ingress_event_recorded` in the Send to Choir response, surface partial
+  receipt failure in the Email app status, and add focused proxy tests before
+  deploy.
