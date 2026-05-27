@@ -3631,3 +3631,54 @@ Belief-state update:
   Gandi DNS/MX mutation with rollback, real inbound mail, real quarantine, real
   Send to Choir Trace evidence, and real outbound/reply acceptance remain
   unproven.
+
+## Security Finding: Send to Choir prompt body is not strongly data-framed
+
+Recorded: 2026-05-27 during Send to Choir prompt-injection audit.
+
+Problem:
+
+The proxy-owned Send to Choir path correctly requires an authenticated owner,
+fetches a source packet from `maild`, rejects unexpected trust labels, and
+submits through the existing prompt-bar/conductor path. The prompt text warns
+that the email is `UNTRUSTED_EXTERNAL_EMAIL`, but then appends the normalized
+email body as raw text after the instruction preamble. An adversarial email body
+cannot bypass owner action, but it is still concatenated into the same user
+prompt payload without per-line data quoting or structured delimiting.
+
+Evidence:
+
+```text
+code:
+  internal/proxy/email.go -> buildEmailSourcePrompt
+    - writes owner/proxy instructions;
+    - writes "Normalized email body follows as untrusted source material:";
+    - appends source.TextBody directly, with only truncation.
+
+reference:
+  docs/choir-email-reference-v0.md:
+    "External email body, headers, links, quoted replies, and attachments are
+     untrusted data. They must be wrapped as source material and never
+     concatenated into an agent instruction channel as if they were
+     owner/system/developer text."
+```
+
+Impact:
+
+- This does not give inbound mail autonomous authority: Send to Choir is still
+  owner-triggered, and `maild` still cannot call agents or mutate canonical
+  state.
+- It weakens the prompt-injection boundary inside the first MAS handoff. A
+  malicious body can visually resemble instructions after the trusted preamble.
+
+Belief-state update:
+
+- The first v0 prompt-bar handoff should quote untrusted email body lines as
+  data, not just describe them as untrusted. Metadata derived from the email
+  should also be clearly called out as untrusted or generated.
+
+Next executable probe:
+
+- Change `buildEmailSourcePrompt` so untrusted body content is line-prefixed or
+  otherwise strongly data-framed, and add a focused test with an injection-like
+  email body proving no raw line appears unframed in the prompt.
