@@ -155,10 +155,6 @@ func extractRFCMessageID(rawHeadersJSON string) string {
 }
 
 func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRequest, error) {
-	from := strings.TrimSpace(in.FromAddress)
-	if from == "" {
-		from = alias.LocalPart + "@" + alias.Domain
-	}
 	to := cleanAddresses(in.ToAddresses)
 	if len(to) == 0 {
 		return resendSendRequest{}, fmt.Errorf("at least one recipient is required")
@@ -173,7 +169,7 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 		return resendSendRequest{}, fmt.Errorf("message body is required")
 	}
 	return resendSendRequest{
-		From:    from,
+		From:    canonicalAliasAddress(alias),
 		To:      to,
 		Cc:      cleanAddresses(in.CcAddresses),
 		Bcc:     cleanAddresses(in.BccAddresses),
@@ -184,6 +180,10 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 			"X-Choir-Maild": "v0-owner-send",
 		},
 	}, nil
+}
+
+func canonicalAliasAddress(alias EmailAlias) string {
+	return strings.ToLower(strings.TrimSpace(alias.LocalPart)) + "@" + strings.ToLower(strings.TrimSpace(alias.Domain))
 }
 
 func cleanAddresses(values []string) []string {
@@ -219,7 +219,7 @@ func (s *Store) StoreOutboundMessage(ctx context.Context, ownerID string, alias 
 		providerMessageID,
 		ownerID,
 		alias.ID,
-		strings.TrimSpace(in.FromAddress),
+		canonicalAliasAddress(alias),
 		strings.TrimSpace(in.Subject),
 		nullString(in.TextBody),
 		nullString(in.HTMLBody),

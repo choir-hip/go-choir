@@ -2143,6 +2143,20 @@ Next executable probe:
   Sent storage, and add a focused test proving display-name input still sends
   and stores `000@choir.news`.
 
+Resolution checkpoint, 2026-05-27:
+
+- `internal/maild/send.go` now derives the outbound Resend `From` value from
+  the resolved alias after ownership validation instead of preserving the
+  caller-supplied address string.
+- Sent rows now store the same canonical alias address.
+- `internal/maild/send_test.go` proves that `Founder <000@choir.news>` input is
+  accepted only as the owned alias and is sent/stored as `000@choir.news`.
+- Focused verification passed:
+
+```text
+nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.

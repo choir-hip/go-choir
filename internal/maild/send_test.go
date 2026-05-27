@@ -36,7 +36,7 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	h.resend = newResendClient(cfg, resend.Client())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
-		"from_address":"000@choir.news",
+		"from_address":"Founder <000@choir.news>",
 		"to_addresses":["friend@example.com"],
 		"subject":"Re: project",
 		"text_body":"Received."
@@ -56,6 +56,9 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	}
 	if messages[0].Direction != "outbound" || messages[0].Subject != "Re: project" || messages[0].TrustStatus != "trusted" {
 		t.Fatalf("sent message = %+v", messages[0])
+	}
+	if messages[0].FromAddress != "000@choir.news" {
+		t.Fatalf("sent from = %q, want canonical numeric alias", messages[0].FromAddress)
 	}
 }
 
