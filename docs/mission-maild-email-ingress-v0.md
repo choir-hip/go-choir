@@ -2727,3 +2727,54 @@ Belief-state update:
 - The next mission uncertainty returns to provider truth: Resend domain/webhook
   visibility, webhook signing secret deployment, Gandi DNS/MX planning, and
   real inbound acceptance.
+
+## Local Finding: Send to Choir ingress receipts are not idempotent
+
+Recorded: 2026-05-27 while auditing the owner-triggered source-packet MAS
+handoff before provider setup.
+
+Problem:
+
+The proxy-owned Send to Choir path submits a prompt-bar request and then asks
+`maild` to record an `email_ingress_events` receipt that links the email source
+packet to the conductor submission id. The receipt id is deterministic from
+`message_id + conductor_submission_id`, but `Store.RecordIngressEvent` uses a
+plain `INSERT`. If the same receipt is posted twice after a response loss,
+proxy retry, or repeated internal callback, `maild` returns a primary-key error
+instead of treating the already-recorded same receipt as success. That weakens
+the final acceptance proof because the source-packet handoff ledger is less
+retryable than the provider webhook ledger.
+
+Evidence:
+
+```text
+internal/maild/ingest.go:
+  ingressEventRowID(messageID, submissionID) derives a stable row id.
+
+internal/maild/store.go:
+  RecordIngressEvent executes INSERT INTO email_ingress_events without
+  conflict handling.
+
+internal/maild/api.go:
+  handleRecordMessageIngressEvent returns HTTP 500 when RecordIngressEvent
+  reports the duplicate primary-key error.
+
+internal/maild/api_test.go:
+  TestHandleMessageIngressEventsRequiresInternalCaller proves the happy path
+  and internal-caller guard, but does not prove duplicate receipt idempotency.
+```
+
+Belief-state update:
+
+- Ingress receipt recording should be idempotent for the same
+  message/source/owner/submission tuple.
+- A conflicting row with the same deterministic id but different owner,
+  message, source packet, or submission should still fail closed.
+- This is a local ledger reliability repair; it does not authorize inbound
+  email to call agents, mutate canonical state, or send outbound mail.
+
+Next executable probe:
+
+- Make `RecordIngressEvent` tolerate exact duplicate receipts while rejecting
+  conflicting duplicates, add a focused API/store test, then run the maild and
+  proxy test slice before deploy.
