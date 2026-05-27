@@ -242,6 +242,7 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 			"text":"Please review the attached files.",
 			"html":"<p>Please review the attached files.</p>",
 			"headers":{"from":"Sender Name <sender@example.com>","authentication-results":"mx.example; dkim=pass"},
+			"raw":{"download_url":"https://resend.example/raw/email-1?token=secret"},
 			"bcc":[],
 			"cc":[],
 			"reply_to":[],
@@ -275,6 +276,13 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	}
 	if msg.Provider != providerResend || msg.ProviderMessageID != "email-1" || msg.ProviderEventID != "evt-1" {
 		t.Fatalf("provider ids = provider=%q message=%q event=%q", msg.Provider, msg.ProviderMessageID, msg.ProviderEventID)
+	}
+	var rawMessageRef string
+	if err := store.db.QueryRowContext(req.Context(), `SELECT coalesce(raw_message_ref, '') FROM email_messages WHERE id = ?`, msg.ID).Scan(&rawMessageRef); err != nil {
+		t.Fatalf("query raw_message_ref: %v", err)
+	}
+	if rawMessageRef != "" {
+		t.Fatalf("raw_message_ref = %q, want no persisted provider download URL", rawMessageRef)
 	}
 	var headers map[string]string
 	if err := json.Unmarshal([]byte(msg.RawHeadersJSON), &headers); err != nil {

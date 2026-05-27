@@ -156,10 +156,6 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 	if len(email.Attachments) > 0 {
 		trustStatus = "quarantined"
 	}
-	rawRef := ""
-	if email.Raw != nil {
-		rawRef = email.Raw.DownloadURL
-	}
 	provenance, err := json.Marshal(map[string]any{
 		"provider":             providerResend,
 		"provider_event_id":    providerEventID,
@@ -190,7 +186,6 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 		TextBody:               email.Text,
 		HTMLBody:               email.HTML,
 		RawHeadersJSON:         string(headersJSON),
-		RawMessageRef:          rawRef,
 		AuthenticationResults:  authenticationResults,
 		TrustStatus:            trustStatus,
 		ReceivedAt:             receivedAt,
