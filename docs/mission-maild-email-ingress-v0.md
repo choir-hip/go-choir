@@ -2269,6 +2269,55 @@ Belief-state update:
   provider acceptance still waits on Resend authority, webhook signing secret,
   exact DNS records, and MX cutover.
 
+## Local Finding: webhook ingest failures currently acknowledge too early
+
+Recorded: 2026-05-27 while auditing the webhook path before real Resend
+receiving.
+
+Problem:
+
+`HandleResendWebhook` durably records the verified Resend webhook event, then
+tries to fetch and store the received email in the same request. If that fetch
+or store path fails, the handler currently returns HTTP 202 with
+`accepted_ingest_failed`. A 2xx response tells Resend the webhook delivery
+succeeded, so the provider may not retry. That weakens the whole duplicate
+retry repair path: it can repair a duplicate delivery if one arrives, but the
+first transient failure no longer asks the provider for a duplicate delivery.
+
+Evidence:
+
+```text
+internal/maild/webhook.go:
+  RecordWebhookEvent succeeds first.
+  ingestReceivedEmail errors are logged.
+  status becomes accepted_ingest_failed.
+  response remains http.StatusAccepted.
+
+internal/maild/webhook_test.go:
+  TestHandleResendWebhookDuplicateRetriesMissingInboundMessage currently expects
+  the first transient provider failure to return 202 accepted_ingest_failed.
+
+docs/choir-email-reference-v0.md:
+  STRIDE denial-of-service note calls for fast webhook ack after durable enqueue
+  and bounded workers; the current v0 does not have a durable background queue.
+```
+
+Belief-state update:
+
+- Until a durable background ingest worker exists, a transient fetch/store
+  failure after webhook event storage should return a retryable non-2xx status.
+- Policy rejects, unknown aliases, or other permanent classification failures
+  should still avoid retry loops, but provider HTTP/server failures and local
+  store failures need Resend retry pressure.
+
+Next executable probe:
+
+- Change `HandleResendWebhook` so retryable ingest failures return a non-2xx
+  status after recording the webhook event, while duplicate deliveries can still
+  retry missing message storage idempotently.
+- Keep response bodies and logs free of email body, webhook secret, API key, and
+  attachment URL data.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
