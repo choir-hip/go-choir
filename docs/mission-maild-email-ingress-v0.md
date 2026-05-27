@@ -2012,6 +2012,50 @@ Belief-state update:
   provider acceptance still waits on Resend authority, webhook signing secret,
   exact DNS records, and MX cutover.
 
+## Local Finding: acceptance checker does not correlate message to webhook receipt
+
+Recorded: 2026-05-27 while provider readiness was still blocked on Resend
+authority.
+
+Problem:
+
+The real inbound acceptance test must prove both that the Resend webhook fired
+and that the selected mailbox message came from that provider event. The current
+`scripts/mail-acceptance-check` prints recent webhook receipts, but it does not
+prove that the matching message is linked to one of them. `maild` stores
+`provider_message_id` and `provider_event_id` on `email_messages`, but
+operator-visible message reads do not expose those ids, so the checker cannot
+assert correlation.
+
+Evidence:
+
+```text
+internal/maild/store.go:
+  EmailMessage does not carry provider, provider_message_id, or
+  provider_event_id despite email_messages storing those columns.
+
+cmd/maildctl/main.go:
+  maildctl message returns EmailMessage, so the provider ids are unavailable to
+  real acceptance runs.
+
+scripts/mail-acceptance-check:
+  fetches maildctl webhooks --limit 5 and includes them in output, but does not
+  require a webhook row that matches the selected message.
+```
+
+Belief-state update:
+
+- The service stores the needed linkage, but the proof tool is too weak.
+- Strengthening this does not require provider mutation or DNS changes.
+- The acceptance checker should fail closed if a selected inbound message lacks
+  provider ids or matching webhook evidence.
+
+Next executable probe:
+
+- Carry provider ids through `EmailMessage`, make `mail-acceptance-check` query
+  enough webhook receipts and require a match for the selected message, and add
+  focused tests for the operator-visible fields.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
