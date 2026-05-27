@@ -1971,6 +1971,20 @@ Next executable probe:
   exactly `UNTRUSTED_EXTERNAL_EMAIL`, and add a focused proxy test that verifies
   no prompt-bar submission happens for an unexpected label.
 
+Resolution checkpoint, 2026-05-27:
+
+- `internal/proxy/email.go` now treats `UNTRUSTED_EXTERNAL_EMAIL` as a hard
+  source-packet contract for Send to Choir. A source packet with a blank or
+  unexpected trust label fails before any prompt-bar submission.
+- `internal/proxy/email_test.go` now proves that an unexpected source-packet
+  trust label returns a gateway error and does not call the sandbox prompt-bar
+  endpoint.
+- Focused verification passed:
+
+```text
+nix develop -c go test ./internal/proxy ./internal/maild ./cmd/maild ./cmd/maildctl
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.

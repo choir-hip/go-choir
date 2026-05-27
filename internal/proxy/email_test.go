@@ -173,12 +173,46 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	}
 }
 
+func TestEmailSendToChoirRejectsUnexpectedSourcePacketTrustLabel(t *testing.T) {
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/email/messages/msg-1/source-packet" {
+			t.Fatalf("maild path = %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"source_packet_id": "src-email-1",
+			"message_id":       "msg-1",
+			"trust_label":      "TRUSTED_INTERNAL",
+		})
+	}))
+	defer maild.Close()
+
+	sandboxCalled := false
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sandboxCalled = true
+		t.Fatalf("unexpected sandbox prompt-bar call")
+	}))
+	defer sandbox.Close()
+
+	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/send-to-choir", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
+	w := httptest.NewRecorder()
+
+	h.HandleAPI(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502; body=%s", w.Code, w.Body.String())
+	}
+	if sandboxCalled {
+		t.Fatalf("sandbox was called for unexpected trust label")
+	}
+}
+
 func TestBuildEmailSourcePromptTruncatesBody(t *testing.T) {
 	body := strings.Repeat("A", 8100)
 	prompt := buildEmailSourcePrompt(emailSourcePacketResponse{
 		SourcePacketID: "src-email-1",
 		MessageID:      "msg-1",
-		TrustLabel:     "UNTRUSTED_EXTERNAL_EMAIL",
+		TrustLabel:     emailSourceTrustLabel,
 		TextBody:       body,
 	})
 	if !strings.Contains(prompt, "[truncated for bounded prompt delivery]") {
