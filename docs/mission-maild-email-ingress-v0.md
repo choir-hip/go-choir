@@ -3528,3 +3528,59 @@ Belief-state update:
   Gandi DNS/MX mutation with rollback, real inbound mail, real quarantine, real
   Send to Choir Trace evidence, and real outbound/reply acceptance remain
   unproven.
+
+## Security Finding: received-email provider fetch is not size-bounded
+
+Recorded: 2026-05-27 during pre-MX maild readiness audit.
+
+Problem:
+
+`HandleResendWebhook` caps the raw webhook body with `MAILD_WEBHOOK_MAX_BYTES`,
+but the follow-up Resend Receiving API fetch decodes `resp.Body` directly in
+`resendClient.retrieveReceivedEmail`. Real inbound mail goes through this path
+before alias policy storage, attachment quarantine metadata, and source-packet
+creation. A large provider response could force maild to allocate and decode an
+unbounded JSON body and then store very large text/html fields in SQLite.
+
+Evidence:
+
+```text
+code:
+  internal/maild/webhook.go
+    - HandleResendWebhook reads the webhook through io.LimitReader.
+    - ingestReceivedEmail then calls h.resend.retrieveReceivedEmail.
+
+  internal/maild/resend.go
+    - retrieveReceivedEmail calls json.NewDecoder(resp.Body).Decode(&email)
+      without an io.LimitReader or configured provider-response cap.
+
+reference:
+  Resend Receiving webhooks intentionally omit body, headers, and attachment
+  content; the application must call the Receiving API to retrieve the full
+  email body and headers.
+
+  Resend raw email and attachment APIs return signed temporary download URLs.
+  Attachment/raw content remains intentionally deferred, but the received-email
+  JSON fetch is already on the live ingest path.
+```
+
+Impact:
+
+- This is a denial-of-service and storage-bloat risk before root MX mutation.
+- It does not break the authority invariant: oversized provider responses still
+  would not gain agent/tool/canonical-state authority.
+- It weakens the dense-feedback invariant that inbound processing has body caps
+  before durable storage.
+
+Belief-state update:
+
+- The existing webhook cap is necessary but insufficient. `maild` also needs a
+  configurable cap for provider API response bodies used during inbound ingest.
+- The cap should fail closed and request webhook retry rather than storing a
+  partial message.
+
+Next executable probe:
+
+- Add a `MAILD_PROVIDER_MAX_BYTES` config value and apply it to Resend
+  received-email response decoding with a focused oversized-provider-response
+  test.
