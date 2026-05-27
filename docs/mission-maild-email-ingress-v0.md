@@ -2056,6 +2056,23 @@ Next executable probe:
   enough webhook receipts and require a match for the selected message, and add
   focused tests for the operator-visible fields.
 
+Resolution checkpoint, 2026-05-27:
+
+- `internal/maild/store.go` now carries `provider`, `provider_message_id`, and
+  `provider_event_id` through owner/operator-visible message reads.
+- `cmd/maildctl message` now prints those provider ids through its existing
+  JSON detail output, so real acceptance can correlate a selected message to
+  the provider event that delivered it.
+- `scripts/mail-acceptance-check` now reads up to 100 recent webhook receipts
+  and fails unless the selected inbox/quarantine message has provider ids and a
+  matching webhook receipt.
+- Focused verification passed:
+
+```text
+bash -n scripts/mail-acceptance-check
+nix develop -c go test ./internal/maild ./cmd/maildctl ./cmd/maild ./internal/proxy
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.

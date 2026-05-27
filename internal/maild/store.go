@@ -60,6 +60,9 @@ type WebhookEvent struct {
 // EmailMessage is a normalized mailbox row.
 type EmailMessage struct {
 	ID                        string
+	Provider                  string
+	ProviderMessageID         string
+	ProviderEventID           string
 	Direction                 string
 	MailboxOwnerID            string
 	AliasID                   string
@@ -538,7 +541,8 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	}
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, `SELECT
-		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
+		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
+		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
 		coalesce(html_body, ''), coalesce(raw_headers_json, ''),
 		coalesce(authentication_results_json, ''), trust_status, coalesce(read_at, ''),
@@ -569,7 +573,8 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 // GetMessage returns an owner-visible message by id.
 func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (EmailMessage, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT
-		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
+		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
+		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
 		coalesce(html_body, ''), coalesce(raw_headers_json, ''),
 		coalesce(authentication_results_json, ''), trust_status, coalesce(read_at, ''),
@@ -742,6 +747,9 @@ func scanMessage(row messageScanner) (EmailMessage, error) {
 	var msg EmailMessage
 	if err := row.Scan(
 		&msg.ID,
+		&msg.Provider,
+		&msg.ProviderMessageID,
+		&msg.ProviderEventID,
 		&msg.Direction,
 		&msg.MailboxOwnerID,
 		&msg.AliasID,

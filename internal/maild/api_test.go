@@ -62,6 +62,13 @@ func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 	if len(resp.Messages) != 1 || resp.Messages[0].ID != "msg-1" {
 		t.Fatalf("messages = %+v, want only msg-1", resp.Messages)
 	}
+	msg, err := store.GetMessage(req.Context(), "user-1", "msg-1")
+	if err != nil {
+		t.Fatalf("GetMessage: %v", err)
+	}
+	if msg.Provider != "resend" || msg.ProviderMessageID != "provider-msg-1" || msg.ProviderEventID != "event-msg-1" {
+		t.Fatalf("provider ids = provider=%q message=%q event=%q", msg.Provider, msg.ProviderMessageID, msg.ProviderEventID)
+	}
 }
 
 func TestHandleMessagesListsAttachmentIndicator(t *testing.T) {

@@ -197,6 +197,9 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	if msg.Subject != "Project files" || msg.FromDisplay != "Sender Name" || msg.TrustStatus != "quarantined" {
 		t.Fatalf("message = %+v", msg)
 	}
+	if msg.Provider != providerResend || msg.ProviderMessageID != "email-1" || msg.ProviderEventID != "evt-1" {
+		t.Fatalf("provider ids = provider=%q message=%q event=%q", msg.Provider, msg.ProviderMessageID, msg.ProviderEventID)
+	}
 	var headers map[string]string
 	if err := json.Unmarshal([]byte(msg.RawHeadersJSON), &headers); err != nil {
 		t.Fatalf("unmarshal raw headers: %v", err)

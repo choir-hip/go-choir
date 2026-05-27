@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/maild"
+	_ "modernc.org/sqlite"
 )
 
 func setupMaildctlStore(t *testing.T) string {
@@ -89,6 +91,40 @@ func TestRunMessagesRequiresOwner(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "--owner is required") {
 		t.Fatalf("stderr missing owner requirement: %s", stderr.String())
+	}
+}
+
+func TestRunMessagePrintsProviderIds(t *testing.T) {
+	dbPath := setupMaildctlStore(t)
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO email_messages (
+		id, provider, provider_message_id, provider_event_id, direction,
+		mailbox_owner_id, alias_id, from_address, subject, text_body,
+		trust_status, received_at, created_at
+	) VALUES ('msg-1', 'resend', 'email-1', 'evt-1', 'inbound',
+		'owner-000', ?, 'sender@example.com', 'Project update', 'Body',
+		'untrusted', ?, ?)`, maild.DefaultRootAliasID, now, now); err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"message", "--db", dbPath, "--owner", "owner-000", "--message", "msg-1"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run message code=%d stderr=%s", code, stderr.String())
+	}
+	var detail messageDetail
+	if err := json.Unmarshal(stdout.Bytes(), &detail); err != nil {
+		t.Fatalf("decode message detail: %v", err)
+	}
+	if detail.Message.Provider != "resend" || detail.Message.ProviderMessageID != "email-1" || detail.Message.ProviderEventID != "evt-1" {
+		t.Fatalf("provider ids = %+v", detail.Message)
 	}
 }
 

@@ -108,7 +108,7 @@ find_message() {
 }
 
 stats="$(maildctl_json stats)"
-webhooks="$(maildctl_json webhooks --limit 5)"
+webhooks="$(maildctl_json webhooks --limit 100)"
 
 message="$(find_message inbox)"
 if [ -z "$message" ]; then
@@ -126,6 +126,23 @@ detail="$(maildctl_json message --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 attachments="$(maildctl_json attachments --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 source_packet="$(maildctl_json source-packet --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 ingress_events="$(maildctl_json ingress-events --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+
+provider_message_id="$(jq -r '.message.ProviderMessageID // empty' <<<"$detail")"
+provider_event_id="$(jq -r '.message.ProviderEventID // empty' <<<"$detail")"
+if [ -z "$provider_message_id" ] || [ -z "$provider_event_id" ]; then
+  echo "error: message is missing provider ids; provider_message_id=${provider_message_id:-<empty>} provider_event_id=${provider_event_id:-<empty>}" >&2
+  exit 1
+fi
+matching_webhooks="$(jq --arg provider_message_id "$provider_message_id" --arg provider_event_id "$provider_event_id" '
+  [
+    .[]
+    | select(.ProviderEventID == $provider_event_id or .ProviderMessageID == $provider_message_id)
+  ]' <<<"$webhooks")"
+matching_webhook_count="$(jq 'length' <<<"$matching_webhooks")"
+if [ "$matching_webhook_count" -eq 0 ]; then
+  echo "error: no recent webhook receipt matches provider_message_id=${provider_message_id} provider_event_id=${provider_event_id}" >&2
+  exit 1
+fi
 
 trust_label="$(jq -r '.source_packet.TrustLabel // empty' <<<"$source_packet")"
 if [ "$trust_label" != "UNTRUSTED_EXTERNAL_EMAIL" ]; then
@@ -154,6 +171,7 @@ jq -n \
   --arg folder "$folder" \
   --argjson stats "$stats" \
   --argjson latest_webhooks "$webhooks" \
+  --argjson matching_webhook_events "$matching_webhooks" \
   --argjson message "$message" \
   --argjson detail "$detail" \
   --argjson attachments "$attachments" \
@@ -165,6 +183,7 @@ jq -n \
     folder: $folder,
     stats: $stats,
     latest_webhooks: $latest_webhooks,
+    matching_webhook_events: $matching_webhook_events,
     message: $message,
     detail: $detail,
     attachments: $attachments,
