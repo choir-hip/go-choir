@@ -3047,3 +3047,77 @@ Belief-state update:
   requires a sufficiently scoped Resend key, actual webhook secret deployment,
   exact provider records, DNS/MX rollback plan, and a real signed
   `email.received` delivery.
+
+## Staging Finding: maild was not selected for host-service pointer deploy
+
+Recorded: 2026-05-27 while verifying the deployed mailbox identity-boundary
+repair from `0408a34`.
+
+Problem:
+
+GitHub Actions reported a successful staging deploy for `0408a34`, and Node B
+checkout/deploy identity now agree on that commit, but the running
+`go-choir-maild` process did not restart and still serves the older binary.
+The deploy-impact classifier selected only `proxy` as a host-service pointer
+deploy for the `0408a34` diff, even though that diff changed
+`internal/maild/api.go` and `internal/maild/send.go`.
+
+Evidence:
+
+```text
+GitHub Actions CI run 26538862723:
+  conclusion: success
+  deploy job: 78175105408 success
+  deploy log HOST_SERVICES: proxy
+  deploy log: Fast building Host service proxy: ./cmd/proxy
+  deploy log: Restarted go-choir-proxy.service
+
+Node B current identity:
+  /var/lib/go-choir/deploy.env:
+    CHOIR_DEPLOYED_COMMIT=0408a3421c28dd484e75874a03b51401149fbd60
+  /opt/go-choir HEAD:
+    0408a3421c28dd484e75874a03b51401149fbd60
+  /opt/go-choir status: clean
+
+Node B maild process:
+  MainPID=2042302
+  ExecMainStartTimestamp=Wed 2026-05-27 20:19:29 UTC
+  /proc/$pid/exe:
+    /nix/store/y49k4bd87ldlmskwgmnfv7gjn9dcpr16-maild-0.1.0/bin/maild
+
+Direct local maild spoof probe on Node B:
+  no X-Authenticated-User header -> HTTP 401 {"error":"authentication required"}
+  X-Authenticated-User only -> HTTP 200 {"messages":[]}
+  X-Authenticated-User + X-Internal-Caller:false -> HTTP 200 {"messages":[]}
+  X-Authenticated-User + X-Internal-Caller:true -> HTTP 200 {"messages":[]}
+```
+
+Impact:
+
+- The `0408a34` mailbox identity-boundary repair is committed and CI-green, but
+  not actually live in the `maild` service.
+- Staging deploy identity is currently too coarse for host-service pointer
+  deploys: a clean `/opt/go-choir` checkout and matching `deploy.env` do not
+  prove every affected host service was rebuilt and restarted.
+- Mail acceptance cannot proceed to Resend/Gandi mutation while a maild
+  security repair is only partially deployed.
+
+Belief-state update:
+
+- The immediate blocker is not the maild code fix; it is deploy impact
+  classification/service selection. Changes under `cmd/maild`,
+  `internal/maild`, maild-facing proxy contracts, or Nix maild service wiring
+  must select and restart `maild`.
+- Health checks alone are insufficient because the old maild binary remains
+  healthy while serving stale behavior.
+
+Next executable probe:
+
+- Fix deploy-impact classification and selected host-service build/restart
+  support so maild changes select `maild`, then push through GitHub Actions and
+  verify on Node B that:
+  - deploy identity remains at the pushed SHA;
+  - `go-choir-maild` has a post-deploy start timestamp and new binary path;
+  - direct spoofed mailbox requests without `X-Internal-Caller:true` return
+    HTTP 403; and
+  - proxy-authenticated mailbox routes still work through the intended boundary.
