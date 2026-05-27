@@ -309,6 +309,58 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	}
 }
 
+func TestHandleResendWebhookOversizedProviderResponseRequestsRetry(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	cfg.ProviderMaxBytes = 96
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/emails/receiving/email-too-large" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-too-large",
+			"to":["000@choir.news"],
+			"from":"sender@example.com",
+			"subject":"Oversized",
+			"text":"` + strings.Repeat("x", 256) + `",
+			"headers":{"from":"sender@example.com"},
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	body := `{"id":"evt-too-large","type":"email.received","data":{"email_id":"email-too-large"}}`
+
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-too-large", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "ingest_retry_requested") {
+		t.Fatalf("body = %s, want ingest_retry_requested", w.Body.String())
+	}
+	count, err := store.CountWebhookEvents(req.Context())
+	if err != nil {
+		t.Fatalf("CountWebhookEvents: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("webhook count = %d, want 1", count)
+	}
+	messages, err := store.ListMessages(req.Context(), "user-root", "inbox", 10)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("messages = %+v, want none stored", messages)
+	}
+}
+
 func TestHandleResendWebhookRejectsUnwhitelistedTrustedUploadAlias(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="

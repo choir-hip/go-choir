@@ -16,9 +16,10 @@ import (
 const maxProviderErrorDetail = 512
 
 type resendClient struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	baseURL          string
+	apiKey           string
+	maxResponseBytes int64
+	client           *http.Client
 }
 
 type resendReceivedEmail struct {
@@ -88,10 +89,18 @@ func newResendClient(cfg *Config, client *http.Client) resendClient {
 		client = http.DefaultClient
 	}
 	return resendClient{
-		baseURL: strings.TrimRight(cfg.ResendBaseURL, "/"),
-		apiKey:  cfg.ResendAPIKey,
-		client:  client,
+		baseURL:          strings.TrimRight(cfg.ResendBaseURL, "/"),
+		apiKey:           cfg.ResendAPIKey,
+		maxResponseBytes: providerMaxBytesOrDefault(cfg.ProviderMaxBytes),
+		client:           client,
 	}
+}
+
+func providerMaxBytesOrDefault(value int64) int64 {
+	if value > 0 {
+		return value
+	}
+	return DefaultProviderMaxBody
 }
 
 func (c resendClient) retrieveReceivedEmail(ctx context.Context, emailID string) (resendReceivedEmail, error) {
@@ -117,11 +126,27 @@ func (c resendClient) retrieveReceivedEmail(ctx context.Context, emailID string)
 	if resp.StatusCode != http.StatusOK {
 		return resendReceivedEmail{}, readProviderHTTPError("retrieve received email", resp)
 	}
+	body, err := readProviderResponseBody(resp.Body, c.maxResponseBytes)
+	if err != nil {
+		return resendReceivedEmail{}, fmt.Errorf("retrieve received email: %w", err)
+	}
 	var email resendReceivedEmail
-	if err := json.NewDecoder(resp.Body).Decode(&email); err != nil {
+	if err := json.Unmarshal(body, &email); err != nil {
 		return resendReceivedEmail{}, fmt.Errorf("decode received email: %w", err)
 	}
 	return email, nil
+}
+
+func readProviderResponseBody(body io.Reader, maxBytes int64) ([]byte, error) {
+	maxBytes = providerMaxBytesOrDefault(maxBytes)
+	data, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read provider response: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("provider response exceeds %d bytes", maxBytes)
+	}
+	return data, nil
 }
 
 func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) (resendSendResponse, error) {

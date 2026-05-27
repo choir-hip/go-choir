@@ -11,13 +11,14 @@ func newTestStore(t *testing.T) (*Store, *Config) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := &Config{
-		Port:            DefaultPort,
-		DBPath:          filepath.Join(dir, "mail.db"),
-		StorageRoot:     filepath.Join(dir, "mail"),
-		PrimaryDomain:   "choir.news",
-		RootOwnerID:     "user-root",
-		ResendBaseURL:   DefaultResendBaseURL,
-		WebhookMaxBytes: DefaultWebhookMaxBody,
+		Port:             DefaultPort,
+		DBPath:           filepath.Join(dir, "mail.db"),
+		StorageRoot:      filepath.Join(dir, "mail"),
+		PrimaryDomain:    "choir.news",
+		RootOwnerID:      "user-root",
+		ResendBaseURL:    DefaultResendBaseURL,
+		WebhookMaxBytes:  DefaultWebhookMaxBody,
+		ProviderMaxBytes: DefaultProviderMaxBody,
 	}
 	if err := cfg.EnsureDirs(); err != nil {
 		t.Fatalf("EnsureDirs: %v", err)

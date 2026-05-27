@@ -117,6 +117,8 @@ MAILD_DB_PATH=/var/lib/go-choir/mail/mail.db
 MAILD_STORAGE_ROOT=/var/lib/go-choir/mail
 MAILD_PRIMARY_DOMAIN=choir.news
 MAILD_ROOT_OWNER_ID=<founder auth user id>
+MAILD_WEBHOOK_MAX_BYTES=1048576
+MAILD_PROVIDER_MAX_BYTES=4194304
 RESEND_API_KEY=...
 RESEND_WEBHOOK_SECRET=...
 ```
@@ -476,8 +478,9 @@ STRIDE summary:
   timestamps.
 - Information disclosure: keep secrets in `/var/lib/go-choir/maild.env`; do not
   log bodies, attachment URLs, webhook secrets, API keys, or Gandi PAT.
-- Denial of service: body caps, attachment caps, sender/alias rate limits, fast
-  webhook ack after durable enqueue, bounded workers.
+- Denial of service: webhook and provider-response body caps, attachment caps,
+  sender/alias rate limits, fast webhook ack after durable enqueue, bounded
+  workers.
 - Elevation of privilege: source packets are `UNTRUSTED_EXTERNAL_EMAIL`; MAS
   handoff requires owner action or later explicit policy.
 

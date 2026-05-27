@@ -31,18 +31,22 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.DBPath != filepath.Join(DefaultLocalDir, "mail.db") {
 		t.Fatalf("DBPath = %q", cfg.DBPath)
 	}
+	if cfg.ProviderMaxBytes != DefaultProviderMaxBody {
+		t.Fatalf("ProviderMaxBytes = %d, want %d", cfg.ProviderMaxBytes, DefaultProviderMaxBody)
+	}
 }
 
 func TestConfigEnsureDirs(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &Config{
-		Port:            DefaultPort,
-		DBPath:          filepath.Join(dir, "nested", "mail.db"),
-		StorageRoot:     filepath.Join(dir, "mail"),
-		PrimaryDomain:   DefaultPrimaryDomain,
-		RootOwnerID:     DefaultRootOwnerID,
-		ResendBaseURL:   DefaultResendBaseURL,
-		WebhookMaxBytes: DefaultWebhookMaxBody,
+		Port:             DefaultPort,
+		DBPath:           filepath.Join(dir, "nested", "mail.db"),
+		StorageRoot:      filepath.Join(dir, "mail"),
+		PrimaryDomain:    DefaultPrimaryDomain,
+		RootOwnerID:      DefaultRootOwnerID,
+		ResendBaseURL:    DefaultResendBaseURL,
+		WebhookMaxBytes:  DefaultWebhookMaxBody,
+		ProviderMaxBytes: DefaultProviderMaxBody,
 	}
 	if err := cfg.EnsureDirs(); err != nil {
 		t.Fatalf("EnsureDirs: %v", err)

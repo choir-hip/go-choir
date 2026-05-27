@@ -11,12 +11,13 @@ import (
 )
 
 const (
-	DefaultPort           = "8087"
-	DefaultLocalDir       = "/tmp/go-choir-maild"
-	DefaultPrimaryDomain  = "choir.news"
-	DefaultRootOwnerID    = "root"
-	DefaultResendBaseURL  = "https://api.resend.com"
-	DefaultWebhookMaxBody = 1 << 20
+	DefaultPort            = "8087"
+	DefaultLocalDir        = "/tmp/go-choir-maild"
+	DefaultPrimaryDomain   = "choir.news"
+	DefaultRootOwnerID     = "root"
+	DefaultResendBaseURL   = "https://api.resend.com"
+	DefaultWebhookMaxBody  = 1 << 20
+	DefaultProviderMaxBody = 4 << 20
 )
 
 // Config holds maild runtime configuration.
@@ -30,6 +31,7 @@ type Config struct {
 	ResendBaseURL    string
 	WebhookSecret    string
 	WebhookMaxBytes  int64
+	ProviderMaxBytes int64
 	WebhookClockSkew time.Duration
 }
 
@@ -46,6 +48,7 @@ func LoadConfig() (*Config, error) {
 		ResendBaseURL:    envOr("RESEND_BASE_URL", DefaultResendBaseURL),
 		WebhookSecret:    os.Getenv("RESEND_WEBHOOK_SECRET"),
 		WebhookMaxBytes:  int64EnvOr("MAILD_WEBHOOK_MAX_BYTES", DefaultWebhookMaxBody),
+		ProviderMaxBytes: int64EnvOr("MAILD_PROVIDER_MAX_BYTES", DefaultProviderMaxBody),
 		WebhookClockSkew: 5 * time.Minute,
 	}
 	if err := cfg.validate(); err != nil {
@@ -75,6 +78,9 @@ func (c *Config) validate() error {
 	}
 	if c.WebhookMaxBytes <= 0 {
 		return fmt.Errorf("MAILD_WEBHOOK_MAX_BYTES must be positive")
+	}
+	if c.ProviderMaxBytes <= 0 {
+		return fmt.Errorf("MAILD_PROVIDER_MAX_BYTES must be positive")
 	}
 	return nil
 }
