@@ -2184,6 +2184,48 @@ Belief-state update:
   provider acceptance still waits on Resend authority, webhook signing secret,
   exact DNS records, and MX cutover.
 
+## Local Finding: no-auto-outbound proof needs an explicit checker gate
+
+Recorded: 2026-05-27 while provider readiness remained blocked on Resend
+authority.
+
+Problem:
+
+The final acceptance requires proof that inbound email cannot trigger outbound
+send, tool execution, canonical mutation, or promotion automatically. The
+current `scripts/mail-acceptance-check` can prove no owner handoff happened yet
+for a selected message by requiring `--expect-ingress-events 0`, and it can
+prove the later explicit Send to Choir handoff with `--expect-ingress-events 1`.
+It does not directly prove that no outbound Sent row appeared at or after the
+selected inbound message arrived.
+
+Evidence:
+
+```text
+scripts/mail-acceptance-check:
+  supports --expect-ingress-events N
+  does not inspect the Sent folder
+
+docs/choir-email-reference-v0.md:
+  acceptance says no inbound message can trigger outbound send, tool execution,
+  canonical state mutation, or promotion.
+```
+
+Belief-state update:
+
+- The code structure already separates inbound storage from outbound send.
+- The real provider acceptance should still include a read-only proof that the
+  selected inbound message did not create a same-owner Sent message before any
+  owner action.
+- This should be opt-in because a real owner mailbox may legitimately contain
+  unrelated Sent rows.
+
+Next executable probe:
+
+- Add an opt-in `scripts/mail-acceptance-check` flag that lists Sent messages
+  for the owner and fails if any Sent row is timestamped at or after the
+  selected inbound message timestamp.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
