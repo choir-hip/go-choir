@@ -8,10 +8,10 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend behavior slice, deploy cleanup, trusted-mail evidence classification, proxy trust-label enforcement, webhook-correlated acceptance tooling, canonical outbound From enforcement, owner-send Resend idempotency key, explicit no-auto-outbound acceptance tooling, retryable webhook-ingest acknowledgement repair, idempotent Send to Choir ingress receipts, visible/retryable Send to Choir receipt recording, public unsigned-webhook fail-closed readiness tooling, proxy identity-marker enforcement for mailbox/send routes, and maild deploy-impact selection are deployed on Node B at 17df13e through GitHub Actions; /opt/go-choir is a clean checkout matching deploy.env and public health; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, retryable ingest failure 503 acknowledgement, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, idempotent ingress-event receipts, bounded proxy retry for ingress receipt callback, owner-visible receipt-pending Send to Choir status, read-only maildctl, bounded provider logging, reply threading headers, owner-send Resend `Idempotency-Key`, no-auto-outbound checker gate, readiness tooling with a public unsigned-webhook fail-closed probe, and CI deploy selection/restart support for the maild host service
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; newly recorded email.received events return HTTP 503 ingest_retry_requested on retryable provider/store failure; duplicate retries that still fail return HTTP 503 duplicate_ingest_retry_requested; duplicate owner Send to Choir ingress receipts for the same message/source/submission are idempotent and preserve a single durable event; proxy retries transient ingress receipt callback failure and reports `ingress_event_recorded=true` after recovery; proxy reports `ingress_event_recorded=false` without hiding the conductor submission id if the receipt remains unrecorded; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; whitelisted trusted-upload messages store trusted sender status and authentication-results evidence; owner-only send; outbound send canonicalizes display-name input back to the numeric alias; owner-send includes a stable Resend `Idempotency-Key`; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; proxy rejects unexpected source-packet trust labels before prompt-bar submission; acceptance checker now requires selected message provider ids and matching webhook receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe now proves the public webhook route fails closed without counter mutation; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions push CI run 26540437227 passed for 17df13e and Deploy to Staging job 78180464584 succeeded; deploy impact selected `HOST_SERVICES=maild`, built `.#maild`, updated `maild -> /var/lib/go-choir/services/maild`, and restarted `go-choir-maild`; public health reports proxy/sandbox deployed_commit 17df13e9d9221ea24b3a2dfdb83b7dd78fa4d8d4; /opt/go-choir HEAD and deploy.env match 17df13e with clean status; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters; the running maild process restarted at 2026-05-27T21:43:27Z from /var/lib/go-choir/services/maild/bin/maild; direct local maild mailbox probes now return 401 with no owner header, 403 for spoofed X-Authenticated-User without X-Internal-Caller:true, and 200 only with the internal marker; public proxy email routes reject unauthenticated/spoofed browser requests with 401; scripts/mail-provider-readiness still proves the public webhook route returns HTTP 503 webhook_secret_not_configured without counter mutation
+current artifact state: maild/proxy/frontend behavior slice, deploy cleanup, trusted-mail evidence classification, proxy trust-label enforcement, webhook-correlated acceptance tooling, canonical outbound From enforcement, owner-send Resend idempotency key, malformed Svix webhook-secret rejection, explicit no-auto-outbound acceptance tooling, retryable webhook-ingest acknowledgement repair, idempotent Send to Choir ingress receipts, visible/retryable Send to Choir receipt recording, public unsigned-webhook fail-closed readiness tooling, proxy identity-marker enforcement for mailbox/send routes, and maild deploy-impact selection are deployed on Node B at d656414 through GitHub Actions; /opt/go-choir is a clean checkout matching deploy.env and maild health; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, retryable ingest failure 503 acknowledgement, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, idempotent ingress-event receipts, bounded proxy retry for ingress receipt callback, owner-visible receipt-pending Send to Choir status, read-only maildctl, bounded provider logging, reply threading headers, owner-send Resend `Idempotency-Key`, empty decoded Svix webhook-secret rejection, no-auto-outbound checker gate, readiness tooling with a public unsigned-webhook fail-closed probe, and CI deploy selection/restart support for the maild host service
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; newly recorded email.received events return HTTP 503 ingest_retry_requested on retryable provider/store failure; duplicate retries that still fail return HTTP 503 duplicate_ingest_retry_requested; malformed `whsec_` webhook secret rejects without storing events; stale Svix timestamps reject; space-delimited Svix signatures accept when any v1 signature matches; duplicate owner Send to Choir ingress receipts for the same message/source/submission are idempotent and preserve a single durable event; proxy retries transient ingress receipt callback failure and reports `ingress_event_recorded=true` after recovery; proxy reports `ingress_event_recorded=false` without hiding the conductor submission id if the receipt remains unrecorded; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; whitelisted trusted-upload messages store trusted sender status and authentication-results evidence; owner-only send; outbound send canonicalizes display-name input back to the numeric alias; owner-send includes a stable Resend `Idempotency-Key`; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; proxy rejects unexpected source-packet trust labels before prompt-bar submission; acceptance checker now requires selected message provider ids and matching webhook receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe now proves the public webhook route fails closed without counter mutation; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+deployed proven: GitHub Actions push CI run 26541199014 passed for d656414 and Deploy to Staging job 78182981909 succeeded; deploy impact selected `HOST_SERVICES=maild`, built `.#maild`, updated `maild -> /var/lib/go-choir/services/maild`, and restarted `go-choir-maild`; /opt/go-choir HEAD and deploy.env match d65641483be2d4462c0dbbf01ba25efddceca603 with clean status; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters; the running maild process restarted at 2026-05-27T22:00:05Z from /var/lib/go-choir/services/maild/bin/maild; direct local maild mailbox probes now return 401 with no owner header, 403 for spoofed X-Authenticated-User without X-Internal-Caller:true, and 200 only with the internal marker; public proxy email routes reject unauthenticated/spoofed browser requests with 401; scripts/mail-provider-readiness still proves the public webhook route returns HTTP 503 webhook_secret_not_configured without counter mutation
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, run scripts/mail-provider-readiness to verify exact provider truth, then deploy RESEND_WEBHOOK_SECRET and plan Gandi DNS from exact Resend records before any MX mutation; do not apply Gandi MX changes while Resend domains/webhooks return restricted_api_key
 ```
@@ -3368,3 +3368,60 @@ Next executable probe:
 - Add verifier tests for malformed empty `whsec_`, stale timestamps, and
   multiple space-delimited Svix signatures; then reject decoded empty signing
   keys in `verifyWebhook`.
+
+Resolution evidence, 2026-05-27:
+
+- Problem checkpoint commit:
+  `9cb86c2 docs: record malformed mail webhook secret gap`.
+- Fix commit:
+  `d65641483be2d4462c0dbbf01ba25efddceca603 fix: reject empty mail webhook signing secret`.
+- `internal/maild/webhook.go` now rejects decoded-empty Svix signing keys.
+- `internal/maild/webhook_test.go` now verifies:
+  - `RESEND_WEBHOOK_SECRET=whsec_` returns `invalid_signature` and stores no
+    webhook event;
+  - stale Svix timestamps reject;
+  - space-delimited Svix signatures accept when any `v1` signature matches.
+- Focused local verification passed:
+  `nix develop -c go test ./internal/maild -run 'TestHandleResendWebhook'`.
+- Broader local verification passed:
+  `nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy`.
+
+Deploy resolution evidence, 2026-05-27:
+
+- GitHub Actions CI run `26541199014` passed for `d656414`; Deploy to Staging
+  job `78182981909` succeeded.
+- Deploy impact selected `HOST_SERVICES=maild`; deploy log shows:
+  - `Fast building Host service maild: ./cmd/maild`
+  - fallback Nix package build `.#maild`
+  - built `/nix/store/9f13nfqiykkn8hzrzh0cqh1jzly8a2sa-maild-0.1.0.drv`
+  - `Host service pointer updated: maild -> /var/lib/go-choir/services/maild`
+  - `Restarted go-choir-maild.service`
+- Node B after deploy:
+  - `/var/lib/go-choir/deploy.env`:
+    `d65641483be2d4462c0dbbf01ba25efddceca603`
+  - `/opt/go-choir` HEAD:
+    `d65641483be2d4462c0dbbf01ba25efddceca603`
+  - `/opt/go-choir` status: clean
+  - `go-choir-maild` MainPID: `2078513`
+  - `go-choir-maild` ExecMainStartTimestamp:
+    `Wed 2026-05-27 22:00:05 UTC`
+  - `/proc/$pid/exe`: `/var/lib/go-choir/services/maild/bin/maild`
+- Node B maild health remains ok with `webhook_secret_configured=false` and
+  zero message/webhook/ingress counters.
+- `scripts/mail-provider-readiness` after deploy still reports:
+  - local `RESEND_API_KEY` configured, `RESEND_WEBHOOK_SECRET` missing, and
+    `GANDI_PAT` configured;
+  - Resend domains/webhooks return `401 restricted_api_key`;
+  - Gandi LiveDNS and public DNS remain on Gandi MX/SPF/DKIM and no DMARC;
+  - public webhook negative probe returns HTTP 503
+    `webhook_secret_not_configured` without counter mutation.
+
+Belief-state update:
+
+- The malformed-webhook-secret deploy footgun is repaired on the live maild
+  service before real Resend webhook-secret deployment.
+- The mission remains `checkpoint_incomplete`: real Resend webhook delivery,
+  sufficient Resend domain/webhook management access, webhook secret deployment,
+  Gandi DNS/MX mutation with rollback, real inbound mail, real quarantine, real
+  Send to Choir Trace evidence, and real outbound/reply acceptance remain
+  unproven.
