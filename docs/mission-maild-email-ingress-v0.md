@@ -8,10 +8,10 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend behavior slice, deploy cleanup, trusted-mail evidence classification, proxy trust-label enforcement, webhook-correlated acceptance tooling, canonical outbound From enforcement, explicit no-auto-outbound acceptance tooling, and retryable webhook-ingest acknowledgement repair are deployed on Node B at a22d075 through GitHub Actions; /opt/go-choir is a clean checkout matching deploy.env and public health; Resend domain/webhook setup and DNS/MX remain unconfigured
-what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, retryable ingest failure 503 acknowledgement, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers, no-auto-outbound checker gate
-locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; newly recorded email.received events return HTTP 503 ingest_retry_requested on retryable provider/store failure; duplicate retries that still fail return HTTP 503 duplicate_ingest_retry_requested; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; whitelisted trusted-upload messages store trusted sender status and authentication-results evidence; owner-only send; outbound send canonicalizes display-name input back to the numeric alias; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; proxy rejects unexpected source-packet trust labels before prompt-bar submission; acceptance checker now requires selected message provider ids and matching webhook receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions run 26534436593 passed and deployed a22d075c54234b4bb36f04d5015ed0616d9bb954 to staging; Deploy to Staging job 78159684073 succeeded; public health reports proxy/sandbox deployed_commit a22d075c54234b4bb36f04d5015ed0616d9bb954; /opt/go-choir HEAD matches a22d075 with clean status; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters
+current artifact state: maild/proxy/frontend behavior slice, deploy cleanup, trusted-mail evidence classification, proxy trust-label enforcement, webhook-correlated acceptance tooling, canonical outbound From enforcement, explicit no-auto-outbound acceptance tooling, retryable webhook-ingest acknowledgement repair, and idempotent Send to Choir ingress receipts are deployed on Node B at 54b487d through GitHub Actions; /opt/go-choir is a clean checkout matching deploy.env and public health; Resend domain/webhook setup and DNS/MX remain unconfigured
+what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, retryable ingest failure 503 acknowledgement, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, idempotent ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers, no-auto-outbound checker gate
+locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; newly recorded email.received events return HTTP 503 ingest_retry_requested on retryable provider/store failure; duplicate retries that still fail return HTTP 503 duplicate_ingest_retry_requested; duplicate owner Send to Choir ingress receipts for the same message/source/submission are idempotent and preserve a single durable event; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; whitelisted trusted-upload messages store trusted sender status and authentication-results evidence; owner-only send; outbound send canonicalizes display-name input back to the numeric alias; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; proxy rejects unexpected source-packet trust labels before prompt-bar submission; acceptance checker now requires selected message provider ids and matching webhook receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
+deployed proven: GitHub Actions run 26536263739 passed and deployed 54b487d502883497567e8047d2f5f3ede27f72b2 to staging; Deploy to Staging job 78166049491 succeeded; public health reports proxy/sandbox deployed_commit 54b487d502883497567e8047d2f5f3ede27f72b2; /opt/go-choir HEAD matches 54b487d with clean status; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
 next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, run scripts/mail-provider-readiness to verify exact provider truth, then deploy RESEND_WEBHOOK_SECRET and plan Gandi DNS from exact Resend records before any MX mutation
 ```
@@ -2797,3 +2797,29 @@ Residual risk:
   next GitHub Actions deploy identity is verified on Node B. Real inbound
   source-packet handoff proof still depends on Resend webhook setup and DNS/MX
   cutover.
+
+Deploy evidence, 2026-05-27:
+
+- Commit `54b487d502883497567e8047d2f5f3ede27f72b2` was pushed to `origin/main`
+  after the doc-only problem checkpoint `6f2f4cf`.
+- GitHub Actions run `26536263739` completed successfully for `54b487d`; the
+  Deploy to Staging job `78166049491` completed successfully.
+- Node B `/var/lib/go-choir/deploy.env` reports
+  `CHOIR_DEPLOYED_COMMIT=54b487d502883497567e8047d2f5f3ede27f72b2`.
+- `git -C /opt/go-choir rev-parse HEAD` reports
+  `54b487d502883497567e8047d2f5f3ede27f72b2`, and
+  `git -C /opt/go-choir status --short --branch` reports
+  `## main...origin/main` with no dirty files.
+- Public `https://choir.news/health` reports proxy and upstream sandbox
+  `deployed_commit=54b487d502883497567e8047d2f5f3ede27f72b2`.
+- Node B `http://127.0.0.1:8087/health` reports maild `status=ok`,
+  `resend_api_key_configured=true`, `webhook_secret_configured=false`,
+  `messages=0`, `webhook_events=0`, and `ingress_events=0`.
+
+Belief-state update:
+
+- The local Send to Choir ingress receipt idempotency gap is closed and
+  deployed.
+- The mission remains `checkpoint_incomplete`; real inbound mail, real
+  source-packet MAS handoff, and owner reply still require provider/domain
+  setup.
