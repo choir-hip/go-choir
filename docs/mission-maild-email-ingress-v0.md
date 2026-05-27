@@ -1,6 +1,6 @@
 # Mission: maild Email Ingress v0
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
@@ -8,12 +8,12 @@ Reference: [choir-email-reference-v0.md](choir-email-reference-v0.md)
 
 ```text
 status: checkpoint_incomplete
-current artifact state: maild/proxy/frontend behavior slice is deployed on Node B at 8c0348c through GitHub Actions; Resend domain/webhook setup and DNS/MX remain unconfigured
+current artifact state: maild/proxy/frontend behavior slice landed on origin/main through 8c0348c, but current Node B staging identity is tainted: public health and deploy.env report a1040f7 while /opt/go-choir is a dirty 8c0348c checkout with untracked source files; Resend domain/webhook setup and DNS/MX remain unconfigured
 what shipped: maild service, SQLite mailbox, webhook verifier, duplicate webhook ingest retry, receive-policy gates, quarantine metadata, source packets, Email app with Compose, row attachment indicators, collapsed raw-header/stored-recipient Details, proxy auth forwarding, proxy-owned Send to Choir, source-packet provenance/text refs, bounded normalized email-body handoff, ingress-event receipts, read-only maildctl, bounded provider logging, reply threading headers
 locally proven: fake signed Resend webhook -> fetch/normalize/store/quarantine/source packet; duplicate email.received after transient provider failure retries and stores missing message idempotently; trusted-upload-style alias rejects unwhitelisted sender and accepts whitelisted sender; owner-only send; owned reply target -> In-Reply-To/References; proxy-owned Send to Choir now carries provenance, stable text refs, bounded normalized email body, and ingress receipt; message list attachment indicator; message-detail raw headers and stored recipient API/UI details surface; Compose posts plain owner-send payload through /api/email/send; frontend production build; NixOS maild/Caddy route eval; read-only provider readiness probe; dry-run Resend setup helper; webhook secret handoff dry-run; dry-run Gandi DNS plan/rollback tooling; mail acceptance checker fake-ssh path
-deployed proven: GitHub Actions run 26461534834 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging; public health reports proxy/sandbox deployed_commit 8c0348cf15f2c7d555dbaf549ebc929f98a50bff at 2026-05-26T16:36:14Z; Node B maild health is ok with webhook_secret_configured=false and zero message/event counters; POST /api/email/resend/webhook still fails closed with 503 {"status":"webhook_secret_not_configured"}
+deployed proven: historical clean GitHub Actions run 26461534834 passed Go vet/build, non-runtime tests, runtime shards 0-3, integration smoke, aggregate Go gate, and Deploy to Staging for 8c0348c; current Node B maild health is ok with webhook_secret_configured=false and zero message/event counters, but current staging cannot be used as acceptance evidence until checkout identity is cleaned and reproven by GitHub Actions
 unproven claims: real Resend webhook, Resend domain verification, Gandi DNS/MX, real inbound/outbound mail, real Send to Choir trace from received email
-next executable probe: obtain a Resend key/dashboard session that can read domain and webhook configuration, then use scripts/mail-provider-readiness to verify exact provider truth before any Gandi DNS mutation
+next executable probe: land the GitHub Actions deploy cleanup fix, run a GitHub Actions forced staging deploy, and prove deploy.env, public /health, and /opt/go-choir all agree on one clean commit before any Resend/Gandi mutation
 ```
 
 ## Mission Frame
@@ -1993,3 +1993,68 @@ Residual risk:
 - This closes the local metadata-only handoff gap, but the mission still lacks
   a real received-email -> Send to Choir staging proof because Resend domain,
   webhook-secret, and Gandi MX/provider access remain blocked.
+
+## Platform Finding: Node B Deploy Identity Is Tainted By Dirty Source State
+
+Recorded: 2026-05-27.
+
+Problem:
+
+Current staging cannot be used as acceptance evidence for the maild mission,
+even though `go-choir-maild` is active and healthy. Node B now reports the
+latest deployed commit as the later Search Provider Plane commit `a1040f7`, but
+the `/opt/go-choir` checkout is not actually a clean checkout of that commit.
+It is a dirty tree at `8c0348c` with tracked search-plane/runtime files modified
+and untracked source files at the repository root. The dirty files are owned by
+uid `501`, while `.git` is owned by root, which is the same ownership mismatch
+that produced the earlier `safe.directory` deploy failure.
+
+Evidence:
+
+```text
+public /health on 2026-05-27:
+  proxy deployed_commit: a1040f7582b5e08c75524a26c285bb5ab1d08738
+  sandbox deployed_commit: a1040f7582b5e08c75524a26c285bb5ab1d08738
+  deployed_at: 2026-05-26T17:30:48Z
+
+node-b /var/lib/go-choir/deploy.env:
+  CHOIR_DEPLOYED_AT=2026-05-26T17:30:48Z
+  CHOIR_DEPLOYED_COMMIT=a1040f7582b5e08c75524a26c285bb5ab1d08738
+
+node-b maild health:
+  status ok
+  messages 0
+  webhook_events 0
+  ingress_events 0
+  resend_api_key_configured true
+  webhook_secret_configured false
+
+node-b /opt/go-choir:
+  git rev-parse HEAD -> 8c0348cf15f2c7d555dbaf549ebc929f98a50bff
+  tracked modifications:
+    internal/gateway/handlers.go
+    internal/gateway/search.go
+    internal/gateway/search_test.go
+    internal/runtime/search_gateway.go
+    internal/runtime/tools_research.go
+  untracked source files:
+    config.go errors.go health.go merge.go policy.go router.go
+    search_gateway.go sqlite_health.go tools_research.go types.go
+    internal/gateway/search_plane.go
+    internal/gateway/searchplane/
+  ownership:
+    /opt/go-choir owned by uid 501 group lp
+    /opt/go-choir/.git owned by root root
+```
+
+Belief-state update:
+
+- Do not configure Resend/Gandi or mutate DNS from this staging state.
+- The next executable platform repair is a GitHub Actions deploy-path fix that
+  makes Node B checkout cleanup remove untracked source files and restores
+  deploy identity from a clean `origin/main` checkout.
+- `git clean -ffdX` is insufficient here because the dangerous extra files are
+  untracked source files, not only ignored build artifacts.
+- Acceptance can resume only after a GitHub Actions deploy proves:
+  `deploy.env`, public `/health`, and `/opt/go-choir` all agree on the same
+  clean commit, and `go-choir-maild` remains healthy.
