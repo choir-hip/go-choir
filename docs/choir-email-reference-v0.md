@@ -166,9 +166,9 @@ Implementation checkpoint, 2026-05-26:
   or calls MAS directly.
 - The authenticated source-packet route returns provenance, a stable normalized
   text ref, and the normalized plain-text email body. The proxy submits a
-  bounded copy of that body into the existing prompt-bar path under explicit
-  `UNTRUSTED_EXTERNAL_EMAIL` framing, while leaving attachments quarantined and
-  provider-only raw-message refs out of browser-visible state.
+  bounded, line-prefixed copy of that body into the existing prompt-bar path
+  under explicit `UNTRUSTED_EXTERNAL_EMAIL` framing, while leaving attachments
+  quarantined and provider-only raw-message refs out of browser-visible state.
 - Node B Nix config defines `go-choir-maild`, `/var/lib/go-choir/mail`, and a
   direct Caddy route for `/api/email/resend/webhook`.
 - `nix/deploy-mail-creds.sh` deploys `RESEND_API_KEY` and
