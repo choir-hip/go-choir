@@ -15,12 +15,16 @@ import (
 
 func signedResendRequest(t *testing.T, secret, msgID, body string) *http.Request {
 	t.Helper()
+	return signedResendRequestAt(t, secret, msgID, body, time.Now().UTC())
+}
+
+func signedResendRequestAt(t *testing.T, secret, msgID, body string, ts time.Time) *http.Request {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/email/resend/webhook", strings.NewReader(body))
 	key, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(secret, "whsec_"))
 	if err != nil {
 		t.Fatalf("decode secret: %v", err)
 	}
-	ts := time.Now().UTC()
 	sig := "v1," + signSvixPayload(key, msgID, ts.Unix(), []byte(body))
 	req.Header.Set("svix-id", msgID)
 	req.Header.Set("svix-timestamp", strconv.FormatInt(ts.Unix(), 10))
@@ -39,6 +43,31 @@ func TestHandleResendWebhookRequiresSecret(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+}
+
+func TestHandleResendWebhookRejectsEmptyDecodedSecret(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_"
+	h := NewHandler(cfg, store)
+	body := `{"id":"evt-empty-secret","type":"domain.updated"}`
+
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-empty-secret", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_signature") {
+		t.Fatalf("body = %s, want invalid_signature", w.Body.String())
+	}
+	count, err := store.CountWebhookEvents(req.Context())
+	if err != nil {
+		t.Fatalf("CountWebhookEvents: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("webhook count = %d, want 0", count)
 	}
 }
 
@@ -68,6 +97,22 @@ func TestHandleResendWebhookStoresVerifiedEventIdempotently(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("webhook count = %d, want 1", count)
+	}
+}
+
+func TestHandleResendWebhookAcceptsAnyValidSvixSignature(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	h := NewHandler(cfg, store)
+	body := `{"id":"evt-multiple-signatures","type":"domain.updated"}`
+
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-multiple-signatures", body)
+	req.Header.Set("svix-signature", "v1,invalid-signature "+req.Header.Get("svix-signature"))
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
 	}
 }
 
@@ -390,6 +435,24 @@ func TestHandleResendWebhookRejectsMissingHeaders(t *testing.T) {
 	h.HandleResendWebhook(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestHandleResendWebhookRejectsStaleTimestamp(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	h := NewHandler(cfg, store)
+	body := `{"id":"evt-stale","type":"domain.updated"}`
+
+	req := signedResendRequestAt(t, cfg.WebhookSecret, "msg-stale", body, time.Now().UTC().Add(-10*time.Minute))
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_signature") {
+		t.Fatalf("body = %s, want invalid_signature", w.Body.String())
 	}
 }
 

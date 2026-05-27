@@ -261,6 +261,9 @@ func verifyWebhook(payload []byte, headers http.Header, secret string) error {
 	if err != nil {
 		return fmt.Errorf("decode svix secret: %w", err)
 	}
+	if len(key) == 0 {
+		return fmt.Errorf("decode svix secret: empty signing key")
+	}
 	expected := signSvixPayload(key, msgID, unixSeconds, payload)
 	for _, signature := range strings.Fields(signatureValue) {
 		signature = strings.TrimSpace(strings.TrimPrefix(signature, "v1,"))
