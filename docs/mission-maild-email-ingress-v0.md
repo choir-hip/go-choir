@@ -1829,6 +1829,56 @@ Next executable probe:
   save the webhook signing secret, and save the exact domain JSON for dry-run
   Gandi planning.
 
+## Local Finding: trusted-upload acceptance does not yet mark trusted sender evidence
+
+Recorded: 2026-05-27 during the receding-horizon local audit after provider
+readiness remained blocked on Resend authority.
+
+Problem:
+
+The receive-policy gate correctly rejects a trusted-upload-style alias when the
+sender is not whitelisted, and accepts the same exact plus alias after a manual
+sender whitelist row exists. But the stored message does not preserve the
+trusted-sender classification in the owner-visible `trust_status` field, and
+the dedicated `authentication_results_json` column is not populated from
+provider headers. This weakens the Email app trust badge and leaves future
+trusted-upload review without a clean structured authentication-results field.
+
+Evidence:
+
+```text
+code:
+  internal/maild/webhook.go: enforceReceivePolicy returns only error/nil, so
+  ingest does not know whether the sender matched a trusted whitelist.
+  internal/maild/ingest.go: buildInboundRecord sets trust_status to "public"
+  unless attachments exist, and never fills AuthenticationResults.
+tests:
+  internal/maild/webhook_test.go proves unwhitelisted trusted-upload rejection
+  and whitelisted trusted-upload acceptance, but does not assert trust_status
+  or authentication_results_json.
+reference:
+  docs/choir-email-reference-v0.md says trusted uploads require sender
+  whitelist and recorded message-authentication results, while UI labels include
+  "Trusted sender" and "Attachment quarantined".
+```
+
+Belief-state update:
+
+- The authority boundary remains intact: accepted inbound content is still
+  wrapped as `UNTRUSTED_EXTERNAL_EMAIL` source material and cannot trigger MAS
+  actions without owner handoff.
+- The local classification evidence is incomplete. A whitelisted trusted upload
+  should remain untrusted as source material, but its mailbox message should
+  show the owner that the sender matched the trusted-upload gate.
+
+Next executable probe:
+
+- Make receive-policy evaluation return a small classification result, store
+  whitelisted trusted-upload messages as `trust_status="trusted"` when there
+  are no attachments, keep attachments in quarantine, populate
+  `authentication_results_json` from authentication-results headers, and add
+  focused maild tests for both fields.
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
