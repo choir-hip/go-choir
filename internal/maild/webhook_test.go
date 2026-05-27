@@ -312,6 +312,22 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	if packet.TrustLabel != "UNTRUSTED_EXTERNAL_EMAIL" {
 		t.Fatalf("TrustLabel = %q", packet.TrustLabel)
 	}
+	var provenance map[string]any
+	if err := json.Unmarshal([]byte(packet.ProvenanceJSON), &provenance); err != nil {
+		t.Fatalf("unmarshal source provenance: %v", err)
+	}
+	if provenance["provider"] != providerResend || provenance["provider_event_id"] != "evt-1" || provenance["provider_message_id"] != "email-1" {
+		t.Fatalf("provenance ids = %+v", provenance)
+	}
+	if provenance["resolved_recipient"] != "000@choir.news" || provenance["trust_label"] != "UNTRUSTED_EXTERNAL_EMAIL" {
+		t.Fatalf("provenance trust/recipient = %+v", provenance)
+	}
+	if _, ok := provenance["mailbox_owner_id"]; ok {
+		t.Fatalf("provenance leaked mailbox_owner_id: %+v", provenance)
+	}
+	if _, ok := provenance["alias_id"]; ok {
+		t.Fatalf("provenance leaked alias_id: %+v", provenance)
+	}
 	if packet.TextRef != "message:"+msg.ID {
 		t.Fatalf("TextRef = %q, want %q", packet.TextRef, "message:"+msg.ID)
 	}
