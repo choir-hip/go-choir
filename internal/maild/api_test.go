@@ -279,6 +279,29 @@ func TestHandleMessageIngressEventsIsIdempotentForSameSubmission(t *testing.T) {
 	}
 }
 
+func TestHandleMessageIngressEventsRejectsOversizedRequestBody(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.APIMaxBytes = 128
+	seedMessage(t, store, "user-1", "msg-1", "untrusted")
+	h := NewHandler(cfg, store)
+
+	body := `{"source_packet_id":"source-msg-1","conductor_submission_id":"submission-1","status":"` + strings.Repeat("x", 256) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
+	setInternalOwner(req, "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+	events, err := store.ListIngressEvents(req.Context(), "user-1", "msg-1", 10)
+	if err != nil {
+		t.Fatalf("list ingress events: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("events = %+v, want none after oversized request", events)
+	}
+}
+
 func TestHandleMessageReadMarksOwnerMessage(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")

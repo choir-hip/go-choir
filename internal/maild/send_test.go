@@ -124,6 +124,32 @@ func TestHandleSendRequiresInternalCaller(t *testing.T) {
 	}
 }
 
+func TestHandleSendRejectsOversizedRequestBody(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.APIMaxBytes = 128
+	h := NewHandler(cfg, store)
+	body := `{
+		"from_address":"000@choir.news",
+		"to_addresses":["friend@example.com"],
+		"subject":"too large",
+		"text_body":"` + strings.Repeat("x", 256) + `"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(body))
+	setInternalOwner(req, "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+	messages, err := store.ListMessages(req.Context(), "user-root", "sent", 10)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("sent messages = %+v, want none after oversized request", messages)
+	}
+}
+
 func TestHandleSendAddsReplyHeadersForOwnedReplyTarget(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"

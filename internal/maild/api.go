@@ -1,8 +1,11 @@
 package maild
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -238,8 +241,8 @@ func (h *Handler) handleRecordMessageIngressEvent(w http.ResponseWriter, r *http
 		return
 	}
 	var in recordIngressEventRequest
-	if err := decodeJSON(r, &in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	if err := h.decodeJSON(r, &in); err != nil {
+		writeDecodeError(w, err)
 		return
 	}
 	sourcePacketID := strings.TrimSpace(in.SourcePacketID)
@@ -354,8 +357,36 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mail store error"})
 }
 
-func decodeJSON(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
+var errAPIBodyTooLarge = errors.New("maild API request body too large")
+
+func apiMaxBytesOrDefault(value int64) int64 {
+	if value > 0 {
+		return value
+	}
+	return DefaultAPIMaxBody
+}
+
+func (h *Handler) decodeJSON(r *http.Request, dst any) error {
+	maxBytes := int64(DefaultAPIMaxBody)
+	if h != nil && h.cfg != nil {
+		maxBytes = apiMaxBytesOrDefault(h.cfg.APIMaxBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) > maxBytes {
+		return errAPIBodyTooLarge
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(dst)
+}
+
+func writeDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errAPIBodyTooLarge) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+		return
+	}
+	writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
 }

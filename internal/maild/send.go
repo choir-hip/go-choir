@@ -41,8 +41,8 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in sendEmailRequest
-	if err := decodeJSON(r, &in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	if err := h.decodeJSON(r, &in); err != nil {
+		writeDecodeError(w, err)
 		return
 	}
 	alias, err := h.resolveOwnedFromAlias(r.Context(), ownerID, in.FromAddress)

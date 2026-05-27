@@ -34,6 +34,9 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.ProviderMaxBytes != DefaultProviderMaxBody {
 		t.Fatalf("ProviderMaxBytes = %d, want %d", cfg.ProviderMaxBytes, DefaultProviderMaxBody)
 	}
+	if cfg.APIMaxBytes != DefaultAPIMaxBody {
+		t.Fatalf("APIMaxBytes = %d, want %d", cfg.APIMaxBytes, DefaultAPIMaxBody)
+	}
 }
 
 func TestConfigEnsureDirs(t *testing.T) {
@@ -46,6 +49,7 @@ func TestConfigEnsureDirs(t *testing.T) {
 		RootOwnerID:      DefaultRootOwnerID,
 		ResendBaseURL:    DefaultResendBaseURL,
 		WebhookMaxBytes:  DefaultWebhookMaxBody,
+		APIMaxBytes:      DefaultAPIMaxBody,
 		ProviderMaxBytes: DefaultProviderMaxBody,
 	}
 	if err := cfg.EnsureDirs(); err != nil {

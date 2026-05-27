@@ -18,6 +18,7 @@ func newTestStore(t *testing.T) (*Store, *Config) {
 		RootOwnerID:      "user-root",
 		ResendBaseURL:    DefaultResendBaseURL,
 		WebhookMaxBytes:  DefaultWebhookMaxBody,
+		APIMaxBytes:      DefaultAPIMaxBody,
 		ProviderMaxBytes: DefaultProviderMaxBody,
 	}
 	if err := cfg.EnsureDirs(); err != nil {
