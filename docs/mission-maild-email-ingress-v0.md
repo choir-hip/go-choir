@@ -2226,6 +2226,22 @@ Next executable probe:
   for the owner and fails if any Sent row is timestamped at or after the
   selected inbound message timestamp.
 
+Resolution checkpoint, 2026-05-27:
+
+- `scripts/mail-acceptance-check` now supports
+  `--expect-no-sent-after-message`.
+- The flag lists the owner's Sent folder and fails if any Sent row is
+  timestamped at or after the selected inbound message's received/created
+  timestamp.
+- The checker remains read-only and opt-in, so ordinary mailbox inspection does
+  not fail because of unrelated historical Sent rows.
+- Focused verification passed:
+
+```text
+bash -n scripts/mail-acceptance-check
+nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.

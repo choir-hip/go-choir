@@ -8,6 +8,7 @@ SUBJECT_CONTAINS=""
 NODE_HOST="${CHOIR_MAIL_NODE_HOST:-node-b}"
 EXPECT_ATTACHMENT_QUARANTINE=0
 EXPECT_INGRESS_EVENTS=""
+EXPECT_NO_SENT_AFTER_MESSAGE=0
 
 usage() {
   cat <<'USAGE'
@@ -21,11 +22,14 @@ Options:
   --node-host HOST                   SSH host for Node B. Default: node-b
   --expect-attachment-quarantine     Require at least one quarantined attachment
   --expect-ingress-events N          Require exactly N owner/message ingress events
+  --expect-no-sent-after-message     Require no Sent rows at/after selected message timestamp
   -h, --help                         Show this help
 
 This checker is read-only. It uses maildctl over SSH and does not submit the
 message to Choir. Use it before owner handoff with --expect-ingress-events 0,
-then after clicking Send to Choir with --expect-ingress-events 1.
+then after clicking Send to Choir with --expect-ingress-events 1. Add
+--expect-no-sent-after-message before owner action to prove inbound mail did
+not create an outbound Sent row.
 USAGE
 }
 
@@ -54,6 +58,10 @@ while [ $# -gt 0 ]; do
     --expect-ingress-events)
       EXPECT_INGRESS_EVENTS="${2:?missing value for --expect-ingress-events}"
       shift 2
+      ;;
+    --expect-no-sent-after-message)
+      EXPECT_NO_SENT_AFTER_MESSAGE=1
+      shift
       ;;
     -h|--help)
       usage
@@ -126,6 +134,7 @@ detail="$(maildctl_json message --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 attachments="$(maildctl_json attachments --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 source_packet="$(maildctl_json source-packet --owner "$OWNER_ID" --message "$MESSAGE_ID")"
 ingress_events="$(maildctl_json ingress-events --owner "$OWNER_ID" --message "$MESSAGE_ID")"
+sent_messages_after_message="[]"
 
 provider_message_id="$(jq -r '.message.ProviderMessageID // empty' <<<"$detail")"
 provider_event_id="$(jq -r '.message.ProviderEventID // empty' <<<"$detail")"
@@ -165,6 +174,27 @@ if [ -n "$EXPECT_INGRESS_EVENTS" ] && [ "$ingress_count" -ne "$EXPECT_INGRESS_EV
   exit 1
 fi
 
+if [ "$EXPECT_NO_SENT_AFTER_MESSAGE" -eq 1 ]; then
+  message_time="$(jq -r '.message.ReceivedAt // .message.CreatedAt // empty' <<<"$detail")"
+  if [ -z "$message_time" ]; then
+    echo "error: message has no timestamp for no-outbound comparison" >&2
+    exit 1
+  fi
+  sent_messages="$(maildctl_json messages --owner "$OWNER_ID" sent)"
+  sent_messages_after_message="$(jq --arg message_time "$message_time" '
+    [
+      .[]
+      | . as $sent
+      | (($sent.SentAt // $sent.CreatedAt // "") | select(. >= $message_time)) as $sent_time
+      | $sent + {ComparisonTime: $sent_time}
+    ]' <<<"$sent_messages")"
+  sent_after_count="$(jq 'length' <<<"$sent_messages_after_message")"
+  if [ "$sent_after_count" -ne 0 ]; then
+    echo "error: found ${sent_after_count} sent message(s) at/after inbound message timestamp ${message_time}" >&2
+    exit 1
+  fi
+fi
+
 jq -n \
   --arg status "ok" \
   --arg owner "$OWNER_ID" \
@@ -177,6 +207,7 @@ jq -n \
   --argjson attachments "$attachments" \
   --argjson source_packet "$source_packet" \
   --argjson ingress_events "$ingress_events" \
+  --argjson sent_messages_after_message "$sent_messages_after_message" \
   '{
     status: $status,
     owner: $owner,
@@ -188,5 +219,6 @@ jq -n \
     detail: $detail,
     attachments: $attachments,
     source_packet: $source_packet,
-    ingress_events: $ingress_events
+    ingress_events: $ingress_events,
+    sent_messages_after_message: $sent_messages_after_message
   }'
