@@ -3526,6 +3526,54 @@ Next executable probe:
   `RESEND_WEBHOOK_SECRET` through the credential path; and plan DNS/MX changes
   from exact Resend records before mutating Gandi.
 
+## Security Finding: source-packet provenance includes internal owner and alias IDs
+
+Recorded: 2026-05-27 during pre-provider source-packet review.
+
+Problem:
+
+`maild` stores source-packet provenance JSON with `alias_id` and
+`mailbox_owner_id`. The proxy then includes the full `provenance_json` string in
+the prompt-bar handoff text for Send to Choir. That means internal routing IDs
+can be copied into the user-computer prompt and Trace path even though they are
+not needed for the agent to treat the email as untrusted source material.
+
+Evidence:
+
+```text
+code:
+  internal/maild/ingest.go -> buildInboundRecord
+    provenance includes alias_id and mailbox_owner_id.
+
+  internal/maild/api.go -> handleMessageSourcePacket
+    returns packet.ProvenanceJSON.
+
+  internal/proxy/email.go -> buildEmailSourcePrompt
+    writes "Provenance: " + source.ProvenanceJSON into the prompt-bar text.
+```
+
+Impact:
+
+- This is not an authorization bypass; source-packet access is owner-scoped and
+  proxy-mediated for Send to Choir.
+- It is still unnecessary internal identifier exposure across the maild ->
+  proxy -> user-computer/MAS boundary. The prompt needs stable, non-secret
+  provenance such as provider, provider message/event ids, resolved recipient,
+  trust label, and attachment count. It does not need the internal owner or
+  alias row ids.
+
+Belief-state update:
+
+- Keep internal owner/alias IDs in SQLite relational columns for authorization
+  and lookup. Do not duplicate them into source-packet provenance that is handed
+  to the user-computer prompt path.
+
+Next executable probe:
+
+- Remove `mailbox_owner_id` and `alias_id` from source-packet provenance JSON,
+  and add focused tests proving the stored provenance remains useful but omits
+  those internal identifiers.
+
 ## Staging/Design Finding: owner-send lacks provider idempotency key
 
 Recorded: 2026-05-27 during provider-readiness continuation.
