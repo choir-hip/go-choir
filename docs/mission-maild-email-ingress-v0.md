@@ -3425,3 +3425,63 @@ Belief-state update:
   Gandi DNS/MX mutation with rollback, real inbound mail, real quarantine, real
   Send to Choir Trace evidence, and real outbound/reply acceptance remain
   unproven.
+
+## Security Finding: trusted-upload whitelist accepts messages without auth-result evidence
+
+Recorded: 2026-05-27 during trusted-upload receive-policy audit.
+
+Problem:
+
+The reference requires trusted-upload aliases to use an exact secret alias, a
+manual sender whitelist, and recorded message-authentication results. Current
+`enforceReceivePolicy` validates the exact secret alias and sender whitelist,
+but it can accept the whitelisted sender even when the received message carries
+no `Authentication-Results` or `ARC-Authentication-Results` header for the
+owner/operator to inspect later.
+
+Evidence:
+
+```text
+code:
+  internal/maild/webhook.go -> enforceReceivePolicy
+    - parses visible From/header From
+    - checks email_sender_whitelist when RequireSenderWhitelist=true
+    - does not require authentication-results evidence before accepting
+
+  internal/maild/ingest.go -> authenticationResultsJSON
+    - stores authentication-results and arc-authentication-results if present
+    - returns empty string when neither header is present
+
+tests:
+  internal/maild/webhook_test.go accepts whitelisted trusted-upload aliases
+  only with authentication-results present, but has no negative test for a
+  whitelisted trusted-upload message with no auth-result evidence.
+
+reference:
+  docs/choir-email-reference-v0.md:
+    - "Do not trust visible From: alone."
+    - trusted uploads require sender whitelist and recorded
+      message-authentication results.
+```
+
+Impact:
+
+- This does not grant MAS authority: accepted email still becomes
+  `UNTRUSTED_EXTERNAL_EMAIL`, and owner/proxy handoff is still required.
+- It weakens the trusted-upload mailbox classification. A future operator or UI
+  may see `trust_status="trusted"` for a whitelisted sender without the recorded
+  authentication evidence the reference says must be available.
+
+Belief-state update:
+
+- Trusted-upload policy should fail closed when `RequireSenderWhitelist=true`
+  and no message-authentication result header is present. The current code can
+  remain tolerant of SPF/DKIM/DMARC pass/fail semantics for v0; the immediate
+  invariant is that the evidence exists and is recorded.
+
+Next executable probe:
+
+- Add a focused negative test for a whitelisted trusted-upload alias with no
+  auth-result headers, then require authentication-results or ARC
+  authentication-results presence before accepting a sender-whitelist-gated
+  inbound message.
