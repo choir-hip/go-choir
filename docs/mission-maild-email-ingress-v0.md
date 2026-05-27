@@ -2916,3 +2916,46 @@ Belief-state update:
   deployment, DNS/MX cutover with rollback, real inbound mail, real quarantine,
   real Send to Choir trace, and no-auto-privileged-action proof are all
   produced.
+
+## Local Finding: Provider readiness lacks deployed webhook fail-closed proof
+
+Recorded: 2026-05-27 while checking provider readiness before any Resend or
+Gandi mutation.
+
+Problem:
+
+The mission requires DNS/MX changes to wait for deployed route and rollback
+proof. `scripts/mail-provider-readiness` currently reports Resend
+domain/webhook API state, Gandi mail records, public DNS, and Node B maild
+health, but it does not exercise the public `/api/email/resend/webhook` route.
+That leaves a gap in the pre-cutover evidence: we can see that `maild` is
+healthy and that the webhook secret is missing, but the standard readiness
+artifact does not prove that the public Caddy route reaches maild and fails
+closed without recording webhook state.
+
+Evidence:
+
+```text
+scripts/mail-provider-readiness:
+  reports credentials, Resend, Gandi, DNS, and Node B maild health only.
+
+internal/maild/webhook.go:
+  missing RESEND_WEBHOOK_SECRET returns webhook_secret_not_configured before
+  storing any webhook event; invalid/missing Svix headers return
+  invalid_signature when a secret is configured.
+```
+
+Belief-state update:
+
+- A negative webhook probe is safe and useful before provider setup: POSTing an
+  unsigned inert JSON body should return either `webhook_secret_not_configured`
+  while the secret is absent or `invalid_signature` once the secret is present.
+- The readiness probe should make that fail-closed route evidence visible
+  without creating domains, webhooks, DNS records, messages, source packets, or
+  ingress events.
+
+Next executable probe:
+
+- Extend `scripts/mail-provider-readiness` with a public webhook negative-route
+  probe and a follow-up maild health snapshot so pre-DNS readiness reports show
+  both route reachability and no message/webhook counter mutation.
