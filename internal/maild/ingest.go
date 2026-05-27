@@ -40,8 +40,8 @@ type inboundMessageRecord struct {
 
 // StoreInboundMessage stores a normalized received email and its untrusted
 // source packet. Attachments are metadata-only and quarantined by default.
-func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string, email resendReceivedEmail, alias EmailAlias, resolvedRecipient string) error {
-	record, err := buildInboundRecord(providerEventID, email, alias, resolvedRecipient)
+func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string, email resendReceivedEmail, alias EmailAlias, resolvedRecipient string, policyResult receivePolicyResult) error {
+	record, err := buildInboundRecord(providerEventID, email, alias, resolvedRecipient, policyResult)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string,
 	return nil
 }
 
-func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias EmailAlias, resolvedRecipient string) (inboundMessageRecord, error) {
+func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias EmailAlias, resolvedRecipient string, policyResult receivePolicyResult) (inboundMessageRecord, error) {
 	providerMessageID := strings.TrimSpace(email.ID)
 	if providerMessageID == "" {
 		return inboundMessageRecord{}, fmt.Errorf("resend email id is required")
@@ -144,8 +144,15 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 	if err != nil {
 		return inboundMessageRecord{}, fmt.Errorf("marshal headers: %w", err)
 	}
+	authenticationResults, err := authenticationResultsJSON(email.Headers)
+	if err != nil {
+		return inboundMessageRecord{}, fmt.Errorf("marshal authentication results: %w", err)
+	}
 	fromAddress, fromDisplay := parseSender(email.From, email.Headers["from"])
 	trustStatus := "public"
+	if policyResult.TrustedSender {
+		trustStatus = "trusted"
+	}
 	if len(email.Attachments) > 0 {
 		trustStatus = "quarantined"
 	}
@@ -184,6 +191,7 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 		HTMLBody:               email.HTML,
 		RawHeadersJSON:         string(headersJSON),
 		RawMessageRef:          rawRef,
+		AuthenticationResults:  authenticationResults,
 		TrustStatus:            trustStatus,
 		ReceivedAt:             receivedAt,
 		CreatedAt:              now,
@@ -203,6 +211,27 @@ func headersWithProviderMessageID(headers map[string]string, messageID string) m
 		out["message_id"] = trimmed
 	}
 	return out
+}
+
+func authenticationResultsJSON(headers map[string]string) (string, error) {
+	out := map[string]string{}
+	for key, value := range headers {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		switch normalized {
+		case "authentication-results", "arc-authentication-results":
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				out[normalized] = trimmed
+			}
+		}
+	}
+	if len(out) == 0 {
+		return "", nil
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func insertRecipients(ctx context.Context, tx *sql.Tx, messageID, kind string, addresses []string) error {

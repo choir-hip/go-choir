@@ -59,22 +59,23 @@ type WebhookEvent struct {
 
 // EmailMessage is a normalized mailbox row.
 type EmailMessage struct {
-	ID             string
-	Direction      string
-	MailboxOwnerID string
-	AliasID        string
-	FromAddress    string
-	FromDisplay    string
-	Subject        string
-	TextBody       string
-	HTMLBody       string
-	RawHeadersJSON string
-	TrustStatus    string
-	ReadAt         string
-	ReceivedAt     string
-	SentAt         string
-	CreatedAt      string
-	HasAttachments bool
+	ID                        string
+	Direction                 string
+	MailboxOwnerID            string
+	AliasID                   string
+	FromAddress               string
+	FromDisplay               string
+	Subject                   string
+	TextBody                  string
+	HTMLBody                  string
+	RawHeadersJSON            string
+	AuthenticationResultsJSON string
+	TrustStatus               string
+	ReadAt                    string
+	ReceivedAt                string
+	SentAt                    string
+	CreatedAt                 string
+	HasAttachments            bool
 }
 
 // EmailRecipient is a normalized message recipient visible to the mailbox owner.
@@ -539,7 +540,8 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	rows, err := s.db.QueryContext(ctx, `SELECT
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
-		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
+		coalesce(html_body, ''), coalesce(raw_headers_json, ''),
+		coalesce(authentication_results_json, ''), trust_status, coalesce(read_at, ''),
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
 		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
@@ -569,7 +571,8 @@ func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (Emai
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
-		coalesce(html_body, ''), coalesce(raw_headers_json, ''), trust_status, coalesce(read_at, ''),
+		coalesce(html_body, ''), coalesce(raw_headers_json, ''),
+		coalesce(authentication_results_json, ''), trust_status, coalesce(read_at, ''),
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
 		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
@@ -748,6 +751,7 @@ func scanMessage(row messageScanner) (EmailMessage, error) {
 		&msg.TextBody,
 		&msg.HTMLBody,
 		&msg.RawHeadersJSON,
+		&msg.AuthenticationResultsJSON,
 		&msg.TrustStatus,
 		&msg.ReadAt,
 		&msg.ReceivedAt,

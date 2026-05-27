@@ -89,7 +89,7 @@ func TestHandleResendWebhookDuplicateRetriesMissingInboundMessage(t *testing.T) 
 			"created_at":"2026-05-26T10:00:00Z",
 			"subject":"Retry me",
 			"text":"This should store after retry.",
-			"headers":{"from":"Sender <sender@example.com>"},
+			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=pass; dkim=pass"},
 			"bcc":[],
 			"cc":[],
 			"reply_to":[],
@@ -204,6 +204,13 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 	if headers["message_id"] != "<email-1@example.com>" {
 		t.Fatalf("stored message_id = %q", headers["message_id"])
 	}
+	var authResults map[string]string
+	if err := json.Unmarshal([]byte(msg.AuthenticationResultsJSON), &authResults); err != nil {
+		t.Fatalf("unmarshal authentication results: %v", err)
+	}
+	if authResults["authentication-results"] != "mx.example; dkim=pass" {
+		t.Fatalf("authentication results = %+v", authResults)
+	}
 	attachments, err := store.ListAttachments(req.Context(), "user-root", msg.ID)
 	if err != nil {
 		t.Fatalf("ListAttachments: %v", err)
@@ -237,7 +244,7 @@ func TestHandleResendWebhookRejectsUnwhitelistedTrustedUploadAlias(t *testing.T)
 			"created_at":"2026-05-26T10:00:00Z",
 			"subject":"Trusted upload",
 			"text":"Please file this.",
-			"headers":{"from":"Sender <sender@example.com>"},
+			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=pass; dkim=pass"},
 			"bcc":[],
 			"cc":[],
 			"reply_to":[],
@@ -283,7 +290,7 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 			"created_at":"2026-05-26T10:00:00Z",
 			"subject":"Trusted upload",
 			"text":"Please file this.",
-			"headers":{"from":"Sender <sender@example.com>"},
+			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=pass; dkim=pass"},
 			"bcc":[],
 			"cc":[],
 			"reply_to":[],
@@ -310,6 +317,16 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	}
 	if len(messages) != 1 || messages[0].Subject != "Trusted upload" {
 		t.Fatalf("messages = %+v, want whitelisted trusted upload", messages)
+	}
+	if messages[0].TrustStatus != "trusted" {
+		t.Fatalf("trust status = %q, want trusted", messages[0].TrustStatus)
+	}
+	var authResults map[string]string
+	if err := json.Unmarshal([]byte(messages[0].AuthenticationResultsJSON), &authResults); err != nil {
+		t.Fatalf("unmarshal authentication results: %v", err)
+	}
+	if authResults["authentication-results"] != "mx.example; spf=pass; dkim=pass" {
+		t.Fatalf("authentication results = %+v", authResults)
 	}
 }
 

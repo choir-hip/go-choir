@@ -1879,6 +1879,26 @@ Next executable probe:
   `authentication_results_json` from authentication-results headers, and add
   focused maild tests for both fields.
 
+Resolution checkpoint, 2026-05-27:
+
+- `internal/maild/webhook.go` now returns a small receive-policy result so
+  ingest can tell whether an inbound message matched a trusted sender
+  whitelist.
+- `internal/maild/ingest.go` stores whitelisted trusted-upload messages as
+  `trust_status="trusted"` when they have no attachments, while attachment
+  presence still forces `trust_status="quarantined"`.
+- `internal/maild/ingest.go` also extracts `authentication-results` and
+  `arc-authentication-results` headers into the dedicated
+  `authentication_results_json` column.
+- `internal/maild/store.go` carries `authentication_results_json` through
+  owner-scoped message reads for tests/operator inspection without changing the
+  browser message-summary API.
+- Focused verification passed:
+
+```text
+nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.

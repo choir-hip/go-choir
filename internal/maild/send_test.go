@@ -75,7 +75,7 @@ func TestHandleSendAddsReplyHeadersForOwnedReplyTarget(t *testing.T) {
 		Headers:   map[string]string{"from": "Sender <sender@example.com>"},
 		MessageID: "<email-inbound-1@example.com>",
 	}
-	if err := store.StoreInboundMessage(context.Background(), "evt-inbound-1", inbound, alias, "000@choir.news"); err != nil {
+	if err := store.StoreInboundMessage(context.Background(), "evt-inbound-1", inbound, alias, "000@choir.news", receivePolicyResult{}); err != nil {
 		t.Fatalf("StoreInboundMessage: %v", err)
 	}
 	replyTargetID := messageRowID("email-inbound-1")
