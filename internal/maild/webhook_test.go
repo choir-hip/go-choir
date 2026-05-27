@@ -355,6 +355,52 @@ func TestHandleResendWebhookRejectsUnwhitelistedTrustedUploadAlias(t *testing.T)
 	}
 }
 
+func TestHandleResendWebhookRejectsWhitelistedTrustedUploadAliasWithoutAuthenticationResults(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	seedTrustedUploadAlias(t, store, true)
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-upload-missing-auth-results",
+			"to":["000+upload-secret@choir.news"],
+			"from":"sender@example.com",
+			"created_at":"2026-05-26T10:00:00Z",
+			"subject":"Trusted upload missing auth results",
+			"text":"Please file this.",
+			"headers":{"from":"Sender <sender@example.com>"},
+			"bcc":[],
+			"cc":[],
+			"reply_to":[],
+			"message_id":"<email-upload-missing-auth-results@example.com>",
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-upload-missing-auth-results","type":"email.received","data":{"email_id":"email-upload-missing-auth-results"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-upload-missing-auth-results", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "accepted_ingest_failed") {
+		t.Fatalf("body = %s, want accepted_ingest_failed", w.Body.String())
+	}
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.Messages != 0 {
+		t.Fatalf("messages = %d, want 0", stats.Messages)
+	}
+}
+
 func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="

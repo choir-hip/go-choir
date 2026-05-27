@@ -224,6 +224,9 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 	senderAddress, _ := parseSender(email.From, email.Headers["from"])
 	whitelisted := false
 	if policy.RequireSenderWhitelist {
+		if !hasAuthenticationResultEvidence(email.Headers) {
+			return receivePolicyResult{}, fmt.Errorf("%w: authentication results required", errReceivePolicyRejected)
+		}
 		whitelisted, err = h.store.IsSenderWhitelisted(ctx, alias.TargetID, alias.ID, senderAddress)
 		if err != nil {
 			return receivePolicyResult{}, err
@@ -239,6 +242,19 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 		return receivePolicyResult{}, fmt.Errorf("%w: attachments disabled", errReceivePolicyRejected)
 	}
 	return receivePolicyResult{TrustedSender: whitelisted}, nil
+}
+
+func hasAuthenticationResultEvidence(headers map[string]string) bool {
+	for key, value := range headers {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized != "authentication-results" && normalized != "arc-authentication-results" {
+			continue
+		}
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func verifyWebhook(payload []byte, headers http.Header, secret string) error {
