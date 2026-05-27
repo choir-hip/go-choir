@@ -3,6 +3,8 @@ package maild
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -137,6 +139,7 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", resendSendIdempotencyKey(body))
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -154,6 +157,11 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 		return resendSendResponse{}, fmt.Errorf("send email response missing id")
 	}
 	return out, nil
+}
+
+func resendSendIdempotencyKey(body []byte) string {
+	sum := sha256.Sum256(body)
+	return "choir_maild_" + hex.EncodeToString(sum[:])
 }
 
 func readProviderHTTPError(operation string, resp *http.Response) error {

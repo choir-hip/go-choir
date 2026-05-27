@@ -13,12 +13,17 @@ import (
 func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"
+	var firstIdempotencyKey string
 	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/emails" {
 			t.Fatalf("%s %s", r.Method, r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer re_test" {
 			t.Fatalf("Authorization = %q", got)
+		}
+		firstIdempotencyKey = r.Header.Get("Idempotency-Key")
+		if !strings.HasPrefix(firstIdempotencyKey, "choir_maild_") {
+			t.Fatalf("Idempotency-Key = %q, want choir_maild_ prefix", firstIdempotencyKey)
 		}
 		var payload resendSendRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -59,6 +64,46 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	}
 	if messages[0].FromAddress != "000@choir.news" {
 		t.Fatalf("sent from = %q, want canonical numeric alias", messages[0].FromAddress)
+	}
+}
+
+func TestResendSendEmailSetsStableIdempotencyKey(t *testing.T) {
+	cfg := &Config{
+		ResendAPIKey:  "re_test",
+		ResendBaseURL: "http://unused",
+	}
+	keys := []string{}
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"sent-1"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	client := newResendClient(cfg, resend.Client())
+	payload := resendSendRequest{
+		From:    "000@choir.news",
+		To:      []string{"delivered@resend.dev"},
+		Subject: "test",
+		Text:    "same payload",
+		Headers: map[string]any{"X-Choir-Maild": "v0-owner-send"},
+	}
+
+	if _, err := client.sendEmail(context.Background(), payload); err != nil {
+		t.Fatalf("send 1: %v", err)
+	}
+	if _, err := client.sendEmail(context.Background(), payload); err != nil {
+		t.Fatalf("send 2: %v", err)
+	}
+
+	if len(keys) != 2 {
+		t.Fatalf("keys = %+v", keys)
+	}
+	if keys[0] == "" || keys[0] != keys[1] {
+		t.Fatalf("idempotency keys = %+v, want stable non-empty key", keys)
+	}
+	if len(keys[0]) > 256 {
+		t.Fatalf("idempotency key length = %d, want <= 256", len(keys[0]))
 	}
 }
 
