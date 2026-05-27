@@ -234,6 +234,35 @@ func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {
 	}
 }
 
+func TestHandleMessageIngressEventsIsIdempotentForSameSubmission(t *testing.T) {
+	store, cfg := newTestStore(t)
+	seedMessage(t, store, "user-1", "msg-1", "untrusted")
+	h := NewHandler(cfg, store)
+
+	body := `{"source_packet_id":"source-msg-1","conductor_submission_id":"submission-1","status":"accepted"}`
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
+		req.Header.Set("X-Authenticated-User", "user-1")
+		req.Header.Set("X-Internal-Caller", "true")
+		w := httptest.NewRecorder()
+		h.HandleMessages(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("post %d status = %d, want %d; body=%s", i+1, w.Code, http.StatusAccepted, w.Body.String())
+		}
+	}
+
+	events, err := store.ListIngressEvents(t.Context(), "user-1", "msg-1", 10)
+	if err != nil {
+		t.Fatalf("list ingress events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1: %+v", len(events), events)
+	}
+	if events[0].ConductorSubmissionID != "submission-1" || events[0].SourcePacketID != "source-msg-1" {
+		t.Fatalf("event = %+v", events[0])
+	}
+}
+
 func TestHandleMessageReadMarksOwnerMessage(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")

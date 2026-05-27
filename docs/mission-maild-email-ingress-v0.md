@@ -2778,3 +2778,22 @@ Next executable probe:
 - Make `RecordIngressEvent` tolerate exact duplicate receipts while rejecting
   conflicting duplicates, add a focused API/store test, then run the maild and
   proxy test slice before deploy.
+
+Resolution evidence, 2026-05-27:
+
+- `internal/maild/store.go` now records ingress receipts with
+  `INSERT OR IGNORE`, then verifies an ignored duplicate matches the same
+  message id, source packet id, owner id, and conductor submission id before
+  accepting it as idempotent.
+- `internal/maild/api_test.go` now posts the same internal
+  `/api/email/messages/:id/ingress-events` receipt twice and proves both
+  requests return `202 Accepted` while only one durable ingress event remains.
+- Focused local verification passed:
+  `nix develop -c go test ./internal/maild ./cmd/maild ./cmd/maildctl ./internal/proxy`.
+
+Residual risk:
+
+- This closes the local duplicate receipt gap, but it is not deployed until the
+  next GitHub Actions deploy identity is verified on Node B. Real inbound
+  source-packet handoff proof still depends on Resend webhook setup and DNS/MX
+  cutover.

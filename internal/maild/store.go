@@ -705,7 +705,7 @@ func (s *Store) ListIngressEvents(ctx context.Context, ownerID, messageID string
 
 // RecordIngressEvent stores an owner-triggered MAS handoff receipt.
 func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent) error {
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO email_ingress_events (
+	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO email_ingress_events (
 		id, message_id, source_packet_id, owner_id, conductor_submission_id,
 		status, created_at, completed_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -717,8 +717,40 @@ func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent)
 		event.Status,
 		event.CreatedAt,
 		nullString(event.CompletedAt),
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("record ingress event: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("record ingress event rows: %w", err)
+	}
+	if rows > 0 {
+		return nil
+	}
+	var existing EmailIngressEvent
+	err = s.db.QueryRowContext(ctx, `SELECT
+		id, message_id, coalesce(source_packet_id, ''), owner_id,
+		coalesce(conductor_submission_id, ''), status, created_at, coalesce(completed_at, '')
+		FROM email_ingress_events
+		WHERE id = ?`, event.ID).Scan(
+		&existing.ID,
+		&existing.MessageID,
+		&existing.SourcePacketID,
+		&existing.OwnerID,
+		&existing.ConductorSubmissionID,
+		&existing.Status,
+		&existing.CreatedAt,
+		&existing.CompletedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("record ingress event lookup: %w", err)
+	}
+	if existing.MessageID != event.MessageID ||
+		existing.SourcePacketID != strings.TrimSpace(event.SourcePacketID) ||
+		existing.OwnerID != event.OwnerID ||
+		existing.ConductorSubmissionID != strings.TrimSpace(event.ConductorSubmissionID) {
+		return fmt.Errorf("record ingress event: conflicting duplicate id")
 	}
 	return nil
 }
