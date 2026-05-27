@@ -117,6 +117,10 @@ func (h *Handler) HandleResendWebhook(w http.ResponseWriter, r *http.Request) {
 		if shouldIngestEmail(eventType, event.Data.EmailID) {
 			if retried, err := h.retryMissingReceivedEmail(r.Context(), providerEventID, strings.TrimSpace(event.Data.EmailID)); err != nil {
 				log.Printf("maild: retry duplicate ingest event=%s email=%s: %v", providerEventID, event.Data.EmailID, err)
+				if shouldRetryIngest(err) {
+					writeJSON(w, http.StatusServiceUnavailable, webhookResponse{Status: "duplicate_ingest_retry_requested", EventID: providerEventID})
+					return
+				}
 				writeJSON(w, http.StatusAccepted, webhookResponse{Status: "duplicate_ingest_failed", EventID: providerEventID})
 				return
 			} else if retried {
@@ -131,6 +135,10 @@ func (h *Handler) HandleResendWebhook(w http.ResponseWriter, r *http.Request) {
 	if shouldIngestEmail(eventType, event.Data.EmailID) {
 		if err := h.ingestReceivedEmail(r.Context(), providerEventID, strings.TrimSpace(event.Data.EmailID)); err != nil {
 			log.Printf("maild: ingest received email event=%s email=%s: %v", providerEventID, event.Data.EmailID, err)
+			if shouldRetryIngest(err) {
+				writeJSON(w, http.StatusServiceUnavailable, webhookResponse{Status: "ingest_retry_requested", EventID: providerEventID})
+				return
+			}
 			status = "accepted_ingest_failed"
 		}
 	}
@@ -153,6 +161,16 @@ func (h *Handler) retryMissingReceivedEmail(ctx context.Context, providerEventID
 		return false, err
 	}
 	return true, nil
+}
+
+func shouldRetryIngest(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errReceivePolicyRejected) || errors.Is(err, sql.ErrNoRows) {
+		return false
+	}
+	return true
 }
 
 func (h *Handler) ingestReceivedEmail(ctx context.Context, providerEventID, providerMessageID string) error {

@@ -106,11 +106,11 @@ func TestHandleResendWebhookDuplicateRetriesMissingInboundMessage(t *testing.T) 
 	req := signedResendRequest(t, cfg.WebhookSecret, "msg-retry-1", body)
 	w := httptest.NewRecorder()
 	h.HandleResendWebhook(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("first status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "accepted_ingest_failed") {
-		t.Fatalf("first body = %s, want accepted_ingest_failed", w.Body.String())
+	if !strings.Contains(w.Body.String(), "ingest_retry_requested") {
+		t.Fatalf("first body = %s, want ingest_retry_requested", w.Body.String())
 	}
 	stats, err := store.Stats(context.Background())
 	if err != nil {
@@ -142,6 +142,37 @@ func TestHandleResendWebhookDuplicateRetriesMissingInboundMessage(t *testing.T) 
 	}
 	if count != 1 {
 		t.Fatalf("webhook count = %d, want 1", count)
+	}
+}
+
+func TestHandleResendWebhookDuplicateRetryFailureRequestsAnotherRetry(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary provider failure", http.StatusBadGateway)
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-retry-still-failing","type":"email.received","data":{"email_id":"email-retry-still-failing"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-retry-still-failing", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+
+	req = signedResendRequest(t, cfg.WebhookSecret, "msg-retry-still-failing", body)
+	w = httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("retry status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "duplicate_ingest_retry_requested") {
+		t.Fatalf("retry body = %s, want duplicate_ingest_retry_requested", w.Body.String())
 	}
 }
 

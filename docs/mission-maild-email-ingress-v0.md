@@ -2318,6 +2318,22 @@ Next executable probe:
 - Keep response bodies and logs free of email body, webhook secret, API key, and
   attachment URL data.
 
+Resolution checkpoint, 2026-05-27:
+
+- `HandleResendWebhook` now returns HTTP 503 with
+  `ingest_retry_requested` when a newly recorded `email.received` event hits a
+  retryable fetch/store failure.
+- Duplicate webhook deliveries still retry missing message storage. If the
+  duplicate retry also hits a retryable failure, `maild` returns HTTP 503 with
+  `duplicate_ingest_retry_requested` instead of acknowledging success.
+- Permanent local rejects such as receive-policy rejection or no matching alias
+  still return an accepted failure status to avoid provider retry loops.
+- Focused verification passed:
+
+```text
+nix develop -c go test ./internal/maild -run 'TestHandleResendWebhook(DuplicateRetriesMissingInboundMessage|DuplicateRetryFailureRequestsAnotherRetry|RejectsUnwhitelistedTrustedUploadAlias|FetchesAndStoresInboundMessage)'
+```
+
 ## Mission Ledger Reconciliation Checkpoint
 
 Recorded: 2026-05-26.
