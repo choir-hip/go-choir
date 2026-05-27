@@ -62,6 +62,29 @@ resend_get() {
   rm -f "$tmp"
 }
 
+webhook_negative_probe() {
+  local url="https://${DOMAIN}/api/email/resend/webhook"
+  local tmp status
+  tmp="$(mktemp)"
+  status="$(curl -sS -o "$tmp" -w '%{http_code}' \
+    -X POST \
+    -H "Content-Type: application/json" \
+    --data '{"readiness_probe":"unsigned_negative"}' \
+    "$url" || true)"
+  jq -n \
+    --arg url "$url" \
+    --arg status "$status" \
+    --argjson body "$(sanitize_json < "$tmp" 2>/dev/null || jq -Rs . < "$tmp")" \
+    '{
+      url: $url,
+      http_status: ($status | tonumber? // 0),
+      body: $body,
+      expected_status: "webhook_secret_not_configured or invalid_signature",
+      expected_state_mutation: "none"
+    }'
+  rm -f "$tmp"
+}
+
 echo "== Choir Email Provider Readiness (${DOMAIN}) =="
 echo "mode: read-only"
 echo
@@ -167,6 +190,20 @@ if command -v dig >/dev/null 2>&1; then
 fi
 
 echo "== Node B maild Health =="
+if command -v ssh >/dev/null 2>&1; then
+  ssh "$NODE_HOST" \
+    'curl -fsS http://127.0.0.1:8087/health | jq "{status, resend_api_key_configured, webhook_secret_configured, root_owner_id_configured, stats}"' \
+    || echo '{"status":"unavailable","reason":"ssh or maild health probe failed"}'
+else
+  echo '{"status":"skipped","reason":"ssh missing"}'
+fi
+
+echo
+echo "== Public Webhook Negative Route Probe =="
+webhook_negative_probe
+
+echo
+echo "== Node B maild Health After Negative Probe =="
 if command -v ssh >/dev/null 2>&1; then
   ssh "$NODE_HOST" \
     'curl -fsS http://127.0.0.1:8087/health | jq "{status, resend_api_key_configured, webhook_secret_configured, root_owner_id_configured, stats}"' \
