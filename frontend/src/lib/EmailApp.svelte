@@ -123,7 +123,13 @@
         throw new Error('Could not send to Choir');
       }
       const data = await res.json();
-      actionStatus = data.submission_id ? `Sent to Choir: ${data.submission_id}` : 'Sent to Choir';
+      if (data.ingress_event_recorded === false) {
+        actionStatus = data.submission_id
+          ? `Sent to Choir: ${data.submission_id} (receipt pending)`
+          : 'Sent to Choir (receipt pending)';
+      } else {
+        actionStatus = data.submission_id ? `Sent to Choir: ${data.submission_id}` : 'Sent to Choir';
+      }
     } catch (err) {
       handleError(err);
     }

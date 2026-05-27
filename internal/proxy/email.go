@@ -32,12 +32,14 @@ type promptBarProxyResponse struct {
 }
 
 type emailSendToChoirResponse struct {
-	SourcePacketID string `json:"source_packet_id"`
-	MessageID      string `json:"message_id"`
-	TrustLabel     string `json:"trust_label"`
-	SubmissionID   string `json:"submission_id"`
-	State          string `json:"state"`
-	StatusURL      string `json:"status_url"`
+	SourcePacketID       string `json:"source_packet_id"`
+	MessageID            string `json:"message_id"`
+	TrustLabel           string `json:"trust_label"`
+	SubmissionID         string `json:"submission_id"`
+	State                string `json:"state"`
+	StatusURL            string `json:"status_url"`
+	IngressEventRecorded bool   `json:"ingress_event_recorded"`
+	IngressEventWarning  string `json:"ingress_event_warning,omitempty"`
 }
 
 const emailSourceTrustLabel = "UNTRUSTED_EXTERNAL_EMAIL"
@@ -91,19 +93,45 @@ func (h *Handler) HandleEmailSendToChoir(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to submit email source"})
 		return
 	}
-	if err := h.recordMailIngressEvent(r, authResult.UserID, source, promptResp); err != nil {
+	ingressRecorded := true
+	ingressWarning := ""
+	if err := h.recordMailIngressEventWithRetry(r, authResult.UserID, source, promptResp); err != nil {
+		ingressRecorded = false
+		ingressWarning = "handoff receipt not recorded"
 		log.Printf("proxy: email send-to-choir record ingress event: %v", err)
 	}
 
 	writeJSON(w, http.StatusAccepted, emailSendToChoirResponse{
-		SourcePacketID: source.SourcePacketID,
-		MessageID:      source.MessageID,
-		TrustLabel:     source.TrustLabel,
-		SubmissionID:   promptResp.SubmissionID,
-		State:          promptResp.State,
-		StatusURL:      promptResp.StatusURL,
+		SourcePacketID:       source.SourcePacketID,
+		MessageID:            source.MessageID,
+		TrustLabel:           source.TrustLabel,
+		SubmissionID:         promptResp.SubmissionID,
+		State:                promptResp.State,
+		StatusURL:            promptResp.StatusURL,
+		IngressEventRecorded: ingressRecorded,
+		IngressEventWarning:  ingressWarning,
 	})
 	h.lifecycle.record("email_send_to_choir.total", "accepted", time.Since(started))
+}
+
+func (h *Handler) recordMailIngressEventWithRetry(r *http.Request, userID string, source emailSourcePacketResponse, promptResp promptBarProxyResponse) error {
+	delays := []time.Duration{0, 100 * time.Millisecond, 250 * time.Millisecond}
+	var lastErr error
+	for i, delay := range delays {
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-r.Context().Done():
+				return fmt.Errorf("receipt retry canceled after %d attempt(s): %w", i, r.Context().Err())
+			}
+		}
+		if err := h.recordMailIngressEvent(r, userID, source, promptResp); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("receipt callback failed after %d attempts: %w", len(delays), lastErr)
 }
 
 func (h *Handler) recordMailIngressEvent(r *http.Request, userID string, source emailSourcePacketResponse, promptResp promptBarProxyResponse) error {

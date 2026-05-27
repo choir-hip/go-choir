@@ -171,6 +171,137 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	if resp.SubmissionID != "run-email-1" || resp.SourcePacketID != "src-email-1" {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
+	if !resp.IngressEventRecorded || resp.IngressEventWarning != "" {
+		t.Fatalf("ingress receipt fields = recorded=%v warning=%q", resp.IngressEventRecorded, resp.IngressEventWarning)
+	}
+}
+
+func TestEmailSendToChoirRetriesTransientIngressReceiptFailure(t *testing.T) {
+	recordAttempts := 0
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/email/messages/msg-1/source-packet":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"source_packet_id": "src-email-1",
+				"message_id":       "msg-1",
+				"trust_label":      "UNTRUSTED_EXTERNAL_EMAIL",
+				"text_ref":         "message:msg-1",
+				"text_body":        "Please summarize this message.",
+			})
+		case "/api/email/messages/msg-1/ingress-events":
+			recordAttempts++
+			if recordAttempts < 3 {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporary store failure"})
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "ingress-1"})
+		default:
+			t.Fatalf("maild path = %s", r.URL.Path)
+		}
+	}))
+	defer maild.Close()
+
+	promptCalls := 0
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		promptCalls++
+		if r.URL.Path != "/api/prompt-bar" {
+			t.Fatalf("sandbox path = %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"submission_id": "run-email-1",
+			"state":         "pending",
+			"status_url":    "/api/prompt-bar/submissions/run-email-1",
+		})
+	}))
+	defer sandbox.Close()
+
+	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/send-to-choir", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
+	w := httptest.NewRecorder()
+
+	h.HandleAPI(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	if promptCalls != 1 {
+		t.Fatalf("prompt calls = %d, want 1", promptCalls)
+	}
+	if recordAttempts != 3 {
+		t.Fatalf("record attempts = %d, want 3", recordAttempts)
+	}
+	var resp emailSendToChoirResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.IngressEventRecorded || resp.IngressEventWarning != "" {
+		t.Fatalf("ingress receipt fields = recorded=%v warning=%q", resp.IngressEventRecorded, resp.IngressEventWarning)
+	}
+}
+
+func TestEmailSendToChoirReportsUnrecordedIngressReceipt(t *testing.T) {
+	recordAttempts := 0
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/email/messages/msg-1/source-packet":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"source_packet_id": "src-email-1",
+				"message_id":       "msg-1",
+				"trust_label":      "UNTRUSTED_EXTERNAL_EMAIL",
+				"text_ref":         "message:msg-1",
+				"text_body":        "Please summarize this message.",
+			})
+		case "/api/email/messages/msg-1/ingress-events":
+			recordAttempts++
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "store unavailable"})
+		default:
+			t.Fatalf("maild path = %s", r.URL.Path)
+		}
+	}))
+	defer maild.Close()
+
+	promptCalls := 0
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		promptCalls++
+		if r.URL.Path != "/api/prompt-bar" {
+			t.Fatalf("sandbox path = %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"submission_id": "run-email-1",
+			"state":         "pending",
+			"status_url":    "/api/prompt-bar/submissions/run-email-1",
+		})
+	}))
+	defer sandbox.Close()
+
+	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
+	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/send-to-choir", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
+	w := httptest.NewRecorder()
+
+	h.HandleAPI(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	if promptCalls != 1 {
+		t.Fatalf("prompt calls = %d, want 1", promptCalls)
+	}
+	if recordAttempts != 3 {
+		t.Fatalf("record attempts = %d, want 3", recordAttempts)
+	}
+	var resp emailSendToChoirResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.SubmissionID != "run-email-1" {
+		t.Fatalf("submission id = %q", resp.SubmissionID)
+	}
+	if resp.IngressEventRecorded || resp.IngressEventWarning == "" {
+		t.Fatalf("ingress receipt fields = recorded=%v warning=%q", resp.IngressEventRecorded, resp.IngressEventWarning)
+	}
 }
 
 func TestEmailSendToChoirRejectsUnexpectedSourcePacketTrustLabel(t *testing.T) {
