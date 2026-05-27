@@ -695,6 +695,20 @@ Required next change:
 - Keep the Resend webhook route independent of this marker, because Resend
   cannot send proxy-authenticated internal headers.
 
+Resolution checkpoint:
+
+- Resolved locally in `internal/maild/api.go` and `internal/maild/send.go`:
+  authenticated mailbox/send routes now require both `X-Authenticated-User` and
+  `X-Internal-Caller: true`.
+- `internal/proxy/email.go` now injects `X-Internal-Caller: true` only after
+  validating the browser session and stripping client-supplied identity headers.
+  The Send to Choir source-packet fetch uses the same internal marker.
+- Focused coverage proves direct spoofed maild mailbox/send calls are rejected,
+  proxy-injected calls still work, and client-supplied `X-Internal-Caller` is
+  replaced by the proxy marker.
+- Local verifier: `nix develop -c go test ./internal/maild ./cmd/maild
+  ./cmd/maildctl ./internal/proxy`.
+
 ## Staging Config Finding: default alias owner reconciliation
 
 Recorded: 2026-05-26.

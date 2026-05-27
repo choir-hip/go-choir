@@ -49,7 +49,7 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer client-token")
 	req.Header.Set("X-Authenticated-User", "spoofed")
 	req.Header.Set("X-User-Id", "spoofed-user-id")
-	req.Header.Set("X-Internal-Caller", "true")
+	req.Header.Set("X-Internal-Caller", "client-spoof")
 	w := httptest.NewRecorder()
 
 	h.HandleAPI(w, req)
@@ -72,17 +72,18 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	if resp["authorization"] != "" || resp["cookie"] != "" {
 		t.Fatalf("client credential header leaked to maild: authorization=%q cookie=%q", resp["authorization"], resp["cookie"])
 	}
-	if resp["internal_caller"] != "" {
-		t.Fatalf("client X-Internal-Caller leaked to maild: %q", resp["internal_caller"])
+	if resp["internal_caller"] != "true" {
+		t.Fatalf("internal caller marker = %q, want proxy-injected true", resp["internal_caller"])
 	}
 }
 
 func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
-	var maildUser, recordUser, recordInternalCaller string
+	var maildUser, maildInternalCaller, recordUser, recordInternalCaller string
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/email/messages/msg-1/source-packet":
 			maildUser = r.Header.Get("X-Authenticated-User")
+			maildInternalCaller = r.Header.Get("X-Internal-Caller")
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"source_packet_id": "src-email-1",
 				"message_id":       "msg-1",
@@ -144,6 +145,9 @@ func TestEmailSendToChoirFetchesSourcePacketAndSubmitsPromptBar(t *testing.T) {
 	}
 	if maildUser != "user-real" {
 		t.Fatalf("maild user = %q, want user-real", maildUser)
+	}
+	if maildInternalCaller != "true" {
+		t.Fatalf("maild internal caller = %q, want true", maildInternalCaller)
 	}
 	if recordUser != "user-real" || recordInternalCaller != "true" {
 		t.Fatalf("record headers user=%q internal=%q", recordUser, recordInternalCaller)

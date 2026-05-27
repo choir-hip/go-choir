@@ -80,9 +80,8 @@ type ingressEventsResponse struct {
 
 // HandleMessages handles /api/email/messages and /api/email/messages/*.
 func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
-	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
-	if ownerID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+	ownerID, ok := authenticatedInternalOwner(w, r)
+	if !ok {
 		return
 	}
 	if r.URL.Path == "/api/email/messages" {
@@ -138,6 +137,19 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+}
+
+func authenticatedInternalOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
+	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
+	if ownerID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+		return "", false
+	}
+	return ownerID, true
 }
 
 func (h *Handler) handleMessageList(w http.ResponseWriter, r *http.Request, ownerID string) {

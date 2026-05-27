@@ -36,9 +36,8 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
-	if ownerID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+	ownerID, ok := authenticatedInternalOwner(w, r)
+	if !ok {
 		return
 	}
 	var in sendEmailRequest

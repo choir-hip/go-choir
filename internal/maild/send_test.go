@@ -41,7 +41,7 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 		"subject":"Re: project",
 		"text_body":"Received."
 	}`))
-	req.Header.Set("X-Authenticated-User", "user-root")
+	setInternalOwner(req, "user-root")
 	w := httptest.NewRecorder()
 	h.HandleSend(w, req)
 	if w.Code != http.StatusAccepted {
@@ -59,6 +59,23 @@ func TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage(t *testing.T) {
 	}
 	if messages[0].FromAddress != "000@choir.news" {
 		t.Fatalf("sent from = %q, want canonical numeric alias", messages[0].FromAddress)
+	}
+}
+
+func TestHandleSendRequiresInternalCaller(t *testing.T) {
+	store, cfg := newTestStore(t)
+	h := NewHandler(cfg, store)
+	req := httptest.NewRequest(http.MethodPost, "/api/email/send", strings.NewReader(`{
+		"from_address":"000@choir.news",
+		"to_addresses":["friend@example.com"],
+		"subject":"Nope",
+		"text_body":"Nope."
+	}`))
+	req.Header.Set("X-Authenticated-User", "user-root")
+	w := httptest.NewRecorder()
+	h.HandleSend(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusForbidden, w.Body.String())
 	}
 }
 
@@ -112,7 +129,7 @@ func TestHandleSendAddsReplyHeadersForOwnedReplyTarget(t *testing.T) {
 		"text_body":"Received.",
 		"reply_to_message_id":"`+replyTargetID+`"
 	}`))
-	req.Header.Set("X-Authenticated-User", "user-root")
+	setInternalOwner(req, "user-root")
 	w := httptest.NewRecorder()
 	h.HandleSend(w, req)
 	if w.Code != http.StatusAccepted {
@@ -133,7 +150,7 @@ func TestHandleSendRejectsReplyTargetMissingMessageID(t *testing.T) {
 		"text_body":"Received.",
 		"reply_to_message_id":"msg-without-rfc-id"
 	}`))
-	req.Header.Set("X-Authenticated-User", "user-root")
+	setInternalOwner(req, "user-root")
 	w := httptest.NewRecorder()
 	h.HandleSend(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -154,7 +171,7 @@ func TestHandleSendRejectsUnownedReplyTarget(t *testing.T) {
 		"text_body":"Received.",
 		"reply_to_message_id":"other-msg"
 	}`))
-	req.Header.Set("X-Authenticated-User", "user-root")
+	setInternalOwner(req, "user-root")
 	w := httptest.NewRecorder()
 	h.HandleSend(w, req)
 	if w.Code != http.StatusForbidden {
@@ -171,7 +188,7 @@ func TestHandleSendRejectsUnownedFromAlias(t *testing.T) {
 		"subject":"Nope",
 		"text_body":"Nope."
 	}`))
-	req.Header.Set("X-Authenticated-User", "other-user")
+	setInternalOwner(req, "other-user")
 	w := httptest.NewRecorder()
 	h.HandleSend(w, req)
 	if w.Code != http.StatusForbidden {

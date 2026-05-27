@@ -190,6 +190,7 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	req.Header.Del("Authorization")
 	req.Header.Del("Cookie")
 	req.Header.Set("X-Authenticated-User", authResult.UserID)
+	req.Header.Set("X-Internal-Caller", "true")
 
 	resp, err := h.maild.Do(req)
 	if err != nil {
@@ -213,6 +214,7 @@ func (h *Handler) fetchMailSourcePacket(r *http.Request, userID string) (emailSo
 		return emailSourcePacketResponse{}, err
 	}
 	req.Header.Set("X-Authenticated-User", userID)
+	req.Header.Set("X-Internal-Caller", "true")
 	resp, err := h.maild.Do(req)
 	if err != nil {
 		return emailSourcePacketResponse{}, fmt.Errorf("call maild: %w", err)

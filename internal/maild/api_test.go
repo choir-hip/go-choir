@@ -31,6 +31,11 @@ func seedMessage(t *testing.T, store *Store, ownerID, messageID, trustStatus str
 	}
 }
 
+func setInternalOwner(req *http.Request, ownerID string) {
+	req.Header.Set("X-Authenticated-User", ownerID)
+	req.Header.Set("X-Internal-Caller", "true")
+}
+
 func TestHandleMessagesRequiresTrustedUser(t *testing.T) {
 	store, cfg := newTestStore(t)
 	h := NewHandler(cfg, store)
@@ -42,6 +47,18 @@ func TestHandleMessagesRequiresTrustedUser(t *testing.T) {
 	}
 }
 
+func TestHandleMessagesRequiresInternalCaller(t *testing.T) {
+	store, cfg := newTestStore(t)
+	h := NewHandler(cfg, store)
+	req := httptest.NewRequest(http.MethodGet, "/api/email/messages", nil)
+	req.Header.Set("X-Authenticated-User", "user-1")
+	w := httptest.NewRecorder()
+	h.HandleMessages(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
 func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")
@@ -49,7 +66,7 @@ func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -83,7 +100,7 @@ func TestHandleMessagesListsAttachmentIndicator(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=quarantine", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -108,7 +125,7 @@ func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -139,7 +156,7 @@ func TestHandleMessageDetailIncludesStoredRecipients(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -163,7 +180,7 @@ func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1/source-packet", nil)
-	req.Header.Set("X-Authenticated-User", "user-2")
+	setInternalOwner(req, "user-2")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusNotFound {
@@ -171,7 +188,7 @@ func TestHandleMessageSourcePacketEnforcesOwnership(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1/source-packet", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w = httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -202,7 +219,8 @@ func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {
 
 	body := `{"source_packet_id":"source-msg-1","conductor_submission_id":"submission-1","status":"accepted"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
+	req.Header.Del("X-Internal-Caller")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusForbidden {
@@ -210,8 +228,7 @@ func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
-	req.Header.Set("X-Authenticated-User", "user-1")
-	req.Header.Set("X-Internal-Caller", "true")
+	setInternalOwner(req, "user-1")
 	w = httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusAccepted {
@@ -219,7 +236,7 @@ func TestHandleMessageIngressEventsRequiresInternalCaller(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/email/messages/msg-1/ingress-events", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w = httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
@@ -242,8 +259,7 @@ func TestHandleMessageIngressEventsIsIdempotentForSameSubmission(t *testing.T) {
 	body := `{"source_packet_id":"source-msg-1","conductor_submission_id":"submission-1","status":"accepted"}`
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/ingress-events", strings.NewReader(body))
-		req.Header.Set("X-Authenticated-User", "user-1")
-		req.Header.Set("X-Internal-Caller", "true")
+		setInternalOwner(req, "user-1")
 		w := httptest.NewRecorder()
 		h.HandleMessages(w, req)
 		if w.Code != http.StatusAccepted {
@@ -269,7 +285,7 @@ func TestHandleMessageReadMarksOwnerMessage(t *testing.T) {
 	h := NewHandler(cfg, store)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/read", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
+	setInternalOwner(req, "user-1")
 	w := httptest.NewRecorder()
 	h.HandleMessages(w, req)
 	if w.Code != http.StatusOK {
