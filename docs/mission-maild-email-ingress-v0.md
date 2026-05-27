@@ -3198,3 +3198,55 @@ Next executable probe:
   management scope; rerun `scripts/mail-provider-readiness`; then deploy a real
   `RESEND_WEBHOOK_SECRET` through the credential path and plan DNS/MX changes
   from exact Resend records before mutating Gandi.
+
+## Staging/Design Finding: owner-send lacks provider idempotency key
+
+Recorded: 2026-05-27 during provider-readiness continuation.
+
+Problem:
+
+The Choir Email reference outbound flow says `maild` sends through Resend with
+an idempotency key. Current owner-authored outbound mail calls Resend
+`POST /emails` without setting a provider idempotency key header. Official
+Resend docs state that `POST /emails` supports the `Idempotency-Key` header for
+duplicate-send prevention, with keys expiring after 24 hours.
+
+Evidence:
+
+```text
+code path:
+  internal/maild/send.go -> h.resend.sendEmail(...)
+  internal/maild/resend.go -> POST {RESEND_BASE_URL}/emails
+
+current request headers:
+  Authorization
+  Accept
+  Content-Type
+
+missing:
+  Idempotency-Key
+
+provider docs:
+  https://resend.com/docs/dashboard/emails/idempotency-keys
+  https://resend.com/docs/api-reference/emails
+```
+
+Impact:
+
+- If the owner-send HTTP call is retried across a transient network or gateway
+  failure after Resend accepted the first request, `maild` does not give Resend
+  a stable key to suppress a duplicate outbound email.
+- This does not enable inbound-triggered outbound mail by itself; owner-send
+  still requires the authenticated proxy/maild path. It is still a reliability
+  and duplicate-send gap in the explicit owner-send slice.
+
+Belief-state update:
+
+- The next safe in-repo improvement is to add a stable, request-derived
+  idempotency key to owner-authored Resend sends and test that the header is
+  present without logging or exposing secrets.
+
+Next executable probe:
+
+- Add an `Idempotency-Key` header to `resendClient.sendEmail`, derived from the
+  canonical outbound payload, and run focused maild send tests before deploy.
