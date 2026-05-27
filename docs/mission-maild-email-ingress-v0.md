@@ -3207,6 +3207,55 @@ Belief-state update:
   Send to Choir Trace evidence, and real outbound/reply acceptance remain
   unproven.
 
+## Security Finding: outbound Resend success responses are not size-bounded
+
+Recorded: 2026-05-27 during pre-MX maild hardening.
+
+Problem:
+
+`maild` already caps the public webhook body and the Resend received-email fetch
+body before decoding or storing provider-controlled data. The outbound owner-send
+path bounds Resend error response details, but a successful Resend `/emails`
+response is decoded directly from `resp.Body` with `json.NewDecoder`. That leaves
+the success path without the same provider response size boundary.
+
+Evidence:
+
+```text
+code:
+  internal/maild/resend.go -> retrieveReceivedEmail
+    - reads successful provider responses through readProviderResponseBody.
+
+  internal/maild/resend.go -> sendEmail
+    - bounds error bodies through readProviderHTTPError;
+    - decodes successful provider responses directly from resp.Body.
+
+config:
+  MAILD_PROVIDER_MAX_BYTES defaults to 4194304 and is intended to bound provider
+  response bodies.
+```
+
+Impact:
+
+- This is not an inbound-autonomy or auth bypass. Only owner-authenticated send
+  requests reach `sendEmail`.
+- It is still an external-provider robustness gap before real outbound proof:
+  a malformed or unexpectedly large success response could consume unnecessary
+  memory during decode and violate the provider body-cap invariant.
+
+Belief-state update:
+
+- The provider response cap should apply to both inbound fetch and outbound send
+  success responses. `MAILD_PROVIDER_MAX_BYTES` should be the single configured
+  ceiling for Resend response bodies that maild decodes.
+
+Next executable probe:
+
+- Change `sendEmail` to read successful provider responses through
+  `readProviderResponseBody` before JSON decode, and add a focused oversized
+  success-response test proving no sent row is accepted from an oversized
+  provider response.
+
 Next executable probe:
 
 - Acquire or create a Resend API key/dashboard path with domain/webhook
