@@ -3428,6 +3428,55 @@ Next executable probe:
   `RESEND_WEBHOOK_SECRET` through the credential path; and plan DNS/MX changes
   from exact Resend records before mutating Gandi.
 
+## Security Finding: inbound raw-message refs persist provider download URLs
+
+Recorded: 2026-05-27 during pre-provider maild storage review.
+
+Problem:
+
+`maild` currently maps the Resend received-email `raw.download_url` field into
+`email_messages.raw_message_ref`. Resend raw/attachment download URLs are
+provider-generated access URLs, not stable public identifiers. Persisting such a
+URL in durable SQLite creates a latent secret-retention and expiry problem even
+though the current API/UI do not expose `raw_message_ref`.
+
+Evidence:
+
+```text
+code:
+  internal/maild/resend.go
+    - resendReceivedEmail.Raw.DownloadURL models provider raw download URL.
+
+  internal/maild/ingest.go -> buildInboundRecord
+    - if email.Raw != nil { rawRef = email.Raw.DownloadURL }
+    - StoreInboundMessage writes rawRef into email_messages.raw_message_ref.
+
+current exposure:
+  internal/maild/api.go message detail does not return raw_message_ref.
+  cmd/maildctl message detail does not print raw_message_ref.
+```
+
+Impact:
+
+- This is not a browser leak today, but it violates the direction of the
+  mission invariant that provider secrets and temporary provider access material
+  stay out of user-visible/product state.
+- Durable state should contain stable provenance refs or internal storage refs,
+  not provider bearer URLs. Raw email content storage is a future feature and
+  should use owned storage with explicit retention/quarantine policy.
+
+Belief-state update:
+
+- For v0, do not persist Resend `raw.download_url`. Either leave
+  `raw_message_ref` empty or write a stable non-secret internal ref only after
+  raw content is fetched into owned storage under policy.
+
+Next executable probe:
+
+- Change inbound normalization so `raw_message_ref` is not populated from
+  Resend `raw.download_url`; add a focused store/webhook test proving a provider
+  raw download URL is not stored.
+
 ## Staging/Design Finding: owner-send lacks provider idempotency key
 
 Recorded: 2026-05-27 during provider-readiness continuation.
