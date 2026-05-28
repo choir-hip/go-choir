@@ -896,3 +896,106 @@ next executable probe:
   accumulating duplicate rules.
 - Redeploy through GitHub Actions, verify active taps receive an `8087` rule
   after vmctl reattach, then rerun the visible prompt-bar to Email Drafts proof.
+
+## Checkpoint: Active Guest Runtime Lacks Maild URL Despite Host Fixes
+
+timestamp: 2026-05-28T07:06:25-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `a5fbe4a` deployed the active tap
+firewall reconciliation fix, product proof advanced to a first-class Email
+appagent Trace node but still did not create a visible maild-backed Email
+Drafts row.
+
+what shipped immediately before this probe:
+- `4d3c66b` recorded the active tap maild firewall blocker.
+- `a5fbe4a` made VM reattach reconcile narrow per-tap INPUT rules for
+  `8083`, `8084`, and `8087`, using idempotent iptables checks.
+- Local proof passed:
+  `nix develop -c go test ./internal/vmmanager`.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26570489585`
+  completed successfully, including `Deploy to Staging (Node B)`.
+- Staging `/health` reported proxy and sandbox commit
+  `a5fbe4af8e8f1628e41a456619151db6df607e0a`, deployed at
+  `2026-05-28T10:57:47Z`.
+
+observed product evidence:
+- Node B iptables inspection showed active tap `8087` INPUT rules after vmctl
+  restart/reattach, including the founder account VM tap.
+- Computer Use submitted a fresh prompt:
+
+```text
+Create an email draft to yusefnathanson@me.com. Subject: Choir Email
+appagent bridge proof a5fbe4a. Body: This is a staging proof that VText hands
+a draft to Email appagent and maild stores it in Drafts without sending. Do
+not send the email.
+```
+
+- VText wrote `Email Draft: Choir Email appagent bridge proof a5fbe4a`.
+- Trace trajectory `2faa8512-30a1-4a1d-9ccf-3182ce82555e` showed agents:
+  `conductor`, `vtext`, and first-class `email`.
+- Trace showed edges `conductor -> vtext` and `vtext -> email`.
+- Trace moment `9a471de5-0e2d-4fd7-a3be-e7f58b6f1051` showed
+  `request_email_draft returned`.
+- The tool result was still below acceptance:
+
+```json
+{
+  "maild_draft_persisted": false,
+  "maild_persistence_status": "runtime_maild_url_not_configured",
+  "status": "draft_pending_owner_approval"
+}
+```
+
+- Maild's internal draft list for owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de` still showed only the older two
+  drafts. The `a5fbe4a` subject was absent.
+- The Email app Drafts view also still showed two drafts after refresh.
+
+infrastructure evidence:
+- `vmctl` ownership for the founder account primary desktop is active at
+  `http://10.200.49.2:8085`, VM
+  `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`.
+- That active VM's `/health` reported sandbox commit
+  `d8c72a713a741f067ccfa34d872b113f68421299`, not the current deployed
+  `a5fbe4a`.
+- The VM's on-disk `fc-config.json` contains
+  `choir.maild_url=http://10.200.49.1:8087`, but this file is not live guest
+  state. A running Firecracker guest does not reread boot args from the host's
+  rewritten config file.
+- Deploy logs for `a5fbe4a` again reported:
+  `Skipping active computer refresh; ordinary guest image and sandbox runtime
+  package unchanged`.
+
+belief-state changes:
+- The Email appagent authority/Trace path is real enough to satisfy the
+  first-class node requirement for this slice: the product trace now shows
+  `vtext -> email`.
+- Maild persistence is still blocked because the active guest runtime lacks
+  `RUNTIME_MAILD_URL`, not because maild, Resend, or the tap firewall are
+  currently unreachable.
+- Reattach-time firewall convergence is necessary but insufficient when the
+  active guest process itself needs new kernel-derived runtime configuration.
+- Host-side `fc-config.json` is not acceptable evidence for guest runtime
+  configuration after a VM is already running. Acceptance needs either a full
+  active VM refresh or a live guest config reconciliation path.
+
+remaining error field:
+- Prompt-bar simple email can reach VText and Email appagent, but Email
+  appagent falls back to Trace-only draft request because the active guest
+  runtime has no maild URL configured.
+- Owner-click approval cannot be proven for prompt-bar-originated drafts until
+  the draft is persisted in maild and visible in the Email app.
+
+next executable probe:
+- Make the guest/runtime deployment path converge `RUNTIME_MAILD_URL` for
+  active computers without manual VM restart or manual host edits. The minimal
+  durable path is to change guest configuration behavior in `nix/sandbox-vm.nix`
+  so the deploy classifier selects ordinary guest refresh, and to add a
+  fallback that derives maild URL from the tap host control URL when an older
+  bootstrap lacks explicit `choir.maild_url`.
+- Redeploy through GitHub Actions, verify the founder active VM serves the new
+  sandbox build after refresh, rerun the prompt-bar proof, and require maild
+  draft persistence plus a visible Email Drafts row before proceeding to send
+  approval paths.
