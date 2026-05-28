@@ -354,6 +354,9 @@ func cleanEmailDraftBodyText(value string) string {
 	for _, marker := range []string{
 		"</<parameter>",
 		"<parameter name=",
+		"<payload ",
+		"</parameter>",
+		"</payload>",
 		"</invoke>",
 	} {
 		if idx := strings.Index(lower, marker); idx >= 0 && idx < cut {

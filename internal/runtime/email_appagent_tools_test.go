@@ -214,6 +214,11 @@ func TestCleanEmailDraftBodyTextRemovesToolMarkupResidue(t *testing.T) {
 			want: "Here is the short demo note.",
 		},
 		{
+			name: "payload residue",
+			in:   "Here is the short demo note.</payload></parameter>\n<payload name=\"doc_id\" string=\"true\">doc</payload>",
+			want: "Here is the short demo note.",
+		},
+		{
 			name: "ordinary less-than content",
 			in:   "The result is 2 < 3.",
 			want: "The result is 2 < 3.",
