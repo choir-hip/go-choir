@@ -2152,3 +2152,46 @@ required fix direction:
   provider successfully calling a mechanically determined next tool.
 - Keep the Email appagent as the first-class Trace authority and keep maild as
   transport/storage evidence only.
+
+## Problem Evidence Checkpoint: Deterministic Handoff Can Still Include VText Provenance In Body
+
+timestamp: 2026-05-28T10:13:00-04:00
+status: documented_before_fix
+
+deployed evidence:
+- After commit `0ceeb1799fa836451b0ba9db508a2a60d5541940` deployed, Computer
+  Use submitted a fresh prompt on `https://choir.news`:
+  `Draft an email to yusefnathanson@me.com with subject "Choir Email
+  deterministic draft proof 0ceeb17" and body exactly "This is a deployed
+  proof that VText handed a clean email draft to Email appagent without a
+  second model tool-call turn."`
+- Trace trajectory `cd11905e-83fa-441f-90b5-39285e6d6749` completed with three
+  first-class agents and the desired causal chain:
+  `conductor -> vtext -> email`.
+- Email appagent run `e0403e61-643f-4c85-b2e0-08a40e00adfe` created maild draft
+  `email-draft-d316738f-4b1e-4db4-8b65-94b943d0f20b` with status
+  `draft_pending_owner_approval`, version hash
+  `9b945fc67ddfef573000ea048aaec2439ff0d9fd947d9de531d8750bee3fb623`, and no
+  send authorization.
+- Maild also created approval token
+  `email-approval-token-a80cd98b-ed6b-49be-bb4e-619033249938` and sent the
+  approval email to `yusefnathanson@me.com` through provider id
+  `6e4b360e-1b37-4502-a624-7b9f030c0c5d`.
+- The same maild draft's stored `text_body` was not exact. It contained the
+  intended sentence followed by VText provenance:
+  `---` and `**Source refs:** User request via conductor:...`.
+
+why this matters:
+- The architecture handoff is now real, but exact owner-supplied email content
+  is not yet preserved when VText appends provenance or source refs after the
+  body.
+- Approval-by-email should not ask the owner to approve a draft whose body
+  silently includes VText workflow metadata.
+
+required fix direction:
+- Extend email artifact extraction stop markers to cut the body before VText
+  provenance sections such as markdown horizontal rules and `Source refs`.
+- Add focused tests for the exact deployed shape: markdown status before
+  recipient, body, horizontal rule, and source refs after the body.
+- Rerun a fresh deployed prompt and do not use the contaminated draft for
+  approval/send proof.
