@@ -1884,20 +1884,17 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	_ = exec.Command(iptBin, "-A", "FORWARD",
 		"-o", tapName, "-j", "ACCEPT").Run()
 	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	// Allow guest sandboxes to reach the host-side vmctl and gateway listeners
-	// on the tap subnet without opening them beyond VM tap interfaces. Insert
-	// ahead of nixos-fw so the packet is accepted before the host firewall's
-	// default refuse path.
-	_ = exec.Command(iptBin, "-I", "INPUT", "1",
-		"-i", tapName,
-		"-p", "tcp", "--dport", "8083",
-		"-m", "comment", "--comment", comment,
-		"-j", "ACCEPT").Run()
-	_ = exec.Command(iptBin, "-I", "INPUT", "1",
-		"-i", tapName,
-		"-p", "tcp", "--dport", "8084",
-		"-m", "comment", "--comment", comment,
-		"-j", "ACCEPT").Run()
+	// Allow guest sandboxes to reach narrow host-side control/transport
+	// listeners on the tap subnet without opening them beyond VM tap
+	// interfaces. Insert ahead of nixos-fw so the packet is accepted before the
+	// host firewall's default refuse path.
+	for _, port := range tapReachableHostServicePorts() {
+		_ = exec.Command(iptBin, "-I", "INPUT", "1",
+			"-i", tapName,
+			"-p", "tcp", "--dport", port,
+			"-m", "comment", "--comment", comment,
+			"-j", "ACCEPT").Run()
+	}
 
 	// Set up MASQUERADE (SNAT) for outbound guest traffic.
 	// This is critical: without it, the guest can send packets to the
@@ -1943,6 +1940,14 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 		"-m", "comment", "--comment", comment).Run()
 
 	return nil
+}
+
+func tapReachableHostServicePorts() []string {
+	return []string{
+		"8083", // vmctl
+		"8084", // gateway
+		"8087", // maild draft persistence
+	}
 }
 
 // findBinary locates a binary by name, falling back to common NixOS paths.

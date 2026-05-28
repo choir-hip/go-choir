@@ -845,6 +845,24 @@ func TestReserveHostURLLockedPreservesReattachedNetworkSlots(t *testing.T) {
 	}
 }
 
+func TestTapReachableHostServicePortsIncludeMaild(t *testing.T) {
+	ports := tapReachableHostServicePorts()
+	for _, want := range []string{"8083", "8084", "8087"} {
+		if !containsString(ports, want) {
+			t.Fatalf("tapReachableHostServicePorts() = %#v, missing %s", ports, want)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Guest Isolation Tests (VAL-VM-007, VAL-VM-011) ---
 
 func TestBuildFirecrackerConfig_NoHostControlPlaneAccess(t *testing.T) {
