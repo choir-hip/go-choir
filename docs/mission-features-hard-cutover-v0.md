@@ -474,3 +474,66 @@ Until verification is detached from the request, the Features flow cannot prove
 Ready, Desk glow, Activate, Roll back, Roll forward, or completion email. The
 UI may say Choir will work in the background, but the substrate is still a
 synchronous request path.
+
+## Staging Evidence Checkpoint: Desk Does Not Observe Ready Import
+
+Timestamp: 2026-05-28 06:48 UTC
+
+Commit under test:
+
+```text
+9eba8746cea31ddc8c903a990ab2537b4644b508
+```
+
+Staging proof established after async verification:
+
+- Public health reported proxy and sandbox deployed commit
+  `9eba8746cea31ddc8c903a990ab2537b4644b508`.
+- A fresh product account
+  `codex-feature-async-1779950260441@example.com` published a private
+  source-level feature package `feature-proof-1779950260441`.
+- Clicking `Import` created adoption
+  `feature-feature-proof-1779950260441-b3b5c584-1c2e-47cc-9e9e-3060db22afa8`
+  and returned control to the UI while verification continued in the
+  background.
+- Product API polling observed the adoption reach `verified`.
+- Verifier evidence recorded a real recipient build:
+  - runtime build command succeeded after `5m27s`;
+  - UI build command succeeded after `8s`;
+  - target runtime digest
+    `sha256:26610bd866c15cfb65c6509ca0335c1f6ab8238eee1dc87094d2538f33b4c81f`;
+  - target UI digest
+    `sha256:2a3991af9c91f2a4ab60d7ca0ff9735a7d423602891b3adc8c6fbe154b8a22d2`;
+  - rollback profile recorded previous active source ref
+    `refs/computers/primary/active`.
+- The completion email endpoint returned HTTP 202 and Resend provider message
+  id `6f088e90-64fb-4ea4-bb5d-53d5583ab9ba`.
+- The Features app showed the ready state and `Activate`.
+
+Blocker discovered:
+
+```text
+The Desk button stayed cold after the adoption became verified:
+data-desk-feature-ready="false".
+
+Opening Desk did not reveal data-desk-feature-controls within 20 seconds,
+even though /api/adoptions/:id returned status "verified" and the Features app
+had already refreshed to show the ready import.
+```
+
+Root cause hypothesis:
+
+The Desk affordance relies on live app-adoption events or a refresh when the
+menu opens. In this deployed proof the Features app observed readiness by
+polling the adoption detail endpoint, but BottomBar did not receive enough
+durable refresh pressure to update the always-visible Desk glow or menu before
+the proof timed out. A background import completion must be visible from Desk
+without depending on the Features window's local polling loop.
+
+Why this matters:
+
+The core import/build/verify substrate now works, and maild accepted a concise
+completion notice. The remaining product failure is the mission-critical
+activation affordance: a user who is not watching the Features window should
+see Desk change state and should be able to activate, roll back, or roll forward
+from Desk.
