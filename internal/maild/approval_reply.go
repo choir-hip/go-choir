@@ -133,6 +133,8 @@ func parseApprovalReplyCommand(text string) (string, string) {
 			return "approve", ""
 		case lower == "reject" || strings.HasPrefix(lower, "reject "):
 			return "reject", ""
+		case lower == "deny" || strings.HasPrefix(lower, "deny "):
+			return "reject", ""
 		case strings.HasPrefix(lower, "edit:"):
 			return "edit", strings.TrimSpace(trimmed[len("edit:"):])
 		case strings.HasPrefix(lower, "edit "):

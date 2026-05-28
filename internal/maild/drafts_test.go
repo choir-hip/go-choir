@@ -493,6 +493,69 @@ func TestApprovalReplyApprovesExactDraftVersionOnce(t *testing.T) {
 	}
 }
 
+func TestApprovalReplyDenyRejectsDraftWithoutSending(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	sendCount := 0
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sendCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"unexpected-send"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Reply deny",
+		TextBody:    "Should not be sent.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+
+	email := resendReceivedEmail{
+		ID:      "received-deny-reply",
+		To:      []string{"approve+" + token.Token + "@choir.news"},
+		From:    "owner@example.com",
+		Text:    "Deny",
+		Headers: map[string]string{"from": "owner@example.com"},
+	}
+	if err := h.processApprovalReply(nilSafeContext(), "event-deny-reply", email, token.Token); err != nil {
+		t.Fatalf("processApprovalReply deny: %v", err)
+	}
+	if sendCount != 0 {
+		t.Fatalf("deny reply sent email; sendCount=%d", sendCount)
+	}
+	updated, err := store.GetDraft(nilSafeContext(), "user-root", draft.ID)
+	if err != nil {
+		t.Fatalf("GetDraft: %v", err)
+	}
+	if updated.Status == "sent" || updated.ProviderMessageID != "" {
+		t.Fatalf("deny reply sent draft: %+v", updated)
+	}
+	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken: %v", err)
+	}
+	if used.Status != "rejected" {
+		t.Fatalf("token status = %q, want rejected", used.Status)
+	}
+	var eventType string
+	if err := store.db.QueryRowContext(nilSafeContext(), `SELECT event_type FROM email_draft_approval_events WHERE draft_id = ?`, draft.ID).Scan(&eventType); err != nil {
+		t.Fatalf("approval event lookup: %v", err)
+	}
+	if eventType != "email_reply_rejected" {
+		t.Fatalf("event_type = %q, want email_reply_rejected", eventType)
+	}
+}
+
 func TestApprovalReplySenderMismatchBlocksRetryAndSendsRiskAlert(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"
