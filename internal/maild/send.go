@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -21,73 +19,6 @@ type sendEmailRequest struct {
 	TextBody         string   `json:"text_body"`
 	HTMLBody         string   `json:"html_body,omitempty"`
 	ReplyToMessageID string   `json:"reply_to_message_id,omitempty"`
-}
-
-type sendEmailResponse struct {
-	ID                string `json:"id"`
-	ProviderMessageID string `json:"provider_message_id"`
-	Status            string `json:"status"`
-}
-
-// HandleSend sends owner-authored outbound mail through Resend and records the
-// sent row in maild. It does not accept agent-originated sends.
-func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		return
-	}
-	ownerID, ok := authenticatedInternalOwner(w, r)
-	if !ok {
-		return
-	}
-	var in sendEmailRequest
-	if err := h.decodeJSON(r, &in); err != nil {
-		writeDecodeError(w, err)
-		return
-	}
-	alias, err := h.resolveOwnedFromAlias(r.Context(), ownerID, in.FromAddress)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "from address is not owned by current user"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve from address"})
-		return
-	}
-	payload, err := buildResendSendRequest(in, alias)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := h.applyReplyHeaders(r.Context(), ownerID, in.ReplyToMessageID, &payload); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reply target is not owned by current user"})
-			return
-		}
-		if errors.Is(err, errMissingReplyMessageID) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reply target is missing message id"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load reply target"})
-		return
-	}
-	sent, err := h.resend.sendEmail(r.Context(), payload)
-	if err != nil {
-		var providerErr *resendHTTPError
-		if errors.As(err, &providerErr) {
-			log.Printf("maild: outbound send provider failure owner=%s alias=%s status=%d detail=%q", ownerID, alias.ID, providerErr.StatusCode, providerErr.Detail)
-		} else {
-			log.Printf("maild: outbound send failure owner=%s alias=%s: %v", ownerID, alias.ID, err)
-		}
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send email"})
-		return
-	}
-	msg, err := h.store.StoreOutboundMessage(r.Context(), ownerID, alias, sent.ID, in)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to store sent email"})
-		return
-	}
-	writeJSON(w, http.StatusAccepted, sendEmailResponse{ID: msg.ID, ProviderMessageID: sent.ID, Status: "sent"})
 }
 
 func (h *Handler) resolveOwnedFromAlias(ctx context.Context, ownerID, fromAddress string) (EmailAlias, error) {

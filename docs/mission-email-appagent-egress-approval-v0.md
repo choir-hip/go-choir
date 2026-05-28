@@ -1856,3 +1856,29 @@ remaining error field:
   unproven.
 - Deletion-first convergence over stale bypass surfaces and setup artifacts is
   still pending.
+
+## Run Checkpoint: Raw Send Handler Deleted
+
+timestamp: 2026-05-28T09:16:00-04:00
+status: local_verified_pending_landing
+
+deletion:
+- Removed the dead `HandleSend` implementation and response type for
+  `/api/email/send`. The route was already unregistered; keeping the handler
+  made raw owner-send look like a supported bypass around Email appagent draft
+  approval.
+- Deleted `internal/maild/send_test.go`, whose direct handler calls preserved
+  the old raw-send contract.
+- Reintroduced the non-bypass Resend idempotency-key check as
+  `internal/maild/resend_test.go`, scoped to provider request semantics rather
+  than `/api/email/send`.
+
+verification:
+- `nix develop -c go test ./internal/maild`
+- `nix develop -c go test ./internal/proxy ./internal/runtime -run 'TestVTextRequestEmailDraft|TestRequestEmailDraftBlocks|TestCoagentCastCannotAddressEmailAppagentDirectly|TestPromptBar'`
+
+diff signal:
+- The deletion pass removes substantially more code than it adds for this
+  surface, while keeping approved draft-send helper code because
+  `/api/email/drafts/:id/send` still depends on canonical alias resolution,
+  reply headers, provider payload construction, and sent-message storage.
