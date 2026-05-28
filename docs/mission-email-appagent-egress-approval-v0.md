@@ -3496,3 +3496,39 @@ fix direction:
   extraction/cleaning marker set.
 - Add a regression test for the exact deployed shape:
   intended email body followed by `**Source ref:**` and `**Outbound send:**`.
+
+### Problem Checkpoint: Workflow Tail And Plain Markdown Reach Sent Mail
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T19:34Z
+evidence source: owner approval reply plus read-only Node B maild inspection
+
+problem:
+- The owner approved the fresh `Choir Email clean parser proof d56d09c` draft by
+  replying to the approval email, and maild sent it through Resend. This proves
+  the approval-by-email path is live.
+- The sent message body still included an internal VText workflow/provenance
+  section:
+  `## Workflow`
+  followed by numbered implementation notes.
+- The owner also observed the design issue directly: Choir is sending Markdown
+  syntax as the visible email surface. The sent email should have a clean,
+  tasteful HTML rendering while preserving a plain-text fallback.
+
+root-cause evidence:
+- `emailDraftArtifactTailMarkers` does not include `## Workflow` or comparable
+  workflow/provenance section headings, so final body cleaning allowed this
+  artifact tail into the stored draft and sent message.
+- `internal/maild/send.go` sends the raw `text_body` and only includes HTML
+  when a draft already has `html_body`. VText-created drafts normally do not
+  provide `html_body`, so Resend receives plain Markdown text only.
+
+fix direction:
+- Add workflow/provenance headings to the shared email body extraction/cleaning
+  marker set so internal workflow sections cannot become human email content.
+- Generate a minimal safe HTML part from the final plain-text body when no
+  explicit HTML body exists. The v0 rendering should be conservative:
+  escaped content, paragraphs, simple line breaks, restrained typography, no
+  remote assets, no scripts, no tracking, and no raw internal metadata.
+- Store the generated HTML with the outbound sent record so the Email app and
+  provider evidence agree about what was sent.
