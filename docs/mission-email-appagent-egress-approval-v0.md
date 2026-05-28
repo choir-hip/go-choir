@@ -3087,3 +3087,37 @@ belief-state changes:
 - The remaining high-value proof is not another local code deletion; it is a
   fresh real owner reply through Resend inbound to prove the deployed
   approval-reply parser and exact-version send/edit/reject semantics.
+
+### Problem Checkpoint: Draft UI Cannot Re-Issue Approval Email
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T16:52Z
+evidence source: owner mailbox observation and Email app code inspection
+
+problem:
+- Approval emails are arriving but often land in spam, and the mission still
+  needs a fresh real owner reply to prove the approval-reply path.
+- `maild` already exposes `/api/email/drafts/{id}/approval-email`, which creates
+  a new exact-version approval token and sends a scoped approval notice to the
+  verified signup email.
+- The Email app draft detail does not expose that capability. It only exposes
+  owner-click send for a draft. If the owner loses or misses an approval email,
+  there is no visible product-path way to ask Choir to send a fresh scoped
+  approval notice.
+
+risk:
+- The approval-by-email proof and later product flow depend on one old email
+  in a spam folder, even though the backend can safely generate a fresh
+  one-time approval channel for the current draft version.
+- This makes the approval layer feel unreliable and slows verification without
+  improving security.
+
+fix direction:
+- Add a small draft-detail action in the Email app that calls
+  `/api/email/drafts/{id}/approval-email` for the current draft.
+- Keep it scoped to drafts, disabled once sent, and clearly separate from the
+  owner-click send action. Creating/sending the approval email must not send
+  the draft itself.
+- Preserve exact-version semantics: the backend endpoint already supersedes old
+  active tokens for the draft and creates a fresh token tied to the current
+  version hash.
