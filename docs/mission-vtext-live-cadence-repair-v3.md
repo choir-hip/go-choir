@@ -394,9 +394,9 @@ The next code investigation should focus on:
 - whether existing tests cover the failure mode "researcher search succeeds,
   model does not call `submit_coagent_update`, parent VText waits past SLA."
 
-No code fix is selected yet. The smallest acceptable fix must make the first
-researcher evidence checkpoint durable after a successful first search/fetch
-without letting researcher or super write canonical VText directly.
+Selected fix criterion: make the first researcher evidence checkpoint durable
+after a successful first search/fetch without letting researcher or super write
+canonical VText directly.
 
 ## Implementation Checkpoint: Researcher Checkpoint Reliability
 
@@ -435,40 +435,104 @@ nix develop -c scripts/go-test-runtime-shards
 
 Result: passed.
 
+## Deployed Acceptance: 2026-05-28
+
+Commit `408884a113a02ea69a388ade83daeadd1a27f51e` was pushed to `main`.
+GitHub Actions:
+
+- CI run `26550780359`: passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, and all four `internal/runtime` shards.
+- FlakeHub publish run `26550780363`: passed.
+- CI deploy job `Deploy to Staging (Node B)` completed successfully.
+
+Deployed health:
+
+```text
+https://choir.news/health
+proxy deployed_commit:   408884a113a02ea69a388ade83daeadd1a27f51e
+sandbox deployed_commit: 408884a113a02ea69a388ade83daeadd1a27f51e
+vmctl_status: ok
+```
+
+Default-policy factual proof:
+
+- Evidence:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-factual-raw-2026-05-28T02-35-29-331Z/baseball.json`
+- Raw trace:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-factual-raw-2026-05-28T02-35-29-331Z/trace.json`
+- Submission: `fa54d0b0-23fd-46ed-b40a-1ec2fddd20dc`
+- Doc: `5f4106b6-bf2c-4719-8fc0-2af07b3c00f8`
+- Result: 2 appagent revisions in 39.366 s.
+- Trace summary counts: one `web_search returned`, one
+  `submit_coagent_update returned`, two VText revision completions.
+- Fallback count: 0. The primary researcher checkpoint path succeeded after
+  the runtime fix was deployed.
+
+Earlier default-policy factual proof:
+
+- Evidence:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-policy-20260528T022631Z/default-policy-proof.json`
+- Submission: `3291978d-5d6f-4769-8356-b6b83c443e73`
+- Doc: `d9a620b5-c693-4ae2-869c-db7f645ab980`
+- Result: 2 appagent revisions in 154.446 s. This run produced an honest
+  partial-findings v2 rather than stopping at v1.
+
+Default-policy bounded coding/execution proof:
+
+- Evidence:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-coding-raw-2026-05-28T02-33-22-941Z/coding-super.json`
+- Raw trace:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-coding-raw-2026-05-28T02-33-22-941Z/trace.json`
+- Submission: `8cc694b0-dbcb-4b8c-b2ce-685eb57701ef`
+- Doc: `495aaa47-6be8-4724-9995-33c9440c42c3`
+- Result: 2 appagent revisions in 28.849 s.
+- Trace showed VText invoking `request_super_execution`, super invoking
+  `bash`, super invoking `submit_coagent_update`, and VText writing the
+  evidence-incorporating v2 with the exact SHA256 command output.
+
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete
+status: email_ready_vtext_boundary_repaired_for_current_demo_path
 last checkpoint: generated default factual probe reproduced an intermittent
   researcher checkpoint failure after web_search.
-current artifact state: deployed code identity is f60a8e0d; no VText repair
-  code has been authored in this mission.
-what shipped: runtime fix authored locally; push/deploy/product-path proof
-  pending at this checkpoint.
+current artifact state: deployed code identity is
+  408884a113a02ea69a388ade83daeadd1a27f51e.
+what shipped: required-next-tool provider calls are bounded; researcher failure
+  recovery synthesizes an honest VText-addressed coagent blocker/update when
+  research evidence exists but no researcher checkpoint was submitted.
 what was proven: explicit medium matrix can complete research and coding
   cadence; generated default coding can complete super execution cadence;
-  generated default factual cadence can fail after researcher web_search returns
-  but before submit_coagent_update.
-unproven or partial claims: deployed behavior after the timeout/fallback fix;
-  whether the live intermittent default-policy factual prompt now always reaches
-  either researcher findings or an honest fallback blocker plus VText v2 within
-  the owner-visible SLA.
+  generated default factual cadence now reaches researcher `web_search`,
+  `submit_coagent_update`, and VText v2 on deployed commit 408884a.
+unproven or partial claims: this is still a small acceptance sample, not a
+  statistical reliability proof. Search provider quality can still degrade, but
+  the runtime now has a bounded fallback path that should produce an honest
+  VText-addressed blocker instead of indefinite v1-only waiting.
 belief-state changes: May 26 review is now a hypothesis source, not direct
   implementation plan, because several findings are stale against current code.
   The active failure is narrower than "VText stops after v1": VText can spawn
   researcher, and researcher can receive search results, but the first durable
-  coagent checkpoint is intermittent.
-remaining error field: commit, push, monitor CI/deploy, verify deployed identity,
-  and re-run product-path VText factual/coding probes against the fixed commit.
-highest-impact remaining uncertainty: deployed product-path proof after the
-  researcher checkpoint reliability fix.
-next executable probe: commit and push the runtime fix, then monitor CI and
-  staging deploy before rerunning the default-policy VText proof.
+  coagent checkpoint was intermittent before this fix.
+remaining error field: continue with email-response integration at the VText
+  boundary; do not expand VText repair unless a new product-path failure is
+  reproduced and documented first.
+highest-impact remaining uncertainty: repeated/current factual reliability
+  under provider/search degradation, especially when fallback is exercised.
+next executable probe: use the email demo's "Respond with Choir" handoff against
+  this repaired VText boundary, with VText-generated response content kept
+  supervised before outbound mail.
 suggested resume goal string: use the Goal Prompt above.
 evidence artifact refs:
   `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-policy-20260528T015212Z/default-policy-proof.json`;
   `/Users/wiz/go-choir/frontend/test-results/vtext-default-policy-proof-b42d9-sh-medium-for-VText-cadence-chromium/trace.zip`;
   `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-detailed-2026-05-28T01-57-23-930Z/baseball.json`;
-  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-coding-2026-05-28T02-04-25-624Z/coding-super.json`.
-rollback refs: no behavior change yet.
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-coding-2026-05-28T02-04-25-624Z/coding-super.json`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-factual-raw-2026-05-28T02-35-29-331Z/baseball.json`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-factual-raw-2026-05-28T02-35-29-331Z/trace.json`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-coding-raw-2026-05-28T02-33-22-941Z/coding-super.json`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-fixed-default-coding-raw-2026-05-28T02-33-22-941Z/trace.json`.
+rollback refs: revert `408884a113a02ea69a388ade83daeadd1a27f51e` if the
+  bounded required-tool timeout causes regressions in non-research exact-tool
+  flows.
 ```
