@@ -999,3 +999,104 @@ next executable probe:
   sandbox build after refresh, rerun the prompt-bar proof, and require maild
   draft persistence plus a visible Email Drafts row before proceeding to send
   approval paths.
+
+## Checkpoint: Sandbox Main Drops MaildURL After Guest Refresh
+
+timestamp: 2026-05-28T07:23:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `dc37227` deployed guest refresh and
+kernel-cmdline maild URL convergence, the visible product path reached
+`request_email_draft`, but Email appagent still reported
+`runtime_maild_url_not_configured`.
+
+what shipped immediately before this probe:
+- `d8883f0` documented that the active guest runtime lacked a live maild URL.
+- `dc37227` changed `nix/sandbox-vm.nix` so guest cmdline extraction writes
+  `RUNTIME_MAILD_URL` from `choir.maild_url` and can derive it from the tap
+  vmctl URL when needed.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26571034484`
+  completed successfully.
+- Deploy job `78278112434` built ordinary and Playwright guest images,
+  restarted vmctl, and refreshed active interactive computers, including
+  founder VM `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`.
+- Staging `/health` reported proxy and sandbox commit
+  `dc37227c2f48143d965a821da70fbd1fff53c28d`, deployed at
+  `2026-05-28T11:10:02Z`.
+- The founder account primary VM moved to `http://10.200.60.2:8085` and its
+  `/health` also reported sandbox commit `dc37227`.
+
+observed product evidence:
+- Computer Use submitted:
+
+```text
+Create an email draft to yusefnathanson@me.com. Subject: Choir Email
+appagent bridge proof dc37227b. Body: This is a retry after a transient
+provider 503. Prove VText hands a draft to Email appagent and maild stores it
+in Drafts without sending. Do not send the email.
+```
+
+- Trace trajectory `b2d1f6e9-66cd-4f96-a6bf-4df3f97de635` completed with
+  first-class agents `conductor`, `vtext`, and `email`.
+- Trace edges included `conductor -> vtext` and `vtext -> email`.
+- Trace moment `120eca40-4beb-4d61-87b7-dd734653cf6e` showed
+  `request_email_draft returned`, but the structured tool result still
+  contained:
+
+```json
+{
+  "maild_draft_persisted": false,
+  "maild_persistence_status": "runtime_maild_url_not_configured",
+  "status": "draft_pending_owner_approval",
+  "subject": "Choir Email appagent bridge proof dc37227b"
+}
+```
+
+- Maild's internal draft list for owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de` still contained only the older
+  `1a06a36` and `18035fc` drafts.
+- A direct terminal WebSocket inside the same refreshed guest showed the
+  process environment has the expected values:
+
+```text
+RUNTIME_GATEWAY_URL=http://10.200.60.1:8084
+RUNTIME_MAILD_URL=http://10.200.60.1:8087
+RUNTIME_VMCTL_URL=http://10.200.60.1:8083
+```
+
+- `/run/go-choir-sandbox.env` in the guest also contains
+  `RUNTIME_MAILD_URL=http://10.200.60.1:8087`.
+
+root cause:
+- `runtime.LoadConfig()` correctly reads `RUNTIME_MAILD_URL` into
+  `runtime.Config.MaildURL`.
+- `cmd/sandbox/main.go` then manually builds a second `runtime.Config` and
+  copies selected fields from `rtRuntimeCfg`.
+- That manual copy omitted `MaildURL`, so `runtime.New` receives an empty
+  `MaildURL` even though the guest environment is correct.
+
+belief-state changes:
+- The deploy refresh and guest environment extraction are now proven to work
+  for the founder VM.
+- The remaining failure is an in-process config propagation bug, not DNS,
+  Resend, maild service health, tap firewall, or guest kernel cmdline state.
+- The product Trace node requirement remains satisfied for this slice, but the
+  Email app UI cannot show the draft until maild persistence receives the URL.
+
+remaining error field:
+- Prompt-bar simple email can reach VText and Email appagent, but the appagent
+  still stores only Trace-level draft request state because `cmd/sandbox/main.go`
+  drops `MaildURL`.
+- The tool call also accepted malformed `from_alias` text from the model in one
+  attempt, so the persistence path should either rely on empty/default alias or
+  reject invalid aliases before maild submission.
+
+next executable probe:
+- Copy `MaildURL` from `rtRuntimeCfg` into the runtime config constructed by
+  `cmd/sandbox/main.go`.
+- Add a focused regression test that fails if sandbox runtime config assembly
+  omits `MaildURL`.
+- Rerun focused tests, deploy through GitHub Actions, and rerun the visible
+  prompt-bar proof until maild contains the new draft and the Email app Drafts
+  view shows it.
