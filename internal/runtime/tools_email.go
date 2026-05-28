@@ -131,9 +131,10 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		return nil, fmt.Errorf("persist email appagent: %w", err)
 	}
 
+	fromAlias := cleanEmailDraftFromAlias(in.FromAlias)
 	draftID := "email-draft-request-" + uuid.NewString()
 	versionID := "email-draft-version-" + uuid.NewString()
-	draftVersionHash := emailDraftVersionHash(in.FromAlias, toAddresses, in.CCAddresses, in.BCCAddresses, subject, body, docID, revisionID, sourceHash)
+	draftVersionHash := emailDraftVersionHash(fromAlias, toAddresses, in.CCAddresses, in.BCCAddresses, subject, body, docID, revisionID, sourceHash)
 	risk := detectEmailDraftPolicyRisk(subject, body, toAddresses, in.CCAddresses, in.BCCAddresses)
 	status := "draft_pending_owner_approval"
 	if risk != "" {
@@ -150,7 +151,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"source_content_hash":   sourceHash,
 		"source_kind":           "vtext_email_artifact",
 		"approval_mode":         approvalMode,
-		"from_alias":            strings.TrimSpace(in.FromAlias),
+		"from_alias":            fromAlias,
 		"to_addresses":          toAddresses,
 		"cc_addresses":          normalizeEmailAddressList(in.CCAddresses),
 		"bcc_addresses":         normalizeEmailAddressList(in.BCCAddresses),
@@ -165,7 +166,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	} else if strings.TrimSpace(rt.cfg.MaildURL) == "" {
 		result["maild_persistence_status"] = "runtime_maild_url_not_configured"
 	} else {
-		persisted, err := rt.persistEmailDraftToMaild(ctx, ownerID, runID, in, toAddresses, subject, body)
+		persisted, err := rt.persistEmailDraftToMaild(ctx, ownerID, runID, in, fromAlias, toAddresses, subject, body)
 		if err != nil {
 			status = "draft_persistence_failed"
 			result["status"] = status
@@ -253,7 +254,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	return result, nil
 }
 
-func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailRunID string, in requestEmailDraftArgs, toAddresses []string, subject, body string) (maildEmailDraftResponse, error) {
+func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailRunID string, in requestEmailDraftArgs, fromAlias string, toAddresses []string, subject, body string) (maildEmailDraftResponse, error) {
 	maildURL := strings.TrimRight(strings.TrimSpace(rt.cfg.MaildURL), "/")
 	if maildURL == "" {
 		return maildEmailDraftResponse{}, fmt.Errorf("runtime maild url is not configured")
@@ -265,7 +266,7 @@ func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailR
 		"email_appagent_run_id": strings.TrimSpace(emailRunID),
 	})
 	payload := map[string]any{
-		"from_address":  strings.TrimSpace(in.FromAlias),
+		"from_address":  fromAlias,
 		"to_addresses":  toAddresses,
 		"cc_addresses":  normalizeEmailAddressList(in.CCAddresses),
 		"bcc_addresses": normalizeEmailAddressList(in.BCCAddresses),
@@ -329,6 +330,18 @@ func normalizeEmailAddressList(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func cleanEmailDraftFromAlias(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, "\r\n\t <>") {
+		return ""
+	}
+	loc := emailAddressPattern.FindStringIndex(value)
+	if loc == nil || loc[0] != 0 || loc[1] != len(value) {
+		return ""
+	}
+	return value
 }
 
 func emailSourceContentHash(docID, revisionID, content string) string {

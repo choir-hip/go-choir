@@ -131,6 +131,67 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 }
 
+func TestVTextRequestEmailDraftDropsMalformedFromAliasBeforeMaild(t *testing.T) {
+	rt, _ := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	var gotFromAddress any
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode maild payload: %v", err)
+		}
+		gotFromAddress = payload["from_address"]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":           "email-draft-maild-clean-alias",
+			"status":       "draft_pending_owner_approval",
+			"version":      1,
+			"version_hash": "maild-version-hash-clean-alias",
+			"from_address": "000@choir.news",
+			"to_addresses": []string{"person@example.com"},
+			"subject":      "Choir demo",
+		})
+	}))
+	defer maild.Close()
+	rt.cfg.MaildURL = maild.URL
+
+	parent, err := rt.createRunWithMetadata(context.Background(), "write email with malformed alias", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:doc-email-clean-alias",
+		runMetadataChannelID:    "doc-email-clean-alias",
+		"type":                  "vtext_agent_revision",
+		"doc_id":                "doc-email-clean-alias",
+	})
+	if err != nil {
+		t.Fatalf("create vtext parent: %v", err)
+	}
+	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+		"doc_id":              "doc-email-clean-alias",
+		"revision_id":         "rev-email-clean-alias",
+		"source_content_hash": "sha256:clean-alias",
+		"from_alias":          "000@choir.news trailing residue",
+		"to_addresses":        []string{"person@example.com"},
+		"subject":             "Choir demo",
+		"body_text":           "Here is the short demo note.",
+	}))
+	if err != nil {
+		t.Fatalf("request_email_draft: %v", err)
+	}
+	if gotFromAddress != "" {
+		t.Fatalf("maild from_address = %v, want empty string for malformed alias", gotFromAddress)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if out["maild_draft_persisted"] != true || out["from_alias"] != "000@choir.news" {
+		t.Fatalf("unexpected persisted result: %+v", out)
+	}
+}
+
 func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {

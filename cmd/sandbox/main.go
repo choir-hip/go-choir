@@ -33,40 +33,7 @@ func main() {
 
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := runtime.LoadConfig()
-	rtCfg := runtime.Config{
-		SandboxID:                       cfg.SandboxID,
-		StorePath:                       cfg.StorePath,
-		PromptRoot:                      rtRuntimeCfg.PromptRoot,
-		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
-		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
-		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
-		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
-		VTextWakeDebounce:               rtRuntimeCfg.VTextWakeDebounce,
-		VmctlURL:                        rtRuntimeCfg.VmctlURL,
-		LLMProvider:                     rtRuntimeCfg.LLMProvider,
-		LLMModel:                        rtRuntimeCfg.LLMModel,
-		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
-		ModelPolicyPath:                 rtRuntimeCfg.ModelPolicyPath,
-		ObscuraPath:                     rtRuntimeCfg.ObscuraPath,
-		ObscuraCDPScreenshots:           rtRuntimeCfg.ObscuraCDPScreenshots,
-		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
-		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
-		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
-		PromotionSourceRepo:             rtRuntimeCfg.PromotionSourceRepo,
-		SourceLedgerRepo:                rtRuntimeCfg.SourceLedgerRepo,
-		PromotionWorkspaceRoot:          rtRuntimeCfg.PromotionWorkspaceRoot,
-		AppPromotionRuntimeBuildCommand: rtRuntimeCfg.AppPromotionRuntimeBuildCommand,
-		AppPromotionRuntimeArtifactPath: rtRuntimeCfg.AppPromotionRuntimeArtifactPath,
-		AppPromotionUIBuildCommand:      rtRuntimeCfg.AppPromotionUIBuildCommand,
-		AppPromotionUIArtifactPath:      rtRuntimeCfg.AppPromotionUIArtifactPath,
-		AppPromotionBuildTimeout:        rtRuntimeCfg.AppPromotionBuildTimeout,
-	}
-	if rtCfg.StorePath == "" {
-		rtCfg.StorePath = runtime.DefaultStorePath
-	}
-	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
-		rtCfg.ModelPolicyPath = runtime.DefaultModelPolicyPath(filesRoot)
-	}
+	rtCfg := buildRuntimeConfig(cfg, rtRuntimeCfg, filesRoot)
 
 	// Ensure the store directory exists.
 	if err := os.MkdirAll(storeDir(rtCfg.StorePath), 0o755); err != nil {
@@ -187,6 +154,45 @@ func storeDir(path string) string {
 		}
 	}
 	return "."
+}
+
+func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRoot string) runtime.Config {
+	rtCfg := runtime.Config{
+		SandboxID:                       cfg.SandboxID,
+		StorePath:                       cfg.StorePath,
+		PromptRoot:                      rtRuntimeCfg.PromptRoot,
+		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
+		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
+		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
+		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
+		VTextWakeDebounce:               rtRuntimeCfg.VTextWakeDebounce,
+		VmctlURL:                        rtRuntimeCfg.VmctlURL,
+		MaildURL:                        rtRuntimeCfg.MaildURL,
+		LLMProvider:                     rtRuntimeCfg.LLMProvider,
+		LLMModel:                        rtRuntimeCfg.LLMModel,
+		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
+		ModelPolicyPath:                 rtRuntimeCfg.ModelPolicyPath,
+		ObscuraPath:                     rtRuntimeCfg.ObscuraPath,
+		ObscuraCDPScreenshots:           rtRuntimeCfg.ObscuraCDPScreenshots,
+		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
+		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
+		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
+		PromotionSourceRepo:             rtRuntimeCfg.PromotionSourceRepo,
+		SourceLedgerRepo:                rtRuntimeCfg.SourceLedgerRepo,
+		PromotionWorkspaceRoot:          rtRuntimeCfg.PromotionWorkspaceRoot,
+		AppPromotionRuntimeBuildCommand: rtRuntimeCfg.AppPromotionRuntimeBuildCommand,
+		AppPromotionRuntimeArtifactPath: rtRuntimeCfg.AppPromotionRuntimeArtifactPath,
+		AppPromotionUIBuildCommand:      rtRuntimeCfg.AppPromotionUIBuildCommand,
+		AppPromotionUIArtifactPath:      rtRuntimeCfg.AppPromotionUIArtifactPath,
+		AppPromotionBuildTimeout:        rtRuntimeCfg.AppPromotionBuildTimeout,
+	}
+	if rtCfg.StorePath == "" {
+		rtCfg.StorePath = runtime.DefaultStorePath
+	}
+	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
+		rtCfg.ModelPolicyPath = runtime.DefaultModelPolicyPath(filesRoot)
+	}
+	return rtCfg
 }
 
 func desktopIDFromRequest(r *http.Request) string {
