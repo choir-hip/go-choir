@@ -3319,3 +3319,42 @@ suggested resume goal string:
 ```text
 /goal Resume docs/mission-email-appagent-egress-approval-v0.md from the blocked reply-proof checkpoint: I have replied from yusefnathanson@me.com to the newest approval email for "Choir Email clean approval proof 06e58f5" with "edit: make it warmer and shorter". Verify the real Resend inbound -> maild approval parser -> draft version update -> token invalidation -> fresh approval notice path. Do not seed webhook/database state, do not click Send as a substitute for reply proof, and preserve Email appagent as the outbound authority boundary.
 ```
+
+### Problem Checkpoint: Approval Email Has Metadata But No Draft Content
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T17:12Z
+evidence source: owner mailbox observation and code/test inspection
+
+problem:
+- The re-issued approval email is deliverable and scoped correctly, but the
+  human-readable body does not include the draft content being approved.
+- The email includes internal line noise:
+  `This approval is scoped to draft ... version ... hash ...`.
+- The owner correctly observed that this is not a usable approval surface:
+  a human cannot reasonably approve or reject an email without seeing the body,
+  and internal ids/hashes distract from the decision.
+
+code evidence:
+- `internal/maild/drafts.go` builds the approval body from subject, recipients,
+  review link, reply commands, draft id, version, and version hash.
+- `internal/maild/drafts_test.go` currently asserts that the approval email
+  contains the draft version hash.
+- The edit-reply test currently asserts that a fresh approval email after
+  `edit:` does not include the edited draft body, which is the opposite of the
+  desired owner-review contract.
+
+fix direction:
+- Approval email text should show the actual draft message body, bounded to a
+  safe preview limit for long drafts.
+- Keep exact-version authority in structured state and headers, not in the
+  human-facing email body.
+- The human-facing approval email should contain:
+  - from alias;
+  - to recipients;
+  - subject;
+  - draft message body or bounded preview;
+  - review link;
+  - reply commands.
+- It should not show raw draft ids, approval token ids, version hashes, trace
+  ids, provider ids, or other internal metadata.
