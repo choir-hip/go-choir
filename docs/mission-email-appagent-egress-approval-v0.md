@@ -1281,3 +1281,73 @@ next executable probe:
   `</invoke>` persists only the intended body.
 - Redeploy and rerun the visible prompt-bar proof until maild shows a clean
   draft body.
+
+## Checkpoint: Draft Body Sanitizer Leaves Truncated Closing Markup
+
+timestamp: 2026-05-28T07:50:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `5eeca00` deployed the first body-cleaning
+pass, the prompt-bar simple email path created an Email appagent/maild draft
+with the correct sender, recipient, subject, trace edge, and no outbound send,
+but the stored body still ended with a truncated closing markup fragment
+`</`. This is smaller than the prior full `<parameter>` leak, but still not an
+owner-reviewable email artifact.
+
+what shipped immediately before this probe:
+- `adcddc8` documented the full tool-call markup residue blocker.
+- `5eeca00` added `cleanEmailDraftBodyText` and regression coverage for
+  `<parameter ...>` / `</invoke>` residue.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26572444848` completed
+  successfully.
+- Deploy job `78283006066` completed successfully.
+- Staging `/health` and founder VM `/health` both reported sandbox commit
+  `5eeca0013a0c84749be1d66206fc0198faa3e73d`, deployed at
+  `2026-05-28T11:41:55Z`.
+
+observed product evidence:
+- Computer Use submitted a visible prompt-bar request with subject
+  `Choir Email appagent bridge proof 5eeca00b`.
+- Maild created draft `email-draft-62971bf3-f31f-4b24-8fac-ab5786a26ec7`
+  with status `draft_pending_owner_approval`, from address `000@choir.news`,
+  recipient `yusefnathanson@me.com`, and no provider message id or `sent_at`.
+- Sent folder count stayed at `3`.
+- Trace trajectory `ef2dc77a-6384-41fe-9854-f122c31d1c17` completed with
+  first-class agents `conductor`, `vtext`, and `email`, and causal edges
+  `conductor -> vtext` plus `vtext -> email`.
+
+problem evidence:
+- The persisted draft body was:
+
+```text
+This is a deployed staging proof that VText hands a draft to Email appagent,
+maild stores it in Drafts, and no outbound email is sent before owner
+approval.</
+```
+
+root cause:
+- The first sanitizer cut at known full markers such as `<parameter name=`,
+  `</invoke>`, and `</<parameter>`.
+- The deployed provider/tool boundary can also leave a truncated orphan close
+  sequence at the end of the body. That sequence is not meaningful email
+  content and was not covered by the marker list.
+
+belief-state changes:
+- The appagent trace architecture, sender defaulting, maild persistence, and
+  no-auto-send invariant are proven on staging for the simple draft path.
+- The remaining blocker for owner-click send proof is now content hygiene, not
+  service reachability or authority routing.
+
+remaining error field:
+- Prompt-bar-originated Email appagent drafts can still contain a trailing
+  malformed markup fragment.
+- Owner-click approval remains deferred until a freshly created draft body is
+  clean.
+
+next executable probe:
+- Strip trailing orphan markup fragments such as `</` after known marker
+  removal.
+- Add a regression test for a body ending in `</`.
+- Redeploy and rerun the visible prompt-bar proof with a new subject before
+  attempting owner-click send.
