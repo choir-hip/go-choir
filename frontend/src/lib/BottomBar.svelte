@@ -27,6 +27,7 @@
     APP_REGISTRY,
     liveStatus as desktopLiveStatus,
   } from './stores/desktop.js';
+  import { fetchWithRenewal } from './auth.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
   export let currentUser = null;
@@ -44,6 +45,11 @@
   let menuOpen = false;
   let promptFocused = false;
   let chyronItems = [];
+  let featureTransitions = [];
+  let featureActionStatus = '';
+  let featureActionError = '';
+  let dismissedFeatureID = '';
+  let featureActing = '';
   let removeLiveListener = () => {};
 
   const launcherAppIds = [
@@ -58,7 +64,7 @@
     'video',
     'pdf',
     'epub',
-    'apps-changes',
+    'features',
     'terminal',
     'settings',
   ];
@@ -77,6 +83,9 @@
 
   function handleStartButton() {
     menuOpen = !menuOpen;
+    if (menuOpen) {
+      void refreshFeatureTransitions();
+    }
   }
 
   function handleShowDesktop() {
@@ -99,6 +108,84 @@
         : {},
     });
     menuOpen = false;
+  }
+
+  function latestFeatureTransition() {
+    return (featureTransitions || [])
+      .filter((item) => item?.adoption_id && item.adoption_id !== dismissedFeatureID)
+      .find((item) => ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(item.status)) || null;
+  }
+
+  function hasRollbackRef(adoption) {
+    if (!adoption?.rollback_profile_json) return false;
+    try {
+      const profile = typeof adoption.rollback_profile_json === 'string'
+        ? JSON.parse(adoption.rollback_profile_json)
+        : adoption.rollback_profile_json;
+      return !!profile?.previous_active_source_ref;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  function featureActionLabel(adoption) {
+    if (!adoption) return '';
+    if (['verified', 'owner_approved'].includes(adoption.status) && hasRollbackRef(adoption)) return 'Ready to activate';
+    if (adoption.status === 'adopted' && hasRollbackRef(adoption)) return 'Active';
+    if (adoption.status === 'rolled_back') return 'Rolled back';
+    if (adoption.status === 'blocked') return 'Blocked';
+    return String(adoption.status || '').replaceAll('_', ' ');
+  }
+
+  async function refreshFeatureTransitions() {
+    if (!authenticated) {
+      featureTransitions = [];
+      return;
+    }
+    try {
+      const res = await fetchWithRenewal('/api/adoptions?limit=20', { method: 'GET' });
+      if (!res.ok) return;
+      const body = await res.json().catch(() => ({}));
+      featureTransitions = Array.isArray(body?.adoptions) ? body.adoptions : [];
+    } catch (_err) {
+      // Desk remains usable without the feature summary.
+    }
+  }
+
+  async function runDeskFeatureAction(adoption, action) {
+    if (!adoption?.adoption_id) return;
+    featureActionStatus = '';
+    featureActionError = '';
+    featureActing = action;
+    try {
+      const res = await fetchWithRenewal(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/${action}`, {
+        method: 'POST',
+        headers: action === 'rollback' ? {} : { 'Content-Type': 'application/json' },
+        body: action === 'rollback' ? undefined : '{}',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || `Feature action failed (${res.status})`);
+      featureActionStatus = action === 'promote'
+        ? 'Activated. Rollback is available here.'
+        : action === 'rollback'
+          ? 'Rolled back. You can roll forward from Desk.'
+          : 'Rolled forward.';
+      await refreshFeatureTransitions();
+    } catch (err) {
+      featureActionError = err.message || 'Feature action failed';
+    } finally {
+      featureActing = '';
+    }
+  }
+
+  function openFeaturesFromDesk() {
+    const app = APP_REGISTRY.find((item) => item.id === 'features');
+    if (app) handleLaunchApp(app);
+  }
+
+  function dismissFeature(adoption) {
+    dismissedFeatureID = adoption?.adoption_id || '';
+    featureActionStatus = 'Saved for later.';
   }
 
   function handlePromptKeydown(event) {
@@ -156,10 +243,17 @@
       'vtext.agent_revision.started',
       'vtext.agent_revision.completed',
       'vtext.document_revision.created',
+      'app_adoption.verified',
+      'app_adoption.blocked',
+      'app_adoption.promoted',
+      'app_adoption.rolled_back',
     ].includes(liveEventKind(message));
   }
 
   function handleLiveEvent(message) {
+    if (liveEventKind(message).startsWith('app_adoption.')) {
+      void refreshFeatureTransitions();
+    }
     if (!shouldShowInChyron(message)) return;
     const text = chyronSummary(message);
     if (!text) return;
@@ -215,10 +309,13 @@
   })();
 
   $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
+  $: deskFeatureTransition = latestFeatureTransition();
+  $: deskHasFeatureAction = !!deskFeatureTransition && ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(deskFeatureTransition.status);
 
   onMount(() => {
     publishBottomBarHeight();
     resizePromptInput();
+    void refreshFeatureTransitions();
     removeLiveListener = addLiveEventListener(handleLiveEvent);
     if (typeof ResizeObserver !== 'undefined' && bottomBarEl) {
       bottomBarResizeObserver = new ResizeObserver(publishBottomBarHeight);
@@ -245,10 +342,12 @@
   <!-- Left section: Desk menu + open windows -->
   <div class="bar-left">
     <button
+      class:feature-ready={deskHasFeatureAction}
       class="show-desktop-btn"
       data-show-desktop-btn
       data-start-button
       data-desk-button
+      data-desk-feature-ready={deskHasFeatureAction ? 'true' : 'false'}
       on:click={handleStartButton}
       aria-label="Open Desk menu, {$openWindows.length} open windows"
       title="Open Desk menu"
@@ -277,6 +376,56 @@
             <small>See and manage open windows</small>
           </span>
         </button>
+        {#if deskFeatureTransition}
+          <section class="desk-feature" data-desk-feature-controls>
+            <div>
+              <span class="menu-label">Feature</span>
+              <strong>{deskFeatureTransition.app_id || deskFeatureTransition.package_id || 'Feature import'}</strong>
+              <small>{featureActionLabel(deskFeatureTransition)}</small>
+            </div>
+            {#if featureActionStatus}
+              <p class="desk-feature-status">{featureActionStatus}</p>
+            {/if}
+            {#if featureActionError}
+              <p class="desk-feature-error" role="alert">{featureActionError}</p>
+            {/if}
+            <div class="desk-feature-actions">
+              <button data-desk-feature-watch on:click={openFeaturesFromDesk}>Watch demo</button>
+              <button data-desk-feature-details on:click={openFeaturesFromDesk}>View details</button>
+              {#if ['verified', 'owner_approved'].includes(deskFeatureTransition.status) && hasRollbackRef(deskFeatureTransition)}
+                <button
+                  class="primary"
+                  data-desk-feature-activate
+                  on:click={() => runDeskFeatureAction(deskFeatureTransition, 'promote')}
+                  disabled={!!featureActing}
+                >
+                  {featureActing === 'promote' ? 'Activating...' : 'Activate'}
+                </button>
+              {/if}
+              {#if deskFeatureTransition.status === 'adopted' && hasRollbackRef(deskFeatureTransition)}
+                <button
+                  class="danger"
+                  data-desk-feature-rollback
+                  on:click={() => runDeskFeatureAction(deskFeatureTransition, 'rollback')}
+                  disabled={!!featureActing}
+                >
+                  {featureActing === 'rollback' ? 'Rolling back...' : 'Roll back'}
+                </button>
+              {/if}
+              {#if deskFeatureTransition.status === 'rolled_back'}
+                <button
+                  class="primary"
+                  data-desk-feature-roll-forward
+                  on:click={() => runDeskFeatureAction(deskFeatureTransition, 'roll-forward')}
+                  disabled={!!featureActing}
+                >
+                  {featureActing === 'roll-forward' ? 'Rolling forward...' : 'Roll forward'}
+                </button>
+              {/if}
+              <button data-desk-feature-later on:click={() => dismissFeature(deskFeatureTransition)}>Later</button>
+            </div>
+          </section>
+        {/if}
         <div class="menu-label menu-group-label">Apps</div>
         <div class="start-apps" data-start-apps>
           {#each startApps as app}
@@ -470,6 +619,12 @@
     border-color: #444;
   }
 
+  .show-desktop-btn.feature-ready {
+    border-color: rgba(74, 222, 128, 0.78);
+    color: #dcfce7;
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.2), 0 0 22px rgba(34, 197, 94, 0.32);
+  }
+
   .show-desktop-btn:focus-visible {
     outline: 2px solid var(--choir-accent, #3b82f6);
     outline-offset: 2px;
@@ -587,6 +742,69 @@
   .menu-overview-btn small {
     color: #bfdbfe;
     font-size: 0.7rem;
+  }
+
+  .desk-feature {
+    display: grid;
+    gap: 0.55rem;
+    margin-bottom: 0.72rem;
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    border-radius: 12px;
+    background: rgba(22, 101, 52, 0.18);
+    padding: 0.72rem;
+  }
+
+  .desk-feature strong,
+  .desk-feature small,
+  .desk-feature p {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .desk-feature strong {
+    color: #f8fafc;
+    font-size: 0.88rem;
+  }
+
+  .desk-feature small,
+  .desk-feature-status {
+    color: #bbf7d0;
+    font-size: 0.74rem;
+  }
+
+  .desk-feature-error {
+    color: #fecaca;
+    font-size: 0.74rem;
+  }
+
+  .desk-feature-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+  }
+
+  .desk-feature-actions button {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.76);
+    color: #e2e8f0;
+    cursor: pointer;
+    padding: 0.42rem 0.58rem;
+    font-size: 0.72rem;
+    font-weight: 820;
+  }
+
+  .desk-feature-actions button.primary {
+    border-color: rgba(96, 165, 250, 0.48);
+    background: rgba(37, 99, 235, 0.48);
+    color: white;
+  }
+
+  .desk-feature-actions button.danger {
+    border-color: rgba(248, 113, 113, 0.42);
+    background: rgba(127, 29, 29, 0.32);
+    color: #fecaca;
   }
 
   .menu-group-label {

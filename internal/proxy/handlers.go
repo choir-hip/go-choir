@@ -433,6 +433,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/email/"):
 		h.HandleEmailAPI(w, r)
 		return
+	case path == "/api/notifications/completion-email":
+		h.HandleNotificationAPI(w, r)
+		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
 		// forwarded to the sandbox with trusted user context injected. The

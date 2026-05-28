@@ -455,6 +455,58 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	return rec, nil
 }
 
+func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	if rec.Status != types.AppAdoptionRolledBack {
+		return rec, fmt.Errorf("roll forward app adoption: adoption status %q is not rolled back", rec.Status)
+	}
+	if rec.RuntimeArtifactDigest == "" || rec.UIArtifactDigest == "" {
+		return rec, fmt.Errorf("roll forward app adoption: runtime/ui artifact digests are required")
+	}
+	rollbackSourceRef := rollbackSourceRefFromProfile(rec.RollbackProfileJSON)
+	if rollbackSourceRef == "" {
+		return rec, fmt.Errorf("roll forward app adoption: rollback source ref is required")
+	}
+	if strings.TrimSpace(rec.CandidateSourceRef) == "" {
+		return rec, fmt.Errorf("roll forward app adoption: verified source ref is required")
+	}
+	rec.Status = types.AppAdoptionAdopted
+	rec.Error = ""
+	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	lineage.ActiveSourceRef = rec.CandidateSourceRef
+	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
+	lineage.UIDigest = rec.UIArtifactDigest
+	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
+	lineage.LastAdoptionID = rec.AdoptionID
+	lineage.LastPackageID = pkg.PackageID
+	lineage.LastCandidateRef = rec.CandidateSourceRef
+	lineage.UpdatedAt = time.Now().UTC()
+	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
+		"adoption_id":             rec.AdoptionID,
+		"package_id":              rec.PackageID,
+		"target_computer_id":      rec.TargetComputerID,
+		"candidate_source_ref":    rec.CandidateSourceRef,
+		"runtime_artifact_digest": rec.RuntimeArtifactDigest,
+		"ui_artifact_digest":      rec.UIArtifactDigest,
+		"route_profile":           lineage.RouteProfile,
+		"default_base_profile":    lineage.DefaultBaseProfile,
+		"rollback_source_ref":     rollbackSourceRef,
+		"roll_forward":            true,
+		"continuous_app_change":   true,
+	})
+	return rec, nil
+}
+
 func (rt *Runtime) loadAdoptionPackageLineage(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, types.AppChangePackageRecord, types.ComputerSourceLineageRecord, error) {
 	if rt == nil || rt.store == nil {
 		return types.AppAdoptionRecord{}, types.AppChangePackageRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("app adoption: runtime store is unavailable")

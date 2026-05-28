@@ -55,6 +55,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/send", h.HandleSend)
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
+	s.HandleFunc("/api/notifications/completion-email", h.HandleCompletionEmail)
 }
 
 // HandleResendWebhook verifies and stores Resend webhook metadata.

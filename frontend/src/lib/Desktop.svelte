@@ -47,7 +47,7 @@
   import FileBrowser from './FileBrowser.svelte';
   import BrowserApp from './BrowserApp.svelte';
   import EmailApp from './EmailApp.svelte';
-  import AppsChangesApp from './AppsChangesApp.svelte';
+  import FeaturesApp from './FeaturesApp.svelte';
   import TerminalApp from './TerminalApp.svelte';
   import ComputeMonitorApp from './ComputeMonitorApp.svelte';
   import PodcastApp from './PodcastApp.svelte';
@@ -1640,10 +1640,11 @@
                   on:authexpired={() => dispatch('authexpired')}
                 />
               </div>
-            {:else if win.appId === 'apps-changes'}
-              <div class="app-content apps-changes-content" data-apps-changes-window>
-                <AppsChangesApp
+            {:else if win.appId === 'features'}
+              <div class="app-content features-content" data-features-window>
+                <FeaturesApp
                   appContext={win.appContext}
+                  {currentUser}
                   on:authexpired={() => dispatch('authexpired')}
                   on:openvtext={handleOpenVTextFromContent}
                   on:opentrace={handleOpenTraceFromContent}
@@ -2058,7 +2059,7 @@
     background: #080d18;
   }
 
-  .apps-changes-content {
+  .features-content {
     padding: 0;
     background: #07111e;
   }

@@ -383,6 +383,22 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, rec)
+	case "roll-forward":
+		var req struct{}
+		if r.Body != nil && r.ContentLength != 0 {
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app adoption roll-forward request"})
+				return
+			}
+		}
+		rec, err := h.rt.RollForwardAppAdoption(r.Context(), ownerID, adoptionID)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, rec)
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "app adoption action not found"})
 	}

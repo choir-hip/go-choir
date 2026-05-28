@@ -9,7 +9,7 @@
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
-  const HEAVY_APPS = new Set(['browser', 'apps-changes', 'terminal', 'vtext', 'trace', 'podcast', 'image', 'audio', 'video', 'pdf', 'epub']);
+  const HEAVY_APPS = new Set(['browser', 'features', 'terminal', 'vtext', 'trace', 'podcast', 'image', 'audio', 'video', 'pdf', 'epub']);
 
   let status = null;
   let loading = false;

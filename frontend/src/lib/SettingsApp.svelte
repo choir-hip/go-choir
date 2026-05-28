@@ -23,12 +23,6 @@
   let themeJSON = JSON.stringify(DEFAULT_THEME, null, 2);
   let themeError = '';
   let themeNotice = '';
-  let promotionLoading = true;
-  let promotionError = '';
-  let promotionActionError = '';
-  let promotionActingId = '';
-  let packages = [];
-  let adoptions = [];
 
   $: themeValidation = validateThemeConfig(selectedTheme);
   $: themePreviewVars = themeCSSVariables(selectedTheme);
@@ -50,74 +44,6 @@
       error = err.message || 'Runtime status unavailable';
     } finally {
       loading = false;
-    }
-  }
-
-  async function refreshPromotionSubstrate() {
-    promotionLoading = true;
-    promotionError = '';
-    try {
-      const [packageRes, adoptionRes] = await Promise.all([
-        fetchWithRenewal('/api/app-change-packages?limit=50', { method: 'GET' }),
-        fetchWithRenewal('/api/adoptions?limit=50', { method: 'GET' }),
-      ]);
-      if (!packageRes.ok) {
-        throw new Error(`App change packages failed (${packageRes.status})`);
-      }
-      if (!adoptionRes.ok) {
-        throw new Error(`App adoptions failed (${adoptionRes.status})`);
-      }
-      const packageBody = await packageRes.json();
-      const adoptionBody = await adoptionRes.json();
-      packages = Array.isArray(packageBody?.packages) ? packageBody.packages : [];
-      adoptions = Array.isArray(adoptionBody?.adoptions) ? adoptionBody.adoptions : [];
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      promotionError = err.message || 'App promotion substrate unavailable';
-      packages = [];
-      adoptions = [];
-    } finally {
-      promotionLoading = false;
-    }
-  }
-
-  function canVerifyAdoption(adoption) {
-    return adoption && ['adoption_proposed', 'candidate_applied', 'blocked'].includes(adoption.status);
-  }
-
-  function canPromoteAdoption(adoption) {
-    return adoption?.status === 'verified' || adoption?.status === 'owner_approved';
-  }
-
-  function canRollbackAdoption(adoption) {
-    return adoption && ['verified', 'adopted', 'blocked'].includes(adoption.status);
-  }
-
-  async function reviewAdoption(adoption, action) {
-    if (!adoption?.adoption_id) return;
-    promotionActionError = '';
-    promotionActingId = `${adoption.adoption_id}:${action}`;
-    try {
-      const res = await fetchWithRenewal(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/${action}`, {
-        method: 'POST',
-        body: ['verify', 'promote'].includes(action) ? '{}' : undefined,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `App adoption action failed (${res.status})`);
-      }
-      await refreshPromotionSubstrate();
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      promotionActionError = err.message || 'App adoption action failed';
-    } finally {
-      promotionActingId = '';
     }
   }
 
@@ -181,20 +107,8 @@
     selectedTheme = await loadStoredTheme();
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
-    void refreshPromotionSubstrate();
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
-      if (
-        kind === 'app_change_package.published' ||
-        kind === 'app_adoption.proposed' ||
-        kind === 'app_adoption.verification_started' ||
-        kind === 'app_adoption.verified' ||
-        kind === 'app_adoption.blocked' ||
-        kind === 'app_adoption.promoted' ||
-        kind === 'app_adoption.rolled_back'
-      ) {
-        void refreshPromotionSubstrate();
-      }
       if (kind === 'theme.updated') {
         void loadStoredTheme().then((theme) => {
           selectedTheme = theme;
@@ -283,91 +197,6 @@
           Reset layout
         </button>
       </div>
-    </section>
-
-    <section class="settings-card promotion-card" data-settings-promotions>
-      <div class="status-header">
-        <div>
-          <h3>App promotion</h3>
-          <p class="muted">AppChangePackages and recipient-computer adoptions only. Old patchset queues are not a success path.</p>
-        </div>
-      </div>
-
-      {#if promotionError}
-        <div class="settings-error" data-settings-promotions-error role="alert">{promotionError}</div>
-      {:else}
-        {#if promotionActionError}
-          <div class="settings-error" data-settings-promotions-action-error role="alert">{promotionActionError}</div>
-        {/if}
-        {#if promotionLoading}
-          <p class="promotion-empty" data-settings-promotions-loading>Loading app packages and adoptions…</p>
-        {:else if packages.length === 0 && adoptions.length === 0}
-          <p class="promotion-empty" data-settings-promotions-empty>No AppChangePackages or recipient adoptions yet.</p>
-        {:else}
-          <div class="promotion-list" data-settings-promotions-list>
-            {#each packages as pkg}
-              <article class="promotion-item" data-settings-app-change-package data-settings-package-id={pkg.package_id}>
-                <div>
-                  <strong>{pkg.app_id || pkg.package_id}</strong>
-                  <span>{pkg.source_computer_id || 'source computer'} · {pkg.visibility || 'visibility'} · {pkg.package_manifest_sha256 || 'manifest pending'}</span>
-                </div>
-                <span class="promotion-status" data-settings-promotion-status>{pkg.status}</span>
-              </article>
-            {/each}
-            {#each adoptions as adoption}
-              <article class="promotion-item" data-settings-app-adoption data-settings-adoption-id={adoption.adoption_id}>
-                <div>
-                  <strong>{adoption.app_id || adoption.package_id}</strong>
-                  <span>{adoption.target_computer_id || 'target computer'} · {adoption.package_id}</span>
-                </div>
-                <span class="promotion-status" data-settings-promotion-status>{adoption.status}</span>
-                {#if adoption.error}
-                  <p>{adoption.error}</p>
-                {/if}
-                {#if adoption.runtime_artifact_digest || adoption.ui_artifact_digest}
-                  <p class="promotion-approved" data-settings-adoption-artifacts>
-                    runtime {shortCommit(adoption.runtime_artifact_digest)} · UI {shortCommit(adoption.ui_artifact_digest)}
-                  </p>
-                {/if}
-                {#if canVerifyAdoption(adoption) || canPromoteAdoption(adoption) || canRollbackAdoption(adoption)}
-                  <div class="promotion-actions" data-settings-promotion-actions>
-                    {#if canVerifyAdoption(adoption)}
-                      <button
-                        class="promotion-action verify"
-                        data-settings-adoption-verify
-                        on:click={() => reviewAdoption(adoption, 'verify')}
-                        disabled={promotionActingId === `${adoption.adoption_id}:verify`}
-                      >
-                        {promotionActingId === `${adoption.adoption_id}:verify` ? 'Verifying…' : 'Verify'}
-                      </button>
-                    {/if}
-                    {#if canPromoteAdoption(adoption)}
-                      <button
-                        class="promotion-action approve"
-                        data-settings-adoption-promote
-                        on:click={() => reviewAdoption(adoption, 'promote')}
-                        disabled={promotionActingId === `${adoption.adoption_id}:promote`}
-                      >
-                        {promotionActingId === `${adoption.adoption_id}:promote` ? 'Promoting…' : 'Promote'}
-                      </button>
-                    {/if}
-                    {#if canRollbackAdoption(adoption)}
-                      <button
-                        class="promotion-action reject"
-                        data-settings-adoption-rollback
-                        on:click={() => reviewAdoption(adoption, 'rollback')}
-                        disabled={promotionActingId === `${adoption.adoption_id}:rollback`}
-                      >
-                        {promotionActingId === `${adoption.adoption_id}:rollback` ? 'Rolling back…' : 'Rollback'}
-                      </button>
-                    {/if}
-                  </div>
-                {/if}
-              </article>
-            {/each}
-          </div>
-        {/if}
-      {/if}
     </section>
 
     <section class="settings-card status-card" data-settings-runtime-status>
@@ -613,11 +442,6 @@
     gap: 0.85rem;
   }
 
-  .promotion-card {
-    display: grid;
-    gap: 0.85rem;
-  }
-
   .status-header {
     display: flex;
     justify-content: space-between;
@@ -659,105 +483,12 @@
     padding: 0.75rem;
   }
 
-  .promotion-empty {
-    color: var(--choir-muted, #94a3b8);
-    font-size: 0.86rem;
-  }
-
-  .promotion-list {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .promotion-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.6rem;
-    align-items: start;
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: var(--choir-radius-md, 12px);
-    background: rgba(2, 6, 23, 0.35);
-    padding: 0.7rem;
-  }
-
-  .promotion-item strong,
-  .promotion-item span,
-  .promotion-item p {
-    overflow-wrap: anywhere;
-  }
-
-  .promotion-item div {
-    display: grid;
-    gap: 0.18rem;
-    min-width: 0;
-  }
-
-  .promotion-item div span,
-  .promotion-item p {
-    color: var(--choir-muted, #94a3b8);
-    font-size: 0.78rem;
-  }
-
-  .promotion-status {
-    border: 1px solid rgba(96, 165, 250, 0.28);
-    border-radius: 999px;
-    color: #bfdbfe;
-    font-size: 0.72rem;
-    font-weight: 800;
-    padding: 0.2rem 0.5rem;
-    white-space: nowrap;
-  }
-
-  .promotion-approved {
-    color: #bbf7d0;
-    font-weight: 800;
-  }
-
-  .promotion-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    margin-top: 0.28rem;
-  }
-
-  .promotion-action {
-    min-height: 2rem;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: var(--choir-radius-sm, 8px);
-    color: var(--choir-fg, #e2e8f0);
-    cursor: pointer;
-    padding: 0.42rem 0.7rem;
-    font-size: 0.76rem;
-    font-weight: 820;
-  }
-
-  .promotion-action.verify {
-    border-color: rgba(96, 165, 250, 0.42);
-    background: rgba(30, 64, 175, 0.34);
-  }
-
-  .promotion-action.approve {
-    border-color: rgba(74, 222, 128, 0.42);
-    background: rgba(22, 101, 52, 0.38);
-  }
-
-  .promotion-action.reject {
-    border-color: rgba(248, 113, 113, 0.36);
-    background: rgba(127, 29, 29, 0.32);
-  }
-
-  .promotion-action:disabled {
-    opacity: 0.58;
-    cursor: not-allowed;
-  }
-
   @media (min-width: 860px) {
     .settings-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .status-card,
-    .promotion-card {
+    .status-card {
       grid-column: 1 / -1;
     }
   }
