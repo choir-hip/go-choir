@@ -1842,6 +1842,11 @@ deployed approval-link proof:
 - The visible owner action remained `Send approved draft`; opening the deep
   link did not send.
 - Maild Sent folder count remained `4` after opening the link.
+- Later maild evidence shows the same draft was sent at
+  `2026-05-28T13:04:29Z` through an `owner_click_approved` event with provider
+  id `1c419536-34b5-4ed0-838c-8b44a9d9a74e`. That is evidence for the
+  owner-click path, but it was not directly observed by Computer Use during
+  this checkpoint. Treat it as durable maild evidence, not a witnessed click.
 
 belief-state changes:
 - Approval deep-link review is now staging-proven for the current account.
@@ -1860,7 +1865,7 @@ remaining error field:
 ## Run Checkpoint: Raw Send Handler Deleted
 
 timestamp: 2026-05-28T09:16:00-04:00
-status: local_verified_pending_landing
+status: deployed_verified
 
 deletion:
 - Removed the dead `HandleSend` implementation and response type for
@@ -1876,6 +1881,13 @@ deletion:
 verification:
 - `nix develop -c go test ./internal/maild`
 - `nix develop -c go test ./internal/proxy ./internal/runtime -run 'TestVTextRequestEmailDraft|TestRequestEmailDraftBlocks|TestCoagentCastCannotAddressEmailAppagentDirectly|TestPromptBar'`
+- GitHub Actions CI run `26576724210` passed for
+  `0635d2dd6004d388d52ca9158a917e447949395a`.
+- Staging health reported proxy and sandbox commit
+  `0635d2dd6004d388d52ca9158a917e447949395a`, deployed at
+  `2026-05-28T13:11:40Z`.
+- Deployed raw-send negative proof against maild returned HTTP `404` for
+  `POST /api/email/send`; Sent count stayed `5 -> 5`.
 
 diff signal:
 - The deletion pass removes substantially more code than it adds for this
