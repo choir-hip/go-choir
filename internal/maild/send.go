@@ -22,7 +22,7 @@ type sendEmailRequest struct {
 	ReplyToMessageID string   `json:"reply_to_message_id,omitempty"`
 }
 
-const choirAutomatedEmailSignature = "Sent by Choir, an automatic computer for personal workflows. This automated email was sent after owner approval."
+const choirAutomatedEmailSignature = "Sent by Choir, an automatic computer for research, publishing, media intelligence, and software. This automated email was sent after owner approval."
 
 func (h *Handler) resolveOwnedFromAlias(ctx context.Context, ownerID, fromAddress string) (EmailAlias, error) {
 	localPart, domain, ok := splitEmailAddress(fromAddress)
