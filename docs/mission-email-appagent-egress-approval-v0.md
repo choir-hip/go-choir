@@ -3465,3 +3465,34 @@ root-cause evidence:
 fix direction:
 - Add `body exactly:` variants as subject stop markers.
 - Add a regression test for prompt text containing `Subject: ... Body exactly: ...`.
+
+### Problem Checkpoint: Body Parser Leaves Singular Source Ref Tail
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T19:23Z
+evidence source: deployed prompt-bar proof after `55feb24`
+
+problem:
+- The `Body exactly:` subject-boundary fix worked for the new proof draft:
+  Node B maild stored the subject as exactly
+  `Choir Email clean parser proof 55feb24`.
+- The stored body still included VText artifact tail text after the intended
+  email body:
+  `**Source ref:** Original user request ...`
+  and
+  `**Outbound send:** Not authorized. Draft only.`
+- This means the prior body scrubber handled plural `Source refs` variants but
+  missed the singular `Source ref` heading emitted by the deployed VText draft.
+
+root-cause evidence:
+- `emailDraftArtifactTailMarkers` includes `**source refs:**` and
+  `source refs:` but not `**source ref:**` or `source ref:`.
+- The deployed VText artifact generated a singular heading, so final
+  `cleanEmailDraftBodyText` did not truncate the provenance/control tail before
+  persistence.
+
+fix direction:
+- Add singular `Source ref` markdown and plain markers to the same shared
+  extraction/cleaning marker set.
+- Add a regression test for the exact deployed shape:
+  intended email body followed by `**Source ref:**` and `**Outbound send:**`.
