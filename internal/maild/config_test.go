@@ -11,6 +11,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("MAILD_DB_PATH", "")
 	t.Setenv("MAILD_PRIMARY_DOMAIN", "")
 	t.Setenv("MAILD_ROOT_OWNER_ID", "")
+	t.Setenv("MAILD_RUNTIME_URL", "")
+	t.Setenv("MAILD_VMCTL_URL", "")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -27,6 +29,12 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if cfg.ResendBaseURL != DefaultResendBaseURL {
 		t.Fatalf("ResendBaseURL = %q, want %q", cfg.ResendBaseURL, DefaultResendBaseURL)
+	}
+	if cfg.RuntimeURL != "" {
+		t.Fatalf("RuntimeURL = %q, want empty", cfg.RuntimeURL)
+	}
+	if cfg.VmctlURL != "" {
+		t.Fatalf("VmctlURL = %q, want empty", cfg.VmctlURL)
 	}
 	if cfg.DBPath != filepath.Join(DefaultLocalDir, "mail.db") {
 		t.Fatalf("DBPath = %q", cfg.DBPath)

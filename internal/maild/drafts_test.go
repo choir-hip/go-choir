@@ -257,6 +257,103 @@ func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 	}
 }
 
+func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/emails" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"provider-vmctl-trace-send-1"}`))
+	}))
+	defer resend.Close()
+
+	wrongRuntimeCalled := false
+	wrongRuntime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrongRuntimeCalled = true
+		http.Error(w, "wrong runtime", http.StatusNotFound)
+	}))
+	defer wrongRuntime.Close()
+
+	var mu sync.Mutex
+	var tracePosts []map[string]any
+	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs/email-run-vmctl/events" {
+			t.Fatalf("runtime request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("owner_id") != "user-root" {
+			t.Fatalf("owner query = %q", r.URL.Query().Get("owner_id"))
+		}
+		var post map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&post); err != nil {
+			t.Fatalf("decode runtime post: %v", err)
+		}
+		mu.Lock()
+		tracePosts = append(tracePosts, post)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"appended"}`))
+	}))
+	defer runtime.Close()
+
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/vmctl/resolve" {
+			t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing vmctl internal caller header: %+v", r.Header)
+		}
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode vmctl request: %v", err)
+		}
+		if req["user_id"] != "user-root" || req["desktop_id"] != "primary" {
+			t.Fatalf("vmctl request body = %+v", req)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"vm_id":"vm-1","user_id":"user-root","desktop_id":"primary","published":true,"sandbox_url":"` + runtime.URL + `","state":"active"}`))
+	}))
+	defer vmctlServer.Close()
+
+	cfg.ResendBaseURL = resend.URL
+	cfg.RuntimeURL = wrongRuntime.URL
+	cfg.VmctlURL = vmctlServer.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	alias, err := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		FromAddress: "000@choir.news",
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Vmctl trace send",
+		TextBody:    "Approved body.",
+		SourceKind:  "vtext_email_artifact",
+		SourceRef:   `{"email_appagent_run_id":"email-run-vmctl","doc_id":"doc-1","revision_id":"rev-1","source_content_hash":"sha256:test"}`,
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", "approval-notice-1"); err != nil {
+		t.Fatalf("sendApprovedDraft: %v", err)
+	}
+	if wrongRuntimeCalled {
+		t.Fatalf("maild posted trace evidence to static MAILD_RUNTIME_URL despite vmctl owner resolution")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(tracePosts) != 2 {
+		t.Fatalf("trace post count = %d, want 2; posts=%+v", len(tracePosts), tracePosts)
+	}
+	if tracePosts[0]["kind"] != emailTraceEventApprovalRecorded || tracePosts[1]["kind"] != emailTraceEventSent {
+		t.Fatalf("trace post kinds = %#v, %#v", tracePosts[0]["kind"], tracePosts[1]["kind"])
+	}
+}
+
 func TestDraftSendRejectsMissingOrStaleVersionHash(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"

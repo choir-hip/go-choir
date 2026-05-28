@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 const (
@@ -23,7 +26,12 @@ type emailDraftSourceRef struct {
 
 func (h *Handler) emitApprovedDraftTraceEvents(ctx context.Context, draft EmailDraft, approvalEventID, approvalEventType, approvalProviderMessageID, sentMessageID, providerMessageID string) {
 	runID := emailAppagentRunIDFromSourceRef(draft.SourceRef)
-	if strings.TrimSpace(h.cfg.RuntimeURL) == "" || runID == "" {
+	if runID == "" {
+		return
+	}
+	runtimeURL, err := h.resolveTraceRuntimeURL(ctx, draft.OwnerID)
+	if err != nil {
+		log.Printf("maild: resolve email trace runtime draft=%s run=%s owner=%s: %v", draft.ID, runID, draft.OwnerID, err)
 		return
 	}
 	base := map[string]any{
@@ -36,7 +44,7 @@ func (h *Handler) emitApprovedDraftTraceEvents(ctx context.Context, draft EmailD
 		"approval_event_type":          approvalEventType,
 		"approval_provider_message_id": approvalProviderMessageID,
 	}
-	if err := h.postRuntimeTraceEvent(ctx, draft.OwnerID, runID, emailTraceEventApprovalRecorded, base); err != nil {
+	if err := h.postRuntimeTraceEvent(ctx, runtimeURL, draft.OwnerID, runID, emailTraceEventApprovalRecorded, base); err != nil {
 		log.Printf("maild: append email approval trace event draft=%s run=%s: %v", draft.ID, runID, err)
 	}
 	sent := map[string]any{
@@ -52,9 +60,31 @@ func (h *Handler) emitApprovedDraftTraceEvents(ctx context.Context, draft EmailD
 		"provider_message_id":          providerMessageID,
 		"send_authorized":              true,
 	}
-	if err := h.postRuntimeTraceEvent(ctx, draft.OwnerID, runID, emailTraceEventSent, sent); err != nil {
+	if err := h.postRuntimeTraceEvent(ctx, runtimeURL, draft.OwnerID, runID, emailTraceEventSent, sent); err != nil {
 		log.Printf("maild: append email sent trace event draft=%s run=%s: %v", draft.ID, runID, err)
 	}
+}
+
+func (h *Handler) resolveTraceRuntimeURL(ctx context.Context, ownerID string) (string, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return "", fmt.Errorf("owner_id is required")
+	}
+	if strings.TrimSpace(h.cfg.VmctlURL) != "" {
+		client := vmctl.NewClientWithTimeout(h.cfg.VmctlURL, 15*time.Second)
+		own, err := client.ResolveDesktopContext(ctx, ownerID, vmctl.PrimaryDesktopID)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(own.SandboxURL) == "" {
+			return "", fmt.Errorf("vmctl resolved empty sandbox_url")
+		}
+		return strings.TrimSpace(own.SandboxURL), nil
+	}
+	if strings.TrimSpace(h.cfg.RuntimeURL) != "" {
+		return strings.TrimSpace(h.cfg.RuntimeURL), nil
+	}
+	return "", fmt.Errorf("MAILD_VMCTL_URL or MAILD_RUNTIME_URL is required")
 }
 
 func emailAppagentRunIDFromSourceRef(raw string) string {
@@ -69,7 +99,7 @@ func emailAppagentRunIDFromSourceRef(raw string) string {
 	return strings.TrimSpace(ref.EmailAppagentRunID)
 }
 
-func (h *Handler) postRuntimeTraceEvent(ctx context.Context, ownerID, runID, kind string, payload map[string]any) error {
+func (h *Handler) postRuntimeTraceEvent(ctx context.Context, runtimeURL, ownerID, runID, kind string, payload map[string]any) error {
 	if payload == nil {
 		payload = map[string]any{}
 	}
@@ -77,7 +107,7 @@ func (h *Handler) postRuntimeTraceEvent(ctx context.Context, ownerID, runID, kin
 	if ownerID == "" {
 		return fmt.Errorf("owner_id is required")
 	}
-	endpoint := strings.TrimRight(strings.TrimSpace(h.cfg.RuntimeURL), "/") +
+	endpoint := strings.TrimRight(strings.TrimSpace(runtimeURL), "/") +
 		"/internal/runtime/runs/" + url.PathEscape(runID) +
 		"/events?owner_id=" + url.QueryEscape(ownerID)
 	body, err := json.Marshal(map[string]any{
