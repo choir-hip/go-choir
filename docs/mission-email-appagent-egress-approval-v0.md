@@ -2011,7 +2011,7 @@ required fix direction:
 ## Run Checkpoint: Approval Reply Policy Failures Become Blocked Alerts
 
 timestamp: 2026-05-28T09:51:00-04:00
-status: local_verified_pending_landing
+status: deployed_verified
 
 implementation:
 - Added an explicit non-retry approval-reply rejection sentinel so policy
@@ -2032,6 +2032,13 @@ implementation:
 verification:
 - `nix develop -c go test ./internal/maild`
 - `nix develop -c go test ./internal/maild ./internal/proxy`
+- Commit `10c8e9f2be9a7617b52f9c1443aeaf580abc9ea1`
+  (`fix: block unsafe email approval replies`) was pushed to `main`.
+- GitHub Actions CI run `26578229044` passed, including non-runtime Go tests,
+  all runtime shards, integration-tagged smoke, vet/build, and staging deploy.
+- Staging health reported proxy and sandbox commit
+  `10c8e9f2be9a7617b52f9c1443aeaf580abc9ea1`, deployed at
+  `2026-05-28T13:40:33Z`.
 
 remaining proof gap:
 - This is local code-path proof. A real owner reply from `yusefnathanson@me.com`
