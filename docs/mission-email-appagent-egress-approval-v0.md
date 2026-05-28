@@ -3121,3 +3121,78 @@ fix direction:
 - Preserve exact-version semantics: the backend endpoint already supersedes old
   active tokens for the draft and creates a fresh token tied to the current
   version hash.
+
+### UI Checkpoint: Draft Owners Can Re-Issue Approval Email
+
+status: approval_resend_ui_deployed_reply_proof_pending
+timestamp: 2026-05-28T16:55Z
+evidence source: local build/tests, GitHub Actions, staging health, Computer
+Use, deployed asset inspection, maild SQLite
+
+commits:
+- `5c01b80` documented that approval emails land in spam and the UI had no
+  way to re-issue a scoped approval notice, even though maild already exposed
+  `/api/email/drafts/{id}/approval-email`.
+- `30da0d3` added an `Email approval link` action to the Email draft detail.
+  The action calls `/api/email/drafts/{id}/approval-email`, is shown only for
+  drafts, and is disabled after a draft is sent.
+
+local verification:
+- `npm run build` passed in `frontend`.
+- `nix develop -c go test ./internal/maild -run
+  'TestDraftApprovalEmailUsesVerifiedSignupEmailAndReplyToken|TestDraftSendMarksActiveApprovalTokensStale|TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken|TestApprovalReplyApprovesExactDraftVersionOnce'`
+  passed.
+
+deployment evidence:
+- GitHub Actions CI run `26588639164` succeeded for
+  `30da0d3e4e134356ae1d82f04b055cb4652c7628`.
+- Deploy job `78341525880` succeeded.
+- FlakeHub publish run `26588639214` succeeded.
+- `https://choir.news/health` reported proxy deployed commit
+  `30da0d3e4e134356ae1d82f04b055cb4652c7628` and deployed_at
+  `2026-05-28T16:45:32Z`.
+- Deployed asset `index-Q8rvMW_y.js` contains the `Email approval link`
+  label.
+
+visible product proof:
+- Computer Use hard-refreshed `https://choir.news` while authenticated as owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- The Email app opened to Drafts after desktop recovery paused old windows.
+- Selecting active draft `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`
+  showed subject `Choir Email clean approval proof 06e58f5`, status
+  `Pending approval`, sender `000@choir.news`, recipient
+  `yusefnathanson@me.com`, and both visible controls:
+  `Email approval link` and `Send approved draft`.
+- The proof intentionally did not click either control. The existing active
+  approval token remains valid and no extra approval email was sent during this
+  observation.
+
+maild waiting state:
+- Draft `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` remains
+  `draft_pending_owner_approval`, version `1`.
+- Its active approval token remains scoped to provider approval-email id
+  `1f93fa65-7b7e-454f-ae4f-2192a0c49009`.
+- No `email_reply_approved`, `email_reply_rejected`, or
+  `email_reply_edit_requested` event has landed after this checkpoint.
+- There are still `0` active approval tokens attached to sent drafts.
+
+belief-state changes:
+- The product now has a safe owner-visible recovery path for missed/spam
+  approval emails without weakening send authority or creating a raw send
+  bypass.
+- The remaining mission-critical gap is still the real reply path:
+  Resend inbound from the owner mailbox must produce `email_reply_approved`,
+  `email_reply_rejected`, or `email_reply_edit_requested` evidence against an
+  exact active draft version.
+
+next executable probe:
+- Wait for, or ask the owner to send, a fresh reply from
+  `yusefnathanson@me.com` to the active approval email for
+  `Choir Email clean approval proof 06e58f5`.
+- Preferred next proof is `edit: make it warmer and shorter`, because it
+  exercises the newest deployed edit-reapproval notice path without sending the
+  draft.
+- If the owner cannot find the original approval email, use the visible
+  `Email approval link` action to generate a fresh scoped approval notice, then
+  verify the new provider id and superseded token state before asking for the
+  reply.
