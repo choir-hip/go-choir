@@ -1798,3 +1798,61 @@ Root cause:
 
 Belief update: the next fix should be a minimal app-context wiring change, not
 a new Email state machine or approval endpoint change.
+
+## Run Checkpoint: Approval Deep Link Opens Exact Draft
+
+timestamp: 2026-05-28T09:09:00-04:00
+status: checkpoint_incomplete
+
+what shipped:
+- Commit `d1f861312e551625ece2d7827652cabf25da89d9`
+  (`fix: preserve singleton app launch context`) made singleton app launches
+  merge deep-link context into an existing Email window.
+- Commit `276a2c90f4a82d28d663c5aeb6c349a157d429ac`
+  (`docs: record email approval deep link context gap`) documented the
+  remaining app-context wiring problem before the follow-up code fix.
+- Commit `203e566492ed98630a0628fb3a462a21a6e79a57`
+  (`fix: pass email launch context into app`) passed `win.appContext` into
+  `EmailApp`.
+
+landing evidence:
+- Local verification:
+  - `npm run build`
+- GitHub Actions CI run `26576006902` passed for
+  `d1f861312e551625ece2d7827652cabf25da89d9`.
+- GitHub Actions CI run `26576282208` passed for
+  `203e566492ed98630a0628fb3a462a21a6e79a57`.
+- Staging health reported proxy and sandbox commit
+  `203e566492ed98630a0628fb3a462a21a6e79a57`, deployed at
+  `2026-05-28T13:02:53Z`.
+- The separate FlakeHub publish workflow `26576282269` failed with FlakeHub
+  authorization/cache fetch errors while staging CI and deploy succeeded. This
+  is residual release-infrastructure noise, not a blocker for the Node B
+  staging proof.
+
+deployed approval-link proof:
+- Computer Use hard-refreshed the approval review URL for draft
+  `email-draft-c3e3484f-8b38-4f73-8eff-2d18398fc482`.
+- The Email app opened to `Drafts`, showed `9 drafts`, selected subject
+  `Choir Email approval-token proof 3af9f4b`, and displayed the exact draft
+  detail with status `Pending approval`.
+- The detail showed `000@choir.news -> yusefnathanson@me.com`, updated
+  `May 28, 8:45 AM`, body
+  `This is a deployed staging proof that Email appagent creates a valid approval reply address and sends the approval email before any send.`
+- The visible owner action remained `Send approved draft`; opening the deep
+  link did not send.
+- Maild Sent folder count remained `4` after opening the link.
+
+belief-state changes:
+- Approval deep-link review is now staging-proven for the current account.
+- The exact-version review path is safe with respect to no-send-on-open.
+- Owner-click approval remains available in the UI, but this checkpoint did
+  not click it because the mission requires explicit owner approval semantics,
+  and this probe was only for deep-link review.
+
+remaining error field:
+- Real approval reply from `yusefnathanson@me.com` is still unproven.
+- Real edit reply and prior-token invalidation through Resend inbound remain
+  unproven.
+- Deletion-first convergence over stale bypass surfaces and setup artifacts is
+  still pending.
