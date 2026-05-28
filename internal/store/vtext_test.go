@@ -1140,6 +1140,42 @@ func TestVTextAgentMutationFail(t *testing.T) {
 	}
 }
 
+func TestVTextAgentMutationMarkStaleClearsPending(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+
+	m := AgentMutation{
+		DocID:     "doc-1",
+		RunID:     "task-stale",
+		OwnerID:   "user-1",
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateAgentMutation(ctx, m); err != nil {
+		t.Fatalf("CreateAgentMutation: %v", err)
+	}
+	if err := s.MarkAgentMutationStale(ctx, "task-stale"); err != nil {
+		t.Fatalf("MarkAgentMutationStale: %v", err)
+	}
+	got, err := s.GetAgentMutationByRun(ctx, "task-stale")
+	if err != nil {
+		t.Fatalf("GetAgentMutationByRun: %v", err)
+	}
+	if got.State != "stale_terminal_run" {
+		t.Fatalf("State = %q, want stale_terminal_run", got.State)
+	}
+	if got.CompletedAt == nil {
+		t.Fatal("CompletedAt is nil, want a timestamp")
+	}
+	pending, err := s.GetPendingAgentMutationByDoc(ctx, "doc-1", "user-1")
+	if err != nil {
+		t.Fatalf("GetPendingAgentMutationByDoc: %v", err)
+	}
+	if pending != nil {
+		t.Fatalf("pending mutation should be nil after stale reconciliation, got %+v", pending)
+	}
+}
+
 func TestVTextAgentMutationNoCrossUserAccess(t *testing.T) {
 	s := vtextTestStore(t)
 	ctx := context.Background()

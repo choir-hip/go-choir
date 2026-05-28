@@ -456,6 +456,23 @@
     return bundle?.publication?.title || 'Published VText';
   }
 
+  function publicURLForPublishResult(result = publishResult) {
+    const direct = String(result?.public_url || '').trim();
+    if (direct) return direct;
+    const routePath = String(result?.route_path || '').trim();
+    if (!routePath) return '';
+    if (/^https?:\/\//.test(routePath)) return routePath;
+    if (typeof window === 'undefined' || !window.location) return routePath;
+    return `${window.location.origin}${routePath.startsWith('/') ? routePath : `/${routePath}`}`;
+  }
+
+  function openPublishedURL(result = publishResult) {
+    const publicURL = publicURLForPublishResult(result);
+    if (!publicURL || typeof window === 'undefined') return false;
+    const opened = window.open(publicURL, '_blank', 'noopener,noreferrer');
+    return !!opened;
+  }
+
   function truncateText(value, max = 360) {
     const text = String(value || '').trim();
     if (text.length <= max) return text;
@@ -1091,7 +1108,8 @@
       publishResult = await publishVText(currentDoc.doc_id, {
         revisionId: revision.revision_id,
       });
-      saveStatus = `Published ${versionLabel}`;
+      const opened = openPublishedURL(publishResult);
+      saveStatus = opened ? `Published ${versionLabel}; opened public link` : `Published ${versionLabel}`;
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -1101,6 +1119,23 @@
       saveStatus = 'Publish failed';
     } finally {
       publishedActionPending = false;
+    }
+  }
+
+  async function handleCopyPublishedURL() {
+    const publicURL = publicURLForPublishResult();
+    if (!publicURL) return;
+    try {
+      await navigator.clipboard.writeText(publicURL);
+      saveStatus = 'Public link copied';
+    } catch (_err) {
+      saveStatus = 'Could not copy public link';
+    }
+  }
+
+  function handleOpenPublishedURL() {
+    if (!openPublishedURL()) {
+      saveStatus = 'Could not open public link';
     }
   }
 
@@ -1376,10 +1411,27 @@
           data-publication-id={publishResult.publication_id || ''}
           data-publication-version-id={publishResult.publication_version_id || ''}
           data-public-route={publishResult.route_path || ''}
+          data-public-url={publicURLForPublishResult(publishResult)}
         >
           <div class="publication-heading">
             <p class="eyebrow">Published</p>
-            <h2>{publishResult.route_path || publishResult.public_url || 'Public route ready'}</h2>
+            <a
+              class="public-link"
+              data-vtext-public-link
+              href={publicURLForPublishResult(publishResult)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {publicURLForPublishResult(publishResult) || 'Public route ready'}
+            </a>
+          </div>
+          <div class="publication-actions">
+            <button type="button" class="secondary-action" data-vtext-open-public on:click={handleOpenPublishedURL}>
+              Open
+            </button>
+            <button type="button" class="secondary-action" data-vtext-copy-public on:click={handleCopyPublishedURL}>
+              Copy
+            </button>
           </div>
           <div class="publication-facts">
             <span>{shortHash(publishResult.content_hash || '')}</span>
@@ -1725,6 +1777,29 @@
   .publication-result {
     background: rgba(20, 83, 45, 0.32);
     border-bottom-color: rgba(134, 239, 172, 0.16);
+  }
+
+  .public-link {
+    display: block;
+    color: #f8fafc;
+    font-size: clamp(0.95rem, 2vw, 1.25rem);
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .public-link:hover,
+  .public-link:focus-visible {
+    color: #bfdbfe;
+    text-decoration: underline;
+  }
+
+  .publication-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
   }
 
   .recent-panel {

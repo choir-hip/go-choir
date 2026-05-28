@@ -1413,6 +1413,26 @@ func (s *Store) CancelAgentMutation(ctx context.Context, runID string) error {
 	return nil
 }
 
+// MarkAgentMutationStale clears a pending mutation whose owning run has already
+// reached a terminal state. This prevents stale pending rows from keeping the
+// VText editor in a perpetual "Revising..." state after recovery or missed
+// completion reconciliation.
+func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error {
+	now := time.Now().UTC()
+	_, err := s.vtextHandle().ExecContext(ctx,
+		`UPDATE vtext_agent_mutations
+		    SET state = 'stale_terminal_run',
+		        completed_at = ?
+		  WHERE loop_id = ? AND state = 'pending'`,
+		now.Format(time.RFC3339Nano),
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("mark stale vtext agent mutation: %w", err)
+	}
+	return nil
+}
+
 // CreateEvidence inserts a durable evidence record into the embedded Dolt
 // workspace. Evidence is owner-scoped and associated with the capturing agent.
 func (s *Store) CreateEvidence(ctx context.Context, rec types.EvidenceRecord) error {

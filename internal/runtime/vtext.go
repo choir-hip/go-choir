@@ -1009,7 +1009,7 @@ func (h *APIHandler) HandleVTextDocumentStream(w http.ResponseWriter, r *http.Re
 		flusher.Flush()
 	}
 
-	pendingMutation, err := h.rt.Store().GetPendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
 		log.Printf("vtext api: get pending mutation for stream: %v", err)
 	}
@@ -1294,7 +1294,7 @@ func (h *APIHandler) HandleVTextAgentRevision(w http.ResponseWriter, r *http.Req
 	// If one exists, return the existing run ID instead of creating a new
 	// mutation. This prevents duplicate canonical revisions when
 	// renewal/retry occurs mid-mutation (VAL-CROSS-122).
-	existing, err := h.rt.Store().GetPendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	existing, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
 		log.Printf("vtext api: check pending mutation: %v", err)
 	} else if existing != nil {
@@ -1345,7 +1345,7 @@ func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	mutation, err := h.rt.Store().GetPendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	mutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusOK, vtextCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
@@ -1353,6 +1353,10 @@ func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *ht
 		}
 		log.Printf("vtext api: get pending mutation for cancel: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load pending revision"})
+		return
+	}
+	if mutation == nil {
+		writeAPIJSON(w, http.StatusOK, vtextCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
 		return
 	}
 	cancelled, err := h.rt.CancelRunGraph(r.Context(), mutation.RunID, ownerID)
@@ -1373,6 +1377,25 @@ func (h *APIHandler) HandleVTextCancelAgentRevision(w http.ResponseWriter, r *ht
 		CancelledRunIDs: cancelled,
 		Resumable:       true,
 	})
+}
+
+func (h *APIHandler) pendingAgentMutationByDoc(ctx context.Context, docID, ownerID string) (*store.AgentMutation, error) {
+	mutation, err := h.rt.Store().GetPendingAgentMutationByDoc(ctx, docID, ownerID)
+	if err != nil || mutation == nil {
+		return mutation, err
+	}
+	run, err := h.rt.GetRun(ctx, mutation.RunID, ownerID)
+	if err != nil {
+		return mutation, nil
+	}
+	if !run.State.Terminal() {
+		return mutation, nil
+	}
+	if err := h.rt.Store().MarkAgentMutationStale(ctx, mutation.RunID); err != nil {
+		log.Printf("vtext api: mark stale pending mutation %s: %v", mutation.RunID, err)
+		return mutation, nil
+	}
+	return nil, nil
 }
 
 // HandleTestVTextResearchFindings is a local-only dry-run browser test seam that
