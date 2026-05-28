@@ -624,3 +624,89 @@ Use observations for draft creation and owner-click send; GitHub Actions run
 `26567618003`; deployed commit
 `1a06a3606468bba548008d9b9979f12683dba1bf`.
 rollback refs: standard git/platform rollback after behavior-changing commits.
+
+## Checkpoint: Maild Bridge Deployed, VText Handoff Still Misroutes
+
+timestamp: 2026-05-28T06:25:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after deploying the runtime-to-maild bridge,
+the first staging prompt-bar proof still did not produce a visible Email
+appagent draft. The prompt opened VText and VText wrote a v1 that correctly
+named the desired boundary:
+
+```text
+Email Appagent Draft Request
+Status: Draft requested, awaiting Email appagent confirmation.
+Recipient: yusefnathanson@me.com
+Subject: Choir Email appagent bridge proof 9d9c6e3
+...
+Next step: Call request_email_draft to hand off to the Email appagent for
+draft creation and storage.
+```
+
+However, the run remained in `Revising...` and the visible activity stream
+showed super/bash activity instead of an Email appagent draft handoff:
+
+```text
+called bash
+called submit_coagent_update ... Role: super. Kind: findings.
+Summary: go-choir is skills-only. Searching for maild service elsewhere
+...
+Summary: No maild services running. Checking Choir API and broader fs
+```
+
+what shipped immediately before this probe:
+- `9d9c6e35e7038ec5bcbcd784c718ebaed55be25a` added `RUNTIME_MAILD_URL`,
+  passed that URL into host and guest runtime environments, and made
+  VText's `request_email_draft` tool persist a draft to maild while still
+  recording a first-class Email appagent child run.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26568468269`
+  completed successfully.
+- Staging `/health` reported proxy and sandbox commit
+  `9d9c6e35e7038ec5bcbcd784c718ebaed55be25a`, deployed at
+  `2026-05-28T10:12:10Z`.
+
+local proof for `9d9c6e35e7038ec5bcbcd784c718ebaed55be25a`:
+- `nix develop -c go test ./internal/runtime -run 'TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun|TestCoagentCastCannotAddressEmailAppagentDirectly|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent|TestLoadConfig'`
+- `nix develop -c go test ./internal/maild -run 'TestDraft'`
+- `nix develop -c go test ./internal/vmmanager -run 'Test.*Boot|TestGuestInitScript'`
+- `nix develop -c go test ./internal/runtime ./internal/maild ./internal/vmmanager ./internal/proxy`
+- `git diff --check -- internal/runtime/config.go internal/runtime/tools_email.go internal/runtime/email_appagent_tools_test.go internal/maild/drafts.go internal/maild/drafts_test.go internal/vmmanager/manager.go internal/vmmanager/manager_test.go nix/node-b.nix nix/sandbox-vm.nix`
+- `nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sandbox.serviceConfig.Environment --json` included `RUNTIME_MAILD_URL=http://127.0.0.1:8087`.
+
+belief-state changes:
+- The maild persistence bridge is now real at unit/integration/Nix-env level
+  and deployed to staging, but product-path VText does not yet reliably call
+  it.
+- The VText prompt already knows enough to write "call request_email_draft" in
+  prose, but prose is not authority. The tool call must be enforced or strongly
+  shaped as a typed continuation.
+- The test prompt used "deployed staging proof" language, which tripped the
+  generic VText execution/verification heuristic and routed into super. That is
+  a useful red-team signal: email handoff requests need an explicit email-draft
+  classification so "send an email" does not get confused with "run execution".
+- `source_content_hash` is currently required as a model-supplied argument.
+  That is brittle for real VText use; the runtime should derive or default it
+  from the committed VText revision/body when the model does not know an exact
+  hash.
+
+remaining error field:
+- Prompt-bar simple email requests can create a VText document, but VText still
+  lacks a reliable continuation from the committed email artifact revision to
+  the `request_email_draft` tool.
+- The visible product path can currently say the right next step without doing
+  it.
+- The first proof prompt misrouted into super, which is explicitly not allowed
+  to own email sending authority and should not be inspecting maild directly
+  for a simple draft request.
+
+next executable probe:
+- Add an email-draft intent classifier and VText guidance so simple owner
+  prompts like `send <address> <message>` create a canonical VText revision
+  and then call `request_email_draft`.
+- Make the email draft source hash runtime-derived or optional so VText does
+  not have to invent a hash.
+- Keep the result draft-only: no outbound send until the owner approves the
+  exact draft version in Email.
