@@ -46,10 +46,10 @@ has reached the VText boundary.
 status: complete
 current artifact state: provider/DNS/runtime setup, public mailbox delivery,
   attachment quarantine, owner-scoped outbound reply, manual Respond with Choir,
-  trusted plus-code pending workflow handoff, and a small convergence pass all
-  have deployed proof. Resend reports choir.news verified for sending and
-  receiving. Gandi apex MX routes choir.news inbound mail to Resend. Resend has
-  an enabled email.received webhook for
+  trusted plus-code pending workflow handoff, a small convergence pass, and the
+  mobile Email app list/detail/compose layout all have deployed proof. Resend
+  reports choir.news verified for sending and receiving. Gandi apex MX routes
+  choir.news inbound mail to Resend. Resend has an enabled email.received webhook for
   https://choir.news/api/email/resend/webhook. Node B maild health reports
   resend_api_key_configured=true and webhook_secret_configured=true. Public
   unsigned webhook probes fail closed with invalid_signature. 000@choir.news
@@ -63,7 +63,10 @@ what shipped: docs checkpoint 0a3029b and behavior commit
   Email app copy that names the owner action "Respond with Choir". Cleanup
   commit fa8a84059ad1eb7b98380233d7ad9226b4f4c726 removes the extra Email app
   read-state control, updates stale Send to Choir wording, and records the
-  deployed live evidence.
+  deployed live evidence. Mobile docs checkpoint b62877e and behavior commit
+  f60a8e0d228b2c04217d699c6365212e7ce8e1b3 add a phone-width mailbox switcher,
+  list-first mobile state, detail/compose panels, and a Back action without
+  changing the desktop three-column layout.
 what was proven: readiness was re-probed; Resend loopback mail to 000@choir.news
   stored message resend-message-f20817a211067c9ef9fc1180a0aa86a9 and source
   packet resend-source-packet-b16502d434ef415f55e1fd9985ce1e0e; authenticated
@@ -106,6 +109,9 @@ what shipped:
     handoff
   - fa8a84059ad1eb7b98380233d7ad9226b4f4c726 chore: converge email demo
     ingress
+  - b62877e docs: record email mobile responsiveness gap
+  - f60a8e0d228b2c04217d699c6365212e7ce8e1b3 fix: make email app responsive
+    on mobile
 what was proven:
   - scripts/mail-provider-readiness passed for Resend/Gandi/Node B maild except
     local .env intentionally lacks RESEND_WEBHOOK_SECRET while Node B has it.
@@ -167,6 +173,25 @@ what was proven:
     one quarantined attachment, prompt_bar_equivalent=false, and zero ingress
     events. The deployed Email app showed Quarantine with the attachment and
     only Reply plus Respond with Choir actions.
+  - mobile fix f60a8e0d228b2c04217d699c6365212e7ce8e1b3 passed CI run
+    26549102857, Publish/FlakeHub run 26549102855, and the Node B staging
+    deploy job. Public /health reported proxy and upstream deployed commit
+    f60a8e0d228b2c04217d699c6365212e7ce8e1b3.
+  - after that deploy, scripts/mail-acceptance-check again passed for
+    resend-message-3d1dbb3525ec84f0bb75ff571d07d8bd with folder=quarantine,
+    one quarantined attachment, trust label UNTRUSTED_EXTERNAL_EMAIL, and zero
+    ingress events.
+  - deployed mobile Playwright proof against https://choir.news at 390x844
+    registered a product-authenticated account, opened the live Email app, and
+    routed only the Email API responses to fixed mail fixtures. Metrics showed
+    scrollWidth=390 in list, detail, and compose states; the mobile mailbox bar
+    displayed; list state used message-list display=flex and detail display=none;
+    detail/compose state used message-list display=none and detail display=flex;
+    Back, Reply, and Respond with Choir controls were visible; a long detail
+    subject wrapped inside the phone viewport. Screenshots:
+    /tmp/choir-email-deployed-mobile-list.png,
+    /tmp/choir-email-deployed-mobile-detail.png, and
+    /tmp/choir-email-deployed-mobile-compose.png.
 unproven or partial claims:
   - VText response generation remains known broken after v1 and is outside this
     email mission.
@@ -258,6 +283,14 @@ Required fix:
   provide a Back action to return to the list.
 - Verify no horizontal overflow at 390px and prove list/detail/compose states
   with screenshots before deploy.
+
+Shipped and proven:
+
+- f60a8e0d228b2c04217d699c6365212e7ce8e1b3 implements the mobile state switch
+  and was deployed to staging.
+- Deployed Playwright proof at 390x844 showed no horizontal overflow
+  (`scrollWidth=390`), visible mobile mailbox controls, list-first behavior,
+  detail/compose panels, and reachable Back/Reply/Respond with Choir controls.
 
 ## Real Artifact
 
