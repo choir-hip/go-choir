@@ -177,6 +177,13 @@
     return ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(String(status || ''));
   }
 
+  function announceFeatureTransition(adoption) {
+    if (!adoption?.adoption_id || typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('choir-feature-transition-observed', {
+      detail: { adoption_id: adoption.adoption_id, status: adoption.status },
+    }));
+  }
+
   function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -299,6 +306,7 @@
       adoptions = [current, ...adoptions.filter((item) => item.adoption_id !== current.adoption_id)];
       await refreshFeatures([current]);
       if (!isTerminalImportStatus(current.status)) continue;
+      announceFeatureTransition(current);
       if (current.status === 'blocked') {
         actionStatus = `${feature.title} is blocked. We emailed ${ownerEmail} with a concise status link.`;
       } else if (['verified', 'owner_approved'].includes(current.status)) {
@@ -327,6 +335,7 @@
         body: action === 'rollback' ? undefined : '{}',
       });
       adoptions = [next, ...adoptions.filter((item) => item.adoption_id !== next.adoption_id)];
+      announceFeatureTransition(next);
       actionStatus = action === 'promote'
         ? 'Activated with rollback available from Desk.'
         : action === 'rollback'

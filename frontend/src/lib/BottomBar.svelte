@@ -117,6 +117,10 @@
       .find((item) => ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(item.status)) || null;
   }
 
+  function canRefreshFeatureTransitions() {
+    return authenticated || !!currentUser?.id || !!currentUser?.email;
+  }
+
   function hasRollbackRef(adoption) {
     if (!adoption?.rollback_profile_json) return false;
     try {
@@ -139,7 +143,7 @@
   }
 
   async function refreshFeatureTransitions() {
-    if (!authenticated) {
+    if (!canRefreshFeatureTransitions()) {
       featureTransitions = [];
       return;
     }
@@ -267,6 +271,10 @@
     ].slice(-10);
   }
 
+  function handleFeatureTransitionObserved() {
+    void refreshFeatureTransitions();
+  }
+
   function resizePromptInput() {
     if (!promptInputEl) return;
     const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
@@ -318,9 +326,10 @@
     resizePromptInput();
     void refreshFeatureTransitions();
     featureRefreshTimer = window.setInterval(() => {
-      if (authenticated) void refreshFeatureTransitions();
+      if (canRefreshFeatureTransitions()) void refreshFeatureTransitions();
     }, 15_000);
     removeLiveListener = addLiveEventListener(handleLiveEvent);
+    window.addEventListener('choir-feature-transition-observed', handleFeatureTransitionObserved);
     if (typeof ResizeObserver !== 'undefined' && bottomBarEl) {
       bottomBarResizeObserver = new ResizeObserver(publishBottomBarHeight);
       bottomBarResizeObserver.observe(bottomBarEl);
@@ -331,6 +340,7 @@
   onDestroy(() => {
     removeLiveListener();
     if (featureRefreshTimer) window.clearInterval(featureRefreshTimer);
+    window.removeEventListener('choir-feature-transition-observed', handleFeatureTransitionObserved);
     bottomBarResizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
   });
