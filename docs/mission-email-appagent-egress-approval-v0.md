@@ -3592,3 +3592,38 @@ remaining error field:
 - Older already-created dirty drafts can still display dirty draft bodies in
   the Drafts list/detail. The approved-send path now defensively strips known
   VText artifact tails before provider send and sent-message storage.
+
+### Problem Checkpoint: HTML Proof Is Visually Indistinct And Proof Subject Has Hash
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T19:50Z
+evidence source: owner iPhone Mail screenshot and read-only maild sent record
+
+problem:
+- The sent `Choir Email clean html proof ad5e05d` message did include an HTML
+  MIME part in maild/provider payload evidence, but the HTML part was just a
+  minimal paragraph wrapper. In iOS Mail it looked like ordinary plain text, so
+  the owner reasonably could not see any HTML treatment.
+- The visible subject included `ad5e05d`. That hash was introduced by the proof
+  prompt, not by maild, but it is still bad product taste and should not appear
+  in owner-visible demo/proof subjects.
+- The owner requested a small italicized signature that gives a one-liner about
+  Choir and discloses that the email is automated.
+
+root-cause evidence:
+- `renderPlainTextEmailHTML` generated a valid but visually neutral HTML body:
+  a white page, one paragraph, and no visible footer or disclosure.
+- The subject is preserved exactly from the approved draft. That is correct for
+  user-authored email authority, so the fix should not silently strip arbitrary
+  user subject text. Instead, product-path proof prompts and generated demo
+  artifacts must stop using hashes in human subjects.
+
+fix direction:
+- Keep subject preservation semantics; use clean human subjects in new proof
+  prompts.
+- Add a restrained generated HTML footer/signature to approved appagent sends:
+  italic, visually separated, no tracking/assets/scripts, and clear that Choir
+  is an automatic computer and the message was sent automatically after owner
+  approval.
+- Preserve plain-text fallback while making the HTML path visibly distinct
+  enough to verify in normal mail clients.
