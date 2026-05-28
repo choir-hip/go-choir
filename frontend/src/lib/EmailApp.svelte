@@ -28,6 +28,7 @@
   let composeBody = '';
   let sending = false;
   let loadedOnce = false;
+  let detailPaneOpen = false;
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = '000@choir.news';
@@ -52,6 +53,7 @@
     loading = true;
     error = '';
     activeFolder = folder;
+    detailPaneOpen = false;
     try {
       const res = await fetchWithRenewal(`/api/email/messages?folder=${encodeURIComponent(folder)}`);
       if (!res.ok) {
@@ -66,7 +68,7 @@
         detail = null;
       }
       if (selectedId) {
-        await loadDetail(selectedId);
+        await loadDetail(selectedId, { openPane: false });
       }
     } catch (err) {
       handleError(err);
@@ -75,12 +77,15 @@
     }
   }
 
-  async function loadDetail(id) {
+  async function loadDetail(id, options = {}) {
     selectedId = id;
     detailLoading = true;
     actionStatus = '';
     replyOpen = false;
     composeOpen = false;
+    if (options.openPane) {
+      detailPaneOpen = true;
+    }
     try {
       const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(id)}`);
       if (!res.ok) {
@@ -185,8 +190,16 @@
   function openCompose() {
     composeOpen = true;
     replyOpen = false;
+    detailPaneOpen = true;
     actionStatus = '';
     error = '';
+  }
+
+  function showMessageList() {
+    detailPaneOpen = false;
+    composeOpen = false;
+    replyOpen = false;
+    actionStatus = '';
   }
 
   function handleError(err) {
@@ -265,7 +278,22 @@
     </nav>
   </aside>
 
-  <main class="message-list" data-email-message-list>
+  <div class="mobile-mailbar">
+    <div>
+      <h1>Email</h1>
+      <p>{activeAddress}</p>
+    </div>
+    <label>
+      <span>Mailbox</span>
+      <select bind:value={activeFolder} on:change={(event) => loadMessages(event.currentTarget.value)}>
+        {#each folders as folder}
+          <option value={folder.id}>{folder.label}</option>
+        {/each}
+      </select>
+    </label>
+  </div>
+
+  <main class="message-list" class:mobile-hidden={detailPaneOpen} data-email-message-list>
     <header class="list-header">
       <div>
         <h2>{folders.find((folder) => folder.id === activeFolder)?.label || 'Inbox'}</h2>
@@ -292,7 +320,7 @@
             type="button"
             class="message-row"
             class:selected={message.id === selectedId}
-            on:click={() => loadDetail(message.id)}
+            on:click={() => loadDetail(message.id, { openPane: true })}
             data-email-message-id={message.id}
           >
             <span class="sender">{message.from_display || message.from_address}</span>
@@ -309,7 +337,9 @@
     {/if}
   </main>
 
-  <section class="message-detail" data-email-message-detail>
+  <section class="message-detail" class:mobile-open={detailPaneOpen} data-email-message-detail>
+    <button type="button" class="mobile-back" on:click={showMessageList}>Back</button>
+
     {#if composeOpen}
       <div class="compose-box" data-email-compose-panel>
         <header class="compose-header">
@@ -435,6 +465,11 @@
     overflow: hidden;
   }
 
+  .mobile-mailbar,
+  .mobile-back {
+    display: none;
+  }
+
   .mail-rail,
   .message-list,
   .message-detail {
@@ -541,6 +576,15 @@
   .list-header h2,
   .detail-header h2 {
     font-size: 18px;
+  }
+
+  .detail-header > div {
+    min-width: 0;
+  }
+
+  .detail-header h2,
+  .detail-header p {
+    overflow-wrap: anywhere;
   }
 
   .icon-button {
@@ -750,6 +794,7 @@
   }
 
   input,
+  select,
   textarea {
     border: 1px solid rgba(121, 147, 194, 0.3);
     background: rgba(5, 11, 20, 0.8);
@@ -784,19 +829,177 @@
 
   @media (max-width: 760px) {
     .email-app {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      height: 100%;
+      min-height: 0;
     }
 
     .mail-rail {
       display: none;
     }
 
+    .mobile-mailbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(118, 151, 194, 0.18);
+      background: #081321;
+      min-width: 0;
+    }
+
+    .mobile-mailbar h1 {
+      font-size: 20px;
+      line-height: 1.15;
+    }
+
+    .mobile-mailbar p,
+    .mobile-mailbar span {
+      color: #9ba9bf;
+      font-size: 12px;
+    }
+
+    .mobile-mailbar label {
+      display: grid;
+      gap: 5px;
+      min-width: 132px;
+    }
+
+    .mobile-mailbar select {
+      min-height: 36px;
+      padding: 7px 32px 7px 10px;
+    }
+
     .message-list {
-      min-height: 48%;
+      border-right: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .message-list.mobile-hidden {
+      display: none;
+    }
+
+    .list-header,
+    .detail-header {
+      padding: 14px 16px;
+    }
+
+    .list-header h2,
+    .detail-header h2 {
+      font-size: 17px;
+    }
+
+    .list-header {
+      align-items: center;
+    }
+
+    .list-actions button:not(.icon-button) {
+      min-height: 36px;
+      padding: 7px 11px;
+    }
+
+    .rows {
+      padding: 8px;
+    }
+
+    .message-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "sender time"
+        "subject subject"
+        "snippet snippet"
+        "trust attachment";
+      padding: 12px 10px;
+    }
+
+    .sender,
+    .subject,
+    .snippet {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .message-detail {
+      display: none;
       border-top: 1px solid rgba(118, 151, 194, 0.18);
+      border-right: 0;
+      min-height: 0;
+    }
+
+    .message-detail.mobile-open {
+      display: flex;
+    }
+
+    .mobile-back {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      margin: 12px 16px 0;
+      min-height: 36px;
+      padding: 7px 11px;
+      border: 1px solid rgba(121, 147, 194, 0.24);
+      background: rgba(21, 35, 58, 0.72);
+      color: #edf4ff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .detail-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+
+    .detail-header p,
+    .body-text,
+    .message-details dd,
+    .attachment span {
+      overflow-wrap: anywhere;
+    }
+
+    .detail-trust {
+      align-self: flex-start;
+      border-radius: 8px;
+    }
+
+    .metadata,
+    .body-text,
+    .message-details,
+    .attachments,
+    .actions,
+    .reply-box,
+    .compose-box,
+    .action-status,
+    .mail-error,
+    .empty-state {
+      margin-left: 16px;
+      margin-right: 16px;
+    }
+
+    .message-details dl div {
+      grid-template-columns: 1fr;
+      gap: 3px;
+    }
+
+    .attachment {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .actions button,
+    .reply-box button,
+    .compose-actions button {
+      min-height: 40px;
+      padding: 9px 12px;
+    }
+
+    .reply-box textarea,
+    .compose-box textarea {
+      min-height: 150px;
     }
   }
 </style>
