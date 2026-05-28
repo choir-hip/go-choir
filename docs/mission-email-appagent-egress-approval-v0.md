@@ -1419,3 +1419,42 @@ next executable probe:
   that indicate tool serialization, while preserving normal less-than text.
 - Add regression coverage for `</payload></parameter>` plus `<payload ...>`.
 - Redeploy and rerun a fresh visible prompt-bar draft before attempting send.
+
+## Checkpoint: Draft Body Sanitizer Needs Generic Trailing Tag Cleanup
+
+timestamp: 2026-05-28T07:58:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `c7378b7` deployed payload-marker
+cleanup, the same staging proof path created another correct pending draft, but
+the body ended with `</pparameter>`. This shows the tool-boundary residue is
+not a finite small set of exact strings.
+
+observed product evidence:
+- Computer Use submitted a visible prompt-bar request with subject
+  `Choir Email appagent bridge proof c7378b7`.
+- Maild created draft `email-draft-109f7ef1-1f42-417d-8302-1a3557effea6`
+  with status `draft_pending_owner_approval`, from address `000@choir.news`,
+  recipient `yusefnathanson@me.com`, no provider message id, and no `sent_at`.
+- Sent folder count stayed at `3`.
+- Trace trajectory `612bd3ab-f2c9-4a84-8d06-32355dd3763c` completed with
+  first-class agents `conductor`, `vtext`, and `email`.
+
+problem evidence:
+- The persisted draft body was:
+
+```text
+This is a deployed staging proof that VText hands a clean draft to Email
+appagent, maild stores it in Drafts, and no outbound email is sent before owner
+approval.</pparameter>
+```
+
+root cause:
+- Marker-specific cleanup is too brittle. Provider/tool serialization residue
+  can appear as malformed but still XML-like closing tags at the end of the
+  body.
+
+next executable probe:
+- Add generic trailing XML-like closing tag cleanup after marker cuts, with
+  regression coverage for `</pparameter>`.
+- Redeploy and rerun a fresh visible prompt-bar proof before owner-click send.
