@@ -2486,3 +2486,43 @@ required fix direction:
   agent authority.
 - Add tests that fail if maild posts to a static host sandbox when a vmctl
   resolver returns an owner-specific runtime URL.
+
+### Problem Evidence Checkpoint: Maild Must Not Import Vmctl Package
+
+status: checkpoint_incomplete  
+timestamp: 2026-05-28T15:12Z  
+evidence source: GitHub Actions CI/deploy run `26583321153` for commit
+`dd50adcef685c02c954ca0a8f7c8a450dc0bb85a`
+
+observation:
+- Local focused tests passed for `./internal/maild ./internal/runtime
+  ./internal/proxy`, and CI Go gates passed.
+- The Node B deploy job failed while building the host NixOS closure.
+- The failing derivation was `maildctl-0.1.0`, which builds `./cmd/maildctl`
+  and therefore imports `internal/maild`.
+- Nix build error:
+  `internal/maild/trace_events.go:15:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/vmctl: import lookup disabled by -mod=vendor`.
+
+root cause:
+- The first owner-runtime routing fix imported `internal/vmctl` directly from
+  `internal/maild`.
+- `flake.nix` intentionally source-filters each small Go service package.
+  The maild and maildctl packages include `internal/maild` and
+  `internal/server`; they do not include `internal/vmctl`.
+- Pulling the full vmctl package into maild would also be the wrong dependency
+  shape: maild only needs a small internal HTTP call to
+  `/internal/vmctl/resolve`, not the vmctl service implementation.
+
+belief-state changes:
+- The routing design still stands: maild must resolve the owner's primary
+  runtime before appending Email appagent evidence.
+- The code dependency must be one-way over the internal HTTP API boundary.
+- A deploy-level build is necessary evidence here because local Go tests do not
+  exercise the Nix service source filter.
+
+required fix direction:
+- Replace the `internal/vmctl` Go import with a tiny maild-local HTTP resolver
+  for `POST /internal/vmctl/resolve`.
+- Keep the same test shape: when `MAILD_VMCTL_URL` is configured, maild must
+  append trace events to the resolved owner sandbox URL and must not use the
+  static `MAILD_RUNTIME_URL`.
