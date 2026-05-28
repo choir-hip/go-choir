@@ -836,3 +836,63 @@ next executable probe:
   or was skipped.
 - Fix the persistence boundary only after root cause is identified; do not
   bypass Email appagent or send mail directly.
+
+## Checkpoint: Active VM Taps Did Not Reconcile Maild Firewall Rules
+
+timestamp: 2026-05-28T06:51:53-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `3c89f35` deployed the host-side tap
+firewall change for newly configured VMs, Node B inspection showed that
+already-running active VM tap interfaces still did not have the new maild
+`8087` allow rule.
+
+what shipped immediately before this probe:
+- `b4b9188` recorded the draft persistence blocker after the `58353f8`
+  product proof.
+- `3c89f35` added `8087` to the narrow per-tap host service allow list beside
+  `8083` vmctl and `8084` gateway.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26570066016`
+  completed successfully, including `Deploy to Staging (Node B)`.
+- Staging `/health` reported proxy and sandbox commit
+  `3c89f353e9bc7c8996c5e7f3d199fb99e81bd264`, deployed at
+  `2026-05-28T10:48:26Z`.
+
+observed infrastructure evidence:
+- Deploy impact restarted `go-choir-vmctl.service`, but reported:
+  `Skipping active computer refresh; ordinary guest image and sandbox runtime
+  package unchanged`.
+- Node B iptables inspection after deploy showed active tap rules for `8083`
+  and `8084`, but no `8087` rules:
+
+```text
+iptables -S INPUT | grep -- --dport | grep go-choir-vm | grep 8087
+```
+
+returned no rows.
+
+belief-state changes:
+- The `3c89f35` code path is expected to fix newly started VMs, but it does
+  not repair existing active VMs that survive vmctl restart.
+- The missing product proof is probably not a VText or Email appagent logic
+  defect at this point. It is a host networking reconciliation defect: the
+  manager can reattach to existing Firecracker processes without ensuring the
+  current host-service firewall contract is present for their tap devices.
+- `setupHostNetworking` is too start-path-specific for a live platform where
+  vmctl restarts can preserve active user computers.
+
+remaining error field:
+- Existing active staging computers can still be unable to reach
+  `RUNTIME_MAILD_URL=http://<tap-host-ip>:8087` until their tap INPUT rules are
+  reconciled or the VM is restarted.
+- Product-path proof should not rely on manual VM restart or manual iptables
+  edits; the deployed manager must converge host networking for reattached
+  active VMs.
+
+next executable probe:
+- Add a small reconciliation path that ensures the narrow per-tap host service
+  INPUT rules during VM reattach, with idempotent iptables checks to avoid
+  accumulating duplicate rules.
+- Redeploy through GitHub Actions, verify active taps receive an `8087` rule
+  after vmctl reattach, then rerun the visible prompt-bar to Email Drafts proof.
