@@ -133,6 +133,8 @@ type pendingRequiredTool struct {
 
 const maxRequiredNextToolRetries = 2
 
+var requiredNextToolCallTimeout = 45 * time.Second
+
 // ToolLoopOption configures optional tool-loop behavior.
 type ToolLoopOption func(*toolLoopOptions)
 
@@ -321,9 +323,43 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			emit(types.EventRunProgress, "provider_call", preCallPayload)
 		}
 
-		// Call the LLM with current conversation state.
-		resp, err := callToolLoopProviderWithRetries(ctx, provider, req, emit)
+		// Call the LLM with current conversation state. Required continuation
+		// turns are narrow function-call obligations; bound them separately so
+		// an exact-tool prompt cannot hold a supervisor-visible chain open for
+		// the gateway's full inference timeout.
+		providerCtx := ctx
+		var cancelProviderCall context.CancelFunc
+		var requiredTimeout *pendingRequiredTool
+		if requiredNextTool != nil && requiredNextToolCallTimeout > 0 {
+			requiredTimeout = requiredNextTool
+			providerCtx, cancelProviderCall = context.WithTimeout(ctx, requiredNextToolCallTimeout)
+		}
+		resp, err := callToolLoopProviderWithRetries(providerCtx, provider, req, emit)
+		providerCallErr := providerCtx.Err()
+		if cancelProviderCall != nil {
+			cancelProviderCall()
+		}
 		if err != nil {
+			if requiredTimeout != nil && ctx.Err() == nil && providerCallErr != nil {
+				requiredTimeout.Attempts++
+				if requiredTimeout.Attempts > maxRequiredNextToolRetries {
+					return "", totalUsage, fmt.Errorf("tool loop: required next tool %q was not called after %d retries", requiredTimeout.Name, maxRequiredNextToolRetries)
+				}
+				requiredNextTool = requiredTimeout
+				if appendErr := appendRequiredNextToolReminder(*requiredTimeout, "provider_timed_out_before_required_tool"); appendErr != nil {
+					return "", totalUsage, fmt.Errorf("tool loop persist required-next-tool timeout retry: %w", appendErr)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"required_tool": requiredTimeout.Name,
+						"attempt":       requiredTimeout.Attempts,
+						"reason":        "provider_timed_out_before_required_tool",
+						"timeout_ms":    requiredNextToolCallTimeout.Milliseconds(),
+					})
+					emit(types.EventRunRetry, "required_next_tool", payload)
+				}
+				continue
+			}
 			if options.memoryHooks.OnProviderError != nil {
 				rebuilt, retry, hookErr := options.memoryHooks.OnProviderError(ctx, messages, err)
 				if hookErr != nil {

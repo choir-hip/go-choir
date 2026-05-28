@@ -656,6 +656,108 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	}
 }
 
+func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(""); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	ownerID := "owner-research-fallback"
+	docID := "doc-research-fallback"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "research fallback",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	parent := types.RunRecord{
+		RunID:        "run-vtext-parent",
+		AgentID:      "vtext:" + docID,
+		ChannelID:    docID,
+		OwnerID:      ownerID,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		State:        types.RunCompleted,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentID:      "vtext:" + docID,
+			runMetadataChannelID:    docID,
+		},
+	}
+	if err := s.CreateRun(ctx, parent); err != nil {
+		t.Fatalf("create parent run: %v", err)
+	}
+	researcher := &types.RunRecord{
+		RunID:        "run-researcher-failed",
+		AgentID:      "researcher:fallback",
+		ChannelID:    docID,
+		ParentRunID:  parent.RunID,
+		OwnerID:      ownerID,
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		State:        types.RunFailed,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentID:      "researcher:fallback",
+			runMetadataChannelID:    docID,
+		},
+	}
+	if err := s.CreateRun(ctx, *researcher); err != nil {
+		t.Fatalf("create researcher run: %v", err)
+	}
+	output := `{"query":"baseball last night","provider":"parallel","result_count":1,"results":[{"title":"Box score","url":"https://example.com/box","snippet":"A score."}],"next_required_tool":"submit_coagent_update"}`
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     "web_search",
+		"call_id":  "call-search",
+		"is_error": false,
+		"output":   output,
+	})
+	if err := s.AppendEvent(ctx, &types.EventRecord{
+		EventID:   "event-web-search",
+		RunID:     researcher.RunID,
+		AgentID:   researcher.AgentID,
+		OwnerID:   ownerID,
+		ChannelID: docID,
+		Timestamp: now,
+		Kind:      types.EventToolResult,
+		Phase:     "tool_call",
+		Payload:   payload,
+	}); err != nil {
+		t.Fatalf("append search event: %v", err)
+	}
+
+	if err := rt.synthesizeResearcherUpdateOnFailure(ctx, researcher, fmt.Errorf("required next tool timed out")); err != nil {
+		t.Fatalf("synthesize update: %v", err)
+	}
+	deliveries, err := s.ListPendingInboxDeliveries(ctx, ownerID, "vtext:"+docID, 10)
+	if err != nil {
+		t.Fatalf("list deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("deliveries len = %d, want 1: %+v", len(deliveries), deliveries)
+	}
+	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "web_search") {
+		t.Fatalf("delivery content = %q, want runtime web_search fallback", deliveries[0].Content)
+	}
+	events, err := s.ListEvents(ctx, researcher.RunID, 20)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	if !hasSuccessfulToolResult(events, "submit_coagent_update") {
+		t.Fatalf("expected synthetic submit_coagent_update tool result")
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := NewToolRegistry()
 

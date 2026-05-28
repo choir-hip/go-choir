@@ -2185,6 +2185,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	if synthErr := rt.synthesizeDelegateWorkerUpdateOnSuperFailure(persistCtx, rec, err); synthErr != nil {
 		log.Printf("runtime: synthesize delegate worker update for run %s: %v", rec.RunID, synthErr)
 	}
+	if synthErr := rt.synthesizeResearcherUpdateOnFailure(persistCtx, rec, err); synthErr != nil {
+		log.Printf("runtime: synthesize researcher update for run %s: %v", rec.RunID, synthErr)
+	}
 
 	// If this is an vtext agent revision task, mark the mutation as failed
 	// and emit the vtext-specific failure event.

@@ -870,6 +870,92 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopBoundsRequiredNextToolProviderCall(t *testing.T) {
+	previousTimeout := requiredNextToolCallTimeout
+	requiredNextToolCallTimeout = 5 * time.Millisecond
+	t.Cleanup(func() { requiredNextToolCallTimeout = previousTimeout })
+
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name:        "web_search",
+		Description: "Search.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"results":[{"url":"https://example.com"}],"next_required_tool":"submit_coagent_update"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register web_search: %v", err)
+	}
+	if err := registry.Register(Tool{
+		Name:        "submit_coagent_update",
+		Description: "Submit.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return `{"status":"submitted"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register submit_coagent_update: %v", err)
+	}
+
+	var choices []string
+	var retryReasons []string
+	provider := &requiredToolTimeoutProvider{choices: &choices}
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"research"}`)},
+		"You are helpful.",
+		4096,
+		func(kind types.EventKind, phase string, payload json.RawMessage) {
+			if kind != types.EventRunRetry || phase != "required_next_tool" {
+				return
+			}
+			var decoded map[string]any
+			if json.Unmarshal(payload, &decoded) == nil {
+				retryReasons = append(retryReasons, stringMapValue(decoded, "reason"))
+			}
+		},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), `required next tool "submit_coagent_update" was not called after 2 retries`) {
+		t.Fatalf("err = %v, want bounded required next tool failure", err)
+	}
+	if len(choices) != 4 || choices[0] != "" || choices[1] != "function:submit_coagent_update" || choices[2] != "function:submit_coagent_update" || choices[3] != "function:submit_coagent_update" {
+		t.Fatalf("choices = %#v, want exact required tool retries", choices)
+	}
+	if len(retryReasons) != 3 || retryReasons[0] != "tool_result_declared_required_next_tool" || retryReasons[1] != "provider_timed_out_before_required_tool" || retryReasons[2] != "provider_timed_out_before_required_tool" {
+		t.Fatalf("retryReasons = %#v", retryReasons)
+	}
+}
+
+type requiredToolTimeoutProvider struct {
+	Provider
+	calls   int32
+	choices *[]string
+}
+
+func (p *requiredToolTimeoutProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	if p.choices != nil {
+		*p.choices = append(*p.choices, req.ToolChoice)
+	}
+	call := atomic.AddInt32(&p.calls, 1)
+	if call == 1 {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-search",
+				Name:      "web_search",
+				Arguments: json.RawMessage(`{"query":"baseball"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		}, nil
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 	provider := newMockToolLoopProvider(&ToolLoopResponse{
 		StopReason: "end_turn",

@@ -398,6 +398,43 @@ No code fix is selected yet. The smallest acceptable fix must make the first
 researcher evidence checkpoint durable after a successful first search/fetch
 without letting researcher or super write canonical VText directly.
 
+## Implementation Checkpoint: Researcher Checkpoint Reliability
+
+Code change authored after the evidence checkpoint:
+
+- `RunToolLoop` now bounds provider calls that are already under an exact
+  `next_required_tool` obligation. Required continuation turns are narrow tool
+  calls, so they should not inherit the gateway's full 10 minute inference
+  timeout before the runtime can retry or fail.
+- Researcher run failure recovery now synthesizes an honest
+  `submit_coagent_update` blocker/update when all of the following are true:
+  the run is a researcher, a `web_search`/`fetch_url`/`import_url_content`
+  result succeeded, and no `submit_coagent_update` succeeded before failure.
+- The synthesized update is delivered through the same coagent update path and
+  addressed to the parent VText agent. It does not edit canonical VText
+  directly; it creates the worker message that lets the VText controller wake
+  and revise honestly from the available evidence or blocker.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/runtime -run 'TestRunToolLoopBoundsRequiredNextToolProviderCall|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries|TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint|TestShouldRequireResearchFindingsAfterResearchToolBatches'
+```
+
+Result: passed.
+
+```text
+nix develop -c go test ./internal/runtime -run 'TestRunToolLoop|Test.*Research.*Checkpoint|Test.*VText.*Worker|Test.*Coagent'
+```
+
+Result: passed.
+
+```text
+nix develop -c scripts/go-test-runtime-shards
+```
+
+Result: passed.
+
 ## Run Checkpoint & Resumption State
 
 ```text
@@ -406,27 +443,27 @@ last checkpoint: generated default factual probe reproduced an intermittent
   researcher checkpoint failure after web_search.
 current artifact state: deployed code identity is f60a8e0d; no VText repair
   code has been authored in this mission.
-what shipped: none.
+what shipped: runtime fix authored locally; push/deploy/product-path proof
+  pending at this checkpoint.
 what was proven: explicit medium matrix can complete research and coding
   cadence; generated default coding can complete super execution cadence;
   generated default factual cadence can fail after researcher web_search returns
   but before submit_coagent_update.
-unproven or partial claims: whether the code-contract gap is in tool-loop
-  enforcement, researcher tool projection timing, continuation scheduling, or a
-  missing fallback after bounded required-next-tool retries.
+unproven or partial claims: deployed behavior after the timeout/fallback fix;
+  whether the live intermittent default-policy factual prompt now always reaches
+  either researcher findings or an honest fallback blocker plus VText v2 within
+  the owner-visible SLA.
 belief-state changes: May 26 review is now a hypothesis source, not direct
   implementation plan, because several findings are stale against current code.
   The active failure is narrower than "VText stops after v1": VText can spawn
   researcher, and researcher can receive search results, but the first durable
   coagent checkpoint is intermittent.
-remaining error field: inspect runtime tool-loop and research-tool enforcement,
-  then author the smallest fix that makes the first checkpoint reliable.
-highest-impact remaining uncertainty: whether the correct layer is stricter
-  required-next-tool enforcement, a researcher-specific fallback checkpoint, or
-  both.
-next executable probe: inspect `internal/runtime/toolloop.go` and
-  `internal/runtime/tools_research.go`, then add a focused failing test for the
-  missing first-checkpoint failure mode.
+remaining error field: commit, push, monitor CI/deploy, verify deployed identity,
+  and re-run product-path VText factual/coding probes against the fixed commit.
+highest-impact remaining uncertainty: deployed product-path proof after the
+  researcher checkpoint reliability fix.
+next executable probe: commit and push the runtime fix, then monitor CI and
+  staging deploy before rerunning the default-policy VText proof.
 suggested resume goal string: use the Goal Prompt above.
 evidence artifact refs:
   `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-policy-20260528T015212Z/default-policy-proof.json`;
