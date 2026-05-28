@@ -1196,3 +1196,88 @@ next executable probe:
 - Add a regression test that a signup/external email in `from_alias` reaches
   maild as an empty/default alias.
 - Redeploy through GitHub Actions and rerun the same visible prompt-bar proof.
+
+## Checkpoint: Draft Body Contains Tool-Call Markup Residue
+
+timestamp: 2026-05-28T07:42:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `f8c003d` deployed the sender-alias
+cleanup, the prompt-bar simple email path finally persisted a maild draft, but
+the draft body contained leaked tool-call markup residue. A draft that requires
+owner review must not silently include malformed tool serialization text that
+the owner did not intend to send.
+
+what shipped immediately before this probe:
+- `1d46ac2` documented the sender-alias blocker.
+- `f8c003d` restricted appagent `from_alias` cleanup to numeric Choir sender
+  aliases and dropped external/signup emails to the maild default alias path.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26572193619` completed
+  successfully.
+- Deploy job `78282155007` completed successfully.
+- Staging `/health` and founder VM `/health` both reported sandbox commit
+  `f8c003d20388175f1a4fb6dae94cc3d717dab728`, deployed at
+  `2026-05-28T11:36:26Z`.
+
+observed product evidence:
+- Computer Use submitted:
+
+```text
+Create an email draft to yusefnathanson@me.com. Subject: Choir Email
+appagent bridge proof f8c003d. Body: This is the deployed staging proof that
+VText hands a draft to Email appagent, maild stores it in Drafts, and no
+outbound email is sent before owner approval. Do not send the email.
+```
+
+- Maild created draft `email-draft-a16570e6-56e1-479d-8572-9908731659c2` with
+  status `draft_pending_owner_approval`, subject
+  `Choir Email appagent bridge proof f8c003d`, from address `000@choir.news`,
+  and recipient `yusefnathanson@me.com`.
+- Trace trajectory `ea9874c3-ed4b-4a17-9a9e-0b279f03fe30` completed with
+  first-class agents `conductor`, `vtext`, and `email`, and edges
+  `conductor -> vtext` plus `vtext -> email`.
+- Trace moment `5b93b706-dc5f-4299-96d6-414462934833` showed
+  `request_email_draft returned`.
+- Sent count remained unchanged during the proof.
+
+problem evidence:
+- The persisted draft `text_body` was not the clean owner-requested message.
+  It included malformed tool-call serialization residue after the body:
+
+```text
+</<parameter>
+<parameter name="doc_id">...</parameter>
+...
+</invoke>
+```
+
+root cause:
+- VText produced enough structure to call `request_email_draft`, but the
+  provider/tool-call boundary allowed malformed parameter markup to leak into
+  the `body_text` argument.
+- `request_email_draft` treated the body argument as already clean email
+  content and persisted it directly to maild.
+- This is not a maild transport failure; it is an appagent handoff hygiene
+  failure at the VText/tool-call boundary.
+
+belief-state changes:
+- Email appagent-to-maild persistence is now proven on staging.
+- Sender alias defaulting works: external signup email was dropped and maild
+  selected `000@choir.news`.
+- The next acceptance target is draft content hygiene before owner approval.
+
+remaining error field:
+- A prompt-bar-originated draft can appear in maild, but its body may include
+  tool-call markup residue.
+- Owner-click approval should not be tested against a polluted draft because
+  that would prove the wrong artifact.
+
+next executable probe:
+- Strip obvious tool-call serialization residue from `request_email_draft`
+  body text before hashing and maild persistence, while keeping the real body
+  text intact.
+- Add a regression test that a body followed by `<parameter ...>` or
+  `</invoke>` persists only the intended body.
+- Redeploy and rerun the visible prompt-bar proof until maild shows a clean
+  draft body.
