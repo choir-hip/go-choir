@@ -180,7 +180,7 @@
   function announceFeatureTransition(adoption) {
     if (!adoption?.adoption_id || typeof window === 'undefined') return;
     window.dispatchEvent(new CustomEvent('choir-feature-transition-observed', {
-      detail: { adoption_id: adoption.adoption_id, status: adoption.status },
+      detail: { adoption_id: adoption.adoption_id, status: adoption.status, adoption },
     }));
   }
 

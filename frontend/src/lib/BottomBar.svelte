@@ -271,7 +271,16 @@
     ].slice(-10);
   }
 
-  function handleFeatureTransitionObserved() {
+  function mergeFeatureTransition(adoption) {
+    if (!adoption?.adoption_id) return;
+    featureTransitions = [
+      adoption,
+      ...featureTransitions.filter((item) => item.adoption_id !== adoption.adoption_id),
+    ];
+  }
+
+  function handleFeatureTransitionObserved(event) {
+    mergeFeatureTransition(event?.detail?.adoption);
     void refreshFeatureTransitions();
   }
 
