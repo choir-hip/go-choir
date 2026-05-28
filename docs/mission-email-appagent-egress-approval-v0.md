@@ -546,22 +546,45 @@ Final report should include:
 
 ## Run Checkpoint & Resumption State
 
-status: draft
-last checkpoint: initial mission authored
-current artifact state: current code has maild transport, direct Email UI send,
-proxy send-to-Choir, trusted inbound pending_conductor markers, and no Email
-appagent Trace authority.
-what shipped: nothing yet
-what was proven: not yet run
-unproven or partial claims: all behavior in this mission
-belief-state changes: Email should be the outbound authority boundary; maild
-should remain transport; super should request drafts, not send.
-remaining error field: unknown implementation effort for appagent identity,
-Trace integration, approval email reply routing, and VText-to-email handoff.
-highest-impact remaining uncertainty: whether current runtime appagent model can
-represent Email as a first-class Trace node without a large runtime rewrite.
-next executable probe: inspect runtime agent/profile conventions and implement
-the smallest Email appagent identity plus draft-only prompt-bar path.
-suggested resume goal string: use the Goal String section above.
-evidence artifact refs: none yet
-rollback refs: standard git/platform rollback after behavior-changing commits
+status: checkpoint_incomplete
+last checkpoint: runtime/maild/UI authority slice implemented locally after the
+problem-first mission doc commit.
+current artifact state: runtime now has `AgentProfileEmail`, VText has a
+`request_email_draft` tool, arbitrary coagent casts to Email appagent are
+blocked, maild has owner-scoped aliases/drafts/draft-send endpoints, the Email
+UI loads aliases instead of hardcoding `000@choir.news`, compose/reply create
+Drafts first, and the proxy-owned `/send-to-choir` implementation has been
+deleted down to forwarding-only behavior.
+what shipped: not pushed/deployed yet in this checkpoint.
+what was proven:
+- `nix develop -c go test ./internal/runtime -run 'TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun|TestCoagentCastCannotAddressEmailAppagentDirectly|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent|TestInstallDefaultAgentToolsProfiles'`
+- `nix develop -c go test ./internal/maild -run 'TestDraft|TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage'`
+- `nix develop -c go test ./internal/maild ./internal/proxy`
+- `npm --prefix frontend run build`
+unproven or partial claims: staging product proof, prompt-bar-to-VText-to-email
+automation, approval email deep link, approval reply parsing, edit-by-email,
+provider-backed risk-alert delivery, and end-to-end Trace inspection remain
+unproven.
+belief-state changes: the smallest durable cut is viable without a large
+runtime rewrite: Email can appear as a first-class completed child run when
+VText emits a draft artifact request. The old proxy handoff was unnecessary
+and is removed as product authority.
+remaining error field: maild stores drafts but does not yet store full approval
+tokens/events or risk alert provider receipts; runtime creates an Email
+appagent draft request but does not yet call maild to persist that request as
+the visible mailbox draft; VText currently remains a known blocker for
+complex/researched content production.
+highest-impact remaining uncertainty: how to bridge runtime Email appagent draft
+requests into maild drafts on staging without giving VText/super raw send power
+or making proxy a workflow author again.
+next executable probe: add an Email appagent-to-maild draft persistence bridge
+or a proxy-mediated internal endpoint that preserves VText-originated authority,
+then prove it on staging with a visible draft and Trace node before implementing
+approval-by-email.
+suggested resume goal string: continue this mission from the checkpoint above,
+first proving VText `request_email_draft` creates a visible maild draft with an
+Email appagent Trace node, then add exact-version approval email and risk-alert
+provider delivery.
+evidence artifact refs: local command outputs listed above; staging refs not
+yet available.
+rollback refs: standard git/platform rollback after behavior-changing commits.

@@ -19,6 +19,7 @@ const (
 	AgentProfileVSuper     = "vsuper"
 	AgentProfileResearcher = "researcher"
 	AgentProfileVText      = "vtext"
+	AgentProfileEmail      = "email"
 )
 
 const (
@@ -217,6 +218,10 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowCoAgentTools:      true,
 			AllowedDelegateTargets: []string{AgentProfileResearcher},
 		}
+	case AgentProfileEmail:
+		return AgentRoleSpec{
+			Profile: AgentProfileEmail,
+		}
 	case AgentProfileCoSuper:
 		return AgentRoleSpec{
 			Profile:                AgentProfileCoSuper,
@@ -264,6 +269,8 @@ func canonicalAgentProfile(profile string) string {
 		return AgentProfileVSuper
 	case "vtext", "vtext-agent", "document-agent":
 		return AgentProfileVText
+	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
+		return AgentProfileEmail
 	case "super":
 		return AgentProfileSuper
 	case "conductor":
@@ -626,6 +633,10 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterVTextTools(vtextRegistry, rt); err != nil {
 		return err
 	}
+	emailRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileEmail), cwd, searchClient, httpClient)
+	if err != nil {
+		return err
+	}
 
 	rt.toolRegistry = superRegistry
 	if rt.toolProfiles == nil {
@@ -637,6 +648,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[AgentProfileVSuper] = vSuperRegistry
 	rt.toolProfiles[AgentProfileResearcher] = researcherRegistry
 	rt.toolProfiles[AgentProfileVText] = vtextRegistry
+	rt.toolProfiles[AgentProfileEmail] = emailRegistry
 	return nil
 }
 

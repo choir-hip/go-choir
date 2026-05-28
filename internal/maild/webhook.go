@@ -53,6 +53,9 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/email/resend/webhook", h.HandleResendWebhook)
 	s.HandleFunc("/api/email/send", h.HandleSend)
+	s.HandleFunc("/api/email/aliases", h.HandleAliases)
+	s.HandleFunc("/api/email/drafts", h.HandleDrafts)
+	s.HandleFunc("/api/email/drafts/", h.HandleDrafts)
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
 	s.HandleFunc("/api/notifications/completion-email", h.HandleCompletionEmail)
@@ -257,7 +260,7 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 	}
 	if whitelisted && policy.AllowAutoAgentRead {
 		result.PromptBarEquivalent = true
-		result.WorkflowHandoffStatus = "pending_conductor"
+		result.WorkflowHandoffStatus = "pending_email_appagent_intent"
 	}
 	return result, nil
 }

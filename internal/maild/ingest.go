@@ -36,7 +36,6 @@ type inboundMessageRecord struct {
 	SourcePacketID         string
 	SourcePacketProvenance string
 	SourcePacketTextRef    string
-	AutoWorkflowHandoff    bool
 }
 
 // StoreInboundMessage stores a normalized received email and its untrusted
@@ -124,20 +123,6 @@ func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string,
 	); err != nil {
 		return fmt.Errorf("insert source packet: %w", err)
 	}
-	if record.AutoWorkflowHandoff {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO email_ingress_events (
-			id, message_id, source_packet_id, owner_id, conductor_submission_id,
-			status, created_at, completed_at
-		) VALUES (?, ?, ?, ?, NULL, 'pending_conductor', ?, NULL)`,
-			ingressEventRowID(record.ID, record.SourcePacketID+":pending-conductor"),
-			record.ID,
-			record.SourcePacketID,
-			record.MailboxOwnerID,
-			record.CreatedAt,
-		); err != nil {
-			return fmt.Errorf("insert pending workflow handoff: %w", err)
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit inbound message tx: %w", err)
 	}
@@ -214,7 +199,6 @@ func buildInboundRecord(providerEventID string, email resendReceivedEmail, alias
 		SourcePacketID:         sourcePacketRowID(providerMessageID),
 		SourcePacketProvenance: string(provenance),
 		SourcePacketTextRef:    "message:" + messageRowID(providerMessageID),
-		AutoWorkflowHandoff:    policyResult.WorkflowHandoffStatus == "pending_conductor",
 	}, nil
 }
 

@@ -8,10 +8,12 @@
 
   const folders = [
     { id: 'inbox', label: 'Inbox' },
+    { id: 'drafts', label: 'Drafts' },
     { id: 'sent', label: 'Sent' },
     { id: 'quarantine', label: 'Quarantine' },
   ];
 
+  let aliases = [];
   let activeFolder = 'inbox';
   let messages = [];
   let selectedId = '';
@@ -31,7 +33,8 @@
   let detailPaneOpen = false;
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
-  $: activeAddress = '000@choir.news';
+  $: activeAddress = aliases[0]?.address || '';
+  $: displayAddress = activeAddress || 'No address';
   $: detailHeaderEntries = headerEntries(detail?.raw_headers);
   $: detailToRecipients = detail?.recipients?.to || [];
   $: detailCcRecipients = detail?.recipients?.cc || [];
@@ -41,12 +44,28 @@
 
   onMount(() => {
     if (authenticated) {
+      void loadAliases();
       void loadMessages(activeFolder);
     }
   });
 
   $: if (authenticated && !loadedOnce && !loading) {
+    void loadAliases();
     void loadMessages(activeFolder);
+  }
+
+  async function loadAliases() {
+    try {
+      const res = await fetchWithRenewal('/api/email/aliases');
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error('Could not load addresses');
+      }
+      const data = await res.json();
+      aliases = data.aliases || [];
+    } catch (err) {
+      handleError(err);
+    }
   }
 
   async function loadMessages(folder) {
@@ -55,6 +74,10 @@
     activeFolder = folder;
     detailPaneOpen = false;
     try {
+      if (folder === 'drafts') {
+        await loadDrafts();
+        return;
+      }
       const res = await fetchWithRenewal(`/api/email/messages?folder=${encodeURIComponent(folder)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
@@ -77,6 +100,24 @@
     }
   }
 
+  async function loadDrafts() {
+    const res = await fetchWithRenewal('/api/email/drafts');
+    if (!res.ok) {
+      if (res.status === 401) throw new AuthRequiredError();
+      throw new Error('Could not load drafts');
+    }
+    const data = await res.json();
+    loadedOnce = true;
+    messages = (data.drafts || []).map(draftListItem);
+    if (!messages.some((message) => message.id === selectedId)) {
+      selectedId = messages[0]?.id || '';
+      detail = null;
+    }
+    if (selectedId) {
+      await loadDetail(selectedId, { openPane: false });
+    }
+  }
+
   async function loadDetail(id, options = {}) {
     selectedId = id;
     detailLoading = true;
@@ -87,6 +128,16 @@
       detailPaneOpen = true;
     }
     try {
+      if (activeFolder === 'drafts') {
+        const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(id)}`);
+        if (!res.ok) {
+          if (res.status === 401) throw new AuthRequiredError();
+          throw new Error('Could not open draft');
+        }
+        const draft = await res.json();
+        detail = draftDetail(draft);
+        return;
+      }
       const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(id)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
@@ -100,36 +151,12 @@
     }
   }
 
-  async function respondWithChoir() {
-    if (!selectedId) return;
-    actionStatus = 'Creating Choir response handoff...';
-    try {
-      const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(selectedId)}/send-to-choir`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        if (res.status === 401) throw new AuthRequiredError();
-        throw new Error('Could not send to Choir');
-      }
-      const data = await res.json();
-      if (data.ingress_event_recorded === false) {
-        actionStatus = data.submission_id
-          ? `Choir response handoff: ${data.submission_id} (receipt pending)`
-          : 'Choir response handoff created (receipt pending)';
-      } else {
-        actionStatus = data.submission_id ? `Choir response handoff: ${data.submission_id}` : 'Choir response handoff created';
-      }
-    } catch (err) {
-      handleError(err);
-    }
-  }
-
   async function sendReply() {
-    if (!selectedMessage || !replyBody.trim()) return;
+    if (!selectedMessage || !replyBody.trim() || !activeAddress) return;
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal('/api/email/send', {
+      const res = await fetchWithRenewal('/api/email/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -142,12 +169,16 @@
       });
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
-        throw new Error('Could not send reply');
+        throw new Error('Could not create reply draft');
       }
+      const draft = await res.json();
       replyBody = '';
       replyOpen = false;
-      actionStatus = 'Reply sent';
-      await loadMessages(activeFolder);
+      actionStatus = 'Reply draft ready for review';
+      activeFolder = 'drafts';
+      selectedId = draft.id;
+      await loadMessages('drafts');
+      await loadDetail(draft.id, { openPane: true });
     } catch (err) {
       handleError(err);
     } finally {
@@ -156,11 +187,11 @@
   }
 
   async function sendCompose() {
-    if (!composeRecipients.length || !composeBody.trim()) return;
+    if (!composeRecipients.length || !composeBody.trim() || !activeAddress) return;
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal('/api/email/send', {
+      const res = await fetchWithRenewal('/api/email/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -172,13 +203,39 @@
       });
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
-        throw new Error('Could not send message');
+        throw new Error('Could not create draft');
       }
+      const draft = await res.json();
       composeTo = '';
       composeSubject = '';
       composeBody = '';
       composeOpen = false;
-      actionStatus = 'Message sent';
+      actionStatus = 'Draft ready for review';
+      activeFolder = 'drafts';
+      selectedId = draft.id;
+      await loadMessages('drafts');
+      await loadDetail(draft.id, { openPane: true });
+    } catch (err) {
+      handleError(err);
+    } finally {
+      sending = false;
+    }
+  }
+
+  async function sendDraft() {
+    const draftId = detail?.draft?.id;
+    if (!draftId) return;
+    sending = true;
+    actionStatus = '';
+    try {
+      const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(draftId)}/send`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error('Could not send draft');
+      }
+      actionStatus = 'Draft sent';
       await loadMessages('sent');
     } catch (err) {
       handleError(err);
@@ -212,6 +269,7 @@
   }
 
   function trustLabel(status) {
+    if (status === 'draft') return 'Pending approval';
     if (status === 'trusted') return 'Trusted sender';
     if (status === 'quarantined') return 'Attachment quarantined';
     if (status === 'public') return 'Public inbound';
@@ -246,6 +304,37 @@
       .filter(Boolean);
   }
 
+  function draftListItem(draft) {
+    return {
+      id: draft.id,
+      direction: 'draft',
+      from_address: draft.from_address,
+      subject: draft.subject,
+      snippet: draft.text_body,
+      trust_status: 'draft',
+      created_at: draft.updated_at || draft.created_at,
+      sent_at: '',
+      received_at: '',
+      has_attachments: false,
+    };
+  }
+
+  function draftDetail(draft) {
+    return {
+      draft,
+      message: draftListItem(draft),
+      text_body: draft.text_body,
+      html_body: draft.html_body,
+      raw_headers: {},
+      recipients: {
+        to: (draft.to_addresses || []).map((address) => ({ address })),
+        cc: (draft.cc_addresses || []).map((address) => ({ address })),
+        bcc: (draft.bcc_addresses || []).map((address) => ({ address })),
+      },
+      attachments: [],
+    };
+  }
+
   function formatTime(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -259,7 +348,7 @@
     <div class="mail-title">
       <div>
         <h1>Email</h1>
-        <p>{activeAddress}</p>
+        <p>{displayAddress}</p>
       </div>
       <span class="address-dot" aria-hidden="true"></span>
     </div>
@@ -281,7 +370,7 @@
   <div class="mobile-mailbar">
     <div>
       <h1>Email</h1>
-      <p>{activeAddress}</p>
+      <p>{displayAddress}</p>
     </div>
     <label>
       <span>Mailbox</span>
@@ -297,7 +386,7 @@
     <header class="list-header">
       <div>
         <h2>{folders.find((folder) => folder.id === activeFolder)?.label || 'Inbox'}</h2>
-        <p>{messages.length} messages</p>
+        <p>{messages.length} {activeFolder === 'drafts' ? 'drafts' : 'messages'}</p>
       </div>
       <div class="list-actions">
         <button type="button" on:click={openCompose} data-email-compose>Compose</button>
@@ -344,8 +433,8 @@
       <div class="compose-box" data-email-compose-panel>
         <header class="compose-header">
           <div>
-            <h2>New message</h2>
-            <p>From {activeAddress}</p>
+            <h2>New draft</h2>
+            <p>From {displayAddress}</p>
           </div>
           <button type="button" class="icon-button" title="Close" on:click={() => (composeOpen = false)}>×</button>
         </header>
@@ -362,7 +451,7 @@
           <textarea bind:value={composeBody} rows="9" data-email-compose-body></textarea>
         </label>
         <div class="compose-actions">
-          <button type="button" disabled={sending || !composeRecipients.length || !composeBody.trim()} on:click={sendCompose}>Send</button>
+          <button type="button" disabled={sending || !activeAddress || !composeRecipients.length || !composeBody.trim()} on:click={sendCompose}>Create draft</button>
         </div>
       </div>
     {:else if detailLoading}
@@ -379,7 +468,7 @@
       </header>
 
       <div class="metadata">
-        <span>Received</span>
+        <span>{detail.draft ? 'Updated' : 'Received'}</span>
         <strong>{formatTime(detail.message.received_at || detail.message.created_at)}</strong>
       </div>
 
@@ -434,17 +523,20 @@
       {/if}
 
       <div class="actions">
-        <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
-        <button type="button" on:click={respondWithChoir}>Respond with Choir</button>
+        {#if detail.draft}
+          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
+        {:else}
+          <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
+        {/if}
       </div>
 
       {#if replyOpen}
         <div class="reply-box">
           <label>
-            <span>From {activeAddress}</span>
+            <span>From {displayAddress}</span>
             <textarea bind:value={replyBody} rows="5" placeholder="Write a reply..."></textarea>
           </label>
-          <button type="button" disabled={sending || !replyBody.trim()} on:click={sendReply}>Send</button>
+          <button type="button" disabled={sending || !activeAddress || !replyBody.trim()} on:click={sendReply}>Create draft</button>
         </div>
       {/if}
 

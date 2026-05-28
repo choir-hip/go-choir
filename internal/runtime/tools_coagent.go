@@ -271,6 +271,9 @@ func newCastAgentTool(rt *Runtime) Tool {
 			if channelID == "" {
 				return "", fmt.Errorf("cast_agent target %s has no channel_id", targetAgentID)
 			}
+			if err := enforceEmailAppagentCastRule(ctx, target); err != nil {
+				return "", err
+			}
 			if err := enforceSkipLevelCastRule(ctx, rt, targetAgentID, nil); err != nil {
 				return "", err
 			}
@@ -379,6 +382,9 @@ func newCastAgentUpdateTool(rt *Runtime) Tool {
 				if channelID == "" {
 					return "", fmt.Errorf("cast_agent_update target %s has no channel_id", targetAgentID)
 				}
+				if err := enforceEmailAppagentCastRule(ctx, target); err != nil {
+					return "", err
+				}
 				cursor, err := rt.ChannelCast(ctx, channelID, targetAgentID, strings.TrimSpace(rec.RunID), from, role, content)
 				if err != nil {
 					return "", err
@@ -394,6 +400,14 @@ func newCastAgentUpdateTool(rt *Runtime) Tool {
 			})
 		},
 	}
+}
+
+func enforceEmailAppagentCastRule(ctx context.Context, target types.AgentRecord) error {
+	if canonicalAgentProfile(target.Profile) != AgentProfileEmail {
+		return nil
+	}
+	callerProfile := canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile))
+	return fmt.Errorf("%s cannot send arbitrary coagent messages to Email appagent %s; use a VText-owned request_email_draft artifact handoff", callerProfile, target.AgentID)
 }
 
 func enforceSkipLevelCastRule(ctx context.Context, rt *Runtime, targetAgentID string, copiedAgentIDs []string) error {

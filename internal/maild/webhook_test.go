@@ -533,8 +533,8 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListIngressEvents: %v", err)
 	}
-	if len(events) != 1 || events[0].Status != "pending_conductor" || events[0].ConductorSubmissionID != "" {
-		t.Fatalf("events = %+v, want pending conductor handoff", events)
+	if len(events) != 0 {
+		t.Fatalf("events = %+v, want no fake conductor handoff", events)
 	}
 	packet, _, err := store.GetSourcePacketForMessage(req.Context(), "user-root", messages[0].ID)
 	if err != nil {
@@ -544,7 +544,7 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	if err := json.Unmarshal([]byte(packet.ProvenanceJSON), &provenance); err != nil {
 		t.Fatalf("unmarshal provenance: %v", err)
 	}
-	if provenance["sender_authority"] != "verified_sender_policy" || provenance["workflow_handoff_status"] != "pending_conductor" {
+	if provenance["sender_authority"] != "verified_sender_policy" || provenance["workflow_handoff_status"] != "pending_email_appagent_intent" {
 		t.Fatalf("provenance = %+v", provenance)
 	}
 }

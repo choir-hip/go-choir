@@ -124,6 +124,40 @@ type EmailIngressEvent struct {
 	CompletedAt           string
 }
 
+// EmailAliasSummary is an owner-scoped address exposed to the Email app.
+type EmailAliasSummary struct {
+	ID         string
+	Address    string
+	LocalPart  string
+	Domain     string
+	Visibility string
+}
+
+// EmailDraft is an appagent-controlled outbound draft. Sending is a later
+// explicit owner action against the current version.
+type EmailDraft struct {
+	ID                string
+	OwnerID           string
+	FromAliasID       string
+	FromAddress       string
+	ToJSON            string
+	CcJSON            string
+	BccJSON           string
+	Subject           string
+	TextBody          string
+	HTMLBody          string
+	ReplyToMessageID  string
+	SourceKind        string
+	SourceRef         string
+	Status            string
+	Version           int
+	VersionHash       string
+	SentMessageID     string
+	ProviderMessageID string
+	CreatedAt         string
+	UpdatedAt         string
+}
+
 // TrustedWorkflowAliasConfig describes a narrow plus-code alias that can create
 // a pending workflow handoff when a whitelisted authenticated sender uses it.
 type TrustedWorkflowAliasConfig struct {
@@ -272,6 +306,38 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			status text not null,
 			created_at text not null,
 			completed_at text
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_drafts (
+			id text primary key,
+			owner_id text not null,
+			from_alias_id text not null,
+			from_address text not null,
+			to_json text not null,
+			cc_json text,
+			bcc_json text,
+			subject text not null,
+			text_body text,
+			html_body text,
+			reply_to_message_id text,
+			source_kind text,
+			source_ref text,
+			status text not null,
+			version integer not null,
+			version_hash text not null,
+			sent_message_id text,
+			provider_message_id text,
+			created_at text not null,
+			updated_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_draft_approval_events (
+			id text primary key,
+			draft_id text not null,
+			owner_id text not null,
+			version integer not null,
+			version_hash text not null,
+			event_type text not null,
+			provider_message_id text,
+			created_at text not null
 		)`,
 	}
 	for _, stmt := range stmts {

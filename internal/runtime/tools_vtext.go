@@ -18,6 +18,7 @@ func RegisterVTextTools(registry *ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newEditVTextTool(rt),
 		newRequestSuperExecutionTool(rt),
+		newRequestEmailDraftTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
