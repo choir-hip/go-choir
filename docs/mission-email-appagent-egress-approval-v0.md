@@ -547,44 +547,80 @@ Final report should include:
 ## Run Checkpoint & Resumption State
 
 status: checkpoint_incomplete
-last checkpoint: runtime/maild/UI authority slice implemented locally after the
-problem-first mission doc commit.
+last checkpoint: deployed approval-hash owner-click slice at
+`1a06a3606468bba548008d9b9979f12683dba1bf`.
 current artifact state: runtime now has `AgentProfileEmail`, VText has a
 `request_email_draft` tool, arbitrary coagent casts to Email appagent are
 blocked, maild has owner-scoped aliases/drafts/draft-send endpoints, the Email
 UI loads aliases instead of hardcoding `000@choir.news`, compose/reply create
-Drafts first, and the proxy-owned `/send-to-choir` implementation has been
-deleted down to forwarding-only behavior.
-what shipped: not pushed/deployed yet in this checkpoint.
+Drafts first, draft sends require the current `version_hash`, app-click sends
+record an approval event before provider dispatch, the raw `/api/email/send`
+route is no longer registered in the product maild route table, and the
+proxy-owned `/send-to-choir` implementation has been deleted down to
+forwarding-only behavior. The app can also launch Email focused on a draft from
+`?app=email&draft=<id>&approval=<token>`, but that path has not yet been
+staging-proven.
+what shipped:
+- `c1c0bd0` recorded the problem-first mission checkpoint.
+- `18035fc` shipped the first runtime/maild/UI authority slice.
+- `1a06a36` shipped exact-version owner-click draft sends and raw-route
+  unregistration.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26567618003` completed
+  successfully.
+- Staging `/health` reported proxy and sandbox commit
+  `1a06a3606468bba548008d9b9979f12683dba1bf`, deployed at
+  `2026-05-28T09:53:41Z`.
 what was proven:
 - `nix develop -c go test ./internal/runtime -run 'TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun|TestCoagentCastCannotAddressEmailAppagentDirectly|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent|TestInstallDefaultAgentToolsProfiles'`
-- `nix develop -c go test ./internal/maild -run 'TestDraft|TestHandleSendRequiresOwnedFromAliasAndStoresSentMessage'`
+- `nix develop -c go test ./internal/maild -run 'TestDraft|TestRegisteredRoutesDoNotExposeRawEmailSend'`
 - `nix develop -c go test ./internal/maild ./internal/proxy`
 - `npm --prefix frontend run build`
-unproven or partial claims: staging product proof, prompt-bar-to-VText-to-email
-automation, approval email deep link, approval reply parsing, edit-by-email,
-provider-backed risk-alert delivery, and end-to-end Trace inspection remain
-unproven.
+- `git diff --check -- frontend/src/App.svelte frontend/src/lib/EmailApp.svelte internal/maild/drafts.go internal/maild/drafts_test.go internal/maild/webhook.go`
+- Computer Use on staging, authenticated as the `yusefnathanson@me.com`
+  account, created a draft from `000@choir.news` to
+  `yusefnathanson@me.com` with subject
+  `Choir approved draft hash proof 1a06a36`; the draft appeared in Drafts as
+  `Pending approval`.
+- Computer Use clicked the visible `Send approved draft` button for that exact
+  draft; the message moved to Sent, Sent count increased to 3, the message
+  detail showed `000@choir.news -> yusefnathanson@me.com`, trust
+  `Trusted sender`, and the body
+  `This is a staging proof that Choir Email sends only after creating a draft
+  and clicking the owner approval button for the current draft version. Commit
+  1a06a36.`
+unproven or partial claims: prompt-bar-to-VText-to-email automation, approval
+email deep link, approval reply parsing, edit-by-email, provider-backed
+risk-alert delivery, end-to-end Trace inspection, provider message id display,
+and staging proof of the raw `/api/email/send` route removal remain incomplete
+or unproven. Owner-click send was staging-proven, but prompt-bar simple send to
+VText-backed draft was not.
 belief-state changes: the smallest durable cut is viable without a large
 runtime rewrite: Email can appear as a first-class completed child run when
 VText emits a draft artifact request. The old proxy handoff was unnecessary
-and is removed as product authority.
-remaining error field: maild stores drafts but does not yet store full approval
-tokens/events or risk alert provider receipts; runtime creates an Email
-appagent draft request but does not yet call maild to persist that request as
-the visible mailbox draft; VText currently remains a known blocker for
-complex/researched content production.
+and is removed as product authority. Exact-version send binding is now a
+low-cost hardening win and should remain mandatory for every approval channel.
+remaining error field: maild stores drafts and app-click approval events but
+does not yet store full approval tokens, approval email notices, reply approval
+events, edit-by-email versioning, send receipts as a separate first-class
+table, or risk alert provider receipts; runtime creates an Email appagent draft
+request but does not yet call maild to persist that request as the visible
+mailbox draft; VText currently remains a known blocker for complex/researched
+content production.
 highest-impact remaining uncertainty: how to bridge runtime Email appagent draft
 requests into maild drafts on staging without giving VText/super raw send power
 or making proxy a workflow author again.
 next executable probe: add an Email appagent-to-maild draft persistence bridge
 or a proxy-mediated internal endpoint that preserves VText-originated authority,
 then prove it on staging with a visible draft and Trace node before implementing
-approval-by-email.
+approval-by-email. After that, add approval email tokens and the structured
+risk-alert sender as the next narrow product proofs.
 suggested resume goal string: continue this mission from the checkpoint above,
 first proving VText `request_email_draft` creates a visible maild draft with an
 Email appagent Trace node, then add exact-version approval email and risk-alert
 provider delivery.
-evidence artifact refs: local command outputs listed above; staging refs not
-yet available.
+evidence artifact refs: local command outputs listed above; staging Computer
+Use observations for draft creation and owner-click send; GitHub Actions run
+`26567618003`; deployed commit
+`1a06a3606468bba548008d9b9979f12683dba1bf`.
 rollback refs: standard git/platform rollback after behavior-changing commits.
