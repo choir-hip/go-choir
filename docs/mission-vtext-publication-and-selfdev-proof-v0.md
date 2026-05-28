@@ -1,6 +1,6 @@
 # MissionGradient: VText Publication + Self-Development Proof v0
 
-Status: draft for owner review
+Status: checkpoint_incomplete — export-level reached, promotion blocked by review-proof linkage
 Date: 2026-05-28
 
 ## Goal String
@@ -20,6 +20,213 @@ Recent evidence changed the mission shape:
 - AppChangePackage/adoption surfaces exist (`AppsChangesApp`, `/api/app-change-packages`, `/api/adoptions`, run acceptance synthesis), but the next proof must show they work through a real worker/candidate trajectory, not by treating their existence as proof.
 
 The next mission should therefore be a proof-and-convergence mission, not a broad architecture rewrite.
+
+## Execution Checkpoint: 2026-05-28
+
+This mission reached the highest honest evidence level currently available:
+`export-level`. It did not reach promotion/adoption-level.
+
+### Platform Repair And Deploy
+
+VText publication was repaired and deployed.
+
+- Problem documentation commit: `bf7a4b0` (`docs: record VText publication proof gap`).
+- Code repair commit: `41991763b0ea61fc9442bd14aa6c3353252811c6` (`fix: make VText publish links usable`).
+- CI run: `26552436491`, passed.
+- FlakeHub run: `26552436506`, passed.
+- Deployed proxy commit: `41991763b0ea61fc9442bd14aa6c3353252811c6`.
+- Deployed sandbox commit: `41991763b0ea61fc9442bd14aa6c3353252811c6`.
+- Deploy timestamp: `2026-05-28T03:16:51Z`.
+
+Supporting local checks:
+
+```text
+pnpm --dir frontend build
+nix develop -c go test ./internal/store -run TestVTextAgentMutationMarkStaleClearsPending
+nix develop -c go test ./internal/runtime -run TestRunToolLoopBoundsRequiredNextToolProviderCall
+nix develop -c go test ./internal/store -run 'TestVTextAgentMutation(Complete|MarkStaleClearsPending)'
+```
+
+Known unrelated local blocker:
+
+```text
+nix develop -c go test ./internal/runtime -run ...
+```
+
+failed before mission-specific execution because `strconvQuote` is redeclared in
+`internal/runtime/content_test.go` and
+`internal/runtime/researcher_checkpoint_fallback.go`.
+
+### Public VText Proof
+
+Computer Use and a no-storage browser proof verified that publishing now yields
+a usable public permalink:
+
+```text
+https://choir.news/pub/vtext/computer-use-verification-write-and-run-a-tiny-shell-pub20e2c0b75
+authState: signed_out
+reader: Published VText
+content: Computer Use Verification
+evidence id: a3e93e9a-e5ca-5972-8182-6b7bcc56dadc
+```
+
+The owner VText toolbar also recovered from stale `Revising...` state on the
+completed shell-command document: `Latest` was visible and `Publish v2` was
+enabled.
+
+### Self-Development Prompt
+
+The complex workload was submitted through the visible prompt bar on
+`https://choir.news`, not through an internal/test route.
+
+Prompt summary:
+
+```text
+Create a VText mission narrative. Research Webber, Moffat, Zobel 2010
+Rank-Biased Overlap, use arXiv:2406.07121 only as tie-handling context, lease a
+background candidate worker VM, delegate to vsuper, coordinate separate
+implementation and verifier co-super agents, implement a tie-free finite RBO Go
+package, verify it, publish an AppChangePackage, and do not claim adoption or
+promotion unless Apps/Changes and rollback evidence are present.
+```
+
+Key IDs and evidence:
+
+- Trajectory/submission: `50ec2a07-1b41-4d45-8fa8-3693941ffc73`.
+- VText doc/channel: `7b7437b1-15f8-4042-a322-af0ed3c62e4d`.
+- Final observed VText revision: `d52fc738` after worker completion.
+- Researcher run: `8cfb9c6b-d0ec-44ea-ae6d-f6f4c5ef97ea`.
+- Super run: `e00bb7eb-9030-420f-a8fb-2a5a8da57d67`.
+- Worker VM: `worker-10d6d2f2dcadd342`.
+- Worker vm id: `vm-b11826f8405cbb5904312d484881f3c5`.
+- Vsuper/worker run: `81968656-c2f3-441b-967a-d0cc65908dcc`.
+- Implementation co-super agent/run:
+  `016693a3-716c-4c20-9b39-45e59e0d0dc9` /
+  `03bd50ae-223d-42c7-be05-2af619cc3f66`.
+- Verifier co-super agent/run:
+  `03dcbb76-ffc9-43bc-995f-3c4d7a3f89e3` /
+  `240629d6-b5fb-4d57-b4cd-2b83118a0945`.
+
+Research evidence:
+
+- Primary source identified as Webber, Moffat, Zobel (2010), "A Similarity
+  Measure for Indefinite Rankings", DOI `10.1145/1852102.1852106`.
+- Tie-handling paper `arXiv:2406.07121` was treated as context only and out of
+  scope for the implemented tie-free algorithm.
+- Foreground sandbox had no Go repo, so super correctly leased a worker VM.
+
+Worker/candidate evidence:
+
+- Candidate repo base SHA: `41991763b0ea61fc9442bd14aa6c3353252811c6`.
+- Candidate commit: `a25de9c1192e8ea4f7d3b17bd9d9ffda7f6d874e`.
+- Candidate ref: `refs/computers/primary/candidates/81968656-c2f3-441b-967a-d0cc65908dcc`.
+- Implemented files:
+  - `internal/rbo/rbo.go` (73 lines).
+  - `internal/rbo/rbo_test.go` (272 lines).
+- Verified formula: `RBO(S,T,p) = (1-p)/p * sum_{d=1..k}(X_d * p^d) + X_k * p^k`.
+- Verifier result: PASS, 100.0% statement coverage, independent Python
+  cross-validation matched all 18 expected values within `1e-15`.
+
+Package evidence:
+
+- AppChangePackage: `84c12250-2d0b-43f3-b5ed-90f8e051634e`.
+- Status: `published_unlisted`.
+- Human proof state: `evidence_pending`.
+- Package publish evidence:
+  - `worker_tool_invoked_event:9c6858db-219a-4cb4-a8e0-215e900cc51e`
+  - `worker_tool_result_event:7b1f3795-9921-43e0-a205-e47acd2cda36`
+- Rollback base/ref:
+  - platform base `41991763b0ea61fc9442bd14aa6c3353252811c6`.
+  - candidate ref `refs/computers/primary/candidates/81968656-c2f3-441b-967a-d0cc65908dcc`.
+
+### Apps/Changes Proof And Blocker
+
+Computer Use verified that Apps & Changes shows the package, but not as a
+reviewable/adoptable package:
+
+```text
+Review changes before they enter this computer
+0 ready, 1 pending
+## Tie-Free Finite Rank-Biased Overlap (RBO) — Go Implementation
+EVIDENCE PENDING
+Needs human proof
+Missing: causal VText narrative, screenshot, video, or benchmark evidence
+Try in candidate: disabled
+Verify build: disabled
+Install: disabled
+Rollback: disabled
+Open Trace evidence: disabled
+Trajectory: not created
+Acceptance: not synthesized
+State: available
+Evidence: pending
+```
+
+Clicking `Open VText narrative` produced the product message:
+
+```text
+This change does not include a VText narrative yet.
+```
+
+Trace also exposed a lifecycle/convergence problem:
+
+```text
+trajectory: 50ec2a07-1b41-4d45-8fa8-3693941ffc73
+visible state: failed
+agents: 4
+delegations: 4
+moments: 519
+messages: 38
+compactions: 2
+retries: 12
+latest activity: 2026-05-28T03:36:04Z
+```
+
+The worker path completed and exported a package, but the foreground trajectory
+failed after completion and the package did not carry enough human-proof
+metadata for Apps/Changes to make it reviewable. This blocks adoption/promotion
+and run-acceptance synthesis through the product surface.
+
+### Current Diagnosis
+
+The self-development substrate is real enough to prove:
+
+```text
+visible prompt bar
+  -> VText narrative
+  -> researcher
+  -> super
+  -> worker VM
+  -> vsuper
+  -> implementation co-super
+  -> verifier co-super
+  -> candidate commit
+  -> AppChangePackage visible in Apps/Changes
+```
+
+The substrate is not yet converged enough to prove:
+
+```text
+AppChangePackage visible
+  -> human-reviewable package
+  -> candidate try/build verification
+  -> owner install/adoption
+  -> rollback evidence
+  -> run acceptance synthesis
+```
+
+The likely product gap is review-proof linkage and finalization sequencing:
+the VText narrative revision exists after worker completion, but the package
+was published as `evidence_pending` without linked narrative refs or another
+accepted human-proof artifact. Apps/Changes therefore correctly blocks install
+and recovery actions.
+
+### Cleanup Decision
+
+Deletion-first cleanup is deferred. Live proof did identify a real dead-end
+state, but it is on the package review/adoption boundary, not on stale UI or
+obvious dead code. Cleaning before repairing this linkage risks deleting paths
+needed to understand the failed export-to-review transition.
 
 ## P0 Live Evidence: Publication Permalink
 
@@ -277,6 +484,12 @@ Stop with `checkpoint_incomplete` if:
 - export-level works but adoption/promotion is not yet safe.
 
 Stop with `blocked_incomplete` only after root-cause probes and route-changing cognitive transforms show that continuing requires external authority or would violate an invariant.
+
+## Follow-On Mission String
+
+```text
+/goal Run a Codex-operated MissionGradient mission to repair the export-to-review boundary for Choir self-development packages. Start from live evidence: trajectory 50ec2a07-1b41-4d45-8fa8-3693941ffc73 reached worker VM worker-10d6d2f2dcadd342, vsuper run 81968656-c2f3-441b-967a-d0cc65908dcc, candidate commit a25de9c1192e8ea4f7d3b17bd9d9ffda7f6d874e, and AppChangePackage 84c12250-2d0b-43f3-b5ed-90f8e051634e, but Apps/Changes shows it as evidence_pending with no linked VText narrative, disabled Try/Verify/Install/Rollback controls, no trajectory/acceptance synthesis, and the foreground Trace row failed after worker completion. Investigate and document root cause first. Then make the smallest platform/product repair so a verified worker package can carry or attach causal VText narrative refs, verifier evidence refs, candidate refs, rollback refs, and run/trace refs into the Apps/Changes human-proof contract without manually seeding success. Preserve authority boundaries: workers/candidates do not mutate canonical state directly, VText remains canonical document writer, AppChangePackage remains export not adoption, and owner install/promotion requires product review plus rollback evidence. Verify on choir.news through visible prompt bar or an existing package replay path that does not use internal/test routes: package becomes human_reviewable, Open VText narrative works, Try in candidate and Verify build become available or produce precise blockers, run acceptance can synthesize the honest level, and adoption/promotion is attempted only if verifier evidence and rollback refs are present. No manual deploy shortcuts, no fake fixtures, no broad product expansion, and deletion-first cleanup only after the export-to-review transition is live-proven.
+```
 
 ## Suggested First Inner Prompt
 
