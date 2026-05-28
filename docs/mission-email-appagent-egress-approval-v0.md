@@ -1615,3 +1615,37 @@ next executable probe:
   deep link opens the exact draft without sending, approval reply sends one
   exact version, edit reply creates a new draft version, and a risky prompt
   sends a templated risk alert without outbound send.
+
+## Problem Checkpoint: Approval Reply Address Was Invalid
+
+timestamp: 2026-05-28T08:45:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix:
+- Staging commit `1e651a70d4163a1fbeab28cfb98d7ec830480175` created a clean
+  prompt-bar/VText/Email-appagent draft:
+  `email-draft-1277a1d4-e837-4346-ba20-e03f4224d715`.
+- Maild created an active approval token scoped to owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`, draft version `1`, version hash
+  prefix `d24ea43410cbd41444b7`, and approval email
+  `yusefnathanson@me.com`.
+- The Email appagent Trace result reported
+  `approval_email_status:"failed"` and
+  `approval_email_error:"maild status 502: {\"error\":\"failed to send approval email\"}"`.
+- Direct Resend send from the same deployed Node B environment succeeded when
+  using `reply_to:["approve+diagnostic@choir.news"]`.
+- Direct Resend send with the real generated reply address failed with HTTP
+  `422` and `Invalid reply_to field`. The local part length was `72`:
+  `approve+` plus a 64-character token.
+
+root cause:
+- The approval token was generated as two UUIDs with hyphens removed, yielding
+  64 hex characters. `approve+<token>@choir.news` therefore exceeded the
+  64-character email local-part limit before it reached Resend. The failure is
+  not a missing API key or domain verification problem.
+
+next fix:
+- Shorten approval reply tokens while preserving enough entropy for one-time
+  approval use. A single UUID without hyphens gives a 32-character token, so
+  `approve+<token>` is 40 characters and remains within the email local-part
+  limit.

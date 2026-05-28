@@ -524,7 +524,7 @@ func (s *Store) CreateDraftApprovalToken(ctx context.Context, draft EmailDraft, 
 	now := time.Now().UTC()
 	token := EmailApprovalToken{
 		ID:            "email-approval-token-" + uuid.NewString(),
-		Token:         strings.ReplaceAll(uuid.NewString()+uuid.NewString(), "-", ""),
+		Token:         strings.ReplaceAll(uuid.NewString(), "-", ""),
 		DraftID:       draft.ID,
 		OwnerID:       draft.OwnerID,
 		Version:       draft.Version,

@@ -232,6 +232,10 @@ func TestDraftApprovalEmailUsesVerifiedSignupEmailAndReplyToken(t *testing.T) {
 	if resp.ProviderMessageID != "approval-notice-1" || !strings.Contains(resp.ReplyAddress, "approve+") {
 		t.Fatalf("approval response = %+v", resp)
 	}
+	replyLocal := strings.SplitN(resp.ReplyAddress, "@", 2)[0]
+	if len(replyLocal) > 64 {
+		t.Fatalf("approval reply local part length = %d, want <= 64: %s", len(replyLocal), resp.ReplyAddress)
+	}
 	if payload.To[0] != "owner@example.com" || len(payload.ReplyTo) != 1 || payload.ReplyTo[0] != resp.ReplyAddress {
 		t.Fatalf("approval payload = %+v response=%+v", payload, resp)
 	}
