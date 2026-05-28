@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -188,6 +189,105 @@ func TestDraftSendRejectsMissingOrStaleVersionHash(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("approval events after rejected send = %d, want 0", count)
+	}
+}
+
+func TestDraftApprovalEmailUsesVerifiedSignupEmailAndReplyToken(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	var payload resendSendRequest
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"approval-notice-1"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Needs approval",
+		TextBody:    "Draft body.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/drafts/"+draft.ID+"/approval-email", strings.NewReader(`{}`))
+	setInternalOwner(req, "user-root")
+	req.Header.Set("X-Authenticated-Email", "owner@example.com")
+	w := httptest.NewRecorder()
+	h.HandleDrafts(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var resp approvalEmailResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ProviderMessageID != "approval-notice-1" || !strings.Contains(resp.ReplyAddress, "approve+") {
+		t.Fatalf("approval response = %+v", resp)
+	}
+	if payload.To[0] != "owner@example.com" || len(payload.ReplyTo) != 1 || payload.ReplyTo[0] != resp.ReplyAddress {
+		t.Fatalf("approval payload = %+v response=%+v", payload, resp)
+	}
+	if !strings.Contains(payload.Text, draft.VersionHash) || strings.Contains(payload.Text, "user-root") {
+		t.Fatalf("approval payload text = %q", payload.Text)
+	}
+}
+
+func TestApprovalReplyApprovesExactDraftVersionOnce(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	sendCount := 0
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sendCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"reply-send-1"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Reply approve",
+		TextBody:    "Approved by email.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+
+	email := resendReceivedEmail{
+		ID:   "received-approval-1",
+		To:   []string{"approve+" + token.Token + "@choir.news"},
+		From: "owner@example.com",
+		Text: "approve",
+		Headers: map[string]string{
+			"from": "owner@example.com",
+		},
+	}
+	if err := h.processApprovalReply(nilSafeContext(), "event-approval-1", email, token.Token); err != nil {
+		t.Fatalf("processApprovalReply: %v", err)
+	}
+	updated, err := store.GetDraft(nilSafeContext(), "user-root", draft.ID)
+	if err != nil {
+		t.Fatalf("GetDraft: %v", err)
+	}
+	if updated.Status != "sent" || updated.ProviderMessageID != "reply-send-1" || sendCount != 1 {
+		t.Fatalf("updated=%+v sendCount=%d", updated, sendCount)
+	}
+	if err := h.processApprovalReply(nilSafeContext(), "event-approval-2", email, token.Token); err == nil {
+		t.Fatal("second approval reply succeeded; want one-time token rejection")
 	}
 }
 

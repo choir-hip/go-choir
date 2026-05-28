@@ -1546,3 +1546,72 @@ remaining error field:
   next code slice small: approval tokens, exact-version approval replies, and
   templated risk alerts should extend the proven draft/owner-click model rather
   than reintroducing a direct send bypass.
+
+## Checkpoint: Approval Email And Risk Alert Slice Implemented Locally
+
+timestamp: 2026-05-28T09:10:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix:
+- The clean draft and owner-click send path was live-proven, but
+  approval-by-email and provider-backed risk alerts were still missing.
+- Maild knew the authenticated owner id but did not know the owner signup
+  email through a trusted service boundary. Passing a browser-supplied
+  `to_email` for approval/risk paths would have weakened the security model.
+
+implemented slice:
+- Auth access JWTs now include the user's signup email as a signed `email`
+  claim.
+- Proxy strips client-supplied `X-Authenticated-Email`, reads the signed claim,
+  and forwards it as trusted internal `X-Authenticated-Email` to sandbox and
+  maild.
+- Runtime carries `owner_email` through prompt-bar/conductor/VText metadata and
+  passes it to maild from the Email appagent handoff.
+- Maild stores approval tokens scoped to owner id, draft id, draft version,
+  version hash, approval email, status, provider id, and expiry.
+- Maild can send an approval email with a review deep link and a one-time
+  `approve+<token>@choir.news` reply address.
+- Resend inbound approval replies to `approve+<token>@choir.news` are parsed by
+  maild before alias resolution:
+  - `approve` sends only the exact draft version;
+  - `reject` records a rejection event and consumes the token;
+  - `edit: ...` records an edit request, creates a new draft version, and
+    supersedes the old token.
+- Runtime risk detection now calls a structured maild risk-alert endpoint when
+  the owner signup email is available. The alert is templated, bounded, and
+  provider-backed; risky content is quoted only as untrusted evidence.
+
+local verification:
+- `nix develop -c go test ./internal/maild ./internal/proxy` passed.
+- `nix develop -c go test ./internal/runtime -run 'TestVTextRequestEmailDraft|TestRequestEmailDraftBlocks|TestCoagentCastCannotAddressEmailAppagentDirectly|TestPromptBar'` passed.
+- Focused earlier slice also passed:
+  `nix develop -c go test ./internal/maild ./internal/proxy ./internal/runtime -run 'TestDraft|TestApproval|TestHandleRiskAlert|TestHandleCompletionEmail|TestEmailAPIForwards|TestVTextRequestEmailDraft|TestRequestEmailDraftBlocks|TestCoagentCastCannotAddressEmailAppagentDirectly'`.
+
+belief-state changes:
+- The trusted signup-email propagation problem is solved at the service
+  boundary level instead of by trusting UI payloads.
+- Approval-by-email now reuses the same draft/version-hash send path as owner
+  click instead of introducing a second outbound authority.
+- Risk alerts are now provider-backed in code, but staging/provider proof is
+  still required before claiming the mission requirement satisfied.
+
+unproven or partial claims:
+- Existing browser sessions may need refresh/reauthentication before their
+  access JWT contains the new `email` claim.
+- Staging has not yet proven approval email delivery, reply approval delivery
+  through Resend inbound, edit reply versioning, or provider-backed risk alert
+  delivery.
+- The Email UI opens approval deep links to the draft but does not yet display
+  approval-token metadata; the link is review-only and does not send by itself.
+- Trace records the Email appagent draft request and risk/draft decision, but
+  maild-side approval reply events are still infrastructure evidence, not
+  first-class runtime Trace agent turns.
+
+next executable probe:
+- Commit, push, monitor CI/deploy, confirm staging commit identity.
+- Reauthenticate or force session renewal so staging proxy forwards the signed
+  email claim.
+- Run deployed proof for: prompt-bar draft with approval email sent, approval
+  deep link opens the exact draft without sending, approval reply sends one
+  exact version, edit reply creates a new draft version, and a risky prompt
+  sends a templated risk alert without outbound send.

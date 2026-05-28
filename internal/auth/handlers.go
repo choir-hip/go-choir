@@ -205,6 +205,7 @@ func (h *Handler) issueAccessJWT(user *User) (string, error) {
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
 		"sub":   user.ID,
+		"email": user.Email,
 		"iat":   now.Unix(),
 		"exp":   now.Add(h.config.AccessTokenTTL).Unix(),
 		"scope": "access",

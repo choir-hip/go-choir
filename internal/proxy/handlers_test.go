@@ -177,15 +177,26 @@ func issueTestAccessJWT(priv ed25519.PrivateKey, userID string) string {
 	return issueTestAccessJWTWithTTL(priv, userID, 5*time.Minute)
 }
 
+func issueTestAccessJWTWithEmail(priv ed25519.PrivateKey, userID, email string) string {
+	return issueTestAccessJWTWithClaims(priv, userID, email, 5*time.Minute)
+}
+
 // issueTestAccessJWTWithTTL creates a signed Ed25519 JWT for the given user
 // ID with the specified TTL and "access" scope.
 func issueTestAccessJWTWithTTL(priv ed25519.PrivateKey, userID string, ttl time.Duration) string {
+	return issueTestAccessJWTWithClaims(priv, userID, "", ttl)
+}
+
+func issueTestAccessJWTWithClaims(priv ed25519.PrivateKey, userID, email string, ttl time.Duration) string {
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
 		"sub":   userID,
 		"iat":   now.Unix(),
 		"exp":   now.Add(ttl).Unix(),
 		"scope": "access",
+	}
+	if email != "" {
+		claims["email"] = email
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	signed, err := token.SignedString(priv)

@@ -29,13 +29,32 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 		t.Fatal("super must not have direct email draft tool")
 	}
 	maildCalled := false
+	approvalEmailCalled := false
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		maildCalled = true
-		if r.Method != http.MethodPost || r.URL.Path != "/api/email/drafts" {
+		if r.Method != http.MethodPost {
 			t.Fatalf("maild request = %s %s", r.Method, r.URL.Path)
 		}
 		if r.Header.Get("X-Authenticated-User") != "user-alice" || r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("maild auth headers user=%q internal=%q", r.Header.Get("X-Authenticated-User"), r.Header.Get("X-Internal-Caller"))
+		}
+		if r.Header.Get("X-Authenticated-Email") != "owner@example.com" {
+			t.Fatalf("maild owner email header = %q", r.Header.Get("X-Authenticated-Email"))
+		}
+		if r.URL.Path == "/api/email/drafts/email-draft-maild-1/approval-email" {
+			approvalEmailCalled = true
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":              "sent",
+				"token_id":            "approval-token-1",
+				"provider_message_id": "approval-provider-1",
+				"review_url":          "https://choir.news/?app=email&draft=email-draft-maild-1&approval=token",
+				"reply_address":       "approve+token@choir.news",
+			})
+			return
+		}
+		maildCalled = true
+		if r.URL.Path != "/api/email/drafts" {
+			t.Fatalf("maild path = %s", r.URL.Path)
 		}
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -66,6 +85,7 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 		runMetadataAgentRole:    AgentProfileVText,
 		runMetadataAgentID:      "vtext:doc-email-1",
 		runMetadataChannelID:    "doc-email-1",
+		runMetadataOwnerEmail:   "owner@example.com",
 		"type":                  "vtext_agent_revision",
 		"doc_id":                "doc-email-1",
 	})
@@ -103,6 +123,9 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 	if !maildCalled {
 		t.Fatal("maild draft endpoint was not called")
+	}
+	if !approvalEmailCalled || out["approval_email_status"] != "sent" {
+		t.Fatalf("approval email endpoint was not called/result missing: %+v", out)
 	}
 
 	agent, err := s.GetAgent(context.Background(), persistentEmailAgentID("user-alice"))
@@ -382,11 +405,30 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
+	riskAlertCalled := false
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/notifications/email-risk-alert" {
+			t.Fatalf("maild path = %s", r.URL.Path)
+		}
+		if r.Header.Get("X-Authenticated-Email") != "owner@example.com" {
+			t.Fatalf("risk alert owner email = %q", r.Header.Get("X-Authenticated-Email"))
+		}
+		riskAlertCalled = true
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":              "sent",
+			"alert_id":            "risk-alert-1",
+			"provider_message_id": "risk-provider-1",
+		})
+	}))
+	defer maild.Close()
+	rt.cfg.MaildURL = maild.URL
 	parent, err := rt.createRunWithMetadata(context.Background(), "write risky email artifact", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileVText,
 		runMetadataAgentRole:    AgentProfileVText,
 		runMetadataAgentID:      "vtext:doc-risk",
 		runMetadataChannelID:    "doc-risk",
+		runMetadataOwnerEmail:   "owner@example.com",
 		"type":                  "vtext_agent_revision",
 		"doc_id":                "doc-risk",
 	})
@@ -413,6 +455,9 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	}
 	if out["risk_alert_subject"] != "[Choir Risk Alert] Email draft blocked" {
 		t.Fatalf("risk alert subject: %+v", out)
+	}
+	if !riskAlertCalled || out["risk_alert_status"] != "sent" || out["risk_alert_provider_message_id"] != "risk-provider-1" {
+		t.Fatalf("risk alert was not provider-backed: %+v", out)
 	}
 }
 

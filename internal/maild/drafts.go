@@ -76,6 +76,14 @@ type sendDraftRequest struct {
 	VersionHash string `json:"version_hash"`
 }
 
+type approvalEmailResponse struct {
+	Status            string `json:"status"`
+	TokenID           string `json:"token_id"`
+	ProviderMessageID string `json:"provider_message_id"`
+	ReviewURL         string `json:"review_url"`
+	ReplyAddress      string `json:"reply_address"`
+}
+
 func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -104,7 +112,7 @@ func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := authenticatedInternalOwner(w, r)
+	ownerID, ownerEmail, ok := authenticatedInternalOwnerWithEmail(w, r)
 	if !ok {
 		return
 	}
@@ -141,6 +149,14 @@ func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleDraftSend(w, r, ownerID, draftID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "approval-email" {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		h.handleDraftApprovalEmail(w, r, ownerID, ownerEmail, draftID)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -204,6 +220,19 @@ func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerI
 		writeDecodeError(w, err)
 		return
 	}
+	resp, err := h.sendApprovedDraft(r.Context(), ownerID, draftID, in.VersionHash, "owner_click_approved", "")
+	if err != nil {
+		writeDraftSendError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, resp)
+}
+
+func (h *Handler) handleDraftApprovalEmail(w http.ResponseWriter, r *http.Request, ownerID, ownerEmail, draftID string) {
+	if ownerEmail == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "verified signup email is required"})
+		return
+	}
 	draft, err := h.store.GetDraft(r.Context(), ownerID, draftID)
 	if err != nil {
 		writeStoreError(w, err)
@@ -213,59 +242,120 @@ func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerI
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
 		return
 	}
-	if strings.TrimSpace(in.VersionHash) == "" || strings.TrimSpace(in.VersionHash) != draft.VersionHash {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft version changed; reopen the draft before approving"})
+	token, err := h.store.CreateDraftApprovalToken(r.Context(), draft, ownerEmail, 24*time.Hour)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create approval token"})
 		return
 	}
-	alias, err := h.resolveOwnedFromAlias(r.Context(), ownerID, draft.FromAddress)
+	reviewURL := "https://choir.news/?app=email&draft=" + draft.ID + "&approval=" + token.Token
+	replyAddress := "approve+" + token.Token + "@" + strings.ToLower(strings.TrimSpace(h.cfg.PrimaryDomain))
+	body := fmt.Sprintf("Choir email draft needs approval.\n\nSubject: %s\nTo: %s\nStatus: needs approval\n\nOpen to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nThis approval is scoped to draft %s version %d hash %s. The link opens review only; it does not send by itself.",
+		draft.Subject, strings.Join(decodeAddressJSON(draft.ToJSON), ", "), reviewURL, draft.ID, draft.Version, draft.VersionHash)
+	sent, err := h.resend.sendEmail(r.Context(), resendSendRequest{
+		From:    "Choir <updates@choir.news>",
+		To:      []string{ownerEmail},
+		ReplyTo: []string{replyAddress},
+		Subject: "Choir email draft needs approval: " + draft.Subject,
+		Text:    body,
+		Headers: map[string]any{
+			"X-Choir-Maild":                     "v0-email-draft-approval",
+			"X-Choir-Email-Draft-ID":            draft.ID,
+			"X-Choir-Email-Draft-Version-Hash":  draft.VersionHash,
+			"X-Choir-Email-Approval-Token-ID":   token.ID,
+			"X-Choir-Email-Approval-Reply-Port": replyAddress,
+		},
+	})
 	if err != nil {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "from address is not owned by current user"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send approval email"})
 		return
 	}
-	approvalEventID, err := h.store.RecordDraftApprovalEvent(r.Context(), draft, "owner_click_approved", "")
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record approval"})
+	token.ProviderMessageID = sent.ID
+	if err := h.store.MarkDraftApprovalTokenSent(r.Context(), token.ID, sent.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record approval email"})
 		return
+	}
+	writeJSON(w, http.StatusAccepted, approvalEmailResponse{
+		Status:            "sent",
+		TokenID:           token.ID,
+		ProviderMessageID: sent.ID,
+		ReviewURL:         reviewURL,
+		ReplyAddress:      replyAddress,
+	})
+}
+
+func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versionHash, eventType, approvalProviderMessageID string) (sendDraftResponse, error) {
+	draft, err := h.store.GetDraft(ctx, ownerID, draftID)
+	if err != nil {
+		return sendDraftResponse{}, err
+	}
+	if draft.Status == "sent" {
+		return sendDraftResponse{}, errDraftAlreadySent
+	}
+	if strings.TrimSpace(versionHash) == "" || strings.TrimSpace(versionHash) != draft.VersionHash {
+		return sendDraftResponse{}, errDraftVersionChanged
+	}
+	alias, err := h.resolveOwnedFromAlias(ctx, ownerID, draft.FromAddress)
+	if err != nil {
+		return sendDraftResponse{}, errDraftForbidden
+	}
+	approvalEventID, err := h.store.RecordDraftApprovalEvent(ctx, draft, eventType, approvalProviderMessageID)
+	if err != nil {
+		return sendDraftResponse{}, fmt.Errorf("record approval: %w", err)
 	}
 	sendReq := draft.toSendRequest()
 	payload, err := buildResendSendRequest(sendReq, alias)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+		return sendDraftResponse{}, err
 	}
 	payload.Headers["X-Choir-Maild"] = "v0-approved-draft-send"
 	payload.Headers["X-Choir-Email-Draft-ID"] = draft.ID
 	payload.Headers["X-Choir-Email-Draft-Version-Hash"] = draft.VersionHash
-	if err := h.applyReplyHeaders(r.Context(), ownerID, draft.ReplyToMessageID, &payload); err != nil {
-		if err == sql.ErrNoRows {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reply target is not owned by current user"})
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reply target is invalid"})
-		return
+	if err := h.applyReplyHeaders(ctx, ownerID, draft.ReplyToMessageID, &payload); err != nil {
+		return sendDraftResponse{}, errDraftInvalidReplyTarget
 	}
-	sent, err := h.resend.sendEmail(r.Context(), payload)
+	sent, err := h.resend.sendEmail(ctx, payload)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send email"})
-		return
+		return sendDraftResponse{}, err
 	}
-	msg, err := h.store.StoreOutboundMessage(r.Context(), ownerID, alias, sent.ID, sendReq)
+	msg, err := h.store.StoreOutboundMessage(ctx, ownerID, alias, sent.ID, sendReq)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to store sent email"})
-		return
+		return sendDraftResponse{}, fmt.Errorf("store sent: %w", err)
 	}
-	updated, err := h.store.MarkDraftSent(r.Context(), ownerID, draftID, msg.ID, sent.ID)
+	updated, err := h.store.MarkDraftSent(ctx, ownerID, draftID, msg.ID, sent.ID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to mark draft sent"})
-		return
+		return sendDraftResponse{}, fmt.Errorf("mark sent: %w", err)
 	}
-	writeJSON(w, http.StatusAccepted, sendDraftResponse{
+	return sendDraftResponse{
 		Draft:             summarizeDraft(updated),
 		MessageID:         msg.ID,
 		ProviderMessageID: sent.ID,
 		ApprovalEventID:   approvalEventID,
 		Status:            "sent",
-	})
+	}, nil
+}
+
+var (
+	errDraftAlreadySent        = fmt.Errorf("draft already sent")
+	errDraftVersionChanged     = fmt.Errorf("draft version changed")
+	errDraftForbidden          = fmt.Errorf("draft forbidden")
+	errDraftInvalidReplyTarget = fmt.Errorf("draft reply target invalid")
+)
+
+func writeDraftSendError(w http.ResponseWriter, err error) {
+	switch {
+	case err == sql.ErrNoRows:
+		writeStoreError(w, err)
+	case err == errDraftAlreadySent:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
+	case err == errDraftVersionChanged:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft version changed; reopen the draft before approving"})
+	case err == errDraftForbidden:
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "from address is not owned by current user"})
+	case err == errDraftInvalidReplyTarget:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reply target is invalid"})
+	default:
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send email"})
+	}
 }
 
 func (s *Store) ListAliasesForOwner(ctx context.Context, ownerID string) ([]EmailAliasSummary, error) {
@@ -421,6 +511,143 @@ func (s *Store) RecordDraftApprovalEvent(ctx context.Context, draft EmailDraft, 
 		return "", fmt.Errorf("insert approval event: %w", err)
 	}
 	return eventID, nil
+}
+
+func (s *Store) CreateDraftApprovalToken(ctx context.Context, draft EmailDraft, approvalEmail string, ttl time.Duration) (EmailApprovalToken, error) {
+	approvalEmail = normalizedTrustedEmail(approvalEmail)
+	if approvalEmail == "" {
+		return EmailApprovalToken{}, fmt.Errorf("approval email is required")
+	}
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	now := time.Now().UTC()
+	token := EmailApprovalToken{
+		ID:            "email-approval-token-" + uuid.NewString(),
+		Token:         strings.ReplaceAll(uuid.NewString()+uuid.NewString(), "-", ""),
+		DraftID:       draft.ID,
+		OwnerID:       draft.OwnerID,
+		Version:       draft.Version,
+		VersionHash:   draft.VersionHash,
+		ApprovalEmail: approvalEmail,
+		Status:        "active",
+		CreatedAt:     now.Format(time.RFC3339Nano),
+		ExpiresAt:     now.Add(ttl).Format(time.RFC3339Nano),
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+		SET status = 'superseded'
+		WHERE draft_id = ? AND owner_id = ? AND status = 'active'`,
+		draft.ID, draft.OwnerID); err != nil {
+		return EmailApprovalToken{}, fmt.Errorf("supersede approval tokens: %w", err)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO email_draft_approval_tokens (
+		id, token, draft_id, owner_id, version, version_hash, approval_email,
+		status, created_at, expires_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		token.ID, token.Token, token.DraftID, token.OwnerID, token.Version, token.VersionHash,
+		token.ApprovalEmail, token.Status, token.CreatedAt, token.ExpiresAt)
+	if err != nil {
+		return EmailApprovalToken{}, fmt.Errorf("insert approval token: %w", err)
+	}
+	return token, nil
+}
+
+func (s *Store) MarkDraftApprovalTokenSent(ctx context.Context, tokenID, providerMessageID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+		SET provider_message_id = ?
+		WHERE id = ?`, nullString(providerMessageID), tokenID)
+	if err != nil {
+		return fmt.Errorf("mark approval token sent: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetDraftApprovalToken(ctx context.Context, token string) (EmailApprovalToken, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, token, draft_id, owner_id, version,
+		version_hash, approval_email, status, coalesce(provider_message_id, ''),
+		created_at, expires_at, coalesce(used_at, '')
+		FROM email_draft_approval_tokens
+		WHERE token = ?`, strings.TrimSpace(token))
+	var out EmailApprovalToken
+	if err := row.Scan(&out.ID, &out.Token, &out.DraftID, &out.OwnerID, &out.Version, &out.VersionHash, &out.ApprovalEmail, &out.Status, &out.ProviderMessageID, &out.CreatedAt, &out.ExpiresAt, &out.UsedAt); err != nil {
+		return EmailApprovalToken{}, err
+	}
+	return out, nil
+}
+
+func (s *Store) UseDraftApprovalToken(ctx context.Context, tokenID, status string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+		SET status = ?, used_at = ?
+		WHERE id = ? AND status = 'active'`,
+		status, now, tokenID)
+	if err != nil {
+		return fmt.Errorf("use approval token: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) UpdateDraftTextFromApprovalEdit(ctx context.Context, draft EmailDraft, editText string) (EmailDraft, error) {
+	editText = strings.TrimSpace(editText)
+	if editText == "" {
+		return EmailDraft{}, fmt.Errorf("edit text is required")
+	}
+	updated := draft
+	updated.TextBody = "Owner approval reply requested edits:\n\n" + editText
+	updated.Version++
+	updated.Status = "draft_pending_owner_approval"
+	updated.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	updated.VersionHash = draftVersionHash(updated)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `UPDATE email_drafts
+		SET text_body = ?, status = ?, version = ?, version_hash = ?, updated_at = ?
+		WHERE id = ? AND owner_id = ? AND status <> 'sent'`,
+		updated.TextBody, updated.Status, updated.Version, updated.VersionHash, updated.UpdatedAt, updated.ID, updated.OwnerID); err != nil {
+		return EmailDraft{}, fmt.Errorf("update draft edit: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+		SET status = 'superseded'
+		WHERE draft_id = ? AND owner_id = ? AND status = 'active'`,
+		updated.ID, updated.OwnerID); err != nil {
+		return EmailDraft{}, fmt.Errorf("supersede edited draft tokens: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return EmailDraft{}, err
+	}
+	tx = nil
+	return s.GetDraft(ctx, updated.OwnerID, updated.ID)
+}
+
+func (s *Store) RecordRiskAlert(ctx context.Context, ownerID, riskKind, sourceRef, snippet, providerMessageID string) (EmailRiskAlert, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	alert := EmailRiskAlert{
+		ID:                "email-risk-alert-" + uuid.NewString(),
+		OwnerID:           strings.TrimSpace(ownerID),
+		RiskKind:          strings.TrimSpace(riskKind),
+		SourceRef:         strings.TrimSpace(sourceRef),
+		Snippet:           strings.TrimSpace(snippet),
+		ProviderMessageID: strings.TrimSpace(providerMessageID),
+		CreatedAt:         now,
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO email_risk_alerts (
+		id, owner_id, risk_kind, source_ref, snippet, provider_message_id, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		alert.ID, alert.OwnerID, alert.RiskKind, nullString(alert.SourceRef), nullString(alert.Snippet), nullString(alert.ProviderMessageID), alert.CreatedAt)
+	if err != nil {
+		return EmailRiskAlert{}, fmt.Errorf("insert risk alert: %w", err)
+	}
+	return alert, nil
 }
 
 func (s *Store) CountDraftApprovalEvents(ctx context.Context, draftID string) (int, error) {

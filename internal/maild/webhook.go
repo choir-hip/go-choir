@@ -58,6 +58,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
 	s.HandleFunc("/api/notifications/completion-email", h.HandleCompletionEmail)
+	s.HandleFunc("/api/notifications/email-risk-alert", h.HandleRiskAlert)
 }
 
 // HandleResendWebhook verifies and stores Resend webhook metadata.
@@ -180,6 +181,9 @@ func (h *Handler) ingestReceivedEmail(ctx context.Context, providerEventID, prov
 	email, err := h.resend.retrieveReceivedEmail(ctx, providerMessageID)
 	if err != nil {
 		return err
+	}
+	if token, ok := approvalReplyToken(email.To, h.cfg.PrimaryDomain); ok {
+		return h.processApprovalReply(ctx, providerEventID, email, token)
 	}
 	alias, recipient, err := h.resolveReceivedAlias(ctx, email.To)
 	if err != nil {

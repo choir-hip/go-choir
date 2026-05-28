@@ -37,6 +37,9 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	req.Header.Del("Authorization")
 	req.Header.Del("Cookie")
 	req.Header.Set("X-Authenticated-User", authResult.UserID)
+	if authResult.Email != "" {
+		req.Header.Set("X-Authenticated-Email", authResult.Email)
+	}
 	req.Header.Set("X-Internal-Caller", "true")
 
 	resp, err := h.maild.Do(req)

@@ -1546,11 +1546,12 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	userRevisionID := uuid.New().String()
 	framingRevisionID := uuid.New().String()
 	userRevMeta, _ := json.Marshal(map[string]any{
-		"seed_prompt":       decision.SeedPrompt,
-		"conductor_loop_id": rec.RunID,
-		"created_from":      "conductor",
-		"source":            "user_prompt",
-		"vtext_version":     "v0",
+		"seed_prompt":         decision.SeedPrompt,
+		"conductor_loop_id":   rec.RunID,
+		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
+		"created_from":        "conductor",
+		"source":              "user_prompt",
+		"vtext_version":       "v0",
 	})
 	userRev := types.Revision{
 		RevisionID:  userRevisionID,
@@ -1571,12 +1572,13 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	doc.CurrentRevisionID = userRev.RevisionID
 	if createInitialVersion && initialContent != "" {
 		framingRevMeta, _ := json.Marshal(map[string]any{
-			"seed_prompt":       decision.SeedPrompt,
-			"conductor_loop_id": rec.RunID,
-			"created_from":      "conductor",
-			"source":            "initial_vtext_seed",
-			"vtext_version":     "v1",
-			"user_revision_id":  userRevisionID,
+			"seed_prompt":         decision.SeedPrompt,
+			"conductor_loop_id":   rec.RunID,
+			runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
+			"created_from":        "conductor",
+			"source":              "initial_vtext_seed",
+			"vtext_version":       "v1",
+			"user_revision_id":    userRevisionID,
 		})
 		framingRev := types.Revision{
 			RevisionID:       framingRevisionID,
@@ -1996,6 +1998,7 @@ var durableMetadataKeys = []string{
 	"seed_prompt",
 	"source_path",
 	"conductor_loop_id",
+	runMetadataOwnerEmail,
 }
 
 // buildAppagentRevisionMetadata constructs the metadata JSON for an

@@ -158,6 +158,34 @@ type EmailDraft struct {
 	UpdatedAt         string
 }
 
+// EmailApprovalToken binds one approval channel to one exact draft version.
+type EmailApprovalToken struct {
+	ID                string
+	Token             string
+	DraftID           string
+	OwnerID           string
+	Version           int
+	VersionHash       string
+	ApprovalEmail     string
+	Status            string
+	ProviderMessageID string
+	CreatedAt         string
+	ExpiresAt         string
+	UsedAt            string
+}
+
+// EmailRiskAlert records a structured provider-backed alert for a blocked
+// email action. Risky text is stored only as bounded evidence.
+type EmailRiskAlert struct {
+	ID                string
+	OwnerID           string
+	RiskKind          string
+	SourceRef         string
+	Snippet           string
+	ProviderMessageID string
+	CreatedAt         string
+}
+
 // TrustedWorkflowAliasConfig describes a narrow plus-code alias that can create
 // a pending workflow handoff when a whitelisted authenticated sender uses it.
 type TrustedWorkflowAliasConfig struct {
@@ -336,6 +364,29 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			version integer not null,
 			version_hash text not null,
 			event_type text not null,
+			provider_message_id text,
+			created_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_draft_approval_tokens (
+			id text primary key,
+			token text not null unique,
+			draft_id text not null,
+			owner_id text not null,
+			version integer not null,
+			version_hash text not null,
+			approval_email text not null,
+			status text not null,
+			provider_message_id text,
+			created_at text not null,
+			expires_at text not null,
+			used_at text
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_risk_alerts (
+			id text primary key,
+			owner_id text not null,
+			risk_kind text not null,
+			source_ref text,
+			snippet text,
 			provider_message_id text,
 			created_at text not null
 		)`,

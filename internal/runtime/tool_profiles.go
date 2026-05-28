@@ -35,6 +35,7 @@ const (
 	runMetadataContLeaseSeconds    = "continuation_lease_seconds"
 	runMetadataContAutoStart       = "continuation_auto_start"
 	runMetadataToolCWD             = "tool_cwd"
+	runMetadataOwnerEmail          = "owner_email"
 	runMetadataWorkerIsolation     = "worker_isolation"
 	runMetadataWorkerBaseSHA       = "worker_base_sha"
 	runMetadataWorkerBranch        = "worker_branch"
@@ -57,6 +58,7 @@ const (
 	toolCtxChannelID  toolContextKey = "channel_id"
 	toolCtxSandboxID  toolContextKey = "sandbox_id"
 	toolCtxDesktopID  toolContextKey = "desktop_id"
+	toolCtxOwnerEmail toolContextKey = "owner_email"
 	toolCtxRunRecord  toolContextKey = "run_record"
 	toolCtxWorkingDir toolContextKey = "tool_cwd"
 )
@@ -74,6 +76,9 @@ func WithToolExecutionContext(ctx context.Context, rec *types.RunRecord) context
 	if rec.Metadata != nil {
 		if cwd, _ := rec.Metadata[runMetadataToolCWD].(string); strings.TrimSpace(cwd) != "" {
 			ctx = context.WithValue(ctx, toolCtxWorkingDir, strings.TrimSpace(cwd))
+		}
+		if ownerEmail, _ := rec.Metadata[runMetadataOwnerEmail].(string); strings.TrimSpace(ownerEmail) != "" {
+			ctx = context.WithValue(ctx, toolCtxOwnerEmail, strings.TrimSpace(ownerEmail))
 		}
 	}
 	return ctx

@@ -58,6 +58,7 @@ type resendSendRequest struct {
 	To      []string       `json:"to"`
 	Cc      []string       `json:"cc,omitempty"`
 	Bcc     []string       `json:"bcc,omitempty"`
+	ReplyTo []string       `json:"reply_to,omitempty"`
 	Subject string         `json:"subject"`
 	Text    string         `json:"text,omitempty"`
 	HTML    string         `json:"html,omitempty"`

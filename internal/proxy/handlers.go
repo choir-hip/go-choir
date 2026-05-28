@@ -27,6 +27,7 @@ import (
 // only injects the JWT-verified user context via X-Authenticated-User.
 var clientIdentityHeaders = []string{
 	"X-Authenticated-User",
+	"X-Authenticated-Email",
 	"X-User-Id",
 	"X-User-Name",
 	"X-Forwarded-User",
@@ -74,6 +75,7 @@ type proxyVMctlHealthSummary struct {
 // AuthResult holds the result of access JWT validation.
 type AuthResult struct {
 	UserID string
+	Email  string
 	Valid  bool
 }
 
@@ -174,9 +176,14 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		if trustedUser != "" {
 			req.Header.Set("X-Authenticated-User", trustedUser)
 		}
+		trustedEmail := req.Header.Get("X-Proxy-Trusted-Email")
+		if trustedEmail != "" {
+			req.Header.Set("X-Authenticated-Email", trustedEmail)
+		}
 
 		// Clean up internal proxy headers before forwarding.
 		req.Header.Del("X-Proxy-Trusted-User")
+		req.Header.Del("X-Proxy-Trusted-Email")
 		req.Header.Del("X-Original-Path")
 		req.Header.Del("X-Original-RawQuery")
 		req.Header.Del("X-Resolved-Sandbox-URL")
@@ -260,8 +267,9 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 	if scope != "access" {
 		return nil, errors.New("token is not an access token")
 	}
+	email, _ := claims["email"].(string)
 
-	return &AuthResult{UserID: userID, Valid: true}, nil
+	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true}, nil
 }
 
 // HandleBootstrap handles GET /api/shell/bootstrap.
@@ -311,6 +319,9 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	// strip any client-supplied X-Authenticated-User and replace it with
 	// this trusted value before forwarding to the upstream.
 	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
+	if authResult.Email != "" {
+		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
+	}
 
 	// Preserve the original path and query for the director to use.
 	r.Header.Set("X-Original-Path", r.URL.Path)
@@ -365,6 +376,9 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Auth is valid. Store the trusted user context for the director.
 	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
+	if authResult.Email != "" {
+		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
+	}
 	r.Header.Set("X-Original-Path", r.URL.Path)
 	r.Header.Set("X-Original-RawQuery", r.URL.RawQuery)
 
@@ -498,6 +512,9 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	// Inject the trusted user context; strip any client-supplied value.
 	// The proxy is the trust boundary — only JWT-verified identity flows.
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
+	if authResult.Email != "" {
+		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+	}
 
 	dialStarted := time.Now()
 	sandboxConn, _, err := h.dialer.Dial(sandboxWSURL, sandboxHeader)
@@ -582,6 +599,9 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	terminalWSURL := h.terminalWSURLForTarget(sandboxURL, r.URL.RawQuery)
 	sandboxHeader := http.Header{}
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
+	if authResult.Email != "" {
+		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+	}
 
 	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
 	if err != nil {

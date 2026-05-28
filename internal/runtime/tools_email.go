@@ -43,6 +43,20 @@ type maildEmailDraftResponse struct {
 	Subject     string   `json:"subject"`
 }
 
+type maildApprovalEmailResponse struct {
+	Status            string `json:"status"`
+	TokenID           string `json:"token_id"`
+	ProviderMessageID string `json:"provider_message_id"`
+	ReviewURL         string `json:"review_url"`
+	ReplyAddress      string `json:"reply_address"`
+}
+
+type maildRiskAlertResponse struct {
+	Status            string `json:"status"`
+	AlertID           string `json:"alert_id"`
+	ProviderMessageID string `json:"provider_message_id"`
+}
+
 func newRequestEmailDraftTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "request_email_draft",
@@ -107,9 +121,13 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	if sourceHash == "" {
 		sourceHash = emailSourceContentHash(docID, revisionID, body)
 	}
+	ownerEmail := strings.TrimSpace(metadataString(parent.Metadata, runMetadataOwnerEmail))
+	if ownerEmail == "" {
+		ownerEmail = stringFromToolContext(ctx, toolCtxOwnerEmail)
+	}
 	approvalMode := strings.TrimSpace(in.ApprovalMode)
 	if approvalMode == "" {
-		approvalMode = "owner_click"
+		approvalMode = "owner_click_or_email_reply"
 	}
 	if approvalMode != "owner_click" && approvalMode != "owner_click_or_email_reply" {
 		return nil, fmt.Errorf("approval_mode must be owner_click or owner_click_or_email_reply")
@@ -163,10 +181,22 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	if risk != "" {
 		result["risk_code"] = risk
 		result["risk_alert_subject"] = "[Choir Risk Alert] Email draft blocked"
+		if strings.TrimSpace(rt.cfg.MaildURL) == "" {
+			result["risk_alert_status"] = "runtime_maild_url_not_configured"
+		} else if ownerEmail == "" {
+			result["risk_alert_status"] = "owner_email_not_available"
+		} else if alert, err := rt.persistEmailRiskAlertToMaild(ctx, ownerID, ownerEmail, risk, docID+":"+revisionID, body); err != nil {
+			result["risk_alert_status"] = "failed"
+			result["risk_alert_error"] = err.Error()
+		} else {
+			result["risk_alert_status"] = alert.Status
+			result["risk_alert_id"] = alert.AlertID
+			result["risk_alert_provider_message_id"] = alert.ProviderMessageID
+		}
 	} else if strings.TrimSpace(rt.cfg.MaildURL) == "" {
 		result["maild_persistence_status"] = "runtime_maild_url_not_configured"
 	} else {
-		persisted, err := rt.persistEmailDraftToMaild(ctx, ownerID, runID, in, fromAlias, toAddresses, subject, body)
+		persisted, err := rt.persistEmailDraftToMaild(ctx, ownerID, ownerEmail, runID, in, fromAlias, toAddresses, subject, body)
 		if err != nil {
 			status = "draft_persistence_failed"
 			result["status"] = status
@@ -187,6 +217,20 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 			result["maild_persistence_status"] = "persisted"
 			result["maild_draft_id"] = persisted.ID
 			result["maild_draft_version_hash"] = persisted.VersionHash
+			if approvalMode == "owner_click_or_email_reply" {
+				if ownerEmail == "" {
+					result["approval_email_status"] = "owner_email_not_available"
+				} else if approval, err := rt.persistEmailApprovalRequestToMaild(ctx, ownerID, ownerEmail, persisted.ID); err != nil {
+					result["approval_email_status"] = "failed"
+					result["approval_email_error"] = err.Error()
+				} else {
+					result["approval_email_status"] = approval.Status
+					result["approval_email_provider_message_id"] = approval.ProviderMessageID
+					result["approval_email_token_id"] = approval.TokenID
+					result["approval_email_review_url"] = approval.ReviewURL
+					result["approval_email_reply_address"] = approval.ReplyAddress
+				}
+			}
 		}
 	}
 
@@ -204,6 +248,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"email_draft_hash":       draftVersionHash,
 		"email_policy_status":    status,
 		"maild_draft_persisted":  result["maild_draft_persisted"],
+		runMetadataOwnerEmail:    ownerEmail,
 		"doc_id":                 docID,
 		"revision_id":            revisionID,
 	}
@@ -254,7 +299,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	return result, nil
 }
 
-func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailRunID string, in requestEmailDraftArgs, fromAlias string, toAddresses []string, subject, body string) (maildEmailDraftResponse, error) {
+func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, ownerEmail, emailRunID string, in requestEmailDraftArgs, fromAlias string, toAddresses []string, subject, body string) (maildEmailDraftResponse, error) {
 	maildURL := strings.TrimRight(strings.TrimSpace(rt.cfg.MaildURL), "/")
 	if maildURL == "" {
 		return maildEmailDraftResponse{}, fmt.Errorf("runtime maild url is not configured")
@@ -285,6 +330,9 @@ func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailR
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Authenticated-User", ownerID)
+	if strings.TrimSpace(ownerEmail) != "" {
+		req.Header.Set("X-Authenticated-Email", ownerEmail)
+	}
 	req.Header.Set("X-Internal-Caller", "true")
 	req.Header.Set("X-Choir-Email-Appagent-Run", emailRunID)
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -308,6 +356,63 @@ func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailR
 		return maildEmailDraftResponse{}, fmt.Errorf("maild draft response missing id or version hash")
 	}
 	return draft, nil
+}
+
+func (rt *Runtime) persistEmailApprovalRequestToMaild(ctx context.Context, ownerID, ownerEmail, draftID string) (maildApprovalEmailResponse, error) {
+	maildURL := strings.TrimRight(strings.TrimSpace(rt.cfg.MaildURL), "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, maildURL+"/api/email/drafts/"+draftID+"/approval-email", strings.NewReader(`{}`))
+	if err != nil {
+		return maildApprovalEmailResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authenticated-User", ownerID)
+	req.Header.Set("X-Authenticated-Email", ownerEmail)
+	req.Header.Set("X-Internal-Caller", "true")
+	return decodeMaildJSONResponse[maildApprovalEmailResponse](req)
+}
+
+func (rt *Runtime) persistEmailRiskAlertToMaild(ctx context.Context, ownerID, ownerEmail, riskKind, sourceRef, snippet string) (maildRiskAlertResponse, error) {
+	maildURL := strings.TrimRight(strings.TrimSpace(rt.cfg.MaildURL), "/")
+	payload := map[string]string{
+		"risk_kind":  riskKind,
+		"source_ref": sourceRef,
+		"snippet":    snippet,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return maildRiskAlertResponse{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, maildURL+"/api/notifications/email-risk-alert", bytes.NewReader(data))
+	if err != nil {
+		return maildRiskAlertResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authenticated-User", ownerID)
+	req.Header.Set("X-Authenticated-Email", ownerEmail)
+	req.Header.Set("X-Internal-Caller", "true")
+	return decodeMaildJSONResponse[maildRiskAlertResponse](req)
+}
+
+func decodeMaildJSONResponse[T any](req *http.Request) (T, error) {
+	var zero T
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return zero, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return zero, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return zero, fmt.Errorf("maild status %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	var out T
+	if err := json.Unmarshal(bodyBytes, &out); err != nil {
+		return zero, err
+	}
+	return out, nil
 }
 
 func persistentEmailAgentID(ownerID string) string {

@@ -32,6 +32,7 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"path":            r.URL.Path,
 			"user":            r.Header.Get("X-Authenticated-User"),
+			"email":           r.Header.Get("X-Authenticated-Email"),
 			"x_user_id":       r.Header.Get("X-User-Id"),
 			"authorization":   r.Header.Get("Authorization"),
 			"cookie":          r.Header.Get("Cookie"),
@@ -44,9 +45,10 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/email/messages?folder=inbox", nil)
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWTWithEmail(priv, "user-real", "owner@example.com")})
 	req.Header.Set("Authorization", "Bearer client-token")
 	req.Header.Set("X-Authenticated-User", "spoofed")
+	req.Header.Set("X-Authenticated-Email", "attacker@example.com")
 	req.Header.Set("X-User-Id", "spoofed-user-id")
 	req.Header.Set("X-Internal-Caller", "client-spoof")
 	w := httptest.NewRecorder()
@@ -64,6 +66,9 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	}
 	if resp["user"] != "user-real" {
 		t.Fatalf("forwarded user = %q, want user-real", resp["user"])
+	}
+	if resp["email"] != "owner@example.com" {
+		t.Fatalf("forwarded email = %q, want owner@example.com", resp["email"])
 	}
 	if resp["x_user_id"] != "" {
 		t.Fatalf("spoofed X-User-Id leaked to maild: %q", resp["x_user_id"])

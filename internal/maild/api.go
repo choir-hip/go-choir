@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 )
@@ -143,16 +144,33 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func authenticatedInternalOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
+	ownerID, _, ok := authenticatedInternalOwnerWithEmail(w, r)
+	return ownerID, ok
+}
+
+func authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
 	if ownerID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
-		return "", false
+		return "", "", false
 	}
 	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
-		return "", false
+		return "", "", false
 	}
-	return ownerID, true
+	return ownerID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
+}
+
+func normalizedTrustedEmail(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, "\r\n") {
+		return ""
+	}
+	addr, err := mail.ParseAddress(value)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(addr.Address))
 }
 
 func (h *Handler) handleMessageList(w http.ResponseWriter, r *http.Request, ownerID string) {

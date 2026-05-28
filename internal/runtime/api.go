@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 
@@ -220,6 +221,18 @@ func authenticateUser(r *http.Request) (string, error) {
 	return user, nil
 }
 
+func authenticatedUserEmail(r *http.Request) string {
+	value := strings.TrimSpace(r.Header.Get("X-Authenticated-Email"))
+	if value == "" || strings.ContainsAny(value, "\r\n") {
+		return ""
+	}
+	addr, err := mail.ParseAddress(value)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(addr.Address))
+}
+
 func requireInternalRuntimeCaller(r *http.Request) error {
 	if r.Header.Get("X-Internal-Caller") != "true" {
 		return fmt.Errorf("missing internal caller marker")
@@ -311,6 +324,9 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		"seed_prompt":            text,
 		"initial_document_title": buildInitialVTextTitle(text, ""),
 		"submission_surface":     "prompt_bar",
+	}
+	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
+		metadata[runMetadataOwnerEmail] = ownerEmail
 	}
 	if contentSourceURL != "" {
 		metadata["content_source_url"] = contentSourceURL
