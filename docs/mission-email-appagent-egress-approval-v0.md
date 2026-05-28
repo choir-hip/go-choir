@@ -778,3 +778,61 @@ next executable probe:
 - Bind host maild on guest-reachable interfaces, preserving external firewall
   invariants, then redeploy and prove a prompt-bar email request creates a
   visible Email Drafts row without sending.
+
+## Checkpoint: VText Tool Returned, Maild Draft Still Not Visible
+
+timestamp: 2026-05-28T06:52:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `58353f8` deployed the host-side maild
+bind change, Computer Use proved that a fresh prompt-bar request still did not
+create a visible Email Drafts row.
+
+fresh staging prompt:
+
+```text
+Create an email draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof 58353f8. Body: This is a staging proof that VText hands a draft to Email appagent and maild stores it without sending. Do not send the email.
+```
+
+observed product evidence:
+- Staging `/health` reported proxy and sandbox commit
+  `58353f84ef210387ce6b4da166b03b4ba37f8adb`, deployed at
+  `2026-05-28T10:38:01Z`.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26569605106`
+  completed successfully, including `Deploy to Staging (Node B)`.
+- The VText window wrote a canonical email artifact titled
+  `Email Draft: Choir Email appagent bridge proof 58353f8`.
+- The product event stream showed
+  `6beabdab-9866-4744-81d3-5b3f4d8aca73 request_email_draft returned`.
+- After focusing Email, opening Drafts, and refreshing, the Email app still
+  showed exactly two old drafts: `Choir approved draft hash proof 1a06a36` and
+  `Choir draft smoke 18035fc`. The new `58353f8` draft was not present.
+- Sent still showed three messages, so the no-send invariant remained intact.
+
+belief-state changes:
+- The prior loopback bind diagnosis was necessary but not sufficient, or the
+  product run did not execute the maild persistence branch even though the
+  tool returned.
+- The product UI's "request_email_draft returned" event is too weak as
+  evidence. Acceptance requires the maild-backed Email app Drafts row and,
+  later, Trace evidence with a first-class Email appagent node.
+- The next investigation should inspect the runtime tool result path and
+  maild bridge response, not VText prose. The VText document can repeat stale
+  or model-inferred maild status.
+
+remaining error field:
+- VText can create a canonical email artifact and invoke `request_email_draft`,
+  but the appagent-to-maild handoff still does not yield a visible mailbox
+  draft on staging.
+- Prompt-bar simple email remains stopped at Trace/tool-return evidence, below
+  the mission's product-path acceptance bar.
+
+next executable probe:
+- Inspect `request_email_draft` result handling and maild persistence errors
+  from product-accessible evidence or logs.
+- Add the smallest durable evidence surface needed so a returned
+  `request_email_draft` exposes whether maild persistence succeeded, failed,
+  or was skipped.
+- Fix the persistence boundary only after root cause is identified; do not
+  bypass Email appagent or send mail directly.
