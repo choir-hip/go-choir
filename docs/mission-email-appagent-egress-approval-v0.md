@@ -3705,3 +3705,23 @@ fix direction:
 - Replace the tagline with a broader one-liner that names research,
   publishing, media intelligence, and software without adding metadata or
   internal implementation language to the email.
+
+### Checkpoint: Broader Footer Tagline Deployed
+
+status: deployed_proof
+timestamp: 2026-05-28T20:24Z
+
+code and deploy:
+- `db5ceac` documented the footer tagline problem before code changes.
+- `13e7e95` changed the generated email disclosure to:
+  `Sent by Choir, an automatic computer for research, publishing, media intelligence, and software. This automated email was sent after owner approval.`
+- Local focused maild tests passed:
+  `nix develop -c go test ./internal/maild -run 'TestBuildResendSendRequestGeneratesSafeHTMLPart|TestDraftSendStoresSentAndPreventsSecondSend|Test.*Approval'`
+- GitHub Actions CI run `26599907352` passed for
+  `13e7e952e9468730aedf8c3ac02a15ef19564456`, including the Node B staging
+  deploy job.
+- `https://choir.news/health` reported proxy build commit
+  `13e7e952e9468730aedf8c3ac02a15ef19564456`.
+- Read-only Node B verification found the new footer string in the deployed
+  maild override binary at `/var/lib/go-choir/services/maild/bin/maild` and
+  did not find the old `personal workflows` wording.
