@@ -522,6 +522,8 @@ func emailDraftArtifactTailMarkers() []string {
 		"\n**notes:**",
 		"\nnotes:",
 		"\n---",
+		"\ncreate the draft only",
+		" create the draft only",
 		"\ndo not send",
 		" do not send",
 	}
@@ -562,6 +564,10 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 	}
 
 	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{
+		"\nbody exactly:",
+		" body exactly:",
+		"\n**body exactly:**",
+		" **body exactly:**",
 		"\nbody:",
 		" body:",
 		"\n**body:**",
@@ -573,6 +579,12 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		"\nstatus:",
 		"\n**status:**",
 	}, emailDraftArtifactTailMarkers()...))
+	if !bodyLabeled {
+		body, bodyLabeled = extractEmailLabeledField(combined, "body exactly", append([]string{
+			"\nstatus:",
+			"\n**status:**",
+		}, emailDraftArtifactTailMarkers()...))
+	}
 	if !bodyLabeled {
 		body = fallbackEmailBodyAfterAddress(combined, to[0])
 	}

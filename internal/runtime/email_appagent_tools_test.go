@@ -508,6 +508,23 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 	}
 }
 
+func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {
+	prompt := "Create a VText-backed Email appagent draft to yusefnathanson@me.com. " +
+		"Subject: Choir Email artifact-tail proof 552c443. " +
+		"Body exactly: This is a deployed proof that Choir trims artifact instructions before sending email. " +
+		"Create the draft only; do not send."
+	intent, ok := extractEmailDraftIntent(prompt, "")
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if intent.Subject != "Choir Email artifact-tail proof 552c443" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if intent.BodyText != "This is a deployed proof that Choir trims artifact instructions before sending email." {
+		t.Fatalf("body_text = %q", intent.BodyText)
+	}
+}
+
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
