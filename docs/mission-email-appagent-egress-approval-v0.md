@@ -2898,3 +2898,28 @@ remaining waiting condition:
   `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` remains pending; a fresh
   `approve` reply should still prove the send-by-email path, while a fresh
   `deny` reply should now record `email_reply_rejected` without sending.
+
+### Problem Checkpoint: Edit Reply Does Not Issue Fresh Approval Notice
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T16:32Z
+evidence source: code inspection and mission acceptance audit
+
+problem:
+- The mission requires an approval reply with edit instructions to create a new
+  draft version, invalidate prior approval, and require reapproval.
+- The current `processApprovalReply` edit branch records
+  `email_reply_edit_requested`, marks the old token `edited`, and updates the
+  draft body/version through `UpdateDraftTextFromApprovalEdit`.
+- It does not send a fresh approval email for the new draft version. That means
+  a user who is operating through email alone receives no new scoped
+  `approve+<token>@choir.news` address for the edited version.
+
+fix direction:
+- Reuse the approval-email generation path from
+  `/api/email/drafts/{id}/approval-email` inside the edit-reply branch after
+  the draft version is updated.
+- The new approval email must be scoped to the updated draft version/hash and
+  must not send the draft itself.
+- Add a regression test that `edit:` creates a new version, marks the old token
+  `edited`, sends a new approval notice, and leaves the draft unsent.
