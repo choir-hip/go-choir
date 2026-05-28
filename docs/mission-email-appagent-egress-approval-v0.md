@@ -2380,3 +2380,42 @@ remaining error field:
   Trace trajectory. The mission's Trace requirement asks for the Email appagent
   node plus approval/send evidence refs; current implementation has the node
   and draft evidence in Trace but uses maild tables for approval/send.
+
+## Problem Evidence Checkpoint: Approval And Send Evidence Is Not In Trace
+
+timestamp: 2026-05-28T10:49:00-04:00
+status: documented_before_fix
+
+current deployed evidence:
+- Trace trajectory `ef31cbfe-1b1f-4c53-9f8e-dee8200233a7` shows the correct
+  prompt-bar -> VText -> Email appagent draft handoff for draft
+  `email-draft-afffb9c9-b4a3-4f91-a972-cd2eacb52c4d`.
+- The same Trace includes Email appagent run
+  `7fcf95e9-c048-46f6-8d9b-b505f756da47` and records draft creation with
+  `maild_send_attempted:false` and `send_authorized:false`.
+- Maild later recorded an exact-version owner-click approval event
+  `email-approval-23483255-31d2-49a4-b278-2accd4bc2667`, marked the draft
+  `sent`, and stored provider id `8dbd98e0-7cf8-4321-8a58-62d6f4ecdcf1`.
+- The approval/send facts are visible in maild SQLite, but a Trace log grep for
+  the trajectory only shows draft creation and does not show the later owner
+  click, send decision, maild sent message id, or provider receipt.
+
+why this matters:
+- The mission explicitly requires Trace to show the Email appagent causal node,
+  draft/version creation, approval request, approval receipt or owner click,
+  send decision, and maild/provider receipt refs.
+- Current implementation proves the Email appagent node and draft creation, but
+  approval/send evidence is split into a separate maild ledger. That is not
+  enough for an owner-readable Trace audit of external side effects.
+
+required fix direction:
+- Preserve maild as mailbox/transport infrastructure; do not make maild an
+  agent authority.
+- Add a narrow internal runtime event append path so maild can attach
+  approval/send evidence to the existing Email appagent run id carried in
+  `email_drafts.source_ref`.
+- Emit bounded structured events for `email.draft.approval_recorded` and
+  `email.draft.sent` after a draft send succeeds. Include draft id, version,
+  version hash, approval event id/type, sent message id, and provider message
+  id. Do not include email body text, raw headers, secrets, approval tokens, or
+  private trace logs.
