@@ -268,6 +268,16 @@ EOF
         esac
       done
 
+      # Older vmmanager bootstraps had vmctl/gateway tap URLs before maild was
+      # added. Derive the same tap host on port 8087 so refreshed active
+      # computers converge Email draft persistence without a manual VM restart.
+      if ! grep -q '^RUNTIME_MAILD_URL=' "$ENV_FILE"; then
+        vmctl_url="$(sed -n 's/^RUNTIME_VMCTL_URL=//p' "$ENV_FILE" | tail -n1)"
+        if [ -n "$vmctl_url" ]; then
+          printf 'RUNTIME_MAILD_URL=%s\n' "$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8087/')" >> "$ENV_FILE"
+        fi
+      fi
+
       # Back-compat fallback for older bootstraps that wrote only the host-side
       # token file expectation. Kernel cmdline now provides first-boot truth.
       if [ -f /mnt/persistent/gateway-token ]; then
