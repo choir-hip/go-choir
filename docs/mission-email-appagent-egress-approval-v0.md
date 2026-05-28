@@ -3001,3 +3001,46 @@ fix direction:
   approval token before any late reply.
 - If practical, add startup repair for existing deployed rows so old sent
   drafts do not retain active approval tokens indefinitely.
+
+### Fix Checkpoint: Sent Draft Approval Tokens Staled
+
+status: stale_sent_token_repair_deployed
+timestamp: 2026-05-28T16:38Z
+evidence source: local focused tests, GitHub Actions, staging health, deployed
+maild SQLite
+
+commits:
+- `fd38002` documented the stale active approval-token gap before code changes.
+- `f325b6c` made `MarkDraftSent` stale still-active approval tokens for the
+  sent draft and added startup repair for existing sent drafts with active
+  tokens.
+
+local verification:
+- `nix develop -c go test ./internal/maild -run
+  'TestDraftSendMarksActiveApprovalTokensStale|TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry|TestEnsureSchemaRepairsActiveApprovalTokensForSentDrafts|TestDraftSendStoresSentAndPreventsSecondSend|TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken|TestApprovalReplyApprovesExactDraftVersionOnce'`
+  passed.
+- `nix develop -c go test ./internal/maild ./internal/runtime
+  ./internal/types -run
+  'Test.*Email|Test.*Draft|Test.*Approval|Test.*Risk|TestEmailDraftEventKinds|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+  passed.
+
+deployment evidence:
+- GitHub Actions CI run `26588146811` succeeded for
+  `f325b6c64552796257e5f0aaa2b62e2d536daee2`.
+- Deploy job `78339867530` succeeded.
+- FlakeHub publish run `26588146845` was triggered for the same commit.
+- `https://choir.news/health` reported deployed commit
+  `f325b6c64552796257e5f0aaa2b62e2d536daee2` and deployed_at
+  `2026-05-28T16:36:34Z`.
+
+deployed data proof:
+- After the `f325b6c` deploy, a live maild SQLite check showed
+  `0` active approval tokens attached to `sent` drafts.
+- Previously active tokens on older sent drafts were repaired to
+  `stale_sent` with `used_at` set to the deploy-time repair timestamp.
+
+remaining waiting condition:
+- This closes stale authority state for already-sent drafts.
+- It does not prove email reply approval/edit/reject. That still requires a
+  fresh real inbound owner reply to an active `approve+<token>@choir.news`
+  approval email.
