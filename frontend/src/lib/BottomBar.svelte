@@ -111,9 +111,9 @@
     menuOpen = false;
   }
 
-  function latestFeatureTransition() {
-    return (featureTransitions || [])
-      .filter((item) => item?.adoption_id && item.adoption_id !== dismissedFeatureID)
+  function latestFeatureTransition(transitions, dismissedID) {
+    return (transitions || [])
+      .filter((item) => item?.adoption_id && item.adoption_id !== dismissedID)
       .find((item) => ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(item.status)) || null;
   }
 
@@ -142,6 +142,46 @@
     return String(adoption.status || '').replaceAll('_', ' ');
   }
 
+  function featureTransitionRank(status) {
+    const ranks = {
+      adoption_proposed: 1,
+      candidate_applied: 2,
+      verifying: 3,
+      built: 4,
+      blocked: 5,
+      verified: 6,
+      owner_approved: 7,
+      adopted: 8,
+      rolled_back: 8,
+    };
+    return ranks[status] || 0;
+  }
+
+  function newerFeatureTransition(first, second) {
+    if (!first) return second;
+    if (!second) return first;
+    const firstRank = featureTransitionRank(first.status);
+    const secondRank = featureTransitionRank(second.status);
+    if (secondRank > firstRank) return second;
+    if (firstRank > secondRank) return first;
+    const firstTime = new Date(first.updated_at || first.created_at || 0).getTime();
+    const secondTime = new Date(second.updated_at || second.created_at || 0).getTime();
+    return secondTime >= firstTime ? second : first;
+  }
+
+  function mergeFeatureTransitions(nextAdoptions = []) {
+    const merged = new Map();
+    for (const adoption of featureTransitions || []) {
+      if (adoption?.adoption_id) merged.set(adoption.adoption_id, adoption);
+    }
+    for (const adoption of nextAdoptions || []) {
+      if (!adoption?.adoption_id) continue;
+      merged.set(adoption.adoption_id, newerFeatureTransition(merged.get(adoption.adoption_id), adoption));
+    }
+    featureTransitions = [...merged.values()]
+      .sort((first, second) => new Date(second.updated_at || second.created_at || 0) - new Date(first.updated_at || first.created_at || 0));
+  }
+
   async function refreshFeatureTransitions() {
     if (!canRefreshFeatureTransitions()) {
       featureTransitions = [];
@@ -151,7 +191,7 @@
       const res = await fetchWithRenewal('/api/adoptions?limit=20', { method: 'GET' });
       if (!res.ok) return;
       const body = await res.json().catch(() => ({}));
-      featureTransitions = Array.isArray(body?.adoptions) ? body.adoptions : [];
+      mergeFeatureTransitions(Array.isArray(body?.adoptions) ? body.adoptions : []);
     } catch (_err) {
       // Desk remains usable without the feature summary.
     }
@@ -273,15 +313,14 @@
 
   function mergeFeatureTransition(adoption) {
     if (!adoption?.adoption_id) return;
-    featureTransitions = [
-      adoption,
-      ...featureTransitions.filter((item) => item.adoption_id !== adoption.adoption_id),
-    ];
+    mergeFeatureTransitions([adoption]);
   }
 
   function handleFeatureTransitionObserved(event) {
     mergeFeatureTransition(event?.detail?.adoption);
-    void refreshFeatureTransitions();
+    if (canRefreshFeatureTransitions()) {
+      void refreshFeatureTransitions();
+    }
   }
 
   function resizePromptInput() {
@@ -327,7 +366,7 @@
   })();
 
   $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
-  $: deskFeatureTransition = latestFeatureTransition();
+  $: deskFeatureTransition = latestFeatureTransition(featureTransitions, dismissedFeatureID);
   $: deskHasFeatureAction = !!deskFeatureTransition && ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(deskFeatureTransition.status);
 
   onMount(() => {
