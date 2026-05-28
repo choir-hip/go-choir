@@ -219,6 +219,11 @@ func TestCleanEmailDraftBodyTextRemovesToolMarkupResidue(t *testing.T) {
 			want: "Here is the short demo note.",
 		},
 		{
+			name: "generic trailing malformed parameter tag",
+			in:   "Here is the short demo note.</pparameter>",
+			want: "Here is the short demo note.",
+		},
+		{
 			name: "ordinary less-than content",
 			in:   "The result is 2 < 3.",
 			want: "The result is 2 < 3.",

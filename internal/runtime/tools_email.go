@@ -366,6 +366,8 @@ func cleanEmailDraftBodyText(value string) string {
 	cleaned := strings.TrimSpace(value[:cut])
 	for {
 		next := strings.TrimSpace(cleaned)
+		next = trailingEmailDraftToolTagPattern.ReplaceAllString(next, "")
+		next = strings.TrimSpace(next)
 		next = strings.TrimSuffix(next, "</")
 		next = strings.TrimSpace(next)
 		if next == cleaned {
@@ -393,6 +395,7 @@ type emailDraftIntent struct {
 
 var emailAddressPattern = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
 var choirSenderAliasPattern = regexp.MustCompile(`(?i)^[0-9]+(?:\+[A-Z0-9][A-Z0-9._\-]{0,63})?@choir\.news$`)
+var trailingEmailDraftToolTagPattern = regexp.MustCompile(`(?is)</[a-z][a-z0-9:_-]*>\s*$`)
 
 func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 	combined := strings.TrimSpace(prompt + "\n" + content)
