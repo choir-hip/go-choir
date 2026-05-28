@@ -262,6 +262,28 @@
     }
   }
 
+  async function emailApprovalLink() {
+    const draftId = detail?.draft?.id;
+    if (!draftId) return;
+    sending = true;
+    actionStatus = '';
+    try {
+      const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(draftId)}/approval-email`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error('Could not send approval email');
+      }
+      actionStatus = 'Approval email sent to your account email';
+      await loadDetail(draftId, { openPane: true });
+    } catch (err) {
+      handleError(err);
+    } finally {
+      sending = false;
+    }
+  }
+
   function openCompose() {
     composeOpen = true;
     replyOpen = false;
@@ -542,6 +564,7 @@
 
       <div class="actions">
         {#if detail.draft}
+          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={emailApprovalLink}>Email approval link</button>
           <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
         {:else}
           <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
