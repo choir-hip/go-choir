@@ -2526,3 +2526,58 @@ required fix direction:
 - Keep the same test shape: when `MAILD_VMCTL_URL` is configured, maild must
   append trace events to the resolved owner sandbox URL and must not use the
   static `MAILD_RUNTIME_URL`.
+
+### Problem Evidence Checkpoint: Maild Vmctl Environment Was Not Activated
+
+status: checkpoint_incomplete
+timestamp: 2026-05-28T15:23Z
+evidence source: deployed commit
+`334e9bc36c2d167b12e2c5d955cd3aeff4730dc8`, live Node B systemd unit, and
+deployed owner-click email proof
+
+observation:
+- GitHub Actions run `26583586922` completed successfully and Node B health
+  reported proxy/sandbox deployed commit
+  `334e9bc36c2d167b12e2c5d955cd3aeff4730dc8`.
+- A live prompt-bar path created two drafts with subject
+  `Choir Email trace routed proof 334e9bc`.
+- Computer Use observed the Email app owner-click path on draft
+  `email-draft-517a9ad5-f1f3-46cf-a550-b8e45476c8c5`; maild recorded
+  approval event `email-approval-2bd947c4-4b3e-4114-bfde-aaf205b35915`,
+  sent message id `resend-message-7c0121dfc761e8e2262a867aa01601d6`, and
+  Resend provider message id `6e016015-632b-4a34-bbc6-bb57e62166b4`.
+- Maild still logged failed Trace append attempts for Email appagent run
+  `e9fecdfb-725a-48da-9424-834b378f05cd`:
+  `runtime trace event status 404 Not Found: {"error":"run not found"}`.
+- A direct invalid-kind POST to the resolved owner runtime
+  `http://10.200.60.2:8085/internal/runtime/runs/e9fecdfb-725a-48da-9424-834b378f05cd/events`
+  returned the expected `400 unsupported internal event kind`, proving the
+  deployed runtime POST route can find that run when called on the owner VM.
+- `systemctl cat go-choir-maild` on Node B showed
+  `MAILD_RUNTIME_URL=http://127.0.0.1:8085` but no `MAILD_VMCTL_URL`.
+
+root cause:
+- Commit `dd50adc` added `MAILD_VMCTL_URL` to `nix/node-b.nix`, but its Node B
+  deploy failed while building the NixOS closure because maild imported the
+  vmctl Go package.
+- Commit `334e9bc` fixed the Go dependency shape and deployed successfully, but
+  it changed only `internal/maild/trace_events.go`.
+- The deploy classifier therefore used a host-service pointer deploy. That
+  updated the maild binary and restarted the service, but intentionally skipped
+  the NixOS switch that would activate the already-pushed systemd environment
+  change from `dd50adc`.
+
+belief-state changes:
+- The owner runtime resolver code is present in the deployed maild binary.
+- The configured resolver URL is not present in the live maild unit, so maild
+  falls back to the host static runtime URL and appends to the wrong runtime.
+- The remaining fix is deploy wiring convergence, not Email appagent policy or
+  runtime Trace API behavior.
+
+required fix direction:
+- Push a small host-configuration commit that changes `nix/node-b.nix`, forcing
+  a host NixOS closure deploy so the live `go-choir-maild` unit includes
+  `MAILD_VMCTL_URL=http://127.0.0.1:8083`.
+- After deploy, confirm `systemctl cat go-choir-maild` shows the resolver URL,
+  then send or approve a remaining draft and require `email.draft.approval_recorded`
+  and `email.draft.sent` events on the Email appagent run.
