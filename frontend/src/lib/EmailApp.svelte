@@ -95,22 +95,6 @@
     }
   }
 
-  async function markRead() {
-    if (!selectedId) return;
-    try {
-      const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(selectedId)}/read`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        if (res.status === 401) throw new AuthRequiredError();
-        throw new Error('Could not mark read');
-      }
-      await loadMessages(activeFolder);
-    } catch (err) {
-      handleError(err);
-    }
-  }
-
   async function respondWithChoir() {
     if (!selectedId) return;
     actionStatus = 'Creating Choir response handoff...';
@@ -311,7 +295,6 @@
             on:click={() => loadDetail(message.id)}
             data-email-message-id={message.id}
           >
-            <span class="unread-dot" class:read={message.read_at}></span>
             <span class="sender">{message.from_display || message.from_address}</span>
             <span class="time">{formatTime(message.received_at || message.sent_at || message.created_at)}</span>
             <span class="subject">{message.subject || '(no subject)'}</span>
@@ -423,7 +406,6 @@
       <div class="actions">
         <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
         <button type="button" on:click={respondWithChoir}>Respond with Choir</button>
-        <button type="button" on:click={markRead}>Mark read</button>
       </div>
 
       {#if replyOpen}
@@ -574,12 +556,12 @@
   .message-row {
     width: 100%;
     display: grid;
-    grid-template-columns: 12px minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "dot sender sender time"
-      "dot subject subject subject"
-      "dot snippet snippet snippet"
-      "dot trust trust attachment";
+      "sender sender time"
+      "subject subject subject"
+      "snippet snippet snippet"
+      "trust trust attachment";
     gap: 4px 10px;
     text-align: left;
     padding: 13px 12px;
@@ -588,19 +570,6 @@
     border-radius: 8px;
     background: transparent;
     cursor: pointer;
-  }
-
-  .unread-dot {
-    grid-area: dot;
-    width: 8px;
-    height: 8px;
-    align-self: center;
-    border-radius: 50%;
-    background: #4088ff;
-  }
-
-  .unread-dot.read {
-    background: transparent;
   }
 
   .sender {

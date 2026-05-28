@@ -136,7 +136,7 @@ proxy config: PROXY_MAILD_URL=http://127.0.0.1:8087
 `maild` should not need `PROXY_VMCTL_URL`, sandbox credentials, gateway tokens,
 or any direct agent/runtime endpoint.
 
-Implementation checkpoint, 2026-05-26:
+Implementation checkpoint, 2026-05-28:
 
 - `cmd/maild` and `internal/maild` own the SQLite schema, Resend webhook
   verification, Resend received-message fetch, outbound send, attachment
@@ -160,10 +160,15 @@ Implementation checkpoint, 2026-05-26:
   or automation.
 - `internal/proxy` owns authenticated `/api/email/*` forwarding and the
   `/api/email/messages/:id/send-to-choir` compound operation.
-- Successful proxy-owned Send to Choir handoff records an owner/message-scoped
+- Successful proxy-owned Respond with Choir handoff records an
+  owner/message-scoped
   `email_ingress_events` row in `maild` after prompt-bar submission. This is
   read-only operator evidence; `maild` still never receives sandbox credentials
   or calls MAS directly.
+- Trusted plus-code aliases use exact unlisted local parts plus whitelisted
+  senders and passing SPF/DKIM/DMARC evidence to create a
+  `pending_conductor` email_ingress_events row. This is a mail-side workflow
+  request boundary, not a direct agent run.
 - The authenticated source-packet route returns provenance, a stable normalized
   text ref, and the normalized plain-text email body. The proxy submits a
   bounded, line-prefixed copy of that body into the existing prompt-bar path
@@ -195,8 +200,10 @@ Implementation checkpoint, 2026-05-26:
 - `scripts/mail-gandi-rollback-records` uses the same Resend domain JSON plus a
   pre-apply Gandi snapshot to restore or delete affected RRsets. It is also
   dry-run by default and requires `--allow-root-mx --apply` for root MX rollback.
-- DNS/MX, real Resend setup, attachment content download, and real staging proof
-  are still future steps.
+- DNS/MX, real Resend setup, live inbound, live attachment quarantine, live
+  owner reply, and deployed trusted plus-code handoff have proof in
+  [mission-email-demo-ingress-v0.md](mission-email-demo-ingress-v0.md). VText
+  response generation remains downstream and known broken after v1.
 
 ## Data Flow
 
@@ -216,10 +223,10 @@ Resend receives mail for choir.news
   -> Email app displays through authenticated proxy APIs
 ```
 
-Manual MAS handoff:
+Manual response workflow handoff:
 
 ```text
-owner clicks "Send to Choir" or "Summarize with Choir"
+owner clicks "Respond with Choir"
   -> browser POSTs /api/email/messages/:id/send-to-choir through proxy
   -> proxy validates owner session
   -> proxy asks maild for an owner-visible source packet

@@ -1,6 +1,6 @@
 # MissionGradient: Email Demo Ingress v0
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 Reference:
 
@@ -44,20 +44,23 @@ has reached the VText boundary.
 
 ```text
 status: checkpoint_incomplete
-current artifact state: provider/DNS/runtime setup and the plain email substrate
-  have live proof. Resend reports choir.news verified for sending and
-  receiving. Gandi apex MX routes choir.news inbound mail to Resend. Resend has
-  an enabled email.received webhook for
-  https://choir.news/api/email/resend/webhook. Node B maild health reports
-  resend_api_key_configured=true and webhook_secret_configured=true. Public
-  unsigned webhook probes fail closed with invalid_signature. 000@choir.news
-  resolves through email_aliases to yusefnathanson@me.com's auth user id
-  5bd6de97-3b58-408c-bf89-c42c81b083de. Live provider-routed inbound, direct
-  SMTP inbound, owner-scoped outbound reply, and owner-triggered response
-  handoff are proven. Account-scoped verified-sender/code-alias policy and the
-  durable VText-response workflow request boundary remain incomplete.
-what shipped: inherited from the maild v0 mission; do not assume the old mission
-  stopping condition is satisfied.
+current artifact state: provider/DNS/runtime setup, public mailbox delivery,
+  attachment quarantine, owner-scoped outbound reply, manual Respond with Choir,
+  and trusted plus-code pending workflow handoff all have deployed proof.
+  Resend reports choir.news verified for sending and receiving. Gandi apex MX
+  routes choir.news inbound mail to Resend. Resend has an enabled
+  email.received webhook for https://choir.news/api/email/resend/webhook.
+  Node B maild health reports resend_api_key_configured=true and
+  webhook_secret_configured=true. Public unsigned webhook probes fail closed
+  with invalid_signature. 000@choir.news resolves through email_aliases to
+  yusefnathanson@me.com's auth user id
+  5bd6de97-3b58-408c-bf89-c42c81b083de.
+what shipped: docs checkpoint 0a3029b and behavior commit
+  63aae2950992706e4f105ca14ef5686db71decc9. The behavior commit adds the
+  trusted plus-code workflow policy, maildctl alias configuration, pending
+  conductor handoff rows for verified whitelisted plus-code mail, stricter
+  authentication-result evidence checks, source-packet workflow provenance, and
+  Email app copy that names the owner action "Respond with Choir".
 what was proven: readiness was re-probed; Resend loopback mail to 000@choir.news
   stored message resend-message-f20817a211067c9ef9fc1180a0aa86a9 and source
   packet resend-source-packet-b16502d434ef415f55e1fd9985ce1e0e; authenticated
@@ -70,31 +73,34 @@ what was proven: readiness was re-probed; Resend loopback mail to 000@choir.news
   event; owner-triggered response handoff for that SMTP message created
   conductor submission 6b50c89e-3bdb-4d0b-8d2e-82d4f22dd8fb and maild ingress
   event email-ingress-event-f0f0e81661c373c1e08ef74e63a5469a.
-unproven or partial claims: attachment quarantine on live provider traffic,
-  account-scoped verified-sender prompt-bar-equivalent ingress, code-alias
-  automation, explicit "Respond with Choir" workflow request shape, cleanup
-  convergence.
-highest-impact uncertainty: how to expose the minimal durable policy/request
-  boundary so verified sender mail can become account-scoped prompt-bar
-  equivalent while public mail remains mailbox-only and maild remains
-  non-agentic.
-next executable probe: add the smallest policy/workflow-request surface around
-  existing alias, sender whitelist, source-packet, and proxy handoff behavior;
-  prove public inbound stays mailbox-only and trusted/code-alias mail creates
-  only the authorized request/handoff.
+unproven or partial claims: true external human-sender demo with the final
+  chosen invite alias and downstream VText response generation. The plus-code
+  email side intentionally stops at a pending_conductor handoff because VText is
+  known broken after v1.
+highest-impact uncertainty: whether the small convergence diff deploys without
+  regressing the proved mail substrate.
+next executable probe: land the convergence diff, confirm deployed identity, and
+  rerun one live read-only acceptance check plus Email app UI observation.
 ```
 
 ## Run Checkpoint & Resumption State
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: 2026-05-28 live email substrate proof
+last checkpoint: 2026-05-28 deployed trusted plus-code and quarantine proof
 current artifact state: 000@choir.news is account-scoped to
   5bd6de97-3b58-408c-bf89-c42c81b083de. Provider DNS/webhook/runtime is live.
-  Public inbound mail stores as public/untrusted mailbox state. Owner UI reply
-  sends through Resend and stores Sent. Owner-triggered Respond with Choir uses the
-  product prompt-bar path and records a maild ingress receipt.
-what shipped: no new code shipped in this checkpoint.
+  Public inbound mail stores as public/untrusted mailbox state. Attachment mail
+  stores in Quarantine with quarantined metadata. Owner UI reply sends through
+  Resend and stores Sent. Owner-triggered Respond with Choir uses the product
+  prompt-bar path and records a maild ingress receipt. Verified whitelisted
+  plus-code mail creates a pending_conductor email_ingress_events row and a
+  source packet annotated as prompt_bar_equivalent without directly running
+  agents from maild.
+what shipped:
+  - 0a3029b docs: checkpoint email demo ingress proof
+  - 63aae2950992706e4f105ca14ef5686db71decc9 feat: add trusted email workflow
+    handoff
 what was proven:
   - scripts/mail-provider-readiness passed for Resend/Gandi/Node B maild except
     local .env intentionally lacks RESEND_WEBHOOK_SECRET while Node B has it.
@@ -115,33 +121,63 @@ what was proven:
     resend-source-packet-2547f93e723e0e87a26db69218240152, conductor submission
     6b50c89e-3bdb-4d0b-8d2e-82d4f22dd8fb, and ingress event
     email-ingress-event-f0f0e81661c373c1e08ef74e63a5469a.
+  - CI run 26548131552 and Publish/FlakeHub run 26548131531 passed for
+    63aae2950992706e4f105ca14ef5686db71decc9; choir.news /health reported
+    proxy and upstream deployed commit
+    63aae2950992706e4f105ca14ef5686db71decc9.
+  - trusted alias 000+invite-smoke@choir.news was configured for owner
+    5bd6de97-3b58-408c-bf89-c42c81b083de and whitelisted sender
+    000@choir.news; authenticated Resend message
+    CHOIR_MAIL_TRUSTED_ALIAS_20260528T010441Z_22093 stored as
+    resend-message-4ed741f34c2ba7ca0bf5be428e5204b6 with webhook
+    msg_3EKbcA7xgqQEcRrThaasEbrqsVL and pending ingress event
+    email-ingress-event-79ea06b1a4d3385dd3282525efc44fbc.
+  - that trusted source packet
+    resend-source-packet-e48931de6748b4cc38d0871c34adfc1a recorded
+    prompt_bar_equivalent=true, sender_authority=verified_sender_policy,
+    receive_policy_id=policy-trusted-workflow-v0, and
+    workflow_handoff_status=pending_conductor.
+  - direct SMTP negative probe
+    CHOIR_MAIL_PLUS_NEGATIVE_20260528T010516Z_13911 to the plus-code alias was
+    rejected with "passing authentication results required" and created no
+    message or ingress event.
+  - live Resend attachment message
+    CHOIR_MAIL_ATTACHMENT_QUARANTINE_20260528T010950Z_25800 stored as
+    resend-message-3d1dbb3525ec84f0bb75ff571d07d8bd in Quarantine with
+    provider event msg_3EKcErsUxMa8NIo5C4S1bzlJEcR. Attachment
+    resend-attachment-794476ee544e01f1d1f560957c6869f7
+    (choir-quarantine-proof.txt, text/plain, 94 bytes) has status
+    quarantined. Source packet
+    resend-source-packet-a5372759fb72debad78b2726e4209801 records
+    prompt_bar_equivalent=false and attachment_count=1. No ingress events
+    exist for this message. The deployed Email app showed it in Quarantine with
+    the attachment marked quarantined.
 unproven or partial claims:
-  - verified-sender mail does not yet have a durable account-scoped policy/API
-    or request boundary beyond manually clicking Respond with Choir.
-  - plus-code aliases are tested in lower-level trusted-upload form but not
-    configured as demo workflow request aliases.
   - VText response generation remains known broken after v1 and is outside this
     email mission.
+  - the eventual in-person demo needs the final invite alias/sender policy
+    chosen and configured; 000+invite-smoke is a proof alias, not product copy.
 belief-state changes:
   - provider payload shape, webhook signature, alias resolution, mailbox
-    storage, authenticated Email app visibility, and owner reply are no longer
-    the primary uncertainties.
-  - the live gap is now policy and request topology, not mail transport.
+    storage, authenticated Email app visibility, owner reply, attachment
+    quarantine, and plus-code policy handoff are no longer the primary
+    uncertainties.
+  - the live gap is now convergence and downstream VText repair, not mail
+    transport or mail-side authority topology.
 remaining error field:
-  - attachment live proof, verified-sender policy surface, plus-code request
-    surface, deletion-first cleanup, and deployed post-code acceptance.
+  - cleanup deploy proof, final demo alias policy choice, and separate VText
+    repair.
 highest-impact remaining uncertainty:
-  - whether the smallest extension should reuse email_ingress_events or add a
-    distinct workflow request object for pending VText/demo response handoff.
+  - whether the convergence diff deploys cleanly without changing mail
+    transport behavior.
 next executable probe:
-  - implement a minimal durable workflow request/policy surface, with tests
-    proving public mail remains mailbox-only and trusted/code-alias mail only
-    creates authorized request/handoff state.
+  - land the convergence diff, confirm deployed identity, and rerun the live
+    quarantined-attachment acceptance check.
 suggested resume goal string:
-  /goal Resume docs/mission-email-demo-ingress-v0.md from the 2026-05-28 live
-  substrate checkpoint: implement and prove the minimal account-scoped
-  verified-sender/code-alias policy and workflow-request boundary without
-  repairing VText.
+  /goal Resume docs/mission-email-demo-ingress-v0.md from the deployed
+  2026-05-28 trusted plus-code/quarantine checkpoint: perform deletion-first
+  convergence without changing the proved mail transport or repairing VText,
+  then stop with an email-complete handoff and a separate VText repair goal.
 evidence artifact refs:
   - maildctl stats/messages/source-packet/ingress-events on Node B;
   - Comet authenticated Email app UI observation on choir.news;
@@ -270,15 +306,15 @@ Current beliefs:
 Highest-impact uncertainty:
 
 ```text
-Does a real signed Resend email.received webhook for 000@choir.news produce an
-owner-visible message in the deployed Email app?
+Can the now-proven email substrate be simplified without removing rollback
+tools, acceptance probes, or evidence needed by the follow-on VText mission?
 ```
 
 Next observation:
 
 ```text
-Send a real email to 000@choir.news and correlate Resend webhook delivery,
-maild webhook_events/messages/source_packets, Node B logs, and Email app UI.
+Run the convergence diff through focused tests, build proof, deployed identity,
+and one read-only mail acceptance check against the live quarantined attachment.
 ```
 
 ## Homotopy Axes

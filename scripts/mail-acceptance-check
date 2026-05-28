@@ -27,7 +27,7 @@ Options:
 
 This checker is read-only. It uses maildctl over SSH and does not submit the
 message to Choir. Use it before owner handoff with --expect-ingress-events 0,
-then after clicking Send to Choir with --expect-ingress-events 1. Add
+then after clicking Respond with Choir with --expect-ingress-events 1. Add
 --expect-no-sent-after-message before owner action to prove inbound mail did
 not create an outbound Sent row.
 USAGE
