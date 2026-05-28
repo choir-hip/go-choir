@@ -433,7 +433,7 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/email/"):
 		h.HandleEmailAPI(w, r)
 		return
-	case path == "/api/notifications/completion-email":
+	case strings.HasPrefix(path, "/api/notifications/"):
 		h.HandleNotificationAPI(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):

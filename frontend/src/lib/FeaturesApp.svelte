@@ -275,6 +275,7 @@
       }
       adoptions = [verified, ...adoptions.filter((item) => item.adoption_id !== verified.adoption_id)];
       actionStatus = `${feature.title} is importing in the background. Choir will email ${ownerEmail} when it is ready or blocked.`;
+      await registerCompletionWatch(feature, verified);
       await refreshFeatures([verified]);
       void waitForImportCompletion(feature, verified.adoption_id);
     } catch (err) {
@@ -314,7 +315,6 @@
       } else {
         actionStatus = `${feature.title} finished with status ${featureState(feature)}. We emailed ${ownerEmail}.`;
       }
-      await notifyCompletion(feature, current);
       return;
     }
     if (!destroyed) {
@@ -368,6 +368,24 @@
       });
     } catch (_err) {
       actionStatus = `${actionStatus} Email notification is queued in product copy but the mail handoff did not complete.`;
+    }
+  }
+
+  async function registerCompletionWatch(feature, adoption) {
+    try {
+      await fetchWithRenewal('/api/notifications/watch-adoption-completion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adoption_id: adoption?.adoption_id || '',
+          to_email: currentUser?.email || '',
+          title: feature?.title || adoption?.app_id || adoption?.package_id || 'Feature import',
+          feature_id: feature?.id || adoption?.package_id || '',
+          link: '/?app=features',
+        }),
+      });
+    } catch (_err) {
+      actionStatus = `${actionStatus} Email notification is queued in product copy but the server-side watch did not start.`;
     }
   }
 
