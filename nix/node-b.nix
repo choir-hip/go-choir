@@ -293,6 +293,9 @@ in
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
       ReadWritePaths = [ mailDir ];
       Environment = [
+        # Sandbox guest VMs persist Email appagent drafts via the host tap
+        # address. The host firewall still keeps 8087 closed externally.
+        "SERVER_HOST=0.0.0.0"
         "MAILD_PORT=8087"
         "MAILD_DB_PATH=${mailDir}/mail.db"
         "MAILD_STORAGE_ROOT=${mailDir}"
