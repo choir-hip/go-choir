@@ -43,24 +43,27 @@ has reached the VText boundary.
 ## Mission Status
 
 ```text
-status: checkpoint_incomplete
+status: complete
 current artifact state: provider/DNS/runtime setup, public mailbox delivery,
   attachment quarantine, owner-scoped outbound reply, manual Respond with Choir,
-  and trusted plus-code pending workflow handoff all have deployed proof.
-  Resend reports choir.news verified for sending and receiving. Gandi apex MX
-  routes choir.news inbound mail to Resend. Resend has an enabled
-  email.received webhook for https://choir.news/api/email/resend/webhook.
-  Node B maild health reports resend_api_key_configured=true and
-  webhook_secret_configured=true. Public unsigned webhook probes fail closed
-  with invalid_signature. 000@choir.news resolves through email_aliases to
-  yusefnathanson@me.com's auth user id
+  trusted plus-code pending workflow handoff, and a small convergence pass all
+  have deployed proof. Resend reports choir.news verified for sending and
+  receiving. Gandi apex MX routes choir.news inbound mail to Resend. Resend has
+  an enabled email.received webhook for
+  https://choir.news/api/email/resend/webhook. Node B maild health reports
+  resend_api_key_configured=true and webhook_secret_configured=true. Public
+  unsigned webhook probes fail closed with invalid_signature. 000@choir.news
+  resolves through email_aliases to yusefnathanson@me.com's auth user id
   5bd6de97-3b58-408c-bf89-c42c81b083de.
 what shipped: docs checkpoint 0a3029b and behavior commit
   63aae2950992706e4f105ca14ef5686db71decc9. The behavior commit adds the
   trusted plus-code workflow policy, maildctl alias configuration, pending
   conductor handoff rows for verified whitelisted plus-code mail, stricter
   authentication-result evidence checks, source-packet workflow provenance, and
-  Email app copy that names the owner action "Respond with Choir".
+  Email app copy that names the owner action "Respond with Choir". Cleanup
+  commit fa8a84059ad1eb7b98380233d7ad9226b4f4c726 removes the extra Email app
+  read-state control, updates stale Send to Choir wording, and records the
+  deployed live evidence.
 what was proven: readiness was re-probed; Resend loopback mail to 000@choir.news
   stored message resend-message-f20817a211067c9ef9fc1180a0aa86a9 and source
   packet resend-source-packet-b16502d434ef415f55e1fd9985ce1e0e; authenticated
@@ -77,17 +80,17 @@ unproven or partial claims: true external human-sender demo with the final
   chosen invite alias and downstream VText response generation. The plus-code
   email side intentionally stops at a pending_conductor handoff because VText is
   known broken after v1.
-highest-impact uncertainty: whether the small convergence diff deploys without
-  regressing the proved mail substrate.
-next executable probe: land the convergence diff, confirm deployed identity, and
-  rerun one live read-only acceptance check plus Email app UI observation.
+highest-impact uncertainty: VText response generation, which is deliberately a
+  separate mission because the current VText flow stops after v1.
+next executable probe: run the follow-on VText repair mission from the exact
+  email message/source-packet/handoff evidence below.
 ```
 
 ## Run Checkpoint & Resumption State
 
 ```text
-status: checkpoint_incomplete
-last checkpoint: 2026-05-28 deployed trusted plus-code and quarantine proof
+status: complete
+last checkpoint: 2026-05-28 email-complete deployed checkpoint
 current artifact state: 000@choir.news is account-scoped to
   5bd6de97-3b58-408c-bf89-c42c81b083de. Provider DNS/webhook/runtime is live.
   Public inbound mail stores as public/untrusted mailbox state. Attachment mail
@@ -101,6 +104,8 @@ what shipped:
   - 0a3029b docs: checkpoint email demo ingress proof
   - 63aae2950992706e4f105ca14ef5686db71decc9 feat: add trusted email workflow
     handoff
+  - fa8a84059ad1eb7b98380233d7ad9226b4f4c726 chore: converge email demo
+    ingress
 what was proven:
   - scripts/mail-provider-readiness passed for Resend/Gandi/Node B maild except
     local .env intentionally lacks RESEND_WEBHOOK_SECRET while Node B has it.
@@ -152,6 +157,16 @@ what was proven:
     prompt_bar_equivalent=false and attachment_count=1. No ingress events
     exist for this message. The deployed Email app showed it in Quarantine with
     the attachment marked quarantined.
+  - convergence commit fa8a84059ad1eb7b98380233d7ad9226b4f4c726 passed CI run
+    26548606027, Publish/FlakeHub run 26548606065, and the Node B staging
+    deploy job. Public /health reported proxy and upstream deployed commit
+    fa8a84059ad1eb7b98380233d7ad9226b4f4c726. Node B maild health remained ok
+    with resend_api_key_configured=true and webhook_secret_configured=true.
+  - after that deploy, scripts/mail-acceptance-check passed for
+    resend-message-3d1dbb3525ec84f0bb75ff571d07d8bd with folder=quarantine,
+    one quarantined attachment, prompt_bar_equivalent=false, and zero ingress
+    events. The deployed Email app showed Quarantine with the attachment and
+    only Reply plus Respond with Choir actions.
 unproven or partial claims:
   - VText response generation remains known broken after v1 and is outside this
     email mission.
@@ -162,22 +177,32 @@ belief-state changes:
     storage, authenticated Email app visibility, owner reply, attachment
     quarantine, and plus-code policy handoff are no longer the primary
     uncertainties.
-  - the live gap is now convergence and downstream VText repair, not mail
-    transport or mail-side authority topology.
+  - the live gap is now downstream VText repair, not mail transport,
+    mail-side authority topology, or cleanup convergence.
 remaining error field:
-  - cleanup deploy proof, final demo alias policy choice, and separate VText
-    repair.
+  - final demo alias policy choice and separate VText repair.
 highest-impact remaining uncertainty:
-  - whether the convergence diff deploys cleanly without changing mail
-    transport behavior.
+  - why VText stops after v1 before research/coding, and how to return a VText
+    response artifact to the Email app/send pipeline.
 next executable probe:
-  - land the convergence diff, confirm deployed identity, and rerun the live
-    quarantined-attachment acceptance check.
+  - start the VText repair mission using the exact email evidence ids below.
 suggested resume goal string:
-  /goal Resume docs/mission-email-demo-ingress-v0.md from the deployed
-  2026-05-28 trusted plus-code/quarantine checkpoint: perform deletion-first
-  convergence without changing the proved mail transport or repairing VText,
-  then stop with an email-complete handoff and a separate VText repair goal.
+  /goal Run a VText Response Workflow Repair mission from the email-complete
+  checkpoint in docs/mission-email-demo-ingress-v0.md. Use proven manual
+  response handoff message resend-message-e6425095af768af20a75e665023f5f6c,
+  source packet resend-source-packet-2547f93e723e0e87a26db69218240152,
+  conductor submission 6b50c89e-3bdb-4d0b-8d2e-82d4f22dd8fb, and ingress event
+  email-ingress-event-f0f0e81661c373c1e08ef74e63a5469a; also use proven
+  trusted plus-code pending handoff message
+  resend-message-4ed741f34c2ba7ca0bf5be428e5204b6, source packet
+  resend-source-packet-e48931de6748b4cc38d0871c34adfc1a, and ingress event
+  email-ingress-event-79ea06b1a4d3385dd3282525efc44fbc. Repair the known VText
+  failure where VText reaches v1 but does not continue into research or coding.
+  The repaired flow must let an owner-controlled response prompt read an email
+  source packet, optionally research/code, produce a VText reply artifact, and
+  return that artifact to the Email app/send pipeline with Trace evidence. Do
+  not change maild provider/DNS behavior unless this mission identifies a
+  specific email-side bug.
 evidence artifact refs:
   - maildctl stats/messages/source-packet/ingress-events on Node B;
   - Comet authenticated Email app UI observation on choir.news;
@@ -209,6 +234,30 @@ VText response generation is currently known broken: it reaches v1 and does not
 continue into research or coding. Therefore, the email mission should stop at a
 well-evidenced email-to-VText handoff boundary and produce a follow-on VText
 repair mission, not mix VText repair into the email substrate work.
+
+## Mobile Responsiveness Finding
+
+Recorded: 2026-05-28 after the email-complete checkpoint, before committing the
+responsive UI fix.
+
+Evidence:
+
+- A 390px-wide Playwright mobile harness against `EmailApp.svelte` showed the
+  existing mobile CSS stacked message list and detail vertically, hid the
+  mailbox rail, and left no mobile-specific mailbox navigation.
+- Opening a message on mobile needed a list/detail mode switch rather than a
+  cramped stacked desktop layout.
+- Long provider-marker subjects in the message reader needed explicit wrapping
+  to stay inside the phone viewport.
+
+Required fix:
+
+- Keep the desktop three-column layout unchanged.
+- On phone widths, show a top address/mailbox control, keep the message list as
+  the initial view, open message detail/compose as a full-width panel, and
+  provide a Back action to return to the list.
+- Verify no horizontal overflow at 390px and prove list/detail/compose states
+  with screenshots before deploy.
 
 ## Real Artifact
 
@@ -711,13 +760,19 @@ After Lambda 6 or Lambda 7 proves the email-side handoff, create a separate
 mission with this shape:
 
 ```text
-/goal Run a VText Response Workflow Repair mission: starting from proven email
-message, source-packet, and workflow handoff ids from
-docs/mission-email-demo-ingress-v0.md, repair the known VText failure where
-VText reaches v1 but does not continue into research or coding. The repaired
-flow must let an owner-controlled response prompt read an email source packet,
-optionally research/code, produce a VText reply artifact, and return that
-artifact to the Email app/send pipeline with Trace evidence. Do not change
-maild provider/DNS behavior unless the email mission identified a specific
+/goal Run a VText Response Workflow Repair mission from the email-complete
+checkpoint in docs/mission-email-demo-ingress-v0.md. Use proven manual response
+handoff message resend-message-e6425095af768af20a75e665023f5f6c, source packet
+resend-source-packet-2547f93e723e0e87a26db69218240152, conductor submission
+6b50c89e-3bdb-4d0b-8d2e-82d4f22dd8fb, and ingress event
+email-ingress-event-f0f0e81661c373c1e08ef74e63a5469a; also use proven trusted
+plus-code pending handoff message resend-message-4ed741f34c2ba7ca0bf5be428e5204b6,
+source packet resend-source-packet-e48931de6748b4cc38d0871c34adfc1a, and ingress
+event email-ingress-event-79ea06b1a4d3385dd3282525efc44fbc. Repair the known
+VText failure where VText reaches v1 but does not continue into research or
+coding. The repaired flow must let an owner-controlled response prompt read an
+email source packet, optionally research/code, produce a VText reply artifact,
+and return that artifact to the Email app/send pipeline with Trace evidence. Do
+not change maild provider/DNS behavior unless this mission identifies a specific
 email-side bug.
 ```
