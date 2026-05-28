@@ -524,6 +524,9 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		"\n**next step:**",
 		"\nstatus:",
 		"\n**status:**",
+		"\nsource refs:",
+		"\n**source refs:**",
+		"\n---",
 		"\ndo not send",
 		" do not send",
 	})
@@ -592,6 +595,9 @@ func fallbackEmailBodyAfterAddress(text, address string) string {
 	body = strings.TrimSpace(truncateEmailIntentAtMarkers(body, []string{
 		"\nconstraint:",
 		"\nnext step:",
+		"\nsource refs:",
+		"\n**source refs:**",
+		"\n---",
 		"\ndo not send",
 		" do not send",
 	}))

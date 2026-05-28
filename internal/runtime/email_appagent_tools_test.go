@@ -368,7 +368,7 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		"doc_id":"doc-email-continuation",
 		"base_revision_id":"rev-user-email-continuation",
 		"operation":"replace_all",
-		"content":"# Email Appagent Draft Request\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that VText requests an Email appagent draft.\n\n**Status:** no outbound email is authorized."
+		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that VText requests an Email appagent draft.\n\n---\n\n**Source refs:** User request via conductor:test. No outbound email is authorized."
 	}`))
 	if err != nil {
 		t.Fatalf("edit_vtext: %v", err)
@@ -414,11 +414,13 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 
 func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
 	content := "# Email Appagent Draft Request\n\n" +
+		"**Status:** Draft prepared -- pending Email appagent review.\n\n" +
 		"**Recipient:** yusefnathanson@me.com\n" +
 		"**Subject:** Choir Email appagent bridge proof\n" +
 		"**Body:**\n" +
 		"This is a deployed staging proof that VText requests an Email appagent draft.\n\n" +
-		"**Status:** no outbound email is authorized."
+		"---\n\n" +
+		"**Source refs:** User request via conductor:test. No outbound email is authorized."
 	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
 	if !ok {
 		t.Fatal("extractEmailDraftIntent returned false")
@@ -429,8 +431,9 @@ func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
 	if intent.Subject != "Choir Email appagent bridge proof" {
 		t.Fatalf("subject = %q", intent.Subject)
 	}
-	if strings.Contains(strings.ToLower(intent.BodyText), "status") || strings.Contains(intent.BodyText, "**") {
-		t.Fatalf("body_text contains markdown/status residue: %q", intent.BodyText)
+	lowerBody := strings.ToLower(intent.BodyText)
+	if strings.Contains(lowerBody, "status") || strings.Contains(lowerBody, "source refs") || strings.Contains(intent.BodyText, "**") || strings.Contains(intent.BodyText, "---") {
+		t.Fatalf("body_text contains markdown/provenance residue: %q", intent.BodyText)
 	}
 	if !strings.Contains(intent.BodyText, "deployed staging proof") {
 		t.Fatalf("body_text = %q", intent.BodyText)
