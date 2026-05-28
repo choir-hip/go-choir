@@ -301,6 +301,8 @@ in
         "MAILD_STORAGE_ROOT=${mailDir}"
         "MAILD_PRIMARY_DOMAIN=choir.news"
         "MAILD_RUNTIME_URL=http://127.0.0.1:8085"
+        # Required for maild to append Email appagent send evidence to the
+        # owner active computer runtime instead of the host fallback runtime.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
       ];
     };
