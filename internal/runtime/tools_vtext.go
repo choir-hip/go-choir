@@ -98,9 +98,19 @@ func newEditVTextTool(rt *Runtime) Tool {
 				"status":           "stored",
 			}
 			if continuation, ok := rt.requiredContinuationAfterInitialVTextEdit(context.Background(), rec, in, rev); ok {
-				result["next_required_tool"] = continuation.Tool
-				result["next_required_args"] = continuation.Args
-				result["next_instruction"] = continuation.Instruction
+				if continuation.Tool == "request_email_draft" {
+					emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
+					if err != nil {
+						return "", err
+					}
+					result["email_draft_request"] = emailResult
+					result["email_draft_request_status"] = emailResult["status"]
+					result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
+				} else {
+					result["next_required_tool"] = continuation.Tool
+					result["next_required_args"] = continuation.Args
+					result["next_instruction"] = continuation.Instruction
+				}
 			}
 			return toolResultJSON(result)
 		},
@@ -111,6 +121,22 @@ type vtextRequiredContinuation struct {
 	Tool        string
 	Args        map[string]any
 	Instruction string
+}
+
+func (rt *Runtime) executeRequiredEmailDraftContinuation(ctx context.Context, rec *types.RunRecord, args map[string]any) (map[string]any, error) {
+	data, err := json.Marshal(args)
+	if err != nil {
+		return nil, fmt.Errorf("marshal email draft continuation args: %w", err)
+	}
+	var in requestEmailDraftArgs
+	if err := json.Unmarshal(data, &in); err != nil {
+		return nil, fmt.Errorf("decode email draft continuation args: %w", err)
+	}
+	result, err := rt.recordEmailDraftRequest(ctx, rec, in)
+	if err != nil {
+		return nil, fmt.Errorf("execute email draft continuation: %w", err)
+	}
+	return result, nil
 }
 
 func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs, rev types.Revision) (vtextRequiredContinuation, bool) {

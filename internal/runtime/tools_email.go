@@ -516,11 +516,14 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		return emailDraftIntent{}, false
 	}
 
-	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{"\nbody:", " body:"})
+	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{"\nbody:", " body:", "\n**body:**", " **body:**"})
 	body, bodyLabeled := extractEmailLabeledField(combined, "body", []string{
 		"\nconstraint:",
+		"\n**constraint:**",
 		"\nnext step:",
+		"\n**next step:**",
 		"\nstatus:",
+		"\n**status:**",
 		"\ndo not send",
 		" do not send",
 	})
@@ -546,13 +549,13 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 }
 
 func extractEmailLabeledField(text, label string, stopMarkers []string) (string, bool) {
-	lower := strings.ToLower(text)
-	marker := strings.ToLower(label) + ":"
-	idx := strings.Index(lower, marker)
-	if idx < 0 {
+	labelPattern := regexp.MustCompile(`(?i)(?:^|[\s*_` + "`" + `>-])(?:\*\*)?` + regexp.QuoteMeta(label) + `\s*:\s*(?:\*\*)?`)
+	loc := labelPattern.FindStringIndex(text)
+	if loc == nil {
 		return "", false
 	}
-	start := idx + len(marker)
+	start := loc[1]
+	lower := strings.ToLower(text)
 	end := len(text)
 	afterLower := lower[start:]
 	for _, stop := range stopMarkers {
@@ -564,7 +567,7 @@ func extractEmailLabeledField(text, label string, stopMarkers []string) (string,
 			end = start + stopIdx
 		}
 	}
-	return strings.TrimSpace(strings.Trim(text[start:end], " \t\r\n\"'`")), true
+	return strings.TrimSpace(strings.Trim(text[start:end], " \t\r\n\"'`*")), true
 }
 
 func fallbackEmailBodyAfterAddress(text, address string) string {

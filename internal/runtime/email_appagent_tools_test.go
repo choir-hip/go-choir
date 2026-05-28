@@ -368,7 +368,7 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		"doc_id":"doc-email-continuation",
 		"base_revision_id":"rev-user-email-continuation",
 		"operation":"replace_all",
-		"content":"# Email Appagent Draft Request\n\nRecipient: yusefnathanson@me.com\nSubject: Choir Email appagent bridge proof\nBody: This is a deployed staging proof that VText requests an Email appagent draft.\nConstraint: no outbound email is authorized."
+		"content":"# Email Appagent Draft Request\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that VText requests an Email appagent draft.\n\n**Status:** no outbound email is authorized."
 	}`))
 	if err != nil {
 		t.Fatalf("edit_vtext: %v", err)
@@ -377,26 +377,63 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if editResult["next_required_tool"] != "request_email_draft" {
-		t.Fatalf("next_required_tool = %v, want request_email_draft; result=%s", editResult["next_required_tool"], editRaw)
+	if editResult["next_required_tool"] != nil {
+		t.Fatalf("next_required_tool = %v, want deterministic email handoff; result=%s", editResult["next_required_tool"], editRaw)
 	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	rawTo, _ := args["to_addresses"].([]any)
+	rawRequest, _ := editResult["email_draft_request"].(map[string]any)
+	if len(rawRequest) == 0 {
+		t.Fatalf("email_draft_request missing: %s", editRaw)
+	}
+	rawTo, _ := rawRequest["to_addresses"].([]any)
 	if len(rawTo) != 1 || rawTo[0] != "yusefnathanson@me.com" {
-		t.Fatalf("to_addresses = %+v", args["to_addresses"])
+		t.Fatalf("to_addresses = %+v", rawRequest["to_addresses"])
 	}
-	if args["subject"] != "Choir Email appagent bridge proof" {
-		t.Fatalf("subject = %+v", args["subject"])
+	if rawRequest["subject"] != "Choir Email appagent bridge proof" {
+		t.Fatalf("subject = %+v", rawRequest["subject"])
 	}
-	if got, _ := args["body_text"].(string); strings.Contains(strings.ToLower(got), "do not send") || !strings.Contains(got, "deployed staging proof") {
-		t.Fatalf("body_text = %q", got)
+	if got, _ := rawRequest["status"].(string); got != "draft_pending_owner_approval" {
+		t.Fatalf("status = %q; result=%s", got, editRaw)
 	}
-	if got, _ := args["source_content_hash"].(string); !strings.HasPrefix(got, "sha256:") {
+	if got, _ := rawRequest["maild_persistence_status"].(string); got != "runtime_maild_url_not_configured" {
+		t.Fatalf("maild_persistence_status = %q; result=%s", got, editRaw)
+	}
+	if got, _ := rawRequest["source_content_hash"].(string); !strings.HasPrefix(got, "sha256:") {
 		t.Fatalf("source_content_hash = %q", got)
 	}
+	if got, _ := rawRequest["draft_version_hash"].(string); got == "" {
+		t.Fatalf("draft_version_hash empty; result=%s", editRaw)
+	}
+	if got, _ := rawRequest["send_authorized"].(bool); got {
+		t.Fatalf("send_authorized = true; result=%s", editRaw)
+	}
 	instruction, _ := editResult["next_instruction"].(string)
-	if !strings.Contains(instruction, "Call request_email_draft next") || strings.Contains(instruction, "request_super_execution next") {
+	if !strings.Contains(instruction, "Email appagent draft handoff completed") || strings.Contains(instruction, "request_super_execution next") {
 		t.Fatalf("next_instruction = %q", instruction)
+	}
+}
+
+func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
+	content := "# Email Appagent Draft Request\n\n" +
+		"**Recipient:** yusefnathanson@me.com\n" +
+		"**Subject:** Choir Email appagent bridge proof\n" +
+		"**Body:**\n" +
+		"This is a deployed staging proof that VText requests an Email appagent draft.\n\n" +
+		"**Status:** no outbound email is authorized."
+	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if len(intent.ToAddresses) != 1 || intent.ToAddresses[0] != "yusefnathanson@me.com" {
+		t.Fatalf("to_addresses = %+v", intent.ToAddresses)
+	}
+	if intent.Subject != "Choir Email appagent bridge proof" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if strings.Contains(strings.ToLower(intent.BodyText), "status") || strings.Contains(intent.BodyText, "**") {
+		t.Fatalf("body_text contains markdown/status residue: %q", intent.BodyText)
+	}
+	if !strings.Contains(intent.BodyText, "deployed staging proof") {
+		t.Fatalf("body_text = %q", intent.BodyText)
 	}
 }
 
