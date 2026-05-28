@@ -2850,3 +2850,51 @@ fix direction:
   parser.
 - Add a focused regression test that a `Deny` reply records
   `email_reply_rejected`, consumes the token as `rejected`, and does not send.
+
+### Fix Checkpoint: Deny Alias Deployed, Reply Proof Still Needs Fresh Mail
+
+status: deny_alias_deployed_reply_proof_pending
+timestamp: 2026-05-28T16:20Z
+evidence source: local focused tests, GitHub Actions, staging health, Trace API,
+maild SQLite
+
+commits:
+- `4bafc47` documented the deployed risk proof and natural rejection gap before
+  code changes.
+- `671c2fb` mapped `deny` / `deny ...` to the same approval-reply rejection
+  path as `reject`.
+
+local verification:
+- `nix develop -c go test ./internal/maild -run
+  'TestApprovalReplyDenyRejectsDraftWithoutSending|TestApprovalReplyApprovesExactDraftVersionOnce|TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken|TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry'`
+  passed.
+- `nix develop -c go test ./internal/maild ./internal/runtime
+  ./internal/types -run
+  'Test.*Email|Test.*Draft|Test.*Approval|Test.*Risk|TestEmailDraftEventKinds|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+  passed.
+
+deployment evidence:
+- GitHub Actions CI run `26586806067` succeeded for
+  `671c2fb5b16af1f6423bf182b5766deaf96ac4bc`.
+- Deploy job `78335170531` succeeded.
+- FlakeHub publish run `26586806080` succeeded.
+- `https://choir.news/health` reported deployed commit
+  `671c2fb5b16af1f6423bf182b5766deaf96ac4bc` and deployed_at
+  `2026-05-28T16:11:48Z`.
+
+Trace evidence:
+- Trace trajectory `87b00e6f-0f86-4152-bdc0-ea1776c00771` for
+  `Choir Email blocked trace proof f06c649` shows Email appagent as a
+  first-class node: `email:5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- The trajectory includes `email.draft.blocked` moment
+  `58064692-86d8-46da-8025-8a58c85826ed`, proving the deployed blocked-draft
+  Trace path is visible through the product Trace API.
+
+remaining waiting condition:
+- A fresh real inbound approval reply after `671c2fb` is required to prove the
+  deployed `deny` synonym from the owner's mailbox. The earlier `Deny` reply
+  arrived before the fix and was already classified as unsupported.
+- The active clean draft
+  `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` remains pending; a fresh
+  `approve` reply should still prove the send-by-email path, while a fresh
+  `deny` reply should now record `email_reply_rejected` without sending.
