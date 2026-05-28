@@ -2195,3 +2195,105 @@ required fix direction:
   recipient, body, horizontal rule, and source refs after the body.
 - Rerun a fresh deployed prompt and do not use the contaminated draft for
   approval/send proof.
+
+## Run Checkpoint: Deterministic VText Email Draft Handoff Proven
+
+timestamp: 2026-05-28T10:21:00-04:00
+status: checkpoint_incomplete
+
+what shipped:
+- Commit `0ceeb1799fa836451b0ba9db508a2a60d5541940`
+  (`fix: make vtext email draft handoff deterministic`) changed the runtime so
+  a supplied-content VText email artifact can deterministically hand off to
+  Email appagent after `edit_vtext`, without requiring another provider turn to
+  call `request_email_draft`.
+- The same commit made email artifact extraction tolerant of VText markdown
+  labels such as `**Subject:**` and `**Body:**`.
+- Commit `fc2e1e56faf512cbf708bb68948566f7c504a8e9`
+  (`fix: keep vtext provenance out of email body`) added body stop markers for
+  VText provenance sections such as markdown horizontal rules and `Source
+  refs`.
+
+verification:
+- `nix develop -c go test ./internal/runtime ./internal/maild ./internal/proxy`
+  passed after both runtime fixes.
+- GitHub Actions CI run `26579757246` passed for
+  `0ceeb1799fa836451b0ba9db508a2a60d5541940`.
+- GitHub Actions CI run `26580172378` passed for
+  `fc2e1e56faf512cbf708bb68948566f7c504a8e9`.
+- `https://choir.news/health` reported both proxy and sandbox deployed commit
+  `fc2e1e56faf512cbf708bb68948566f7c504a8e9`, deployed at
+  `2026-05-28T14:15:06Z`.
+- The active computer health at `http://10.200.60.2:8085/health` reported the
+  same sandbox commit.
+
+deployed evidence:
+- Computer Use submitted a fresh prompt through the deployed app while signed
+  in as owner account `5bd6de97-3b58-408c-bf89-c42c81b083de`:
+  `Draft an email to yusefnathanson@me.com with subject "Choir Email exact
+  body proof fc2e1e5" and body exactly "This body must be the only stored email
+  body after the provenance stop-marker fix."`
+- Trace trajectory `ef31cbfe-1b1f-4c53-9f8e-dee8200233a7` completed with
+  first-class `conductor`, `vtext`, and `email` agents and causal edges
+  `conductor -> vtext` and `vtext -> email`.
+- Email appagent run `7fcf95e9-c048-46f6-8d9b-b505f756da47` created maild
+  draft `email-draft-afffb9c9-b4a3-4f91-a972-cd2eacb52c4d` with status
+  `draft_pending_owner_approval`, version `1`, and version hash
+  `aaae07a28d72fffbba355fb0aea312511e7d75d25af8940cc858c580a7b91f4b`.
+- Maild persisted the draft body exactly as the requested sentence:
+  `This body must be the only stored email body after the provenance
+  stop-marker fix.`
+- Maild created approval token
+  `email-approval-token-f596867d-a4cc-40f3-a3fe-ebb4f867e16e` and sent the
+  approval email to `yusefnathanson@me.com` through Resend provider id
+  `934d95fb-734b-430b-b21e-64655aa1562b`.
+- Computer Use opened the deployed approval deep link while signed in. The
+  Email app focused the exact draft, showed `Pending approval`, rendered the
+  exact subject/body, and showed the `Send approved draft` control.
+- After opening the approval deep link, maild still reported `6` outbound
+  messages, the draft still had status `draft_pending_owner_approval`, and the
+  approval token remained `active` with no `used_at`. The deep link is therefore
+  review-only and does not send by itself.
+
+belief-state changes:
+- Prompt-bar simple-send now reaches the intended Email appagent boundary
+  through VText for supplied-content drafts.
+- Email appagent is now visible in Trace as the first-class outbound authority
+  for this path; maild remains transport/storage evidence.
+- The runtime no longer depends on a second model tool-call turn for the
+  mechanically determined VText -> Email appagent supplied-content handoff.
+- The latest body extraction fix prevents VText provenance from silently
+  entering the email body for the observed artifact shape.
+
+unproven or partial claims:
+- Real approval reply from the owner mailbox through Resend inbound has not yet
+  been proven for the latest exact-body draft.
+- Edit-by-reply creating a new draft version and invalidating prior approval is
+  still unproven on the live product path.
+- Public inbound and verified plus-code inbound negative/intent-boundary proofs
+  remain partially proven by earlier API/unit evidence but not yet re-run as
+  fresh visible staging workflows after the deterministic handoff fixes.
+
+remaining error field:
+- The current highest-impact uncertainty is the full email-reply approval loop:
+  owner replies `approve`, `reject`, or edit instructions to the approval
+  email, Resend receives the reply, maild verifies the scoped token/version,
+  Email appagent records the approval event, and only then maild sends or
+  creates a new draft version.
+- This cannot be honestly completed without a real owner-mailbox reply or a
+  separately authorized provider-level acceptance harness. Do not claim the
+  approval-by-email path complete from local webhook or database seeding.
+
+next executable probe:
+- Ask the owner to reply `approve` to the latest Choir approval email for
+  subject `Choir Email exact body proof fc2e1e5`, then verify through maild,
+  Trace, Sent UI, and Resend provider receipt that only draft version hash
+  `aaae07a28d72fffbba355fb0aea312511e7d75d25af8940cc858c580a7b91f4b` was sent.
+- After that, create a second exact-body draft and ask the owner to reply with
+  an edit instruction. Verify the old approval is invalidated, a new draft
+  version appears, and no outbound message is sent until reapproval.
+
+suggested resume goal string:
+```text
+/goal Continue docs/mission-email-appagent-egress-approval-v0.md from the deterministic VText-to-Email checkpoint: after I reply to the latest Choir approval email, verify the real approval-by-email path through Resend inbound, maild, Email appagent Trace, Sent UI, and provider receipt. Then prove edit-by-reply creates a new draft version and invalidates prior approval. Do not seed webhook/database state manually, do not click Send as a substitute for reply approval, and stop with exact evidence or a documented blocker.
+```
