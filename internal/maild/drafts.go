@@ -484,7 +484,16 @@ func (s *Store) GetDraft(ctx context.Context, ownerID, draftID string) (EmailDra
 
 func (s *Store) MarkDraftSent(ctx context.Context, ownerID, draftID, messageID, providerMessageID string) (EmailDraft, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE email_drafts
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	result, err := tx.ExecContext(ctx, `UPDATE email_drafts
 		SET status = 'sent', sent_message_id = ?, provider_message_id = ?, updated_at = ?
 		WHERE owner_id = ? AND id = ? AND status <> 'sent'`,
 		messageID, providerMessageID, now, ownerID, draftID)
@@ -494,6 +503,16 @@ func (s *Store) MarkDraftSent(ctx context.Context, ownerID, draftID, messageID, 
 	if rows, _ := result.RowsAffected(); rows == 0 {
 		return EmailDraft{}, sql.ErrNoRows
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+		SET status = 'stale_sent', used_at = coalesce(used_at, ?)
+		WHERE owner_id = ? AND draft_id = ? AND status = 'active'`,
+		now, ownerID, draftID); err != nil {
+		return EmailDraft{}, fmt.Errorf("stale sent draft approval tokens: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return EmailDraft{}, err
+	}
+	tx = nil
 	return s.GetDraft(ctx, ownerID, draftID)
 }
 

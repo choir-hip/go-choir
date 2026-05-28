@@ -158,6 +158,47 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	}
 }
 
+func TestDraftSendMarksActiveApprovalTokensStale(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"sent-draft-with-token"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	alias, err := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Approved with token",
+		TextBody:    "Approved body.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+
+	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", ""); err != nil {
+		t.Fatalf("sendApprovedDraft: %v", err)
+	}
+	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken: %v", err)
+	}
+	if used.Status != "stale_sent" || used.UsedAt == "" {
+		t.Fatalf("token after send = %+v, want stale_sent with used_at", used)
+	}
+}
+
 func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"
@@ -743,6 +784,13 @@ func TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry(t *testing.T) {
 	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", ""); err != nil {
 		t.Fatalf("owner click send: %v", err)
 	}
+	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken after owner click: %v", err)
+	}
+	if used.Status != "stale_sent" {
+		t.Fatalf("token status after owner click = %q, want stale_sent", used.Status)
+	}
 
 	email := resendReceivedEmail{
 		ID:      "received-approve-after-click",
@@ -759,10 +807,10 @@ func TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry(t *testing.T) {
 		t.Fatalf("payload count = %d, want send + risk alert; payloads=%+v", len(payloads), payloads)
 	}
 	if payloads[1].Subject != "[Choir Risk Alert] Email draft blocked" ||
-		payloads[1].Headers["X-Choir-Risk-Kind"] != "approval_draft_already_sent" {
+		payloads[1].Headers["X-Choir-Risk-Kind"] != "approval_token_not_active" {
 		t.Fatalf("risk alert payload = %+v", payloads[1])
 	}
-	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	used, err = store.GetDraftApprovalToken(nilSafeContext(), token.Token)
 	if err != nil {
 		t.Fatalf("GetDraftApprovalToken: %v", err)
 	}

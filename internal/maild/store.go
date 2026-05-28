@@ -396,7 +396,27 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			return fmt.Errorf("schema migration: %w", err)
 		}
 	}
-	return s.seedDefaults(cfg)
+	if err := s.seedDefaults(cfg); err != nil {
+		return err
+	}
+	return s.repairSentDraftApprovalTokens()
+}
+
+func (s *Store) repairSentDraftApprovalTokens() error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`UPDATE email_draft_approval_tokens
+		SET status = 'stale_sent', used_at = coalesce(used_at, ?)
+		WHERE status = 'active'
+			AND EXISTS (
+				SELECT 1 FROM email_drafts d
+				WHERE d.id = email_draft_approval_tokens.draft_id
+					AND d.owner_id = email_draft_approval_tokens.owner_id
+					AND d.status = 'sent'
+			)`, now)
+	if err != nil {
+		return fmt.Errorf("repair sent draft approval tokens: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) seedDefaults(cfg *Config) error {

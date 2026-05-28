@@ -71,6 +71,40 @@ func TestEnsureSchemaReconcilesRootAliasOwner(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaRepairsActiveApprovalTokensForSentDrafts(t *testing.T) {
+	store, cfg := newTestStore(t)
+	alias, err := store.ResolveAlias(context.Background(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	draft, err := store.CreateDraft(context.Background(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Stale approval token repair",
+		TextBody:    "Already sent.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(context.Background(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+	if _, err := store.db.ExecContext(context.Background(), `UPDATE email_drafts SET status = 'sent' WHERE id = ?`, draft.ID); err != nil {
+		t.Fatalf("force sent draft: %v", err)
+	}
+
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema repair: %v", err)
+	}
+	repaired, err := store.GetDraftApprovalToken(context.Background(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken: %v", err)
+	}
+	if repaired.Status != "stale_sent" || repaired.UsedAt == "" {
+		t.Fatalf("repaired token = %+v, want stale_sent with used_at", repaired)
+	}
+}
+
 func TestRecordWebhookEventIdempotent(t *testing.T) {
 	store, _ := newTestStore(t)
 	event := WebhookEvent{
