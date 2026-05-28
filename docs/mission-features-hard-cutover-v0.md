@@ -603,3 +603,87 @@ build, and completion-email handoff.
 
 Not promotion-level: Desk Activate/Roll back/Roll forward remain unproven.
 ```
+
+## Staging Evidence Checkpoint: Product Transition Proven, Notification Still Foreground-Triggered
+
+Timestamp: 2026-05-28 07:49 UTC
+
+Commit under test:
+
+```text
+cef80ab8ee49fc7352bfb171165d2891a4bd4f48
+```
+
+Staging proof established:
+
+- GitHub Actions CI run `26561201251` passed and deployed through the normal
+  staging deploy job.
+- `/health` reported proxy and sandbox deployed commit
+  `cef80ab8ee49fc7352bfb171165d2891a4bd4f48`.
+- A fresh authenticated product account
+  `codex-feature-complete-1779954126190@example.com` created package
+  `feature-proof-complete-1779954126190`.
+- Desktop screenshot evidence:
+  - `/tmp/choir-features-proof-complete-1779954126190/catalog.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/import-started.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/desk-ready.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/activated.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/rolled-back.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/rolled-forward.png`
+- Mobile screenshot evidence:
+  - `/tmp/choir-features-proof-complete-1779954126190/mobile-features.png`
+- Video evidence was captured by Playwright in:
+  - `/tmp/choir-features-proof-complete-1779954126190/`
+- Product API evidence:
+  - adoption
+    `feature-feature-proof-complete-1779954126190-8893f9ab-6a66-401f-84c1-959e86f05b2f`
+    reached `verified`;
+  - runtime digest
+    `sha256:1bd7ed11e091e5e59932eed98a8b3b0cd5a8683a6dc373189e994c71ad7626e2`;
+  - UI digest
+    `sha256:ccbffd2109d9cff58eadd7c387f335656fb85b14cb8bd3bf8958ac65ae4fa1b4`;
+  - rollback ref `refs/computers/primary/active`;
+  - Activate advanced active source ref to
+    `refs/computers/primary/candidates/primary-feature-demo-video-feature-complete-1779954126190-1779954135231`;
+  - Roll back restored `refs/computers/primary/active`;
+  - Roll forward restored
+    `refs/computers/primary/candidates/primary-feature-demo-video-feature-complete-1779954126190-1779954135231`.
+- Desk proof:
+  - `data-desk-feature-ready="true"`;
+  - Desk menu showed `Watch demo`, `View details`, `Activate`, and `Later`
+    before activation;
+  - Roll back and Roll forward worked from the Desk controls.
+- Completion email handoff returned HTTP 202 from maild/Resend with provider
+  message id `f92da33f-1f2d-4f2f-8c1d-1a80a19981d8`.
+- Full machine-readable proof result:
+  - `/tmp/choir-features-proof-complete-1779954126190/result-1779954126190.json`
+
+Problem discovered:
+
+```text
+The completion email is currently triggered by the mounted Features app after
+its foreground polling loop observes a terminal import status. This proves the
+maild/Resend handoff and the owner-facing notification content, but it does not
+prove the stricter unattended contract: if the owner clicks Import and then
+closes the tab before verification finishes, no server-side watcher is yet
+responsible for sending the email.
+```
+
+Root cause:
+
+The async verification substrate runs inside the sandbox/runtime, while the
+notification transport is maild behind the proxy. The current implementation
+kept the notification call in `FeaturesApp.svelte` because it already had the
+signup email in `currentUser.email`. That is not durable enough for unattended
+work.
+
+Required fix:
+
+Move feature-import completion notification ownership to a proxy-side watcher:
+after an authenticated Import starts async verification, the frontend should
+register an adoption completion watch with the proxy. The proxy should poll the
+authenticated user's sandbox adoption until `verified`, `owner_approved`,
+`adopted`, `rolled_back`, or `blocked`, then send one concise notification
+through maild to the provided signup email. The email must contain only
+title/status/link and must not include raw logs, traces, secrets, or private
+source content.
