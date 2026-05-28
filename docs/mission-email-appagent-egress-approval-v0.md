@@ -3439,3 +3439,29 @@ fix direction:
   before maild persistence, so model/tool-call variants cannot bypass one layer.
 - Add regression tests for the exact observed marker and for final
   `request_email_draft` body cleaning.
+
+### Problem Checkpoint: Prompt Subject Parser Swallows `Body exactly`
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T19:16Z
+evidence source: deployed prompt-bar proof after `552c443`
+
+problem:
+- The artifact-tail fix worked for body content: Node B maild stored the new
+  `Choir Email artifact-tail proof 552c443` draft body as exactly:
+  `This is a deployed proof that Choir trims artifact instructions before sending email.`
+- However, the stored subject was wrong because the original prompt used
+  `Subject: ... Body exactly: ...`, and the subject parser did not treat
+  `Body exactly:` as a subject-field boundary.
+- Resulting subject began with the intended subject but then swallowed body and
+  instruction text.
+
+root-cause evidence:
+- `extractEmailDraftIntent` has subject stop markers for `Body:` and markdown
+  `Body` headings, but not `Body exactly:`.
+- The parser combines prompt and VText content, so prompt-field variants can win
+  before the cleaner sees the better VText artifact fields.
+
+fix direction:
+- Add `body exactly:` variants as subject stop markers.
+- Add a regression test for prompt text containing `Subject: ... Body exactly: ...`.
