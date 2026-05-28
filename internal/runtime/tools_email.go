@@ -337,7 +337,7 @@ func cleanEmailDraftFromAlias(value string) string {
 	if value == "" || strings.ContainsAny(value, "\r\n\t <>") {
 		return ""
 	}
-	loc := emailAddressPattern.FindStringIndex(value)
+	loc := choirSenderAliasPattern.FindStringIndex(value)
 	if loc == nil || loc[0] != 0 || loc[1] != len(value) {
 		return ""
 	}
@@ -361,6 +361,7 @@ type emailDraftIntent struct {
 }
 
 var emailAddressPattern = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
+var choirSenderAliasPattern = regexp.MustCompile(`(?i)^[0-9]+(?:\+[A-Z0-9][A-Z0-9._\-]{0,63})?@choir\.news$`)
 
 func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 	combined := strings.TrimSpace(prompt + "\n" + content)

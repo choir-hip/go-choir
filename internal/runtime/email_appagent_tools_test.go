@@ -131,7 +131,7 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 }
 
-func TestVTextRequestEmailDraftDropsMalformedFromAliasBeforeMaild(t *testing.T) {
+func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -172,7 +172,7 @@ func TestVTextRequestEmailDraftDropsMalformedFromAliasBeforeMaild(t *testing.T) 
 		"doc_id":              "doc-email-clean-alias",
 		"revision_id":         "rev-email-clean-alias",
 		"source_content_hash": "sha256:clean-alias",
-		"from_alias":          "000@choir.news trailing residue",
+		"from_alias":          "yusefnathanson@me.com",
 		"to_addresses":        []string{"person@example.com"},
 		"subject":             "Choir demo",
 		"body_text":           "Here is the short demo note.",
