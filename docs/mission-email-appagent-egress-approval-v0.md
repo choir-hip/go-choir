@@ -2297,3 +2297,86 @@ suggested resume goal string:
 ```text
 /goal Continue docs/mission-email-appagent-egress-approval-v0.md from the deterministic VText-to-Email checkpoint: after I reply to the latest Choir approval email, verify the real approval-by-email path through Resend inbound, maild, Email appagent Trace, Sent UI, and provider receipt. Then prove edit-by-reply creates a new draft version and invalidates prior approval. Do not seed webhook/database state manually, do not click Send as a substitute for reply approval, and stop with exact evidence or a documented blocker.
 ```
+
+## Run Checkpoint: Forged Approval Reply Rejected, Approval Reply Still Unproven
+
+timestamp: 2026-05-28T10:37:00-04:00
+status: checkpoint_incomplete
+
+deployed negative-send proof:
+- A live Resend email was sent to the active one-time approval address for
+  draft `email-draft-afffb9c9-b4a3-4f91-a972-cd2eacb52c4d` from
+  `000@choir.news`, not from the token-bound approval email
+  `yusefnathanson@me.com`.
+- The email body began with `approve` and included an untrusted instruction
+  override snippet. This tested that an inbound approval-looking message from
+  the wrong sender cannot authorize a send.
+- Resend accepted the outbound probe as provider id
+  `4c3c12fa-4863-404a-b633-6812a8458912`.
+- Maild received the real Resend inbound webhook
+  `resend-webhook-b49d9e423aa15e1427abadb095644301` for provider message
+  `b6da1ec2-cedc-47b9-b0ff-332a9fc17ac0`.
+- `go-choir-maild` logged:
+  `approval reply rejected: approval reply sender mismatch`.
+- Maild recorded structured risk alert
+  `email-risk-alert-c4843b8b-edb7-4897-b92c-e8f2b5b9c74d` with risk kind
+  `approval_sender_mismatch`, source ref
+  `approval_reply:email-draft-afffb9c9-b4a3-4f91-a972-cd2eacb52c4d`, and
+  Resend provider id `1a911ba0-060d-4215-824f-6edea509697d`.
+- The active approval token for the exact-body draft remained `active` with no
+  `used_at` immediately after the mismatch rejection. The forged reply did not
+  consume the token.
+
+raw send bypass proof:
+- Public unauthenticated `POST https://choir.news/api/email/send` returned
+  `401` before it could reach maild.
+- Direct internal maild probe `POST /api/email/send` returned `404`.
+- No message with subject `raw send negative probe` was stored.
+
+focused regression proof:
+- `nix develop -c go test ./internal/runtime -run 'TestEmailAppagent|TestVTextEmail|TestCoagent|TestRequestEmailDraft'`
+  passed.
+- `nix develop -c go test ./internal/maild -run 'TestDraft|TestApproval|TestRisk|TestRaw|TestWebhook'`
+  passed.
+
+important observation after the negative proof:
+- Two drafts were later sent with maild approval event type
+  `owner_click_approved`:
+  - `email-draft-afffb9c9-b4a3-4f91-a972-cd2eacb52c4d`, subject
+    `Choir Email exact body proof fc2e1e5`, version hash
+    `aaae07a28d72fffbba355fb0aea312511e7d75d25af8940cc858c580a7b91f4b`,
+    provider id `8dbd98e0-7cf8-4321-8a58-62d6f4ecdcf1`;
+  - `email-draft-d316738f-4b1e-4db4-8b65-94b943d0f20b`, subject
+    `Choir Email deterministic draft proof 0ceeb17`, version hash
+    `9b945fc67ddfef573000ea048aaec2439ff0d9fd947d9de531d8750bee3fb623`,
+    provider id `a27ef648-49c7-44cf-9f7c-a6bed03a0c56`.
+- These are not approval-by-email proof. Their approval tokens still show
+  `active` with no `used_at`, and their approval events are
+  `owner_click_approved`, not `email_reply_approved`.
+- Treat this only as additional exact-version owner-click send evidence.
+
+belief-state changes:
+- A real inbound forged approval reply from a non-owner sender is rejected and
+  generates a structured risk alert without consuming the active token.
+- The owner-click send path remains functional for exact draft versions.
+- The reply-by-email approval path remains unproven because no
+  `email_reply_approved` event or consumed approval token has been observed.
+- Trace currently proves prompt-bar/VText/Email-appagent draft creation, but
+  the later UI owner-click send is represented in maild approval/send tables,
+  not appended back into the originating Trace trajectory. Do not claim full
+  Trace coverage for approval/send until this evidence edge is repaired or
+  explicitly accepted as maild evidence only.
+
+remaining error field:
+- Prove real approval-by-email with an owner-sent reply from
+  `yusefnathanson@me.com` to an active approval address. Required evidence:
+  `email_reply_approved` approval event, token `used_at` populated with status
+  `approved`, exact draft version hash sent, Sent UI entry, provider receipt,
+  and Trace or documented maild evidence refs.
+- Prove edit-by-reply with an owner-sent `edit:` response. Required evidence:
+  old token consumed/invalidated, new draft version hash, no outbound send
+  before reapproval, new approval notice, and UI-visible revised draft.
+- Decide whether approval/send events must be backfilled into the originating
+  Trace trajectory. The mission's Trace requirement asks for the Email appagent
+  node plus approval/send evidence refs; current implementation has the node
+  and draft evidence in Trace but uses maild tables for approval/send.
