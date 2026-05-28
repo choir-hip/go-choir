@@ -56,6 +56,13 @@ type verifyAppAdoptionInput struct {
 	ForegroundTailMergeResult      string          `json:"foreground_tail_merge_result,omitempty"`
 	MergeStrategy                  string          `json:"merge_strategy,omitempty"`
 	MergeConflicts                 json.RawMessage `json:"merge_conflicts,omitempty"`
+	Async                          bool            `json:"async,omitempty"`
+}
+
+type appAdoptionVerificationState struct {
+	rec        types.AppAdoptionRecord
+	pkg        types.AppChangePackageRecord
+	cutoverRef string
 }
 
 func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, computerID, kind, activeRef string) (types.ComputerSourceLineageRecord, error) {
@@ -283,9 +290,30 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 }
 
 func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
+	}
+	return rt.finishAppAdoptionVerification(ctx, ownerID, state)
+}
+
+func (rt *Runtime) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	go func() {
+		if _, err := rt.finishAppAdoptionVerification(context.Background(), ownerID, state); err != nil {
+			log.Printf("runtime: async app adoption verification adoption=%s: %v", state.rec.AdoptionID, err)
+		}
+	}()
+	return state.rec, nil
+}
+
+func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (appAdoptionVerificationState, error) {
+	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+	if err != nil {
+		return appAdoptionVerificationState{}, err
 	}
 	cutoverRef := strings.TrimSpace(in.TargetActiveSourceRefAtCutover)
 	if cutoverRef == "" {
@@ -307,7 +335,7 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 	rec.VerifierResultsJSON = startedResultsJSON
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
-		return types.AppAdoptionRecord{}, err
+		return appAdoptionVerificationState{}, err
 	}
 	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionVerificationStarted, "adoption", map[string]any{
 		"adoption_id":                  rec.AdoptionID,
@@ -320,8 +348,13 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 		"recipient_build_status":       "started",
 		"continuous_app_change":        true,
 	})
-	var buildErr error
-	buildReport, buildErr = rt.materializeAppAdoptionCandidate(ctx, pkg, rec, cutoverRef)
+	return appAdoptionVerificationState{rec: rec, pkg: pkg, cutoverRef: cutoverRef}, nil
+}
+
+func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID string, state appAdoptionVerificationState) (types.AppAdoptionRecord, error) {
+	rec := state.rec
+	pkg := state.pkg
+	buildReport, buildErr := rt.materializeAppAdoptionCandidate(ctx, pkg, rec, state.cutoverRef)
 	if buildErr != nil {
 		buildReport.Required = true
 		buildReport.Status = "failed"
@@ -340,6 +373,7 @@ func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID st
 		rec.Status = types.AppAdoptionVerified
 		rec.Error = ""
 	}
+	var err error
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err

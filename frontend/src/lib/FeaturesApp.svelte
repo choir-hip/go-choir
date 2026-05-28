@@ -18,6 +18,7 @@
   let selectedPackageId = appContext?.packageId || '';
   let acting = '';
   let removeLiveListener = () => {};
+  let destroyed = false;
 
   $: features = packages.map(packageToFeature);
   $: if (!selectedPackageId && features.length > 0) selectedPackageId = features[0].id;
@@ -172,6 +173,14 @@
     return adoption && adoption.status === 'rolled_back' && adoption.runtime_artifact_digest && adoption.ui_artifact_digest;
   }
 
+  function isTerminalImportStatus(status) {
+    return ['verified', 'owner_approved', 'adopted', 'rolled_back', 'blocked'].includes(String(status || ''));
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async function fetchJSON(url, options = {}) {
     const res = await fetchWithRenewal(url, {
       ...options,
@@ -243,6 +252,7 @@
         verified = await fetchJSON(`/api/adoptions/${encodeURIComponent(adoption.adoption_id)}/verify`, {
           method: 'POST',
           body: JSON.stringify({
+            async: true,
             target_active_source_ref_at_cutover: adoption.target_active_source_ref_at_candidate_start,
             foreground_tail_merge_result: adoption.foreground_tail_merge_result || 'no-conflict',
             merge_strategy: adoption.merge_strategy || 'rebase',
@@ -257,11 +267,9 @@
         throw verifyErr;
       }
       adoptions = [verified, ...adoptions.filter((item) => item.adoption_id !== verified.adoption_id)];
-      actionStatus = verified.status === 'verified'
-        ? `${feature.title} is ready. We emailed ${ownerEmail}; open Desk to activate or leave it for later.`
-        : `${feature.title} finished with status ${featureState(feature)}. We emailed ${ownerEmail}.`;
-      await notifyCompletion(feature, verified);
+      actionStatus = `${feature.title} is importing in the background. Choir will email ${ownerEmail} when it is ready or blocked.`;
       await refreshFeatures([verified]);
+      void waitForImportCompletion(feature, verified.adoption_id);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -270,6 +278,39 @@
       actionError = err.message || 'Import failed';
     } finally {
       acting = '';
+    }
+  }
+
+  async function waitForImportCompletion(feature, adoptionID) {
+    for (let attempt = 0; attempt < 240 && !destroyed; attempt += 1) {
+      await delay(attempt === 0 ? 1500 : 3000);
+      if (destroyed) return;
+      let current;
+      try {
+        current = await fetchJSON(`/api/adoptions/${encodeURIComponent(adoptionID)}`, { method: 'GET' });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          dispatch('authexpired');
+          return;
+        }
+        actionError = err.message || 'Import status refresh failed';
+        return;
+      }
+      adoptions = [current, ...adoptions.filter((item) => item.adoption_id !== current.adoption_id)];
+      await refreshFeatures([current]);
+      if (!isTerminalImportStatus(current.status)) continue;
+      if (current.status === 'blocked') {
+        actionStatus = `${feature.title} is blocked. We emailed ${ownerEmail} with a concise status link.`;
+      } else if (['verified', 'owner_approved'].includes(current.status)) {
+        actionStatus = `${feature.title} is ready. We emailed ${ownerEmail}; open Desk to activate or leave it for later.`;
+      } else {
+        actionStatus = `${feature.title} finished with status ${featureState(feature)}. We emailed ${ownerEmail}.`;
+      }
+      await notifyCompletion(feature, current);
+      return;
+    }
+    if (!destroyed) {
+      actionStatus = `${feature?.title || 'Feature'} is still importing. Choir will email ${ownerEmail} when it is ready or blocked.`;
     }
   }
 
@@ -362,6 +403,7 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
     removeLiveListener();
   });
 </script>

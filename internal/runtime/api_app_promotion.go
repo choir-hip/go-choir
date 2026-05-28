@@ -354,9 +354,19 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 				return
 			}
 		}
-		rec, err := h.rt.VerifyAppAdoption(r.Context(), ownerID, adoptionID, req)
+		var rec types.AppAdoptionRecord
+		var err error
+		if req.Async {
+			rec, err = h.rt.StartVerifyAppAdoptionAsync(r.Context(), ownerID, adoptionID, req)
+		} else {
+			rec, err = h.rt.VerifyAppAdoption(r.Context(), ownerID, adoptionID, req)
+		}
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
+		if req.Async {
+			writeAPIJSON(w, http.StatusAccepted, rec)
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, rec)
