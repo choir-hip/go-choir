@@ -2581,3 +2581,80 @@ required fix direction:
 - After deploy, confirm `systemctl cat go-choir-maild` shows the resolver URL,
   then send or approve a remaining draft and require `email.draft.approval_recorded`
   and `email.draft.sent` events on the Email appagent run.
+
+### Email Appagent Approval Trace Checkpoint: Owner-Click Evidence Routed
+
+status: email_trace_checkpoint_complete
+timestamp: 2026-05-28T15:34Z
+evidence source: GitHub Actions CI run `26584289461`, deployed commit
+`7097e1b1e51f4227e4f13163b95973d6b192015b`, Computer Use, maild SQLite, and
+owner-runtime Trace API
+
+commits:
+- `7ba75e3` documented the skipped maild vmctl environment activation.
+- `7097e1b` changed `nix/node-b.nix` to force host NixOS activation and keep
+  the maild vmctl resolver environment visible in the service unit.
+
+deployment evidence:
+- GitHub Actions CI run `26584289461` succeeded.
+- Deploy job `78326084259` succeeded.
+- `https://choir.news/health` reported proxy/sandbox deployed commit
+  `7097e1b1e51f4227e4f13163b95973d6b192015b` and deployed_at
+  `2026-05-28T15:26:52Z`.
+- `systemctl cat go-choir-maild` and `systemctl show go-choir-maild -p
+  Environment` both showed:
+  - `MAILD_RUNTIME_URL=http://127.0.0.1:8085`
+  - `MAILD_VMCTL_URL=http://127.0.0.1:8083`
+
+visible product proof:
+- Computer Use opened the Email app through the owner session and loaded the
+  approval deep link for draft `email-draft-1277a1d4-e837-4346-ba20-e03f4224d715`.
+- The Email app showed the draft subject `Choir Email approval-token proof
+  1e651a7`, sender `000@choir.news`, recipient `yusefnathanson@me.com`,
+  status `Pending approval`, and an enabled `Send approved draft` button.
+- After owner-clicking `Send approved draft`, the app switched to Sent and
+  showed `11 messages`; the top Sent item was the same subject with trust label
+  `Trusted sender`.
+
+maild evidence:
+- Draft `email-draft-1277a1d4-e837-4346-ba20-e03f4224d715` moved to `sent`.
+- Maild recorded approval event
+  `email-approval-bf2900f5-8f2d-49b1-9d88-bf1ce88d1804` with
+  `event_type=owner_click_approved`.
+- Maild recorded sent message
+  `resend-message-a900ff6cef8cae76f6d4a32b4e3dbe24`.
+- Resend provider message id:
+  `d2c3c7cc-6b1b-43e4-b675-efe7bdbd1d29`.
+
+Trace evidence:
+- Vmctl resolved owner `5bd6de97-3b58-408c-bf89-c42c81b083de`, desktop
+  `primary`, to `http://10.200.60.2:8085`.
+- Owner-runtime run
+  `6456bf74-b859-43dd-84d8-b4f54db81eef` includes the Email appagent causal
+  sequence:
+  - `loop.submitted`
+  - `loop.started` with `authority=email_appagent`, `action=draft_request`
+  - `loop.completed` with draft
+    `email-draft-1277a1d4-e837-4346-ba20-e03f4224d715`
+  - `email.draft.approval_recorded` with phase
+    `email_appagent_evidence`, `authority=email_appagent`, and
+    `maild_role=transport_evidence`
+  - `email.draft.sent` with phase `email_appagent_evidence`,
+    `send_authorized=true`, `sent_message_id`, and provider message id
+    `d2c3c7cc-6b1b-43e4-b675-efe7bdbd1d29`
+
+residual risks:
+- The user's live observation is that approval emails are arriving but often
+  land in spam. That is not a send/approval correctness failure, but it is a
+  product reliability issue for unattended approval flows.
+- Several stale proof drafts remain in Drafts, including old drafts without
+  active approval tokens; they should be cleaned up in a later deletion-first
+  convergence pass.
+- VText remains known-broken for broader research/coding trajectories and still
+  tends to continue into noisy super/probing paths. This checkpoint proves the
+  email-side approval/send/Trace substrate only.
+
+next realism axis:
+- Prove approval-by-reply after the vmctl resolver environment is active, then
+  prove edit-by-reply invalidates the prior version and produces a new approval
+  requirement.
