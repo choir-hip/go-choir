@@ -290,12 +290,17 @@ export function openApp(appId, appName, icon, appContext = {}) {
     const allowMultiple = appContext.allowMultiple === true || definition?.singleton === false;
     const existing = !allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null;
     if (existing) {
-      // Focus existing window
+      // Focus existing window and apply any launch context such as a deep link.
       activeWindowId.set(existing.windowId);
       let updated = $windows.map((w) =>
         w.windowId === existing.windowId
           ? {
               ...withoutShowDesktopMarkers(w),
+              title: appContext.windowTitle || appName || w.title,
+              appContext: {
+                ...(w.appContext || {}),
+                ...(appContext || {}),
+              },
               zIndex: getNextZIndex(),
               mode: w.mode === 'minimized' ? (w._showDesktopPrevMode || 'normal') : w.mode,
             }
