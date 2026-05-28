@@ -847,9 +847,9 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if inst, ok := m.vms[vmID]; ok {
 		if inst.State == StateRunning {
+			m.mu.Unlock()
 			return inst, nil
 		}
 	}
@@ -883,6 +883,9 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 	}
 	m.vms[vmID] = inst
 	m.reserveHostURLLocked(hostURL)
+	m.mu.Unlock()
+
+	m.ensureTapHostServiceInputRules(tapNameForVMID(vmID))
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
@@ -981,7 +984,7 @@ func (m *Manager) DestroyVMState(vmID string) error {
 	}
 
 	if len(vmID) >= 8 {
-		m.deleteTapDevice(fmt.Sprintf("vm-%s-tap", vmID[:8]))
+		m.deleteTapDevice(tapNameForVMID(vmID))
 	}
 	stateRoot := filepath.Clean(m.cfg.StateDir)
 	stateDir := filepath.Clean(filepath.Join(stateRoot, vmID))
@@ -1239,7 +1242,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			{
 				"iface_id":      "eth0",
 				"guest_mac":     fmt.Sprintf("AA:FC:00:00:00:%02X", hostPort%256),
-				"host_dev_name": fmt.Sprintf("vm-%s-tap", cfg.VMID[:8]),
+				"host_dev_name": tapNameForVMID(cfg.VMID),
 			},
 		},
 	}
@@ -1275,7 +1278,7 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	// Create the tap device for VM networking.
 	// Firecracker requires the tap device to exist before launching.
 	// The tap name comes from the config's host_dev_name field.
-	tapName := fmt.Sprintf("vm-%s-tap", vmID[:8])
+	tapName := tapNameForVMID(vmID)
 	if err := m.createTapDevice(tapName); err != nil {
 		log.Printf("vmmanager: warning: could not create tap device %s: %v (may already exist)", tapName, err)
 	}
@@ -1369,8 +1372,7 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 
 	// Clean up the tap device.
 	if vmID != "" && len(vmID) >= 8 {
-		tapName := fmt.Sprintf("vm-%s-tap", vmID[:8])
-		m.deleteTapDevice(tapName)
+		m.deleteTapDevice(tapNameForVMID(vmID))
 	}
 }
 
@@ -1884,17 +1886,7 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	_ = exec.Command(iptBin, "-A", "FORWARD",
 		"-o", tapName, "-j", "ACCEPT").Run()
 	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	// Allow guest sandboxes to reach narrow host-side control/transport
-	// listeners on the tap subnet without opening them beyond VM tap
-	// interfaces. Insert ahead of nixos-fw so the packet is accepted before the
-	// host firewall's default refuse path.
-	for _, port := range tapReachableHostServicePorts() {
-		_ = exec.Command(iptBin, "-I", "INPUT", "1",
-			"-i", tapName,
-			"-p", "tcp", "--dport", port,
-			"-m", "comment", "--comment", comment,
-			"-j", "ACCEPT").Run()
-	}
+	m.ensureTapHostServiceInputRules(tapName)
 
 	// Set up MASQUERADE (SNAT) for outbound guest traffic.
 	// This is critical: without it, the guest can send packets to the
@@ -1942,12 +1934,48 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	return nil
 }
 
+func (m *Manager) ensureTapHostServiceInputRules(tapName string) {
+	if strings.TrimSpace(tapName) == "" {
+		return
+	}
+	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
+	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
+	for _, port := range tapReachableHostServicePorts() {
+		spec := tapHostServiceInputRuleSpec(tapName, port, comment)
+		checkArgs := append([]string{"-C", "INPUT"}, spec...)
+		if err := exec.Command(iptBin, checkArgs...).Run(); err == nil {
+			continue
+		}
+		insertArgs := append([]string{"-I", "INPUT", "1"}, spec...)
+		if err := exec.Command(iptBin, insertArgs...).Run(); err != nil {
+			log.Printf("vmmanager: warning: could not allow tap %s to reach host service port %s: %v", tapName, port, err)
+		}
+	}
+}
+
+func tapHostServiceInputRuleSpec(tapName, port, comment string) []string {
+	return []string{
+		"-i", tapName,
+		"-p", "tcp", "--dport", port,
+		"-m", "comment", "--comment", comment,
+		"-j", "ACCEPT",
+	}
+}
+
 func tapReachableHostServicePorts() []string {
 	return []string{
 		"8083", // vmctl
 		"8084", // gateway
 		"8087", // maild draft persistence
 	}
+}
+
+func tapNameForVMID(vmID string) string {
+	prefix := vmID
+	if len(prefix) > 8 {
+		prefix = prefix[:8]
+	}
+	return fmt.Sprintf("vm-%s-tap", prefix)
 }
 
 // findBinary locates a binary by name, falling back to common NixOS paths.

@@ -854,6 +854,28 @@ func TestTapReachableHostServicePortsIncludeMaild(t *testing.T) {
 	}
 }
 
+func TestTapHostServiceInputRuleSpec(t *testing.T) {
+	got := tapHostServiceInputRuleSpec("vm-deadbeef-tap", "8087", "go-choir-vm-vm-deadbeef-tap")
+	want := []string{
+		"-i", "vm-deadbeef-tap",
+		"-p", "tcp", "--dport", "8087",
+		"-m", "comment", "--comment", "go-choir-vm-vm-deadbeef-tap",
+		"-j", "ACCEPT",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("tapHostServiceInputRuleSpec() = %#v, want %#v", got, want)
+	}
+}
+
+func TestTapNameForVMID(t *testing.T) {
+	if got := tapNameForVMID("vm-abcdef012345"); got != "vm-vm-abcde-tap" {
+		t.Fatalf("tapNameForVMID() = %q", got)
+	}
+	if got := tapNameForVMID("short"); got != "vm-short-tap" {
+		t.Fatalf("tapNameForVMID(short) = %q", got)
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
