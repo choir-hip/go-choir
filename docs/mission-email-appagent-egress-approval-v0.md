@@ -1100,3 +1100,99 @@ next executable probe:
 - Rerun focused tests, deploy through GitHub Actions, and rerun the visible
   prompt-bar proof until maild contains the new draft and the Email app Drafts
   view shows it.
+
+## Checkpoint: Email Appagent Must Not Treat Signup Email As From Alias
+
+timestamp: 2026-05-28T07:34:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `27d22c2` deployed the sandbox config fix,
+the visible product path reached Email appagent with a live maild URL, but the
+tool call provided the account signup email as `from_alias`. Maild correctly
+rejected the draft because `yusefnathanson@me.com` is not an owned Choir sender
+alias.
+
+what shipped immediately before this probe:
+- `b38ef38` documented the in-process `MaildURL` propagation bug.
+- `27d22c2` changed `cmd/sandbox/main.go` to preserve host service URLs from
+  `runtime.LoadConfig()`, added `TestBuildRuntimeConfigPreservesHostServiceURLs`,
+  and hardened malformed `from_alias` cleanup.
+- Focused local dev-shell tests passed:
+
+```text
+nix develop -c go test ./cmd/sandbox ./internal/runtime -run 'TestBuildRuntimeConfigPreservesHostServiceURLs|TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun|TestVTextRequestEmailDraftDropsMalformedFromAliasBeforeMaild|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent|TestCoagentCastCannotAddressEmailAppagentDirectly'
+```
+
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26571846719` completed
+  successfully.
+- Deploy job `78280903984` completed successfully.
+- Staging `/health` reported proxy and sandbox commit
+  `27d22c27da23592ced93e97bb9b2e57e16797084`, deployed at
+  `2026-05-28T11:28:22Z`.
+- The founder VM `http://10.200.60.2:8085/health` also reported sandbox commit
+  `27d22c27da23592ced93e97bb9b2e57e16797084`.
+
+observed product evidence:
+- Computer Use submitted:
+
+```text
+Create an email draft to yusefnathanson@me.com. Subject: Choir Email
+appagent bridge proof 27d22c2. Body: This is the deployed staging proof that
+VText hands a draft to Email appagent, maild stores it in Drafts, and no
+outbound email is sent before owner approval. Do not send the email.
+```
+
+- Trace trajectory `7bac1fe3-e4a3-4c64-8010-2673bf3ab7f9` completed with
+  first-class agents `conductor`, `vtext`, and `email`.
+- Trace edges included `conductor -> vtext` and `vtext -> email`.
+- Trace moment `7399f397-aa43-41d2-a374-34c645da311d` showed
+  `request_email_draft returned`, but the structured result contained:
+
+```json
+{
+  "from_alias": "yusefnathanson@me.com",
+  "maild_draft_persisted": false,
+  "maild_persistence_error": "maild draft status 403: {\"error\":\"from address is not owned by current user\"}",
+  "maild_persistence_status": "failed",
+  "status": "draft_persistence_failed",
+  "subject": "Choir Email appagent bridge proof 27d22c2"
+}
+```
+
+- Maild's internal draft list for owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de` still contained only the older
+  `1a06a36` and `18035fc` drafts.
+
+root cause:
+- The `request_email_draft` schema and prompt say `from_alias` should be an
+  owned numeric Choir address, and an empty value lets Email appagent/maild
+  choose the owner default.
+- The runtime cleanup only required syntactic email validity. It did not
+  restrict `from_alias` to Choir-owned numeric aliases before sending the draft
+  request to maild.
+- The VText model therefore extracted the recipient/signup email as the sender
+  alias. Maild's ownership gate blocked the draft, which is the correct
+  transport-layer safety outcome but too late for the appagent UX.
+
+belief-state changes:
+- The host-service URL and tap path are now good enough for the appagent to
+  reach maild; the failure advanced from configuration to sender-alias policy.
+- Maild's sender ownership check is functioning.
+- Email appagent should sanitize unsupported `from_alias` values to empty so
+  the mailbox service selects the account default sender alias, rather than
+  forwarding external/signup addresses to maild.
+
+remaining error field:
+- Prompt-bar simple email can reach VText and Email appagent, but a supplied
+  non-Choir `from_alias` causes draft persistence failure.
+- The Email app Drafts UI still cannot show the prompt-bar-created draft until
+  appagent sender-alias cleanup is stricter.
+
+next executable probe:
+- Restrict `request_email_draft.from_alias` cleanup to Choir numeric sender
+  aliases and drop all other addresses to empty before hashing or calling
+  maild.
+- Add a regression test that a signup/external email in `from_alias` reaches
+  maild as an empty/default alias.
+- Redeploy through GitHub Actions and rerun the same visible prompt-bar proof.
