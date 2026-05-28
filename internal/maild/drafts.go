@@ -325,6 +325,9 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 	if err != nil {
 		return sendDraftResponse{}, fmt.Errorf("mark sent: %w", err)
 	}
+	tracePayloadDraft := draft
+	tracePayloadDraft.OwnerID = ownerID
+	h.emitApprovedDraftTraceEvents(ctx, tracePayloadDraft, approvalEventID, eventType, approvalProviderMessageID, msg.ID, sent.ID)
 	return sendDraftResponse{
 		Draft:             summarizeDraft(updated),
 		MessageID:         msg.ID,

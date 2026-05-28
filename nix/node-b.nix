@@ -300,6 +300,7 @@ in
         "MAILD_DB_PATH=${mailDir}/mail.db"
         "MAILD_STORAGE_ROOT=${mailDir}"
         "MAILD_PRIMARY_DOMAIN=choir.news"
+        "MAILD_RUNTIME_URL=http://127.0.0.1:8085"
       ];
     };
   };

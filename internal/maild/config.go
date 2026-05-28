@@ -30,6 +30,7 @@ type Config struct {
 	RootOwnerID      string
 	ResendAPIKey     string
 	ResendBaseURL    string
+	RuntimeURL       string
 	WebhookSecret    string
 	WebhookMaxBytes  int64
 	APIMaxBytes      int64
@@ -48,6 +49,7 @@ func LoadConfig() (*Config, error) {
 		RootOwnerID:      envOr("MAILD_ROOT_OWNER_ID", DefaultRootOwnerID),
 		ResendAPIKey:     os.Getenv("RESEND_API_KEY"),
 		ResendBaseURL:    envOr("RESEND_BASE_URL", DefaultResendBaseURL),
+		RuntimeURL:       os.Getenv("MAILD_RUNTIME_URL"),
 		WebhookSecret:    os.Getenv("RESEND_WEBHOOK_SECRET"),
 		WebhookMaxBytes:  int64EnvOr("MAILD_WEBHOOK_MAX_BYTES", DefaultWebhookMaxBody),
 		APIMaxBytes:      int64EnvOr("MAILD_API_MAX_BYTES", DefaultAPIMaxBody),

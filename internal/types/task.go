@@ -197,6 +197,14 @@ const (
 	// event stream.
 	EventChannelMessage EventKind = "channel.message"
 
+	// EventEmailDraftApprovalRecorded is emitted when Email appagent records
+	// an approval decision for a specific draft version.
+	EventEmailDraftApprovalRecorded EventKind = "email.draft.approval_recorded"
+
+	// EventEmailDraftSent is emitted when an approved Email appagent draft is
+	// handed to maild/Resend and stored as sent.
+	EventEmailDraftSent EventKind = "email.draft.sent"
+
 	// EventBrowserSessionCreated is emitted when the backend Browser product
 	// path creates an owner-scoped browser session.
 	EventBrowserSessionCreated EventKind = "browser.session.created"

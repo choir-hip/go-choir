@@ -9,8 +9,11 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -162,6 +165,19 @@ type runListResponse struct {
 // the authenticated owner across recent runs.
 type eventListResponse struct {
 	Events []types.EventRecord `json:"events"`
+}
+
+type internalRunEventAppendRequest struct {
+	OwnerID string          `json:"owner_id"`
+	Kind    types.EventKind `json:"kind"`
+	Phase   string          `json:"phase,omitempty"`
+	Payload map[string]any  `json:"payload,omitempty"`
+}
+
+type internalRunEventAppendResponse struct {
+	Status  string          `json:"status"`
+	EventID string          `json:"event_id"`
+	Kind    types.EventKind `json:"kind"`
 }
 
 // channelMessageListResponse is the JSON response for GET /api/agent/channel-messages.
@@ -905,9 +921,9 @@ func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Re
 	writeAPIJSON(w, http.StatusOK, internalChannelCastResponse{Status: "cast", Cursor: cursor})
 }
 
-// HandleInternalRunEvents handles GET /internal/runtime/runs/{id}/events.
+// HandleInternalRunEvents handles internal service-to-service run events.
 func (h *APIHandler) HandleInternalRunEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
@@ -929,6 +945,10 @@ func (h *APIHandler) HandleInternalRunEvents(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
 		return
 	}
+	if r.Method == http.MethodPost {
+		h.handleInternalRunEventAppend(w, r, ownerID, runID)
+		return
+	}
 	limit := 200
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 1000 {
@@ -942,6 +962,65 @@ func (h *APIHandler) HandleInternalRunEvents(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, eventListResponse{Events: events})
+}
+
+func (h *APIHandler) handleInternalRunEventAppend(w http.ResponseWriter, r *http.Request, ownerID, runID string) {
+	var in internalRunEventAppendRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&in); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(in.OwnerID) != "" && strings.TrimSpace(in.OwnerID) != ownerID {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id mismatch"})
+		return
+	}
+	kind := types.EventKind(strings.TrimSpace(string(in.Kind)))
+	switch kind {
+	case types.EventEmailDraftApprovalRecorded, types.EventEmailDraftSent:
+	default:
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsupported internal event kind"})
+		return
+	}
+	rec, err := h.rt.GetRun(r.Context(), runID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	if in.Payload == nil {
+		in.Payload = map[string]any{}
+	}
+	raw, err := json.Marshal(in.Payload)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid event payload"})
+		return
+	}
+	event := types.EventRecord{
+		EventID:      uuid.NewString(),
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rec.ChannelID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Phase:        firstNonEmpty(strings.TrimSpace(in.Phase), "email_appagent_evidence"),
+		Payload:      raw,
+	}
+	if err := h.rt.Store().AppendEvent(r.Context(), &event); err != nil {
+		log.Printf("runtime api: append internal run event: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to append event"})
+		return
+	}
+	if h.rt.bus != nil {
+		h.rt.bus.Publish(events.RuntimeEvent{
+			Record: event,
+			Actor:  events.ActorRuntime,
+			Cause:  events.CauseHostAction,
+		})
+	}
+	writeAPIJSON(w, http.StatusAccepted, internalRunEventAppendResponse{Status: "appended", EventID: event.EventID, Kind: kind})
 }
 
 func internalRuntimeRunIDFromPath(path string) string {

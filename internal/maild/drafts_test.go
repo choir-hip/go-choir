@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -154,6 +155,105 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	h.HandleDrafts(w, req)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("second send status = %d, want %d; body=%s", w.Code, http.StatusConflict, w.Body.String())
+	}
+}
+
+func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/emails" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"provider-trace-send-1"}`))
+	}))
+	defer resend.Close()
+
+	var mu sync.Mutex
+	var tracePosts []map[string]any
+	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs/email-run-1/events" {
+			t.Fatalf("runtime request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header: %+v", r.Header)
+		}
+		if r.URL.Query().Get("owner_id") != "user-root" {
+			t.Fatalf("owner query = %q", r.URL.Query().Get("owner_id"))
+		}
+		var post map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&post); err != nil {
+			t.Fatalf("decode runtime post: %v", err)
+		}
+		raw, _ := json.Marshal(post)
+		if strings.Contains(string(raw), "Approved body.") || strings.Contains(string(raw), "secret-approval-token") {
+			t.Fatalf("trace post leaked risky content: %s", raw)
+		}
+		mu.Lock()
+		tracePosts = append(tracePosts, post)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"appended","event_id":"runtime-event-1","kind":"email.draft.sent"}`))
+	}))
+	defer runtime.Close()
+
+	cfg.ResendBaseURL = resend.URL
+	cfg.RuntimeURL = runtime.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	alias, err := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		FromAddress: "000@choir.news",
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Trace send",
+		TextBody:    "Approved body.",
+		SourceKind:  "vtext_email_artifact",
+		SourceRef:   `{"email_appagent_run_id":"email-run-1","doc_id":"doc-1","revision_id":"rev-1","source_content_hash":"sha256:test"}`,
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	resp, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", "approval-notice-1")
+	if err != nil {
+		t.Fatalf("sendApprovedDraft: %v", err)
+	}
+	if resp.ProviderMessageID != "provider-trace-send-1" || resp.ApprovalEventID == "" {
+		t.Fatalf("send response = %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(tracePosts) != 2 {
+		t.Fatalf("trace post count = %d, want 2; posts=%+v", len(tracePosts), tracePosts)
+	}
+	if tracePosts[0]["kind"] != emailTraceEventApprovalRecorded || tracePosts[1]["kind"] != emailTraceEventSent {
+		t.Fatalf("trace post kinds = %#v, %#v", tracePosts[0]["kind"], tracePosts[1]["kind"])
+	}
+	for _, post := range tracePosts {
+		if post["owner_id"] != "user-root" || post["phase"] != "email_appagent_evidence" {
+			t.Fatalf("trace post envelope = %+v", post)
+		}
+		payload, ok := post["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("payload type = %T", post["payload"])
+		}
+		if payload["authority"] != "email_appagent" || payload["maild_role"] != "transport_evidence" {
+			t.Fatalf("trace payload authority = %+v", payload)
+		}
+		if payload["draft_id"] != draft.ID || payload["draft_version_hash"] != draft.VersionHash ||
+			payload["approval_event_type"] != "owner_click_approved" ||
+			payload["approval_provider_message_id"] != "approval-notice-1" {
+			t.Fatalf("trace payload = %+v", payload)
+		}
+	}
+	sentPayload := tracePosts[1]["payload"].(map[string]any)
+	if sentPayload["sent_message_id"] == "" || sentPayload["provider_message_id"] != "provider-trace-send-1" || sentPayload["send_authorized"] != true {
+		t.Fatalf("sent trace payload = %+v", sentPayload)
 	}
 }
 
