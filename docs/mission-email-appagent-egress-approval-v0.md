@@ -3358,3 +3358,47 @@ fix direction:
   - reply commands.
 - It should not show raw draft ids, approval token ids, version hashes, trace
   ids, provider ids, or other internal metadata.
+
+### Checkpoint: Approval Email Body Fix Deployed
+
+status: deployed_partial_proof
+timestamp: 2026-05-28T18:33Z
+
+problem fix:
+- `2756919` documented the approval-email UX/security defect before code
+  changes.
+- `7c4ce0f` changed maild approval emails to include From, To, Subject, and a
+  bounded plain-text draft message preview.
+- The exact draft id/version hash remain in structured Resend headers and maild
+  approval-token state for enforcement, but the owner-facing body no longer
+  prints the version-hash metadata sentence.
+
+verification:
+- Focused local test passed:
+  `nix develop -c go test ./internal/maild -run 'TestDraftApprovalEmailUsesVerifiedSignupEmailAndReplyToken|TestApprovalEmailDraftBodyPreviewIsBounded|TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken'`
+- Broader local email/security set passed:
+  `nix develop -c go test ./internal/maild ./internal/runtime ./internal/types -run 'Test.*Email|Test.*Draft|Test.*Approval|Test.*Risk|TestEmailDraftEventKinds|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+- GitHub Actions CI run `26594272363` passed for
+  `7c4ce0f03d1c1ed9618619fd0c08321dd894d104`, including the Node B staging
+  deploy job.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `7c4ce0f03d1c1ed9618619fd0c08321dd894d104` with deployed_at
+  `2026-05-28T18:31:57Z`.
+- Computer Use product-path observation: authenticated Email app on
+  `choir.news` opened the current draft
+  `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` and clicked
+  `Email approval link`.
+- Read-only Node B maild inspection then showed a fresh active approval token:
+  `email-approval-token-17e5a19a-5c2c-4b46-832f-f6ff14e71cce`, provider message
+  id `a4d78b88-a0d9-4d67-a449-5a58d0263f63`, created
+  `2026-05-28T18:32:58Z`, with the prior provider id
+  `fb94f9fc-a374-4bf9-9076-0769af82c394` superseded.
+
+remaining error field:
+- I cannot directly inspect the owner mailbox content without the owner sharing
+  it, so the deployed provider-path proof confirms a new approval email was
+  sent after the fix, while tests confirm the generated body shape.
+- The mission still needs real owner reply proof for `edit:`, `approve`, and
+  `reject` paths. The next owner-visible email should show the draft message
+  body before the review link and should not include the old draft/version/hash
+  metadata sentence.
