@@ -242,25 +242,196 @@ No behavior code edits are allowed until this mission record names the failing
 transition using current product-path evidence. Documentation updates that record
 the reproduced problem are allowed and required before any fix commit.
 
+## Reproduction Evidence: 2026-05-28
+
+All probes below used the deployed product path at `https://choir.news`.
+Health at the start reported proxy and sandbox code commit
+`f60a8e0d228b2c04217d699c6365212e7ce8e1b3`, with `vmctl_status=ok`.
+
+### Explicit Medium Policy Matrix
+
+Command shape:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news \
+VTEXT_MODEL_CADENCE_EVIDENCE_DIR=../test-results/vtext-live-cadence-repair-v3-20260528T014733Z \
+VTEXT_MODEL_VARIANTS=fireworks-deepseek-v4-flash-medium \
+VTEXT_MODEL_PROMPTS=baseball,coding-super \
+npx playwright test tests/vtext-researcher-model-cadence-matrix.tmp.spec.js --project=chromium --workers=1 --reporter=line
+```
+
+Result: passed in 3.6 minutes.
+
+Evidence file:
+`/Users/wiz/go-choir/test-results/vtext-live-cadence-repair-v3-20260528T014733Z/fireworks-deepseek-v4-flash-medium.json`
+
+Findings:
+
+- Baseball prompt: submission `bd3334b2-873d-454c-9197-e015326c9b79`,
+  doc `96df7b2c-316a-4d0e-98f1-1b9cbe3cd97e`.
+- Baseball produced v1 in 3122 ms and v2 in 27122 ms, then continued to eight
+  appagent revisions during observation.
+- Baseball chain included one researcher spawn, five `web_search` calls, seven
+  fetches, seven findings, and eight successful `edit_vtext` calls.
+- Coding prompt: submission `43e3fd4a-a392-43c9-a924-998e915a9e83`,
+  doc `76951d7e-1ec4-4d2e-87a2-ea56ffa4aa49`.
+- Coding produced v1 in 4238 ms and v2 in 27238 ms, with one super request and
+  two successful `edit_vtext` calls.
+- No `edit_vtext` errors, VText mutation-state errors, or duplicate tool errors
+  were observed.
+
+Interpretation: the code path can complete the desired cadence when the harness
+pins every role to the explicit medium model variant. This does not prove the
+generated default policy, because the matrix harness also pinned super to the
+selected variant.
+
+### Generated Default Policy Failure
+
+Command shape:
+
+```text
+PLAYWRIGHT_BASE_URL=https://choir.news \
+VTEXT_DEFAULT_POLICY_EVIDENCE_DIR=../test-results/vtext-live-cadence-default-policy-20260528T015212Z \
+npx playwright test tests/vtext-default-policy-proof.tmp.spec.js --project=chromium --workers=1 --reporter=line
+```
+
+Result: failed after roughly 3 minutes because the test expected at least two
+appagent revisions and observed only one.
+
+Evidence:
+
+- JSON:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-policy-20260528T015212Z/default-policy-proof.json`
+- Trace:
+  `/Users/wiz/go-choir/frontend/test-results/vtext-default-policy-proof-b42d9-sh-medium-for-VText-cadence-chromium/trace.zip`
+- Test account:
+  `vtext-default-policy-1779933133700-66ub2a@example.com`
+- Submission: `63c4a9a9-acd0-4302-a73a-819ad462e2c9`
+- Doc: `00caea62-2687-42f0-b2e7-81ee02746b78`
+- Only appagent revision:
+  `6cf52d0b-d742-4626-92e8-3ca67e1f3760`, created
+  `2026-05-28T01:52:26Z`
+- VText and researcher both used
+  `fireworks/accounts/fireworks/models/deepseek-v4-flash`, reasoning
+  `medium`, policy `/mnt/persistent/files/System/model-policy.toml`.
+
+Trace classification:
+
+- The trajectory was still `running` when captured.
+- VText successfully wrote v1 through `edit_vtext`.
+- VText then called `spawn_agent`; a researcher was created and started.
+- The researcher called `web_search`; at least one search result returned.
+- The runtime emitted a required-next-tool retry after the search result.
+- No `submit_coagent_update` was recorded before the 180 second observation
+  window ended.
+- Because no coagent update existed, VText had no worker evidence packet to
+  wake on and no v2 revision was created.
+
+Named failing transition:
+
+```text
+researcher web_search result
+  -> required submit_coagent_update checkpoint
+  -> VText wake
+  -> evidence-incorporating v2
+```
+
+The failing edge is specifically the first `web_search` result to durable
+researcher checkpoint. It is not the initial VText edit, the researcher spawn,
+medium model policy selection, or total search provider outage.
+
+### Generated Default Policy Control Runs
+
+Detailed baseball control:
+
+- Evidence dir:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-detailed-2026-05-28T01-57-23-930Z`
+- Submission: `56080f3e-1558-4b94-b069-6963dec14812`
+- Doc: `77486925-f4fc-495e-974e-8d64ecd72bbb`
+- Result: three appagent revisions.
+- Timeline: v1 at 4562 ms, researcher spawn at 10562 ms, first `web_search`
+  at 12562 ms, first `submit_coagent_update` at 21562 ms, v2 at 33562 ms,
+  second `submit_coagent_update` at 37562 ms, v3 at 51562 ms.
+- The run had four tool errors from import/fetch/read/grep attempts, but no
+  `edit_vtext` error and no cadence break.
+
+Fresh coding default control:
+
+- Evidence dir:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-coding-2026-05-28T02-04-25-624Z`
+- Submission: `1edef4ac-9336-4964-a2da-adad728a1bd0`
+- Doc: `1cd9e1c9-aec4-4e51-aed7-70d8b9949e9c`
+- Result: two appagent revisions.
+- Super used `fireworks/accounts/fireworks/models/deepseek-v4-pro`, reasoning
+  `medium`, policy `/mnt/persistent/files/System/model-policy.toml`.
+- Chain included one `request_super_execution`, one successful `bash`, one
+  successful `submit_coagent_update`, and two successful VText edits.
+
+Interpretation: generated default policy can succeed for both factual/research
+and bounded coding/execution prompts in fresh sessions, but the factual path has
+an intermittent reliability failure at the researcher checkpoint edge.
+
+## Root Cause Hypothesis
+
+The reproduced defect is a runtime contract reliability gap, not a total
+capability absence. Current tooling already marks first researcher search/fetch
+results with `next_required_tool=submit_coagent_update`, and the tool loop emits
+required-next-tool retry events. However, live evidence shows the loop can remain
+running beyond the owner-visible VText SLA without a durable
+`submit_coagent_update` after a returned search result. The runtime currently
+depends too heavily on the next model turn satisfying the required checkpoint
+prompt/tool-choice contract.
+
+The next code investigation should focus on:
+
+- whether the required-next-tool retry budget is actually terminal in the
+  researcher run once the model ignores `submit_coagent_update`;
+- whether the researcher can continue with another model/tool path before a
+  first checkpoint despite the tool result declaring `next_required_tool`;
+- whether a bounded runtime fallback should synthesize or force a precise
+  blocker/finding packet from the already returned search result instead of
+  leaving VText waiting indefinitely;
+- whether existing tests cover the failure mode "researcher search succeeds,
+  model does not call `submit_coagent_update`, parent VText waits past SLA."
+
+No code fix is selected yet. The smallest acceptable fix must make the first
+researcher evidence checkpoint durable after a successful first search/fetch
+without letting researcher or super write canonical VText directly.
+
 ## Run Checkpoint & Resumption State
 
 ```text
 status: checkpoint_incomplete
-last checkpoint: mission created before reproduction.
+last checkpoint: generated default factual probe reproduced an intermittent
+  researcher checkpoint failure after web_search.
 current artifact state: deployed code identity is f60a8e0d; no VText repair
   code has been authored in this mission.
 what shipped: none.
-what was proven: current health only.
-unproven or partial claims: live VText failure transition.
+what was proven: explicit medium matrix can complete research and coding
+  cadence; generated default coding can complete super execution cadence;
+  generated default factual cadence can fail after researcher web_search returns
+  but before submit_coagent_update.
+unproven or partial claims: whether the code-contract gap is in tool-loop
+  enforcement, researcher tool projection timing, continuation scheduling, or a
+  missing fallback after bounded required-next-tool retries.
 belief-state changes: May 26 review is now a hypothesis source, not direct
   implementation plan, because several findings are stale against current code.
-remaining error field: reproduce and classify current failure.
-highest-impact remaining uncertainty: whether the failure is generic code,
-  deployed/live-state drift, owner-computer policy/state, or provider/search
-  behavior.
-next executable probe: run staging product-path factual and coding prompts and
-  record full transition evidence.
+  The active failure is narrower than "VText stops after v1": VText can spawn
+  researcher, and researcher can receive search results, but the first durable
+  coagent checkpoint is intermittent.
+remaining error field: inspect runtime tool-loop and research-tool enforcement,
+  then author the smallest fix that makes the first checkpoint reliable.
+highest-impact remaining uncertainty: whether the correct layer is stricter
+  required-next-tool enforcement, a researcher-specific fallback checkpoint, or
+  both.
+next executable probe: inspect `internal/runtime/toolloop.go` and
+  `internal/runtime/tools_research.go`, then add a focused failing test for the
+  missing first-checkpoint failure mode.
 suggested resume goal string: use the Goal Prompt above.
-evidence artifact refs: pending.
+evidence artifact refs:
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-policy-20260528T015212Z/default-policy-proof.json`;
+  `/Users/wiz/go-choir/frontend/test-results/vtext-default-policy-proof-b42d9-sh-medium-for-VText-cadence-chromium/trace.zip`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-detailed-2026-05-28T01-57-23-930Z/baseball.json`;
+  `/Users/wiz/go-choir/test-results/vtext-live-cadence-default-coding-2026-05-28T02-04-25-624Z/coding-super.json`.
 rollback refs: no behavior change yet.
 ```
