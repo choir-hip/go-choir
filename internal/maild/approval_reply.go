@@ -85,8 +85,12 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		if err := h.store.UseDraftApprovalToken(ctx, token.ID, "edited"); err != nil {
 			return err
 		}
-		if _, err := h.store.UpdateDraftTextFromApprovalEdit(ctx, draft, editText); err != nil {
+		updated, err := h.store.UpdateDraftTextFromApprovalEdit(ctx, draft, editText)
+		if err != nil {
 			return err
+		}
+		if _, err := h.sendDraftApprovalEmail(ctx, updated, token.ApprovalEmail); err != nil {
+			log.Printf("maild: edited draft approval email failed owner=%s draft=%s: %v", token.OwnerID, token.DraftID, err)
 		}
 		return nil
 	default:

@@ -242,16 +242,24 @@ func (h *Handler) handleDraftApprovalEmail(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
 		return
 	}
-	token, err := h.store.CreateDraftApprovalToken(r.Context(), draft, ownerEmail, 24*time.Hour)
+	resp, err := h.sendDraftApprovalEmail(r.Context(), draft, ownerEmail)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create approval token"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send approval email"})
 		return
+	}
+	writeJSON(w, http.StatusAccepted, resp)
+}
+
+func (h *Handler) sendDraftApprovalEmail(ctx context.Context, draft EmailDraft, ownerEmail string) (approvalEmailResponse, error) {
+	token, err := h.store.CreateDraftApprovalToken(ctx, draft, ownerEmail, 24*time.Hour)
+	if err != nil {
+		return approvalEmailResponse{}, fmt.Errorf("create approval token: %w", err)
 	}
 	reviewURL := "https://choir.news/?app=email&draft=" + draft.ID + "&approval=" + token.Token
 	replyAddress := "approve+" + token.Token + "@" + strings.ToLower(strings.TrimSpace(h.cfg.PrimaryDomain))
 	body := fmt.Sprintf("Choir email draft needs approval.\n\nSubject: %s\nTo: %s\nStatus: needs approval\n\nOpen to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nThis approval is scoped to draft %s version %d hash %s. The link opens review only; it does not send by itself.",
 		draft.Subject, strings.Join(decodeAddressJSON(draft.ToJSON), ", "), reviewURL, draft.ID, draft.Version, draft.VersionHash)
-	sent, err := h.resend.sendEmail(r.Context(), resendSendRequest{
+	sent, err := h.resend.sendEmail(ctx, resendSendRequest{
 		From:    "Choir <updates@choir.news>",
 		To:      []string{ownerEmail},
 		ReplyTo: []string{replyAddress},
@@ -266,21 +274,19 @@ func (h *Handler) handleDraftApprovalEmail(w http.ResponseWriter, r *http.Reques
 		},
 	})
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send approval email"})
-		return
+		return approvalEmailResponse{}, err
 	}
 	token.ProviderMessageID = sent.ID
-	if err := h.store.MarkDraftApprovalTokenSent(r.Context(), token.ID, sent.ID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record approval email"})
-		return
+	if err := h.store.MarkDraftApprovalTokenSent(ctx, token.ID, sent.ID); err != nil {
+		return approvalEmailResponse{}, fmt.Errorf("record approval email: %w", err)
 	}
-	writeJSON(w, http.StatusAccepted, approvalEmailResponse{
+	return approvalEmailResponse{
 		Status:            "sent",
 		TokenID:           token.ID,
 		ProviderMessageID: sent.ID,
 		ReviewURL:         reviewURL,
 		ReplyAddress:      replyAddress,
-	})
+	}, nil
 }
 
 func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versionHash, eventType, approvalProviderMessageID string) (sendDraftResponse, error) {

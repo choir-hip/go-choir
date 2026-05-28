@@ -622,13 +622,15 @@ func TestApprovalReplySenderMismatchBlocksRetryAndSendsRiskAlert(t *testing.T) {
 func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"
-	var payload resendSendRequest
+	var payloads []resendSendRequest
 	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload resendSendRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode payload: %v", err)
 		}
+		payloads = append(payloads, payload)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"risk-alert-stale-edit-token"}`))
+		_, _ = w.Write([]byte(`{"id":"provider-call-` + string(rune('0'+len(payloads))) + `"}`))
 	}))
 	defer resend.Close()
 	cfg.ResendBaseURL = resend.URL
@@ -667,12 +669,30 @@ func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) 
 	if !strings.Contains(updated.TextBody, "make it warmer and shorter") || updated.ProviderMessageID != "" {
 		t.Fatalf("updated draft body/provider = %+v", updated)
 	}
+	if len(payloads) != 1 {
+		t.Fatalf("payload count after edit = %d, want fresh approval email; payloads=%+v", len(payloads), payloads)
+	}
+	if payloads[0].Subject != "Choir email draft needs approval: Edit reply" ||
+		payloads[0].Headers["X-Choir-Maild"] != "v0-email-draft-approval" ||
+		payloads[0].Headers["X-Choir-Email-Draft-Version-Hash"] != updated.VersionHash {
+		t.Fatalf("fresh approval payload = %+v updated=%+v", payloads[0], updated)
+	}
+	if strings.Contains(payloads[0].Text, "make it warmer and shorter") || !strings.Contains(payloads[0].Text, updated.VersionHash) {
+		t.Fatalf("approval email should reference the version without embedding edit body: %q", payloads[0].Text)
+	}
 	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
 	if err != nil {
 		t.Fatalf("GetDraftApprovalToken: %v", err)
 	}
 	if used.Status != "edited" {
 		t.Fatalf("old token status = %q, want edited", used.Status)
+	}
+	var activeTokenCount int
+	if err := store.db.QueryRowContext(nilSafeContext(), `SELECT count(*) FROM email_draft_approval_tokens WHERE draft_id = ? AND status = 'active' AND version_hash = ?`, draft.ID, updated.VersionHash).Scan(&activeTokenCount); err != nil {
+		t.Fatalf("active token count query: %v", err)
+	}
+	if activeTokenCount != 1 {
+		t.Fatalf("active token count for edited version = %d, want 1", activeTokenCount)
 	}
 
 	approveOld := editReply
@@ -682,8 +702,11 @@ func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) 
 	if !errors.Is(err, errApprovalReplyRejected) || shouldRetryIngest(err) {
 		t.Fatalf("old token approval err=%v retry=%v", err, shouldRetryIngest(err))
 	}
-	if payload.Headers["X-Choir-Risk-Kind"] != "approval_token_not_active" {
-		t.Fatalf("risk alert payload after old token approval = %+v", payload)
+	if len(payloads) != 2 {
+		t.Fatalf("payload count after old-token approval = %d, want approval + risk alert; payloads=%+v", len(payloads), payloads)
+	}
+	if payloads[1].Headers["X-Choir-Risk-Kind"] != "approval_token_not_active" {
+		t.Fatalf("risk alert payload after old token approval = %+v", payloads[1])
 	}
 }
 
