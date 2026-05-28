@@ -2699,3 +2699,85 @@ required next mission:
 - Then rerun approval-by-reply using a fresh token, requiring Resend inbound
   evidence, maild approval event, provider send receipt, and Email appagent
   Trace `approval_recorded`/`sent` evidence.
+
+### VText-To-Email Draft Handoff Checkpoint: Parser Fixed, Risk Gate Proven
+
+status: email_draft_handoff_fixed_reply_pending
+timestamp: 2026-05-28T15:58Z
+evidence source: local focused tests, GitHub Actions CI, staging deploy health,
+Computer Use, maild SQLite, owner-runtime Trace API
+
+commits:
+- `06e58f5` fixed deterministic extraction for VText email artifacts that use
+  plain section headings such as `Recipient`, `Subject`, and `Body`, and added
+  a regression test for the deployed failure shape.
+
+local verification:
+- `nix develop -c go test ./internal/runtime -run
+  'TestExtractEmailDraftIntentHandles|TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+  passed.
+- `nix develop -c go test ./internal/runtime ./internal/maild
+  ./internal/proxy -run 'Test.*Email|Test.*Draft|Test.*Approval|Test.*Risk|Test.*Coagent.*Email|TestExtractEmailDraftIntentHandles|TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation'`
+  passed.
+
+deployment evidence:
+- GitHub Actions CI run `26585279252` succeeded for
+  `06e58f5a9fd6a04edef5b2c1f60d1a34bdb064cf`.
+- Deploy job `78329645275` succeeded.
+- `https://choir.news/health` reported deployed commit
+  `06e58f5a9fd6a04edef5b2c1f60d1a34bdb064cf` and deployed_at
+  `2026-05-28T15:44:09Z`.
+
+negative/risk proof:
+- A fresh deployed prompt-bar probe with subject `Choir Email reply approval
+  proof 06e58f5` created a VText artifact and executed the Email appagent
+  handoff, but the draft body itself contained `Please reply approve...`.
+- The Email appagent blocked that content as `suspected_prompt_injection`
+  instead of creating a sendable draft.
+- Maild recorded risk alert
+  `email-risk-alert-cc419745-7a9a-451e-ad13-755eb7d2a2f1` with provider
+  message id `be163cc7-ef3e-4dc1-8cdb-188a74958592`.
+- This is the desired security outcome: approval instructions belong in the
+  owner approval email, not in arbitrary outbound draft body content.
+
+clean draft proof:
+- A clean deployed prompt-bar probe with subject `Choir Email clean approval
+  proof 06e58f5` created a maild-backed draft and approval token.
+- Maild draft: `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`.
+- Draft status: `draft_pending_owner_approval`.
+- Active approval token: `b69c3d3a1afa454b86c3c5a325a4825d`.
+- Approval email provider message id:
+  `1f93fa65-7b7e-454f-ae4f-2192a0c49009`.
+- Source ref:
+  `{"doc_id":"c07beacd-776a-4e01-859e-013ae288f987","email_appagent_run_id":"32f082b1-d1cb-4ee4-9aac-99289aa3b79d","revision_id":"5426aa41-54db-4ca1-90da-79db0105013c","source_content_hash":"sha256:5656a4c0a8ee66f426856f766ba7648d10d56aa6ae9c749ad986c6b207864543"}`.
+
+Trace evidence:
+- Owner-runtime Email appagent run
+  `32f082b1-d1cb-4ee4-9aac-99289aa3b79d` includes:
+  - `loop.submitted`
+  - `loop.started` with `authority=email_appagent`, `action=draft_request`
+  - `loop.completed` with draft
+    `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`, status
+    `draft_pending_owner_approval`, and version id
+    `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648-v1`
+
+current waiting condition:
+- Approval-by-reply is now waiting on the owner replying `approve` to the
+  approval email for `Choir Email clean approval proof 06e58f5`.
+- As of this checkpoint, maild has not yet recorded an approval event or sent
+  message for that clean draft.
+
+belief-state changes:
+- The prior VText-to-maild boundary blocker is repaired for the deployed failure
+  shape.
+- The risk-alert path is live and provider-backed for suspicious approval
+  manipulation content.
+- Approval-by-reply remains unproven only because the external owner reply has
+  not arrived yet, not because the draft/token path is missing.
+
+remaining error:
+- Approval emails are still landing in spam in the owner's mailbox. This is a
+  deliverability/product reliability issue and may slow human approval loops.
+- The Email app still has stale proof windows and stale drafts from earlier
+  probes; deletion-first convergence should remove demo cruft after the reply
+  proof completes.
