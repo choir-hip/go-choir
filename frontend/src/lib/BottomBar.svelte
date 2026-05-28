@@ -50,6 +50,7 @@
   let featureActionError = '';
   let dismissedFeatureID = '';
   let featureActing = '';
+  let featureRefreshTimer = null;
   let removeLiveListener = () => {};
 
   const launcherAppIds = [
@@ -316,6 +317,9 @@
     publishBottomBarHeight();
     resizePromptInput();
     void refreshFeatureTransitions();
+    featureRefreshTimer = window.setInterval(() => {
+      if (authenticated) void refreshFeatureTransitions();
+    }, 15_000);
     removeLiveListener = addLiveEventListener(handleLiveEvent);
     if (typeof ResizeObserver !== 'undefined' && bottomBarEl) {
       bottomBarResizeObserver = new ResizeObserver(publishBottomBarHeight);
@@ -326,6 +330,7 @@
 
   onDestroy(() => {
     removeLiveListener();
+    if (featureRefreshTimer) window.clearInterval(featureRefreshTimer);
     bottomBarResizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
   });
