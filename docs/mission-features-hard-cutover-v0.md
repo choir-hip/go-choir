@@ -1,6 +1,6 @@
 # MissionGradient: Features Hard Cutover v0
 
-Status: draft_for_review
+Status: complete
 Date: 2026-05-28
 
 ## Goal String
@@ -687,3 +687,110 @@ authenticated user's sandbox adoption until `verified`, `owner_approved`,
 through maild to the provided signup email. The email must contain only
 title/status/link and must not include raw logs, traces, secrets, or private
 source content.
+
+## Final Evidence Checkpoint: Features Hard Cutover Complete
+
+Timestamp: 2026-05-28 08:09 UTC
+
+Final commit under test:
+
+```text
+fceb2da222bbab2f686c640c4e059d71ac6d41d6
+```
+
+Landing evidence:
+
+- GitHub Actions CI run `26562394906` passed.
+- Staging deploy job `78248540089` passed.
+- `/health` reported proxy and sandbox deployed commit
+  `fceb2da222bbab2f686c640c4e059d71ac6d41d6` at
+  `2026-05-28T08:00:29Z`.
+- Focused local verification before commit:
+  - `nix develop -c go test ./internal/proxy -run 'Test(NotificationAPIForwardsToMaildWithTrustedUser|FeatureAdoptionCompletionWatchSendsMailAfterTerminalStatus)'`
+  - `npm --prefix frontend run build`
+
+Product proof retained from commit `cef80ab`:
+
+- Feature package:
+  `feature-proof-complete-1779954126190`
+- Adoption:
+  `feature-feature-proof-complete-1779954126190-8893f9ab-6a66-401f-84c1-959e86f05b2f`
+- Desktop screenshots:
+  - `/tmp/choir-features-proof-complete-1779954126190/catalog.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/import-started.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/desk-ready.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/activated.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/rolled-back.png`
+  - `/tmp/choir-features-proof-complete-1779954126190/rolled-forward.png`
+- Mobile screenshot:
+  - `/tmp/choir-features-proof-complete-1779954126190/mobile-features.png`
+- Full result:
+  - `/tmp/choir-features-proof-complete-1779954126190/result-1779954126190.json`
+- Verified recipient build:
+  - runtime digest
+    `sha256:1bd7ed11e091e5e59932eed98a8b3b0cd5a8683a6dc373189e994c71ad7626e2`
+  - UI digest
+    `sha256:ccbffd2109d9cff58eadd7c387f335656fb85b14cb8bd3bf8958ac65ae4fa1b4`
+  - rollback source ref `refs/computers/primary/active`
+- Desk controls proved:
+  - Ready state: `data-desk-feature-ready="true"`
+  - Activate advanced active source ref to
+    `refs/computers/primary/candidates/primary-feature-demo-video-feature-complete-1779954126190-1779954135231`
+  - Roll back restored `refs/computers/primary/active`
+  - Roll forward restored
+    `refs/computers/primary/candidates/primary-feature-demo-video-feature-complete-1779954126190-1779954135231`
+
+Unattended completion notification proof at final commit:
+
+- Feature package:
+  `feature-proof-unattended-1779955319060`
+- Adoption:
+  `feature-feature-proof-unattended-1779955319060-4283963e-b863-41e7-acee-0da3cbd69e63`
+- Screenshots:
+  - `/tmp/choir-features-unattended-1779955319060/before-import.png`
+  - `/tmp/choir-features-unattended-1779955319060/import-started.png`
+- Result:
+  - `/tmp/choir-features-unattended-1779955319060/result-1779955319060.json`
+- The frontend received the proxy watcher registration response:
+  `HTTP 202 {"status":"watching","adoption_id":"feature-feature-proof-unattended-1779955319060-4283963e-b863-41e7-acee-0da3cbd69e63"}`.
+- The proof closed the page immediately after watcher registration, before the
+  terminal adoption status, so the foreground Features polling loop could not
+  send the completion email.
+- Node B proxy log evidence:
+
+```text
+May 28 08:07:48 choiros-b ... go-choir-proxy ... proxy: feature adoption completion email sent adoption=feature-feature-proof-unattended-1779955319060-4283963e-b863-41e7-acee-0da3cbd69e63 user=09e3e8f0-714f-4149-916d-1261e9ad3d09 status=verified provider_message_id=7164bb64-6eb0-4c22-a16c-b0cde565c646
+```
+
+Diffstat from the mission base through final commit:
+
+```text
+19 files changed, 2573 insertions(+), 2047 deletions(-)
+```
+
+Major deletion/convergence evidence:
+
+- Deleted `frontend/src/lib/AppsChangesApp.svelte` (1406 lines).
+- Deleted `frontend/src/lib/ChangePreviewFrame.svelte` (170 lines).
+- Deleted `frontend/src/lib/Launcher.svelte` (186 lines).
+- Removed Settings promotion controls from the normal product path.
+- Added `frontend/src/lib/FeaturesApp.svelte` as the new launcher-facing
+  surface.
+
+Residual risks:
+
+- Ordinary research/coding trajectory completion emails are not generalized
+  yet; this mission proved the feature-import watcher. The same proxy/maild
+  notification pattern should be applied to run completion records in a
+  follow-on mission.
+- The proof uses Node B proxy logs to observe the unattended provider message
+  id. A product-visible notification ledger would be better than log scraping.
+- The source-level package/adoption API names remain internal implementation
+  vocabulary. They are hidden from the happy path but still present in code and
+  expert evidence.
+
+Next mission string:
+
+```text
+/goal Run a Codex-operated MissionGradient mission to generalize Choir completion notifications from Features import watches to ordinary research and coding trajectories. Preserve the concise email contract: account signup email for v0, title/status/link only, no raw logs/secrets/private content, and no email authorization semantics. Add a durable product-visible notification ledger so future unattended proofs do not depend on proxy log scraping, then prove one long research/coding run reaches final or blocker state while no browser page is observing and sends exactly one completion email.
+```
