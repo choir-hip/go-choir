@@ -1766,3 +1766,35 @@ next executable probe:
   increment and old-token invalidation through the real inbound path.
 - After reply approval is proven, run the deletion-first convergence pass over
   old direct-send tests/docs/UI surfaces and stale setup artifacts.
+
+## Problem Evidence Checkpoint: Approval URL Context Was Not Reaching Email
+
+timestamp: 2026-05-28T09:05:00-04:00
+status: documented_before_fix
+
+After commit `d1f861312e551625ece2d7827652cabf25da89d9` fixed singleton window
+context preservation, staging still opened the approval URL for draft
+`email-draft-c3e3484f-8b38-4f73-8eff-2d18398fc482` to the Email Inbox instead
+of the exact draft.
+
+Computer Use evidence:
+- Staging served proxy/sandbox commit
+  `d1f861312e551625ece2d7827652cabf25da89d9`, deployed at
+  `2026-05-28T12:57:25Z`.
+- The approval URL loaded successfully and no outbound send occurred, but the
+  Email window showed Inbox with 5 messages and selected `Re: Test 0`.
+- The desired draft subject `Choir Email approval-token proof 3af9f4b` was not
+  visible or focused.
+
+Root cause:
+- `App.svelte` correctly parses `?app=email&draft=...&approval=...` into an
+  Email app launch context.
+- `Desktop.svelte` replays that launch intent after desktop state is ready.
+- `stores/desktop.js` now preserves/merges launch context when focusing an
+  existing singleton Email window.
+- But the Email window render path instantiated `<EmailApp>` without
+  `appContext={win.appContext}`. `EmailApp.svelte` therefore never received
+  `draftId`, so its `openContextDraft()` guard could not run.
+
+Belief update: the next fix should be a minimal app-context wiring change, not
+a new Email state machine or approval endpoint change.
