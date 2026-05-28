@@ -39,6 +39,11 @@ type featureAdoptionWatchRecord struct {
 	Error      string `json:"error,omitempty"`
 }
 
+type featureCompletionEmailResponse struct {
+	Status            string `json:"status"`
+	ProviderMessageID string `json:"provider_message_id,omitempty"`
+}
+
 func (h *Handler) HandleNotificationAPI(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/notifications/watch-adoption-completion" {
 		h.HandleFeatureAdoptionCompletionWatch(w, r)
@@ -132,8 +137,11 @@ func (h *Handler) watchFeatureAdoptionCompletion(userID, sandboxURL string, in f
 			}
 			log.Printf("proxy: feature adoption watch poll adoption=%s user=%s: %v", in.AdoptionID, userID, err)
 		} else if featureAdoptionTerminalStatus(rec.Status) {
-			if err := h.sendFeatureAdoptionCompletionEmail(ctx, userID, in, rec); err != nil {
+			providerMessageID, err := h.sendFeatureAdoptionCompletionEmail(ctx, userID, in, rec)
+			if err != nil {
 				log.Printf("proxy: feature adoption completion email adoption=%s user=%s status=%s: %v", in.AdoptionID, userID, rec.Status, err)
+			} else {
+				log.Printf("proxy: feature adoption completion email sent adoption=%s user=%s status=%s provider_message_id=%s", in.AdoptionID, userID, rec.Status, providerMessageID)
 			}
 			return
 		}
@@ -175,10 +183,10 @@ func (h *Handler) fetchFeatureAdoptionForWatch(ctx context.Context, sandboxURL, 
 	return rec, nil
 }
 
-func (h *Handler) sendFeatureAdoptionCompletionEmail(ctx context.Context, userID string, in featureAdoptionWatchRequest, rec featureAdoptionWatchRecord) error {
+func (h *Handler) sendFeatureAdoptionCompletionEmail(ctx context.Context, userID string, in featureAdoptionWatchRequest, rec featureAdoptionWatchRecord) (string, error) {
 	target, err := joinBasePath(h.cfg.MaildURL, "/api/notifications/completion-email")
 	if err != nil {
-		return err
+		return "", err
 	}
 	title := in.Title
 	if title == "" {
@@ -192,25 +200,29 @@ func (h *Handler) sendFeatureAdoptionCompletionEmail(ctx context.Context, userID
 		"link":       in.Link,
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Authenticated-User", userID)
 	req.Header.Set("X-Internal-Caller", "true")
 	resp, err := h.maild.Do(req)
 	if err != nil {
-		return fmt.Errorf("call maild: %w", err)
+		return "", fmt.Errorf("call maild: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("maild status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("maild status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return nil
+	var sent featureCompletionEmailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sent); err != nil {
+		return "", fmt.Errorf("decode maild completion response: %w", err)
+	}
+	return sent.ProviderMessageID, nil
 }
 
 func firstNonEmptyString(values ...string) string {
