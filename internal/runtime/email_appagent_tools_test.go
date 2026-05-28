@@ -471,6 +471,43 @@ func TestExtractEmailDraftIntentHandlesPlainArtifactHeadings(t *testing.T) {
 	}
 }
 
+func TestExtractEmailDraftIntentStopsAtInstructionsFromUserMarker(t *testing.T) {
+	content := "Email Draft: Choir Email clean approval proof 06e58f5\n" +
+		"Status: Draft created -- pending user approval before send.\n\n" +
+		"Recipient\n" +
+		"yusefnathanson@me.com\n\n" +
+		"Subject\n" +
+		"Choir Email clean approval proof 06e58f5\n\n" +
+		"Body\n" +
+		"This is a deployed clean approval-by-email proof candidate after commit 06e58f5.\n\n" +
+		"**Instructions from user:\n" +
+		"- This draft is review-only.\n" +
+		"- Do not send before approval."
+	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if intent.Subject != "Choir Email clean approval proof 06e58f5" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if strings.TrimSpace(intent.BodyText) != "This is a deployed clean approval-by-email proof candidate after commit 06e58f5." {
+		t.Fatalf("body_text = %q", intent.BodyText)
+	}
+}
+
+func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
+	body := "This is the email body.\n\n**Instructions from user:\n- Do not send before approval."
+	cleaned := cleanEmailDraftBodyText(body)
+	if cleaned != "This is the email body." {
+		t.Fatalf("cleaned body = %q", cleaned)
+	}
+	body = "This is the email body.\n\n**Source references:** User prompt."
+	cleaned = cleanEmailDraftBodyText(body)
+	if cleaned != "This is the email body." {
+		t.Fatalf("cleaned body with source references = %q", cleaned)
+	}
+}
+
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {

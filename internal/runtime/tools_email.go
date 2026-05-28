@@ -486,6 +486,8 @@ func cleanEmailDraftBodyText(value string) string {
 		}
 	}
 	cleaned := strings.TrimSpace(value[:cut])
+	cleaned = truncateEmailIntentAtMarkers(cleaned, emailDraftArtifactTailMarkers())
+	cleaned = strings.TrimSpace(cleaned)
 	for {
 		next := strings.TrimSpace(cleaned)
 		next = trailingEmailDraftToolTagPattern.ReplaceAllString(next, "")
@@ -496,6 +498,32 @@ func cleanEmailDraftBodyText(value string) string {
 			return cleaned
 		}
 		cleaned = next
+	}
+}
+
+func emailDraftArtifactTailMarkers() []string {
+	return []string{
+		"\n**instructions from user:",
+		"\ninstructions from user:",
+		"\n**instructions:**",
+		"\n**instructions**\n",
+		"\ninstructions:",
+		"\ninstructions\n",
+		"\n**source refs:**",
+		"\nsource refs:",
+		"\n**source references:**",
+		"\nsource references:",
+		"\n**constraint:**",
+		"\nconstraint:",
+		"\n**constraints:**",
+		"\nconstraints:",
+		"\n**next step:**",
+		"\nnext step:",
+		"\n**notes:**",
+		"\nnotes:",
+		"\n---",
+		"\ndo not send",
+		" do not send",
 	}
 }
 
@@ -541,23 +569,10 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		"\nbody\n",
 		"\n**body**\n",
 	})
-	body, bodyLabeled := extractEmailLabeledField(combined, "body", []string{
-		"\nconstraint:",
-		"\n**constraint:**",
-		"\nnext step:",
-		"\n**next step:**",
+	body, bodyLabeled := extractEmailLabeledField(combined, "body", append([]string{
 		"\nstatus:",
 		"\n**status:**",
-		"\nsource refs:",
-		"\n**source refs:**",
-		"\ninstructions:",
-		"\n**instructions:**",
-		"\ninstructions\n",
-		"\n**instructions**\n",
-		"\n---",
-		"\ndo not send",
-		" do not send",
-	})
+	}, emailDraftArtifactTailMarkers()...))
 	if !bodyLabeled {
 		body = fallbackEmailBodyAfterAddress(combined, to[0])
 	}
@@ -624,15 +639,10 @@ func fallbackEmailBodyAfterAddress(text, address string) string {
 			break
 		}
 	}
-	body = strings.TrimSpace(truncateEmailIntentAtMarkers(body, []string{
-		"\nconstraint:",
-		"\nnext step:",
-		"\nsource refs:",
-		"\n**source refs:**",
-		"\n---",
-		"\ndo not send",
-		" do not send",
-	}))
+	body = strings.TrimSpace(truncateEmailIntentAtMarkers(body, append([]string{
+		"\nstatus:",
+		"\n**status:**",
+	}, emailDraftArtifactTailMarkers()...)))
 	return body
 }
 
