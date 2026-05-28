@@ -537,3 +537,69 @@ completion notice. The remaining product failure is the mission-critical
 activation affordance: a user who is not watching the Features window should
 see Desk change state and should be able to activate, roll back, or roll forward
 from Desk.
+
+## Stopping Checkpoint: Email/Verified Import Works, Desk Activation Still Blocked
+
+Timestamp: 2026-05-28 07:23 UTC
+
+Commits subsequently tested:
+
+```text
+e252aca1c4fe486a1657fca8eab45e50786900be
+d90cf194123c7961312aecdf7d8459fc5c2babc5
+d0f81c56e0e15dd09a500f0e4df9e9a7b6d43aa3
+```
+
+What remained consistently true on staging:
+
+- `/health` reported each tested commit after GitHub Actions deployed it.
+- The video-first `Features` catalog loaded from the deployed product surface.
+- Old happy-path labels remained absent from the ordinary UI:
+  `Apps & Changes`, `Try in candidate`, `Install`, `Promote`, and
+  `AppChangePackage`.
+- Clicking `Import` created a real adoption and returned while verification
+  continued in the background.
+- The recipient build reached `verified` with real runtime/UI build evidence.
+- The completion email path returned HTTP 202 from maild/Resend:
+  - `6f088e90-64fb-4ea4-bb5d-53d5583ab9ba`
+  - `db59e9d7-23ad-42fc-a2b6-7535ba4b07b6`
+  - `b12894ff-c147-4d0a-8fbf-7160f3cf48d9`
+  - `47082fbc-e694-4ef8-981a-af7c24b02fe1`
+
+What failed repeatedly:
+
+```text
+After the adoption reached "verified", the Desk button still reported:
+
+data-desk-feature-ready="false"
+
+The proof therefore could not proceed through Desk Activate, Roll back, or
+Roll forward.
+```
+
+Fixes attempted:
+
+- `e252aca`: poll `/api/adoptions` periodically from BottomBar while the owner
+  is authenticated.
+- `d90cf19`: relax the refresh guard to use either authenticated state or
+  current user state, and have Features dispatch a local readiness event.
+- `d0f81c5`: include the verified adoption object in the local readiness event
+  so Desk can update before a follow-up API refresh.
+
+Current belief state:
+
+The core backend transition is no longer the blocker. The remaining problem is
+frontend state propagation into `BottomBar`: either the event does not reach the
+mounted Desk component, the button being inspected is not backed by the same
+component state, or a reactive overwrite clears the mirrored transition before
+the Desk affordance can render. This needs a focused UI-state investigation with
+instrumented browser observations before another product patch.
+
+Honest stopping level:
+
+```text
+staging-smoke-level for the Features catalog, Import, async verified recipient
+build, and completion-email handoff.
+
+Not promotion-level: Desk Activate/Roll back/Roll forward remain unproven.
+```
