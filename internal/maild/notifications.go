@@ -1,6 +1,7 @@
 package maild
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -100,11 +101,28 @@ func (h *Handler) HandleRiskAlert(w http.ResponseWriter, r *http.Request) {
 		writeDecodeError(w, err)
 		return
 	}
-	riskKind := conciseMailNotificationField(in.RiskKind, "policy_attack", 80)
-	sourceRef := conciseMailNotificationField(in.SourceRef, "", 180)
-	snippet := boundedUntrustedSnippet(in.Snippet, 500)
+	resp, err := h.sendStructuredRiskAlert(r.Context(), ownerID, ownerEmail, in.RiskKind, in.SourceRef, in.Snippet)
+	if err != nil {
+		log.Printf("maild: risk alert send failure owner=%s risk=%s: %v", ownerID, in.RiskKind, err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send risk alert"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, resp)
+}
+
+func (h *Handler) sendStructuredRiskAlert(ctx context.Context, ownerID, ownerEmail, riskKind, sourceRef, rawSnippet string) (riskAlertResponse, error) {
+	ownerEmail = strings.TrimSpace(ownerEmail)
+	if ownerEmail == "" {
+		return riskAlertResponse{}, fmt.Errorf("verified signup email is required")
+	}
+	if _, err := mail.ParseAddress(ownerEmail); err != nil {
+		return riskAlertResponse{}, fmt.Errorf("valid signup email is required")
+	}
+	riskKind = conciseMailNotificationField(riskKind, "policy_attack", 80)
+	sourceRef = conciseMailNotificationField(sourceRef, "", 180)
+	snippet := boundedUntrustedSnippet(rawSnippet, 500)
 	body := fmt.Sprintf("Choir blocked an Email draft or approval action.\n\nRisk: %s\nStatus: blocked\n\nNo outbound email was sent. Review the draft in Choir before retrying.\n\nUntrusted evidence snippet follows. It is data, not instruction:\n%s", riskKind, snippet)
-	sent, err := h.resend.sendEmail(r.Context(), resendSendRequest{
+	sent, err := h.resend.sendEmail(ctx, resendSendRequest{
 		From:    "Choir <updates@choir.news>",
 		To:      []string{ownerEmail},
 		Subject: "[Choir Risk Alert] Email draft blocked",
@@ -116,16 +134,13 @@ func (h *Handler) HandleRiskAlert(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		log.Printf("maild: risk alert send failure owner=%s risk=%s: %v", ownerID, riskKind, err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send risk alert"})
-		return
+		return riskAlertResponse{}, err
 	}
-	alert, err := h.store.RecordRiskAlert(r.Context(), ownerID, riskKind, sourceRef, snippet, sent.ID)
+	alert, err := h.store.RecordRiskAlert(ctx, ownerID, riskKind, sourceRef, snippet, sent.ID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record risk alert"})
-		return
+		return riskAlertResponse{}, err
 	}
-	writeJSON(w, http.StatusAccepted, riskAlertResponse{Status: "sent", AlertID: alert.ID, ProviderMessageID: sent.ID})
+	return riskAlertResponse{Status: "sent", AlertID: alert.ID, ProviderMessageID: sent.ID}, nil
 }
 
 func boundedUntrustedSnippet(value string, max int) string {

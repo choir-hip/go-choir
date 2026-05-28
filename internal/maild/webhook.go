@@ -171,7 +171,7 @@ func shouldRetryIngest(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, errReceivePolicyRejected) || errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, errReceivePolicyRejected) || errors.Is(err, errApprovalReplyRejected) || errors.Is(err, sql.ErrNoRows) {
 		return false
 	}
 	return true

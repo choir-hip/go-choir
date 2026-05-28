@@ -3,10 +3,14 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
+
+var errApprovalReplyRejected = errors.New("approval reply rejected")
 
 func approvalReplyToken(recipients []string, primaryDomain string) (string, bool) {
 	wantDomain := strings.ToLower(strings.TrimSpace(primaryDomain))
@@ -29,14 +33,14 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		return err
 	}
 	if token.Status != "active" {
-		return fmt.Errorf("approval token is not active")
+		return h.rejectApprovalReply(ctx, token, "approval_token_not_active", "approval token is not active", email)
 	}
 	if expiresAt, err := time.Parse(time.RFC3339Nano, token.ExpiresAt); err == nil && time.Now().UTC().After(expiresAt) {
-		return fmt.Errorf("approval token expired")
+		return h.rejectApprovalReply(ctx, token, "approval_token_expired", "approval token expired", email)
 	}
 	fromAddress, _ := parseSender(email.From, email.Headers["from"])
 	if !strings.EqualFold(strings.TrimSpace(fromAddress), token.ApprovalEmail) {
-		return fmt.Errorf("approval reply sender mismatch")
+		return h.rejectApprovalReply(ctx, token, "approval_sender_mismatch", "approval reply sender mismatch", email)
 	}
 	command, editText := parseApprovalReplyCommand(email.Text)
 	draft, err := h.store.GetDraft(ctx, token.OwnerID, token.DraftID)
@@ -44,8 +48,11 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		return err
 	}
 	if draft.VersionHash != token.VersionHash || draft.Version != token.Version {
+		if err := h.sendApprovalReplyRiskAlert(ctx, token, "approval_draft_version_mismatch", "approval token draft version mismatch", email); err != nil {
+			log.Printf("maild: approval reply risk alert failed owner=%s draft=%s risk=approval_draft_version_mismatch: %v", token.OwnerID, token.DraftID, err)
+		}
 		_ = h.store.UseDraftApprovalToken(ctx, token.ID, "superseded")
-		return fmt.Errorf("approval token draft version mismatch")
+		return fmt.Errorf("%w: approval token draft version mismatch", errApprovalReplyRejected)
 	}
 	switch command {
 	case "approve":
@@ -76,8 +83,34 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported approval reply command")
+		return h.rejectApprovalReply(ctx, token, "approval_reply_unsupported_command", "unsupported approval reply command", email)
 	}
+}
+
+func (h *Handler) rejectApprovalReply(ctx context.Context, token EmailApprovalToken, riskKind, reason string, email resendReceivedEmail) error {
+	if err := h.sendApprovalReplyRiskAlert(ctx, token, riskKind, reason, email); err != nil {
+		log.Printf("maild: approval reply risk alert failed owner=%s draft=%s risk=%s: %v", token.OwnerID, token.DraftID, riskKind, err)
+	}
+	return fmt.Errorf("%w: %s", errApprovalReplyRejected, reason)
+}
+
+func (h *Handler) sendApprovalReplyRiskAlert(ctx context.Context, token EmailApprovalToken, riskKind, reason string, email resendReceivedEmail) error {
+	if strings.TrimSpace(token.ApprovalEmail) == "" {
+		return fmt.Errorf("approval email is empty")
+	}
+	sourceRef := "approval_reply:" + token.DraftID
+	snippet := approvalReplyRiskSnippet(reason, email)
+	_, err := h.sendStructuredRiskAlert(ctx, token.OwnerID, token.ApprovalEmail, riskKind, sourceRef, snippet)
+	return err
+}
+
+func approvalReplyRiskSnippet(reason string, email resendReceivedEmail) string {
+	return fmt.Sprintf("Reason: %s\nFrom: %s\nTo: %s\nText: %s",
+		strings.TrimSpace(reason),
+		strings.TrimSpace(email.From),
+		strings.Join(email.To, ", "),
+		strings.TrimSpace(email.Text),
+	)
 }
 
 func parseApprovalReplyCommand(text string) (string, string) {

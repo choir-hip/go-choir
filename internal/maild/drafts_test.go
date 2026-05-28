@@ -3,6 +3,7 @@ package maild
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -292,6 +293,137 @@ func TestApprovalReplyApprovesExactDraftVersionOnce(t *testing.T) {
 	}
 	if err := h.processApprovalReply(nilSafeContext(), "event-approval-2", email, token.Token); err == nil {
 		t.Fatal("second approval reply succeeded; want one-time token rejection")
+	}
+}
+
+func TestApprovalReplySenderMismatchBlocksRetryAndSendsRiskAlert(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	var payload resendSendRequest
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"risk-alert-sender-mismatch"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Sender mismatch",
+		TextBody:    "Do not send from attacker.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+
+	email := resendReceivedEmail{
+		ID:   "received-approval-attacker",
+		To:   []string{"approve+" + token.Token + "@choir.news"},
+		From: "attacker@example.com",
+		Text: "approve",
+		Headers: map[string]string{
+			"from": "attacker@example.com",
+		},
+	}
+	err = h.processApprovalReply(nilSafeContext(), "event-approval-attacker", email, token.Token)
+	if !errors.Is(err, errApprovalReplyRejected) {
+		t.Fatalf("processApprovalReply error = %v, want errApprovalReplyRejected", err)
+	}
+	if shouldRetryIngest(err) {
+		t.Fatalf("sender mismatch should be a blocked non-retry decision: %v", err)
+	}
+	updated, err := store.GetDraft(nilSafeContext(), "user-root", draft.ID)
+	if err != nil {
+		t.Fatalf("GetDraft: %v", err)
+	}
+	if updated.Status == "sent" || updated.ProviderMessageID != "" {
+		t.Fatalf("sender mismatch sent draft: %+v", updated)
+	}
+	if payload.Subject != "[Choir Risk Alert] Email draft blocked" || payload.To[0] != "owner@example.com" {
+		t.Fatalf("risk alert payload = %+v", payload)
+	}
+	if payload.Headers["X-Choir-Risk-Kind"] != "approval_sender_mismatch" {
+		t.Fatalf("risk headers = %+v", payload.Headers)
+	}
+	if strings.Contains(payload.Text, "user-root") || !strings.Contains(payload.Text, "attacker@example.com") {
+		t.Fatalf("risk alert text = %q", payload.Text)
+	}
+}
+
+func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	var payload resendSendRequest
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"risk-alert-stale-edit-token"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Edit reply",
+		TextBody:    "Original body.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+	editReply := resendReceivedEmail{
+		ID:      "received-edit-reply",
+		To:      []string{"approve+" + token.Token + "@choir.news"},
+		From:    "owner@example.com",
+		Text:    "edit: make it warmer and shorter",
+		Headers: map[string]string{"from": "owner@example.com"},
+	}
+	if err := h.processApprovalReply(nilSafeContext(), "event-edit-reply", editReply, token.Token); err != nil {
+		t.Fatalf("processApprovalReply edit: %v", err)
+	}
+	updated, err := store.GetDraft(nilSafeContext(), "user-root", draft.ID)
+	if err != nil {
+		t.Fatalf("GetDraft: %v", err)
+	}
+	if updated.Status != "draft_pending_owner_approval" || updated.Version != draft.Version+1 || updated.VersionHash == draft.VersionHash {
+		t.Fatalf("updated draft = %+v, original=%+v", updated, draft)
+	}
+	if !strings.Contains(updated.TextBody, "make it warmer and shorter") || updated.ProviderMessageID != "" {
+		t.Fatalf("updated draft body/provider = %+v", updated)
+	}
+	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken: %v", err)
+	}
+	if used.Status != "edited" {
+		t.Fatalf("old token status = %q, want edited", used.Status)
+	}
+
+	approveOld := editReply
+	approveOld.ID = "received-approve-old-token"
+	approveOld.Text = "approve"
+	err = h.processApprovalReply(nilSafeContext(), "event-approve-old-token", approveOld, token.Token)
+	if !errors.Is(err, errApprovalReplyRejected) || shouldRetryIngest(err) {
+		t.Fatalf("old token approval err=%v retry=%v", err, shouldRetryIngest(err))
+	}
+	if payload.Headers["X-Choir-Risk-Kind"] != "approval_token_not_active" {
+		t.Fatalf("risk alert payload after old token approval = %+v", payload)
 	}
 }
 

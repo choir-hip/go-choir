@@ -2007,3 +2007,33 @@ required fix direction:
   stale/hash mismatch, unsupported command, or sender mismatch.
 - Keep the alert body templated; include only bounded untrusted snippets as
   evidence, never as alert-writing instructions.
+
+## Run Checkpoint: Approval Reply Policy Failures Become Blocked Alerts
+
+timestamp: 2026-05-28T09:51:00-04:00
+status: local_verified_pending_landing
+
+implementation:
+- Added an explicit non-retry approval-reply rejection sentinel so policy
+  failures are accepted as blocked decisions instead of causing Resend webhook
+  retries.
+- Reused the structured risk-alert sender from maild notification handling for
+  approval reply sender mismatch, inactive/expired token, stale draft version,
+  and unsupported reply command failures.
+- Kept the alert body templated and bounded: the risky email reply text is
+  included only as an untrusted evidence snippet after safe front matter.
+- Added focused tests for:
+  - sender mismatch blocks send, does not retry, and sends a risk alert to the
+    token approval email;
+  - edit replies create a new draft version, mark the old token edited, and a
+    later approval attempt with that old token is blocked/non-retry with a risk
+    alert.
+
+verification:
+- `nix develop -c go test ./internal/maild`
+- `nix develop -c go test ./internal/maild ./internal/proxy`
+
+remaining proof gap:
+- This is local code-path proof. A real owner reply from `yusefnathanson@me.com`
+  through Resend inbound is still unproven and requires either owner mailbox
+  action or a future verified end-to-end provider harness.
