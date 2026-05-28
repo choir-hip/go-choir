@@ -3532,3 +3532,63 @@ fix direction:
   remote assets, no scripts, no tracking, and no raw internal metadata.
 - Store the generated HTML with the outbound sent record so the Email app and
   provider evidence agree about what was sent.
+
+### Checkpoint: Clean HTML Approval Reply Proven On Staging
+
+status: deployed_proof
+timestamp: 2026-05-28T19:42Z
+
+code and deploy:
+- `d9e0fba` documented the workflow-tail/plain-Markdown issue before code
+  changes.
+- `ad5e05d` added the fix:
+  - VText email artifact cleaning now treats `## Workflow` as an artifact tail.
+  - maild defensively strips workflow/source/outbound-send tails from
+    `vtext_email_artifact` drafts at approved-send time.
+  - maild generates a conservative escaped HTML part when sending text-only
+    approved drafts and stores that generated HTML on the sent message record.
+- Local focused/broader email tests passed:
+  `nix develop -c go test ./internal/maild ./internal/runtime ./internal/types -run 'TestBuildResendSendRequestGeneratesSafeHTMLPart|TestDraftSendStoresSentAndPreventsSecondSend|TestCleanEmailDraftBodyTextStopsAtArtifactTail|TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary|Test.*Approval|Test.*Email|Test.*Draft|Test.*Risk|TestEmailDraftEventKinds|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+- GitHub Actions CI run `26597614656` passed for
+  `ad5e05d2660617945daf8d91b6a8a176b55a509d`.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `ad5e05d2660617945daf8d91b6a8a176b55a509d`, deployed at
+  `2026-05-28T19:36:50Z`.
+
+product-path proof:
+- Computer Use submitted a prompt-bar request on deployed `choir.news`:
+  subject `Choir Email clean html proof ad5e05d`;
+  body `This is a deployed proof that Choir sends a clean HTML email after approval.`
+- Read-only Node B maild inspection showed draft
+  `email-draft-3c180354-334d-41d5-b3e0-fbd8f9980189` persisted as
+  `draft_pending_owner_approval` with exact subject and exact body, no workflow
+  or source-reference tail.
+- maild sent approval token
+  `email-approval-token-69c1f87e-281f-480c-96a5-7884ae7408eb` to
+  `yusefnathanson@me.com`, provider id
+  `b512d326-a9bf-4447-8e76-87f0ff4ba867`.
+- Computer Use opened Apple Mail, observed the approval email rendered with the
+  draft body and no internal ids/version hashes in the human-facing body, then
+  replied `approve` to the one-time address
+  `approve+f9da98dc6e77437f940bcc5104f7a130@choir.news`.
+- Resend inbound delivered the approval reply to maild as provider message id
+  `0205a398-85f3-4785-9663-ed63e3d049c0`.
+- maild recorded approval event
+  `email-approval-e8ebbfba-0da4-4938-8a0b-43f8eb5f44aa`,
+  `event_type=email_reply_approved`.
+- maild marked the draft `sent`, marked the approval token `stale_sent`, and
+  recorded outbound provider message id
+  `932d90f1-73a3-4624-b607-c96de6ad845b`.
+- Sent message `resend-message-73fee82d3e52c897a67c30221494fc6c` stored exact
+  clean text body:
+  `This is a deployed proof that Choir sends a clean HTML email after approval.`
+  and stored an HTML body beginning with:
+  `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">...`
+
+remaining error field:
+- Approval emails themselves are now visibly useful and the approved outbound
+  message is sent with HTML, but the styling is intentionally minimal. A later
+  design pass should define the long-term email typography/layout system.
+- Older already-created dirty drafts can still display dirty draft bodies in
+  the Drafts list/detail. The approved-send path now defensively strips known
+  VText artifact tails before provider send and sent-message storage.
