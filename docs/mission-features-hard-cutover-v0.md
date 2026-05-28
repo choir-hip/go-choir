@@ -378,3 +378,52 @@ invariant.
 ```text
 /goal Run a Codex-operated MissionGradient mission to repair the lowest substrate blocker discovered by the Features hard cutover. Preserve the new Features/Import/Activate/Roll back/Roll forward product language, do not restore Apps & Changes or manual QA controls, and focus only on the backend state transition that prevented staging proof.
 ```
+
+## Staging Evidence Checkpoint: Import Contract Mismatch
+
+Timestamp: 2026-05-28 06:10 UTC
+
+Commit under test:
+
+```text
+7706c220afd9d415e14080707fd40d173744b324
+```
+
+Staging proof established:
+
+- `https://choir.news` served frontend/proxy/sandbox build identity
+  `7706c220afd9d415e14080707fd40d173744b324`.
+- A fresh authenticated staging account could open the Desk menu and launch
+  `Features`.
+- The launcher showed `Features`, not `Apps & Changes`.
+- The Features app rendered on desktop and mobile without horizontal overflow.
+- Old ordinary product labels were absent from the new surface:
+  `Apps & Changes`, `Try in candidate`, `Install`, `Promote`, and
+  `AppChangePackage`.
+- A product API-created private source-level package rendered as a video-first
+  catalog item with `Import`, `Watch demo`, `Later`, `View details`, and signup
+  email notification copy.
+
+Blocker discovered:
+
+```text
+Clicking Import failed before adoption creation with:
+
+invalid app adoption request
+```
+
+Root cause hypothesis:
+
+The new `FeaturesApp` sends
+`target_active_source_ref_at_candidate_start` in the create-adoption request,
+but `createAppAdoptionInput` does not accept that field and the runtime decoder
+uses `DisallowUnknownFields`. The backend already computes and records the
+target active source ref at candidate start. The frontend should not send this
+server-owned field during import.
+
+Why this matters:
+
+The hard cutover UI is live, but the central state transition is not. Until the
+request contract is fixed, `Import` cannot create an adoption, verification
+cannot start, no completion email can be sent from the import flow, and Desk
+ready/activate/rollback/roll-forward controls cannot be proven on staging.
