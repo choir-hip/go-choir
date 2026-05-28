@@ -52,7 +52,6 @@ func NewHandler(cfg *Config, store *Store) *Handler {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/email/resend/webhook", h.HandleResendWebhook)
-	s.HandleFunc("/api/email/send", h.HandleSend)
 	s.HandleFunc("/api/email/aliases", h.HandleAliases)
 	s.HandleFunc("/api/email/drafts", h.HandleDrafts)
 	s.HandleFunc("/api/email/drafts/", h.HandleDrafts)

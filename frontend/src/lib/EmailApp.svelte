@@ -3,6 +3,7 @@
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
 
   export let authenticated = false;
+  export let appContext = {};
 
   const dispatch = createEventDispatcher();
 
@@ -31,6 +32,7 @@
   let sending = false;
   let loadedOnce = false;
   let detailPaneOpen = false;
+  let openedContextDraftId = '';
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = aliases[0]?.address || '';
@@ -41,6 +43,10 @@
   $: detailBccRecipients = detail?.recipients?.bcc || [];
   $: detailToLine = addressListLabel(detailToRecipients) || activeAddress;
   $: composeRecipients = parseAddressList(composeTo);
+
+  $: if (authenticated && appContext?.draftId && openedContextDraftId !== appContext.draftId) {
+    void openContextDraft(appContext.draftId);
+  }
 
   onMount(() => {
     if (authenticated) {
@@ -116,6 +122,14 @@
     if (selectedId) {
       await loadDetail(selectedId, { openPane: false });
     }
+  }
+
+  async function openContextDraft(draftId) {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    openedContextDraftId = id;
+    await loadMessages('drafts');
+    await loadDetail(id, { openPane: true });
   }
 
   async function loadDetail(id, options = {}) {
@@ -230,6 +244,10 @@
     try {
       const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(draftId)}/send`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          version_hash: detail?.draft?.version_hash || '',
+        }),
       });
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();

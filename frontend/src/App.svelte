@@ -150,6 +150,26 @@
     }
   }
 
+  function initialAppIntentFromURL() {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search || '');
+    const appId = (params.get('app') || '').trim().toLowerCase();
+    if (appId !== 'email') return null;
+    const draftId = (params.get('draft') || '').trim();
+    const approvalToken = (params.get('approval') || '').trim();
+    return {
+      kind: 'app_launch',
+      appId: 'email',
+      appName: 'Email',
+      icon: '✉️',
+      appContext: {
+        draftId,
+        approvalToken,
+        windowTitle: 'Email',
+      },
+    };
+  }
+
   async function handleAuthBegin(event) {
     const { email, type } = event.detail;
     passkeyError = '';
@@ -248,7 +268,16 @@
   onMount(() => {
     publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
     applyTheme(DEFAULT_THEME, false);
-    checkSession();
+    const initialIntent = initialAppIntentFromURL();
+    checkSession().then((session) => {
+      if (!initialIntent) return;
+      if (session?.authenticated) {
+        maybeReplayPendingIntent(initialIntent);
+      } else {
+        pendingAuthIntent = initialIntent;
+        authOverlayOpen = true;
+      }
+    });
 
     function handleThemeChange(event) {
       applyTheme(event.detail?.theme || DEFAULT_THEME);

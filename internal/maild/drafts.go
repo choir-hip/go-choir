@@ -68,7 +68,12 @@ type sendDraftResponse struct {
 	Draft             draftResponse `json:"draft"`
 	MessageID         string        `json:"message_id"`
 	ProviderMessageID string        `json:"provider_message_id"`
+	ApprovalEventID   string        `json:"approval_event_id"`
 	Status            string        `json:"status"`
+}
+
+type sendDraftRequest struct {
+	VersionHash string `json:"version_hash"`
 }
 
 func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
@@ -187,6 +192,11 @@ func (h *Handler) handleDraftDetail(w http.ResponseWriter, r *http.Request, owne
 }
 
 func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerID, draftID string) {
+	var in sendDraftRequest
+	if err := h.decodeJSON(r, &in); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
 	draft, err := h.store.GetDraft(r.Context(), ownerID, draftID)
 	if err != nil {
 		writeStoreError(w, err)
@@ -196,9 +206,18 @@ func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerI
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
 		return
 	}
+	if strings.TrimSpace(in.VersionHash) == "" || strings.TrimSpace(in.VersionHash) != draft.VersionHash {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft version changed; reopen the draft before approving"})
+		return
+	}
 	alias, err := h.resolveOwnedFromAlias(r.Context(), ownerID, draft.FromAddress)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "from address is not owned by current user"})
+		return
+	}
+	approvalEventID, err := h.store.RecordDraftApprovalEvent(r.Context(), draft, "owner_click_approved", "")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to record approval"})
 		return
 	}
 	sendReq := draft.toSendRequest()
@@ -207,6 +226,9 @@ func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerI
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	payload.Headers["X-Choir-Maild"] = "v0-approved-draft-send"
+	payload.Headers["X-Choir-Email-Draft-ID"] = draft.ID
+	payload.Headers["X-Choir-Email-Draft-Version-Hash"] = draft.VersionHash
 	if err := h.applyReplyHeaders(r.Context(), ownerID, draft.ReplyToMessageID, &payload); err != nil {
 		if err == sql.ErrNoRows {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reply target is not owned by current user"})
@@ -234,6 +256,7 @@ func (h *Handler) handleDraftSend(w http.ResponseWriter, r *http.Request, ownerI
 		Draft:             summarizeDraft(updated),
 		MessageID:         msg.ID,
 		ProviderMessageID: sent.ID,
+		ApprovalEventID:   approvalEventID,
 		Status:            "sent",
 	})
 }
@@ -352,6 +375,37 @@ func (s *Store) MarkDraftSent(ctx context.Context, ownerID, draftID, messageID, 
 		return EmailDraft{}, sql.ErrNoRows
 	}
 	return s.GetDraft(ctx, ownerID, draftID)
+}
+
+func (s *Store) RecordDraftApprovalEvent(ctx context.Context, draft EmailDraft, eventType, providerMessageID string) (string, error) {
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		return "", fmt.Errorf("approval event type is required")
+	}
+	eventID := "email-approval-" + uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO email_draft_approval_events (
+		id, draft_id, owner_id, version, version_hash, event_type, provider_message_id, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		eventID,
+		draft.ID,
+		draft.OwnerID,
+		draft.Version,
+		draft.VersionHash,
+		eventType,
+		nullString(providerMessageID),
+		now,
+	)
+	if err != nil {
+		return "", fmt.Errorf("insert approval event: %w", err)
+	}
+	return eventID, nil
+}
+
+func (s *Store) CountDraftApprovalEvents(ctx context.Context, draftID string) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_draft_approval_events WHERE draft_id = ?`, draftID).Scan(&count)
+	return count, err
 }
 
 func draftSelectSQL() string {
