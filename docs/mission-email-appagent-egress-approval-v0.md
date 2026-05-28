@@ -1974,3 +1974,36 @@ remaining error field:
   unproven.
 - The prompt-bar/VText result-to-email path is only proven to the draft boundary;
   VText result completion remains a separate known blocker.
+
+## Problem Evidence Checkpoint: Approval Reply Policy Failures Retry Instead Of Alert
+
+timestamp: 2026-05-28T09:39:00-04:00
+status: documented_before_fix
+
+evidence:
+- Code review of `internal/maild/approval_reply.go` found that approval reply
+  sender mismatch, stale/hash-mismatched draft tokens, expired tokens, and
+  unsupported commands return ordinary errors from `processApprovalReply`.
+- `internal/maild/webhook.go` treats ordinary ingest errors as retryable unless
+  they are `errReceivePolicyRejected` or `sql.ErrNoRows`. That means approval
+  policy failures can make `/api/email/resend/webhook` return an ingest retry
+  response to Resend instead of accepting the webhook as a blocked policy event.
+- The same approval policy failures do not currently use the templated
+  `[Choir Risk Alert] Email draft blocked` path, even though the mission
+  explicitly requires suspicious approval manipulation, stale/hash-mismatched
+  artifacts, and quoted/forwarded authorization attempts to block send and
+  notify the account signup email through structured fields.
+
+why this matters:
+- Retrying policy-invalid approval replies turns a blocked attack into repeated
+  provider work and noisy logs.
+- More importantly, the owner does not get the risk-alert signal that an
+  approval reply was rejected for a security reason.
+
+required fix direction:
+- Treat approval reply policy failures as non-retryable blocked decisions.
+- Send a bounded, structured risk alert to the token approval email when an
+  active token exists and the failure is a suspicious approval manipulation,
+  stale/hash mismatch, unsupported command, or sender mismatch.
+- Keep the alert body templated; include only bounded untrusted snippets as
+  evidence, never as alert-writing instructions.
