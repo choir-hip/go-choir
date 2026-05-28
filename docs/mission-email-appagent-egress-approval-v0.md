@@ -710,3 +710,71 @@ next executable probe:
   not have to invent a hash.
 - Keep the result draft-only: no outbound send until the owner approves the
   exact draft version in Email.
+
+## Checkpoint: VText Calls Email Appagent, Maild Not Reachable From Guest
+
+timestamp: 2026-05-28T06:40:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `d8c72a7` deployed, the previously stuck
+VText email proof advanced far enough to call `request_email_draft`, but the
+runtime could not persist the draft into maild. Computer Use observed a VText
+revision titled `Email Appagent Draft Request — Completed` with:
+
+```text
+Status: Draft created, pending owner approval. No outbound email sent.
+Draft ID: email-draft-request-b272a52c-9c94-44fb-b90b-c78a11db2700
+Status: draft_pending_owner_approval
+Send Authorized: false
+Maild Send Attempted: false
+Maild URL configured (RUNTIME_MAILD_URL=http://10.200.49.1:8087) but maild
+host is unreachable (connection timeout). Sandbox proxy /api/email/drafts
+returns 404 — route not registered in this runtime.
+```
+
+This is progress but not acceptance. The mission requires a visible mailbox
+draft in the Email app. A Trace-only draft request is insufficient.
+
+what shipped immediately before this probe:
+- `96baaa1` recorded the VText handoff blocker.
+- `d8c72a7` made VText email artifacts continue to `request_email_draft`,
+  made `source_content_hash` runtime-derived when omitted, added VText email
+  instructions, and made `request_email_draft` terminal/sequential for VText.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26569407309`
+  completed successfully.
+- Staging `/health` reported proxy and sandbox commit
+  `d8c72a713a741f067ccfa34d872b113f68421299`, deployed at
+  `2026-05-28T10:33:31Z`.
+
+local proof for `d8c72a7`:
+- `nix develop -c go test ./internal/runtime -run 'TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun|TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation|TestCoagentCastCannotAddressEmailAppagentDirectly|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent|TestLoadConfig'`
+- `nix develop -c go test ./internal/maild -run 'TestDraft'`
+- `nix develop -c go test ./internal/vmmanager -run 'Test.*Boot|TestGuestInitScript'`
+- `nix develop -c go test ./internal/runtime ./internal/maild ./internal/vmmanager ./internal/proxy`
+- `git diff --check -- internal/runtime/tools_email.go internal/runtime/tools_vtext.go internal/runtime/runtime.go internal/runtime/tools.go internal/runtime/vtext.go internal/runtime/prompt_defaults/vtext.md internal/runtime/email_appagent_tools_test.go`
+
+belief-state changes:
+- VText-to-Email appagent causality now works enough for the tool call to
+  happen under product observation.
+- The remaining failure is infrastructure reachability, not email authority:
+  sandbox runtime has `RUNTIME_MAILD_URL` but cannot reach host maild through
+  the tap address.
+- Static inspection shows `go-choir-maild` uses the shared server default
+  bind host, which is `127.0.0.1`. Guest VMs receive
+  `choir.maild_url=http://<tap-host-ip>:8087`, so a loopback-only maild
+  process is expected to be unreachable from guests. Gateway already uses
+  `SERVER_HOST=0.0.0.0` for the same guest-to-host reason, while host firewall
+  policy keeps service ports closed externally.
+
+remaining error field:
+- Email appagent draft requests can be created as Trace-visible child runs, but
+  mailbox draft persistence from sandbox runtime to host maild fails on
+  staging.
+- Email app cannot yet show the VText-originated draft in Drafts, so owner
+  click approval for prompt-bar-originated email remains unproven.
+
+next executable probe:
+- Bind host maild on guest-reachable interfaces, preserving external firewall
+  invariants, then redeploy and prove a prompt-bar email request creates a
+  visible Email Drafts row without sending.
