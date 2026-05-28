@@ -2070,7 +2070,7 @@ required fix direction:
 ## Run Checkpoint: Already-Sent Approval Replies Block Without Retry
 
 timestamp: 2026-05-28T10:03:00-04:00
-status: local_verified_pending_landing
+status: deployed_verified
 
 implementation:
 - `processApprovalReply` now checks for `draft.status == sent` before command
@@ -2087,3 +2087,10 @@ implementation:
 verification:
 - `nix develop -c go test ./internal/maild`
 - `nix develop -c go test ./internal/maild ./internal/proxy`
+- Commit `55c2012de29ffcbeff04d1e48551927210615f33`
+  (`fix: reject stale email approval replies`) was pushed to `main`.
+- GitHub Actions CI run `26578515595` passed, including non-runtime Go tests,
+  all runtime shards, integration-tagged smoke, vet/build, and staging deploy.
+- Staging health reported proxy and sandbox commit
+  `55c2012de29ffcbeff04d1e48551927210615f33`, deployed at
+  `2026-05-28T13:45:50Z`.
