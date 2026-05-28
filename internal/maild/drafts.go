@@ -76,6 +76,8 @@ type sendDraftRequest struct {
 	VersionHash string `json:"version_hash"`
 }
 
+const approvalEmailDraftBodyPreviewRunes = 4000
+
 type approvalEmailResponse struct {
 	Status            string `json:"status"`
 	TokenID           string `json:"token_id"`
@@ -257,8 +259,7 @@ func (h *Handler) sendDraftApprovalEmail(ctx context.Context, draft EmailDraft, 
 	}
 	reviewURL := "https://choir.news/?app=email&draft=" + draft.ID + "&approval=" + token.Token
 	replyAddress := "approve+" + token.Token + "@" + strings.ToLower(strings.TrimSpace(h.cfg.PrimaryDomain))
-	body := fmt.Sprintf("Choir email draft needs approval.\n\nSubject: %s\nTo: %s\nStatus: needs approval\n\nOpen to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nThis approval is scoped to draft %s version %d hash %s. The link opens review only; it does not send by itself.",
-		draft.Subject, strings.Join(decodeAddressJSON(draft.ToJSON), ", "), reviewURL, draft.ID, draft.Version, draft.VersionHash)
+	body := buildDraftApprovalEmailBody(draft, reviewURL)
 	sent, err := h.resend.sendEmail(ctx, resendSendRequest{
 		From:    "Choir <updates@choir.news>",
 		To:      []string{ownerEmail},
@@ -287,6 +288,28 @@ func (h *Handler) sendDraftApprovalEmail(ctx context.Context, draft EmailDraft, 
 		ReviewURL:         reviewURL,
 		ReplyAddress:      replyAddress,
 	}, nil
+}
+
+func buildDraftApprovalEmailBody(draft EmailDraft, reviewURL string) string {
+	toLine := strings.Join(decodeAddressJSON(draft.ToJSON), ", ")
+	if toLine == "" {
+		toLine = "(no recipients)"
+	}
+	bodyPreview := approvalEmailDraftBodyPreview(draft.TextBody)
+	return fmt.Sprintf("Choir email draft needs approval.\n\nFrom: %s\nTo: %s\nSubject: %s\n\nDraft message:\n%s\n\nOpen in Choir to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nOpening the link does not send the draft.",
+		draft.FromAddress, toLine, draft.Subject, bodyPreview, reviewURL)
+}
+
+func approvalEmailDraftBodyPreview(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "(No plain text body.)"
+	}
+	runes := []rune(body)
+	if len(runes) <= approvalEmailDraftBodyPreviewRunes {
+		return body
+	}
+	return string(runes[:approvalEmailDraftBodyPreviewRunes]) + "\n\n[Draft message preview truncated. Open in Choir to review the full draft.]"
 }
 
 func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versionHash, eventType, approvalProviderMessageID string) (sendDraftResponse, error) {

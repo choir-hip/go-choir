@@ -478,8 +478,35 @@ func TestDraftApprovalEmailUsesVerifiedSignupEmailAndReplyToken(t *testing.T) {
 	if payload.To[0] != "owner@example.com" || len(payload.ReplyTo) != 1 || payload.ReplyTo[0] != resp.ReplyAddress {
 		t.Fatalf("approval payload = %+v response=%+v", payload, resp)
 	}
-	if !strings.Contains(payload.Text, draft.VersionHash) || strings.Contains(payload.Text, "user-root") {
+	if !strings.Contains(payload.Text, "From: 000@choir.news") ||
+		!strings.Contains(payload.Text, "To: friend@example.com") ||
+		!strings.Contains(payload.Text, "Subject: Needs approval") ||
+		!strings.Contains(payload.Text, "Draft message:\nDraft body.") ||
+		!strings.Contains(payload.Text, "Open in Choir to review and send:") ||
+		!strings.Contains(payload.Text, "approve\nreject\nedit: <requested change>") {
+		t.Fatalf("approval payload text missing reviewable draft content: %q", payload.Text)
+	}
+	if strings.Contains(payload.Text, draft.VersionHash) || strings.Contains(payload.Text, "user-root") {
 		t.Fatalf("approval payload text = %q", payload.Text)
+	}
+	if payload.Headers["X-Choir-Email-Draft-ID"] != draft.ID ||
+		payload.Headers["X-Choir-Email-Draft-Version-Hash"] != draft.VersionHash {
+		t.Fatalf("approval payload headers = %+v", payload.Headers)
+	}
+}
+
+func TestApprovalEmailDraftBodyPreviewIsBounded(t *testing.T) {
+	short := approvalEmailDraftBodyPreview("  hello owner  ")
+	if short != "hello owner" {
+		t.Fatalf("short preview = %q", short)
+	}
+	if got := approvalEmailDraftBodyPreview(""); got != "(No plain text body.)" {
+		t.Fatalf("empty preview = %q", got)
+	}
+	longBody := strings.Repeat("x", approvalEmailDraftBodyPreviewRunes) + "SECRET_TAIL"
+	preview := approvalEmailDraftBodyPreview(longBody)
+	if strings.Contains(preview, "SECRET_TAIL") || !strings.Contains(preview, "preview truncated") {
+		t.Fatalf("long preview = %q", preview)
 	}
 }
 
@@ -718,8 +745,13 @@ func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) 
 		payloads[0].Headers["X-Choir-Email-Draft-Version-Hash"] != updated.VersionHash {
 		t.Fatalf("fresh approval payload = %+v updated=%+v", payloads[0], updated)
 	}
-	if strings.Contains(payloads[0].Text, "make it warmer and shorter") || !strings.Contains(payloads[0].Text, updated.VersionHash) {
-		t.Fatalf("approval email should reference the version without embedding edit body: %q", payloads[0].Text)
+	if !strings.Contains(payloads[0].Text, "Draft message:") ||
+		!strings.Contains(payloads[0].Text, "Owner approval reply requested edits:") ||
+		!strings.Contains(payloads[0].Text, "make it warmer and shorter") {
+		t.Fatalf("approval email should embed the current draft body for review: %q", payloads[0].Text)
+	}
+	if strings.Contains(payloads[0].Text, updated.VersionHash) || strings.Contains(payloads[0].Text, "user-root") {
+		t.Fatalf("approval email should keep internal ids and hashes out of human body: %q", payloads[0].Text)
 	}
 	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
 	if err != nil {
