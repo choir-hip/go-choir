@@ -46,6 +46,32 @@ func TestDraftCreateRequiresOwnedAliasAndDoesNotSend(t *testing.T) {
 	}
 }
 
+func TestDraftCreateDefaultsToOwnerNumericAlias(t *testing.T) {
+	store, cfg := newTestStore(t)
+	h := NewHandler(cfg, store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/email/drafts", strings.NewReader(`{
+		"to_addresses":["friend@example.com"],
+		"subject":"Choir demo",
+		"text_body":"Draft first.",
+		"source_kind":"vtext_email_artifact",
+		"source_ref":"doc-1:rev-1"
+	}`))
+	setInternalOwner(req, "user-root")
+	w := httptest.NewRecorder()
+	h.HandleDrafts(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var draft draftResponse
+	if err := json.NewDecoder(w.Body).Decode(&draft); err != nil {
+		t.Fatalf("decode draft: %v", err)
+	}
+	if draft.FromAddress != "000@choir.news" || draft.Status != "draft_pending_owner_approval" {
+		t.Fatalf("draft response: %+v", draft)
+	}
+}
+
 func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"

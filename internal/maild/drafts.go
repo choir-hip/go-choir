@@ -165,7 +165,7 @@ func (h *Handler) handleDraftCreate(w http.ResponseWriter, r *http.Request, owne
 		writeDecodeError(w, err)
 		return
 	}
-	alias, err := h.resolveOwnedFromAlias(r.Context(), ownerID, in.FromAddress)
+	alias, err := h.resolveOwnedDraftFromAlias(r.Context(), ownerID, in.FromAddress)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "from address is not owned by current user"})
@@ -180,6 +180,13 @@ func (h *Handler) handleDraftCreate(w http.ResponseWriter, r *http.Request, owne
 		return
 	}
 	writeJSON(w, http.StatusCreated, summarizeDraft(draft))
+}
+
+func (h *Handler) resolveOwnedDraftFromAlias(ctx context.Context, ownerID, fromAddress string) (EmailAlias, error) {
+	if strings.TrimSpace(fromAddress) == "" {
+		return h.store.DefaultAliasForOwner(ctx, ownerID)
+	}
+	return h.resolveOwnedFromAlias(ctx, ownerID, fromAddress)
 }
 
 func (h *Handler) handleDraftDetail(w http.ResponseWriter, r *http.Request, ownerID, draftID string) {
@@ -280,6 +287,20 @@ func (s *Store) ListAliasesForOwner(ctx context.Context, ownerID string) ([]Emai
 		out = append(out, alias)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) DefaultAliasForOwner(ctx context.Context, ownerID string) (EmailAlias, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, domain, local_part, coalesce(canonical_number, -1),
+		target_type, target_id, visibility, receive_policy_id
+		FROM email_aliases
+		WHERE target_id = ? AND target_type = 'user' AND disabled_at IS NULL
+		ORDER BY canonical_number IS NULL, canonical_number, local_part
+		LIMIT 1`, ownerID)
+	var alias EmailAlias
+	if err := row.Scan(&alias.ID, &alias.Domain, &alias.LocalPart, &alias.CanonicalNumber, &alias.TargetType, &alias.TargetID, &alias.Visibility, &alias.ReceivePolicyID); err != nil {
+		return EmailAlias{}, err
+	}
+	return alias, nil
 }
 
 func (s *Store) CreateDraft(ctx context.Context, ownerID string, alias EmailAlias, in createDraftRequest) (EmailDraft, error) {

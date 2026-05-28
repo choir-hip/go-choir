@@ -597,6 +597,9 @@ in
         # Route LLM calls through the host-side gateway instead of
         # resolving providers directly (VAL-GATEWAY-001).
         "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"
+        # Email appagent draft persistence goes to maild as draft-only
+        # infrastructure. Runtime agents still have no raw send route.
+        "RUNTIME_MAILD_URL=http://127.0.0.1:8087"
         # Explicit runtime-selected model. The gateway does not infer a
         # fallback provider/model.
         "RUNTIME_LLM_PROVIDER=chatgpt"

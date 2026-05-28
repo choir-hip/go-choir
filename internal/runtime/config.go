@@ -100,6 +100,11 @@ type Config struct {
 	// lifecycle tools to request branch desktops and worker VMs.
 	VmctlURL string
 
+	// MaildURL is the host-side mail service URL. VText-originated Email
+	// appagent draft requests use this only to persist reviewable drafts; it
+	// must not expose raw send authority to runtime agents.
+	MaildURL string
+
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.
 	// Empty means no provider is selected by this runtime config.
 	LLMProvider string
@@ -168,6 +173,7 @@ func LoadConfig() Config {
 		ResearcherCount:     intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearcherCount),
 		VTextWakeDebounce:   durationOr("RUNTIME_VTEXT_WAKE_DEBOUNCE", DefaultVTextWakeDebounce),
 		VmctlURL:            envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
+		MaildURL:            os.Getenv("RUNTIME_MAILD_URL"),
 		LLMProvider:         os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:            os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort:  os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),

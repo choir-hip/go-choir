@@ -259,6 +259,9 @@ EOF
           choir.vmctl_url=*)
             echo "RUNTIME_VMCTL_URL=''${param#choir.vmctl_url=}" >> "$ENV_FILE"
             ;;
+          choir.maild_url=*)
+            echo "RUNTIME_MAILD_URL=''${param#choir.maild_url=}" >> "$ENV_FILE"
+            ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
             ;;

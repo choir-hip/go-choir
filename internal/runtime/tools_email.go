@@ -1,11 +1,14 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -27,6 +30,16 @@ type requestEmailDraftArgs struct {
 	BodyText          string   `json:"body_text"`
 	SourceRefs        []string `json:"source_refs,omitempty"`
 	ApprovalMode      string   `json:"approval_mode,omitempty"`
+}
+
+type maildEmailDraftResponse struct {
+	ID          string   `json:"id"`
+	Status      string   `json:"status"`
+	Version     int      `json:"version"`
+	VersionHash string   `json:"version_hash"`
+	FromAddress string   `json:"from_address"`
+	ToAddresses []string `json:"to_addresses"`
+	Subject     string   `json:"subject"`
 }
 
 func newRequestEmailDraftTool(rt *Runtime) Tool {
@@ -98,7 +111,23 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		return nil, fmt.Errorf("approval_mode must be owner_click or owner_click_or_email_reply")
 	}
 
-	draftID := "email-draft-" + uuid.NewString()
+	agentID := persistentEmailAgentID(ownerID)
+	now := time.Now().UTC()
+	runID := uuid.NewString()
+	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: rt.cfg.SandboxID,
+		Profile:   AgentProfileEmail,
+		Role:      AgentProfileEmail,
+		ChannelID: agentID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		return nil, fmt.Errorf("persist email appagent: %w", err)
+	}
+
+	draftID := "email-draft-request-" + uuid.NewString()
 	versionID := "email-draft-version-" + uuid.NewString()
 	draftVersionHash := emailDraftVersionHash(in.FromAlias, toAddresses, in.CCAddresses, in.BCCAddresses, subject, body, docID, revisionID, sourceHash)
 	risk := detectEmailDraftPolicyRisk(subject, body, toAddresses, in.CCAddresses, in.BCCAddresses)
@@ -108,44 +137,54 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	}
 
 	result := map[string]any{
-		"status":               status,
-		"draft_id":             draftID,
-		"draft_version_id":     versionID,
-		"draft_version_hash":   draftVersionHash,
-		"doc_id":               docID,
-		"revision_id":          revisionID,
-		"source_content_hash":  sourceHash,
-		"source_kind":          "vtext_email_artifact",
-		"approval_mode":        approvalMode,
-		"from_alias":           strings.TrimSpace(in.FromAlias),
-		"to_addresses":         toAddresses,
-		"cc_addresses":         normalizeEmailAddressList(in.CCAddresses),
-		"bcc_addresses":        normalizeEmailAddressList(in.BCCAddresses),
-		"subject":              subject,
-		"send_authorized":      false,
-		"maild_send_attempted": false,
+		"status":                status,
+		"draft_id":              draftID,
+		"draft_version_id":      versionID,
+		"draft_version_hash":    draftVersionHash,
+		"doc_id":                docID,
+		"revision_id":           revisionID,
+		"source_content_hash":   sourceHash,
+		"source_kind":           "vtext_email_artifact",
+		"approval_mode":         approvalMode,
+		"from_alias":            strings.TrimSpace(in.FromAlias),
+		"to_addresses":          toAddresses,
+		"cc_addresses":          normalizeEmailAddressList(in.CCAddresses),
+		"bcc_addresses":         normalizeEmailAddressList(in.BCCAddresses),
+		"subject":               subject,
+		"send_authorized":       false,
+		"maild_send_attempted":  false,
+		"maild_draft_persisted": false,
 	}
 	if risk != "" {
 		result["risk_code"] = risk
 		result["risk_alert_subject"] = "[Choir Risk Alert] Email draft blocked"
+	} else if strings.TrimSpace(rt.cfg.MaildURL) == "" {
+		result["maild_persistence_status"] = "runtime_maild_url_not_configured"
+	} else {
+		persisted, err := rt.persistEmailDraftToMaild(ctx, ownerID, runID, in, toAddresses, subject, body)
+		if err != nil {
+			status = "draft_persistence_failed"
+			result["status"] = status
+			result["maild_persistence_status"] = "failed"
+			result["maild_persistence_error"] = err.Error()
+		} else {
+			draftID = persisted.ID
+			versionID = fmt.Sprintf("%s-v%d", persisted.ID, persisted.Version)
+			draftVersionHash = persisted.VersionHash
+			result["status"] = persisted.Status
+			result["draft_id"] = draftID
+			result["draft_version_id"] = versionID
+			result["draft_version_hash"] = draftVersionHash
+			result["from_alias"] = persisted.FromAddress
+			result["to_addresses"] = persisted.ToAddresses
+			result["subject"] = persisted.Subject
+			result["maild_draft_persisted"] = true
+			result["maild_persistence_status"] = "persisted"
+			result["maild_draft_id"] = persisted.ID
+			result["maild_draft_version_hash"] = persisted.VersionHash
+		}
 	}
 
-	agentID := persistentEmailAgentID(ownerID)
-	now := time.Now().UTC()
-	agent := types.AgentRecord{
-		AgentID:   agentID,
-		OwnerID:   ownerID,
-		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileEmail,
-		Role:      AgentProfileEmail,
-		ChannelID: agentID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := rt.store.UpsertAgent(ctx, agent); err != nil {
-		return nil, fmt.Errorf("persist email appagent: %w", err)
-	}
-	runID := uuid.NewString()
 	metadata := map[string]any{
 		runMetadataAgentProfile:  AgentProfileEmail,
 		runMetadataAgentRole:     AgentProfileEmail,
@@ -159,6 +198,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"email_draft_version_id": versionID,
 		"email_draft_hash":       draftVersionHash,
 		"email_policy_status":    status,
+		"maild_draft_persisted":  result["maild_draft_persisted"],
 		"doc_id":                 docID,
 		"revision_id":            revisionID,
 	}
@@ -207,6 +247,62 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	result["channel_id"] = agentID
 	result["profile"] = AgentProfileEmail
 	return result, nil
+}
+
+func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, emailRunID string, in requestEmailDraftArgs, toAddresses []string, subject, body string) (maildEmailDraftResponse, error) {
+	maildURL := strings.TrimRight(strings.TrimSpace(rt.cfg.MaildURL), "/")
+	if maildURL == "" {
+		return maildEmailDraftResponse{}, fmt.Errorf("runtime maild url is not configured")
+	}
+	sourceRef, _ := json.Marshal(map[string]string{
+		"doc_id":                strings.TrimSpace(in.DocID),
+		"revision_id":           strings.TrimSpace(in.RevisionID),
+		"source_content_hash":   strings.TrimSpace(in.SourceContentHash),
+		"email_appagent_run_id": strings.TrimSpace(emailRunID),
+	})
+	payload := map[string]any{
+		"from_address":  strings.TrimSpace(in.FromAlias),
+		"to_addresses":  toAddresses,
+		"cc_addresses":  normalizeEmailAddressList(in.CCAddresses),
+		"bcc_addresses": normalizeEmailAddressList(in.BCCAddresses),
+		"subject":       subject,
+		"text_body":     body,
+		"source_kind":   "vtext_email_artifact",
+		"source_ref":    string(sourceRef),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return maildEmailDraftResponse{}, fmt.Errorf("marshal maild draft payload: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, maildURL+"/api/email/drafts", bytes.NewReader(data))
+	if err != nil {
+		return maildEmailDraftResponse{}, fmt.Errorf("create maild draft request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authenticated-User", ownerID)
+	req.Header.Set("X-Internal-Caller", "true")
+	req.Header.Set("X-Choir-Email-Appagent-Run", emailRunID)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return maildEmailDraftResponse{}, fmt.Errorf("maild draft request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return maildEmailDraftResponse{}, fmt.Errorf("read maild draft response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return maildEmailDraftResponse{}, fmt.Errorf("maild draft status %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	var draft maildEmailDraftResponse
+	if err := json.Unmarshal(bodyBytes, &draft); err != nil {
+		return maildEmailDraftResponse{}, fmt.Errorf("decode maild draft response: %w", err)
+	}
+	if strings.TrimSpace(draft.ID) == "" || strings.TrimSpace(draft.VersionHash) == "" {
+		return maildEmailDraftResponse{}, fmt.Errorf("maild draft response missing id or version hash")
+	}
+	return draft, nil
 }
 
 func persistentEmailAgentID(ownerID string) string {

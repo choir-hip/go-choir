@@ -1100,6 +1100,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"epoch=1",
 		"choir.gateway_url=http://10.200.0.1:8084",
 		"choir.vmctl_url=http://10.200.0.1:8083",
+		"choir.maild_url=http://10.200.0.1:8087",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {
@@ -1118,6 +1119,7 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//   - SANDBOX_ID (from vm_id kernel param)
 	//   - RUNTIME_GATEWAY_URL / RUNTIME_GATEWAY_TOKEN (sandbox auth only)
 	//   - RUNTIME_VMCTL_URL (tap-subnet control plane for super VM tools)
+	//   - RUNTIME_MAILD_URL (tap-subnet draft persistence only)
 	//   - RUNTIME_STORE_PATH (local persistent path)
 	//
 	// No provider credentials or host-side secret paths are set.
@@ -1127,6 +1129,7 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 		"RUNTIME_GATEWAY_URL",
 		"RUNTIME_GATEWAY_TOKEN",
 		"RUNTIME_VMCTL_URL",
+		"RUNTIME_MAILD_URL",
 		"RUNTIME_STORE_PATH",
 	}
 

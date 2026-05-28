@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,38 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	if _, ok := rt.ToolRegistryForProfile(AgentProfileSuper).Lookup("request_email_draft"); ok {
 		t.Fatal("super must not have direct email draft tool")
 	}
+	maildCalled := false
+	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		maildCalled = true
+		if r.Method != http.MethodPost || r.URL.Path != "/api/email/drafts" {
+			t.Fatalf("maild request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Authenticated-User") != "user-alice" || r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("maild auth headers user=%q internal=%q", r.Header.Get("X-Authenticated-User"), r.Header.Get("X-Internal-Caller"))
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode maild payload: %v", err)
+		}
+		if payload["source_kind"] != "vtext_email_artifact" || payload["subject"] != "Choir demo" || payload["text_body"] != "Here is the short demo note." {
+			t.Fatalf("maild payload = %+v", payload)
+		}
+		if payload["from_address"] != "000@choir.news" {
+			t.Fatalf("maild from_address = %v", payload["from_address"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":           "email-draft-maild-1",
+			"status":       "draft_pending_owner_approval",
+			"version":      1,
+			"version_hash": "maild-version-hash-1",
+			"from_address": "000@choir.news",
+			"to_addresses": []string{"person@example.com"},
+			"subject":      "Choir demo",
+		})
+	}))
+	defer maild.Close()
+	rt.cfg.MaildURL = maild.URL
 
 	parent, err := rt.createRunWithMetadata(context.Background(), "write the email artifact", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileVText,
@@ -61,6 +95,12 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	if out["send_authorized"] != false || out["maild_send_attempted"] != false {
 		t.Fatalf("email draft tool must not authorize or send: %+v", out)
 	}
+	if out["maild_draft_persisted"] != true || out["draft_id"] != "email-draft-maild-1" || out["draft_version_hash"] != "maild-version-hash-1" {
+		t.Fatalf("email draft tool did not persist maild draft: %+v", out)
+	}
+	if !maildCalled {
+		t.Fatal("maild draft endpoint was not called")
+	}
 
 	agent, err := s.GetAgent(context.Background(), persistentEmailAgentID("user-alice"))
 	if err != nil {
@@ -82,6 +122,9 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 	if metadataStringValue(child.Metadata, "email_action") != "draft_request" {
 		t.Fatalf("email child metadata missing draft request: %+v", child.Metadata)
+	}
+	if metadataStringValue(child.Metadata, "email_draft_id") != "email-draft-maild-1" {
+		t.Fatalf("email child metadata missing maild draft id: %+v", child.Metadata)
 	}
 }
 
