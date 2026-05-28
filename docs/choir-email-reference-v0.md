@@ -139,8 +139,8 @@ or any direct agent/runtime endpoint.
 Implementation checkpoint, 2026-05-28:
 
 - `cmd/maild` and `internal/maild` own the SQLite schema, Resend webhook
-  verification, Resend received-message fetch, outbound send, attachment
-  quarantine metadata, and source packet rows.
+  verification, Resend received-message fetch, approved outbound transport,
+  attachment quarantine metadata, and source packet rows.
 - `maild` enforces alias receive policies before storing inbound messages. The
   v0 public alias accepts public inbound, while future trusted-upload-style
   aliases can require exact unlisted plus aliases and sender whitelist rows.
@@ -154,21 +154,20 @@ Implementation checkpoint, 2026-05-28:
   rows. The Email app renders those stored recipients instead of assuming the
   active root alias, which keeps plus-alias, forwarded-mail, and Sent-message
   inspection honest.
-- The Email app includes a minimal owner-initiated Compose panel that sends
-  plain text through the existing authenticated `/api/email/send` route with
-  From fixed to `000@choir.news`. It does not add drafts, rich HTML, aliases,
-  or automation.
-- `internal/proxy` owns authenticated `/api/email/*` forwarding and the
-  `/api/email/messages/:id/send-to-choir` compound operation.
-- Successful proxy-owned Respond with Choir handoff records an
-  owner/message-scoped
-  `email_ingress_events` row in `maild` after prompt-bar submission. This is
-  read-only operator evidence; `maild` still never receives sandbox credentials
-  or calls MAS directly.
+- The Email app includes a minimal owner-initiated Compose/Reply surface that
+  creates versioned drafts through `/api/email/drafts`. Outbound transport goes
+  through `/api/email/drafts/:id/send` only after approval for the current draft
+  version. The old raw `/api/email/send` route is not registered.
+- `internal/proxy` owns authenticated `/api/email/*` forwarding only. It must
+  not author email-to-Choir workflows, submit source packets to prompt bar, or
+  bypass the Email appagent draft/approval boundary.
+- Email-originated workflow handoffs are represented as Email appagent-owned
+  intents/drafts or source-packet evidence. The historical proxy-owned
+  `send-to-choir` handoff path is removed from the product contract.
 - Trusted plus-code aliases use exact unlisted local parts plus whitelisted
-  senders and passing SPF/DKIM/DMARC evidence to create a
-  `pending_conductor` email_ingress_events row. This is a mail-side workflow
-  request boundary, not a direct agent run.
+  senders and passing SPF/DKIM/DMARC evidence to mark the source packet as
+  `pending_email_appagent_intent`. This is a mail-side request boundary for the
+  Email appagent, not a direct conductor run or send authority.
 - The authenticated source-packet route returns provenance, a stable normalized
   text ref, and the normalized plain-text email body. The proxy submits a
   bounded, line-prefixed copy of that body into the existing prompt-bar path
@@ -223,27 +222,28 @@ Resend receives mail for choir.news
   -> Email app displays through authenticated proxy APIs
 ```
 
-Manual response workflow handoff:
+Email appagent response workflow handoff:
 
 ```text
-owner clicks "Respond with Choir"
-  -> browser POSTs /api/email/messages/:id/send-to-choir through proxy
-  -> proxy validates owner session
-  -> proxy asks maild for an owner-visible source packet
-  -> maild enforces mailbox ownership and returns provenance, normalized text ref,
-     and normalized plain-text source content
-  -> proxy submits a conductor-style request to the resolved user computer
-  -> proxy records an owner/message-scoped email_ingress_events receipt in maild
-  -> sandbox/conductor receives owner instruction plus bounded untrusted source content
+owner requests an agentic email response
+  -> conductor/VText create or reference a durable email artifact
+  -> Email appagent receives a draft intent with source refs
+  -> Email appagent creates a versioned draft
+  -> Email app opens the draft for review
+  -> owner approves in app or by scoped approval reply
+  -> maild sends and stores provider receipt
 ```
 
 Outbound:
 
 ```text
 user composes or replies in Email app
-  -> browser POSTs /api/email/send through proxy
+  -> browser POSTs /api/email/drafts through proxy
   -> proxy validates session and forwards trusted user context to maild
-  -> maild validates from_alias ownership and send policy
+  -> maild validates from_alias ownership and stores a pending draft version
+  -> owner approves the exact version
+  -> browser POSTs /api/email/drafts/:id/send through proxy
+  -> maild validates owner, draft status, version hash, and from_alias ownership
   -> maild calls Resend Send Email API with an idempotency key
   -> maild stores outbound message in Sent
 ```
@@ -380,13 +380,17 @@ Authenticated mailbox APIs:
 GET  /api/email/messages?folder=inbox|sent|quarantine
 GET  /api/email/messages/:id
 POST /api/email/messages/:id/read
-POST /api/email/messages/:id/send-to-choir
-POST /api/email/send
+GET  /api/email/drafts
+POST /api/email/drafts
+GET  /api/email/drafts/:id
+POST /api/email/drafts/:id/send
+POST /api/email/drafts/:id/approval-email
 ```
 
-`/api/email/messages/:id/send-to-choir` is a proxy-owned compound operation. The
-browser still calls the public path, but proxy performs the maild source lookup
-and the user-computer conductor submission.
+The old raw `/api/email/send` and proxy-owned
+`/api/email/messages/:id/send-to-choir` routes are not current product
+contracts. Maild is transport/storage; Email appagent owns draft and approval
+authority.
 
 Admin/dev inspection should be a CLI command or localhost-only endpoint. Do not
 expose raw message/admin inspection through unauthenticated public routes.

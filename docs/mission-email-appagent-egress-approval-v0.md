@@ -1894,3 +1894,33 @@ diff signal:
   surface, while keeping approved draft-send helper code because
   `/api/email/drafts/:id/send` still depends on canonical alias resolution,
   reply headers, provider payload construction, and sent-message storage.
+
+## Run Checkpoint: Reference And Proxy Test Cut Over To Draft Authority
+
+timestamp: 2026-05-28T09:24:00-04:00
+status: local_verified_pending_landing
+
+convergence:
+- Updated `docs/choir-email-reference-v0.md` so the current reference contract
+  says Compose/Reply create drafts through `/api/email/drafts`, send occurs
+  through `/api/email/drafts/:id/send` after exact-version approval, and
+  `maild` remains transport/storage while Email appagent owns draft/approval
+  authority.
+- Replaced the stale proxy `send-to-choir` forwarding test with a draft-send
+  forwarding test. The test still proves proxy forwards authenticated Email API
+  traffic to maild and does not submit directly to prompt bar, but no longer
+  preserves the removed workflow name as an active code contract.
+- Changed the shared Resend-send helper's default `X-Choir-Maild` marker from
+  `v0-owner-send` to `v0-approved-draft-send`. Approved draft send already
+  overwrites this header explicitly; the default now matches the only remaining
+  current outbound path.
+
+verification:
+- `nix develop -c go test ./internal/maild ./internal/proxy`
+- `rg` found no `send-to-choir`, `pending_conductor`, `Respond with Choir`,
+  `v0-owner-send`, `EmailSendToChoir`, or `SendToChoir` references in
+  `internal`, `frontend`, or the updated current email reference, except for
+  explicit negative/deprecated route mentions in the reference doc.
+- `rg` found no hardcoded `000@choir.news` in `frontend/src/lib/EmailApp.svelte`,
+  `frontend/src/lib/Desktop.svelte`, or `frontend/src/App.svelte`; the visible
+  current address comes from `/api/email/aliases`.

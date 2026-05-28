@@ -107,7 +107,7 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 		Text:    text,
 		HTML:    html,
 		Headers: map[string]any{
-			"X-Choir-Maild": "v0-owner-send",
+			"X-Choir-Maild": "v0-approved-draft-send",
 		},
 	}, nil
 }

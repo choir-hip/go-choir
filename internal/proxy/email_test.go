@@ -81,11 +81,11 @@ func TestEmailAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	}
 }
 
-func TestEmailSendToChoirPathIsOnlyForwardedToMaild(t *testing.T) {
+func TestEmailDraftSendPathIsOnlyForwardedToMaild(t *testing.T) {
 	maildCalled := false
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		maildCalled = true
-		if r.URL.Path != "/api/email/messages/msg-1/send-to-choir" {
+		if r.URL.Path != "/api/email/drafts/draft-1/send" {
 			t.Fatalf("maild path = %s", r.URL.Path)
 		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -99,7 +99,7 @@ func TestEmailSendToChoirPathIsOnlyForwardedToMaild(t *testing.T) {
 	defer sandbox.Close()
 	h, priv := newEmailTestHandler(t, maild.URL, sandbox.URL)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/email/messages/msg-1/send-to-choir", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/email/drafts/draft-1/send", nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
 	w := httptest.NewRecorder()
 
