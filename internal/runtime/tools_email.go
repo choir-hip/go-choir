@@ -511,6 +511,8 @@ func emailDraftArtifactTailMarkers() []string {
 		"\ninstructions\n",
 		"\n**source refs:**",
 		"\nsource refs:",
+		"\n**source ref:**",
+		"\nsource ref:",
 		"\n**source references:**",
 		"\nsource references:",
 		"\n**constraint:**",

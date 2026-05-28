@@ -506,6 +506,11 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 	if cleaned != "This is the email body." {
 		t.Fatalf("cleaned body with source references = %q", cleaned)
 	}
+	body = "This is the email body.\n\n**Source ref:** Original user request.\n\n**Outbound send:** Not authorized. Draft only."
+	cleaned = cleanEmailDraftBodyText(body)
+	if cleaned != "This is the email body." {
+		t.Fatalf("cleaned body with singular source ref = %q", cleaned)
+	}
 }
 
 func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {
