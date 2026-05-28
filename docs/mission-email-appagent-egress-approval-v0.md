@@ -2781,3 +2781,26 @@ remaining error:
 - The Email app still has stale proof windows and stale drafts from earlier
   probes; deletion-first convergence should remove demo cruft after the reply
   proof completes.
+
+### Problem Checkpoint: Risk Blocks Need First-Class Trace Evidence
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T16:10Z
+evidence source: code inspection and deployed risk-alert proof
+
+problem:
+- The deployed `Choir Email reply approval proof 06e58f5` probe correctly
+  blocked an approval-manipulation draft and sent a provider-backed templated
+  risk alert, but the Email appagent run only exposed that outcome through the
+  generic `loop.completed` status/result payload.
+- The mission requires Email appagent to appear as first-class Trace authority
+  for send-control decisions. Risk blocks are send-control decisions, so they
+  need a bounded appagent event, not only a stored maild alert row.
+
+fix direction:
+- Add a structured `email.draft.blocked` event emitted by the Email appagent
+  run when a draft is blocked before approval.
+- Include only bounded policy/evidence fields: draft/version ids, version hash,
+  risk code, alert status/id/provider id, and explicit `send_authorized=false`.
+- Do not include raw risky body text, quoted mail, private trace logs, or
+  secrets in the event payload.
