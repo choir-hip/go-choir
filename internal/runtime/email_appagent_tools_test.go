@@ -197,6 +197,37 @@ func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T
 	}
 }
 
+func TestCleanEmailDraftBodyTextRemovesToolMarkupResidue(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "full parameter residue",
+			in:   "Here is the short demo note.\n</<parameter>\n<parameter name=\"doc_id\">doc</parameter>\n</invoke>",
+			want: "Here is the short demo note.",
+		},
+		{
+			name: "truncated close residue",
+			in:   "Here is the short demo note.</",
+			want: "Here is the short demo note.",
+		},
+		{
+			name: "ordinary less-than content",
+			in:   "The result is 2 < 3.",
+			want: "The result is 2 < 3.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanEmailDraftBodyText(tt.in); got != tt.want {
+				t.Fatalf("cleanEmailDraftBodyText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {

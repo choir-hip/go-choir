@@ -360,7 +360,16 @@ func cleanEmailDraftBodyText(value string) string {
 			cut = idx
 		}
 	}
-	return strings.TrimSpace(value[:cut])
+	cleaned := strings.TrimSpace(value[:cut])
+	for {
+		next := strings.TrimSpace(cleaned)
+		next = strings.TrimSuffix(next, "</")
+		next = strings.TrimSpace(next)
+		if next == cleaned {
+			return cleaned
+		}
+		cleaned = next
+	}
 }
 
 func emailSourceContentHash(docID, revisionID, content string) string {
