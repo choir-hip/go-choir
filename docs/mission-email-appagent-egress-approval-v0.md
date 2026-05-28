@@ -3402,3 +3402,40 @@ remaining error field:
   `reject` paths. The next owner-visible email should show the draft message
   body before the review link and should not include the old draft/version/hash
   metadata sentence.
+
+### Problem Checkpoint: Sent Draft Body Leaks VText Instruction Marker
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T19:08Z
+evidence source: owner iPhone Mail screenshot and read-only Node B maild query
+
+problem:
+- The approved outbound email for
+  `Choir Email clean approval proof 06e58f5` was sent from `000@choir.news`,
+  but the body contains a leaked artifact/control marker:
+  `**Instructions from user:`.
+- This is not an email-client rendering issue. Read-only Node B maild inspection
+  of `email_draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` showed the stored
+  `text_body` itself ends with that marker, and the draft status is `sent`.
+- The sent email also shows large blank space after the leaked marker, which is
+  consistent with malformed artifact tail content being admitted into the human
+  email body.
+
+root-cause evidence:
+- `internal/runtime/tools_email.go` extracts labeled `Body` sections and stops
+  at exact artifact markers such as `Instructions:` and `**Instructions:**`.
+- The actual generated artifact used `**Instructions from user:`, which does
+  not match the existing stop markers.
+- `cleanEmailDraftBodyText` only strips XML/tool-tag residue and does not
+  defensively truncate common VText/email-artifact sections such as
+  `Instructions from user`, `Source refs`, or markdown `---` separators.
+
+fix direction:
+- Treat email body extraction as a strict artifact-boundary parser: a human
+  email body must stop at any control/provenance section, including
+  `Instructions from user`, `Instructions`, `Source refs`, `Source references`,
+  `Constraints`, `Notes`, and markdown separators.
+- Apply the same scrubber at both extraction time and final draft-body cleaning
+  before maild persistence, so model/tool-call variants cannot bypass one layer.
+- Add regression tests for the exact observed marker and for final
+  `request_email_draft` body cleaning.
