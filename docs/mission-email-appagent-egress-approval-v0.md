@@ -3686,3 +3686,22 @@ remaining error field:
 - The footer wording is deliberately conservative. A later design pass can
   tune typography and language, but the current output is clean, visible, and
   free of internal ids/hashes.
+
+### Problem Checkpoint: Footer Tagline Is Too Narrow
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T20:24Z
+evidence source: owner review of the received `Choir Email proof` message
+
+problem:
+- The deployed footer says Choir is "an automatic computer for personal
+  workflows."
+- That is too narrow for the actual product direction. It omits research,
+  publishing, media intelligence, and software creation, which are central
+  Choir surfaces.
+
+fix direction:
+- Keep the disclosure/approval semantics unchanged.
+- Replace the tagline with a broader one-liner that names research,
+  publishing, media intelligence, and software without adding metadata or
+  internal implementation language to the email.
