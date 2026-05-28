@@ -3044,3 +3044,46 @@ remaining waiting condition:
 - It does not prove email reply approval/edit/reject. That still requires a
   fresh real inbound owner reply to an active `approve+<token>@choir.news`
   approval email.
+
+### Convergence Checkpoint: Old Bypass Surfaces Stay Deleted
+
+status: deletion_audit_clean_reply_proof_pending
+timestamp: 2026-05-28T16:45Z
+evidence source: repository search, code inspection, deployed maild SQLite
+
+audit:
+- Repository search across `frontend/src`, `internal/maild`, `internal/proxy`,
+  and `internal/runtime`, excluding tests, found no product-path references to
+  `send-to-choir`, `pending_conductor`, raw `/api/email/send`,
+  `Respond with Choir`, or hardcoded `000@choir.news`.
+- `internal/proxy/email.go` now only authenticates and forwards `/api/email/*`
+  to maild. It no longer authors prompt-bar workflows.
+- `internal/maild/webhook.go` registers aliases, drafts, messages, completion
+  email, risk alert, and Resend webhook routes. It does not register raw
+  `/api/email/send`.
+- `frontend/src/lib/EmailApp.svelte` loads account aliases from
+  `/api/email/aliases`, creates compose/reply drafts through `/api/email/drafts`,
+  and sends only the selected draft/version through
+  `/api/email/drafts/{id}/send`.
+- `internal/maild/ingest.go` stores inbound messages/source packets with
+  provenance including `prompt_bar_equivalent` and
+  `workflow_handoff_status`, but it no longer creates a
+  `pending_conductor` fake handoff.
+
+live waiting state:
+- Staging still serves behavior commit
+  `f325b6c64552796257e5f0aaa2b62e2d536daee2`.
+- The active reply-proof draft remains
+  `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`, subject
+  `Choir Email clean approval proof 06e58f5`, status
+  `draft_pending_owner_approval`, with one active approval token whose provider
+  approval-email id is `1f93fa65-7b7e-454f-ae4f-2192a0c49009`.
+- No `email_reply_approved`, `email_reply_rejected`, or
+  `email_reply_edit_requested` approval event has landed yet.
+
+belief-state changes:
+- The hard-cut away from the old proxy/UI/maild bypasses is still intact in
+  current code.
+- The remaining high-value proof is not another local code deletion; it is a
+  fresh real owner reply through Resend inbound to prove the deployed
+  approval-reply parser and exact-version send/edit/reject semantics.
