@@ -1458,3 +1458,91 @@ next executable probe:
 - Add generic trailing XML-like closing tag cleanup after marker cuts, with
   regression coverage for `</pparameter>`.
 - Redeploy and rerun a fresh visible prompt-bar proof before owner-click send.
+
+## Checkpoint: Clean Draft And Owner-Click Send Proven On Staging
+
+timestamp: 2026-05-28T08:20:00-04:00
+status: checkpoint_incomplete
+
+what shipped immediately before this probe:
+- `e403905` documented the generic trailing tag blocker.
+- `8722a0a` added generic trailing XML-like closing tag cleanup for Email
+  appagent draft body text and regression coverage for `</pparameter>`.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26573282953` completed
+  successfully.
+- Deploy job `78285962488` completed successfully.
+- Staging `/health` and the active founder VM `/health` both reported sandbox
+  commit `8722a0a6ebc7fc5838456fe1b4bfcd61beb86156`, deployed at
+  `2026-05-28T12:00:31Z`.
+
+observed product evidence:
+- A visible prompt-bar request with subject
+  `Choir Email appagent bridge proof 8722a0a` created the VText artifact but
+  failed before Email appagent because the VText tool loop did not call the
+  required `request_email_draft` tool after retries. Trace trajectory
+  `72599855-9589-4ec5-bd47-a2a04448dc46` showed `conductor -> vtext` only.
+- A shorter visible prompt-bar request with subject
+  `Choir Email appagent clean proof 8722r1` succeeded through
+  `conductor -> vtext -> email`.
+- Maild created draft `email-draft-3eec7d9a-c053-42ad-b6fe-318693755703` with:
+  - status `draft_pending_owner_approval`;
+  - from address `000@choir.news`;
+  - recipient `yusefnathanson@me.com`;
+  - body exactly `Clean deployed proof.`;
+  - version hash
+    `a63b34e730e23941673e00269733e496b0780b897f241aeeef373a4b07e31911`;
+  - no provider message id before owner approval.
+- Trace trajectory `b97a00c8-f5a2-4436-9632-bff463a27165` contained
+  first-class agents `conductor`, `vtext`, and `email`, with causal edges
+  `conductor -> vtext` and `vtext -> email`.
+- Sent folder count remained `3` before owner approval.
+- Computer Use opened the deployed Email app, selected the draft, and clicked
+  the visible `Send approved draft` control.
+- After the owner click, Sent showed `4` messages and the top message was
+  `Choir Email appagent clean proof 8722r1` with body
+  `Clean deployed proof.`.
+- Maild draft `email-draft-3eec7d9a-c053-42ad-b6fe-318693755703` moved to
+  status `sent` and recorded provider message id
+  `ba8f9dda-b100-4872-a3c6-bddfe8f0fefc`.
+- The stored outbound message id was
+  `resend-message-ab5db191817c6ad6db97cbf6abe8f3c1`, with direction
+  `outbound`, trust status `trusted`, subject
+  `Choir Email appagent clean proof 8722r1`, and `sent_at`
+  `2026-05-28T12:08:55.378507052Z`.
+
+belief-state changes:
+- The core low-resolution topology is now proven on staging:
+  prompt bar -> conductor -> VText -> Email appagent Trace node -> maild draft
+  -> owner click -> Resend send receipt -> Sent mailbox.
+- The simple prompt path no longer depends on raw `/api/email/send`; outbound
+  send requires an exact draft version hash and owner approval.
+- The long prompt failure confirms that VText required-tool compliance remains
+  fragile for more verbose prompts. This is a VText/tool-loop reliability
+  blocker, not evidence that the Email appagent bridge is unreachable.
+
+current artifact state:
+- Owner-click approval is proven for a clean prompt-bar-originated draft.
+- Email appagent appears as a first-class Trace node for the successful
+  prompt-bar/VText-originated email intent.
+- Maild remains the transport and mailbox layer, with provider refs stored as
+  evidence.
+
+unproven or partial claims:
+- Approval-by-email deep link and reply approval are not implemented or proven.
+- Edit-by-email and prior-token invalidation after edits are not implemented or
+  proven.
+- Runtime risk detection currently blocks risky draft requests as
+  `blocked_risk_alert_required`, but no provider-backed templated risk alert is
+  sent to the signup email.
+- The long prompt path can still fail before Email appagent when VText does not
+  satisfy a required next tool.
+
+remaining error field:
+- The mission is not complete until the approval-by-email and structured
+  risk-alert paths either work on staging or are explicitly deferred with an
+  honest incomplete checkpoint.
+- Before implementing those paths, record the problem separately and keep the
+  next code slice small: approval tokens, exact-version approval replies, and
+  templated risk alerts should extend the proven draft/owner-click model rather
+  than reintroducing a direct send bypass.
