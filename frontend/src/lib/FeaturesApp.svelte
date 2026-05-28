@@ -227,7 +227,6 @@
     acting = `import:${feature.id}`;
     actionStatus = `Importing ${feature.title}. Choir will email ${ownerEmail} when it is ready or blocked.`;
     try {
-      const lineage = await fetchJSON(`/api/computers/${encodeURIComponent(TARGET_COMPUTER_ID)}/source-lineage`, { method: 'GET' });
       const adoptionID = newRunID('feature', feature);
       const adoption = await fetchJSON(`/api/computers/${encodeURIComponent(TARGET_COMPUTER_ID)}/adoptions`, {
         method: 'POST',
@@ -235,7 +234,6 @@
           adoption_id: adoptionID,
           package_id: feature.id,
           target_candidate_id: `${TARGET_COMPUTER_ID}-feature-${safeID(feature.title)}-${Date.now()}`,
-          target_active_source_ref_at_candidate_start: lineage.active_source_ref,
           trace_id: `features-${safeID(feature.title)}`,
         }),
       });
