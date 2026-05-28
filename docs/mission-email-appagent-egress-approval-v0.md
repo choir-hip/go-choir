@@ -3627,3 +3627,62 @@ fix direction:
   approval.
 - Preserve plain-text fallback while making the HTML path visibly distinct
   enough to verify in normal mail clients.
+
+### Checkpoint: Automated Signature Footer Proven On Staging
+
+status: deployed_proof
+timestamp: 2026-05-28T20:18Z
+
+code and deploy:
+- `d6bb176` documented the visually-indistinct HTML/proof-subject issue before
+  code changes.
+- `046e626` added the approved-email footer/signature:
+  - plain-text sends append a `--` signature delimiter plus an automated Choir
+    disclosure;
+  - generated HTML sends append a separated italic footer with the same
+    disclosure;
+  - sent-message storage records the exact text/HTML provider payload after
+    signature generation.
+- Local focused tests passed:
+  `nix develop -c go test ./internal/maild ./internal/runtime ./internal/types -run 'TestBuildResendSendRequestGeneratesSafeHTMLPart|TestDraftSendStoresSentAndPreventsSecondSend|Test.*Approval|Test.*Email|Test.*Draft|Test.*Risk|TestEmailDraftEventKinds|TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent'`
+- GitHub Actions CI run `26599397598` passed for
+  `046e6262d472d7176264a96c695d591752cd7587`.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `046e6262d472d7176264a96c695d591752cd7587`, deployed at
+  `2026-05-28T20:11:21Z`.
+
+product-path proof:
+- Computer Use used the deployed Email app to create a new draft from
+  `000@choir.news` to `yusefnathanson@me.com`.
+- The proof subject was exactly `Choir Email proof`, with no hash or metadata
+  line noise.
+- The proof body was exactly:
+  `This is a clean Choir email with a visible automated-signature footer.`
+- The owner-click send path sent draft
+  `email-draft-53c73afd-32e4-4dcf-8495-39f4fccabe33`.
+- maild recorded approval event
+  `email-approval-d6327785-1c99-46b6-a651-bc3a079102d7`,
+  `event_type=owner_click_approved`.
+- maild recorded outbound provider message id
+  `2c43a9ee-8ac2-40dd-bf4e-f3ae7c3b75d9` and sent message
+  `resend-message-f5083b51e8c6755d9b7bfdbcb0a9c878`.
+- The stored sent plain text includes:
+  `--`
+  followed by
+  `Sent by Choir, an automatic computer for personal workflows. This automated email was sent after owner approval.`
+- The stored sent HTML contains a `<footer>` and `<em>` signature with the same
+  disclosure.
+- Computer Use opened Apple Mail and observed the received email:
+  - subject `Choir Email proof`;
+  - visible body content only;
+  - a separated italic footer disclosure below the body.
+
+remaining error field:
+- The VText-mediated prompt created a readable VText artifact for
+  `Choir Email proof` but did not complete the `request_email_draft` handoff;
+  the deployed Email app compose/review/send path was used for this proof to
+  isolate and verify maild/email rendering. This remains part of the broader
+  VText handoff repair surface, not this footer polish.
+- The footer wording is deliberately conservative. A later design pass can
+  tune typography and language, but the current output is clean, visible, and
+  free of internal ids/hashes.
