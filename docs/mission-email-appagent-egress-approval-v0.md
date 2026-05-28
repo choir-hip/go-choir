@@ -3196,3 +3196,59 @@ next executable probe:
   `Email approval link` action to generate a fresh scoped approval notice, then
   verify the new provider id and superseded token state before asking for the
   reply.
+
+### Product Checkpoint: Approval Email Re-Issue Rotates Token Without Sending
+
+status: fresh_approval_email_sent_reply_proof_pending
+timestamp: 2026-05-28T16:59Z
+evidence source: Computer Use, maild SQLite, Resend provider ids
+
+precondition:
+- Before the action, draft
+  `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` had one active
+  approval token:
+  `email-approval-token-843305d4-5cd3-472b-8057-6aec681adff1`, with approval
+  email provider id `1f93fa65-7b7e-454f-ae4f-2192a0c49009`.
+- No `email_reply_approved`, `email_reply_rejected`, or
+  `email_reply_edit_requested` event had landed.
+
+visible product action:
+- Computer Use opened the deployed Email app on `https://choir.news` as owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- The selected pending draft was `Choir Email clean approval proof 06e58f5`.
+- Computer Use clicked the visible `Email approval link` action, not
+  `Send approved draft`.
+
+durable evidence:
+- Maild created fresh active approval token
+  `email-approval-token-5f4a82c7-e188-44fb-8a1c-1ccd5fb8d69b` for the same
+  draft/version.
+- Resend approval email provider id:
+  `fb94f9fc-a374-4bf9-9076-0769af82c394`.
+- Previous token
+  `email-approval-token-843305d4-5cd3-472b-8057-6aec681adff1` is now
+  `superseded`.
+- Draft `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648` remains
+  `draft_pending_owner_approval`, version `1`.
+- Outbound sent-message count remained `11`; no new Sent message was created.
+- There are still `0` active approval tokens attached to sent drafts.
+
+belief-state changes:
+- The approval re-issue UI is now not only visible but product-path proven.
+- The latest approval email is the only current reply target for the active
+  proof draft. Replies to older approval emails should now be treated as stale
+  or unsupported depending on provider threading and recipient address.
+
+next executable probe:
+- The owner should reply to the newest approval email for
+  `Choir Email clean approval proof 06e58f5`, provider id
+  `fb94f9fc-a374-4bf9-9076-0769af82c394`.
+- Preferred reply text remains:
+
+```text
+edit: make it warmer and shorter
+```
+
+- Expected evidence after that reply: `email_reply_edit_requested`, old active
+  token marked edited/used, draft version incremented, no outbound sent message,
+  and a fresh scoped approval notice for the edited draft version.
