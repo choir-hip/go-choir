@@ -2044,3 +2044,25 @@ remaining proof gap:
 - This is local code-path proof. A real owner reply from `yusefnathanson@me.com`
   through Resend inbound is still unproven and requires either owner mailbox
   action or a future verified end-to-end provider harness.
+
+## Problem Evidence Checkpoint: Active Approval Token Can Outlive Owner-Click Send
+
+timestamp: 2026-05-28T09:58:00-04:00
+status: documented_before_fix
+
+evidence:
+- After owner-click approval, existing email approval tokens for the same draft
+  are not necessarily marked used.
+- If the owner later replies to an old approval email with `approve`, maild can
+  load an active token for a draft whose status is already `sent`.
+- `sendApprovedDraft` returns `errDraftAlreadySent`, but the approval reply
+  path currently treats that as an ordinary error. Since `shouldRetryIngest`
+  only suppresses selected policy errors, this can ask Resend to retry a
+  harmless stale approval reply instead of accepting it as a blocked decision.
+
+required fix direction:
+- Treat approval replies for already-sent drafts as blocked, non-retry policy
+  decisions.
+- Send a structured risk alert because the reply attempted to authorize a stale
+  draft artifact.
+- Include this case in focused approval-reply tests.
