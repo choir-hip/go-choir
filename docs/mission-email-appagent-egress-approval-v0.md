@@ -2970,3 +2970,34 @@ remaining waiting condition:
 - Approval-link proof and approval-email-arrival proof are useful, but they do
   not replace reply-token proof because the acceptance criterion is scoped to
   email replies approving, rejecting, or editing an exact draft version.
+
+### Problem Checkpoint: Sent Drafts Leave Approval Tokens Active
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T16:40Z
+evidence source: deployed maild SQLite, code inspection
+
+problem:
+- The mission invariant says approval is scoped to an exact owner, draft,
+  version hash, from alias, recipients, and action. Once a draft is sent by
+  owner click or email reply, any outstanding approval token for that draft
+  should stop carrying active authority.
+- Deployed maild data shows several `sent` drafts whose
+  `email_draft_approval_tokens.status` is still `active`.
+- Code inspection confirms `Store.MarkDraftSent` updates the draft row to
+  `sent` but does not mark active approval tokens for that draft stale.
+
+risk:
+- A later reply to a stale token does not send a duplicate email because
+  `processApprovalReply` checks the draft's `sent` status, but the token remains
+  misleadingly active until that late reply arrives.
+- This creates avoidable risk-alert noise and weakens the "one exact approval
+  action" state model.
+
+fix direction:
+- Make `MarkDraftSent` atomically mark any still-active approval tokens for the
+  sent draft as `stale_sent` with `used_at` set.
+- Add a regression test that owner-click send immediately invalidates an active
+  approval token before any late reply.
+- If practical, add startup repair for existing deployed rows so old sent
+  drafts do not retain active approval tokens indefinitely.
