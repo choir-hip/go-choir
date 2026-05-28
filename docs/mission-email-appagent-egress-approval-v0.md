@@ -2094,3 +2094,61 @@ verification:
 - Staging health reported proxy and sandbox commit
   `55c2012de29ffcbeff04d1e48551927210615f33`, deployed at
   `2026-05-28T13:45:50Z`.
+
+## Problem Evidence Checkpoint: Clean VText Email Draft Handoff Is Still Fragile
+
+timestamp: 2026-05-28T10:05:00-04:00
+status: documented_before_fix
+
+deployed evidence:
+- Computer Use submitted a clean prompt through `https://choir.news` while
+  authenticated as owner `5bd6de97-3b58-408c-bf89-c42c81b083de`:
+  `Draft an email to yusefnathanson@me.com with subject "Choir Email approval
+  reply clean proof 55c2012" and body exactly "This is a clean deployed
+  approval-by-email proof candidate for the current Email appagent flow."`
+- The prompt created Trace trajectory
+  `354f2874-6e18-4495-b494-d72199251782` with conductor -> VText causality.
+- VText wrote revision `7a7578a8-0382-4cae-b842-0aaacfb4e1c9`, but the
+  structured `next_required_args` emitted by `edit_vtext` were malformed:
+  - `subject` began with markdown residue `** Choir Email approval...` and
+    included `**Body:**`, the body text, and `**Status:**` prose;
+  - `body_text` began with `**` and included the non-email status sentence
+    `Draft prepared. No outbound mail authorized...`.
+- After `edit_vtext` returned `next_required_tool=request_email_draft`, the
+  runtime retried exact `function:request_email_draft` calls, but the deployed
+  VText provider path timed out before the required tool call. Trace events
+  recorded `provider_timed_out_before_required_tool` at attempts `1` and `2`.
+- No maild draft for subject `Choir Email approval reply clean proof 55c2012`
+  was persisted by the time of the checkpoint.
+
+code evidence:
+- `internal/runtime/tools_email.go` parses email artifacts with
+  `extractEmailLabeledField`, which only looks for plain `subject:` and
+  `body:` markers. VText commonly writes markdown labels such as
+  `**Subject:**` and `**Body:**`.
+- The fallback field extraction therefore treats the first `Subject:` inside
+  `**Subject:**` as starting after the colon but leaves the leading markdown
+  marker and does not stop cleanly at the markdown body/status sections.
+- `internal/runtime/toolloop.go` currently asks the model to perform a required
+  next tool call after a tool result. That is appropriate for many agent
+  continuations, but the simple supplied-content email handoff has already
+  been deterministically parsed into a complete `request_email_draft` argument
+  object by runtime code. Requiring another model turn makes the core demo path
+  provider-latency fragile.
+
+why this matters:
+- A clean owner prompt can fail before reaching Email appagent, even though the
+  owner supplied all required email fields and the policy surface is ready.
+- Worse, if the required tool eventually runs with malformed extraction, the
+  Email appagent may receive a draft whose subject/body contain VText status
+  prose rather than the exact user-intended email.
+
+required fix direction:
+- Make Email artifact extraction tolerant of the markdown labels VText actually
+  writes, while preserving strict stops at non-email status/next-step sections.
+- Prefer a deterministic runtime continuation for the safe supplied-content
+  VText -> Email appagent handoff once `edit_vtext` has emitted complete
+  `request_email_draft` arguments, so the product path does not depend on a
+  provider successfully calling a mechanically determined next tool.
+- Keep the Email appagent as the first-class Trace authority and keep maild as
+  transport/storage evidence only.
