@@ -100,7 +100,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		return nil, fmt.Errorf("at least one to_address is required")
 	}
 	subject := strings.TrimSpace(in.Subject)
-	body := strings.TrimSpace(in.BodyText)
+	body := cleanEmailDraftBodyText(in.BodyText)
 	if subject == "" || body == "" {
 		return nil, fmt.Errorf("subject and body_text are required")
 	}
@@ -342,6 +342,25 @@ func cleanEmailDraftFromAlias(value string) string {
 		return ""
 	}
 	return value
+}
+
+func cleanEmailDraftBodyText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	cut := len(value)
+	for _, marker := range []string{
+		"</<parameter>",
+		"<parameter name=",
+		"</invoke>",
+	} {
+		if idx := strings.Index(lower, marker); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	return strings.TrimSpace(value[:cut])
 }
 
 func emailSourceContentHash(docID, revisionID, content string) string {

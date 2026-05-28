@@ -137,12 +137,14 @@ func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T
 		t.Fatalf("install tools: %v", err)
 	}
 	var gotFromAddress any
+	var gotTextBody any
 	maild := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode maild payload: %v", err)
 		}
 		gotFromAddress = payload["from_address"]
+		gotTextBody = payload["text_body"]
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":           "email-draft-maild-clean-alias",
@@ -175,13 +177,16 @@ func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T
 		"from_alias":          "yusefnathanson@me.com",
 		"to_addresses":        []string{"person@example.com"},
 		"subject":             "Choir demo",
-		"body_text":           "Here is the short demo note.",
+		"body_text":           "Here is the short demo note.\n</<parameter>\n<parameter name=\"doc_id\">doc-email-clean-alias</parameter>\n</invoke>",
 	}))
 	if err != nil {
 		t.Fatalf("request_email_draft: %v", err)
 	}
 	if gotFromAddress != "" {
 		t.Fatalf("maild from_address = %v, want empty string for malformed alias", gotFromAddress)
+	}
+	if gotTextBody != "Here is the short demo note." {
+		t.Fatalf("maild text_body = %q, want clean body without tool markup", gotTextBody)
 	}
 	var out map[string]any
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
