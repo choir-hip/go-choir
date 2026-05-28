@@ -1351,3 +1351,71 @@ next executable probe:
 - Add a regression test for a body ending in `</`.
 - Redeploy and rerun the visible prompt-bar proof with a new subject before
   attempting owner-click send.
+
+## Checkpoint: Draft Body Sanitizer Misses Payload Tag Residue
+
+timestamp: 2026-05-28T07:55:00-04:00
+status: checkpoint_incomplete
+
+problem documented before fix: after `53ce42e` deployed the truncated-close
+cleanup, the prompt-bar simple email path again created a draft with correct
+account-scoped routing, no send, and first-class Email appagent trace, but the
+stored body contained a different provider serialization residue:
+`</payload></parameter>` and a `<payload ...>` tag.
+
+what shipped immediately before this probe:
+- `df7954c` documented the truncated closing markup blocker.
+- `53ce42e` stripped trailing orphan `</` fragments and added regression
+  coverage.
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/26572807382` completed
+  successfully.
+- Deploy job `78284240649` completed successfully.
+- Staging `/health` and founder VM `/health` both reported sandbox commit
+  `53ce42ef12d3d57bc06c61e2b06b019155f749a2`, deployed at
+  `2026-05-28T11:49:51Z`.
+
+observed product evidence:
+- Computer Use submitted a visible prompt-bar request with subject
+  `Choir Email appagent bridge proof 53ce42e`.
+- Maild created draft `email-draft-c0b2b2c5-f3f2-4969-a74a-a4eb3d6a26d5`
+  with status `draft_pending_owner_approval`, from address `000@choir.news`,
+  recipient `yusefnathanson@me.com`, no provider message id, and no `sent_at`.
+- Sent folder count stayed at `3`.
+- Trace trajectory `11cff569-a11d-4e58-8912-73d9e973251b` completed with
+  first-class agents `conductor`, `vtext`, and `email`.
+
+problem evidence:
+- The persisted draft body was:
+
+```text
+This is a deployed staging proof that VText hands a clean draft to Email
+appagent, maild stores it in Drafts, and no outbound email is sent before owner
+approval.</payload></parameter>
+<payload name="doc_id" string="true">0d8ea111-b05d-4009-9c93-f189cca568de</payload>
+```
+
+root cause:
+- The tool boundary residue is not stable across provider responses. The prior
+  sanitizer handled `<parameter>` / `</invoke>` and an orphan `</`, but did not
+  cut at payload/parameter closing tags.
+- Treating only one observed serialization shape as the marker set is too
+  narrow for owner-reviewable email drafts.
+
+belief-state changes:
+- The mission has repeatedly proven the desired authority path:
+  prompt-bar -> conductor -> VText -> Email appagent -> maild draft, with no
+  outbound send.
+- The remaining blocker is a normalization boundary at
+  `request_email_draft.body_text`, not a routing or mail transport blocker.
+
+remaining error field:
+- Email appagent drafts may still include provider/tool serialization residue
+  when the model produces payload-style tags in tool arguments.
+- Owner-click send remains deferred until a freshly created draft body is clean.
+
+next executable probe:
+- Broaden body cleanup to cut at payload/parameter closing and opening tags
+  that indicate tool serialization, while preserving normal less-than text.
+- Add regression coverage for `</payload></parameter>` plus `<payload ...>`.
+- Redeploy and rerun a fresh visible prompt-bar draft before attempting send.
