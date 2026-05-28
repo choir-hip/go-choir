@@ -97,7 +97,7 @@ func newEditVTextTool(rt *Runtime) Tool {
 				"base_revision_id": rev.ParentRevisionID,
 				"status":           "stored",
 			}
-			if continuation, ok := rt.requiredContinuationAfterInitialVTextEdit(context.Background(), rec, in); ok {
+			if continuation, ok := rt.requiredContinuationAfterInitialVTextEdit(context.Background(), rec, in, rev); ok {
 				result["next_required_tool"] = continuation.Tool
 				result["next_required_args"] = continuation.Args
 				result["next_instruction"] = continuation.Instruction
@@ -113,7 +113,7 @@ type vtextRequiredContinuation struct {
 	Instruction string
 }
 
-func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs) (vtextRequiredContinuation, bool) {
+func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs, rev types.Revision) (vtextRequiredContinuation, bool) {
 	if rt == nil || rt.store == nil || rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
 		return vtextRequiredContinuation{}, false
 	}
@@ -143,6 +143,21 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 	}
 	if prompt == "" || vtextPromptAllowsUngroundedCreativeDraft(prompt) {
 		return vtextRequiredContinuation{}, false
+	}
+	if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
+		return vtextRequiredContinuation{
+			Tool: "request_email_draft",
+			Args: map[string]any{
+				"doc_id":              rev.DocID,
+				"revision_id":         rev.RevisionID,
+				"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
+				"to_addresses":        intent.ToAddresses,
+				"subject":             intent.Subject,
+				"body_text":           intent.BodyText,
+				"approval_mode":       "owner_click_or_email_reply",
+			},
+			Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
+		}, true
 	}
 	needsResearch := vtextPromptNeedsResearchContinuation(prompt)
 	needsSuper := vtextPromptNeedsSuperExecution(prompt)

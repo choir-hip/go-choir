@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -73,14 +74,13 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 
 	raw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
-		"doc_id":              "doc-email-1",
-		"revision_id":         "rev-email-1",
-		"source_content_hash": "sha256:vtext-source",
-		"from_alias":          "000@choir.news",
-		"to_addresses":        []string{"person@example.com"},
-		"subject":             "Choir demo",
-		"body_text":           "Here is the short demo note.",
-		"approval_mode":       "owner_click_or_email_reply",
+		"doc_id":        "doc-email-1",
+		"revision_id":   "rev-email-1",
+		"from_alias":    "000@choir.news",
+		"to_addresses":  []string{"person@example.com"},
+		"subject":       "Choir demo",
+		"body_text":     "Here is the short demo note.",
+		"approval_mode": "owner_click_or_email_reply",
 	}))
 	if err != nil {
 		t.Fatalf("request_email_draft: %v", err)
@@ -97,6 +97,9 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 	if out["maild_draft_persisted"] != true || out["draft_id"] != "email-draft-maild-1" || out["draft_version_hash"] != "maild-version-hash-1" {
 		t.Fatalf("email draft tool did not persist maild draft: %+v", out)
+	}
+	if got, _ := out["source_content_hash"].(string); !strings.HasPrefix(got, "sha256:") {
+		t.Fatalf("source_content_hash should be runtime-derived when omitted, got %+v", out)
 	}
 	if !maildCalled {
 		t.Fatal("maild draft endpoint was not called")
@@ -162,6 +165,108 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "request_email_draft") {
 		t.Fatalf("error should direct callers to VText artifact handoff, got %v", err)
+	}
+}
+
+func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.T) {
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-email-continuation",
+		OwnerID:   "user-alice",
+		Title:     "Email proof",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	userRev := types.Revision{
+		RevisionID:  "rev-user-email-continuation",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "Create an email draft.",
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, userRev); err != nil {
+		t.Fatalf("create user revision: %v", err)
+	}
+	run := types.RunRecord{
+		RunID:        "run-vtext-email-continuation",
+		AgentID:      "vtext:" + doc.DocID,
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Revise the document",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Metadata: map[string]any{
+			"type":                      "vtext_agent_revision",
+			"doc_id":                    doc.DocID,
+			"current_revision_id":       userRev.RevisionID,
+			"original_prompt":           "Create a VText-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that VText requests an Email appagent draft. Do not send the email.",
+			"requires_worker_grounding": false,
+			runMetadataAgentID:          "vtext:" + doc.DocID,
+			runMetadataChannelID:        doc.DocID,
+			runMetadataAgentRole:        AgentProfileVText,
+			runMetadataAgentProfile:     AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     run.RunID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create mutation: %v", err)
+	}
+
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+		"doc_id":"doc-email-continuation",
+		"base_revision_id":"rev-user-email-continuation",
+		"operation":"replace_all",
+		"content":"# Email Appagent Draft Request\n\nRecipient: yusefnathanson@me.com\nSubject: Choir Email appagent bridge proof\nBody: This is a deployed staging proof that VText requests an Email appagent draft.\nConstraint: no outbound email is authorized."
+	}`))
+	if err != nil {
+		t.Fatalf("edit_vtext: %v", err)
+	}
+	var editResult map[string]any
+	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
+		t.Fatalf("decode edit result: %v", err)
+	}
+	if editResult["next_required_tool"] != "request_email_draft" {
+		t.Fatalf("next_required_tool = %v, want request_email_draft; result=%s", editResult["next_required_tool"], editRaw)
+	}
+	args, _ := editResult["next_required_args"].(map[string]any)
+	rawTo, _ := args["to_addresses"].([]any)
+	if len(rawTo) != 1 || rawTo[0] != "yusefnathanson@me.com" {
+		t.Fatalf("to_addresses = %+v", args["to_addresses"])
+	}
+	if args["subject"] != "Choir Email appagent bridge proof" {
+		t.Fatalf("subject = %+v", args["subject"])
+	}
+	if got, _ := args["body_text"].(string); strings.Contains(strings.ToLower(got), "do not send") || !strings.Contains(got, "deployed staging proof") {
+		t.Fatalf("body_text = %q", got)
+	}
+	if got, _ := args["source_content_hash"].(string); !strings.HasPrefix(got, "sha256:") {
+		t.Fatalf("source_content_hash = %q", got)
+	}
+	instruction, _ := editResult["next_instruction"].(string)
+	if !strings.Contains(instruction, "Call request_email_draft next") || strings.Contains(instruction, "request_super_execution next") {
+		t.Fatalf("next_instruction = %q", instruction)
 	}
 }
 

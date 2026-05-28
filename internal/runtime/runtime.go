@@ -1049,6 +1049,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			"edit_vtext",
 			"spawn_agent",
 			"request_super_execution",
+			"request_email_draft",
 		))
 	}
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,7 +59,7 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			"body_text":           map[string]any{"type": "string"},
 			"source_refs":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
-		}, []string{"doc_id", "revision_id", "source_content_hash", "to_addresses", "subject", "body_text"}, false),
+		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileVText {
 				return "", fmt.Errorf("request_email_draft is only available to vtext agents")
@@ -91,8 +92,8 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	docID := strings.TrimSpace(in.DocID)
 	revisionID := strings.TrimSpace(in.RevisionID)
 	sourceHash := strings.TrimSpace(in.SourceContentHash)
-	if docID == "" || revisionID == "" || sourceHash == "" {
-		return nil, fmt.Errorf("doc_id, revision_id, and source_content_hash are required")
+	if docID == "" || revisionID == "" {
+		return nil, fmt.Errorf("doc_id and revision_id are required")
 	}
 	toAddresses := normalizeEmailAddressList(in.ToAddresses)
 	if len(toAddresses) == 0 {
@@ -102,6 +103,9 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	body := strings.TrimSpace(in.BodyText)
 	if subject == "" || body == "" {
 		return nil, fmt.Errorf("subject and body_text are required")
+	}
+	if sourceHash == "" {
+		sourceHash = emailSourceContentHash(docID, revisionID, body)
 	}
 	approvalMode := strings.TrimSpace(in.ApprovalMode)
 	if approvalMode == "" {
@@ -325,6 +329,159 @@ func normalizeEmailAddressList(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func emailSourceContentHash(docID, revisionID, content string) string {
+	payload, _ := json.Marshal(map[string]string{
+		"doc_id":      strings.TrimSpace(docID),
+		"revision_id": strings.TrimSpace(revisionID),
+		"content":     strings.TrimSpace(content),
+	})
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+type emailDraftIntent struct {
+	ToAddresses []string
+	Subject     string
+	BodyText    string
+}
+
+var emailAddressPattern = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
+
+func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
+	combined := strings.TrimSpace(prompt + "\n" + content)
+	if combined == "" {
+		return emailDraftIntent{}, false
+	}
+	lower := strings.ToLower(combined)
+	if !strings.Contains(lower, "email") && !strings.Contains(lower, "send") && !strings.Contains(lower, "draft") {
+		return emailDraftIntent{}, false
+	}
+	to := normalizeEmailAddressList(emailAddressPattern.FindAllString(combined, -1))
+	if len(to) == 0 {
+		return emailDraftIntent{}, false
+	}
+
+	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{"\nbody:", " body:"})
+	body, bodyLabeled := extractEmailLabeledField(combined, "body", []string{
+		"\nconstraint:",
+		"\nnext step:",
+		"\nstatus:",
+		"\ndo not send",
+		" do not send",
+	})
+	if !bodyLabeled {
+		body = fallbackEmailBodyAfterAddress(combined, to[0])
+	}
+	if body == "" {
+		return emailDraftIntent{}, false
+	}
+	if !bodyLabeled && looksLikeComplexEmailPlaceholder(lower) {
+		return emailDraftIntent{}, false
+	}
+	if !subjectLabeled {
+		subject = fallbackEmailSubject(body)
+	} else {
+		subject = strings.Trim(subject, " \t\r\n.,;:!?")
+	}
+	return emailDraftIntent{
+		ToAddresses: to,
+		Subject:     subject,
+		BodyText:    body,
+	}, true
+}
+
+func extractEmailLabeledField(text, label string, stopMarkers []string) (string, bool) {
+	lower := strings.ToLower(text)
+	marker := strings.ToLower(label) + ":"
+	idx := strings.Index(lower, marker)
+	if idx < 0 {
+		return "", false
+	}
+	start := idx + len(marker)
+	end := len(text)
+	afterLower := lower[start:]
+	for _, stop := range stopMarkers {
+		stop = strings.ToLower(stop)
+		if stop == "" {
+			continue
+		}
+		if stopIdx := strings.Index(afterLower, stop); stopIdx >= 0 && start+stopIdx < end {
+			end = start + stopIdx
+		}
+	}
+	return strings.TrimSpace(strings.Trim(text[start:end], " \t\r\n\"'`")), true
+}
+
+func fallbackEmailBodyAfterAddress(text, address string) string {
+	idx := strings.Index(strings.ToLower(text), strings.ToLower(address))
+	if idx < 0 {
+		return ""
+	}
+	body := strings.TrimSpace(text[idx+len(address):])
+	body = strings.Trim(body, " \t\r\n:,-")
+	for _, prefix := range []string{
+		"with message ",
+		"message ",
+		"saying ",
+		"that says ",
+		"to say ",
+	} {
+		if strings.HasPrefix(strings.ToLower(body), prefix) {
+			body = strings.TrimSpace(body[len(prefix):])
+			break
+		}
+	}
+	body = strings.TrimSpace(truncateEmailIntentAtMarkers(body, []string{
+		"\nconstraint:",
+		"\nnext step:",
+		"\ndo not send",
+		" do not send",
+	}))
+	return body
+}
+
+func truncateEmailIntentAtMarkers(text string, markers []string) string {
+	lower := strings.ToLower(text)
+	end := len(text)
+	for _, marker := range markers {
+		if idx := strings.Index(lower, strings.ToLower(marker)); idx >= 0 && idx < end {
+			end = idx
+		}
+	}
+	return text[:end]
+}
+
+func fallbackEmailSubject(body string) string {
+	words := strings.Fields(body)
+	if len(words) == 0 {
+		return "Message from Choir"
+	}
+	if len(words) > 8 {
+		words = words[:8]
+	}
+	subject := strings.Join(words, " ")
+	subject = strings.Trim(subject, " \t\r\n.,;:!?")
+	if subject == "" {
+		return "Message from Choir"
+	}
+	return subject
+}
+
+func looksLikeComplexEmailPlaceholder(lower string) bool {
+	for _, marker := range []string{
+		"figure out",
+		"research",
+		"investigate",
+		"find out",
+		"results",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func emailDraftVersionHash(from string, to, cc, bcc []string, subject, body, docID, revisionID, sourceHash string) string {

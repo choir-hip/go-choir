@@ -382,6 +382,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 		"wait_agent",
 		"cancel_agent",
 		"request_super_execution",
+		"request_email_draft",
 		"request_worker_vm",
 		"delegate_worker_vm",
 		"start_worker_delegation",
