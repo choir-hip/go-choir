@@ -2658,3 +2658,44 @@ next realism axis:
 - Prove approval-by-reply after the vmctl resolver environment is active, then
   prove edit-by-reply invalidates the prior version and produces a new approval
   requirement.
+
+### Reply Approval Probe Checkpoint: Blocked At VText-To-Maild Boundary
+
+status: checkpoint_blocked_at_vtext_boundary
+timestamp: 2026-05-28T15:39Z
+evidence source: Computer Use, maild SQLite
+
+probe:
+- Submitted a visible prompt-bar request:
+  `Draft an email to yusefnathanson@me.com with subject "Choir Email reply
+  approval proof d78b6b3" and body exactly "This is a deployed proof candidate
+  for approval by email reply after commit d78b6b3. Please reply approve to the
+  approval email to send this exact draft version." Do not send the email until
+  I approve it.`
+
+observation:
+- Computer Use observed a VText document/window containing the intended email
+  artifact, recipient, subject, body, and "pending user approval before send"
+  language.
+- Repeated maild SQLite checks found no `email_drafts` row and no
+  `email_draft_approval_tokens` row with subject
+  `Choir Email reply approval proof d78b6b3`.
+- No approval email could be expected for this probe because no maild-backed
+  draft/token was created.
+
+belief-state changes:
+- The post-`7097e1b` email-side owner-click path is proven through maild,
+  Resend provider receipt, and Email appagent Trace evidence.
+- Approval-by-reply remains unproven after the resolver fix, but the blocker is
+  now upstream of reply processing: the prompt/VText path did not reliably call
+  the Email appagent draft handoff.
+- This matches the known VText boundary: VText can produce a draft-looking
+  artifact but may not execute the tool handoff needed to create maild state.
+
+required next mission:
+- Repair the VText-to-appagent handoff so a prompt-bar email draft request
+  deterministically creates a maild-backed draft and active approval token
+  without VText/super raw send authority.
+- Then rerun approval-by-reply using a fresh token, requiring Resend inbound
+  evidence, maild approval event, provider send receipt, and Email appagent
+  Trace `approval_recorded`/`sent` evidence.
