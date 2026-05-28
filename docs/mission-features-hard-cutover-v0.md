@@ -427,3 +427,50 @@ The hard cutover UI is live, but the central state transition is not. Until the
 request contract is fixed, `Import` cannot create an adoption, verification
 cannot start, no completion email can be sent from the import flow, and Desk
 ready/activate/rollback/roll-forward controls cannot be proven on staging.
+
+## Staging Evidence Checkpoint: Verification Is Not Background
+
+Timestamp: 2026-05-28 06:21 UTC
+
+Commit under test:
+
+```text
+ed0568a70b9c5f27306104e3a0b139900c6017de
+```
+
+Staging proof established after the request contract fix:
+
+- Clicking `Import` created a real adoption record:
+  `feature-feature-proof-1779949266247-8f71f7a4-1aa5-433e-9de7-34559b4f677c`.
+- The adoption entered `verifying`.
+- The verifier results recorded:
+  - `source-refs-resolve`: passed;
+  - `source-ledger-reference`: passed;
+  - `actual-recipient-runtime-ui-build`: running.
+- The rollback profile already recorded previous active source ref
+  `origin/main`.
+- Mobile continued to render the importing state without horizontal overflow.
+
+Blocker discovered:
+
+```text
+The browser-triggered verify request remained open during the recipient build
+and hit the deployed proxy timeout after roughly 122 seconds. The UI still
+showed Importing, and the adoption remained in status "verifying" with only the
+"recipient build started" verifier result.
+```
+
+Root cause hypothesis:
+
+`POST /api/adoptions/:id/verify` performs recipient materialization/build inside
+the request context. That contradicts the mission invariant that `Import` starts
+background apply/build/verify and returns control to the owner. A long build
+should not depend on an open browser request, and request cancellation should
+not leave a durable adoption stuck in `verifying`.
+
+Why this matters:
+
+Until verification is detached from the request, the Features flow cannot prove
+Ready, Desk glow, Activate, Roll back, Roll forward, or completion email. The
+UI may say Choir will work in the background, but the substrate is still a
+synchronous request path.
