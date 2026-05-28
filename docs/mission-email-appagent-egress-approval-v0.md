@@ -2923,3 +2923,50 @@ fix direction:
   must not send the draft itself.
 - Add a regression test that `edit:` creates a new version, marks the old token
   `edited`, sends a new approval notice, and leaves the draft unsent.
+
+### Fix Checkpoint: Edit Reply Reapproval Notice Deployed
+
+status: edit_reapproval_notice_deployed_reply_proof_pending
+timestamp: 2026-05-28T16:28Z
+evidence source: local focused tests, GitHub Actions, staging health, owner
+mailbox observation
+
+commits:
+- `3cf9b1f` documented the edit-reapproval gap before code changes.
+- `7224dd0` sends a fresh approval notice after an email approval `edit:`
+  reply creates a new draft version.
+
+local verification:
+- `nix develop -c go test ./internal/maild -run
+  'TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken|TestDraftApprovalEmailSendsScopedReplyAddress|TestApprovalReplyApprovesExactDraftVersionOnce|TestApprovalReplyDenyRejectsDraftWithoutSending|TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry'`
+  passed.
+- The edit regression now asserts that an `edit:` reply sends exactly one fresh
+  approval email, scopes it to the updated version hash, leaves the draft
+  unsent, marks the old token `edited`, and rejects later use of the old token
+  with `approval_token_not_active`.
+
+deployment evidence:
+- GitHub Actions CI run `26587550864` succeeded for
+  `7224dd01bb77668a37340b1e1a571aca556c7f7a`.
+- Deploy job `78337777436` succeeded.
+- FlakeHub publish run `26587550808` succeeded.
+- `https://choir.news/health` reported deployed commit
+  `7224dd01bb77668a37340b1e1a571aca556c7f7a` and deployed_at
+  `2026-05-28T16:25:36Z`.
+
+owner observation:
+- The owner reports that approval emails are arriving, and that approval links
+  can be clicked eventually.
+- The same observation says approval emails tend to land in spam, so
+  deliverability is now a real UX/reliability issue for any workflow that
+  depends on prompt owner action by email.
+
+remaining waiting condition:
+- The deployed `edit:` reply path still needs a fresh real inbound owner reply
+  to prove the full Resend inbound -> maild reply parser -> new approval email
+  loop on staging.
+- The deployed `deny` alias likewise still needs a fresh real inbound owner
+  reply after `671c2fb`.
+- Approval-link proof and approval-email-arrival proof are useful, but they do
+  not replace reply-token proof because the acceptance criterion is scoped to
+  email replies approving, rejecting, or editing an exact draft version.
