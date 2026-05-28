@@ -440,6 +440,37 @@ func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
 	}
 }
 
+func TestExtractEmailDraftIntentHandlesPlainArtifactHeadings(t *testing.T) {
+	content := "Email Draft: Choir Email reply approval proof d78b6b3\n" +
+		"Status: Draft created -- pending user approval before send.\n\n" +
+		"Recipient\n" +
+		"yusefnathanson@me.com\n\n" +
+		"Subject\n" +
+		"Choir Email reply approval proof d78b6b3\n\n" +
+		"Body\n" +
+		"This is a deployed proof candidate for approval by email reply after commit d78b6b3. Please reply approve to the approval email to send this exact draft version.\n\n" +
+		"Instructions\n" +
+		"- This draft is a reviewable artifact only.\n" +
+		"- No outbound email has been sent.\n" +
+		"- User must explicitly approve before any send action is taken."
+	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if len(intent.ToAddresses) != 1 || intent.ToAddresses[0] != "yusefnathanson@me.com" {
+		t.Fatalf("to_addresses = %+v", intent.ToAddresses)
+	}
+	if intent.Subject != "Choir Email reply approval proof d78b6b3" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if !strings.Contains(intent.BodyText, "reply approve") {
+		t.Fatalf("body_text = %q", intent.BodyText)
+	}
+	if strings.Contains(strings.ToLower(intent.BodyText), "instructions") || strings.Contains(strings.ToLower(intent.BodyText), "no outbound email") {
+		t.Fatalf("body_text includes non-email instructions: %q", intent.BodyText)
+	}
+}
+
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {

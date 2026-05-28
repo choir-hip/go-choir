@@ -516,7 +516,14 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		return emailDraftIntent{}, false
 	}
 
-	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{"\nbody:", " body:", "\n**body:**", " **body:**"})
+	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{
+		"\nbody:",
+		" body:",
+		"\n**body:**",
+		" **body:**",
+		"\nbody\n",
+		"\n**body**\n",
+	})
 	body, bodyLabeled := extractEmailLabeledField(combined, "body", []string{
 		"\nconstraint:",
 		"\n**constraint:**",
@@ -526,6 +533,10 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 		"\n**status:**",
 		"\nsource refs:",
 		"\n**source refs:**",
+		"\ninstructions:",
+		"\n**instructions:**",
+		"\ninstructions\n",
+		"\n**instructions**\n",
 		"\n---",
 		"\ndo not send",
 		" do not send",
@@ -555,7 +566,11 @@ func extractEmailLabeledField(text, label string, stopMarkers []string) (string,
 	labelPattern := regexp.MustCompile(`(?i)(?:^|[\s*_` + "`" + `>-])(?:\*\*)?` + regexp.QuoteMeta(label) + `\s*:\s*(?:\*\*)?`)
 	loc := labelPattern.FindStringIndex(text)
 	if loc == nil {
-		return "", false
+		linePattern := regexp.MustCompile(`(?im)^[ \t>*_-]*(?:\*\*)?` + regexp.QuoteMeta(label) + `(?:\*\*)?[ \t]*$`)
+		loc = linePattern.FindStringIndex(text)
+		if loc == nil {
+			return "", false
+		}
 	}
 	start := loc[1]
 	lower := strings.ToLower(text)
