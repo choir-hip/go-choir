@@ -1898,7 +1898,7 @@ diff signal:
 ## Run Checkpoint: Reference And Proxy Test Cut Over To Draft Authority
 
 timestamp: 2026-05-28T09:24:00-04:00
-status: local_verified_pending_landing
+status: deployed_verified
 
 convergence:
 - Updated `docs/choir-email-reference-v0.md` so the current reference contract
@@ -1917,6 +1917,12 @@ convergence:
 
 verification:
 - `nix develop -c go test ./internal/maild ./internal/proxy`
+- Commit `f3c4d28d926b57b38e7f12c251df80a45bf1d58b`
+  (`refactor: remove stale email handoff contract`) was pushed to `main`.
+- GitHub Actions CI run `26577214799` passed for `f3c4d28`.
+- Staging health reported proxy and sandbox commit
+  `f3c4d28d926b57b38e7f12c251df80a45bf1d58b`, deployed at
+  `2026-05-28T13:21:34Z`.
 - `rg` found no `send-to-choir`, `pending_conductor`, `Respond with Choir`,
   `v0-owner-send`, `EmailSendToChoir`, or `SendToChoir` references in
   `internal`, `frontend`, or the updated current email reference, except for
@@ -1924,3 +1930,47 @@ verification:
 - `rg` found no hardcoded `000@choir.news` in `frontend/src/lib/EmailApp.svelte`,
   `frontend/src/lib/Desktop.svelte`, or `frontend/src/App.svelte`; the visible
   current address comes from `/api/email/aliases`.
+
+## Run Checkpoint: Witnessed Owner-Click Send On Deployed Cutover
+
+timestamp: 2026-05-28T09:27:00-04:00
+status: deployed_verified
+
+staging proof:
+- Computer Use on `https://choir.news` opened the Email app while authenticated
+  as owner `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- Before the action, maild Sent count was `5`.
+- In the visible Email UI, Compose created a new draft from the account alias
+  to `yusefnathanson@me.com`:
+  - subject `Choir Email owner-click proof f3c4d28`;
+  - body `Witnessed staging proof: Email UI created a versioned draft and only
+    sent after the owner clicked Send approved draft on deployed commit
+    f3c4d28.`
+- The draft appeared in Drafts with status `Pending approval` and the
+  `Send approved draft` button visible.
+- Computer Use clicked `Send approved draft`.
+- The Email app switched to Sent, selected the same subject, displayed
+  `Trusted sender`, and Sent count increased to `6`.
+
+durable maild evidence:
+- Draft id `email-draft-2a22d19f-5483-4258-a772-171b54119f51` ended with
+  status `sent`, version `1`, version hash
+  `febd4df7ff6064a7b07340551ef4125d818b45627e134c60b378d2c310cb58f1`.
+- Approval event id `email-approval-0c8eb25c-418c-49ad-a2b9-d5935a6368b4`
+  recorded `owner_click_approved` for that exact draft/version/hash.
+- Sent message id `resend-message-5d9bc0031355bc91c976fc73862d7d22` was stored
+  as outbound/trusted with Resend provider id
+  `6edd813a-e101-4775-b62e-e15de1fc04c3`.
+
+belief-state changes:
+- Owner-click approval is now witnessed on the deployed post-cutover Email UI,
+  not only inferred from durable maild records.
+- The current product path visibly holds at the approval boundary: draft first,
+  explicit owner click second, provider send third, Sent storage fourth.
+
+remaining error field:
+- Real approval reply from `yusefnathanson@me.com` is still unproven.
+- Real edit reply and prior-token invalidation through Resend inbound remain
+  unproven.
+- The prompt-bar/VText result-to-email path is only proven to the draft boundary;
+  VText result completion remains a separate known blocker.
