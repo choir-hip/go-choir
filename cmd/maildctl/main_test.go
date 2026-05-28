@@ -194,3 +194,25 @@ func TestRunIngressEventsPrintsOwnerScopedRows(t *testing.T) {
 		t.Fatalf("events = %+v", events)
 	}
 }
+
+func TestRunConfigureWorkflowAlias(t *testing.T) {
+	dbPath := setupMaildctlStore(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"configure-workflow-alias",
+		"--db", dbPath,
+		"--owner", "owner-000",
+		"--local-part", "000+invite-test",
+		"--sender", "sender@example.com",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run configure-workflow-alias code=%d stderr=%s", code, stderr.String())
+	}
+	var alias maild.EmailAlias
+	if err := json.Unmarshal(stdout.Bytes(), &alias); err != nil {
+		t.Fatalf("decode alias: %v", err)
+	}
+	if alias.LocalPart != "000+invite-test" || alias.TargetID != "owner-000" || alias.ReceivePolicyID != maild.DefaultTrustedWorkflowPolicyID {
+		t.Fatalf("alias = %+v", alias)
+	}
+}

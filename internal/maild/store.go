@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	DefaultPublicPolicyID = "policy-public-inbound-v0"
-	DefaultRootAliasID    = "alias-choir-news-000"
+	DefaultPublicPolicyID          = "policy-public-inbound-v0"
+	DefaultTrustedWorkflowPolicyID = "policy-trusted-workflow-v0"
+	DefaultRootAliasID             = "alias-choir-news-000"
 )
 
 // Store is maild's SQLite-backed durable state.
@@ -121,6 +122,15 @@ type EmailIngressEvent struct {
 	Status                string
 	CreatedAt             string
 	CompletedAt           string
+}
+
+// TrustedWorkflowAliasConfig describes a narrow plus-code alias that can create
+// a pending workflow handoff when a whitelisted authenticated sender uses it.
+type TrustedWorkflowAliasConfig struct {
+	OwnerID       string
+	Domain        string
+	LocalPart     string
+	SenderAddress string
 }
 
 // StoreStats is a safe operational summary for health reporting.
@@ -296,7 +306,79 @@ func (s *Store) seedDefaults(cfg *Config) error {
 		cfg.PrimaryDomain, cfg.RootOwnerID, DefaultPublicPolicyID, DefaultRootAliasID); err != nil {
 		return fmt.Errorf("reconcile 000 alias: %w", err)
 	}
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO email_receive_policies (
+		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
+		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
+		allow_auto_outbound_send, quarantine_by_default, created_at
+	) VALUES (?, ?, 0, 0, 1, 1, 1, 0, 0, 1, ?)`,
+		DefaultTrustedWorkflowPolicyID, "trusted plus-code workflow", now); err != nil {
+		return fmt.Errorf("seed trusted workflow policy: %w", err)
+	}
 	return nil
+}
+
+// ConfigureTrustedWorkflowAlias creates or updates an owner-scoped plus-code
+// alias and whitelists one sender for trusted workflow handoff.
+func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config TrustedWorkflowAliasConfig) (EmailAlias, error) {
+	ownerID := strings.TrimSpace(config.OwnerID)
+	domain := strings.ToLower(strings.TrimSpace(config.Domain))
+	localPart := strings.ToLower(strings.TrimSpace(config.LocalPart))
+	senderAddress := strings.ToLower(strings.TrimSpace(config.SenderAddress))
+	if ownerID == "" || domain == "" || localPart == "" || senderAddress == "" {
+		return EmailAlias{}, fmt.Errorf("owner, domain, local part, and sender address are required")
+	}
+	if !strings.Contains(localPart, "+") {
+		return EmailAlias{}, fmt.Errorf("trusted workflow aliases must use a plus-code local part")
+	}
+	if _, _, ok := splitEmailAddress(senderAddress); !ok {
+		return EmailAlias{}, fmt.Errorf("sender address is invalid")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return EmailAlias{}, fmt.Errorf("begin trusted workflow alias tx: %w", err)
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	var existingID, existingOwner string
+	err = tx.QueryRowContext(ctx, `SELECT id, target_id FROM email_aliases WHERE domain = ? AND local_part = ?`, domain, localPart).Scan(&existingID, &existingOwner)
+	if err != nil && err != sql.ErrNoRows {
+		return EmailAlias{}, fmt.Errorf("load alias: %w", err)
+	}
+	if err == nil && existingOwner != ownerID {
+		return EmailAlias{}, fmt.Errorf("alias is owned by a different target")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	aliasID := existingID
+	if aliasID == "" {
+		aliasID = aliasRowID(domain, localPart)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO email_aliases (
+			id, domain, local_part, canonical_number, target_type, target_id,
+			visibility, receive_policy_id, created_at
+		) VALUES (?, ?, ?, ?, 'user', ?, 'unlisted', ?, ?)`,
+			aliasID, domain, localPart, canonicalNumberFromLocalPart(localPart), ownerID, DefaultTrustedWorkflowPolicyID, now); err != nil {
+			return EmailAlias{}, fmt.Errorf("insert trusted workflow alias: %w", err)
+		}
+	} else if _, err := tx.ExecContext(ctx, `UPDATE email_aliases
+		SET target_type = 'user', target_id = ?, visibility = 'unlisted',
+			receive_policy_id = ?, disabled_at = NULL
+		WHERE id = ?`,
+		ownerID, DefaultTrustedWorkflowPolicyID, aliasID); err != nil {
+		return EmailAlias{}, fmt.Errorf("update trusted workflow alias: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO email_sender_whitelist (
+		id, owner_id, alias_id, sender_address, created_at
+	) VALUES (?, ?, ?, ?, ?)`,
+		senderWhitelistRowID(aliasID, senderAddress), ownerID, aliasID, senderAddress, now); err != nil {
+		return EmailAlias{}, fmt.Errorf("insert sender whitelist: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return EmailAlias{}, fmt.Errorf("commit trusted workflow alias tx: %w", err)
+	}
+	tx = nil
+	return s.ResolveAlias(ctx, domain, localPart)
 }
 
 // ResolveAlias resolves a domain/local_part pair.

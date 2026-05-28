@@ -111,9 +111,9 @@
     }
   }
 
-  async function sendToChoir() {
+  async function respondWithChoir() {
     if (!selectedId) return;
-    actionStatus = 'Sending to Choir...';
+    actionStatus = 'Creating Choir response handoff...';
     try {
       const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(selectedId)}/send-to-choir`, {
         method: 'POST',
@@ -125,10 +125,10 @@
       const data = await res.json();
       if (data.ingress_event_recorded === false) {
         actionStatus = data.submission_id
-          ? `Sent to Choir: ${data.submission_id} (receipt pending)`
-          : 'Sent to Choir (receipt pending)';
+          ? `Choir response handoff: ${data.submission_id} (receipt pending)`
+          : 'Choir response handoff created (receipt pending)';
       } else {
-        actionStatus = data.submission_id ? `Sent to Choir: ${data.submission_id}` : 'Sent to Choir';
+        actionStatus = data.submission_id ? `Choir response handoff: ${data.submission_id}` : 'Choir response handoff created';
       }
     } catch (err) {
       handleError(err);
@@ -422,7 +422,7 @@
 
       <div class="actions">
         <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
-        <button type="button" on:click={sendToChoir}>Send to Choir</button>
+        <button type="button" on:click={respondWithChoir}>Respond with Choir</button>
         <button type="button" on:click={markRead}>Mark read</button>
       </div>
 

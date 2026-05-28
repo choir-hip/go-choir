@@ -47,6 +47,13 @@ func TestEnsureSchemaSeedsRootAlias(t *testing.T) {
 	if alias.ReceivePolicyID != DefaultPublicPolicyID {
 		t.Fatalf("ReceivePolicyID = %q, want %q", alias.ReceivePolicyID, DefaultPublicPolicyID)
 	}
+	policy, err := store.GetReceivePolicy(context.Background(), DefaultTrustedWorkflowPolicyID)
+	if err != nil {
+		t.Fatalf("GetReceivePolicy trusted workflow: %v", err)
+	}
+	if policy.AllowPublicInbound || !policy.RequireSenderWhitelist || !policy.RequireSecretAlias || !policy.AllowAutoAgentRead {
+		t.Fatalf("trusted workflow policy = %+v", policy)
+	}
 }
 
 func TestEnsureSchemaReconcilesRootAliasOwner(t *testing.T) {
@@ -95,5 +102,28 @@ func TestRecordWebhookEventIdempotent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("webhook count = %d, want 1", count)
+	}
+}
+
+func TestConfigureTrustedWorkflowAlias(t *testing.T) {
+	store, _ := newTestStore(t)
+	alias, err := store.ConfigureTrustedWorkflowAlias(context.Background(), TrustedWorkflowAliasConfig{
+		OwnerID:       "user-root",
+		Domain:        "choir.news",
+		LocalPart:     "000+invite-test",
+		SenderAddress: "sender@example.com",
+	})
+	if err != nil {
+		t.Fatalf("ConfigureTrustedWorkflowAlias: %v", err)
+	}
+	if alias.TargetID != "user-root" || alias.LocalPart != "000+invite-test" || alias.ReceivePolicyID != DefaultTrustedWorkflowPolicyID {
+		t.Fatalf("alias = %+v", alias)
+	}
+	ok, err := store.IsSenderWhitelisted(context.Background(), "user-root", alias.ID, "sender@example.com")
+	if err != nil {
+		t.Fatalf("IsSenderWhitelisted: %v", err)
+	}
+	if !ok {
+		t.Fatalf("sender was not whitelisted")
 	}
 }

@@ -32,6 +32,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ownerID := fs.String("owner", "", "mailbox owner id")
 	messageID := fs.String("message", "", "message id")
 	includeBody := fs.Bool("body", false, "include message body fields")
+	domain := fs.String("domain", "choir.news", "email domain")
+	localPart := fs.String("local-part", "", "email local part")
+	senderAddress := fs.String("sender", "", "sender email address")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -85,6 +88,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		out, err = store.ListIngressEvents(ctx, *ownerID, *messageID, *limit)
+	case "configure-workflow-alias":
+		if strings.TrimSpace(*ownerID) == "" || strings.TrimSpace(*localPart) == "" || strings.TrimSpace(*senderAddress) == "" {
+			_, _ = fmt.Fprintln(stderr, "maildctl configure-workflow-alias: --owner, --local-part, and --sender are required")
+			return 2
+		}
+		out, err = store.ConfigureTrustedWorkflowAlias(ctx, maild.TrustedWorkflowAliasConfig{
+			OwnerID:       *ownerID,
+			Domain:        *domain,
+			LocalPart:     *localPart,
+			SenderAddress: *senderAddress,
+		})
 	default:
 		printUsage(stderr)
 		return 2
@@ -153,6 +167,7 @@ commands:
   attachments --owner ID --message ID
   source-packet --owner ID --message ID
   ingress-events --owner ID [--message ID] [--limit N]
+  configure-workflow-alias --owner ID --local-part LOCAL --sender EMAIL [--domain DOMAIN]
 
 common flags:
   --db PATH                     maild SQLite database path`)

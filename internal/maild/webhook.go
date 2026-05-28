@@ -209,7 +209,12 @@ func (h *Handler) resolveReceivedAlias(ctx context.Context, recipients []string)
 var errReceivePolicyRejected = errors.New("receive policy rejected inbound email")
 
 type receivePolicyResult struct {
-	TrustedSender bool
+	PolicyID              string
+	PolicyName            string
+	TrustedSender         bool
+	SenderAuthority       string
+	PromptBarEquivalent   bool
+	WorkflowHandoffStatus string
 }
 
 func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceivedEmail, alias EmailAlias) (receivePolicyResult, error) {
@@ -223,9 +228,10 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 
 	senderAddress, _ := parseSender(email.From, email.Headers["from"])
 	whitelisted := false
+	senderAuthority := "public"
 	if policy.RequireSenderWhitelist {
-		if !hasAuthenticationResultEvidence(email.Headers) {
-			return receivePolicyResult{}, fmt.Errorf("%w: authentication results required", errReceivePolicyRejected)
+		if !hasPassingAuthenticationResultEvidence(email.Headers) {
+			return receivePolicyResult{}, fmt.Errorf("%w: passing authentication results required", errReceivePolicyRejected)
 		}
 		whitelisted, err = h.store.IsSenderWhitelisted(ctx, alias.TargetID, alias.ID, senderAddress)
 		if err != nil {
@@ -234,6 +240,7 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 		if !whitelisted {
 			return receivePolicyResult{}, fmt.Errorf("%w: sender whitelist required", errReceivePolicyRejected)
 		}
+		senderAuthority = "verified_sender_policy"
 	}
 	if !policy.AllowPublicInbound && !whitelisted {
 		return receivePolicyResult{}, fmt.Errorf("%w: public inbound disabled", errReceivePolicyRejected)
@@ -241,16 +248,27 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 	if len(email.Attachments) > 0 && !policy.AllowAttachments && !policy.QuarantineByDefault {
 		return receivePolicyResult{}, fmt.Errorf("%w: attachments disabled", errReceivePolicyRejected)
 	}
-	return receivePolicyResult{TrustedSender: whitelisted}, nil
+	result := receivePolicyResult{
+		PolicyID:        policy.ID,
+		PolicyName:      policy.Name,
+		TrustedSender:   whitelisted,
+		SenderAuthority: senderAuthority,
+	}
+	if whitelisted && policy.AllowAutoAgentRead {
+		result.PromptBarEquivalent = true
+		result.WorkflowHandoffStatus = "pending_conductor"
+	}
+	return result, nil
 }
 
-func hasAuthenticationResultEvidence(headers map[string]string) bool {
+func hasPassingAuthenticationResultEvidence(headers map[string]string) bool {
 	for key, value := range headers {
 		normalized := strings.ToLower(strings.TrimSpace(key))
 		if normalized != "authentication-results" && normalized != "arc-authentication-results" {
 			continue
 		}
-		if strings.TrimSpace(value) != "" {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if strings.Contains(value, "dmarc=pass") || strings.Contains(value, "dkim=pass") || strings.Contains(value, "spf=pass") {
 			return true
 		}
 	}

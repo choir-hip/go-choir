@@ -529,6 +529,70 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	if authResults["authentication-results"] != "mx.example; spf=pass; dkim=pass" {
 		t.Fatalf("authentication results = %+v", authResults)
 	}
+	events, err := store.ListIngressEvents(req.Context(), "user-root", messages[0].ID, 10)
+	if err != nil {
+		t.Fatalf("ListIngressEvents: %v", err)
+	}
+	if len(events) != 1 || events[0].Status != "pending_conductor" || events[0].ConductorSubmissionID != "" {
+		t.Fatalf("events = %+v, want pending conductor handoff", events)
+	}
+	packet, _, err := store.GetSourcePacketForMessage(req.Context(), "user-root", messages[0].ID)
+	if err != nil {
+		t.Fatalf("GetSourcePacketForMessage: %v", err)
+	}
+	var provenance map[string]any
+	if err := json.Unmarshal([]byte(packet.ProvenanceJSON), &provenance); err != nil {
+		t.Fatalf("unmarshal provenance: %v", err)
+	}
+	if provenance["sender_authority"] != "verified_sender_policy" || provenance["workflow_handoff_status"] != "pending_conductor" {
+		t.Fatalf("provenance = %+v", provenance)
+	}
+}
+
+func TestHandleResendWebhookRejectsWhitelistedTrustedUploadAliasWithFailedAuthenticationResults(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
+	cfg.ResendAPIKey = "re_test"
+	seedTrustedUploadAlias(t, store, true)
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"email-upload-auth-fail",
+			"to":["000+upload-secret@choir.news"],
+			"from":"sender@example.com",
+			"created_at":"2026-05-26T10:00:00Z",
+			"subject":"Trusted upload auth fail",
+			"text":"Please file this.",
+			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=fail; dkim=fail; dmarc=fail"},
+			"bcc":[],
+			"cc":[],
+			"reply_to":[],
+			"message_id":"<email-upload-auth-fail@example.com>",
+			"attachments":[]
+		}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+
+	body := `{"id":"evt-upload-auth-fail","type":"email.received","data":{"email_id":"email-upload-auth-fail"}}`
+	req := signedResendRequest(t, cfg.WebhookSecret, "msg-upload-auth-fail", body)
+	w := httptest.NewRecorder()
+	h.HandleResendWebhook(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "accepted_ingest_failed") {
+		t.Fatalf("body = %s, want accepted_ingest_failed", w.Body.String())
+	}
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.Messages != 0 || stats.IngressEvents != 0 {
+		t.Fatalf("stats = %+v, want no message or ingress", stats)
+	}
 }
 
 func TestHandleResendWebhookRejectsMutatedBody(t *testing.T) {
