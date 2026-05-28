@@ -47,6 +47,13 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 	if err != nil {
 		return err
 	}
+	if draft.Status == "sent" {
+		if err := h.sendApprovalReplyRiskAlert(ctx, token, "approval_draft_already_sent", "approval reply targeted an already-sent draft", email); err != nil {
+			log.Printf("maild: approval reply risk alert failed owner=%s draft=%s risk=approval_draft_already_sent: %v", token.OwnerID, token.DraftID, err)
+		}
+		_ = h.store.UseDraftApprovalToken(ctx, token.ID, "stale_sent")
+		return fmt.Errorf("%w: approval reply targeted an already-sent draft", errApprovalReplyRejected)
+	}
 	if draft.VersionHash != token.VersionHash || draft.Version != token.Version {
 		if err := h.sendApprovalReplyRiskAlert(ctx, token, "approval_draft_version_mismatch", "approval token draft version mismatch", email); err != nil {
 			log.Printf("maild: approval reply risk alert failed owner=%s draft=%s risk=approval_draft_version_mismatch: %v", token.OwnerID, token.DraftID, err)

@@ -2066,3 +2066,24 @@ required fix direction:
 - Send a structured risk alert because the reply attempted to authorize a stale
   draft artifact.
 - Include this case in focused approval-reply tests.
+
+## Run Checkpoint: Already-Sent Approval Replies Block Without Retry
+
+timestamp: 2026-05-28T10:03:00-04:00
+status: local_verified_pending_landing
+
+implementation:
+- `processApprovalReply` now checks for `draft.status == sent` before command
+  execution.
+- A reply against an already-sent draft sends a structured
+  `approval_draft_already_sent` risk alert to the token approval email, marks
+  the old token `stale_sent`, and returns the non-retry approval rejection
+  sentinel.
+- Added a focused test that simulates owner-click send first, then an approval
+  email reply against the old token. The test proves no second outbound draft
+  send occurs, the risk alert is sent, the token is marked stale, and
+  `shouldRetryIngest` is false.
+
+verification:
+- `nix develop -c go test ./internal/maild`
+- `nix develop -c go test ./internal/maild ./internal/proxy`

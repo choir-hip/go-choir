@@ -427,6 +427,67 @@ func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) 
 	}
 }
 
+func TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry(t *testing.T) {
+	store, cfg := newTestStore(t)
+	cfg.ResendAPIKey = "re_test"
+	var payloads []resendSendRequest
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload resendSendRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		payloads = append(payloads, payload)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"provider-call-` + string(rune('0'+len(payloads))) + `"}`))
+	}))
+	defer resend.Close()
+	cfg.ResendBaseURL = resend.URL
+	h := NewHandler(cfg, store)
+	h.resend = newResendClient(cfg, resend.Client())
+	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
+	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Already sent",
+		TextBody:    "Owner clicked first.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", ""); err != nil {
+		t.Fatalf("owner click send: %v", err)
+	}
+
+	email := resendReceivedEmail{
+		ID:      "received-approve-after-click",
+		To:      []string{"approve+" + token.Token + "@choir.news"},
+		From:    "owner@example.com",
+		Text:    "approve",
+		Headers: map[string]string{"from": "owner@example.com"},
+	}
+	err = h.processApprovalReply(nilSafeContext(), "event-approve-after-click", email, token.Token)
+	if !errors.Is(err, errApprovalReplyRejected) || shouldRetryIngest(err) {
+		t.Fatalf("approve after click err=%v retry=%v", err, shouldRetryIngest(err))
+	}
+	if len(payloads) != 2 {
+		t.Fatalf("payload count = %d, want send + risk alert; payloads=%+v", len(payloads), payloads)
+	}
+	if payloads[1].Subject != "[Choir Risk Alert] Email draft blocked" ||
+		payloads[1].Headers["X-Choir-Risk-Kind"] != "approval_draft_already_sent" {
+		t.Fatalf("risk alert payload = %+v", payloads[1])
+	}
+	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
+	if err != nil {
+		t.Fatalf("GetDraftApprovalToken: %v", err)
+	}
+	if used.Status != "stale_sent" {
+		t.Fatalf("old token status = %q, want stale_sent", used.Status)
+	}
+}
+
 func TestRegisteredRoutesDoNotExposeRawEmailSend(t *testing.T) {
 	store, cfg := newTestStore(t)
 	h := NewHandler(cfg, store)
