@@ -1636,6 +1636,7 @@
             {:else if win.appId === 'email'}
               <div class="app-content email-content" data-email-window>
                 <EmailApp
+                  appContext={win.appContext}
                   {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
                 />
