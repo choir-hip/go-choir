@@ -86,10 +86,10 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode payload: %v", err)
 		}
-		if payload.From != "000@choir.news" || payload.To[0] != "friend@example.com" || payload.Text != "Approved body." {
+		if payload.From != "000@choir.news" || payload.To[0] != "friend@example.com" || !strings.HasPrefix(payload.Text, "Approved body.\n\n--\n") || !strings.Contains(payload.Text, choirAutomatedEmailSignature) {
 			t.Fatalf("payload = %+v", payload)
 		}
-		if payload.HTML == "" || strings.Contains(payload.HTML, "## Workflow") || !strings.Contains(payload.HTML, "Approved body.") {
+		if payload.HTML == "" || strings.Contains(payload.HTML, "## Workflow") || !strings.Contains(payload.HTML, "Approved body.") || !strings.Contains(payload.HTML, "<footer") || !strings.Contains(payload.HTML, choirAutomatedEmailSignature) {
 			t.Fatalf("payload HTML = %q", payload.HTML)
 		}
 		if payload.Headers["X-Choir-Maild"] != "v0-approved-draft-send" ||
@@ -141,7 +141,7 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMessage: %v", err)
 	}
-	if msg.TextBody != "Approved body." || msg.HTMLBody == "" || strings.Contains(msg.HTMLBody, "## Workflow") {
+	if !strings.HasPrefix(msg.TextBody, "Approved body.\n\n--\n") || !strings.Contains(msg.TextBody, choirAutomatedEmailSignature) || msg.HTMLBody == "" || strings.Contains(msg.HTMLBody, "## Workflow") || !strings.Contains(msg.HTMLBody, "<footer") {
 		t.Fatalf("stored sent message body = text %q html %q", msg.TextBody, msg.HTMLBody)
 	}
 	approvalCount, err := store.CountDraftApprovalEvents(req.Context(), draft.ID)

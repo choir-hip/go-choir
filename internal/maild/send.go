@@ -22,6 +22,8 @@ type sendEmailRequest struct {
 	ReplyToMessageID string   `json:"reply_to_message_id,omitempty"`
 }
 
+const choirAutomatedEmailSignature = "Sent by Choir, an automatic computer for personal workflows. This automated email was sent after owner approval."
+
 func (h *Handler) resolveOwnedFromAlias(ctx context.Context, ownerID, fromAddress string) (EmailAlias, error) {
 	localPart, domain, ok := splitEmailAddress(fromAddress)
 	if !ok {
@@ -94,13 +96,17 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 	if subject == "" {
 		subject = "(no subject)"
 	}
-	text := strings.TrimSpace(in.TextBody)
-	html := strings.TrimSpace(in.HTMLBody)
-	if text == "" && html == "" {
+	textBody := strings.TrimSpace(in.TextBody)
+	text := appendChoirAutomatedTextSignature(textBody)
+	htmlBody := strings.TrimSpace(in.HTMLBody)
+	html := htmlBody
+	if textBody == "" && html == "" {
 		return resendSendRequest{}, fmt.Errorf("message body is required")
 	}
-	if html == "" && text != "" {
-		html = renderPlainTextEmailHTML(text)
+	if html == "" && textBody != "" {
+		html = renderPlainTextEmailHTML(textBody)
+	} else if html != "" {
+		html = appendChoirAutomatedHTMLSignature(html)
 	}
 	return resendSendRequest{
 		From:    canonicalAliasAddress(alias),
@@ -196,7 +202,32 @@ func renderPlainTextEmailHTML(text string) string {
 	if body.Len() == 0 {
 		return ""
 	}
-	return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;"><main style="max-width:640px;margin:0 auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#111827;">` + body.String() + `</main></body></html>`
+	return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;"><main style="max-width:640px;margin:0 auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#111827;">` + body.String() + choirAutomatedHTMLSignature() + `</main></body></html>`
+}
+
+func appendChoirAutomatedTextSignature(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" || strings.Contains(text, choirAutomatedEmailSignature) {
+		return text
+	}
+	return text + "\n\n--\n" + choirAutomatedEmailSignature
+}
+
+func appendChoirAutomatedHTMLSignature(htmlBody string) string {
+	htmlBody = strings.TrimSpace(htmlBody)
+	if htmlBody == "" || strings.Contains(htmlBody, choirAutomatedEmailSignature) {
+		return htmlBody
+	}
+	footer := choirAutomatedHTMLSignature()
+	lower := strings.ToLower(htmlBody)
+	if idx := strings.LastIndex(lower, "</body>"); idx >= 0 {
+		return htmlBody[:idx] + footer + htmlBody[idx:]
+	}
+	return htmlBody + footer
+}
+
+func choirAutomatedHTMLSignature() string {
+	return `<footer style="margin-top:28px;padding-top:14px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.45;"><em>` + html.EscapeString(choirAutomatedEmailSignature) + `</em></footer>`
 }
 
 func markdownHeading(line string) (string, int, bool) {

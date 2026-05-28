@@ -337,6 +337,7 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 	if err != nil {
 		return sendDraftResponse{}, err
 	}
+	sendReq.TextBody = payload.Text
 	sendReq.HTMLBody = payload.HTML
 	payload.Headers["X-Choir-Maild"] = "v0-approved-draft-send"
 	payload.Headers["X-Choir-Email-Draft-ID"] = draft.ID

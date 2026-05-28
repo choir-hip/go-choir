@@ -14,13 +14,16 @@ func TestBuildResendSendRequestGeneratesSafeHTMLPart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildResendSendRequest: %v", err)
 	}
-	if payload.Text != "Intro paragraph.\n\n## Section\n\n- First\n- <second>" {
+	if !strings.HasPrefix(payload.Text, "Intro paragraph.\n\n## Section\n\n- First\n- <second>\n\n--\n") || !strings.Contains(payload.Text, choirAutomatedEmailSignature) {
 		t.Fatalf("payload text = %q", payload.Text)
 	}
-	if !strings.Contains(payload.HTML, "<h2") || !strings.Contains(payload.HTML, "<li") {
+	if !strings.Contains(payload.HTML, "<h2") || !strings.Contains(payload.HTML, "<li") || !strings.Contains(payload.HTML, "<footer") || !strings.Contains(payload.HTML, "<em>") {
 		t.Fatalf("payload HTML did not render markdown structure: %q", payload.HTML)
 	}
 	if strings.Contains(payload.HTML, "<second>") || !strings.Contains(payload.HTML, "&lt;second&gt;") {
 		t.Fatalf("payload HTML did not escape text: %q", payload.HTML)
+	}
+	if !strings.Contains(payload.HTML, choirAutomatedEmailSignature) {
+		t.Fatalf("payload HTML missing automated signature: %q", payload.HTML)
 	}
 }
