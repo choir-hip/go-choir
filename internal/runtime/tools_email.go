@@ -285,6 +285,23 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"authority": "email_appagent",
 		"action":    "draft_request",
 	}))
+	if risk != "" {
+		rt.emitEvent(ctx, run, types.EventEmailDraftBlocked, events.CauseToolExecution,
+			emailEventJSON(map[string]any{
+				"phase":                          "email_appagent_evidence",
+				"authority":                      "email_appagent",
+				"action":                         "draft_blocked",
+				"draft_id":                       draftID,
+				"version_id":                     versionID,
+				"draft_version_hash":             draftVersionHash,
+				"risk_code":                      risk,
+				"risk_alert_status":              result["risk_alert_status"],
+				"risk_alert_id":                  result["risk_alert_id"],
+				"risk_alert_provider_message_id": result["risk_alert_provider_message_id"],
+				"send_authorized":                false,
+				"maild_send_attempted":           false,
+			}))
+	}
 	rt.emitEvent(ctx, run, types.EventRunCompleted, events.CauseTaskLifecycle, emailEventJSON(map[string]any{
 		"authority":  "email_appagent",
 		"action":     "draft_request",

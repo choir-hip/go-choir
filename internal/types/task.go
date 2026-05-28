@@ -201,6 +201,10 @@ const (
 	// an approval decision for a specific draft version.
 	EventEmailDraftApprovalRecorded EventKind = "email.draft.approval_recorded"
 
+	// EventEmailDraftBlocked is emitted when Email appagent blocks a draft
+	// before approval because policy detected a risky email artifact.
+	EventEmailDraftBlocked EventKind = "email.draft.blocked"
+
 	// EventEmailDraftSent is emitted when an approved Email appagent draft is
 	// handed to maild/Resend and stored as sent.
 	EventEmailDraftSent EventKind = "email.draft.sent"

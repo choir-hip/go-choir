@@ -46,7 +46,7 @@ func TestTaskRecordJSONRoundTrip(t *testing.T) {
 	finishedAt := now.Add(10 * time.Second)
 
 	rec := RunRecord{
-		RunID:     "task-001",
+		RunID:      "task-001",
 		OwnerID:    "user-alice",
 		SandboxID:  "sandbox-dev",
 		State:      RunCompleted,
@@ -97,7 +97,7 @@ func TestTaskRecordJSONRoundTrip(t *testing.T) {
 func TestTaskRecordWithoutOptionalFields(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := RunRecord{
-		RunID:    "task-002",
+		RunID:     "task-002",
 		OwnerID:   "user-bob",
 		SandboxID: "sandbox-dev",
 		State:     RunPending,
@@ -133,7 +133,7 @@ func TestEventRecordJSONRoundTrip(t *testing.T) {
 		EventID:   "evt-001",
 		Seq:       1,
 		Timestamp: now,
-		RunID:    "task-001",
+		RunID:     "task-001",
 		OwnerID:   "user-alice",
 		Kind:      EventRunStarted,
 		Phase:     "execution",
@@ -175,7 +175,7 @@ func TestEventRecordWithEmptyPayload(t *testing.T) {
 		EventID:   "evt-002",
 		Seq:       2,
 		Timestamp: time.Now().UTC(),
-		RunID:    "task-001",
+		RunID:     "task-001",
 		Kind:      EventRunCompleted,
 		Payload:   json.RawMessage(`{}`),
 	}
@@ -248,5 +248,28 @@ func TestVTextAgentRevisionEventKinds(t *testing.T) {
 		if seen[string(tk)] {
 			t.Errorf("vtext event kind collides with task event kind: %q", tk)
 		}
+	}
+}
+
+func TestEmailDraftEventKinds(t *testing.T) {
+	eventKinds := []EventKind{
+		EventEmailDraftApprovalRecorded,
+		EventEmailDraftBlocked,
+		EventEmailDraftSent,
+	}
+	expected := []string{
+		"email.draft.approval_recorded",
+		"email.draft.blocked",
+		"email.draft.sent",
+	}
+	seen := map[string]bool{}
+	for i, kind := range eventKinds {
+		if string(kind) != expected[i] {
+			t.Errorf("event kind %d: got %q, want %q", i, kind, expected[i])
+		}
+		if seen[string(kind)] {
+			t.Errorf("duplicate event kind: %q", kind)
+		}
+		seen[string(kind)] = true
 	}
 }

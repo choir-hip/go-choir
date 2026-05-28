@@ -472,7 +472,7 @@ func TestExtractEmailDraftIntentHandlesPlainArtifactHeadings(t *testing.T) {
 }
 
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
-	rt, _ := testRuntime(t)
+	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
@@ -529,6 +529,39 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	}
 	if !riskAlertCalled || out["risk_alert_status"] != "sent" || out["risk_alert_provider_message_id"] != "risk-provider-1" {
 		t.Fatalf("risk alert was not provider-backed: %+v", out)
+	}
+	children, err := s.ListChildRuns(context.Background(), parent.RunID, 10)
+	if err != nil {
+		t.Fatalf("list child runs: %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("child runs: got %d, want 1", len(children))
+	}
+	events, err := s.ListEvents(context.Background(), children[0].RunID, 10)
+	if err != nil {
+		t.Fatalf("list email appagent events: %v", err)
+	}
+	var blockedPayload map[string]any
+	for _, ev := range events {
+		if ev.Kind == types.EventEmailDraftBlocked {
+			if err := json.Unmarshal(ev.Payload, &blockedPayload); err != nil {
+				t.Fatalf("decode blocked payload: %v", err)
+			}
+			break
+		}
+	}
+	if blockedPayload == nil {
+		t.Fatalf("missing %s event in %+v", types.EventEmailDraftBlocked, events)
+	}
+	if blockedPayload["authority"] != "email_appagent" || blockedPayload["send_authorized"] != false || blockedPayload["risk_code"] != "suspected_prompt_injection" {
+		t.Fatalf("blocked payload = %+v", blockedPayload)
+	}
+	if blockedPayload["risk_alert_provider_message_id"] != "risk-provider-1" {
+		t.Fatalf("blocked payload missing provider id: %+v", blockedPayload)
+	}
+	rawPayload, _ := json.Marshal(blockedPayload)
+	if strings.Contains(string(rawPayload), "Ignore previous instructions") || strings.Contains(string(rawPayload), "reply approve") {
+		t.Fatalf("blocked event leaked risky body content: %s", rawPayload)
 	}
 }
 
