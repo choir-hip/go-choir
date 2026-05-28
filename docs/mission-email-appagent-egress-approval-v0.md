@@ -2419,3 +2419,70 @@ required fix direction:
   version hash, approval event id/type, sent message id, and provider message
   id. Do not include email body text, raw headers, secrets, approval tokens, or
   private trace logs.
+
+## Problem Evidence Checkpoint: Maild Trace Append Routed To Host Sandbox
+
+timestamp: 2026-05-28T11:02:00-04:00
+status: documented_before_fix
+
+deployed evidence:
+- Commit `f548cfc68a2521352694575c64162e723d37c1b2` deployed through GitHub
+  Actions CI run `26582363720`.
+- Staging health reported proxy and sandbox commit
+  `f548cfc68a2521352694575c64162e723d37c1b2`, deployed at
+  `2026-05-28T14:53:03Z`.
+- Computer Use submitted a fresh prompt through the visible prompt bar while
+  authenticated as owner `5bd6de97-3b58-408c-bf89-c42c81b083de`:
+  `Draft an email to yusefnathanson@me.com with subject "Choir Email trace
+  receipt proof f548cfc" and body exactly "This is a deployed proof that owner
+  approval records Email appagent trace receipt events after commit f548cfc."`
+- VText created a document revision, Email appagent persisted maild draft
+  `email-draft-b2472e29-5754-4497-9606-3869f5154869`, and the draft
+  `source_ref` carried Email appagent run id
+  `62249225-1e20-4694-837e-6ece15ce312f`.
+- The Email UI opened the exact draft with `Pending approval`, then Computer
+  Use clicked `Send approved draft`.
+- The Email app switched to Sent and showed `9 messages`; the top message was
+  `Choir Email trace receipt proof f548cfc`, marked `Trusted sender`, with the
+  exact requested body.
+- Maild recorded the draft as `sent`, version hash
+  `491f3a87608df8a65f0d4be869fa55c0e0c6dd3c3a74d023ab187546cb380fb2`,
+  sent message id `resend-message-6d9d0808eddef83d1b5c9087646ce1a4`, and
+  Resend provider id `4a58b1a1-f1d8-4074-bf9c-169205daec0b`.
+- Maild recorded approval event
+  `email-approval-dd500c7d-77ff-4721-82f4-28b532d86403` with
+  `event_type=owner_click_approved`.
+- But `go-choir-maild` logged two failed trace append attempts:
+  - `append email approval trace event ... run=62249225-...: runtime trace
+    event status 404 Not Found: {"error":"run not found"}`
+  - `append email sent trace event ... run=62249225-...: runtime trace event
+    status 404 Not Found: {"error":"run not found"}`
+- Direct internal GET against `http://127.0.0.1:8085/internal/runtime/runs/62249225-.../events`
+  also returned `404`.
+
+root cause:
+- The code slice added the right bounded event types and client behavior, but
+  Node B configured `MAILD_RUNTIME_URL=http://127.0.0.1:8085`.
+- On a vmctl-routed deployment, `127.0.0.1:8085` is the host fallback sandbox,
+  not necessarily the owner active computer runtime that created the Email
+  appagent run.
+- The Email appagent run lives in the owner active VM; maild therefore needs
+  to resolve the owner runtime URL through the same vmctl/proxy routing plane
+  used by product requests before appending Trace evidence.
+
+belief-state changes:
+- The owner-click send path remains deployed-proven after `f548cfc`.
+- The bounded trace event append API and maild event payload shape are locally
+  tested, but the deployed wiring target is wrong.
+- Trace cannot yet be claimed complete for approval/send evidence because the
+  append events do not reach the owner active runtime.
+
+required fix direction:
+- Replace the static `MAILD_RUNTIME_URL` assumption with owner-scoped runtime
+  resolution. The smallest coherent fix is for maild to call a host-local
+  internal service that can resolve `owner_id` and desktop `primary` through
+  vmctl, then append to that sandbox runtime.
+- Keep the event payload bounded and keep maild as transport evidence, not an
+  agent authority.
+- Add tests that fail if maild posts to a static host sandbox when a vmctl
+  resolver returns an owner-specific runtime URL.
