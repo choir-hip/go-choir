@@ -3252,3 +3252,70 @@ edit: make it warmer and shorter
 - Expected evidence after that reply: `email_reply_edit_requested`, old active
   token marked edited/used, draft version incremented, no outbound sent message,
   and a fresh scoped approval notice for the edited draft version.
+
+### Blocked Checkpoint: Reply Proof Requires Owner Mailbox Action
+
+status: blocked_incomplete
+timestamp: 2026-05-28T17:05Z
+evidence source: maild SQLite, Resend provider ids, repeated goal
+continuations
+
+current live state:
+- The active proof draft remains
+  `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`, subject
+  `Choir Email clean approval proof 06e58f5`, status
+  `draft_pending_owner_approval`, version `1`.
+- The fresh active approval token remains
+  `email-approval-token-5f4a82c7-e188-44fb-8a1c-1ccd5fb8d69b`.
+- Its approval email provider id remains
+  `fb94f9fc-a374-4bf9-9076-0769af82c394`.
+- The previous token
+  `email-approval-token-843305d4-5cd3-472b-8057-6aec681adff1` remains
+  `superseded`.
+- Maild still has no `email_reply_approved`, `email_reply_rejected`, or
+  `email_reply_edit_requested` approval event.
+- The latest inbound mailbox rows do not include an approval reply from
+  `yusefnathanson@me.com` to the `approve+<token>@choir.news` address.
+
+requirement audit:
+- Proven: prompt-bar/VText to Email appagent draft creation, first-class Email
+  appagent Trace node, exact-version owner-click send, approval email delivery,
+  deep-link review without send, provider-backed structured risk alert,
+  forged/wrong-sender approval rejection, stale sent-token repair, raw
+  `/api/email/send` removal, deletion/demotion of old `send-to-choir` and
+  `pending_conductor` bypasses, and visible approval-email re-issue.
+- Not proven: real owner approval-by-email send, real owner reject-by-email,
+  and real owner edit-by-email creating a new draft version and fresh approval
+  requirement. Local tests cover these branches, but the mission requires
+  staging/provider-path proof through Resend inbound from the owner mailbox.
+
+blocked condition:
+- The same blocker has repeated across the last continuation turns: no fresh
+  owner reply has arrived for the active approval email.
+- Continuing without that external message would either spin on already-proven
+  checks or fake the remaining product proof by seeding webhooks/database state,
+  which the mission explicitly forbids.
+
+smallest safe resume action:
+- Reply from `yusefnathanson@me.com` to the newest approval email for
+  `Choir Email clean approval proof 06e58f5` with:
+
+```text
+edit: make it warmer and shorter
+```
+
+- After the reply lands, resume by verifying:
+  - a new inbound Resend webhook is recorded;
+  - `email_reply_edit_requested` exists for draft
+    `email-draft-8d20cdd8-b91f-43ea-ab13-9b4b0877f648`;
+  - token `email-approval-token-5f4a82c7-e188-44fb-8a1c-1ccd5fb8d69b` is no
+    longer active;
+  - draft version increments from `1`;
+  - no outbound sent message is created by the edit;
+  - a fresh approval email/provider id is recorded for the edited version.
+
+suggested resume goal string:
+
+```text
+/goal Resume docs/mission-email-appagent-egress-approval-v0.md from the blocked reply-proof checkpoint: I have replied from yusefnathanson@me.com to the newest approval email for "Choir Email clean approval proof 06e58f5" with "edit: make it warmer and shorter". Verify the real Resend inbound -> maild approval parser -> draft version update -> token invalidation -> fresh approval notice path. Do not seed webhook/database state, do not click Send as a substitute for reply proof, and preserve Email appagent as the outbound authority boundary.
+```
