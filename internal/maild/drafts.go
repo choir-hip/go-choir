@@ -332,10 +332,12 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 		return sendDraftResponse{}, fmt.Errorf("record approval: %w", err)
 	}
 	sendReq := draft.toSendRequest()
+	sendReq.TextBody = cleanApprovedDraftTextBody(sendReq.TextBody, draft.SourceKind)
 	payload, err := buildResendSendRequest(sendReq, alias)
 	if err != nil {
 		return sendDraftResponse{}, err
 	}
+	sendReq.HTMLBody = payload.HTML
 	payload.Headers["X-Choir-Maild"] = "v0-approved-draft-send"
 	payload.Headers["X-Choir-Email-Draft-ID"] = draft.ID
 	payload.Headers["X-Choir-Email-Draft-Version-Hash"] = draft.VersionHash
@@ -364,6 +366,34 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 		ApprovalEventID:   approvalEventID,
 		Status:            "sent",
 	}, nil
+}
+
+func cleanApprovedDraftTextBody(body, sourceKind string) string {
+	body = strings.TrimSpace(body)
+	if body == "" || sourceKind != "vtext_email_artifact" {
+		return body
+	}
+	lower := strings.ToLower(body)
+	cut := len(body)
+	for _, marker := range []string{
+		"\n## workflow",
+		"\n# workflow",
+		"\n**workflow:**",
+		"\n## source ref",
+		"\n# source ref",
+		"\n**source ref:**",
+		"\n**source refs:**",
+		"\n**source references:**",
+		"\n## outbound send",
+		"\n# outbound send",
+		"\n**outbound send:**",
+		"\n---",
+	} {
+		if idx := strings.Index(lower, marker); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	return strings.TrimSpace(body[:cut])
 }
 
 var (

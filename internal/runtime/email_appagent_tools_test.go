@@ -511,6 +511,11 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 	if cleaned != "This is the email body." {
 		t.Fatalf("cleaned body with singular source ref = %q", cleaned)
 	}
+	body = "This is the email body.\n\n## Workflow\n\n1. VText wrote this canonical email artifact."
+	cleaned = cleanEmailDraftBodyText(body)
+	if cleaned != "This is the email body." {
+		t.Fatalf("cleaned body with workflow tail = %q", cleaned)
+	}
 }
 
 func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {

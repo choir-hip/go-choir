@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 )
@@ -98,6 +99,9 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 	if text == "" && html == "" {
 		return resendSendRequest{}, fmt.Errorf("message body is required")
 	}
+	if html == "" && text != "" {
+		html = renderPlainTextEmailHTML(text)
+	}
 	return resendSendRequest{
 		From:    canonicalAliasAddress(alias),
 		To:      to,
@@ -110,6 +114,133 @@ func buildResendSendRequest(in sendEmailRequest, alias EmailAlias) (resendSendRe
 			"X-Choir-Maild": "v0-approved-draft-send",
 		},
 	}, nil
+}
+
+func renderPlainTextEmailHTML(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	var body, paragraph strings.Builder
+	inUL := false
+	inOL := false
+	closeLists := func() {
+		if inUL {
+			body.WriteString(`</ul>`)
+			inUL = false
+		}
+		if inOL {
+			body.WriteString(`</ol>`)
+			inOL = false
+		}
+	}
+	flushParagraph := func() {
+		if paragraph.Len() == 0 {
+			return
+		}
+		closeLists()
+		body.WriteString(`<p style="margin:0 0 16px;line-height:1.55;">`)
+		body.WriteString(paragraph.String())
+		body.WriteString(`</p>`)
+		paragraph.Reset()
+	}
+	for _, rawLine := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			flushParagraph()
+			continue
+		}
+		if heading, level, ok := markdownHeading(line); ok {
+			flushParagraph()
+			closeLists()
+			body.WriteString(fmt.Sprintf(`<h%d style="margin:0 0 12px;font-size:%dpx;line-height:1.25;color:#0f172a;">%s</h%d>`, level, headingFontSize(level), html.EscapeString(heading), level))
+			continue
+		}
+		if item, ok := unorderedListItem(line); ok {
+			flushParagraph()
+			if inOL {
+				body.WriteString(`</ol>`)
+				inOL = false
+			}
+			if !inUL {
+				body.WriteString(`<ul style="margin:0 0 16px 20px;padding:0;line-height:1.55;">`)
+				inUL = true
+			}
+			body.WriteString(`<li style="margin:0 0 6px;">`)
+			body.WriteString(html.EscapeString(item))
+			body.WriteString(`</li>`)
+			continue
+		}
+		if item, ok := orderedListItem(line); ok {
+			flushParagraph()
+			if inUL {
+				body.WriteString(`</ul>`)
+				inUL = false
+			}
+			if !inOL {
+				body.WriteString(`<ol style="margin:0 0 16px 20px;padding:0;line-height:1.55;">`)
+				inOL = true
+			}
+			body.WriteString(`<li style="margin:0 0 6px;">`)
+			body.WriteString(html.EscapeString(item))
+			body.WriteString(`</li>`)
+			continue
+		}
+		if paragraph.Len() > 0 {
+			paragraph.WriteString("<br>")
+		}
+		paragraph.WriteString(html.EscapeString(line))
+	}
+	flushParagraph()
+	closeLists()
+	if body.Len() == 0 {
+		return ""
+	}
+	return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;"><main style="max-width:640px;margin:0 auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#111827;">` + body.String() + `</main></body></html>`
+}
+
+func markdownHeading(line string) (string, int, bool) {
+	for _, prefix := range []string{"### ", "## ", "# "} {
+		if strings.HasPrefix(line, prefix) {
+			text := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			if text == "" {
+				return "", 0, false
+			}
+			return text, len(strings.TrimSpace(prefix)), true
+		}
+	}
+	return "", 0, false
+}
+
+func headingFontSize(level int) int {
+	switch level {
+	case 1:
+		return 22
+	case 2:
+		return 19
+	default:
+		return 17
+	}
+}
+
+func unorderedListItem(line string) (string, bool) {
+	if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+		return strings.TrimSpace(line[2:]), true
+	}
+	return "", false
+}
+
+func orderedListItem(line string) (string, bool) {
+	dot := strings.Index(line, ". ")
+	if dot <= 0 || dot > 3 {
+		return "", false
+	}
+	for _, r := range line[:dot] {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+	return strings.TrimSpace(line[dot+2:]), true
 }
 
 func canonicalAliasAddress(alias EmailAlias) string {

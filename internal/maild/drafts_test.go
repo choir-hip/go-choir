@@ -78,16 +78,19 @@ func TestDraftCreateDefaultsToOwnerNumericAlias(t *testing.T) {
 func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	store, cfg := newTestStore(t)
 	cfg.ResendAPIKey = "re_test"
+	var payload resendSendRequest
 	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/emails" {
 			t.Fatalf("%s %s", r.Method, r.URL.Path)
 		}
-		var payload resendSendRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode payload: %v", err)
 		}
 		if payload.From != "000@choir.news" || payload.To[0] != "friend@example.com" || payload.Text != "Approved body." {
 			t.Fatalf("payload = %+v", payload)
+		}
+		if payload.HTML == "" || strings.Contains(payload.HTML, "## Workflow") || !strings.Contains(payload.HTML, "Approved body.") {
+			t.Fatalf("payload HTML = %q", payload.HTML)
 		}
 		if payload.Headers["X-Choir-Maild"] != "v0-approved-draft-send" ||
 			payload.Headers["X-Choir-Email-Draft-ID"] == "" ||
@@ -110,7 +113,7 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 		FromAddress: "000@choir.news",
 		ToAddresses: []string{"friend@example.com"},
 		Subject:     "Approved",
-		TextBody:    "Approved body.",
+		TextBody:    "Approved body.\n\n## Workflow\n\n1. Internal artifact notes must not be sent.",
 		SourceKind:  "vtext_email_artifact",
 		SourceRef:   "doc-1:rev-1",
 	})
@@ -133,6 +136,13 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	}
 	if resp.ApprovalEventID == "" {
 		t.Fatalf("send response missing approval event: %+v", resp)
+	}
+	msg, err := store.GetMessage(req.Context(), "user-root", resp.MessageID)
+	if err != nil {
+		t.Fatalf("GetMessage: %v", err)
+	}
+	if msg.TextBody != "Approved body." || msg.HTMLBody == "" || strings.Contains(msg.HTMLBody, "## Workflow") {
+		t.Fatalf("stored sent message body = text %q html %q", msg.TextBody, msg.HTMLBody)
 	}
 	approvalCount, err := store.CountDraftApprovalEvents(req.Context(), draft.ID)
 	if err != nil {
