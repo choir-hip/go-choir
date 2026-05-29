@@ -524,9 +524,13 @@ func emailDraftArtifactTailMarkers() []string {
 		"\nconstraints:",
 		"\n**next step:**",
 		"\nnext step:",
+		"\n**next step**\n",
+		"\nnext step\n",
 		"\n**notes:**",
 		"\nnotes:",
 		"\n---",
+		"\ndraft only",
+		" draft only",
 		"\ncreate the draft only",
 		" create the draft only",
 		"\ndo not send",
@@ -581,12 +585,20 @@ func extractEmailDraftIntentFromText(combined string) (emailDraftIntent, bool) {
 	subject, subjectLabeled := extractEmailLabeledField(combined, "subject", []string{
 		"\nbody exactly:",
 		" body exactly:",
+		"\nbody exactly (",
+		" body exactly (",
 		"\n**body exactly:**",
 		" **body exactly:**",
+		"\n**body exactly (",
+		" **body exactly (",
 		"\nbody:",
 		" body:",
+		"\nbody (",
+		" body (",
 		"\n**body:**",
 		" **body:**",
+		"\n**body (",
+		" **body (",
 		"\nbody\n",
 		"\n**body**\n",
 	})
@@ -625,10 +637,11 @@ func extractEmailDraftIntentFromText(combined string) (emailDraftIntent, bool) {
 }
 
 func extractEmailLabeledField(text, label string, stopMarkers []string) (string, bool) {
-	labelPattern := regexp.MustCompile(`(?i)(?:^|[\s*_` + "`" + `>-])(?:\*\*)?` + regexp.QuoteMeta(label) + `\s*:\s*(?:\*\*)?`)
+	labelToken := regexp.QuoteMeta(label) + `(?:\s*\([^)\n]{1,80}\))?`
+	labelPattern := regexp.MustCompile(`(?i)(?:^|[\s*_` + "`" + `>-])(?:\*\*)?` + labelToken + `\s*:\s*(?:\*\*)?`)
 	loc := labelPattern.FindStringIndex(text)
 	if loc == nil {
-		linePattern := regexp.MustCompile(`(?im)^[ \t>*_-]*(?:\*\*)?` + regexp.QuoteMeta(label) + `(?:\*\*)?[ \t]*$`)
+		linePattern := regexp.MustCompile(`(?im)^[ \t>*_-]*(?:\*\*)?` + labelToken + `(?:\*\*)?[ \t]*$`)
 		loc = linePattern.FindStringIndex(text)
 		if loc == nil {
 			return "", false

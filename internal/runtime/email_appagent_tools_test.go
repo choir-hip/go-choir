@@ -687,6 +687,29 @@ func TestExtractEmailDraftIntentPrefersConcreteRevisionBodyOverPromptPlaceholder
 	}
 }
 
+func TestExtractEmailDraftIntentHandlesQualifiedBodyLabel(t *testing.T) {
+	content := "# Email Draft: Official Title of example.com\n\n" +
+		"Email Artifact\n\n" +
+		"To: yusefnathanson@me.com Subject: Choir Email researched result proof Body (plain language):\n" +
+		"I looked up the official title of https://example.com. The page's official HTML title is \"Example Domain\".\n" +
+		"Draft only — not sent.\n\n" +
+		"Next Step\n\n" +
+		"Hand off this email artifact to the Email appagent via request_email_draft."
+	intent, ok := extractEmailDraftIntent("Draft the researched result email.", content)
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if intent.Subject != "Choir Email researched result proof" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if strings.Contains(strings.ToLower(intent.BodyText), "draft only") || strings.Contains(strings.ToLower(intent.BodyText), "next step") {
+		t.Fatalf("body_text includes artifact tail: %q", intent.BodyText)
+	}
+	if !strings.Contains(intent.BodyText, "Example Domain") {
+		t.Fatalf("body_text = %q", intent.BodyText)
+	}
+}
+
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
