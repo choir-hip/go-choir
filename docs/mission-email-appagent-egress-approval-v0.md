@@ -63,6 +63,36 @@ Belief update: the right first code move is not to add a raw email tool. It is
 to introduce an Email appagent-owned draft/approval object, then delete or
 demote proxy/maild/UI paths that currently bypass that authority boundary.
 
+## Follow-Up Problem Checkpoint: Researched Result Email Handoff
+
+Recorded on 2026-05-29 before code changes to the researched-result path.
+
+Live product evidence from `https://choir.news` with Computer Use showed that a
+prompt-bar request shaped as "look up X, then create an Email appagent draft
+with the results" can enter the correct first half of the workflow:
+
+- conductor creates the VText document and initial user revision;
+- VText writes an interim "research in progress" revision;
+- the deterministic continuation requires a researcher worker rather than
+  fabricating an email body from model priors.
+
+The missing transition is the second half: after worker grounding, VText must
+be able to write a concrete email artifact and hand that exact revision to the
+Email appagent. Code inspection found the narrowing condition:
+
+- `requiredContinuationAfterInitialVTextEdit` only performs deterministic
+  `request_email_draft` handoff when the base revision is user-authored;
+- it returns immediately when `channelHasGroundedHistory` is true;
+- worker-wake revisions are appagent-authored and, by design, have grounded
+  history.
+
+That means the simple supplied-content email path can create a draft, but the
+researched-result path is biased to stop at a VText artifact/checkpoint unless
+the model voluntarily calls `request_email_draft`. The desired product behavior
+should not depend on that fragile voluntary call. The deterministic continuation
+needs to distinguish unsafe ungrounded placeholder drafts from safe
+post-grounding concrete artifacts.
+
 ## Real Artifact
 
 A product-path Email appagent egress substrate:
