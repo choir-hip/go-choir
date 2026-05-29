@@ -311,6 +311,20 @@
     cursor: pointer;
   }
 
+  .desk-mark-button :global(svg),
+  .voice-button span {
+    display: block;
+    width: 1.42rem;
+    height: 1.42rem;
+    line-height: 1;
+  }
+
+  .voice-button span {
+    display: grid;
+    place-items: center;
+    font-size: 1.03rem;
+  }
+
   .desk-mark-button:hover,
   .desk-mark-button:focus-visible {
     box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
@@ -360,6 +374,16 @@
     cursor: pointer;
   }
 
+  .window-tray-item > span {
+    flex: 0 0 1.35rem;
+    display: inline-grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 1.08rem;
+    line-height: 1;
+  }
+
   .window-tray-item.active {
     color: var(--choir-fg);
     background: var(--choir-selected);
@@ -367,9 +391,11 @@
   }
 
   .window-tray-item small {
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.05;
   }
 
   .command-field {
@@ -442,13 +468,17 @@
   }
 
   .mobile-app-switcher-item span {
+    display: grid;
+    place-items: center;
+    width: 1.48rem;
+    height: 1.48rem;
     font-size: 1.16rem;
     line-height: 1;
   }
 
   .mobile-app-switcher-item :global(svg) {
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 1.32rem;
+    height: 1.32rem;
   }
 
   .prompt-status {
