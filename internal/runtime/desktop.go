@@ -115,10 +115,22 @@ func sanitizeWindowStates(windows []types.WindowState, activeWindowID string) ([
 		out = append(out, win)
 	}
 
-	if _, ok := seen[activeWindowID]; !ok {
-		activeWindowID = ""
+	return out, topVisibleWindowID(out)
+}
+
+func topVisibleWindowID(windows []types.WindowState) string {
+	activeWindowID := ""
+	activeZ := -1
+	for _, win := range windows {
+		if win.Mode == types.WindowMinimized {
+			continue
+		}
+		if activeWindowID == "" || win.ZIndex >= activeZ {
+			activeWindowID = win.WindowID
+			activeZ = win.ZIndex
+		}
 	}
-	return out, activeWindowID
+	return activeWindowID
 }
 
 // HandleDesktopStateGet handles GET /api/desktop/state.

@@ -193,8 +193,61 @@ func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 	if resp.Windows[0].Mode != types.WindowNormal {
 		t.Fatalf("first window mode = %q, want %q", resp.Windows[0].Mode, types.WindowNormal)
 	}
-	if resp.ActiveWindowID != "" {
-		t.Fatalf("ActiveWindowID = %q, want empty for missing active window", resp.ActiveWindowID)
+	if resp.ActiveWindowID != "dup-2" {
+		t.Fatalf("ActiveWindowID = %q, want top visible sanitized window dup-2", resp.ActiveWindowID)
+	}
+}
+
+func TestDesktopStateActiveWindowFollowsTopVisibleZOrder(t *testing.T) {
+	_, h := testAPISetup(t)
+
+	saveReq := desktopStateSaveRequest{
+		Windows: []types.WindowState{
+			{
+				WindowID: "win-email",
+				AppID:    "email",
+				Title:    "Email",
+				Geometry: types.WindowGeometry{X: 10, Y: 20, Width: 600, Height: 400},
+				Mode:     types.WindowNormal,
+				ZIndex:   2,
+			},
+			{
+				WindowID: "win-trace",
+				AppID:    "trace",
+				Title:    "Trace",
+				Geometry: types.WindowGeometry{X: 30, Y: 40, Width: 700, Height: 500},
+				Mode:     types.WindowNormal,
+				ZIndex:   8,
+			},
+		},
+		ActiveWindowID: "win-email",
+		Driver:         true,
+	}
+	body, _ := json.Marshal(saveReq)
+	req := httptest.NewRequest(http.MethodPut, "/api/desktop/state", bytesReader(body))
+	req.Header.Set("X-Authenticated-User", "user-1")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Choir-Session", "session-a")
+	w := httptest.NewRecorder()
+	h.HandleDesktopStateSave(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
+	get.Header.Set("X-Authenticated-User", "user-1")
+	get.Header.Set("X-Choir-Session", "session-a")
+	getW := httptest.NewRecorder()
+	h.HandleDesktopStateGet(getW, get)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d; body: %s", getW.Code, http.StatusOK, getW.Body.String())
+	}
+	var resp desktopStateGetResponse
+	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ActiveWindowID != "win-trace" {
+		t.Fatalf("ActiveWindowID = %q, want top visible win-trace", resp.ActiveWindowID)
 	}
 }
 
