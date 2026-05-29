@@ -34,6 +34,9 @@ test('logged-out shell uses PromptSurface, DeskSheet, and fixture previews', asy
   await expect(page.locator('[data-vtext-editor]')).toContainText('Node A redesign morning review');
   await expect(page.locator('[data-trace-app]')).toContainText('Preview fixture');
 
+  const surfaceHeight = await page.locator('[data-prompt-surface]').evaluate((el) => el.getBoundingClientRect().height);
+  expect(surfaceHeight).toBeLessThanOrEqual(78);
+
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet].placement-bottom')).toBeVisible();
   await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="email"]')).toBeVisible();

@@ -33,7 +33,7 @@ const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
   },
   layout: {
     promptSurfacePlacement: 'bottom',
-    promptSurfaceMinHeight: '86px',
+    promptSurfaceMinHeight: '72px',
     deskSheetHeight: '56dvh',
   },
   fonts: {

@@ -282,8 +282,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, max-content) minmax(14rem, 1fr) auto auto;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.72rem 0.86rem;
+    gap: 0.62rem;
+    padding: 0.42rem 0.62rem;
     border-radius: var(--choir-radius-pill);
     color: var(--choir-fg);
     background: var(--choir-prompt-surface-bg);
@@ -304,8 +304,8 @@
     position: relative;
     display: grid;
     place-items: center;
-    width: 3rem;
-    height: 3rem;
+    width: 2.45rem;
+    height: 2.45rem;
     border: 0;
     border-radius: var(--choir-radius-control);
     background: var(--choir-control-bg);
@@ -357,8 +357,8 @@
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-panel-soft);
     color: var(--choir-muted);
-    padding: 0.34rem 0.55rem;
-    min-height: 2.2rem;
+    padding: 0.26rem 0.5rem;
+    min-height: 1.95rem;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
     cursor: pointer;
   }
@@ -385,17 +385,20 @@
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--choir-panel-soft) 50%, transparent), transparent 58%),
       var(--choir-input-bg);
-    min-height: 4.3rem;
+    min-height: 3.05rem;
+    height: 3.05rem;
     box-shadow:
-      inset 0 18px 34px rgba(255, 255, 255, 0.018),
-      0 16px 36px rgba(0, 0, 0, 0.24);
+      inset 0 14px 28px rgba(255, 255, 255, 0.018),
+      0 12px 30px rgba(0, 0, 0, 0.22);
   }
 
   .command-field textarea {
     position: relative;
     z-index: 2;
     width: 100%;
-    min-height: 4.3rem;
+    box-sizing: border-box;
+    min-height: 3.05rem;
+    height: 100%;
     border: 0;
     outline: 0;
     resize: none;
@@ -404,7 +407,7 @@
     font: inherit;
     font-size: 1rem;
     line-height: 1.35;
-    padding: 1.05rem 1.15rem;
+    padding: 0.66rem 0.95rem;
   }
 
   .mobile-app-switcher {
@@ -413,9 +416,9 @@
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 4.3rem;
+    min-height: 3.05rem;
     overflow-x: auto;
-    padding: 0.62rem;
+    padding: 0.45rem;
     scrollbar-width: none;
   }
 
@@ -427,8 +430,8 @@
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    width: 2.72rem;
-    height: 2.72rem;
+    width: 2.38rem;
+    height: 2.38rem;
     border: 0;
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-control-bg);
@@ -514,7 +517,7 @@
       right: 8px;
       grid-template-columns: auto minmax(0, 1fr) auto auto;
       gap: 0.45rem;
-      padding: 0.62rem 0.62rem;
+      padding: 0.4rem 0.48rem;
     }
 
     .window-tray {
