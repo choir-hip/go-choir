@@ -678,27 +678,27 @@ Remaining error field:
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-05-29T08:12Z local owner-QA redirect pass after the all-app/all-theme logged-out fixes, before the next Node A deploy.
+last checkpoint: 2026-05-29T08:15Z Node A deployed owner-QA redirect cut at commit `5282f8fbc8b92a2bed88bb41c45fd38c902deb57`.
 
-current artifact state: local branch code now opens every app registry entry while logged out with frontend-only demo/preview state; Settings opens logged out and switches exactly the three schema-v2 themes; Trace has visible swimlanes; DeskSheet is dense and non-scroll in normal and mobile-sized support checks; TetraMark still opens DeskSheet and, on mobile while the sheet is open, replaces the prompt field with open-app icons. Node A still serves the prior deployed commit until the next branch workflow completes.
+current artifact state: Node A serves the owner-QA redirect cut. Every app registry entry opens while logged out with frontend-only demo/preview state; Settings opens logged out and switches exactly the three schema-v2 themes; Trace has visible swimlanes; DeskSheet is dense and non-scroll in normal and mobile-sized support checks; TetraMark still opens DeskSheet and, on mobile while the sheet is open, replaces the prompt field with open-app icons.
 
-what shipped: prior Node A branch deploy path, hard-cut shell, schema-v2 theme set, PromptSurface/DeskSheet/TetraMark, initial logged-out VText/Trace preview, and prompt geometry polish.
+what shipped: Node A branch deploy path, hard-cut shell, schema-v2 theme set, PromptSurface/DeskSheet/TetraMark, all-app logged-out preview fixtures/gates, Trace swimlanes, dense DeskSheet, mobile Tetra open-app switcher, prompt-safe desktop icon reflow, no-hard-outline app retokenization, and London Salmon contrast correction.
 
-what was proven: locally, `pnpm build` passed; the focused hard-cutover Playwright suite passed 5/5; Computer Use observed desktop/compact DeskSheet and Trace swimlanes; support screenshots covered all three themes and mobile Tetra switching. Node A deployment proof for this checkpoint is still pending.
+what was proven: `pnpm build` passed locally; the focused hard-cutover Playwright suite passed 5/5 locally and 5/5 against `https://choir-ip.com`; Node A health reported deployed commit `5282f8fbc8b92a2bed88bb41c45fd38c902deb57`; Computer Use observed deployed desktop/compact DeskSheet and Trace swimlanes; support screenshots covered all three deployed themes and mobile Tetra switching.
 
-unproven or partial claims: live Node A proof for this checkpoint, deeper owner visual approval across every app body in all three themes, full interactive mobile Computer Use proof, and merge-back readiness.
+unproven or partial claims: deeper owner visual approval across every app body in all three themes, full interactive mobile device proof beyond Playwright-sized viewport support, and merge-back readiness.
 
-belief-state changes: the live deployment route works; the owner QA redirect exposed product completeness gaps rather than infrastructure gaps; local evidence now shows the major logged-out visibility, theme switching, mobile switching, and swimlane requirements are implemented.
+belief-state changes: the live deployment route works; the owner QA redirect exposed product completeness gaps rather than infrastructure gaps; deployed evidence now shows the major logged-out visibility, theme switching, mobile switching, and swimlane requirements are implemented.
 
-remaining error field: live Node A deploy/health identity for the latest commit, deployed Computer Use screenshots/observations, residual theme taste gaps, and possible fixture honesty gaps.
+remaining error field: residual theme taste gaps, deeper per-app visual polish, possible fixture honesty gaps, and merge-back cleanup.
 
-highest-impact remaining uncertainty: whether the deployed Node A build matches the local 90%+ reviewable cut under real browser/network conditions.
+highest-impact remaining uncertainty: whether owner review agrees that this Node A cut is at or above the 90% visual/product bar for later merge-back preparation.
 
-next executable probe: commit and push only the intended branch changes, let the Node A redesign workflow deploy them, then verify `https://choir-ip.com` health/build identity and repeat deployed desktop/mobile visual QA.
+next executable probe: owner morning review on `https://choir-ip.com`, then a final merge-back preparation pass if approved.
 
 suggested resume goal string: use the `Goal String` section above.
 
-evidence artifact refs: this mission doc; local screenshots `/tmp/choir-local-futuristic-noir.png`, `/tmp/choir-local-carbon-fiber-kintsugi.png`, `/tmp/choir-local-london-salmon-v2.png`, and `/tmp/choir-local-mobile-tetra.png`; previous deployed screenshot refs `/tmp/choir-prompt-polish-deployed-desktop.png` and `/tmp/choir-prompt-polish-deployed-mobile.png`.
+evidence artifact refs: this mission doc; deployed screenshots `/tmp/choir-node-a-futuristic-noir-5282f8f.png`, `/tmp/choir-node-a-carbon-fiber-kintsugi-5282f8f.png`, `/tmp/choir-node-a-london-salmon-5282f8f.png`, and `/tmp/choir-node-a-mobile-tetra-5282f8f.png`; local screenshots `/tmp/choir-local-futuristic-noir.png`, `/tmp/choir-local-carbon-fiber-kintsugi.png`, `/tmp/choir-local-london-salmon-v2.png`, and `/tmp/choir-local-mobile-tetra.png`.
 
 rollback refs: Node A disposable; branch previous deployed commit `00a3000d6105b8415b56be1e68ce853a230a7860`; no Node B/main mutation performed.
 
@@ -799,3 +799,42 @@ Remaining before stopping:
 - Commit and push this cut.
 - Let the branch-scoped Node A workflow deploy it.
 - Verify deployed health/build identity, deployed Computer Use observations, and deployed screenshots before claiming the live Node A review checkpoint.
+
+### 2026-05-29T08:15Z - Node A Owner QA Redirect Cut
+
+Claim: Node A is serving the latest logged-out all-app/all-theme redesign preview cut and is ready for owner morning review as an incomplete-but-reviewable MissionGradient checkpoint.
+
+Identity evidence:
+
+- Branch: `codex/redesign-hard-cutover-node-a`.
+- Code commit: `5282f8fbc8b92a2bed88bb41c45fd38c902deb57` (`frontend: complete logged-out redesign preview cut`).
+- GitHub Actions run: `https://github.com/choir-hip/go-choir/actions/runs/26626173013`, status `completed`, conclusion `success`, head SHA `5282f8fbc8b92a2bed88bb41c45fd38c902deb57`.
+- Public health: `curl -fsS https://choir-ip.com/health` returned proxy and sandbox health with deployed commit `5282f8fbc8b92a2bed88bb41c45fd38c902deb57` and deployed_at `2026-05-29T08:13:14Z`.
+- Public HTML: `curl -fsS https://choir-ip.com/` returned `title>Choir Design Lab</title>`, the inline TetraMark favicon, `/assets/index-B4vgWjWM.js`, and `/assets/index-X3tveBp1.css`.
+
+Deployed regression evidence:
+
+- `PLAYWRIGHT_BASE_URL=https://choir-ip.com pnpm exec playwright test tests/prompt-surface-hard-cutover.spec.js --project=chromium --reporter=line` passed 5/5.
+- Deployed support metrics: 16 windows after opening every app, 3 Settings theme presets, 4 Trace swimlanes, 7 Trace swimlane moments, Terminal preview visible, and prompt placeholder empty.
+- Deployed mobile support metrics at 390x844: DeskSheet visible, `sheetOverflow=0`, mobile app switcher visible, prompt input absent while switcher open, and 3 switcher buttons.
+
+Computer Use observations:
+
+- Deployed Comet at `https://choir-ip.com` showed VText Preview and Trace Preview open while logged out.
+- Trace defaulted to Timeline in the compact window and showed Agent graph plus Swimlanes; graph nodes no longer had hard default button outlines.
+- TetraMark opened DeskSheet and showed the full app tray; the sheet was dense, non-scroll visually, and no tray labels overlapped.
+- In compact width, the prompt field was replaced by open-app icons while DeskSheet remained open, preserving Tetra as the sheet/app-tray button.
+
+Screenshot refs:
+
+- `/tmp/choir-node-a-futuristic-noir-5282f8f.png`
+- `/tmp/choir-node-a-carbon-fiber-kintsugi-5282f8f.png`
+- `/tmp/choir-node-a-london-salmon-5282f8f.png`
+- `/tmp/choir-node-a-mobile-tetra-5282f8f.png`
+
+Residual visual/product issues:
+
+- This is reviewable, not merge-ready. The app ecosystem still uses emoji-style icons and some older internal app layouts behind the new no-hard-outline retokenization layer.
+- Theme convergence is substantially closer, especially London Salmon contrast, but owner taste review should decide whether the three theme directions are sufficient before merge-back.
+- Mobile was verified by Playwright-sized viewport and compact Computer Use browser width, not by a physical device session.
+- Demo fixtures remain frontend-only and must not be treated as backend proof or written into authenticated user state.
