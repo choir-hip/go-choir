@@ -93,6 +93,29 @@ should not depend on that fragile voluntary call. The deterministic continuation
 needs to distinguish unsafe ungrounded placeholder drafts from safe
 post-grounding concrete artifacts.
 
+### Follow-Up Problem Checkpoint: Artifact Label Drift
+
+Recorded on 2026-05-29 after the first researched-result handoff fix was
+deployed.
+
+Fresh Computer Use inspection of the live product found a second, narrower
+boundary failure. The researched `example.com` trajectory reached a concrete
+VText artifact:
+
+- `To: yusefnathanson@me.com`
+- `Subject: Choir Email researched result proof`
+- `Body (plain language): ... "Example Domain" ...`
+
+The Email app Drafts list did not contain a matching draft. This shows the
+workflow can now reach the grounded artifact, but the deterministic email draft
+extractor is still too brittle: it recognizes `Body:` and `Body exactly:`, while
+VText naturally produced the semantically equivalent `Body (plain language):`.
+
+Belief update: this is not a Resend, approval, or owner-account blocker. The
+next fix should make email artifact extraction tolerate short parenthetical
+qualifiers on canonical labels, without broadening into arbitrary prose parsing
+or allowing ungrounded prompt placeholders to become outbound drafts.
+
 ## Real Artifact
 
 A product-path Email appagent egress substrate:
