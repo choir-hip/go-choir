@@ -3749,3 +3749,34 @@ fix direction:
 - Make `/api/email/drafts` list only unsent draft records.
 - Add a regression assertion proving an approved/sent draft is present in Sent
   messages but absent from Drafts.
+
+### Problem Checkpoint: Complex Email Prompts Can Draft Placeholder Bodies
+
+status: problem_documented_before_fix
+timestamp: 2026-05-29T04:40Z
+evidence source: Computer Use staging probe and maild draft inspection
+
+problem:
+- A bounded prompt asked Choir to inspect the current Email mission state in
+  Trace and then create an Email appagent draft with "a short plain-language
+  summary of that fact."
+- The run produced an Email appagent draft, but the draft body was the literal
+  placeholder text: `a short plain-language summary of that fact. Draft only;`.
+- Product expectation: if the body content must be generated from research,
+  Trace, VText, or later super work, the system must not create a sendable
+  draft from the placeholder instruction.
+
+root-cause evidence:
+- `extractEmailDraftIntent` rejects complex placeholder prompts only when it
+  falls back to unlabeled body parsing.
+- The live prompt used a labeled `Body:` phrase, so the parser treated
+  "a short plain-language summary of that fact" as supplied email content and
+  let the deterministic Email appagent handoff run.
+- Trace showed conductor, VText, and Email appagent, but no researcher,
+  findings, or searches for the fact the prompt asked Choir to discover.
+
+fix direction:
+- Preserve the simple supplied-content path for exact/literal email bodies.
+- Reject unresolved generated-body placeholders even when they appear after a
+  `Body:` label, so complex "figure out/research/find and email the result"
+  prompts remain at the VText/research/super boundary until real content exists.
