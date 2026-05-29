@@ -97,13 +97,13 @@ test('PromptSurface supports top placement with explicit placement offsets', asy
       sheetTop: sheet.top,
       promptTop: root.getPropertyValue('--choir-prompt-surface-top-offset').trim(),
       promptBottom: root.getPropertyValue('--choir-prompt-surface-bottom-offset').trim(),
-      legacyBottom: root.getPropertyValue('--choir-prompt-surface-height').trim(),
+      removedHeightVar: root.getPropertyValue('--choir-prompt-surface-height').trim(),
     };
   });
   expect(boxes.sheetTop).toBeGreaterThanOrEqual(boxes.surfaceBottom - 1);
   expect(boxes.promptTop).toMatch(/px$/);
   expect(boxes.promptBottom).toBe('0px');
-  expect(boxes.legacyBottom).toBe('');
+  expect(boxes.removedHeightVar).toBe('');
 });
 
 test('desktop icons reflow inside the prompt-safe viewport', async ({ page }) => {

@@ -15,7 +15,7 @@
     data-desktop             — root desktop container
     data-desktop-windows     — window container area
     data-desktop-surface     — desktop surface with floating icons
-    data-shell               — backward compat with existing tests
+    data-shell               — authenticated shell anchor for product-path tests
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
