@@ -1,6 +1,6 @@
 # MissionGradient: Choir Redesign Hard Cutover on Node A - v0
 
-Status: draft for owner review  
+Status: Node A deployed for owner review  
 Target branch: `codex/redesign-hard-cutover-node-a`  
 Target host: `node-a`  
 Target public URL: `https://choir-ip.com`  
@@ -682,3 +682,46 @@ Remaining error field:
 - Need update `frontend/package-lock.json` for `typescript`.
 - Need update `flake.nix` `npmDepsHash` from the Nix build error after the lockfile changes.
 - Need rerun branch CI and then verify Node A health and visual behavior.
+
+### 2026-05-29T07:21Z - Node A Deployed Review Cut
+
+Claim: Node A is now a disposable `go-choir` design lab serving the redesign branch at `https://choir-ip.com`; Node B and `main` were not touched.
+
+Evidence:
+
+- Branch: `codex/redesign-hard-cutover-node-a`.
+- Deployed commit: `cd1955c9ff2b24a6cd3100a81ba81a4ccaa4cb46`.
+- GitHub Actions run: `https://github.com/choir-hip/go-choir/actions/runs/26623900052`, status `completed`, conclusion `success`, head SHA `cd1955c9ff2b24a6cd3100a81ba81a4ccaa4cb46`.
+- Node A deploy env: `CHOIR_DEPLOYED_AT=2026-05-29T07:19:19Z`, `CHOIR_DEPLOYED_BRANCH=codex/redesign-hard-cutover-node-a`, `CHOIR_DEPLOYED_COMMIT=cd1955c9ff2b24a6cd3100a81ba81a4ccaa4cb46`.
+- Stale state deletion: `/opt/choiros` absent and `/var/lib/choiros` absent on Node A after deploy.
+- Stale services: `hypervisor.service` not found/inactive; old `cloud-hypervisor@u-b59f2836.service` and `socat-sandbox@u-b59f2836.service` inactive.
+- Active services: `caddy`, `go-choir-auth`, `go-choir-platformd`, `go-choir-platform-dolt`, `go-choir-gateway`, `go-choir-sandbox`, `go-choir-vmctl`, `go-choir-proxy`, and `go-choir-maild` all reported active.
+- Public health: `curl -fsS https://choir-ip.com/health` returned proxy and sandbox health with deployed commit `cd1955c9ff2b24a6cd3100a81ba81a4ccaa4cb46`.
+- Public HTML: `curl -fsS https://choir-ip.com/` returned `title>Choir Design Lab</title>` and the new inline TetraMark favicon.
+- Direct Node A health with `--resolve choir-ip.com:443:51.81.93.94` also returned the same deployed commit.
+- DNS caveat: `dig +short choir-ip.com A` returned `147.135.24.51` while `node-a` still reports `51.81.93.94`; nevertheless public `https://choir-ip.com` served the deployed build and health at evidence time.
+
+Visual observations:
+
+- Computer Use desktop observation on deployed `choir-ip.com`: PromptSurface visible at the bottom, VText Preview and Trace Preview open while logged out, fixture-backed VText and Trace content visible, and protected actions such as Publish/Sign in presented at action boundaries.
+- Computer Use Desk observation on deployed `choir-ip.com`: DeskSheet opened from PromptSurface, showed Desktop Overview, all major app entries, `PUBLIC PREVIEW`, and `Sign in`.
+- Screenshot refs: `/tmp/choir-node-a-desktop.png` and `/tmp/choir-node-a-mobile.png`.
+- Mobile-sized Playwright screenshot support pass: the 390px viewport rendered the shell, VText/Trace preview windows, PromptSurface, and app icons without a blank screen.
+
+Local regression evidence:
+
+- `pnpm build` passed in `frontend/`; only existing chunk-size warnings remained.
+- Focused Playwright cutover smoke passed: `PLAYWRIGHT_BASE_URL=http://localhost:5173 pnpm exec playwright test tests/prompt-surface-hard-cutover.spec.js --project=chromium --reporter=line` with `2 passed`.
+- Nix config probes passed for `go-choir-a` hostname, `choir-ip.com` auth RP environment, and Caddy virtual host.
+
+Residual visual/product issues:
+
+- PromptSurface/Chyron ticker is bounded, but the desktop accessibility tree and screenshots still show repeated ticker copy over time; this should be cleaned before merge-back.
+- Mobile review used Playwright screenshot support because Comet could not be reliably resized by Computer Use; mobile is reviewable but not yet as thoroughly interactively verified as desktop.
+- The app icon set still uses emoji-style desktop icons in several places; this is acceptable for the Node A review cut but should be revisited for a polished merge-back.
+- Node A hostname still reports `choiros-a` immediately after switch even though the active NixOS config is `go-choir-a`; verify after reboot or hostname service reload before treating the machine identity as clean.
+
+Remaining error field:
+
+- Owner QA should review `https://choir-ip.com` directly and decide whether this is the right visual direction.
+- Before merge-back to `main`, clean the ticker repetition, do deeper mobile Computer Use or device proof, decide whether to keep Node A workflow/assets in the branch, and reverify production auth/mail/private paths on Node B in a separate landing mission.
