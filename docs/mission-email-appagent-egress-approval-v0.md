@@ -3779,6 +3779,24 @@ code and deploy:
   maild override binary at `/var/lib/go-choir/services/maild/bin/maild` and
   did not find the old `personal workflows` wording.
 
+### Problem Checkpoint: Footer Signature Should Be Shorter
+
+status: problem_documented_before_fix
+timestamp: 2026-05-29T02:20Z
+evidence source: owner requested exact footer wording
+
+problem:
+- The deployed footer disclosure is still too long for ordinary email.
+- The footer includes product-scope copy and approval mechanics that distract
+  from the message body.
+- Owner expectation: the visible signature should be exactly
+  `Sent by Choir, the automatic computer.`
+
+fix direction:
+- Keep the existing plain-text and HTML footer mechanics.
+- Replace only the generated signature sentence with the owner-specified copy.
+- Preserve the no-duplicate-signature guard and HTML escaping behavior.
+
 ### Problem Checkpoint: Sent Drafts Still Appear In Drafts
 
 status: problem_documented_before_fix

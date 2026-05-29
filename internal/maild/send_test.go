@@ -14,6 +14,9 @@ func TestBuildResendSendRequestGeneratesSafeHTMLPart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildResendSendRequest: %v", err)
 	}
+	if choirAutomatedEmailSignature != "Sent by Choir, the automatic computer." {
+		t.Fatalf("signature = %q", choirAutomatedEmailSignature)
+	}
 	if !strings.HasPrefix(payload.Text, "Intro paragraph.\n\n## Section\n\n- First\n- <second>\n\n--\n") || !strings.Contains(payload.Text, choirAutomatedEmailSignature) {
 		t.Fatalf("payload text = %q", payload.Text)
 	}
