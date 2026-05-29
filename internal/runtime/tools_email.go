@@ -555,7 +555,17 @@ var choirSenderAliasPattern = regexp.MustCompile(`(?i)^[0-9]+(?:\+[A-Z0-9][A-Z0-
 var trailingEmailDraftToolTagPattern = regexp.MustCompile(`(?is)</[a-z][a-z0-9:_-]*>\s*$`)
 
 func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
+	if strings.TrimSpace(content) != "" {
+		if intent, ok := extractEmailDraftIntentFromText(content); ok {
+			return intent, true
+		}
+	}
 	combined := strings.TrimSpace(prompt + "\n" + content)
+	return extractEmailDraftIntentFromText(combined)
+}
+
+func extractEmailDraftIntentFromText(combined string) (emailDraftIntent, bool) {
+	combined = strings.TrimSpace(combined)
 	if combined == "" {
 		return emailDraftIntent{}, false
 	}

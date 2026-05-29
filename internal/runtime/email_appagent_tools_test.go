@@ -412,6 +412,125 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 	}
 }
 
+func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *testing.T) {
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-grounded-email-continuation",
+		OwnerID:   "user-alice",
+		Title:     "Grounded email proof",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	userRev := types.Revision{
+		RevisionID:  "rev-grounded-user-email-continuation",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "Look up the official title of https://example.com, then create an Email appagent draft.",
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, userRev); err != nil {
+		t.Fatalf("create user revision: %v", err)
+	}
+	initialRev := types.Revision{
+		RevisionID:       "rev-grounded-initial-email-continuation",
+		DocID:            doc.DocID,
+		OwnerID:          doc.OwnerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		Content:          "Status: research in progress. No email draft has been created yet.",
+		ParentRevisionID: userRev.RevisionID,
+		CreatedAt:        now.Add(time.Second),
+	}
+	if err := s.CreateRevision(ctx, initialRev); err != nil {
+		t.Fatalf("create initial appagent revision: %v", err)
+	}
+	researchRun, err := rt.StartRunWithMetadata(ctx, "Research example.com title", doc.OwnerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    doc.DocID,
+	})
+	if err != nil {
+		t.Fatalf("start research run: %v", err)
+	}
+	if _, err := rt.ChannelCast(WithToolExecutionContext(ctx, researchRun), doc.DocID, "vtext:"+doc.DocID, "", "researcher-1", AgentProfileResearcher, "Evidence: the official page title is Example Domain."); err != nil {
+		t.Fatalf("post grounded worker message: %v", err)
+	}
+	run := types.RunRecord{
+		RunID:        "run-grounded-vtext-email-continuation",
+		AgentID:      "vtext:" + doc.DocID,
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "Integrate worker findings",
+		CreatedAt:    now.Add(2 * time.Second),
+		UpdatedAt:    now.Add(2 * time.Second),
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Metadata: map[string]any{
+			"type":                      "vtext_agent_revision",
+			"doc_id":                    doc.DocID,
+			"current_revision_id":       initialRev.RevisionID,
+			"request_intent":            "integrate_worker_findings",
+			"original_prompt":           "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
+			"requires_worker_grounding": false,
+			runMetadataAgentID:          "vtext:" + doc.DocID,
+			runMetadataChannelID:        doc.DocID,
+			runMetadataAgentRole:        AgentProfileVText,
+			runMetadataAgentProfile:     AgentProfileVText,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     run.RunID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create mutation: %v", err)
+	}
+
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "edit_vtext", json.RawMessage(`{
+		"doc_id":"doc-grounded-email-continuation",
+		"base_revision_id":"rev-grounded-initial-email-continuation",
+		"operation":"replace_all",
+		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared from grounded research — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email researched result proof\n**Body:**\nThe official title of https://example.com is \"Example Domain\".\n\n---\n\n**Source refs:** Researcher worker message. No outbound email is authorized."
+	}`))
+	if err != nil {
+		t.Fatalf("edit_vtext: %v", err)
+	}
+	var editResult map[string]any
+	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
+		t.Fatalf("decode edit result: %v", err)
+	}
+	rawRequest, _ := editResult["email_draft_request"].(map[string]any)
+	if len(rawRequest) == 0 {
+		t.Fatalf("email_draft_request missing for grounded artifact: %s", editRaw)
+	}
+	if rawRequest["subject"] != "Choir Email researched result proof" {
+		t.Fatalf("subject = %+v", rawRequest["subject"])
+	}
+	if got, _ := rawRequest["draft_version_hash"].(string); got == "" {
+		t.Fatalf("draft_version_hash empty; result=%s", editRaw)
+	}
+	if got, _ := rawRequest["status"].(string); got != "draft_pending_owner_approval" {
+		t.Fatalf("status = %q; result=%s", got, editRaw)
+	}
+}
+
 func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
 	content := "# Email Appagent Draft Request\n\n" +
 		"**Status:** Draft prepared -- pending Email appagent review.\n\n" +
@@ -540,6 +659,31 @@ func TestExtractEmailDraftIntentRejectsGeneratedBodyPlaceholder(t *testing.T) {
 		"with subject: Choir Email research draft proof. Body: a short plain-language summary of that fact. Draft only; do not send."
 	if intent, ok := extractEmailDraftIntent(prompt, ""); ok {
 		t.Fatalf("extractEmailDraftIntent returned placeholder draft: %+v", intent)
+	}
+}
+
+func TestExtractEmailDraftIntentPrefersConcreteRevisionBodyOverPromptPlaceholder(t *testing.T) {
+	prompt := "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com " +
+		"with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send."
+	content := "# Email Appagent Draft Request\n\n" +
+		"**Recipient:** yusefnathanson@me.com\n" +
+		"**Subject:** Choir Email researched result proof\n" +
+		"**Body:**\n" +
+		"The official title of https://example.com is \"Example Domain\".\n\n" +
+		"---\n\n" +
+		"**Source refs:** Researcher worker message."
+	intent, ok := extractEmailDraftIntent(prompt, content)
+	if !ok {
+		t.Fatal("extractEmailDraftIntent returned false")
+	}
+	if intent.Subject != "Choir Email researched result proof" {
+		t.Fatalf("subject = %q", intent.Subject)
+	}
+	if strings.Contains(strings.ToLower(intent.BodyText), "short plain-language summary") {
+		t.Fatalf("body_text used prompt placeholder: %q", intent.BodyText)
+	}
+	if !strings.Contains(intent.BodyText, "Example Domain") {
+		t.Fatalf("body_text = %q", intent.BodyText)
 	}
 }
 

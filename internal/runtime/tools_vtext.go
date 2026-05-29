@@ -97,7 +97,7 @@ func newEditVTextTool(rt *Runtime) Tool {
 				"base_revision_id": rev.ParentRevisionID,
 				"status":           "stored",
 			}
-			if continuation, ok := rt.requiredContinuationAfterInitialVTextEdit(context.Background(), rec, in, rev); ok {
+			if continuation, ok := rt.requiredContinuationAfterVTextEdit(context.Background(), rec, in, rev); ok {
 				if continuation.Tool == "request_email_draft" {
 					emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
 					if err != nil {
@@ -139,7 +139,7 @@ func (rt *Runtime) executeRequiredEmailDraftContinuation(ctx context.Context, re
 	return result, nil
 }
 
-func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs, rev types.Revision) (vtextRequiredContinuation, bool) {
+func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *types.RunRecord, in editVTextArgs, rev types.Revision) (vtextRequiredContinuation, bool) {
 	if rt == nil || rt.store == nil || rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
 		return vtextRequiredContinuation{}, false
 	}
@@ -152,11 +152,11 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 		return vtextRequiredContinuation{}, false
 	}
 	baseRevision, err := rt.store.GetRevision(ctx, baseRevisionID, rec.OwnerID)
-	if err != nil || baseRevision.AuthorKind != types.AuthorUser {
+	if err != nil {
 		return vtextRequiredContinuation{}, false
 	}
 	grounded, err := rt.channelHasGroundedHistory(ctx, rec.OwnerID, docID, time.Time{})
-	if err != nil || grounded {
+	if err != nil {
 		return vtextRequiredContinuation{}, false
 	}
 	prompt := strings.TrimSpace(firstNonEmpty(
@@ -171,19 +171,24 @@ func (rt *Runtime) requiredContinuationAfterInitialVTextEdit(ctx context.Context
 		return vtextRequiredContinuation{}, false
 	}
 	if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
-		return vtextRequiredContinuation{
-			Tool: "request_email_draft",
-			Args: map[string]any{
-				"doc_id":              rev.DocID,
-				"revision_id":         rev.RevisionID,
-				"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
-				"to_addresses":        intent.ToAddresses,
-				"subject":             intent.Subject,
-				"body_text":           intent.BodyText,
-				"approval_mode":       "owner_click_or_email_reply",
-			},
-			Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
-		}, true
+		if baseRevision.AuthorKind == types.AuthorUser || grounded {
+			return vtextRequiredContinuation{
+				Tool: "request_email_draft",
+				Args: map[string]any{
+					"doc_id":              rev.DocID,
+					"revision_id":         rev.RevisionID,
+					"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
+					"to_addresses":        intent.ToAddresses,
+					"subject":             intent.Subject,
+					"body_text":           intent.BodyText,
+					"approval_mode":       "owner_click_or_email_reply",
+				},
+				Instruction: "The VText email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
+			}, true
+		}
+	}
+	if baseRevision.AuthorKind != types.AuthorUser || grounded {
+		return vtextRequiredContinuation{}, false
 	}
 	needsResearch := vtextPromptNeedsResearchContinuation(prompt)
 	needsSuper := vtextPromptNeedsSuperExecution(prompt)
