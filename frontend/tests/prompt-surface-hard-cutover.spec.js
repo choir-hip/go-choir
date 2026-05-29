@@ -61,6 +61,29 @@ test('logged-out shell uses PromptSurface, DeskSheet, and fixture previews', asy
   expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');
   expect(decodeURIComponent(favicon || '')).toContain('M 476.43 455.41');
 
+  const vtextToolbar = page.locator('[data-vtext-toolbar]');
+  const vtextEditor = page.locator('[data-vtext-editor-area]');
+  await vtextEditor.evaluate((node) => {
+    node.innerHTML = `<h1>Scroll proof</h1>${Array.from({ length: 40 }, (_, i) => `<p>Paragraph ${i + 1}: the toolbar should recede while reading.</p>`).join('')}`;
+    node.scrollTop = 0;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(vtextToolbar).not.toHaveClass(/toolbar-hidden/);
+  const toolbarHeight = await vtextToolbar.evaluate((el) => el.getBoundingClientRect().height);
+  await vtextEditor.evaluate((node) => {
+    node.scrollTop = 320;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(vtextToolbar).toHaveClass(/toolbar-hidden/);
+  await page.waitForTimeout(220);
+  const hiddenToolbarHeight = await vtextToolbar.evaluate((el) => el.getBoundingClientRect().height);
+  expect(hiddenToolbarHeight).toBeLessThan(toolbarHeight / 3);
+  await vtextEditor.evaluate((node) => {
+    node.scrollTop = 160;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(vtextToolbar).not.toHaveClass(/toolbar-hidden/);
+
   const surfaceHeight = await page.locator('[data-prompt-surface]').evaluate((el) => el.getBoundingClientRect().height);
   expect(surfaceHeight).toBeLessThanOrEqual(78);
 
@@ -195,6 +218,11 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
         },
         vtextFont: getComputedStyle(document.querySelector('[data-vtext-editor]')).fontFamily,
         settingsFont: getComputedStyle(document.querySelector('[data-settings-window]')).fontFamily,
+        vtextToolbar: {
+          backgroundColor: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).backgroundColor,
+          color: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).color,
+        },
+        vtextHeadingColor: getComputedStyle(document.querySelector('[data-vtext-editor-area] h1')).color,
         shells: selectors.map((selector) => {
           const element = document.querySelector(selector);
           const style = element ? getComputedStyle(element) : null;
@@ -225,12 +253,62 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
       expect(sample.vars.blur).toBe('0px');
       expect(sample.vars.uiFont).toContain('Georgia');
       expect(sample.settingsFont).toContain('Georgia');
+      const toolbarBg = parseRgb(sample.vtextToolbar.backgroundColor);
+      const toolbarColor = parseRgb(sample.vtextToolbar.color);
+      const headingColor = parseRgb(sample.vtextHeadingColor);
+      expect(toolbarBg[0]).toBeGreaterThanOrEqual(248);
+      expect(toolbarBg[1]).toBeGreaterThanOrEqual(228);
+      expect(toolbarBg[2]).toBeGreaterThanOrEqual(222);
+      expect(toolbarColor[0]).toBeLessThan(75);
+      expect(toolbarColor[1]).toBeLessThan(35);
+      expect(toolbarColor[2]).toBeLessThan(38);
+      expect(headingColor[0]).toBeLessThan(100);
+      expect(headingColor[1]).toBeLessThan(45);
+      expect(headingColor[2]).toBeLessThan(50);
     }
   };
 
   await assertThemeOnShells('futuristic-noir', { bg: '#050912', accent: '#6D8DFF', panel: '#0D1628' });
   await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#FFD86B', panel: '#151719', blur: '4px' });
-  await assertThemeOnShells('london-salmon', { bg: '#F8DED7', accent: '#A9554D', panel: '#FFF6F2', blur: '0px' });
+  await assertThemeOnShells('london-salmon', { bg: '#FBEAE6', accent: '#964A43', panel: '#FFFAF7', blur: '0px' });
+
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+  const salmonAffordance = await page.evaluate(() => {
+    const read = (selector) => {
+      const element = document.querySelector(selector);
+      const style = element ? getComputedStyle(element) : null;
+      return {
+        fontFamily: style?.fontFamily || '',
+        fontStyle: style?.fontStyle || '',
+        fontWeight: style?.fontWeight || '',
+        backgroundColor: style?.backgroundColor || '',
+        boxShadow: style?.boxShadow || '',
+      };
+    };
+    return {
+      deskLabel: read('[data-desk-sheet-app] strong'),
+      deskButton: read('[data-desk-sheet-app]'),
+      desktopIconLabel: read('[data-desktop-icon-label]'),
+      vtextButton: read('[data-vtext-toolbar] button'),
+      settingsButton: read('[data-settings-window] button'),
+    };
+  });
+  for (const [name, style] of Object.entries({
+    deskLabel: salmonAffordance.deskLabel,
+    desktopIconLabel: salmonAffordance.desktopIconLabel,
+    vtextButton: salmonAffordance.vtextButton,
+    settingsButton: salmonAffordance.settingsButton,
+  })) {
+    expect(style.fontFamily, name).toContain('Georgia');
+    expect(style.fontStyle, name).toBe('italic');
+    expect(Number.parseInt(style.fontWeight, 10), name).toBeLessThanOrEqual(500);
+  }
+  expect(salmonAffordance.deskButton.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(salmonAffordance.deskButton.boxShadow).toBe('none');
+  expect(salmonAffordance.settingsButton.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(salmonAffordance.settingsButton.boxShadow).toBe('none');
+  await page.locator('[data-desk-sheet-close]').click();
 });
 
 test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({ page, browser }) => {

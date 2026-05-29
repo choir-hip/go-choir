@@ -26,7 +26,7 @@ body {
 
 :root[data-theme-id='london-salmon'] body {
   background:
-    linear-gradient(rgba(122, 69, 52, .04) 1px, transparent 1px),
+    linear-gradient(rgba(122, 69, 52, .03) 1px, transparent 1px),
     var(--choir-bg);
   background-size: 100% 28px, auto;
 }
@@ -48,7 +48,7 @@ body {
 
 :root[data-theme-id='london-salmon'] :is(.window, .floating-window, [data-window], [data-floating-window]) {
   box-shadow:
-    0 8px 16px rgba(91, 58, 40, 0.14),
+    0 8px 16px rgba(91, 58, 40, 0.11),
     0 1px 0 rgba(255, 255, 255, 0.72) inset !important;
 }
 
@@ -265,6 +265,130 @@ body {
   .prompt-status
 ) {
   font-family: var(--choir-font-display, Georgia, 'Times New Roman', ui-serif, serif) !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-app] {
+  background: #fffaf7 !important;
+  color: #3a1517 !important;
+}
+
+:root[data-theme-id='london-salmon'] :is(.vtext-editor, [data-vtext-editor]) {
+  background:
+    linear-gradient(rgba(91, 28, 31, .025) 1px, transparent 1px),
+    #fffaf7 !important;
+  background-size: 100% 30px, auto !important;
+  color: #3a1517 !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-toolbar] {
+  background: rgba(253, 240, 236, .98) !important;
+  color: #3a1517 !important;
+  box-shadow: 0 1px 0 rgba(91, 28, 31, .07), 0 10px 18px rgba(91, 58, 40, .06) !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is([data-vtext-state], [data-vtext-version], button) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+  font-style: italic !important;
+  font-weight: 430 !important;
+  color: #3a1517 !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is(button, [data-vtext-version]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is(button:hover, button:focus-visible) {
+  background: rgba(91, 28, 31, .055) !important;
+  box-shadow: 0 6px 14px rgba(91, 58, 40, .06) !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-editor-area] {
+  background: #fffaf7 !important;
+  color: #3a1517 !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-editor-area] :is(h1, h2, h3, h4) {
+  color: #5b1c1f !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-vtext-editor-area] :is(p, li, blockquote) {
+  color: #604844 !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is(button, [role='button']),
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is(button, [role='button']) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+  font-style: italic !important;
+  font-weight: 430 !important;
+  color: #3a1517 !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button),
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .mobile-app-button, .voice-button) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button):hover,
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button):focus-visible,
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .mobile-app-button, .voice-button):hover,
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .mobile-app-button, .voice-button):focus-visible {
+  background: rgba(91, 28, 31, .055) !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app] strong, [data-desk-overview] strong),
+:root[data-theme-id='london-salmon'] :is([data-desktop-icon-label], [data-rail-label]) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+  font-style: italic !important;
+  font-weight: 400 !important;
+  color: #5f403c !important;
+}
+
+:root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app] small, [data-desk-overview] small) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+  font-style: italic !important;
+  font-weight: 400 !important;
+}
+
+:root[data-theme-id='london-salmon'] .app-content :is(
+  button,
+  .button,
+  .icon-button,
+  .primary-action,
+  .secondary-action,
+  .toolbar-button,
+  .control-button,
+  .play-button,
+  .audio-play,
+  .video-play
+) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+  font-style: italic !important;
+  font-weight: 430 !important;
+  background: transparent !important;
+  color: #3a1517 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme-id='london-salmon'] .app-content :is(
+  button:hover,
+  button:focus-visible,
+  button.active,
+  button.selected,
+  [aria-selected='true'],
+  .active,
+  .selected,
+  .is-active,
+  .theme-preset.active,
+  .current,
+  .primary-action
+) {
+  background: rgba(91, 28, 31, .055) !important;
+  box-shadow: none !important;
 }
 
 :root[data-theme-id='carbon-fiber-kintsugi'] :is(

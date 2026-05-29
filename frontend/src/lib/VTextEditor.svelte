@@ -55,7 +55,8 @@
   let recentDocuments = [];
   let editorSurface = null;
   let surfaceFocused = false;
-  let toolbarFaded = false;
+  let toolbarHidden = false;
+  let lastDocumentScrollTop = 0;
   let autosaveTimer = null;
   let autosavePromise = null;
   let autosaveInFlight = false;
@@ -72,6 +73,8 @@
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
+  const TOOLBAR_HIDE_SCROLL_DELTA = 8;
+  const TOOLBAR_HIDE_SCROLL_TOP = 56;
 
   function escapeHTML(value) {
     return String(value || '')
@@ -855,7 +858,8 @@
     latestHeadRevisionId = '';
     showRecent = false;
     surfaceFocused = false;
-    toolbarFaded = false;
+    toolbarHidden = false;
+    lastDocumentScrollTop = 0;
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
@@ -1063,7 +1067,8 @@
     clearAutosaveTimer();
     showRecent = false;
     surfaceFocused = false;
-    toolbarFaded = false;
+    toolbarHidden = false;
+    lastDocumentScrollTop = 0;
     error = '';
     try {
       currentDoc = await createDocument('Untitled VText');
@@ -1280,7 +1285,16 @@
   }
 
   function handleDocumentScroll(event) {
-    toolbarFaded = event.currentTarget.scrollTop > 32;
+    const scrollTop = event.currentTarget.scrollTop || 0;
+    const delta = scrollTop - lastDocumentScrollTop;
+    if (scrollTop <= TOOLBAR_HIDE_SCROLL_TOP) {
+      toolbarHidden = false;
+    } else if (delta > TOOLBAR_HIDE_SCROLL_DELTA) {
+      toolbarHidden = true;
+    } else if (delta < -TOOLBAR_HIDE_SCROLL_DELTA) {
+      toolbarHidden = false;
+    }
+    lastDocumentScrollTop = Math.max(0, scrollTop);
   }
 
   $: contextKey = getContextKey(appContext);
@@ -1361,7 +1375,7 @@
       </div>
     </section>
   {:else}
-    <div class="doc-toolbar" class:toolbar-faded={toolbarFaded && !surfaceFocused} data-vtext-toolbar>
+    <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-vtext-toolbar>
       <div class="version-controls">
         <span class="nav-version" data-vtext-version>{versionLabel}</span>
         <button
@@ -1579,19 +1593,46 @@
     padding: 0.58rem 0.72rem;
     border-bottom: 1px solid rgba(148, 163, 184, 0.12);
     background: rgba(17, 24, 39, 0.58);
-    transition: opacity 180ms ease, transform 180ms ease;
-    will-change: opacity, transform;
+    max-height: 4.2rem;
+    overflow: hidden;
+    transition:
+      opacity 180ms ease,
+      transform 180ms ease,
+      max-height 180ms ease,
+      padding 180ms ease,
+      border-color 180ms ease;
+    will-change: opacity, transform, max-height;
   }
 
-  .doc-toolbar.toolbar-faded {
-    opacity: 0.16;
-    transform: translateY(-0.4rem);
+  .doc-toolbar.toolbar-hidden {
+    height: 0;
+    max-height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-color: transparent;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
   }
 
-  .doc-toolbar.toolbar-faded:hover,
-  .doc-toolbar.toolbar-faded:focus-within {
+  .doc-toolbar.toolbar-hidden > * {
+    visibility: hidden;
+  }
+
+  .doc-toolbar.toolbar-hidden:focus-within {
+    height: auto;
+    max-height: 4.2rem;
+    padding-top: 0.58rem;
+    padding-bottom: 0.58rem;
+    border-bottom-color: rgba(148, 163, 184, 0.12);
     opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
+  }
+
+  .doc-toolbar.toolbar-hidden:focus-within > * {
+    visibility: visible;
   }
 
   .version-controls,

@@ -64,6 +64,7 @@ async function getVTextLayout(page) {
       editor: rect('[data-vtext-editor-area]'),
       promptSurface: rect('[data-prompt-surface]'),
       toolbarOpacity: toolbar ? Number(getComputedStyle(toolbar).opacity) : null,
+      toolbarHidden: toolbar ? toolbar.classList.contains('toolbar-hidden') : false,
       controlBand,
     };
   });
@@ -119,7 +120,15 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
   await page.mouse.move(180, 520);
-  await expect(page.locator('[data-vtext-toolbar]')).toHaveCSS('opacity', /0\.1[0-9]|0\.2[0-5]/);
+  await expect(page.locator('[data-vtext-toolbar]')).toHaveClass(/toolbar-hidden/);
+  await page.waitForTimeout(220);
+  const hiddenLayout = await getVTextLayout(page);
+  expect(hiddenLayout.toolbar.height).toBeLessThan(8);
+  await editor.evaluate((node) => {
+    node.scrollTop = 60;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(page.locator('[data-vtext-toolbar]')).not.toHaveClass(/toolbar-hidden/);
   await expect(page.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 7000 });
 
   const beforeReload = await getVTextLayout(page);
