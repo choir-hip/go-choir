@@ -532,7 +532,7 @@
   .map-window {
     position: absolute;
     display: grid;
-    grid-template-columns: 1.2rem minmax(0, 1fr);
+    grid-template-columns: 1.35rem minmax(0, 1fr);
     align-content: start;
     align-items: center;
     gap: 0.35rem;
@@ -548,6 +548,15 @@
     pointer-events: auto;
     padding: 0.45rem;
     text-align: left;
+  }
+
+  .map-window > span {
+    display: inline-grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .map-window.active {
@@ -648,13 +657,14 @@
 
   .card-icon {
     display: grid;
-    align-items: center;
-    justify-content: center;
+    place-items: center;
     width: 2rem;
     height: 2rem;
     border-radius: 10px;
     background: rgba(96, 165, 250, 0.13);
     background: color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent);
+    font-size: 1.15rem;
+    line-height: 1;
   }
 
   .card-copy {
@@ -694,6 +704,9 @@
   }
 
   .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 999px;
     background: color-mix(in srgb, var(--choir-selected, rgba(91, 123, 255, 0.22)) 62%, transparent);

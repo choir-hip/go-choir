@@ -385,6 +385,47 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
   await expect(mobile.locator('[data-mobile-app-switcher]')).toBeVisible();
   await expect(mobile.locator('[data-mobile-switcher-open="true"] [data-prompt-input]')).toHaveCount(0);
   await expect(mobile.locator('[data-mobile-app-switcher] button')).not.toHaveCount(0);
+  const mobileIconAlignment = await mobile.evaluate(() => {
+    const centerDelta = (button) => {
+      const icon = button.querySelector('span');
+      const buttonRect = button.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      return {
+        x: Math.abs((buttonRect.left + buttonRect.width / 2) - (iconRect.left + iconRect.width / 2)),
+        y: Math.abs((buttonRect.top + buttonRect.height / 2) - (iconRect.top + iconRect.height / 2)),
+      };
+    };
+    const cardAlignment = (button) => {
+      const icon = button.querySelector('span');
+      const label = button.querySelector('strong');
+      const buttonRect = button.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      const labelRect = label.getBoundingClientRect();
+      const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+      return {
+        iconX: Math.abs(buttonCenterX - (iconRect.left + iconRect.width / 2)),
+        labelX: Math.abs(buttonCenterX - (labelRect.left + labelRect.width / 2)),
+        iconTopInside: iconRect.top >= buttonRect.top,
+        labelBottomInside: labelRect.bottom <= buttonRect.bottom,
+      };
+    };
+    return {
+      switcher: [...document.querySelectorAll('[data-mobile-app-switcher] button')].map(centerDelta),
+      deskCards: [...document.querySelectorAll('[data-desk-sheet-app]')].slice(0, 6).map(cardAlignment),
+    };
+  });
+  expect(mobileIconAlignment.switcher.length).toBeGreaterThan(0);
+  expect(mobileIconAlignment.deskCards.length).toBeGreaterThan(3);
+  for (const delta of mobileIconAlignment.switcher) {
+    expect(delta.x).toBeLessThanOrEqual(1);
+    expect(delta.y).toBeLessThanOrEqual(1);
+  }
+  for (const card of mobileIconAlignment.deskCards) {
+    expect(card.iconX).toBeLessThanOrEqual(1);
+    expect(card.labelX).toBeLessThanOrEqual(2);
+    expect(card.iconTopInside).toBe(true);
+    expect(card.labelBottomInside).toBe(true);
+  }
   await mobile.close();
 });
 
@@ -411,6 +452,48 @@ test('Desktop Overview is theme-native and action-oriented', async ({ page }) =>
     await expect(overview).not.toContainText('Restore pressure');
     await expect(overview).not.toContainText('honest card');
     await expect(page.locator('[data-overview-map-window]').first()).toBeEnabled();
+    const overviewIconAlignment = await overview.evaluate((node) => {
+      const centerDelta = (container, iconSelector) => {
+        const icon = container.querySelector(iconSelector);
+        const containerRect = container.getBoundingClientRect();
+        const iconRect = icon.getBoundingClientRect();
+        return {
+          x: Math.abs((containerRect.left + containerRect.width / 2) - (iconRect.left + iconRect.width / 2)),
+          y: Math.abs((containerRect.top + containerRect.height / 2) - (iconRect.top + iconRect.height / 2)),
+        };
+      };
+      return {
+        mapIcons: [...node.querySelectorAll('[data-overview-map-window] > span')].slice(0, 4).map((icon) => {
+          const rect = icon.getBoundingClientRect();
+          const style = getComputedStyle(icon);
+          return {
+            width: rect.width,
+            height: rect.height,
+            display: style.display,
+            placeItems: style.placeItems,
+          };
+        }),
+        cardIcons: [...node.querySelectorAll('.card-icon')].slice(0, 4).map((icon) => {
+          const rect = icon.getBoundingClientRect();
+          const style = getComputedStyle(icon);
+          return {
+            width: rect.width,
+            height: rect.height,
+            display: style.display,
+            placeItems: style.placeItems,
+          };
+        }),
+        badges: [...node.querySelectorAll('.badge')].slice(0, 4).map((badge) => getComputedStyle(badge).alignItems),
+      };
+    });
+    for (const icon of [...overviewIconAlignment.mapIcons, ...overviewIconAlignment.cardIcons]) {
+      expect(icon.display).toBe('grid');
+      expect(icon.width).toBeGreaterThan(10);
+      expect(icon.height).toBeGreaterThan(10);
+    }
+    for (const alignItems of overviewIconAlignment.badges) {
+      expect(alignItems).toBe('center');
+    }
 
     const sample = await overview.evaluate((node) => {
       const panel = node.querySelector('.overview-panel');

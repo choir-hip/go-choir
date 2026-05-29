@@ -145,7 +145,7 @@
 
   .overview-card {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 1.55rem minmax(0, 1fr);
     gap: 0.12rem 0.55rem;
     align-self: start;
     align-items: center;
@@ -157,7 +157,12 @@
 
   .overview-card span {
     grid-row: span 2;
+    display: inline-grid;
+    place-items: center;
+    width: 1.55rem;
+    height: 1.55rem;
     font-size: 1.18rem;
+    line-height: 1;
   }
 
   .overview-card small,
@@ -173,7 +178,7 @@
 
   .app-grid button {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 1.55rem minmax(0, 1fr);
     gap: 0.04rem 0.42rem;
     align-items: center;
     min-height: 2.58rem;
@@ -183,7 +188,12 @@
 
   .app-grid button span {
     grid-row: span 2;
-    font-size: 1.05rem;
+    display: inline-grid;
+    place-items: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    font-size: 1.1rem;
+    line-height: 1;
   }
 
   .app-grid strong {
@@ -202,6 +212,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .overview-card strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.1;
   }
 
   .plain-row {
@@ -226,13 +244,16 @@
       grid-template-columns: 1fr;
       justify-items: center;
       min-height: 3.35rem;
-      gap: 0.16rem;
+      gap: 0.14rem;
       padding: 0.38rem 0.28rem;
       text-align: center;
     }
 
     .app-grid button span {
       grid-row: auto;
+      width: 1.65rem;
+      height: 1.65rem;
+      font-size: 1.24rem;
     }
 
     .app-grid small,
