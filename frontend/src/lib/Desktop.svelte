@@ -40,22 +40,8 @@
   import PromptSurface from './PromptSurface.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
-  import TraceApp from './TraceApp.svelte';
-  import VTextEditor from './VTextEditor.svelte';
-  import SettingsApp from './SettingsApp.svelte';
+  import AppHost from './AppHost.svelte';
   import { openFileDocument } from './vtext.js';
-  import FileBrowser from './FileBrowser.svelte';
-  import BrowserApp from './BrowserApp.svelte';
-  import EmailApp from './EmailApp.svelte';
-  import FeaturesApp from './FeaturesApp.svelte';
-  import TerminalApp from './TerminalApp.svelte';
-  import ComputeMonitorApp from './ComputeMonitorApp.svelte';
-  import PodcastApp from './PodcastApp.svelte';
-  import ImageApp from './ImageApp.svelte';
-  import AudioApp from './AudioApp.svelte';
-  import VideoApp from './VideoApp.svelte';
-  import PdfApp from './PdfApp.svelte';
-  import EpubApp from './EpubApp.svelte';
   import {
     windows,
     activeWindowId,
@@ -1685,151 +1671,24 @@
                   <button type="button" on:click={() => handleWindowFocus({ detail: { windowId: win.windowId } })}>Resume app</button>
                 </div>
               </div>
-            {:else if win.appId === 'files'}
-              <div class="app-content files-content" data-files-app>
-                <FileBrowser
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:opentextfile={handleOpenTextFile}
-                  on:openmediafile={handleOpenMediaFile}
-                />
-              </div>
-            {:else if win.appId === 'browser'}
-              <div class="app-content browser-content" data-browser-app-container>
-                <BrowserApp
-                  appContext={win.appContext}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:openvtext={handleOpenVTextFromContent}
-                />
-              </div>
-            {:else if win.appId === 'email'}
-              <div class="app-content email-content" data-email-window>
-                <EmailApp
-                  appContext={win.appContext}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                />
-              </div>
-            {:else if win.appId === 'features'}
-              <div class="app-content features-content" data-features-window>
-                <FeaturesApp
-                  appContext={win.appContext}
-                  {currentUser}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:openvtext={handleOpenVTextFromContent}
-                  on:opentrace={handleOpenTraceFromContent}
-                />
-              </div>
-            {:else if win.appId === 'terminal'}
-              <div class="app-content terminal-content" data-terminal-app>
-                <TerminalApp windowId={win.windowId} {authenticated} />
-              </div>
-            {:else if win.appId === 'compute-monitor'}
-              <div class="app-content compute-monitor-content" data-compute-monitor-window>
-                <ComputeMonitorApp
-                  windowId={win.windowId}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:clearsavedwindows={handleClearDesktopWindows}
-                  on:keepwindowonly={handleKeepWindowOnly}
-                />
-              </div>
-            {:else if win.appId === 'settings'}
-              <div class="app-content settings-content" data-settings-window>
-                <SettingsApp
-                  {currentUser}
-                  currentTheme={theme}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:resetdesktop={handleResetDesktop}
-                  on:opencomputemonitor={handleOpenComputeMonitor}
-                />
-              </div>
-            {:else if win.appId === 'vtext'}
-              <div class="app-content vtext-content" data-vtext-app>
-                <VTextEditor
-                  windowId={win.windowId}
-                  {currentUser}
-                  {authenticated}
-                  appContext={win.appContext}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'trace'}
-              <div class="app-content trace-content" data-trace-window>
-                <TraceApp
-                  {authenticated}
-                  appContext={win.appContext}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                />
-              </div>
-            {:else if win.appId === 'podcast'}
-              <div class="app-content podcast-content" data-podcast-window>
-                <PodcastApp
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:openvtext={handleOpenVTextFromContent}
-                />
-              </div>
-            {:else if win.appId === 'image'}
-              <div class="app-content image-content" data-image-window>
-                <ImageApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'audio'}
-              <div class="app-content audio-content" data-audio-window>
-                <AudioApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'video'}
-              <div class="app-content video-content" data-video-window>
-                <VideoApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'pdf'}
-              <div class="app-content pdf-content" data-pdf-window>
-                <PdfApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'epub'}
-              <div class="app-content epub-content" data-epub-window>
-                <EpubApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
             {:else}
-              <div class="app-content">
-                <div class="app-header">
-                  <span class="app-label">{win.title}</span>
-                </div>
-              </div>
+              <AppHost
+                {win}
+                {currentUser}
+                {authenticated}
+                {theme}
+                on:authexpired={() => dispatch('authexpired')}
+                on:authrequired={(event) => requestAuth(event.detail || {})}
+                on:opentextfile={handleOpenTextFile}
+                on:openmediafile={handleOpenMediaFile}
+                on:openvtext={handleOpenVTextFromContent}
+                on:opentrace={handleOpenTraceFromContent}
+                on:clearsavedwindows={handleClearDesktopWindows}
+                on:keepwindowonly={handleKeepWindowOnly}
+                on:resetdesktop={handleResetDesktop}
+                on:opencomputemonitor={handleOpenComputeMonitor}
+                on:contextchange={handleWindowAppContextChange}
+              />
             {/if}
           </FloatingWindow>
         {/if}
@@ -2098,51 +1957,6 @@
     color: #f8fbff;
   }
 
-  /* App content inside windows */
-  .app-content {
-    padding: 1rem;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: var(--choir-panel, #0d1628);
-    color: var(--choir-fg, #f7faff);
-  }
-
-  .vtext-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .terminal-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .trace-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .podcast-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .settings-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .compute-monitor-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
-  .features-content {
-    padding: 0;
-    background: var(--choir-panel, #0d1628);
-  }
-
   .suspended-app-content {
     align-items: center;
     justify-content: center;
@@ -2223,19 +2037,6 @@
     background: rgba(69, 10, 10, 0.94);
     box-shadow: 0 12px 32px rgba(248, 113, 113, 0.18);
     color: #fee2e2;
-  }
-
-  .app-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .app-label {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #c0c0d0;
   }
 
   @media (max-width: 768px) {

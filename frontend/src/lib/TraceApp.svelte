@@ -1399,8 +1399,8 @@
   .trace-app {
     display: grid;
     grid-template-columns: 292px minmax(0, 1fr);
-    background: #0a0d14;
-    color: #e2e8f0;
+    background: var(--choir-panel, #0a0d14);
+    color: var(--choir-fg, #e2e8f0);
     overscroll-behavior: contain;
     touch-action: pan-y;
   }
@@ -1427,9 +1427,9 @@
     min-height: 0;
     overflow: hidden;
     background:
-      linear-gradient(90deg, rgba(15, 23, 42, 0.34), transparent 96%),
-      rgba(9, 12, 19, 0.92);
-    box-shadow: 18px 0 36px rgba(0, 0, 0, 0.14);
+      linear-gradient(90deg, color-mix(in srgb, var(--choir-accent, #60a5fa) 10%, transparent), transparent 96%),
+      var(--choir-panel-soft, rgba(9, 12, 19, 0.92));
+    box-shadow: var(--choir-card-shadow, 18px 0 36px rgba(0, 0, 0, 0.14));
   }
 
   .trace-main {
@@ -2458,8 +2458,8 @@
       gap: 0.4rem;
       overflow-x: auto;
       padding: 0.55rem 0.65rem;
-      background: rgba(9, 12, 19, 0.96);
-      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+      background: var(--choir-panel-soft, rgba(9, 12, 19, 0.96));
+      box-shadow: var(--choir-card-shadow, 0 16px 32px rgba(0, 0, 0, 0.18));
       scrollbar-width: none;
     }
 
@@ -2472,16 +2472,16 @@
       min-height: 34px;
       border: 0;
       border-radius: var(--choir-radius-control-sm, 14px);
-      background: rgba(15, 23, 42, 0.74);
-      color: #cbd5e1;
+      background: var(--choir-control-bg, rgba(15, 23, 42, 0.74));
+      color: var(--choir-fg, #cbd5e1);
       cursor: pointer;
       font-weight: 820;
     }
 
     .mobile-trace-tabs button.selected {
-      background: rgba(37, 99, 235, 0.26);
-      box-shadow: 0 0 30px rgba(96, 165, 250, 0.18);
-      color: #eff6ff;
+      background: var(--choir-selected, rgba(37, 99, 235, 0.26));
+      box-shadow: var(--choir-control-shadow, 0 0 30px rgba(96, 165, 250, 0.18));
+      color: var(--choir-fg, #eff6ff);
     }
 
     .trace-app[data-mobile-panel='timeline'] .trace-sidebar,

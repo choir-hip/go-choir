@@ -7,7 +7,7 @@
     openWindows,
     restoreWindow,
     focusWindow,
-    APP_REGISTRY,
+    DESK_APPS,
     liveStatus as desktopLiveStatus,
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
@@ -30,11 +30,7 @@
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
 
-  const launcherAppIds = [
-    'files', 'browser', 'email', 'compute-monitor', 'vtext', 'trace', 'podcast',
-    'image', 'audio', 'video', 'pdf', 'epub', 'features', 'terminal', 'settings',
-  ];
-  const deskApps = launcherAppIds.map((id) => APP_REGISTRY.find((app) => app.id === id)).filter(Boolean);
+  const deskApps = DESK_APPS;
   const publicTicker = [
   ];
 

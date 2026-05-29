@@ -1,6 +1,6 @@
 # MissionGradient: App Building API Hard Cutover - v0
 
-Status: draft
+Status: execution checkpoint
 Target branch: `codex/redesign-hard-cutover-node-a`
 Primary acceptance host: `https://choir-ip.com`
 Protected host: `node-b` / `https://choir.news`
@@ -131,18 +131,35 @@ Stop only when:
 - Node A is deployed at the final commit and `https://choir-ip.com/health` reports that commit.
 - Build, focused Playwright, and Computer Use evidence are recorded.
 
+## App Addition API
+
+The hard cutover target is now documented in `frontend/src/lib/apps/README.md`.
+The minimal API is:
+
+1. Create one Svelte app component.
+2. Add one `ChoirAppDefinition` entry in `frontend/src/lib/apps/registry.ts`.
+3. Use the shared app primitives and `--choir-*` theme tokens inside the component.
+
+The registry projects the same definition into DeskSheet, desktop icons, mobile
+open-app switching, app window hosting, heavy-app metadata, and overview
+regression expectations. App components receive `authenticated`, `currentUser`,
+`appContext`, and `currentTheme` through `AppHost`; they should use logged-out
+fixtures only for public preview and dispatch `authrequired` for durable,
+private, spend-bearing, account, publish, send, import, upload, activate,
+rollback, roll-forward, or owner-scoped actions.
+
 ## Run Checkpoint & Resumption State
 
-status: draft
-last checkpoint: mission authored from owner QA after London Salmon Files toolbar regression
-current artifact state: Node A redesign branch has coherent app visuals but app wiring remains scattered
-what shipped: not yet executed
-what was proven: Files toolbar regression shows app-local CSS can escape the theme system
-unproven or partial claims: no app-building API exists yet; no registry-host migration is complete
-belief-state changes: maintainability is now a first-class redesign acceptance criterion
-remaining error field: scattered app wiring, duplicated launcher lists, app-local theming gaps
-highest-impact remaining uncertainty: how small the typed app contract can be while deleting all current switchboard wiring
-next executable probe: implement a thin AppDefinition/AppHost slice for one easy app and one complex app, then delete the corresponding `Desktop.svelte` render branches
+status: local cutover implemented, Node A deploy pending
+last checkpoint: registry/AppHost migration completed locally; documentation added before deploy
+current artifact state: app identity and shell participation derive from `frontend/src/lib/apps/registry.ts`
+what shipped: pending commit and Node A deploy for this slice
+what was proven: local build and focused Playwright passed before the final Trace tokenization pass; Computer Use verified registry-launched DeskSheet, mobile switcher, Settings, VText, Trace, Files, and Desktop Overview across the active themes
+unproven or partial claims: Node A health and deployed Playwright evidence still pending for the final commit
+belief-state changes: the durable app API is the registry plus shared primitives, not a second metadata layer beside old switchboards
+remaining error field: app-local CSS can still create token escapes when an app hand-rolls deep internals, but new app addition no longer requires scattered shell edits
+highest-impact remaining uncertainty: how aggressively to migrate older app internals onto primitives without broad visual churn
+next executable probe: rerun build/focused Playwright, commit scoped changes, push the branch, and verify `https://choir-ip.com/health` reports the final commit
 suggested resume goal string: use the Goal String above
-evidence artifact refs: owner screenshot of London Salmon Files toolbar regression, 2026-05-29
-rollback refs: branch history before this mission document
+evidence artifact refs: owner screenshot of London Salmon Files toolbar regression, 2026-05-29; Computer Use mobile observations for London Salmon Files/Trace/VText/Desktop Overview and Carbon Settings, 2026-05-29
+rollback refs: branch history before `frontend: hard cut app registry host`

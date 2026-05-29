@@ -17,59 +17,20 @@
  */
 
 import { writable, derived } from 'svelte/store';
+import {
+  APP_REGISTRY,
+  DESK_APPS,
+  DESKTOP_ICON_APPS,
+  HEAVY_APP_IDS,
+  getAppDefinition,
+  getAppIcon,
+  getAppWindowPreference,
+  isHeavyAppId,
+} from '../apps/registry';
 
 // ---- App registry ----
 
-export const APP_REGISTRY = [
-  { id: 'files', name: 'Files', icon: '📁', description: 'File Browser', singleton: true },
-  { id: 'browser', name: 'Web Lens', icon: '🌐', description: 'Web snapshots and imports', singleton: true },
-  { id: 'email', name: 'Email', icon: '✉️', description: 'Mail for your automatic computer', singleton: true, window: { desktop: { width: 1120, height: 720, minWidth: 760, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'compute-monitor', name: 'Compute Monitor', icon: '📊', description: 'User computer health and recovery', singleton: true, window: { desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'features', name: 'Features', icon: '🎬', description: 'Watch demos and import features', singleton: true, window: { desktop: { width: 1100, height: 760, minWidth: 760, minHeight: 540 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'terminal', name: 'Terminal', icon: '💻', description: 'Terminal', singleton: true },
-  { id: 'settings', name: 'Settings', icon: '⚙️', description: 'Desktop settings', singleton: true, window: { desktop: { width: 940, height: 720 } } },
-  { id: 'pdf', name: 'PDF', icon: '📄', description: 'PDF reader', singleton: false, window: { desktop: { width: 940, height: 720 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'epub', name: 'EPUB', icon: '📚', description: 'EPUB reader', singleton: false, window: { desktop: { width: 900, height: 700 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'image', name: 'Image', icon: '🖼️', description: 'Image viewer', singleton: false, window: { desktop: { width: 900, height: 680 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'video', name: 'Video', icon: '🎬', description: 'Video and YouTube player', singleton: false, window: { desktop: { width: 980, height: 720 }, compact: { minWidth: 280, minHeight: 420 } } },
-  { id: 'audio', name: 'Audio', icon: '🎧', description: 'Audio player', singleton: false, window: { desktop: { width: 760, height: 420 }, compact: { minWidth: 280, minHeight: 320 } } },
-  { id: 'podcast', name: 'Podcast', icon: '📡', description: 'Podcast feed player', singleton: false, window: { desktop: { width: 900, height: 660 }, compact: { minWidth: 280, minHeight: 420 } } },
-  {
-    id: 'vtext',
-    name: 'VText',
-    icon: '📝',
-    description: 'Versioned document editor',
-    singleton: false,
-    window: {
-      desktop: { width: 960, height: 720, minWidth: 680, minHeight: 520 },
-      compact: { minWidth: 280, minHeight: 420 },
-    },
-  },
-  { id: 'trace', name: 'Trace', icon: '🔎', description: 'Multiagent trace viewer', singleton: true, window: { desktop: { width: 1040, height: 680 } } },
-];
-
-/** The main apps shown as floating desktop icons */
-export const DESKTOP_ICON_APPS = APP_REGISTRY.filter((app) =>
-  ['files', 'browser', 'email', 'compute-monitor', 'terminal', 'settings', 'vtext', 'trace', 'podcast'].includes(app.id)
-);
-
-export const HEAVY_APP_IDS = new Set([
-  'browser',
-  'features',
-  'terminal',
-  'vtext',
-  'trace',
-  'podcast',
-  'image',
-  'audio',
-  'video',
-  'pdf',
-  'epub',
-]);
-
-export function isHeavyAppId(appId) {
-  return HEAVY_APP_IDS.has(appId);
-}
+export { APP_REGISTRY, DESK_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId };
 
 // ---- Window counter ----
 
@@ -82,18 +43,6 @@ const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
 const WINDOW_Z_INDEX_COMPACT_AT = 80;
-export function getAppDefinition(appId) {
-  return APP_REGISTRY.find((app) => app.id === appId) || null;
-}
-
-export function getAppIcon(appId) {
-  return getAppDefinition(appId)?.icon || '📱';
-}
-
-export function getAppWindowPreference(appId) {
-  return getAppDefinition(appId)?.window || {};
-}
-
 function generateWindowId() {
   windowCounter++;
   return `win-${Date.now()}-${windowCounter}`;
@@ -287,7 +236,7 @@ export const visibleWindows = derived(windows, ($windows) =>
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
     const definition = getAppDefinition(appId);
-    const allowMultiple = appContext.allowMultiple === true || definition?.singleton === false;
+    const allowMultiple = appContext.allowMultiple === true || definition?.window?.singleton === false;
     const existing = !allowMultiple ? $windows.find((w) => w.appId === appId && w.mode !== 'closed') : null;
     if (existing) {
       // Focus existing window and apply any launch context such as a deep link.

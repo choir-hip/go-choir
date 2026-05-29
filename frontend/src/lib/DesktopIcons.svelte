@@ -17,16 +17,13 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { APP_REGISTRY, windows, activeWindowId } from './stores/desktop.js';
+  import { DESKTOP_ICON_APPS, windows, activeWindowId } from './stores/desktop.js';
 
   export let hamburgerOpen = false;
 
   const dispatch = createEventDispatcher();
 
-  /** The 4 main apps shown in the left rail */
-  const railApps = APP_REGISTRY.filter((app) =>
-    ['files', 'browser', 'terminal', 'settings'].includes(app.id)
-  );
+  const railApps = DESKTOP_ICON_APPS;
 
   /** Check if an app has an open (non-closed) window */
   function isAppOpen($windows, appId) {

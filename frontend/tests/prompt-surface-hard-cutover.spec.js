@@ -1,42 +1,6 @@
 import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
-const DESK_APP_IDS = [
-  'files',
-  'browser',
-  'email',
-  'compute-monitor',
-  'vtext',
-  'trace',
-  'podcast',
-  'image',
-  'audio',
-  'video',
-  'pdf',
-  'epub',
-  'features',
-  'terminal',
-  'settings',
-];
-
-const THEMED_APP_SHELLS = [
-  '[data-files-app]',
-  '[data-browser-app-container]',
-  '[data-email-window]',
-  '[data-compute-monitor-window]',
-  '[data-vtext-app]',
-  '[data-trace-window]',
-  '[data-podcast-window]',
-  '[data-image-window]',
-  '[data-audio-window]',
-  '[data-video-window]',
-  '[data-pdf-window]',
-  '[data-epub-window]',
-  '[data-features-window]',
-  '[data-terminal-app]',
-  '[data-settings-window]',
-];
-
 function parseRgb(value) {
   const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (match) return match.slice(1, 4).map(Number);
@@ -49,6 +13,12 @@ async function openDeskApp(page, appId) {
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet]')).toBeVisible();
   await page.locator(`[data-desk-sheet-app][data-desk-app-id="${appId}"]`).click();
+}
+
+async function deskAppIds(page) {
+  return page.locator('[data-desk-sheet-app]').evaluateAll((buttons) =>
+    buttons.map((button) => button.getAttribute('data-desk-app-id')).filter(Boolean)
+  );
 }
 
 test('logged-out shell uses PromptSurface, DeskSheet, and fixture previews', async ({ page }) => {
@@ -180,28 +150,24 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await expect(page.locator('[data-desk-sheet]')).toBeVisible();
   const deskOverflow = await page.locator('[data-desk-sheet]').evaluate((el) => el.scrollHeight - el.clientHeight);
   expect(deskOverflow).toBeLessThanOrEqual(1);
-  for (const appId of DESK_APP_IDS) {
+  const appIds = await deskAppIds(page);
+  expect(appIds.length).toBeGreaterThanOrEqual(15);
+  expect(new Set(appIds).size).toBe(appIds.length);
+  for (const appId of appIds) {
     await expect(page.locator(`[data-desk-sheet-app][data-desk-app-id="${appId}"]`), appId).toBeVisible();
   }
   await page.locator('[data-desk-sheet-close]').click();
 
-  for (const appId of DESK_APP_IDS) {
+  for (const appId of appIds) {
     await openDeskApp(page, appId);
   }
 
-  await expect(page.locator('[data-files-app]')).toHaveCount(1);
-  await expect(page.locator('[data-browser-app-container]')).toHaveCount(1);
-  await expect(page.locator('[data-email-window]')).toHaveCount(1);
-  await expect(page.locator('[data-compute-monitor-window]')).toHaveCount(1);
-  expect(await page.locator('[data-vtext-app]').count()).toBeGreaterThanOrEqual(1);
-  await expect(page.locator('[data-trace-window]')).toHaveCount(1);
-  await expect(page.locator('[data-podcast-window]')).toHaveCount(1);
-  await expect(page.locator('[data-image-window]')).toHaveCount(1);
-  await expect(page.locator('[data-audio-window]')).toHaveCount(1);
-  await expect(page.locator('[data-video-window]')).toHaveCount(1);
-  await expect(page.locator('[data-pdf-window]')).toHaveCount(1);
-  await expect(page.locator('[data-epub-window]')).toHaveCount(1);
-  await expect(page.locator('[data-features-window]')).toHaveCount(1);
+  const appHostIds = await page.locator('[data-app-host]').evaluateAll((hosts) =>
+    hosts.map((host) => host.getAttribute('data-app-id')).filter(Boolean)
+  );
+  for (const appId of appIds) {
+    expect(appHostIds, `${appId} app host`).toContain(appId);
+  }
   await expect(page.locator('[data-terminal-preview]')).toBeVisible();
   await expect(page.locator('[data-settings-window]')).toHaveCount(1);
 
@@ -220,7 +186,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
     await page.locator(`[data-settings-window] [data-theme-preset="${themeId}"]`).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme-id', themeId);
     await expect(page.locator('[data-settings-theme-validation]')).toContainText(`${themeName}: valid config`);
-    const sample = await page.evaluate((selectors) => {
+    const sample = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
       return {
         vars: {
@@ -241,29 +207,28 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           color: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).color,
         },
         vtextHeadingColor: getComputedStyle(document.querySelector('[data-vtext-editor-area] h1')).color,
-        shells: selectors.map((selector) => {
-          const element = document.querySelector(selector);
+        shells: [...document.querySelectorAll('[data-app-host]')].map((element) => {
           const style = element ? getComputedStyle(element) : null;
           return {
-            selector,
+            appId: element.getAttribute('data-app-id') || '',
             exists: !!element,
             backgroundColor: style?.backgroundColor || '',
             color: style?.color || '',
           };
         }),
       };
-    }, THEMED_APP_SHELLS);
+    });
     expect(sample.vars).toMatchObject(expectedVars);
     for (const shell of sample.shells) {
-      expect(shell.exists, `${themeId} ${shell.selector} exists`).toBe(true);
+      expect(shell.exists, `${themeId} ${shell.appId} exists`).toBe(true);
       const rgb = parseRgb(shell.backgroundColor);
-      expect(rgb, `${themeId} ${shell.selector} background ${shell.backgroundColor}`).not.toBeNull();
+      expect(rgb, `${themeId} ${shell.appId} background ${shell.backgroundColor}`).not.toBeNull();
       if (themeId === 'london-salmon') {
-        expect(rgb[0], `${shell.selector} red channel`).toBeGreaterThanOrEqual(250);
-        expect(rgb[1], `${shell.selector} green channel`).toBeGreaterThanOrEqual(235);
-        expect(rgb[2], `${shell.selector} blue channel`).toBeGreaterThanOrEqual(230);
+        expect(rgb[0], `${shell.appId} red channel`).toBeGreaterThanOrEqual(250);
+        expect(rgb[1], `${shell.appId} green channel`).toBeGreaterThanOrEqual(235);
+        expect(rgb[2], `${shell.appId} blue channel`).toBeGreaterThanOrEqual(230);
       } else {
-        expect(Math.max(...rgb), `${themeId} ${shell.selector} should not retain light salmon panel`).toBeLessThan(245);
+        expect(Math.max(...rgb), `${themeId} ${shell.appId} should not retain light salmon panel`).toBeLessThan(245);
       }
     }
     expect(sample.vtextFont).toContain('Georgia');

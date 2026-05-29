@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { activeWindowId, focusWindow, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
+  import { activeWindowId, focusWindow, isHeavyAppId, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
   import { AuthRequiredError } from './auth.js';
   import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
@@ -10,8 +10,6 @@
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
-  const HEAVY_APPS = new Set(['browser', 'features', 'terminal', 'vtext', 'trace', 'podcast', 'image', 'audio', 'video', 'pdf', 'epub']);
-
   let status = null;
   let loading = false;
   let error = '';
@@ -24,7 +22,7 @@
   $: runtime = status?.runtime || {};
   $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
   $: visibleWindows = currentWindows.filter((win) => win.mode !== 'minimized');
-  $: heavyWindows = visibleWindows.filter((win) => HEAVY_APPS.has(win.appId));
+  $: heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
   $: suspendedWindows = visibleWindows.filter((win) => win.restoreSuspended);
   $: healthState = !status
     ? 'loading'
@@ -265,7 +263,7 @@
             <span class="window-icon">{win.icon || '□'}</span>
             <span class="window-copy">
               <strong>{win.title}</strong>
-              <small>{win.appId} · {win.mode}{HEAVY_APPS.has(win.appId) ? ' · heavy' : ''}{win.restoreSuspended ? ' · suspended' : ''}</small>
+              <small>{win.appId} · {win.mode}{isHeavyAppId(win.appId) ? ' · heavy' : ''}{win.restoreSuspended ? ' · suspended' : ''}</small>
             </span>
           </button>
         {/each}
