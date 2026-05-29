@@ -163,8 +163,13 @@
     if (appId !== 'email') return null;
     const draftId = (params.get('draft') || '').trim();
     const approvalToken = (params.get('approval') || '').trim();
+    if (!draftId && !approvalToken) {
+      clearConsumedAppIntentFromURL();
+      return null;
+    }
     return {
       kind: 'app_launch',
+      source: 'url',
       appId: 'email',
       appName: 'Email',
       icon: '✉️',
@@ -174,6 +179,18 @@
         windowTitle: 'Email',
       },
     };
+  }
+
+  function clearConsumedAppIntentFromURL(intent = null) {
+    if (typeof window === 'undefined') return;
+    if (intent && intent.source !== 'url') return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('app')) return;
+    url.searchParams.delete('app');
+    url.searchParams.delete('draft');
+    url.searchParams.delete('approval');
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(window.history.state, '', next || '/');
   }
 
   async function handleAuthBegin(event) {
@@ -195,6 +212,7 @@
       const session = await checkSession();
       if (session?.authenticated) {
         maybeReplayPendingIntent(pendingAuthIntent);
+        clearConsumedAppIntentFromURL(pendingAuthIntent);
         authOverlayOpen = false;
         pendingAuthIntent = null;
       }
@@ -279,6 +297,7 @@
       if (!initialIntent) return;
       if (session?.authenticated) {
         maybeReplayPendingIntent(initialIntent);
+        clearConsumedAppIntentFromURL(initialIntent);
       } else {
         pendingAuthIntent = initialIntent;
         authOverlayOpen = true;

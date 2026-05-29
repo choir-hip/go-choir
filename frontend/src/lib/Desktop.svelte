@@ -225,47 +225,19 @@
       {
         windowId: 'public-preview-vtext',
         appId: 'vtext',
-        title: 'VText Preview',
+        title: 'Choir Preview',
         icon: getAppIcon('vtext'),
         x: 152,
         y: 42,
         width: 640,
         height: 520,
         mode: 'normal',
-        zIndex: 2,
-        restoredGeometry: null,
-        appContext: { preview: true, windowTitle: 'VText Preview' },
-      },
-      {
-        windowId: 'public-preview-trace',
-        appId: 'trace',
-        title: 'Trace Preview',
-        icon: getAppIcon('trace'),
-        x: 420,
-        y: 116,
-        width: 720,
-        height: 500,
-        mode: 'normal',
-        zIndex: 3,
-        restoredGeometry: null,
-        appContext: { preview: true, windowTitle: 'Trace Preview' },
-      },
-      {
-        windowId: 'public-preview-files',
-        appId: 'files',
-        title: 'Files Preview',
-        icon: getAppIcon('files'),
-        x: 104,
-        y: 188,
-        width: 520,
-        height: 420,
-        mode: 'minimized',
         zIndex: 1,
         restoredGeometry: null,
-        appContext: { preview: true, windowTitle: 'Files Preview' },
+        appContext: { preview: true, windowTitle: 'Choir Preview' },
       },
     ];
-    setWindows(previewWindows, 'public-preview-trace');
+    setWindows(previewWindows, 'public-preview-vtext');
   }
 
   async function startAuthenticatedDesktop() {
@@ -327,7 +299,7 @@
 
   function shouldApplyRemoteDesktopStateUpdate() {
     if (typeof document === 'undefined') return true;
-    return document.visibilityState === 'hidden';
+    return document.visibilityState === 'hidden' || !isDrivingSession();
   }
 
   function desktopLiveEventAffectsSharedState(message) {
@@ -423,9 +395,9 @@
     const payload = liveEventPayload(message);
     observeRemoteDriverSession(payload.source_session_id || '');
     if (!desktopLiveEventAffectsSharedState(message)) return;
-    // Desktop layout is viewport- and interaction-sensitive. A visible tab may
-    // merge shared app identity/order, but remote saves must not seize local
-    // focus or geometry. Hidden tabs can safely reload their full snapshot.
+    // Desktop layout is viewport- and interaction-sensitive. Passive sessions
+    // should converge on the latest owner state; a session with a current local
+    // driver lease keeps its in-progress foreground geometry until it saves.
     if (shouldApplyRemoteDesktopStateUpdate()) {
       void loadDesktopState();
     } else {

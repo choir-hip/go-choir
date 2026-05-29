@@ -101,6 +101,26 @@ test('single window position and size restored after reload', async ({
   expect(Math.abs(statesAfter[0].height - statesBefore[0].height)).toBeLessThanOrEqual(5);
 });
 
+test('stale bare email URL intent does not override restored desktop state', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  await openApp(page, 'vtext');
+  await page.locator('[data-vtext-app]').last().waitFor({ state: 'visible', timeout: 10000 });
+  await page.waitForTimeout(1000);
+
+  await page.goto(`${BASE_URL}?app=email`);
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.waitForTimeout(1500);
+
+  await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-email-app]')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/app=email/);
+});
+
 // ---------------------------------------------------------------
 // Test: multiple windows with z-index restored after reload
 // (VAL-SHELL-022)

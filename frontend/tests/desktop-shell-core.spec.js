@@ -183,6 +183,18 @@ test('logged-out desktop can open read-only Podcast without the auth wall', asyn
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
+test('logged-out desktop starts with one explanatory VText window', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
+
+  await expect(page.locator('[data-window]')).toHaveCount(1);
+  await expect(page.locator('[data-window]').first()).toHaveAttribute('data-window-id', 'public-preview-vtext');
+  await expect(page.locator('[data-vtext-editor]').first()).toBeVisible();
+  await expect(page.locator('[data-trace-app]')).toHaveCount(0);
+  await expect(page.locator('[data-files-app]')).toHaveCount(0);
+});
+
 test('logged-out desktop opens Browser and Trace as read shells before auth', async ({ page }) => {
   const protectedAppRequests = [];
   page.on('request', (request) => {

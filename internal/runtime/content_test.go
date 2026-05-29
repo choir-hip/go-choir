@@ -285,11 +285,6 @@ func TestPromptBarContextualURLRoutesToVText(t *testing.T) {
 	}
 }
 
-func strconvQuote(s string) string {
-	data, _ := json.Marshal(s)
-	return string(data)
-}
-
 func provenanceHasRung(provenance map[string]any, name string) bool {
 	rungs, ok := provenance["rungs"].([]any)
 	if !ok {

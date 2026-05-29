@@ -23,10 +23,13 @@ func normalizeDesktopSessionID(sessionID string) string {
 	return sessionID
 }
 
-// GetDesktopStateForSession returns shared desktop app instances with
-// placement/focus resolved for the current browser session. If no session-aware
-// records exist yet, it falls back to the legacy desktop workspace row so
-// existing computers keep their saved windows through the hard cutover.
+// GetDesktopStateForSession returns the owner's latest shared desktop app
+// instances, placement, and focus. Session IDs are retained as provenance for
+// driver leases and live events, but they are not authority boundaries for the
+// primary user desktop: one owner's sessions should converge on the same
+// visible computer state. If no session-aware records exist yet, it falls back
+// to the legacy desktop workspace row so existing computers keep their saved
+// windows through the hard cutover.
 func (s *Store) GetDesktopStateForSession(ctx context.Context, ownerID, desktopID, sessionID string) (types.DesktopState, error) {
 	desktopID = normalizeDesktopID(desktopID)
 	sessionID = normalizeDesktopSessionID(sessionID)
@@ -41,8 +44,10 @@ func (s *Store) GetDesktopStateForSession(ctx context.Context, ownerID, desktopI
 	return s.getLegacyDesktopState(ctx, ownerID, desktopID)
 }
 
-// SaveDesktopStateForSession stores shared app identity/order separately from
-// session-local presentation. Passive sessions only update their presence row;
+// SaveDesktopStateForSession stores the owner's canonical app roster, active
+// focus, and placement. The saving session is recorded as provenance/driver,
+// but its placement replaces prior session placements so the owner's devices
+// converge on one desktop. Passive sessions only update their presence row;
 // they cannot overwrite the shared app roster, active focus, or placement.
 func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.DesktopState, session types.DesktopSessionContext) error {
 	desktopID := normalizeDesktopID(state.DesktopID)
@@ -100,10 +105,9 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 		return fmt.Errorf("replace desktop app instances: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM desktop_window_placements WHERE owner_id = ? AND desktop_id = ? AND session_id = ?`,
+		`DELETE FROM desktop_window_placements WHERE owner_id = ? AND desktop_id = ?`,
 		state.OwnerID,
 		desktopID,
-		sessionID,
 	); err != nil {
 		return fmt.Errorf("replace desktop window placements: %w", err)
 	}
@@ -319,7 +323,7 @@ func (s *Store) getSessionAwareDesktopState(ctx context.Context, ownerID, deskto
 			if placement.sessionID == sessionID {
 				hadSessionPlacement = true
 			}
-			if placement.localFocused && placement.sessionID == sessionID {
+			if placement.localFocused {
 				activeWindowID = row.appInstanceID
 			}
 			if placement.updatedAt.After(updatedAt) {
@@ -367,9 +371,6 @@ type desktopPlacement struct {
 }
 
 func (s *Store) findDesktopPlacement(ctx context.Context, ownerID, desktopID, sessionID, appInstanceID string) (desktopPlacement, bool, error) {
-	if p, found, err := s.queryDesktopPlacement(ctx, ownerID, desktopID, sessionID, appInstanceID); err != nil || found {
-		return p, found, err
-	}
 	return s.queryLatestDesktopPlacement(ctx, ownerID, desktopID, appInstanceID)
 }
 

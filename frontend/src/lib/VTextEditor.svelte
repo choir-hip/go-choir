@@ -37,6 +37,7 @@
   let loading = true;
   let submitting = false;
   let agentPending = false;
+  let agentRunId = '';
   let error = '';
   let saveStatus = '';
   let currentDoc = null;
@@ -550,6 +551,14 @@
     return hasAppAgentRevision() ? 'Revising…' : 'Writing first draft…';
   }
 
+  function applyDocumentWorkState(doc) {
+    agentPending = !!doc?.agent_revision_pending;
+    agentRunId = doc?.agent_revision_run_id || '';
+    if (agentPending) {
+      saveStatus = synthStatusLabel();
+    }
+  }
+
   function clearNewVersionIndicator() {
     pendingHeadRevisionId = '';
     newVersionAvailable = false;
@@ -650,6 +659,7 @@
 
   async function reloadDocument(preferredRevisionId = '') {
     currentDoc = await getDocument(currentDoc.doc_id);
+    applyDocumentWorkState(currentDoc);
     latestHeadRevisionId = currentDoc.current_revision_id || latestHeadRevisionId;
     await refreshRevisions(currentDoc.doc_id, preferredRevisionId);
   }
@@ -812,6 +822,7 @@
       case 'snapshot':
         latestHeadRevisionId = event.current_revision_id || latestHeadRevisionId;
         agentPending = !!event.pending;
+        agentRunId = event.loop_id || '';
         if (agentPending) {
           saveStatus = synthStatusLabel();
         }
@@ -821,11 +832,13 @@
         return;
       case 'synth_started':
         agentPending = true;
+        agentRunId = event.loop_id || agentRunId;
         error = '';
         saveStatus = synthStatusLabel();
         return;
       case 'synth_completed':
         agentPending = false;
+        agentRunId = '';
         return;
       case 'revision_created':
         latestHeadRevisionId = event.current_revision_id || event.revision_id || latestHeadRevisionId;
@@ -833,10 +846,12 @@
       case 'head_changed':
         latestHeadRevisionId = event.current_revision_id || event.revision_id || latestHeadRevisionId;
         agentPending = false;
+        agentRunId = '';
         await applyHeadChange(latestHeadRevisionId);
         return;
       case 'synth_failed':
         agentPending = false;
+        agentRunId = '';
         error = event.error || 'Agent revision failed';
         saveStatus = 'Revision failed';
         return;
@@ -849,6 +864,7 @@
     loading = true;
     submitting = false;
     agentPending = false;
+    agentRunId = '';
     error = '';
     saveStatus = '';
     currentDoc = null;
@@ -903,10 +919,13 @@
         currentDoc = await getDocument(appContext.docId);
         latestHeadRevisionId = currentDoc.current_revision_id || '';
         await refreshRevisions(currentDoc.doc_id);
+        applyDocumentWorkState(currentDoc);
         if (revisions.length === 0) {
           editorValue = initialValue || '';
-          saveStatus = initialValue ? 'Loaded document content' : 'Blank document ready';
-        } else {
+          if (!agentPending) {
+            saveStatus = initialValue ? 'Loaded document content' : 'Blank document ready';
+          }
+        } else if (!agentPending) {
           saveStatus = 'Document loaded';
         }
       } else {
@@ -1113,10 +1132,11 @@
     try {
       await ensureCurrentRevisionSaved('Saving user version…');
       saveStatus = 'Submitting revise event…';
-      await submitAgentRevision(currentDoc.doc_id, {
+      const response = await submitAgentRevision(currentDoc.doc_id, {
         intent: 'revise',
       });
       agentPending = true;
+      agentRunId = response?.run_id || agentRunId;
       saveStatus = synthStatusLabel();
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -1139,6 +1159,7 @@
     try {
       await cancelAgentRevision(currentDoc.doc_id);
       agentPending = false;
+      agentRunId = '';
       pendingHeadRevisionId = '';
       saveStatus = 'Revision cancelled. You can revise again from the current version.';
     } catch (err) {
@@ -1483,6 +1504,22 @@
       </div>
     </div>
 
+    {#if agentPending}
+      <div
+        class="work-banner"
+        data-vtext-working
+        data-vtext-agent-run-id={agentRunId || undefined}
+        role="status"
+        aria-live="polite"
+      >
+        <span class="work-pulse" aria-hidden="true"></span>
+        <span class="work-copy">{synthStatusLabel()}</span>
+        {#if agentRunId}
+          <span class="work-run">{shortHash(agentRunId)}</span>
+        {/if}
+      </div>
+    {/if}
+
     <div class="document-body" data-vtext-document-body>
       {#if publishResult}
         <section
@@ -1676,6 +1713,58 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  .work-banner {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.5rem;
+    padding: 0.52rem 0.78rem;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+    background: rgba(8, 47, 73, 0.58);
+    color: #dbeafe;
+    font-size: 0.78rem;
+    font-weight: 760;
+  }
+
+  .work-pulse {
+    width: 0.72rem;
+    height: 0.72rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #38bdf8;
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.56);
+    animation: work-pulse 1.1s ease-out infinite;
+  }
+
+  .work-copy {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .work-run {
+    margin-left: auto;
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(191, 219, 254, 0.72);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+
+  @keyframes work-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.58);
+    }
+    100% {
+      box-shadow: 0 0 0 0.55rem rgba(56, 189, 248, 0);
+    }
   }
 
   .nav-version {

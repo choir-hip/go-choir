@@ -3600,6 +3600,37 @@ func TestVTextDocumentStreamSendsSnapshot(t *testing.T) {
 	}
 }
 
+func TestVTextDocumentResponseReportsPendingAgentMutation(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	docID, _ := createDocWithUserRevision(t, h)
+	if err := s.CreateAgentMutation(context.Background(), store.AgentMutation{
+		DocID:     docID,
+		RunID:     "run-vtext-pending-ui",
+		OwnerID:   "user-1",
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID, nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextDocument(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get document: status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp vtextDocumentResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode document response: %v", err)
+	}
+	if !resp.AgentRevisionPending {
+		t.Fatalf("agent_revision_pending = false, want true; response=%+v", resp)
+	}
+	if resp.AgentRevisionRunID != "run-vtext-pending-ui" {
+		t.Fatalf("agent_revision_run_id = %q, want run-vtext-pending-ui", resp.AgentRevisionRunID)
+	}
+}
+
 func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)

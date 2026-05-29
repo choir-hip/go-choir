@@ -455,7 +455,7 @@ func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 	}
 }
 
-func TestDesktopStateSessionPlacementDoesNotCrossDevices(t *testing.T) {
+func TestDesktopStateSessionsConvergeOnLatestDriverPlacement(t *testing.T) {
 	_, h := testAPISetup(t)
 
 	saveForSession := func(sessionID string, x int) {
@@ -509,10 +509,10 @@ func TestDesktopStateSessionPlacementDoesNotCrossDevices(t *testing.T) {
 		return resp.Windows[0].Geometry.X
 	}
 
-	if got := getX("desktop-session"); got != 20 {
-		t.Fatalf("desktop session x = %d, want 20", got)
+	if got := getX("desktop-session"); got != 360 {
+		t.Fatalf("desktop session x = %d, want latest synced placement 360", got)
 	}
 	if got := getX("mobile-session"); got != 360 {
-		t.Fatalf("mobile session x = %d, want 360", got)
+		t.Fatalf("mobile session x = %d, want latest synced placement 360", got)
 	}
 }

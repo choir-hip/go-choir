@@ -48,12 +48,14 @@ test('covered product apps do not expose manual refresh or reload sync controls'
   }
 });
 
-test('desktop live state cannot seize the visible foreground window stack', async () => {
+test('desktop live state syncs passive sessions but protects the local driver', async () => {
   const source = await readRelative('src/lib/Desktop.svelte');
   const promptSurfaceSource = await readRelative('src/lib/PromptSurface.svelte');
 
   expect(source).toContain('function handleRemoteDesktopStateUpdate(message = {})');
   expect(source).toContain("document.visibilityState === 'hidden'");
+  expect(source).toContain('!isDrivingSession()');
+  expect(source).toContain('void loadDesktopState();');
   expect(source).toContain('mergeRemoteDesktopSharedState();');
   expect(source).toContain('observeRemoteDriverSession');
   expect(source).toContain('handleRemoteDesktopStateUpdate(message);');

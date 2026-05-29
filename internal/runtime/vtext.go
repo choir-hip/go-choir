@@ -91,15 +91,17 @@ type vtextShortcutFile struct {
 
 // vtextDocumentResponse is the JSON response for GET /api/vtext/documents/{id}.
 type vtextDocumentResponse struct {
-	DocID             string `json:"doc_id"`
-	OwnerID           string `json:"owner_id"`
-	Title             string `json:"title"`
-	CurrentRevisionID string `json:"current_revision_id,omitempty"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
-	RevisionCount     int    `json:"revision_count"`
-	LastEditor        string `json:"last_editor,omitempty"`
-	LastAuthorKind    string `json:"last_author_kind,omitempty"`
+	DocID                string `json:"doc_id"`
+	OwnerID              string `json:"owner_id"`
+	Title                string `json:"title"`
+	CurrentRevisionID    string `json:"current_revision_id,omitempty"`
+	CreatedAt            string `json:"created_at"`
+	UpdatedAt            string `json:"updated_at"`
+	RevisionCount        int    `json:"revision_count"`
+	LastEditor           string `json:"last_editor,omitempty"`
+	LastAuthorKind       string `json:"last_author_kind,omitempty"`
+	AgentRevisionPending bool   `json:"agent_revision_pending,omitempty"`
+	AgentRevisionRunID   string `json:"agent_revision_run_id,omitempty"`
 }
 
 // vtextDocumentStreamEvent is the hidden transport envelope sent over the
@@ -610,14 +612,25 @@ func (h *APIHandler) handleVTextGetDocument(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: get pending mutation for document: %v", err)
+	}
 
 	writeAPIJSON(w, http.StatusOK, vtextDocumentResponse{
-		DocID:             doc.DocID,
-		OwnerID:           doc.OwnerID,
-		Title:             doc.Title,
-		CurrentRevisionID: doc.CurrentRevisionID,
-		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		DocID:                doc.DocID,
+		OwnerID:              doc.OwnerID,
+		Title:                doc.Title,
+		CurrentRevisionID:    doc.CurrentRevisionID,
+		CreatedAt:            doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:            doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		AgentRevisionPending: pendingMutation != nil,
+		AgentRevisionRunID: func() string {
+			if pendingMutation == nil {
+				return ""
+			}
+			return pendingMutation.RunID
+		}(),
 	})
 }
 
