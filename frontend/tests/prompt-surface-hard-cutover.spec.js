@@ -190,7 +190,11 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           bg: root.getPropertyValue('--choir-bg').trim(),
           accent: root.getPropertyValue('--choir-accent').trim(),
           panel: root.getPropertyValue('--choir-panel').trim(),
+          blur: root.getPropertyValue('--choir-blur').trim(),
+          uiFont: root.getPropertyValue('--choir-font-ui').trim(),
         },
+        vtextFont: getComputedStyle(document.querySelector('[data-vtext-editor]')).fontFamily,
+        settingsFont: getComputedStyle(document.querySelector('[data-settings-window]')).fontFamily,
         shells: selectors.map((selector) => {
           const element = document.querySelector(selector);
           const style = element ? getComputedStyle(element) : null;
@@ -209,18 +213,24 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
       const rgb = parseRgb(shell.backgroundColor);
       expect(rgb, `${themeId} ${shell.selector} background ${shell.backgroundColor}`).not.toBeNull();
       if (themeId === 'london-salmon') {
-        expect(rgb[0], `${shell.selector} red channel`).toBeGreaterThanOrEqual(245);
-        expect(rgb[1], `${shell.selector} green channel`).toBeGreaterThanOrEqual(215);
-        expect(rgb[2], `${shell.selector} blue channel`).toBeGreaterThanOrEqual(210);
+        expect(rgb[0], `${shell.selector} red channel`).toBeGreaterThanOrEqual(250);
+        expect(rgb[1], `${shell.selector} green channel`).toBeGreaterThanOrEqual(235);
+        expect(rgb[2], `${shell.selector} blue channel`).toBeGreaterThanOrEqual(230);
       } else {
         expect(Math.max(...rgb), `${themeId} ${shell.selector} should not retain light salmon panel`).toBeLessThan(245);
       }
     }
+    expect(sample.vtextFont).toContain('Georgia');
+    if (themeId === 'london-salmon') {
+      expect(sample.vars.blur).toBe('0px');
+      expect(sample.vars.uiFont).toContain('Georgia');
+      expect(sample.settingsFont).toContain('Georgia');
+    }
   };
 
   await assertThemeOnShells('futuristic-noir', { bg: '#050912', accent: '#6D8DFF', panel: '#0D1628' });
-  await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#F0C84B', panel: '#151719' });
-  await assertThemeOnShells('london-salmon', { bg: '#F2B7AA', accent: '#B65045', panel: '#FFE1DA' });
+  await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#FFD86B', panel: '#151719', blur: '4px' });
+  await assertThemeOnShells('london-salmon', { bg: '#F8CFC6', accent: '#B95A50', panel: '#FFF0EA', blur: '0px' });
 });
 
 test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({ page, browser }) => {

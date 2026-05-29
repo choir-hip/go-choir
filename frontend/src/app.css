@@ -15,6 +15,22 @@ body {
   color: var(--choir-fg);
 }
 
+:root[data-theme-id='carbon-fiber-kintsugi'] body {
+  background:
+    linear-gradient(115deg, rgba(255, 232, 164, .09), transparent 16%, transparent 78%, rgba(255, 232, 164, .07)),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 3px, transparent 3px 9px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.032) 0 3px, transparent 3px 9px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.34) 0 1px, transparent 1px 7px),
+    var(--choir-bg);
+}
+
+:root[data-theme-id='london-salmon'] body {
+  background:
+    linear-gradient(rgba(122, 69, 52, .04) 1px, transparent 1px),
+    var(--choir-bg);
+  background-size: 100% 28px, auto;
+}
+
 .window,
 .floating-window,
 [data-window],
@@ -22,6 +38,18 @@ body {
   background: var(--choir-panel, #0d1628) !important;
   color: var(--choir-fg, #f7faff) !important;
   border-color: transparent !important;
+}
+
+:root[data-theme-id='carbon-fiber-kintsugi'] :is(.window, .floating-window, [data-window], [data-floating-window]) {
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.58),
+    0 0 18px rgba(255, 216, 107, 0.16) !important;
+}
+
+:root[data-theme-id='london-salmon'] :is(.window, .floating-window, [data-window], [data-floating-window]) {
+  box-shadow:
+    0 8px 16px rgba(91, 58, 40, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset !important;
 }
 
 .window :is(.titlebar, [data-window-titlebar]),
@@ -198,6 +226,71 @@ body {
   color: var(--choir-accent-2, #45d7ff) !important;
 }
 
+[data-vtext-app],
+[data-vtext-editor],
+.vtext-editor,
+.vtext-editor :is(h1, h2, h3, p, blockquote, li, textarea, [contenteditable='true']) {
+  font-family: Georgia, 'Times New Roman', ui-serif, serif !important;
+}
+
+:root[data-theme-id='london-salmon'] :is(
+  body,
+  .window,
+  .floating-window,
+  .titlebar,
+  .titlvtext,
+  .app-content,
+  .desk-sheet,
+  .prompt-surface,
+  .desktop-icons,
+  .floating-desktop-icons,
+  .settings-app,
+  .desktop-overview
+) {
+  font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
+}
+
+:root[data-theme-id='london-salmon'] :is(
+  h1,
+  h2,
+  h3,
+  h4,
+  .desktop-title,
+  .app-label,
+  .window-title,
+  .titlvtext,
+  .settings-app .section-title,
+  .theme-preset,
+  .desk-sheet-title,
+  .prompt-status
+) {
+  font-family: var(--choir-font-display, Georgia, 'Times New Roman', ui-serif, serif) !important;
+}
+
+:root[data-theme-id='carbon-fiber-kintsugi'] :is(
+  .prompt-surface,
+  .desk-sheet,
+  .window,
+  .floating-window,
+  .app-content,
+  .panel,
+  .card
+) {
+  backdrop-filter: blur(4px) !important;
+}
+
+:root[data-theme-id='london-salmon'] :is(
+  .prompt-surface,
+  .desk-sheet,
+  .window,
+  .floating-window,
+  .app-content,
+  .panel,
+  .card
+) {
+  backdrop-filter: none !important;
+}
+
 .app-content :is(button, input, textarea, select) {
   border-color: transparent !important;
   outline: 0;
@@ -251,14 +344,13 @@ body {
 }
 
 :root[data-theme-id='carbon-fiber-kintsugi'] body::before {
-  opacity: 0.42;
+  opacity: 0.54;
   background:
-    repeating-linear-gradient(45deg, rgba(255,255,255,.025) 0 8px, transparent 8px 16px),
-    repeating-linear-gradient(-45deg, rgba(255,255,255,.018) 0 8px, transparent 8px 16px);
+    linear-gradient(115deg, rgba(255, 232, 164, .08), transparent 18%, transparent 76%, rgba(255, 232, 164, .06));
 }
 
 :root[data-theme-id='london-salmon'] body::before {
-  opacity: 0.16;
-  background-image: radial-gradient(rgba(159, 69, 62, .18) 1px, transparent 1px);
-  background-size: 7px 7px;
+  opacity: 0.12;
+  background: linear-gradient(90deg, rgba(122, 69, 52, .08) 1px, transparent 1px);
+  background-size: 64px 100%;
 }
