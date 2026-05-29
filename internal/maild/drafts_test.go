@@ -158,6 +158,13 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 	if len(messages) != 1 || messages[0].Subject != "Approved" {
 		t.Fatalf("sent messages = %+v", messages)
 	}
+	drafts, err := store.ListDrafts(req.Context(), "user-root", 10)
+	if err != nil {
+		t.Fatalf("ListDrafts: %v", err)
+	}
+	if len(drafts) != 0 {
+		t.Fatalf("sent draft still listed in Drafts: %+v", drafts)
+	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/email/drafts/"+draft.ID+"/send", strings.NewReader(`{"version_hash":"`+draft.VersionHash+`"}`))
 	setInternalOwner(req, "user-root")

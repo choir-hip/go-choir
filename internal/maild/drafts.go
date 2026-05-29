@@ -515,7 +515,7 @@ func (s *Store) ListDrafts(ctx context.Context, ownerID string, limit int) ([]Em
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
+	rows, err := s.db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND status <> 'sent' ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil, err
 	}
