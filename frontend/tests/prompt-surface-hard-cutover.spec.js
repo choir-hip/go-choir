@@ -230,7 +230,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
 
   await assertThemeOnShells('futuristic-noir', { bg: '#050912', accent: '#6D8DFF', panel: '#0D1628' });
   await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#FFD86B', panel: '#151719', blur: '4px' });
-  await assertThemeOnShells('london-salmon', { bg: '#F8CFC6', accent: '#B95A50', panel: '#FFF0EA', blur: '0px' });
+  await assertThemeOnShells('london-salmon', { bg: '#F8DED7', accent: '#A9554D', panel: '#FFF6F2', blur: '0px' });
 });
 
 test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({ page, browser }) => {
