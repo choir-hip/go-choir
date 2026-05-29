@@ -387,6 +387,10 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
   await expect(mobile.locator('[data-mobile-switcher-open="true"] [data-prompt-input]')).toHaveCount(0);
   await expect(mobile.locator('[data-mobile-app-switcher] button')).not.toHaveCount(0);
   const mobileIconAlignment = await mobile.evaluate(() => {
+    const promptSurface = document.querySelector('[data-prompt-surface]').getBoundingClientRect();
+    const promptCenterY = promptSurface.top + promptSurface.height / 2;
+    const deskButton = document.querySelector('[data-desk-menu-button]').getBoundingClientRect();
+    const commandField = document.querySelector('[data-command-field]').getBoundingClientRect();
     const centerDelta = (button) => {
       const icon = button.querySelector('span');
       const buttonRect = button.getBoundingClientRect();
@@ -394,6 +398,7 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
       return {
         x: Math.abs((buttonRect.left + buttonRect.width / 2) - (iconRect.left + iconRect.width / 2)),
         y: Math.abs((buttonRect.top + buttonRect.height / 2) - (iconRect.top + iconRect.height / 2)),
+        rowY: Math.abs(promptCenterY - (buttonRect.top + buttonRect.height / 2)),
       };
     };
     const cardAlignment = (button) => {
@@ -406,21 +411,31 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
       return {
         iconX: Math.abs(buttonCenterX - (iconRect.left + iconRect.width / 2)),
         labelX: Math.abs(buttonCenterX - (labelRect.left + labelRect.width / 2)),
+        iconLabelY: Math.abs((iconRect.top + iconRect.height / 2) - (labelRect.top + labelRect.height / 2)),
         iconTopInside: iconRect.top >= buttonRect.top,
         labelBottomInside: labelRect.bottom <= buttonRect.bottom,
       };
     };
     return {
+      deskButtonRowY: Math.abs(promptCenterY - (deskButton.top + deskButton.height / 2)),
+      commandFieldRowY: Math.abs(promptCenterY - (commandField.top + commandField.height / 2)),
       switcher: [...document.querySelectorAll('[data-mobile-app-switcher] button')].map(centerDelta),
       deskCards: [...document.querySelectorAll('[data-desk-sheet-app]')].slice(0, 6).map(cardAlignment),
+      overview: cardAlignment(document.querySelector('[data-desk-overview]')),
     };
   });
+  expect(mobileIconAlignment.deskButtonRowY).toBeLessThanOrEqual(1);
+  expect(mobileIconAlignment.commandFieldRowY).toBeLessThanOrEqual(1);
   expect(mobileIconAlignment.switcher.length).toBeGreaterThan(0);
   expect(mobileIconAlignment.deskCards.length).toBeGreaterThan(3);
   for (const delta of mobileIconAlignment.switcher) {
     expect(delta.x).toBeLessThanOrEqual(1);
     expect(delta.y).toBeLessThanOrEqual(1);
+    expect(delta.rowY).toBeLessThanOrEqual(1);
   }
+  expect(mobileIconAlignment.overview.iconLabelY).toBeLessThanOrEqual(1);
+  expect(mobileIconAlignment.overview.iconTopInside).toBe(true);
+  expect(mobileIconAlignment.overview.labelBottomInside).toBe(true);
   for (const card of mobileIconAlignment.deskCards) {
     expect(card.iconX).toBeLessThanOrEqual(1);
     expect(card.labelX).toBeLessThanOrEqual(2);

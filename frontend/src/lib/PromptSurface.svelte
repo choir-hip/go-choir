@@ -439,9 +439,11 @@
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 3.05rem;
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
     overflow-x: auto;
-    padding: 0.45rem;
+    padding: 0.335rem 0.45rem;
     scrollbar-width: none;
   }
 
@@ -556,13 +558,17 @@
     }
 
     .command-field,
-    .command-field textarea,
-    .mobile-app-switcher {
+    .command-field textarea {
       min-height: 2.7rem;
     }
 
     .command-field {
       height: 2.7rem;
+    }
+
+    .mobile-app-switcher {
+      min-height: 0;
+      padding-block: 0.28rem;
     }
 
     .command-field textarea {
