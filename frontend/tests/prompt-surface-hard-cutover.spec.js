@@ -113,6 +113,7 @@ test('Settings exposes prompt surface placement toggle', async ({ page }) => {
 
   await openDeskApp(page, 'settings');
   const settings = page.locator('[data-settings-window]');
+  const settingsChrome = page.locator('[data-window]').filter({ has: settings }).first();
   await expect(settings).toBeVisible();
   await expect(settings.locator('[data-settings-prompt-placement]')).toContainText('Pinned to bottom');
 
@@ -121,6 +122,50 @@ test('Settings exposes prompt surface placement toggle', async ({ page }) => {
   await expect(settings.locator('[data-settings-prompt-placement]')).toContainText('Pinned to top');
   await expect(settings.locator('[data-settings-prompt-placement-top]')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.locator('[data-settings-prompt-placement-bottom]')).toHaveAttribute('aria-pressed', 'false');
+  await page.waitForTimeout(80);
+  const topLayout = await page.evaluate(() => {
+    const prompt = document.querySelector('[data-prompt-surface]').getBoundingClientRect();
+    const windows = [...document.querySelectorAll('[data-window]')].map((windowEl) => {
+      const win = windowEl.getBoundingClientRect();
+      const titlebar = windowEl.querySelector('[data-window-titlebar]').getBoundingClientRect();
+      const style = getComputedStyle(windowEl);
+      return {
+        appId: windowEl.getAttribute('data-window-app-id'),
+        mode: windowEl.getAttribute('data-window-mode'),
+        visible: style.display !== 'none' && win.width > 1 && win.height > 1,
+        windowTop: win.top,
+        windowBottom: win.bottom,
+        titlebarTop: titlebar.top,
+        titlebarBottom: titlebar.bottom,
+      };
+    }).filter((win) => win.visible);
+    return { promptBottom: prompt.bottom, viewportHeight: window.innerHeight, windows };
+  });
+  expect(topLayout.windows.length).toBeGreaterThan(0);
+  for (const win of topLayout.windows) {
+    expect(win.titlebarTop, `${win.appId} titlebar top`).toBeGreaterThanOrEqual(topLayout.promptBottom - 1);
+    expect(win.windowTop, `${win.appId} window top`).toBeGreaterThanOrEqual(topLayout.promptBottom - 1);
+    expect(win.windowBottom, `${win.appId} window bottom`).toBeLessThanOrEqual(topLayout.viewportHeight + 1);
+  }
+
+  await settingsChrome.locator('[data-window-maximize]').click();
+  const maximizedLayout = await page.evaluate(() => {
+    const prompt = document.querySelector('[data-prompt-surface]').getBoundingClientRect();
+    const windowEl = document.querySelector('[data-settings-window]').closest('[data-window]');
+    const win = windowEl.getBoundingClientRect();
+    const titlebar = windowEl.querySelector('[data-window-titlebar]').getBoundingClientRect();
+    return {
+      promptBottom: prompt.bottom,
+      viewportHeight: window.innerHeight,
+      windowTop: win.top,
+      windowBottom: win.bottom,
+      titlebarTop: titlebar.top,
+    };
+  });
+  expect(maximizedLayout.titlebarTop).toBeGreaterThanOrEqual(maximizedLayout.promptBottom - 1);
+  expect(maximizedLayout.windowTop).toBeGreaterThanOrEqual(maximizedLayout.promptBottom - 1);
+  expect(maximizedLayout.windowBottom).toBeLessThanOrEqual(maximizedLayout.viewportHeight + 1);
+  await settingsChrome.locator('[data-window-maximize]').click();
 
   await settings.locator('[data-settings-prompt-placement-bottom]').click();
   await expect(page.locator('[data-prompt-surface][data-placement="bottom"]')).toBeVisible();

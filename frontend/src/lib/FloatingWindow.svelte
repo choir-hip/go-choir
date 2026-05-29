@@ -61,7 +61,8 @@
 
   let viewportWidth = DEFAULT_VIEWPORT_WIDTH;
   let viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
-  let promptSurfaceSize = DEFAULT_PROMPT_SURFACE_SIZE;
+  let promptSurfaceTopOffset = 0;
+  let promptSurfaceBottomOffset = DEFAULT_PROMPT_SURFACE_SIZE;
   let promptSurfaceObserver = null;
 
   // ---- Drag state ----
@@ -89,16 +90,33 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
-  function readPromptSurfaceSize() {
-    if (typeof document === 'undefined') return DEFAULT_PROMPT_SURFACE_SIZE;
+  function readPromptSurfaceOffsets() {
+    if (typeof document === 'undefined') {
+      return { top: 0, bottom: DEFAULT_PROMPT_SURFACE_SIZE };
+    }
+
+    const root = window.getComputedStyle(document.documentElement);
+    const themeTop = parsePixelValue(
+      root.getPropertyValue('--choir-prompt-surface-top-offset'),
+      0
+    );
+    const themeBottom = parsePixelValue(
+      root.getPropertyValue('--choir-prompt-surface-bottom-offset'),
+      DEFAULT_PROMPT_SURFACE_SIZE
+    );
 
     const promptSurface = document.querySelector('[data-prompt-surface]');
-    if (promptSurface?.offsetHeight) return promptSurface.offsetHeight;
+    if (!promptSurface) return { top: themeTop, bottom: themeBottom };
 
-    const fromTheme = window
-      .getComputedStyle(document.documentElement)
-      .getPropertyValue('--choir-prompt-surface-size');
-    return parsePixelValue(fromTheme, DEFAULT_PROMPT_SURFACE_SIZE);
+    const placement = promptSurface.getAttribute('data-placement') || document.documentElement.dataset.promptSurfacePlacement;
+    const rect = promptSurface.getBoundingClientRect();
+    if (placement === 'top') {
+      return { top: Math.max(themeTop, rect.bottom), bottom: 0 };
+    }
+    if (placement === 'bottom') {
+      return { top: 0, bottom: Math.max(themeBottom, viewportHeight - rect.top) };
+    }
+    return { top: themeTop, bottom: themeBottom };
   }
 
   function refreshViewportBounds() {
@@ -106,7 +124,13 @@
 
     viewportWidth = window.innerWidth || DEFAULT_VIEWPORT_WIDTH;
     viewportHeight = window.innerHeight || DEFAULT_VIEWPORT_HEIGHT;
-    promptSurfaceSize = readPromptSurfaceSize();
+    const promptOffsets = readPromptSurfaceOffsets();
+    promptSurfaceTopOffset = promptOffsets.top;
+    promptSurfaceBottomOffset = promptOffsets.bottom;
+  }
+
+  function refreshViewportBoundsAfterThemeChange() {
+    window.requestAnimationFrame(refreshViewportBounds);
   }
 
   function trySetPointerCapture(target, pointerId) {
@@ -250,6 +274,7 @@
     window.addEventListener('pointercancel', handleDragEnd);
     window.addEventListener('pointercancel', handleResizeEnd);
     window.addEventListener('resize', refreshViewportBounds);
+    window.addEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
 
     const promptSurface = document.querySelector('[data-prompt-surface]');
     if (typeof ResizeObserver !== 'undefined' && promptSurface) {
@@ -266,6 +291,7 @@
     window.removeEventListener('pointercancel', handleDragEnd);
     window.removeEventListener('pointercancel', handleResizeEnd);
     window.removeEventListener('resize', refreshViewportBounds);
+    window.removeEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
     promptSurfaceObserver?.disconnect();
   });
 
@@ -279,20 +305,21 @@
   $: maxNormalWidth = Math.max(MIN_WIDTH, viewportWidth - viewportMargin * 2);
   $: maxNormalHeight = Math.max(
     MIN_HEIGHT,
-    viewportHeight - promptSurfaceSize - viewportMargin * 2
+    viewportHeight - promptSurfaceTopOffset - promptSurfaceBottomOffset - viewportMargin * 2
   );
+  $: minRenderedY = viewportMargin + promptSurfaceTopOffset;
   $: renderedWidth = Math.min(Math.max(width, MIN_WIDTH), maxNormalWidth);
   $: renderedHeight = Math.min(Math.max(height, MIN_HEIGHT), maxNormalHeight);
   $: maxRenderedX = Math.max(viewportMargin, viewportWidth - renderedWidth - viewportMargin);
   $: maxRenderedY = Math.max(
-    viewportMargin,
-    viewportHeight - promptSurfaceSize - renderedHeight - viewportMargin
+    minRenderedY,
+    viewportHeight - promptSurfaceBottomOffset - renderedHeight - viewportMargin
   );
   $: renderedX = clamp(x, viewportMargin, maxRenderedX);
-  $: renderedY = clamp(y, viewportMargin, maxRenderedY);
+  $: renderedY = clamp(y, minRenderedY, maxRenderedY);
 
   $: windowStyle = mode === 'maximized'
-    ? 'left:0; top:0; width:100%; height:calc(100%);'
+    ? `left:0; top:${promptSurfaceTopOffset}px; width:100%; height:calc(100dvh - ${promptSurfaceTopOffset + promptSurfaceBottomOffset}px);`
     : mode === 'minimized'
     ? 'display:none;'
     : `left:${renderedX}px; top:${renderedY}px; width:${renderedWidth}px; height:${renderedHeight}px;`;
@@ -386,7 +413,7 @@
     transition: box-shadow 0.15s, filter 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 16px);
+    max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 16px);
   }
 
   .window.overview-preview {
@@ -549,7 +576,7 @@
   @media (max-width: 768px) {
     .window {
       max-width: calc(100vw - 16px);
-      max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 8px);
+      max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 8px);
     }
 
     .titlebar {

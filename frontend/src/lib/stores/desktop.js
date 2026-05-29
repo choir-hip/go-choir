@@ -52,11 +52,40 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function parsePixelValue(value, fallback = 0) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getPromptSurfaceOffsets(viewportHeight) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return { top: 0, bottom: PROMPT_SURFACE_SIZE };
+  }
+
+  const rootStyle = window.getComputedStyle(document.documentElement);
+  const themeTop = parsePixelValue(rootStyle.getPropertyValue('--choir-prompt-surface-top-offset'), 0);
+  const themeBottom = parsePixelValue(rootStyle.getPropertyValue('--choir-prompt-surface-bottom-offset'), PROMPT_SURFACE_SIZE);
+  const promptSurface = document.querySelector('[data-prompt-surface]');
+  if (!promptSurface) return { top: themeTop, bottom: themeBottom };
+
+  const placement = promptSurface.getAttribute('data-placement') || document.documentElement.dataset.promptSurfacePlacement;
+  const rect = promptSurface.getBoundingClientRect();
+  if (placement === 'top') {
+    return { top: Math.max(themeTop, rect.bottom), bottom: 0 };
+  }
+  if (placement === 'bottom') {
+    return { top: 0, bottom: Math.max(themeBottom, viewportHeight - rect.top) };
+  }
+  return { top: themeTop, bottom: themeBottom };
+}
+
 function getViewportMetrics() {
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : DEFAULT_VIEWPORT_WIDTH;
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : DEFAULT_VIEWPORT_HEIGHT;
+  const promptSurfaceOffsets = getPromptSurfaceOffsets(viewportHeight);
   const compact = viewportWidth < COMPACT_BREAKPOINT;
   const margin = compact ? 10 : 24;
+  const workspaceStartY = margin + promptSurfaceOffsets.top;
   const preferredWorkspaceStartX = compact ? margin + 8 : margin + 124;
   const workspaceStartX = Math.min(
     preferredWorkspaceStartX,
@@ -66,7 +95,7 @@ function getViewportMetrics() {
   const maxWidth = Math.max(MIN_WINDOW_WIDTH, viewportWidth - margin * 2);
   const maxHeight = Math.max(
     MIN_WINDOW_HEIGHT,
-    viewportHeight - PROMPT_SURFACE_SIZE - margin * 2
+    viewportHeight - promptSurfaceOffsets.top - promptSurfaceOffsets.bottom - margin * 2
   );
   const compactWindowWidth = Math.max(
     MIN_WINDOW_WIDTH,
@@ -83,7 +112,9 @@ function getViewportMetrics() {
     margin,
     viewportWidth,
     viewportHeight,
+    promptSurfaceOffsets,
     workspaceStartX,
+    workspaceStartY,
     workspaceWidth,
     maxWidth,
     maxHeight,
@@ -114,13 +145,13 @@ function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
   const clampedHeight = clamp(height, Math.min(minimums.height, metrics.maxHeight), metrics.maxHeight);
   const maxX = Math.max(metrics.margin, metrics.viewportWidth - clampedWidth - metrics.margin);
   const maxY = Math.max(
-    metrics.margin,
-    metrics.viewportHeight - PROMPT_SURFACE_SIZE - clampedHeight - metrics.margin
+    metrics.workspaceStartY,
+    metrics.viewportHeight - metrics.promptSurfaceOffsets.bottom - clampedHeight - metrics.margin
   );
 
   return {
     x: clamp(x, metrics.margin, maxX),
-    y: clamp(y, metrics.margin, maxY),
+    y: clamp(y, metrics.workspaceStartY, maxY),
     width: clampedWidth,
     height: clampedHeight,
   };
@@ -137,7 +168,7 @@ function getNewWindowGeometry(openCount, appId = '') {
     const compactPref = preference.compact || {};
     return constrainWindowGeometry({
       x: metrics.workspaceStartX + offset,
-      y: metrics.margin + offset,
+      y: metrics.workspaceStartY + offset,
       width: Math.min(compactPref.width || metrics.baseWidth, metrics.maxWidth),
       height: Math.min(compactPref.height || metrics.baseHeight, metrics.maxHeight),
       appId,
@@ -146,7 +177,7 @@ function getNewWindowGeometry(openCount, appId = '') {
 
   return constrainWindowGeometry({
     x: metrics.workspaceStartX + offset,
-    y: metrics.margin + offset,
+    y: metrics.workspaceStartY + offset,
     width: Math.min(desktopPref.width || metrics.baseWidth, metrics.workspaceWidth),
     height: desktopPref.height || metrics.baseHeight,
     appId,
