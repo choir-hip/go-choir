@@ -33,6 +33,9 @@ test('logged-out shell uses PromptSurface, DeskSheet, and fixture previews', asy
   await expect(page.locator('[data-window-tray-item]')).toHaveCount(3);
   await expect(page.locator('[data-vtext-editor]')).toContainText('Node A redesign morning review');
   await expect(page.locator('[data-trace-app]')).toContainText('Preview fixture');
+  const favicon = await page.locator('link[rel="icon"][data-tetramark-favicon]').getAttribute('href');
+  expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');
+  expect(decodeURIComponent(favicon || '')).toContain('M 476.43 455.41');
 
   const surfaceHeight = await page.locator('[data-prompt-surface]').evaluate((el) => el.getBoundingClientRect().height);
   expect(surfaceHeight).toBeLessThanOrEqual(78);
