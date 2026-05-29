@@ -11,7 +11,7 @@
     - Minimize hides window, shows indicator in the prompt surface tray
     - Restore from minimized returns to pre-minimize geometry
     - Clicking window brings it to front (z-index management)
-    - Active window has blue border (#3b82f6) and enhanced shadow
+    - Active window uses elevated shadow and accent glow
     - Cascade positioning: 30px offset per window, wraps after 8
     - Window close transfers focus to next highest z-index window
 
@@ -376,12 +376,14 @@
     display: flex;
     flex-direction: column;
     background: #1e1e2e;
-    border: 1px solid #333;
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      0 28px 80px rgba(0, 0, 0, 0.48),
+      0 10px 30px color-mix(in srgb, var(--choir-accent, #3b82f6) 10%, transparent);
     transform-origin: top left;
-    transition: box-shadow 0.15s, border-color 0.15s;
+    transition: box-shadow 0.15s, filter 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 16px);
@@ -403,18 +405,15 @@
     transition:
       transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1),
       box-shadow 0.2s ease,
-      border-color 0.2s ease,
       opacity 0.2s ease;
     box-shadow:
       0 24px 70px rgba(0, 0, 0, 0.52),
-      0 0 0 1px rgba(125, 211, 252, 0.18);
+      0 12px 42px color-mix(in srgb, var(--choir-accent, #7dd3fc) 14%, transparent);
   }
 
   .window.overview-preview-live.window-active {
-    border-color: rgba(125, 211, 252, 0.95);
     box-shadow:
       0 28px 86px rgba(37, 99, 235, 0.32),
-      0 0 0 2px rgba(125, 211, 252, 0.28),
       0 0 44px rgba(59, 130, 246, 0.24);
   }
 
@@ -431,8 +430,9 @@
   }
 
   .window-active {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.3);
+    box-shadow:
+      0 30px 88px rgba(0, 0, 0, 0.52),
+      0 0 54px color-mix(in srgb, var(--choir-accent, #3b82f6) 24%, transparent);
   }
 
   /* ---- Title bar ---- */
@@ -443,8 +443,8 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background: #181825;
-    border-bottom: 1px solid #2a2a3a;
+    background: color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
     cursor: grab;
     flex-shrink: 0;
     touch-action: none;
@@ -475,7 +475,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--choir-radius-control-sm, 14px);
     font-size: 0.7rem;
     cursor: pointer;
     color: #888;
@@ -536,8 +536,8 @@
     right: 3px;
     width: 8px;
     height: 8px;
-    border-right: 2px solid rgba(255, 255, 255, 0.2);
-    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+    background: radial-gradient(circle at 100% 100%, rgba(255, 255, 255, 0.28), transparent 60%);
+    border-radius: 999px;
   }
 
   @media (max-width: 1024px) and (min-width: 769px) {

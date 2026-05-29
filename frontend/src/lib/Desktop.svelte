@@ -101,7 +101,7 @@
   let bootstrapError = '';
   let bootstrapStable = false;
   let desktopReady = false;
-  let promptPlaceholder = 'Connecting to desktop...';
+  let promptPlaceholder = '';
   let promptStatus = '';
   let mounted = false;
   let authenticatedStartupRunning = false;
@@ -152,7 +152,7 @@
   const OVERVIEW_STAGE_BOTTOM_RAIL_MOBILE = 190;
   const OVERVIEW_STAGE_BOTTOM_RAIL_DESKTOP = 196;
   $: desktopReady = bootstrapStable && stateLoaded;
-  $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
+  $: promptPlaceholder = desktopReady ? '' : bootPromptPlaceholder;
   $: promptSurfacePlacement = theme?.layout?.promptSurfacePlacement === 'top' ? 'top' : 'bottom';
   $: if (mounted && authenticated !== lastAuthenticated) {
     const wasAuthenticated = lastAuthenticated === true;
@@ -218,7 +218,7 @@
     desktopReady = true;
     bootLines = [];
     bootPromptPlaceholder = 'Booting user computer...';
-    promptPlaceholder = 'Ask anything...';
+    promptPlaceholder = '';
     promptStatus = '';
     authenticatedStartupRunning = false;
     restoreRecovery = null;
@@ -1936,8 +1936,8 @@
     right: clamp(16px, 6vw, 72px);
     bottom: calc(var(--choir-prompt-surface-bottom-offset, 64px) + 24px);
     max-width: 760px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(5, 8, 14, 0.92);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38);
     color: #d1fae5;
@@ -1949,7 +1949,7 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
     padding: 0.65rem 0.8rem;
     color: #bfdbfe;
     font-size: 0.72rem;
@@ -2008,10 +2008,10 @@
     display: grid;
     gap: 1rem;
     padding: 1.1rem;
-    border: 1px solid rgba(96, 165, 250, 0.34);
-    border-radius: 12px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(8, 13, 24, 0.94);
-    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(15, 23, 42, 0.82);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 48px rgba(96, 165, 250, 0.14);
     color: #e5edf9;
     z-index: 85;
   }
@@ -2058,8 +2058,8 @@
 
   .recovery-actions button {
     min-height: 40px;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(15, 23, 42, 0.86);
     color: #dbeafe;
     padding: 0.55rem 0.78rem;
@@ -2070,7 +2070,7 @@
   }
 
   .recovery-actions button:hover {
-    border-color: rgba(147, 197, 253, 0.62);
+    box-shadow: 0 14px 34px rgba(96, 165, 250, 0.16);
     background: rgba(30, 41, 59, 0.94);
   }
 
@@ -2080,7 +2080,6 @@
   }
 
   .recovery-actions .recovery-primary {
-    border-color: rgba(96, 165, 250, 0.62);
     background: rgba(30, 64, 175, 0.72);
     color: #f8fbff;
   }
@@ -2139,8 +2138,8 @@
     max-width: 28rem;
     display: grid;
     gap: 0.65rem;
-    border: 1px solid rgba(251, 191, 36, 0.28);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(2, 6, 23, 0.68);
     padding: 1rem;
     color: #e5edf9;
@@ -2172,8 +2171,8 @@
   .suspended-card button {
     justify-self: start;
     min-height: 2.35rem;
-    border: 1px solid rgba(96, 165, 250, 0.38);
-    border-radius: 7px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(30, 64, 175, 0.46);
     color: #eff6ff;
     cursor: pointer;
@@ -2198,8 +2197,8 @@
   .toast {
     background: rgba(17, 24, 39, 0.95);
     color: #edf2ff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
+    border: 0;
+    border-radius: var(--choir-radius-pill, 30px);
     padding: 0.6rem 0.95rem;
     font-size: 0.82rem;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
@@ -2207,7 +2206,7 @@
 
   .toast.error {
     background: rgba(69, 10, 10, 0.94);
-    border-color: rgba(248, 113, 113, 0.42);
+    box-shadow: 0 12px 32px rgba(248, 113, 113, 0.18);
     color: #fee2e2;
   }
 

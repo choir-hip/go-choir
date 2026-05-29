@@ -74,10 +74,9 @@
     height: min(var(--choir-desk-sheet-height, 56dvh), calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px));
     overflow: auto;
     padding: 1rem;
-    border: 1px solid var(--choir-border-strong);
     background: var(--choir-sheet-bg);
     color: var(--choir-fg);
-    box-shadow: var(--choir-shadow-floating);
+    box-shadow: var(--choir-shadow-floating), 0 -18px 70px color-mix(in srgb, var(--choir-accent) 12%, transparent);
     backdrop-filter: blur(var(--choir-blur));
   }
 
@@ -96,7 +95,8 @@
     width: 3rem;
     height: 0.25rem;
     border-radius: 999px;
-    background: var(--choir-border-strong);
+    background: color-mix(in srgb, var(--choir-accent) 42%, transparent);
+    filter: blur(0.1px);
   }
 
   header,
@@ -129,11 +129,12 @@
   }
 
   button {
-    border: 1px solid var(--choir-border);
+    border: 0;
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-control-bg);
     color: var(--choir-fg);
     cursor: pointer;
+    box-shadow: var(--choir-control-shadow);
   }
 
   header button,
@@ -152,6 +153,7 @@
     height: auto;
     padding: 0.9rem;
     text-align: left;
+    border-radius: var(--choir-radius-control);
   }
 
   .overview-card span {

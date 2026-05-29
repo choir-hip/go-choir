@@ -21,11 +21,11 @@ export type ChoirTheme = {
 const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
   schema_version: THEME_SCHEMA_VERSION,
   radii: {
-    controlSm: '10px',
-    control: '16px',
-    panel: '22px',
-    sheet: '30px',
-    pill: '999px',
+    controlSm: '14px',
+    control: '20px',
+    panel: '26px',
+    sheet: '32px',
+    pill: '30px',
   },
   motion: {
     fast: '120ms ease',
@@ -33,7 +33,7 @@ const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
   },
   layout: {
     promptSurfacePlacement: 'bottom',
-    promptSurfaceMinHeight: '64px',
+    promptSurfaceMinHeight: '86px',
     deskSheetHeight: '56dvh',
   },
   fonts: {
@@ -64,7 +64,7 @@ export const FUTURISTIC_NOIR: ChoirTheme = {
     shadowSoft: '0 18px 54px rgba(0,0,0,.38)',
     shadowFloating: '0 26px 90px rgba(0,0,0,.46)',
     shadowGlow: '0 0 42px rgba(89, 125, 255, .22)',
-    controlShadow: 'inset 0 1px 0 rgba(255,255,255,.05)',
+    controlShadow: '0 12px 32px rgba(0,0,0,.24), inset 0 10px 24px rgba(255,255,255,.035)',
   },
 };
 
@@ -89,7 +89,7 @@ export const CARBON_FIBER_KINTSUGI: ChoirTheme = {
     shadowSoft: '0 18px 54px rgba(0,0,0,.42)',
     shadowFloating: '0 28px 90px rgba(0,0,0,.55)',
     shadowGlow: '0 0 34px rgba(216,173,69,.24)',
-    controlShadow: 'inset 0 1px 0 rgba(255,255,255,.035)',
+    controlShadow: '0 12px 32px rgba(0,0,0,.28), inset 0 10px 24px rgba(255,255,255,.03)',
   },
 };
 
@@ -119,7 +119,7 @@ export const LONDON_SALMON: ChoirTheme = {
     shadowSoft: '0 12px 32px rgba(91, 58, 40, .16)',
     shadowFloating: '0 20px 60px rgba(91, 58, 40, .22)',
     shadowGlow: 'none',
-    controlShadow: 'inset 0 1px 0 rgba(255,255,255,.38)',
+    controlShadow: '0 12px 28px rgba(91, 58, 40, .12), inset 0 10px 24px rgba(255,255,255,.24)',
   },
 };
 

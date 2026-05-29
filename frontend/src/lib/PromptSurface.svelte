@@ -15,7 +15,7 @@
   export let currentUser: any = null;
   export let authenticated = false;
   export let promptDisabled = false;
-  export let promptPlaceholder = 'Ask anything...';
+  export let promptPlaceholder = '';
   export let promptStatus = '';
   export let placement: 'top' | 'bottom' = 'bottom';
 
@@ -27,7 +27,6 @@
   let sheetOpen = false;
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
-  let publicTickerTimer: number | null = null;
   let removeLiveListener = () => {};
 
   const launcherAppIds = [
@@ -36,10 +35,6 @@
   ];
   const deskApps = launcherAppIds.map((id) => APP_REGISTRY.find((app) => app.id === id)).filter(Boolean);
   const publicTicker = [
-    'Preview mode: local edits stay in this browser until you sign in.',
-    'Trace is showing demo trajectories; private evidence loads after sign-in.',
-    'Save, send, import, activate, and provider-spend actions request auth at the moment of action.',
-    'Node A design lab: review the shell without touching choir.news.',
   ];
 
   $: normalizedPlacement = placement === 'top' ? 'top' : 'bottom';
@@ -74,7 +69,7 @@
   function resizePromptInput() {
     if (!promptInputEl) return;
     const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
-    const collapsedHeight = Math.max(44, Math.ceil(lineHeight + 18));
+    const collapsedHeight = Math.max(68, Math.ceil(lineHeight + 34));
     const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
     promptInputEl.style.height = `${collapsedHeight}px`;
     const nextHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
@@ -113,10 +108,11 @@
   }
 
   function pushTicker(text: string) {
+    if (chyronItems.some((item) => item.text === text)) return;
     chyronItems = [
       ...chyronItems,
       { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, text },
-    ].slice(-6);
+    ].slice(-4);
   }
 
   function handleLiveEvent(message: any) {
@@ -135,14 +131,8 @@
   }
 
   function startPublicTicker() {
-    if (authenticated || publicTickerTimer) return;
-    publicTicker.forEach((text, index) => {
-      window.setTimeout(() => pushTicker(text), index * 450);
-    });
-    publicTickerTimer = window.setInterval(() => {
-      const next = publicTicker[Math.floor(Date.now() / 6000) % publicTicker.length];
-      pushTicker(next);
-    }, 6000);
+    if (authenticated || chyronItems.length > 0) return;
+    chyronItems = publicTicker.map((text, index) => ({ id: `public-${index}`, text }));
   }
 
   onMount(() => {
@@ -157,14 +147,10 @@
     window.addEventListener('resize', resizePromptInput);
   });
 
-  $: if (authenticated && publicTickerTimer) {
-    window.clearInterval(publicTickerTimer);
-    publicTickerTimer = null;
-  }
+  $: if (authenticated && chyronItems.some((item) => item.id.startsWith('public-'))) chyronItems = [];
 
   onDestroy(() => {
     removeLiveListener();
-    if (publicTickerTimer) window.clearInterval(publicTickerTimer);
     resizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
   });
@@ -259,11 +245,10 @@
     right: max(12px, env(safe-area-inset-right));
     z-index: 10000;
     display: grid;
-    grid-template-columns: auto minmax(0, max-content) minmax(12rem, 1fr) auto auto;
-    align-items: end;
-    gap: 0.65rem;
-    padding: 0.55rem 0.75rem;
-    border: 1px solid var(--choir-border-strong);
+    grid-template-columns: auto minmax(0, max-content) minmax(14rem, 1fr) auto auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.72rem 0.86rem;
     border-radius: var(--choir-radius-pill);
     color: var(--choir-fg);
     background: var(--choir-prompt-surface-bg);
@@ -284,9 +269,9 @@
     position: relative;
     display: grid;
     place-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border: 1px solid var(--choir-border-strong);
+    width: 3rem;
+    height: 3rem;
+    border: 0;
     border-radius: var(--choir-radius-control);
     background: var(--choir-control-bg);
     color: var(--choir-tetramark-color);
@@ -296,8 +281,7 @@
 
   .desk-mark-button:hover,
   .desk-mark-button:focus-visible {
-    border-color: var(--choir-accent);
-    box-shadow: var(--choir-shadow-glow);
+    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
   }
 
   .window-count {
@@ -308,7 +292,7 @@
     height: 1.15rem;
     display: grid;
     place-items: center;
-    border-radius: 999px;
+    border-radius: var(--choir-radius-control-sm);
     background: var(--choir-accent);
     color: var(--choir-on-accent);
     font-size: 0.66rem;
@@ -331,21 +315,23 @@
   .window-tray-item {
     min-width: 0;
     max-width: 9rem;
+    border: 0;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    border: 1px solid var(--choir-border);
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-panel-soft);
     color: var(--choir-muted);
-    padding: 0.42rem 0.55rem;
+    padding: 0.34rem 0.55rem;
+    min-height: 2.2rem;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
     cursor: pointer;
   }
 
   .window-tray-item.active {
     color: var(--choir-fg);
-    border-color: var(--choir-accent);
     background: var(--choir-selected);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--choir-accent) 18%, transparent);
   }
 
   .window-tray-item small {
@@ -360,16 +346,21 @@
     display: grid;
     align-items: end;
     overflow: hidden;
-    border: 1px solid var(--choir-border);
     border-radius: var(--choir-radius-pill);
-    background: var(--choir-input-bg);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--choir-panel-soft) 50%, transparent), transparent 58%),
+      var(--choir-input-bg);
+    min-height: 4.3rem;
+    box-shadow:
+      inset 0 18px 34px rgba(255, 255, 255, 0.018),
+      0 16px 36px rgba(0, 0, 0, 0.24);
   }
 
   .command-field textarea {
     position: relative;
     z-index: 2;
     width: 100%;
-    min-height: 2.75rem;
+    min-height: 4.3rem;
     border: 0;
     outline: 0;
     resize: none;
@@ -378,11 +369,7 @@
     font: inherit;
     font-size: 1rem;
     line-height: 1.35;
-    padding: 0.72rem 1rem;
-  }
-
-  .command-field textarea::placeholder {
-    color: var(--choir-muted);
+    padding: 1.05rem 1.15rem;
   }
 
   .prompt-status {
@@ -402,7 +389,7 @@
     display: flex;
     align-items: center;
     overflow: hidden;
-    opacity: 0.3;
+    opacity: 0.24;
     pointer-events: none;
     mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
   }
@@ -413,7 +400,7 @@
 
   .agent-chyron > div {
     display: inline-flex;
-    gap: 1.6rem;
+    gap: 2rem;
     min-width: max-content;
     animation: choir-chyron 38s linear infinite;
   }
@@ -432,9 +419,9 @@
     align-self: center;
     width: 0.78rem;
     height: 0.78rem;
-    border-radius: 999px;
+    border-radius: var(--choir-radius-control-sm);
     background: var(--choir-muted);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--choir-muted) 16%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--choir-muted) 26%, transparent);
   }
 
   .online-indicator.online {
@@ -448,7 +435,7 @@
       right: 8px;
       grid-template-columns: auto minmax(0, 1fr) auto auto;
       gap: 0.45rem;
-      padding-inline: 0.55rem;
+      padding: 0.62rem 0.62rem;
     }
 
     .window-tray {
