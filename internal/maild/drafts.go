@@ -244,6 +244,10 @@ func (h *Handler) handleDraftApprovalEmail(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
 		return
 	}
+	if draft.Status != "draft_pending_owner_approval" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft is not pending approval"})
+		return
+	}
 	resp, err := h.sendDraftApprovalEmail(r.Context(), draft, ownerEmail)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to send approval email"})
@@ -319,6 +323,9 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 	}
 	if draft.Status == "sent" {
 		return sendDraftResponse{}, errDraftAlreadySent
+	}
+	if draft.Status != "draft_pending_owner_approval" {
+		return sendDraftResponse{}, errDraftNotPending
 	}
 	if strings.TrimSpace(versionHash) == "" || strings.TrimSpace(versionHash) != draft.VersionHash {
 		return sendDraftResponse{}, errDraftVersionChanged
@@ -399,6 +406,7 @@ func cleanApprovedDraftTextBody(body, sourceKind string) string {
 
 var (
 	errDraftAlreadySent        = fmt.Errorf("draft already sent")
+	errDraftNotPending         = fmt.Errorf("draft is not pending approval")
 	errDraftVersionChanged     = fmt.Errorf("draft version changed")
 	errDraftForbidden          = fmt.Errorf("draft forbidden")
 	errDraftInvalidReplyTarget = fmt.Errorf("draft reply target invalid")
@@ -410,6 +418,8 @@ func writeDraftSendError(w http.ResponseWriter, err error) {
 		writeStoreError(w, err)
 	case err == errDraftAlreadySent:
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft already sent"})
+	case err == errDraftNotPending:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft is not pending approval"})
 	case err == errDraftVersionChanged:
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "draft version changed; reopen the draft before approving"})
 	case err == errDraftForbidden:
@@ -515,7 +525,7 @@ func (s *Store) ListDrafts(ctx context.Context, ownerID string, limit int) ([]Em
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND status <> 'sent' ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
+	rows, err := s.db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND status = 'draft_pending_owner_approval' ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -534,6 +544,21 @@ func (s *Store) ListDrafts(ctx context.Context, ownerID string, limit int) ([]Em
 func (s *Store) GetDraft(ctx context.Context, ownerID, draftID string) (EmailDraft, error) {
 	row := s.db.QueryRowContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND id = ?`, ownerID, draftID)
 	return scanDraft(row)
+}
+
+func (s *Store) MarkDraftRejected(ctx context.Context, ownerID, draftID string) (EmailDraft, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(ctx, `UPDATE email_drafts
+		SET status = 'draft_rejected', updated_at = ?
+		WHERE owner_id = ? AND id = ? AND status = 'draft_pending_owner_approval'`,
+		now, ownerID, draftID)
+	if err != nil {
+		return EmailDraft{}, fmt.Errorf("mark draft rejected: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return EmailDraft{}, sql.ErrNoRows
+	}
+	return s.GetDraft(ctx, ownerID, draftID)
 }
 
 func (s *Store) MarkDraftSent(ctx context.Context, ownerID, draftID, messageID, providerMessageID string) (EmailDraft, error) {

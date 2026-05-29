@@ -622,8 +622,18 @@ func TestApprovalReplyDenyRejectsDraftWithoutSending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDraft: %v", err)
 	}
-	if updated.Status == "sent" || updated.ProviderMessageID != "" {
-		t.Fatalf("deny reply sent draft: %+v", updated)
+	if updated.Status != "draft_rejected" || updated.ProviderMessageID != "" {
+		t.Fatalf("deny reply draft state = %+v, want rejected without provider message", updated)
+	}
+	drafts, err := store.ListDrafts(nilSafeContext(), "user-root", 10)
+	if err != nil {
+		t.Fatalf("ListDrafts after reject: %v", err)
+	}
+	if len(drafts) != 0 {
+		t.Fatalf("rejected draft still listed in Drafts: %+v", drafts)
+	}
+	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", "approval-notice-1"); !errors.Is(err, errDraftNotPending) {
+		t.Fatalf("send rejected draft err=%v, want errDraftNotPending", err)
 	}
 	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
 	if err != nil {

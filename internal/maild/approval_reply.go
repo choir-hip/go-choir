@@ -77,6 +77,9 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		if _, err := h.store.RecordDraftApprovalEvent(ctx, draft, "email_reply_rejected", email.ID); err != nil {
 			return err
 		}
+		if _, err := h.store.MarkDraftRejected(ctx, token.OwnerID, token.DraftID); err != nil {
+			return err
+		}
 		return h.store.UseDraftApprovalToken(ctx, token.ID, "rejected")
 	case "edit":
 		if _, err := h.store.RecordDraftApprovalEvent(ctx, draft, "email_reply_edit_requested", email.ID); err != nil {
