@@ -3780,3 +3780,31 @@ fix direction:
 - Reject unresolved generated-body placeholders even when they appear after a
   `Body:` label, so complex "figure out/research/find and email the result"
   prompts remain at the VText/research/super boundary until real content exists.
+
+### Problem Checkpoint: Rejected Approval Drafts Remain Pending
+
+status: problem_documented_before_fix
+timestamp: 2026-05-29T04:55Z
+evidence source: Mail.app approval-reply proof and maild database/API inspection
+
+problem:
+- A pre-fix placeholder draft was rejected by replying `reject` to its
+  one-time approval address.
+- The approval token was consumed with status `rejected`, and no outbound email
+  was sent, but the draft row itself remained
+  `draft_pending_owner_approval`.
+- Product expectation: a rejected approval should no longer look like an
+  actionable pending draft in the Email app. It should leave the owner-facing
+  Drafts queue.
+
+root-cause evidence:
+- `processApprovalReply` records an `email_reply_rejected` approval event and
+  marks the approval token `rejected`.
+- It does not update `email_drafts.status`.
+- `Store.ListDrafts` returns every non-`sent` draft, so rejected-but-still-
+  pending rows continue to appear in Drafts.
+
+fix direction:
+- Mark the draft itself as rejected when an owner rejects by email.
+- Make the Drafts list return only actively pending draft rows.
+- Preserve the invariant that reject does not send mail.
