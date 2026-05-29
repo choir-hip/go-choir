@@ -236,6 +236,10 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           backgroundColor: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).backgroundColor,
           color: getComputedStyle(document.querySelector('[data-vtext-toolbar]')).color,
         },
+        fileToolbar: {
+          backgroundColor: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).backgroundColor,
+          color: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).color,
+        },
         vtextHeadingColor: getComputedStyle(document.querySelector('[data-vtext-editor-area] h1')).color,
         shells: selectors.map((selector) => {
           const element = document.querySelector(selector);
@@ -269,13 +273,21 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
       expect(sample.settingsFont).toContain('Georgia');
       const toolbarBg = parseRgb(sample.vtextToolbar.backgroundColor);
       const toolbarColor = parseRgb(sample.vtextToolbar.color);
+      const fileToolbarBg = parseRgb(sample.fileToolbar.backgroundColor);
+      const fileToolbarColor = parseRgb(sample.fileToolbar.color);
       const headingColor = parseRgb(sample.vtextHeadingColor);
       expect(toolbarBg[0]).toBeGreaterThanOrEqual(248);
       expect(toolbarBg[1]).toBeGreaterThanOrEqual(228);
       expect(toolbarBg[2]).toBeGreaterThanOrEqual(222);
+      expect(fileToolbarBg[0]).toBeGreaterThanOrEqual(248);
+      expect(fileToolbarBg[1]).toBeGreaterThanOrEqual(235);
+      expect(fileToolbarBg[2]).toBeGreaterThanOrEqual(230);
       expect(toolbarColor[0]).toBeLessThan(75);
       expect(toolbarColor[1]).toBeLessThan(35);
       expect(toolbarColor[2]).toBeLessThan(38);
+      expect(fileToolbarColor[0]).toBeLessThan(75);
+      expect(fileToolbarColor[1]).toBeLessThan(35);
+      expect(fileToolbarColor[2]).toBeLessThan(38);
       expect(headingColor[0]).toBeLessThan(100);
       expect(headingColor[1]).toBeLessThan(45);
       expect(headingColor[2]).toBeLessThan(50);
@@ -336,6 +348,8 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await mobile.goto(BASE_URL);
   await expect(mobile.locator('[data-prompt-surface]')).toBeVisible();
+  const promptBox = await mobile.locator('[data-prompt-surface]').boundingBox();
+  expect(promptBox.height).toBeLessThanOrEqual(64);
   await mobile.locator('[data-desk-menu-button]').click();
   await expect(mobile.locator('[data-desk-sheet]')).toBeVisible();
   await expect(mobile.locator('[data-mobile-app-switcher]')).toBeVisible();

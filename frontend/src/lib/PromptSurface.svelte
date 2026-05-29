@@ -70,8 +70,9 @@
   function resizePromptInput() {
     if (!promptInputEl) return;
     const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
-    const collapsedHeight = Math.max(68, Math.ceil(lineHeight + 34));
-    const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
+    const compact = window.innerWidth <= 768;
+    const collapsedHeight = compact ? Math.max(54, Math.ceil(lineHeight + 24)) : Math.max(68, Math.ceil(lineHeight + 34));
+    const maxHeight = compact ? Math.min(108, Math.max(64, window.innerHeight * 0.18)) : Math.min(128, Math.max(72, window.innerHeight * 0.22));
     promptInputEl.style.height = `${collapsedHeight}px`;
     const nextHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
     promptInputEl.style.height = `${Math.max(collapsedHeight, nextHeight)}px`;
@@ -526,6 +527,20 @@
 
     .voice-button {
       display: none;
+    }
+
+    .command-field,
+    .command-field textarea,
+    .mobile-app-switcher {
+      min-height: 2.7rem;
+    }
+
+    .command-field {
+      height: 2.7rem;
+    }
+
+    .command-field textarea {
+      padding-block: 0.46rem;
     }
   }
 </style>
