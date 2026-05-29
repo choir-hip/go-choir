@@ -267,6 +267,7 @@ Start here:
 - [docs/glossary.md](docs/glossary.md): canonical vocabulary.
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
+- [docs/frontend-app-building-api.md](docs/frontend-app-building-api.md): current frontend app registry, preview, theme, and shell contract.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
 - [docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision.
 - [docs/mission-promotion-substrate-preflight-hard-cutover-v0.md](docs/mission-promotion-substrate-preflight-hard-cutover-v0.md): completed promotion-substrate preflight hard cutover.

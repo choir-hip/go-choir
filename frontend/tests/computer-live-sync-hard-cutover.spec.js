@@ -8,9 +8,7 @@ const frontendRoot = path.resolve(__dirname, '..');
 
 const syncedStateFiles = [
   'src/App.svelte',
-  'src/lib/AppsChangesApp.svelte',
   'src/lib/AudioApp.svelte',
-  'src/lib/ChangePreviewFrame.svelte',
   'src/lib/ComputeMonitorApp.svelte',
   'src/lib/Desktop.svelte',
   'src/lib/EpubApp.svelte',
@@ -23,10 +21,10 @@ const syncedStateFiles = [
   'src/lib/VideoApp.svelte',
   'src/lib/media-utils.js',
   'src/lib/preferences.js',
-  'src/lib/theme.js',
+  'src/lib/theme.ts',
 ];
 
-const coveredRefreshFiles = syncedStateFiles.filter((file) => file !== 'src/lib/theme.js');
+const coveredRefreshFiles = syncedStateFiles.filter((file) => file !== 'src/lib/theme.ts');
 
 async function readRelative(file) {
   return fs.readFile(path.join(frontendRoot, file), 'utf8');

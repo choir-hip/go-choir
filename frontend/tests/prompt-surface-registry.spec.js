@@ -24,7 +24,6 @@ async function deskAppIds(page) {
 test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async ({ page }) => {
   await page.goto(BASE_URL);
   await expect(page.locator('[data-prompt-surface]')).toBeVisible();
-  await expect(page.locator('[data-bottom-bar]')).toHaveCount(0);
   await expect(page.locator('[data-desk-menu-button]')).toBeVisible();
   await expect(page.locator('[data-window-tray-item]')).toHaveCount(3);
   await expect(page.locator('[data-vtext-editor]')).toContainText('A note before sign-in');
@@ -70,7 +69,7 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
   await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="email"]')).toBeVisible();
 });
 
-test('PromptSurface supports top placement without old geometry variables', async ({ page }) => {
+test('PromptSurface supports top placement with explicit placement offsets', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.evaluate(() => {
     window.dispatchEvent(new CustomEvent('choir-theme-change', {

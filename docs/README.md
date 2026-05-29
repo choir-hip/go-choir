@@ -44,6 +44,8 @@ Use these buckets when reading or editing docs:
   custom domain roadmap.
 - `docs/docs-state-report-2026-05-14.md` - current documentation audit and cleanup recommendation matrix.
 - `docs/current-architecture.md` - current product/runtime architecture.
+- `docs/frontend-app-building-api.md` - current frontend app registry, preview,
+  theme, and shell contract.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.

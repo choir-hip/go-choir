@@ -37,9 +37,6 @@ export type ChoirAppDefinition = {
     shellDataAttr: string;
     contentClass: string;
   };
-  publicPreview?: {
-    context?: Record<string, unknown>;
-  };
 };
 
 const windowDefaults = {
@@ -60,7 +57,6 @@ export const APP_REGISTRY = [
     window: { ...windowDefaults },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_mutation', 'file_upload'] },
     theme: { surface: 'standard', shellDataAttr: 'data-files-app', contentClass: 'files-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'browser',
@@ -72,7 +68,6 @@ export const APP_REGISTRY = [
     window: { ...windowDefaults },
     auth: { preview: 'public-preview', requiresAuthFor: ['web_import', 'provider_spend'] },
     theme: { surface: 'standard', shellDataAttr: 'data-browser-app-container', contentClass: 'browser-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'email',
@@ -84,7 +79,6 @@ export const APP_REGISTRY = [
     window: { singleton: true, heavy: false, desktop: { width: 1120, height: 720, minWidth: 760, minHeight: 520 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['email_reply', 'email_compose', 'email_send'] },
     theme: { surface: 'standard', shellDataAttr: 'data-email-window', contentClass: 'email-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'compute-monitor',
@@ -96,7 +90,6 @@ export const APP_REGISTRY = [
     window: { singleton: true, heavy: false, desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['wake_computer', 'suspend_background', 'reset_desktop'] },
     theme: { surface: 'standard', shellDataAttr: 'data-compute-monitor-window', contentClass: 'compute-monitor-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'vtext',
@@ -113,7 +106,6 @@ export const APP_REGISTRY = [
     },
     auth: { preview: 'public-preview', requiresAuthFor: ['save_vtext', 'revise_vtext', 'publish_vtext'] },
     theme: { surface: 'document', shellDataAttr: 'data-vtext-app', contentClass: 'vtext-content' },
-    publicPreview: { context: { preview: true, guestMode: true } },
   },
   {
     id: 'trace',
@@ -125,7 +117,6 @@ export const APP_REGISTRY = [
     window: { singleton: true, heavy: true, desktop: { width: 1040, height: 680 } },
     auth: { preview: 'public-preview', requiresAuthFor: ['private_trace'] },
     theme: { surface: 'standard', shellDataAttr: 'data-trace-window', contentClass: 'trace-content' },
-    publicPreview: { context: { preview: true, guestMode: true } },
   },
   {
     id: 'podcast',
@@ -137,7 +128,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 660 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['podcast_import', 'provider_spend'] },
     theme: { surface: 'media', shellDataAttr: 'data-podcast-window', contentClass: 'podcast-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'image',
@@ -149,7 +139,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 680 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
     theme: { surface: 'media', shellDataAttr: 'data-image-window', contentClass: 'image-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'audio',
@@ -161,7 +150,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 760, height: 420 }, compact: { minWidth: 280, minHeight: 320 } },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
     theme: { surface: 'media', shellDataAttr: 'data-audio-window', contentClass: 'audio-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'video',
@@ -173,7 +161,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 980, height: 720 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_upload', 'provider_spend'] },
     theme: { surface: 'media', shellDataAttr: 'data-video-window', contentClass: 'video-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'pdf',
@@ -185,7 +172,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 940, height: 720 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
     theme: { surface: 'document', shellDataAttr: 'data-pdf-window', contentClass: 'pdf-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'epub',
@@ -197,7 +183,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 700 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
     theme: { surface: 'document', shellDataAttr: 'data-epub-window', contentClass: 'epub-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'features',
@@ -209,7 +194,6 @@ export const APP_REGISTRY = [
     window: { singleton: true, heavy: true, desktop: { width: 1100, height: 760, minWidth: 760, minHeight: 540 }, compact: compactDefault },
     auth: { preview: 'public-preview', requiresAuthFor: ['feature_import', 'feature_activate'] },
     theme: { surface: 'standard', shellDataAttr: 'data-features-window', contentClass: 'features-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'terminal',
@@ -221,7 +205,6 @@ export const APP_REGISTRY = [
     window: { singleton: true, heavy: true },
     auth: { preview: 'public-preview', requiresAuthFor: ['terminal_session'] },
     theme: { surface: 'terminal', shellDataAttr: 'data-terminal-app', contentClass: 'terminal-content' },
-    publicPreview: { context: { preview: true } },
   },
   {
     id: 'settings',

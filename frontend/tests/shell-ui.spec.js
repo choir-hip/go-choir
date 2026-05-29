@@ -69,7 +69,7 @@ test('authenticated shell includes a visible logout control', async ({
 
   await openDesktopMenu(page);
 
-  // The logout button should be visible and enabled in the desktop menu.
+  // The logout button should be visible and enabled in the Desk sheet.
   const logoutBtn = page.locator('[data-shell-logout]');
   await expect(logoutBtn).toBeVisible();
   await expect(logoutBtn).toBeEnabled();
@@ -87,7 +87,7 @@ test('authenticated shell exposes session-aware current user display', async ({
 
   await openDesktopMenu(page);
 
-  // The user area should show the current email in the desktop menu.
+  // The user area should show the current email in the Desk sheet.
   const userArea = page.locator('[data-shell-user]');
   await expect(userArea).toBeVisible();
   await expect(userArea).toContainText(email);
@@ -164,7 +164,7 @@ test('clicking logout returns to public desktop', async ({
   const email = uniqueEmail();
   await registerAndReloadShell(page, authenticator, email);
 
-  // Click logout from the desktop menu.
+  // Click logout from the Desk sheet.
   await openDesktopMenu(page);
   const logoutBtn = page.locator('[data-shell-logout]');
   await logoutBtn.click();

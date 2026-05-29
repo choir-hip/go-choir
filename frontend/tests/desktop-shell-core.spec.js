@@ -722,7 +722,7 @@ test('prompt surface switches all open windows and exits show-desktop state', as
 // ---------------------------------------------------------------
 // Test: user info and logout in desktop/account menu (VAL-SHELL-009)
 // ---------------------------------------------------------------
-test('user info and logout in desktop menu', async ({ page, authenticator }) => {
+test('user info and logout in Desk sheet', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 

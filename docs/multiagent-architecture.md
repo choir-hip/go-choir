@@ -191,7 +191,7 @@ agent_evidence
 
 ```
 User types prompt
-  -> BottomBar.svelte emits promptsubmit
+  -> PromptSurface.svelte emits promptsubmit
   -> Desktop.svelte: submitConductorPrompt()
        POST /api/prompt-bar { text }
   -> Proxy validates auth, forwards to sandbox :8081
@@ -349,16 +349,18 @@ Default prompts embedded via `//go:embed` from `internal/runtime/prompt_defaults
 
 ```
 Desktop.svelte
-  BottomBar.svelte             prompt input -> conductor
+  PromptSurface.svelte         prompt input, DeskSheet, open-app switcher
   conductor.js                 submitConductorPrompt, waitForConductorDecision
-  Window.svelte                window chrome (minimize / maximize / close)
-    VTextEditor.svelte         main writing surface
-      Activity panel           reads /api/trace/trajectories/<trajectory_id>
-      Version nav              floating vN navigator (v0 to vLatest)
-      Revise button            POST .../revise
-      vtext.js                 VText CRUD + agent revision API calls
-      trace.js                 read-only trajectory projections
+  FloatingWindow.svelte        window chrome (minimize / maximize / close)
+    AppHost.svelte             registry-driven app component loader
+      VTextEditor.svelte       main writing surface
+        Activity panel         reads /api/trace/trajectories/<trajectory_id>
+        Version nav            floating vN navigator (v0 to vLatest)
+        Revise button          POST .../revise
+        vtext.js               VText CRUD + agent revision API calls
+        trace.js               read-only trajectory projections
   TraceApp.svelte              full run family inspector + event timeline
+  apps/registry.ts             Desk, desktop icon, mobile switcher, window policy
 ```
 
 ---

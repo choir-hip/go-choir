@@ -106,7 +106,7 @@ test('logout tears down the open live channel', async ({
   const liveStatusBefore = page.locator('[data-shell-live-status]');
   await expect(liveStatusBefore).toBeVisible();
 
-  // Click logout from the desktop menu.
+  // Click logout from the Desk sheet.
   await clickShellLogout(page);
 
   // Should return to the guest auth UI.
@@ -124,7 +124,7 @@ test('after logout, GET /api/shell/bootstrap fails', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout from the desktop menu.
+  // Click logout from the Desk sheet.
   await clickShellLogout(page);
 
   // Wait for guest auth UI.
@@ -150,7 +150,7 @@ test('after logout, GET /api/ws cannot reconnect', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout from the desktop menu.
+  // Click logout from the Desk sheet.
   await clickShellLogout(page);
 
   // Wait for guest auth UI.
@@ -230,7 +230,7 @@ test('refresh after logout does not resurrect the authenticated shell', async ({
 }) => {
   const email = await setupAuthenticatedShell(page);
 
-  // Click logout from the desktop menu.
+  // Click logout from the Desk sheet.
   await clickShellLogout(page);
   await page.locator('[data-auth-entry]').waitFor({ state: 'visible', timeout: 10_000 });
 
