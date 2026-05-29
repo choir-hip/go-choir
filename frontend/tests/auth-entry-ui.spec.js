@@ -20,8 +20,8 @@ function uniqueEmail() {
 
 // ---------------------------------------------------------------
 async function openAuthOverlay(page) {
-  await page.locator('[data-show-desktop-btn]').click();
-  await page.locator('[data-shell-login]').click();
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-prompt-surface-login]').click();
   await page.locator('[data-auth-overlay]').waitFor({ state: 'visible' });
 }
 
@@ -127,9 +127,9 @@ test('signed-out root shows public shell without signed-in controls', async ({
   const shell = page.locator('[data-shell]');
   await expect(shell).toBeVisible();
 
-  await page.locator('[data-show-desktop-btn]').click();
-  await expect(page.locator('[data-shell-login]')).toBeVisible();
-  await expect(page.locator('[data-shell-logout]')).toHaveCount(0);
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-prompt-surface-login]')).toBeVisible();
+  await expect(page.locator('[data-prompt-surface-logout]')).toHaveCount(0);
 });
 
 test('signed-out prompt intent opens auth overlay without prompt-bar mutation', async ({
