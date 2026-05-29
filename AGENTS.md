@@ -49,6 +49,22 @@ capabilities are explicitly verified for the task at hand.
 
 Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
 
+## Worktree Hygiene
+
+Before handing off or stopping a mission, run `git status --short` and classify
+every dirty path as intentional source, durable documentation/evidence,
+temporary proof output, generated artifact, or unrelated WIP.
+
+Do not leave untracked scratch files in the repo. Temporary Playwright probes
+may use `*.tmp.spec.js` while investigating, but before stopping they must be
+deleted, moved outside the repo, or promoted to a normal tracked `*.spec.js`
+with a clear regression purpose. Do not let scratch tests become a parallel
+test suite.
+
+If unrelated WIP is already present, preserve it explicitly instead of mixing it
+into the current mission commit. Use a named stash or a separate branch/commit,
+and report the recovery handle.
+
 ## Problem Documentation First
 
 Every platform behavior-changing mission must observe the following invariant:

@@ -46,3 +46,7 @@ vmctl.log
 
 # Test results
 test-results/
+
+# Temporary Playwright probes. Promote durable tests by renaming them to
+# *.spec.js before committing; proof-only probes should not accumulate.
+*.tmp.spec.js
