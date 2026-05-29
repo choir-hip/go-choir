@@ -1742,6 +1742,7 @@
               <div class="app-content settings-content" data-settings-window>
                 <SettingsApp
                   {currentUser}
+                  currentTheme={theme}
                   on:authexpired={() => dispatch('authexpired')}
                   on:resetdesktop={handleResetDesktop}
                   on:opencomputemonitor={handleOpenComputeMonitor}

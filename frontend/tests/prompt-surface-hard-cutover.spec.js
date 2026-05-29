@@ -204,8 +204,14 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await expect(page.locator('[data-settings-window] [data-theme-editor]')).toBeHidden();
 
   const assertThemeOnShells = async (themeId, expectedVars) => {
+    const themeName = {
+      'futuristic-noir': 'Futuristic Noir',
+      'carbon-fiber-kintsugi': 'Carbon Fiber Kintsugi',
+      'london-salmon': 'London Salmon',
+    }[themeId];
     await page.locator(`[data-settings-window] [data-theme-preset="${themeId}"]`).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme-id', themeId);
+    await expect(page.locator('[data-settings-theme-validation]')).toContainText(`${themeName}: valid config`);
     const sample = await page.evaluate((selectors) => {
       const root = getComputedStyle(document.documentElement);
       return {

@@ -13,13 +13,14 @@
   } from './theme';
 
   export let currentUser = null;
+  export let currentTheme = DEFAULT_THEME;
 
   const dispatch = createEventDispatcher();
 
   let loading = true;
   let error = '';
   let health = null;
-  let selectedTheme = DEFAULT_THEME;
+  let selectedTheme = normalizeThemeConfig(currentTheme);
   let themeJSON = JSON.stringify(DEFAULT_THEME, null, 2);
   let themeError = '';
   let themeNotice = '';
@@ -58,6 +59,11 @@
 
   function handleOpenComputeMonitor() {
     dispatch('opencomputemonitor');
+  }
+
+  $: if (!currentUser?.email && currentTheme?.id && currentTheme.id !== selectedTheme.id) {
+    selectedTheme = normalizeThemeConfig(currentTheme);
+    themeJSON = JSON.stringify(selectedTheme, null, 2);
   }
 
   async function loadStoredTheme() {
@@ -104,7 +110,7 @@
   let removeLiveListener = () => {};
 
   onMount(async () => {
-    selectedTheme = await loadStoredTheme();
+    selectedTheme = currentUser?.email ? await loadStoredTheme() : normalizeThemeConfig(currentTheme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
     removeLiveListener = addLiveEventListener((message) => {
