@@ -77,7 +77,7 @@ let windowCounter = 0;
 
 const MIN_WINDOW_WIDTH = 200;
 const MIN_WINDOW_HEIGHT = 120;
-const BOTTOM_BAR_HEIGHT = 56;
+const PROMPT_SURFACE_SIZE = 64;
 const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
@@ -117,7 +117,7 @@ function getViewportMetrics() {
   const maxWidth = Math.max(MIN_WINDOW_WIDTH, viewportWidth - margin * 2);
   const maxHeight = Math.max(
     MIN_WINDOW_HEIGHT,
-    viewportHeight - BOTTOM_BAR_HEIGHT - margin * 2
+    viewportHeight - PROMPT_SURFACE_SIZE - margin * 2
   );
   const compactWindowWidth = Math.max(
     MIN_WINDOW_WIDTH,
@@ -166,7 +166,7 @@ function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
   const maxX = Math.max(metrics.margin, metrics.viewportWidth - clampedWidth - metrics.margin);
   const maxY = Math.max(
     metrics.margin,
-    metrics.viewportHeight - BOTTOM_BAR_HEIGHT - clampedHeight - metrics.margin
+    metrics.viewportHeight - PROMPT_SURFACE_SIZE - clampedHeight - metrics.margin
   );
 
   return {
@@ -262,12 +262,12 @@ export const selectedIconId = writable('');
 
 // ---- Derived stores ----
 
-/** Minimized windows (shown in bottom bar) */
+/** Minimized windows (shown in the prompt surface tray) */
 export const minimizedWindows = derived(windows, ($windows) =>
   $windows.filter((w) => w.mode === 'minimized')
 );
 
-/** Open windows (shown in the bottom-bar switcher) */
+/** Open windows (shown in the prompt surface tray) */
 export const openWindows = derived(windows, ($windows) =>
   $windows.filter((w) => w.mode !== 'closed' && w.mode !== 'hidden')
 );

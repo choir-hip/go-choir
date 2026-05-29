@@ -62,7 +62,7 @@ async function getVTextLayout(page) {
       titlebar: rect('[data-window-titlebar]'),
       toolbar: rect('[data-vtext-toolbar]'),
       editor: rect('[data-vtext-editor-area]'),
-      bottomBar: rect('[data-bottom-bar]'),
+      promptSurface: rect('[data-prompt-surface]'),
       toolbarOpacity: toolbar ? Number(getComputedStyle(toolbar).opacity) : null,
       controlBand,
     };

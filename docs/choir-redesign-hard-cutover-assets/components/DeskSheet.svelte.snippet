@@ -1,0 +1,52 @@
+<script>
+  import { createEventDispatcher } from 'svelte';
+  export let normalizedPlacement = 'bottom';
+  export let deskApps = [];
+  export let openWindows = [];
+  export let authenticated = false;
+  export let currentUser = null;
+  const dispatch = createEventDispatcher();
+</script>
+
+<div class="desk-sheet-backdrop" data-desk-sheet-backdrop on:click={() => dispatch('close')}></div>
+<section class="desk-sheet placement-{normalizedPlacement}" data-desk-sheet role="dialog" aria-label="Desk">
+  <div class="sheet-handle" aria-hidden="true"></div>
+  <header>
+    <div>
+      <p>Desk</p>
+      <h2>{openWindows.length} open</h2>
+    </div>
+    <button type="button" data-desk-sheet-close on:click={() => dispatch('close')}>Close</button>
+  </header>
+
+  <button class="overview-card" data-desk-overview type="button" on:click={() => dispatch('showoverview')}>
+    <span>▦</span>
+    <strong>Desktop Overview</strong>
+    <small>Switch, suspend, focus, and clean up windows</small>
+  </button>
+
+  <section class="desk-section">
+    <h3>Apps</h3>
+    <div class="app-grid" data-desk-sheet-apps>
+      {#each deskApps as app}
+        <button data-desk-sheet-app data-desk-app-id={app.id} type="button" on:click={() => dispatch('launchapp', { app })}>
+          <span>{app.icon}</span>
+          <strong>{app.name}</strong>
+          <small>{app.description}</small>
+        </button>
+      {/each}
+    </div>
+  </section>
+
+  <button class="plain-row" data-desk-show-desktop type="button" on:click={() => dispatch('showdesktop')}>Show desktop</button>
+
+  <footer>
+    {#if authenticated}
+      <span data-prompt-surface-user>{currentUser?.email || 'signed in'}</span>
+      <button type="button" data-prompt-surface-logout on:click={() => dispatch('logout')}>Sign out</button>
+    {:else}
+      <span data-prompt-surface-user>Public desktop</span>
+      <button type="button" data-prompt-surface-login on:click={() => dispatch('authrequest')}>Sign in</button>
+    {/if}
+  </footer>
+</section>

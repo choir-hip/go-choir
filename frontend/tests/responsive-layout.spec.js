@@ -4,14 +4,14 @@
  * Covers validation assertions:
  * - VAL-RESP-001: Desktop — floating icons visible with labels
  * - VAL-RESP-002: Desktop — windows floating, draggable, resizable
- * - VAL-RESP-003: Desktop — bottom bar full height (~56px)
+ * - VAL-RESP-003: Desktop — prompt surface full height (~56px)
  * - VAL-RESP-004: Desktop — multiple windows visible simultaneously
  * - VAL-RESP-005: Tablet — windows floating with max-width constraint
  * - VAL-RESP-006: Mobile — floating icons remain visible
  * - VAL-RESP-007: Mobile — multiple windows remain available simultaneously
  * - VAL-RESP-008: Mobile — window remains floating and resizable
  * - VAL-RESP-009: Mobile — prompt bar full width with >=44px touch target
- * - VAL-RESP-010: Mobile — minimizing preserves window state via bottom bar
+ * - VAL-RESP-010: Mobile — minimizing preserves window state via prompt surface
  * - VAL-RESP-011: No horizontal overflow at any breakpoint
  * - VAL-RESP-012: Breakpoint transition is smooth (no layout flash)
  * - VAL-RESP-013: Mobile — consistent desktop experience
@@ -203,19 +203,19 @@ test.describe('Desktop breakpoint (>1024px)', () => {
     await expect(resizeHandle).toHaveCount(1);
   });
 
-  // VAL-RESP-003: Desktop — bottom bar full height (~56px)
-  test('bottom bar renders at ~56px full width', async ({ page, authenticator }) => {
+  // VAL-RESP-003: Desktop — prompt surface full height (~56px)
+  test('prompt surface renders at ~56px full width', async ({ page, authenticator }) => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
 
-    const bottomBar = page.locator('[data-bottom-bar]');
-    await expect(bottomBar).toBeVisible();
+    const promptSurface = page.locator('[data-prompt-surface]');
+    await expect(promptSurface).toBeVisible();
 
-    const height = await bottomBar.evaluate((el) => el.offsetHeight);
+    const height = await promptSurface.evaluate((el) => el.offsetHeight);
     expect(height).toBeGreaterThanOrEqual(52);
     expect(height).toBeLessThanOrEqual(60);
 
-    const width = await bottomBar.evaluate((el) => el.offsetWidth);
+    const width = await promptSurface.evaluate((el) => el.offsetWidth);
     expect(width).toBe(1280);
   });
 
@@ -263,14 +263,14 @@ test.describe('Tablet breakpoint (768-1024px)', () => {
   });
 
   // Bottom bar remains full height
-  test('bottom bar remains full height', async ({ page, authenticator }) => {
+  test('prompt surface remains full height', async ({ page, authenticator }) => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 900, height: 800 });
 
-    const bottomBar = page.locator('[data-bottom-bar]');
-    await expect(bottomBar).toBeVisible();
+    const promptSurface = page.locator('[data-prompt-surface]');
+    await expect(promptSurface).toBeVisible();
 
-    const height = await bottomBar.evaluate((el) => el.offsetHeight);
+    const height = await promptSurface.evaluate((el) => el.offsetHeight);
     expect(height).toBeGreaterThanOrEqual(52);
     expect(height).toBeLessThanOrEqual(60);
   });
@@ -337,7 +337,7 @@ test.describe('Mobile breakpoint (<768px)', () => {
     await expect(windows.nth(1)).toBeVisible();
   });
 
-  // VAL-RESP-010: Mobile — minimizing preserves window state via bottom bar
+  // VAL-RESP-010: Mobile — minimizing preserves window state via prompt surface
   test('minimizing on mobile preserves the window and exposes a restore target', async ({ page, authenticator }) => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 375, height: 812 });
@@ -352,7 +352,7 @@ test.describe('Mobile breakpoint (<768px)', () => {
 
     await expect(windowEl).not.toBeVisible();
 
-    const indicator = page.locator('[data-minimized-indicator]');
+    const indicator = page.locator('[data-window-tray-item]');
     await expect(indicator).toHaveCount(1);
     await expect(indicator.first()).toBeVisible();
 

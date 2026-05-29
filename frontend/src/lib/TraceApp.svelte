@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError } from './auth.js';
   import {
@@ -11,6 +11,7 @@
     synthesizeContinuation,
   } from './trace.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { demoTraceSnapshot, demoTraceTrajectories } from './demo-fixtures';
 
   const dispatch = createEventDispatcher();
 
@@ -181,12 +182,20 @@
     snapshotLoading = false;
     detailLoading = false;
     error = '';
-    trajectories = [];
-    snapshot = null;
-    selectedTrajectoryId = '';
+    trajectories = demoTraceTrajectories;
+    snapshot = demoTraceSnapshot;
+    selectedTrajectoryId = demoTraceSnapshot.trajectory.trajectory_id;
     selectedAgentId = '';
-    selectedMomentId = '';
-    momentDetails = {};
+    selectedMomentId = demoTraceSnapshot.moments[demoTraceSnapshot.moments.length - 1]?.moment_id || '';
+    momentDetails = {
+      [selectedMomentId]: {
+        moment: demoTraceSnapshot.moments[demoTraceSnapshot.moments.length - 1],
+        payload: {
+          preview: true,
+          note: 'Frontend-only Trace fixture. Private run evidence loads after sign-in.',
+        },
+      },
+    };
     selectedContinuation = null;
     selectedAcceptanceId = '';
     continuationError = '';
@@ -467,7 +476,14 @@
   }
 
   async function selectTrajectory(trajectoryId) {
-    if (!authenticated) return;
+    if (!authenticated) {
+      const selected = demoTraceTrajectories.find((item) => item.trajectory_id === trajectoryId);
+      if (!selected) return;
+      selectedTrajectoryId = trajectoryId;
+      snapshot = { ...demoTraceSnapshot, trajectory: selected };
+      mobilePanel = 'summary';
+      return;
+    }
     if (!trajectoryId || trajectoryId === selectedTrajectoryId) return;
     selectedTrajectoryId = trajectoryId;
     selectedAgentId = '';
@@ -501,7 +517,18 @@
   }
 
   async function selectMoment(momentId) {
-    if (!authenticated) return;
+    if (!authenticated) {
+      selectedMomentId = momentId;
+      mobilePanel = 'inspector';
+      momentDetails = {
+        ...momentDetails,
+        [momentId]: {
+          moment: demoTraceSnapshot.moments.find((item) => item.moment_id === momentId),
+          payload: { preview: true, note: 'Demo inspector detail; not backend proof.' },
+        },
+      };
+      return;
+    }
     if (!momentId) return;
     selectedMomentId = momentId;
     mobilePanel = 'inspector';
@@ -647,9 +674,7 @@
     </div>
 
     <div class="trajectory-list" data-trace-trajectory-list>
-      {#if !authenticated}
-        <div class="empty-state" data-trace-guest-sidebar>Sign in to inspect private trajectories.</div>
-      {:else if loadingIndex}
+      {#if loadingIndex}
         <div class="empty-state">Loading trajectories…</div>
       {:else if trajectories.length === 0}
         <div class="empty-state">No trajectories yet. Start with the prompt bar or open VText.</div>
@@ -679,22 +704,12 @@
     </aside>
 
     <section class="trace-main">
-    {#if !authenticated}
-      <section class="panel guest-trace-panel" data-trace-guest>
-        <div class="panel-header">
-          <div>
-            <h4>Trace evidence is private</h4>
-            <p>Use the public desktop without loading run evidence. Sign in when you need trajectories, moments, worker provenance, or continuation controls.</p>
-          </div>
-          <span class="status-pill neutral">read shell</span>
+      {#if !authenticated}
+        <div class="preview-banner" data-trace-guest>
+          <span>Preview fixture</span>
+          <button class="ghost-btn" data-trace-guest-sign-in on:click={requestTraceAuth}>Sign in for private Trace</button>
         </div>
-        <div class="guest-trace-actions">
-          <button class="ghost-btn" data-trace-guest-sign-in on:click={requestTraceAuth}>
-            Sign in for Trace
-          </button>
-        </div>
-      </section>
-    {:else}
+      {/if}
       {#if error}
         <div class="error-banner">{error}</div>
       {/if}
@@ -1291,7 +1306,6 @@
       {:else if !loadingIndex}
         <div class="empty-state">Select a trajectory to inspect its graph, moments, and message flow.</div>
       {/if}
-    {/if}
     </section>
   </div>
 </div>

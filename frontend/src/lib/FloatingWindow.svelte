@@ -5,10 +5,10 @@
     - Title bar drag (no drag on buttons)
     - Single resize handle at bottom-right corner (no 8-handle system)
     - Minimum dimensions: width >= 200px, height >= 120px
-    - Maximized fills desktop area excluding left rail and bottom bar
+    - Maximized fills desktop area excluding the prompt surface
     - Maximize button icon changes to restore icon when maximized
     - Restore returns to pre-maximize geometry
-    - Minimize hides window, shows indicator in bottom bar
+    - Minimize hides window, shows indicator in the prompt surface tray
     - Restore from minimized returns to pre-minimize geometry
     - Clicking window brings it to front (z-index management)
     - Active window has blue border (#3b82f6) and enhanced shadow
@@ -55,14 +55,14 @@
   const MIN_HEIGHT = 120;
   const DEFAULT_VIEWPORT_WIDTH = 1280;
   const DEFAULT_VIEWPORT_HEIGHT = 800;
-  const DEFAULT_BOTTOM_BAR_HEIGHT = 56;
+  const DEFAULT_PROMPT_SURFACE_SIZE = 64;
   const MOBILE_BREAKPOINT = 768;
   const TABLET_BREAKPOINT = 1024;
 
   let viewportWidth = DEFAULT_VIEWPORT_WIDTH;
   let viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
-  let bottomBarHeight = DEFAULT_BOTTOM_BAR_HEIGHT;
-  let bottomBarObserver = null;
+  let promptSurfaceSize = DEFAULT_PROMPT_SURFACE_SIZE;
+  let promptSurfaceObserver = null;
 
   // ---- Drag state ----
   let dragging = false;
@@ -89,16 +89,16 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
-  function readBottomBarHeight() {
-    if (typeof document === 'undefined') return DEFAULT_BOTTOM_BAR_HEIGHT;
+  function readPromptSurfaceSize() {
+    if (typeof document === 'undefined') return DEFAULT_PROMPT_SURFACE_SIZE;
 
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (promptSurface?.offsetHeight) return promptSurface.offsetHeight;
 
     const fromTheme = window
       .getComputedStyle(document.documentElement)
-      .getPropertyValue('--choir-bottom-bar-height');
-    return parsePixelValue(fromTheme, DEFAULT_BOTTOM_BAR_HEIGHT);
+      .getPropertyValue('--choir-prompt-surface-size');
+    return parsePixelValue(fromTheme, DEFAULT_PROMPT_SURFACE_SIZE);
   }
 
   function refreshViewportBounds() {
@@ -106,7 +106,7 @@
 
     viewportWidth = window.innerWidth || DEFAULT_VIEWPORT_WIDTH;
     viewportHeight = window.innerHeight || DEFAULT_VIEWPORT_HEIGHT;
-    bottomBarHeight = readBottomBarHeight();
+    promptSurfaceSize = readPromptSurfaceSize();
   }
 
   function trySetPointerCapture(target, pointerId) {
@@ -251,10 +251,10 @@
     window.addEventListener('pointercancel', handleResizeEnd);
     window.addEventListener('resize', refreshViewportBounds);
 
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (typeof ResizeObserver !== 'undefined' && bottomBar) {
-      bottomBarObserver = new ResizeObserver(refreshViewportBounds);
-      bottomBarObserver.observe(bottomBar);
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (typeof ResizeObserver !== 'undefined' && promptSurface) {
+      promptSurfaceObserver = new ResizeObserver(refreshViewportBounds);
+      promptSurfaceObserver.observe(promptSurface);
     }
   });
 
@@ -266,7 +266,7 @@
     window.removeEventListener('pointercancel', handleDragEnd);
     window.removeEventListener('pointercancel', handleResizeEnd);
     window.removeEventListener('resize', refreshViewportBounds);
-    bottomBarObserver?.disconnect();
+    promptSurfaceObserver?.disconnect();
   });
 
   // ---- Computed styles ----
@@ -279,14 +279,14 @@
   $: maxNormalWidth = Math.max(MIN_WIDTH, viewportWidth - viewportMargin * 2);
   $: maxNormalHeight = Math.max(
     MIN_HEIGHT,
-    viewportHeight - bottomBarHeight - viewportMargin * 2
+    viewportHeight - promptSurfaceSize - viewportMargin * 2
   );
   $: renderedWidth = Math.min(Math.max(width, MIN_WIDTH), maxNormalWidth);
   $: renderedHeight = Math.min(Math.max(height, MIN_HEIGHT), maxNormalHeight);
   $: maxRenderedX = Math.max(viewportMargin, viewportWidth - renderedWidth - viewportMargin);
   $: maxRenderedY = Math.max(
     viewportMargin,
-    viewportHeight - bottomBarHeight - renderedHeight - viewportMargin
+    viewportHeight - promptSurfaceSize - renderedHeight - viewportMargin
   );
   $: renderedX = clamp(x, viewportMargin, maxRenderedX);
   $: renderedY = clamp(y, viewportMargin, maxRenderedY);
@@ -384,7 +384,7 @@
     transition: box-shadow 0.15s, border-color 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 16px);
+    max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 16px);
   }
 
   .window.overview-preview {
@@ -549,7 +549,7 @@
   @media (max-width: 768px) {
     .window {
       max-width: calc(100vw - 16px);
-      max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 8px);
+      max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 8px);
     }
 
     .titlebar {

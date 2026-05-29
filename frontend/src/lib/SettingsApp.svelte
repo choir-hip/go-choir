@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { BUILD_INFO } from './build-info.js';
@@ -10,7 +10,7 @@
     normalizeThemeConfig,
     themeCSSVariables,
     validateThemeConfig,
-  } from './theme.js';
+  } from './theme';
 
   export let currentUser = null;
 

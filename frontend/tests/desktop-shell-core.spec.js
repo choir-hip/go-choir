@@ -9,7 +9,7 @@
  * - Active window indicator on desktop icon (VAL-SHELL-004)
  * - Bottom bar always visible (VAL-SHELL-006)
  * - Bottom bar prompt input (VAL-SHELL-007)
- * - Minimized window indicators in bottom bar (VAL-SHELL-008)
+ * - Minimized window indicators in prompt surface (VAL-SHELL-008)
  * - User info and logout in desktop/account menu (VAL-SHELL-009)
  * - Live connection status dot (VAL-SHELL-010)
  * - No bootstrap accordion or runtime panel (VAL-SHELL-024)
@@ -228,7 +228,7 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   await expect(page.locator('[data-auth-entry]')).toBeVisible();
 });
 
-test('mobile bottom-bar restore raises the selected app above the current window', async ({ page, authenticator }) => {
+test('mobile prompt-surface restore raises the selected app above the current window', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await page.setViewportSize({ width: 390, height: 844 });
   await registerAndLoadDesktop(page, authenticator, email);
@@ -417,30 +417,30 @@ test('floating icon active indicator highlights open app', async ({ page, authen
 });
 
 // ---------------------------------------------------------------
-// Test: bottom bar always visible (VAL-SHELL-006)
+// Test: prompt surface always visible (VAL-SHELL-006)
 // ---------------------------------------------------------------
-test('bottom bar always visible', async ({ page, authenticator }) => {
+test('prompt surface always visible', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const bottomBar = page.locator('[data-bottom-bar]');
-  await expect(bottomBar).toBeVisible();
+  const promptSurface = page.locator('[data-prompt-surface]');
+  await expect(promptSurface).toBeVisible();
 
   // Bottom bar should have a fixed height approximately 56px
-  const height = await bottomBar.evaluate((el) => el.offsetHeight);
+  const height = await promptSurface.evaluate((el) => el.offsetHeight);
   expect(height).toBeGreaterThanOrEqual(52);
   expect(height).toBeLessThanOrEqual(60);
 
-  // Open a window and check bottom bar is still visible
+  // Open a window and check prompt surface is still visible
   await openAppViaIcon(page, 'files');
   await page.locator('[data-window]').first().waitFor({ state: 'visible', timeout: 5000 });
-  await expect(bottomBar).toBeVisible();
+  await expect(promptSurface).toBeVisible();
 });
 
 // ---------------------------------------------------------------
-// Test: bottom bar prompt input (VAL-SHELL-007)
+// Test: prompt surface prompt input (VAL-SHELL-007)
 // ---------------------------------------------------------------
-test('bottom bar prompt input with placeholder', async ({ page, authenticator }) => {
+test('prompt surface prompt input with placeholder', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -648,9 +648,9 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
 });
 
 // ---------------------------------------------------------------
-// Test: minimized window indicators in bottom bar (VAL-SHELL-008)
+// Test: minimized window indicators in prompt surface (VAL-SHELL-008)
 // ---------------------------------------------------------------
-test('minimized window indicators in bottom bar', async ({ page, authenticator }) => {
+test('minimized window indicators in prompt surface', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -666,8 +666,8 @@ test('minimized window indicators in bottom bar', async ({ page, authenticator }
   // Window should be hidden
   await expect(windowEl).not.toBeVisible();
 
-  // A minimized indicator should appear in bottom bar
-  const indicator = page.locator('[data-minimized-indicator]');
+  // A minimized indicator should appear in prompt surface
+  const indicator = page.locator('[data-window-tray-item]');
   await expect(indicator).toHaveCount(1);
   await expect(indicator.first()).toBeVisible();
 
@@ -678,10 +678,10 @@ test('minimized window indicators in bottom bar', async ({ page, authenticator }
   // Window should be visible again
   await expect(windowEl).toBeVisible();
   // Indicator should be gone
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(0);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(0);
 });
 
-test('bottom bar switches all open windows and exits show-desktop state', async ({ page, authenticator }) => {
+test('prompt surface switches all open windows and exits show-desktop state', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -697,18 +697,18 @@ test('bottom bar switches all open windows and exits show-desktop state', async 
 
   await settingsWindow.locator('[data-window-minimize]').click();
   await expect(settingsWindow).not.toBeVisible();
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(1);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(1);
 
   const settingsSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Settings' }).first();
   await settingsSwitch.click();
   await expect(settingsWindow).toBeVisible();
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(0);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(0);
 
   await page.locator('[data-show-desktop-btn]').click();
   await page.locator('[data-start-show-desktop]').click();
   await expect(filesWindow).not.toBeVisible();
   await expect(settingsWindow).not.toBeVisible();
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(2);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(2);
 
   const filesSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Files' }).first();
   await filesSwitch.click();
@@ -768,7 +768,7 @@ test('logout remains reachable when desktop bootstrap fails', async ({ page, aut
   await expect(page.locator('[data-desktop]')).not.toBeVisible();
   await expect(page.locator('[data-boot-console]')).toBeVisible();
   await expect(page.locator('[data-boot-line]').first()).toContainText(/Powering|Resolving|returned 502/);
-  await expect(page.locator('[data-bottom-bar]')).toBeVisible();
+  await expect(page.locator('[data-prompt-surface]')).toBeVisible();
   await page.locator('[data-start-button]').click();
   await expect(page.locator('[data-shell-logout]')).toBeVisible();
 
@@ -803,7 +803,7 @@ test('Settings opens as safe product settings without prompt APIs', async ({ pag
 // ---------------------------------------------------------------
 // Test: live connection status dot (VAL-SHELL-010)
 // ---------------------------------------------------------------
-test('live connection status dot in bottom bar', async ({ page, authenticator }) => {
+test('live connection status dot in prompt surface', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -871,7 +871,7 @@ test('floating window minimize hides and shows indicator', async ({ page, authen
 
   // Window hidden (still in DOM but display:none), indicator shown
   await expect(page.locator('[data-window]').first()).not.toBeVisible();
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(1);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(1);
 });
 
 // ---------------------------------------------------------------

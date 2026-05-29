@@ -34,14 +34,16 @@
     data-nav-back         — back navigation button
     data-nav-forward      — forward navigation button
 -->
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { createEventDispatcher } from 'svelte';
   import { mediaRouteForFileName } from './media-utils.js';
   import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
+  import { demoFiles, demoFolderEntries } from './demo-fixtures';
 
   const dispatch = createEventDispatcher();
+  export let authenticated = false;
 
   // Auto-focus action for inputs
   function autofocus(node) {
@@ -79,6 +81,12 @@
     loading = true;
     error = '';
     entries = [];
+    if (!authenticated) {
+      const key = pathSegments.join('/');
+      entries = key ? (demoFolderEntries[key] || []) : demoFiles;
+      loading = false;
+      return;
+    }
     try {
       const path = pathSegments.length > 0
         ? '/api/files/' + pathSegments.map(encodeURIComponent).join('/')
@@ -120,6 +128,10 @@
 
   async function createFolder() {
     newFolderError = '';
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      return;
+    }
     const name = newFolderName.trim();
     if (!name) {
       newFolderError = 'Folder name cannot be empty.';
@@ -169,6 +181,10 @@
   async function deleteItem() {
     if (!deleteTarget) return;
     deleteError = '';
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      return;
+    }
 
     const path = currentPath.length > 0
       ? '/api/files/' + [...currentPath, deleteTarget.name].map(encodeURIComponent).join('/')
@@ -203,6 +219,10 @@
   async function uploadSelectedFiles(files) {
     uploadError = '';
     uploadStatus = '';
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_upload', appId: 'files', appName: 'Files' });
+      return;
+    }
     const selected = Array.from(files || []);
     if (selected.length === 0) return;
     uploading = true;
@@ -412,6 +432,10 @@
   }
 
   function handleUploadClick() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_upload', appId: 'files', appName: 'Files' });
+      return;
+    }
     uploadInputEl?.click();
   }
 
@@ -430,6 +454,10 @@
   }
 
   function startDelete(entry) {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
+      return;
+    }
     deleteTarget = { name: entry.name, type: entry.type };
     deleteError = '';
   }

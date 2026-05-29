@@ -1,0 +1,40 @@
+:root {
+  color-scheme: dark;
+  --choir-prompt-surface-size: 64px;
+  --choir-prompt-surface-top-offset: 0px;
+  --choir-prompt-surface-bottom-offset: 64px;
+}
+
+:root[data-theme-id='london-salmon'] {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--choir-font-ui);
+  background:
+    var(--choir-bg);
+  color: var(--choir-fg);
+}
+
+:root[data-theme-id='carbon-fiber-kintsugi'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.42;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.025) 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.018) 0 8px, transparent 8px 16px);
+}
+
+:root[data-theme-id='london-salmon'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.16;
+  background-image: radial-gradient(rgba(89, 57, 42, .16) 1px, transparent 1px);
+  background-size: 7px 7px;
+}

@@ -1,0 +1,46 @@
+name: Node A Redesign Lab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/redesign-hard-cutover-node-a
+
+concurrency:
+  group: node-a-redesign-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-node-a:
+    name: Deploy Node A Design Lab
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/codex/redesign-hard-cutover-node-a'
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 51.81.93.94 >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host go-choir-node-a
+            HostName 51.81.93.94
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          EOF
+
+      - name: Deploy branch to Node A
+        run: |
+          ssh go-choir-node-a 'GO_CHOIR_DEPLOY_BRANCH=codex/redesign-hard-cutover-node-a bash -s' < scripts/node-a-redesign-deploy
+
+      - name: Cleanup SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

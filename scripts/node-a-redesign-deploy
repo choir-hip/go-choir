@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="${GO_CHOIR_DEPLOY_BRANCH:-codex/redesign-hard-cutover-node-a}"
+repo="${GO_CHOIR_DEPLOY_REPO:-https://github.com/choir-hip/go-choir.git}"
+checkout="/opt/go-choir"
+frontend_root="/var/www/go-choir"
+deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+export PKG_CONFIG_PATH="/run/current-system/sw/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+
+echo "==> Node A redesign deploy: branch=${branch}"
+echo "==> Disabling stale choiros-rs services"
+systemctl stop 'cloud-hypervisor@*.service' 'socat-sandbox@*.service' hypervisor.service 2>/dev/null || true
+systemctl disable hypervisor.service 2>/dev/null || true
+systemctl mask hypervisor.service 2>/dev/null || true
+
+if [ -d /opt/choiros ]; then
+  rm -rf /opt/choiros
+fi
+if [ -d /var/lib/choiros ]; then
+  rm -rf /var/lib/choiros
+fi
+
+if [ ! -d "${checkout}/.git" ]; then
+  rm -rf "${checkout}"
+  git clone "${repo}" "${checkout}"
+fi
+
+git config --global --add safe.directory "${checkout}" || true
+cd "${checkout}"
+git remote set-url origin "${repo}"
+git fetch origin "${branch}"
+git reset --hard "origin/${branch}"
+git clean -ffdx
+commit="$(git rev-parse HEAD)"
+
+install -d -m 0750 /var/lib/go-choir
+printf "CHOIR_DEPLOYED_AT=%s\nCHOIR_DEPLOYED_COMMIT=%s\nCHOIR_DEPLOYED_BRANCH=%s\n" "$deployed_at" "$commit" "$branch" > /var/lib/go-choir/deploy.env
+chmod 0644 /var/lib/go-choir/deploy.env
+
+echo "==> Building Node A host closure"
+nix build .#nixosConfigurations.go-choir-a.config.system.build.toplevel -o /tmp/go-choir-node-a-nixos-result
+
+echo "==> Building frontend"
+nix build .#frontend -o /tmp/go-choir-node-a-frontend-result
+
+echo "==> Building ordinary guest image"
+nix build .#guest-image -o /tmp/go-choir-node-a-guest-result
+
+echo "==> Activating Node A host closure"
+next_system="$(readlink -f /tmp/go-choir-node-a-nixos-result)"
+nix-env -p /nix/var/nix/profiles/system --set "$next_system"
+NIXOS_NO_CHECK=1 "$next_system/bin/switch-to-configuration" switch
+
+echo "==> Installing frontend pointer"
+install -d -m 0755 "${frontend_root}"
+rm -rf "${frontend_root}/.frontend-next"
+mkdir -p "${frontend_root}/.frontend-next"
+cp -a /tmp/go-choir-node-a-frontend-result/. "${frontend_root}/.frontend-next/"
+rm -rf "${frontend_root}/frontend-previous"
+if [ -e "${frontend_root}/frontend-current" ]; then
+  mv "${frontend_root}/frontend-current" "${frontend_root}/frontend-previous"
+fi
+mv "${frontend_root}/.frontend-next" "${frontend_root}/frontend-current"
+
+echo "==> Installing guest image"
+install -d -m 0750 /var/lib/go-choir/guest
+for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params; do
+  install -m 0644 "/tmp/go-choir-node-a-guest-result/${artifact}" "/var/lib/go-choir/guest/${artifact}"
+done
+
+echo "==> Restarting go-choir services"
+systemctl daemon-reload || true
+systemctl restart \
+  go-choir-auth \
+  go-choir-maild \
+  go-choir-platform-dolt \
+  go-choir-platformd \
+  go-choir-gateway \
+  go-choir-sandbox \
+  go-choir-vmctl \
+  go-choir-proxy
+systemctl reload caddy || systemctl restart caddy
+
+echo "==> Health"
+for port in 8081 8082 8083 8084 8086 8087; do
+  curl -fsS --retry 10 --retry-delay 2 --retry-all-errors "http://127.0.0.1:${port}/health" >/dev/null
+  echo "port ${port}: ok"
+done
+curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -H 'Host: choir-ip.com' http://127.0.0.1/health
+echo "==> Node A redesign deploy complete: ${commit}"

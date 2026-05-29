@@ -72,7 +72,7 @@
     position: fixed;
     left: 0;
     top: 0;
-    bottom: 56px; /* height of bottom bar */
+    bottom: var(--choir-prompt-surface-bottom-offset, 64px);
     width: 180px;
     background: #11111b;
     border-right: 1px solid #2a2a3a;

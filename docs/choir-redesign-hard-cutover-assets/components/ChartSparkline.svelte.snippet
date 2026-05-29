@@ -1,0 +1,33 @@
+<script>
+  export let values = [];
+  export let width = 360;
+  export let height = 88;
+  export let label = 'Sparkline';
+  export let colorVar = '--choir-chart-1';
+  $: nums = values.map(Number).filter(Number.isFinite);
+  $: min = nums.length ? Math.min(...nums) : 0;
+  $: max = nums.length ? Math.max(...nums) : 1;
+  $: span = Math.max(1, max - min);
+  $: points = nums.map((value, index) => {
+    const x = nums.length <= 1 ? 0 : (index / (nums.length - 1)) * width;
+    const y = height - ((value - min) / span) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+</script>
+
+<svg class="chart-sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} preserveAspectRatio="none">
+  <polyline points={points} fill="none" stroke={`var(${colorVar})`} stroke-width="3" vector-effect="non-scaling-stroke" />
+</svg>
+
+<style>
+  .chart-sparkline {
+    width: 100%;
+    min-height: 4rem;
+    border-radius: var(--choir-radius-control);
+    background:
+      linear-gradient(var(--choir-border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--choir-border) 1px, transparent 1px),
+      color-mix(in srgb, var(--choir-panel) 82%, transparent);
+    background-size: 48px 22px;
+  }
+</style>

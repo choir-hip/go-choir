@@ -20,11 +20,11 @@
   Passkey ceremony errors (cancel/failure) keep the user in a retryable
   guest auth state and never reveal the authenticated shell.
 -->
-<script>
+<script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession } from './lib/auth.js';
-  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
+  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
@@ -90,7 +90,7 @@
   function getAuthIntentMessage(intent) {
     if (!intent) return 'Sign in to continue.';
     if (intent.kind === 'prompt') {
-      return `Sign in to run: ${intent.text}`;
+      return `Sign in to run this prompt: ${intent.text}`;
     }
     if (intent.kind === 'session_expired') {
       return 'Your session expired. Sign in to continue.';
@@ -98,6 +98,12 @@
     if (intent.kind === 'app_launch') {
       return `Sign in to open ${intent.appName || 'this app'}.`;
     }
+    if (intent.kind === 'save_vtext') return 'Sign in to save this VText revision to your computer.';
+    if (intent.kind === 'publish_vtext') return 'Sign in to publish this VText.';
+    if (intent.kind === 'file_upload') return 'Sign in to upload files to your computer.';
+    if (intent.kind === 'file_mutation') return 'Sign in to change files on your computer.';
+    if (String(intent.kind || '').startsWith('email')) return 'Sign in to use your mailbox, drafts, and send approval.';
+    if (String(intent.kind || '').startsWith('podcast')) return 'Sign in to subscribe, import, search providers, or sync playback.';
     if (intent.kind === 'published_vtext_edit') {
       return `Sign in to edit your version of ${intent.title || 'this published VText'}.`;
     }
@@ -334,6 +340,7 @@
       {promptReplay}
       {appReplay}
       {publicRoutePath}
+      theme={currentTheme}
       on:logout={handleLogout}
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}

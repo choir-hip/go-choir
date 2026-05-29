@@ -3,9 +3,9 @@
  * through VAL-DESKTOP-007).
  *
  * Updated for the ChoirOS desktop shell rewrite:
- * - No top bar (replaced by floating desktop icons + bottom bar)
+ * - No top bar (replaced by floating desktop icons + prompt surface)
  * - No launcher dropdown (replaced by floating desktop icons)
- * - No taskbar (minimized windows shown in bottom bar)
+ * - No taskbar (minimized windows shown in prompt surface)
  * - No runtime panel (TaskRunner removed from visible UI)
  * - No left rail (replaced by floating desktop icons on the desktop surface)
  *
@@ -75,9 +75,9 @@ test('authenticated users reach a real desktop shell', async ({
   const surface = page.locator('[data-desktop-surface]');
   await expect(surface).toBeVisible();
 
-  // The bottom bar should be visible.
-  const bottomBar = page.locator('[data-bottom-bar]');
-  await expect(bottomBar).toBeVisible();
+  // The prompt surface should be visible.
+  const promptSurface = page.locator('[data-prompt-surface]');
+  await expect(promptSurface).toBeVisible();
 
   // The logout button should be available from the desktop/account menu.
   await page.locator('[data-show-desktop-btn]').click();
@@ -227,8 +227,8 @@ test('windows support minimize, maximize, and restore', async ({
   // The window should no longer be visible (minimized).
   await expect(windowEl).not.toBeVisible();
 
-  // A minimized indicator should appear in the bottom bar.
-  const indicator = page.locator('[data-minimized-indicator]');
+  // A minimized indicator should appear in the prompt surface.
+  const indicator = page.locator('[data-window-tray-item]');
   await expect(indicator.first()).toBeVisible();
 
   // Click the indicator to restore the window.
@@ -357,16 +357,16 @@ test('signed-out users see the public desktop', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------
-// Test: desktop includes the prompt input (in bottom bar)
+// Test: desktop includes the prompt input (in prompt surface)
 // ---------------------------------------------------------------
-test('desktop includes the prompt input in bottom bar', async ({
+test('desktop includes the prompt input in prompt surface', async ({
   page,
   authenticator,
 }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // The prompt input should be visible in the bottom bar.
+  // The prompt input should be visible in the prompt surface.
   const promptInput = page.locator('[data-prompt-input]');
   await expect(promptInput).toBeVisible();
   await expect(promptInput).toBeEnabled();

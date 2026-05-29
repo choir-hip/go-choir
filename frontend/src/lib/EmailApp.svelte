@@ -1,6 +1,7 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+  import { demoEmailMessages } from './demo-fixtures';
 
   export let authenticated = false;
   export let appContext = {};
@@ -49,7 +50,9 @@
   }
 
   onMount(() => {
-    if (authenticated) {
+    if (!authenticated) {
+      loadPreviewMailbox();
+    } else {
       void loadAliases();
       void loadMessages(activeFolder);
     }
@@ -74,7 +77,26 @@
     }
   }
 
+  function loadPreviewMailbox() {
+    aliases = [{ address: 'preview@choir-ip.com' }];
+    activeFolder = 'inbox';
+    messages = demoEmailMessages;
+    selectedId = messages[0]?.id || '';
+    detail = selectedId ? {
+      ...messages[0],
+      text_body: `${messages[0].snippet}\n\nThis is a frontend-only mailbox preview. Real drafts, send, and mailbox data require sign-in.`,
+      recipients: { to: [{ display: 'Owner', address: 'preview@choir-ip.com' }], cc: [], bcc: [] },
+      raw_headers: { 'X-Choir-Preview': 'fixture' },
+    } : null;
+    loadedOnce = true;
+  }
+
   async function loadMessages(folder) {
+    if (!authenticated) {
+      loadPreviewMailbox();
+      activeFolder = folder;
+      return;
+    }
     loading = true;
     error = '';
     activeFolder = folder;
@@ -166,6 +188,10 @@
   }
 
   async function sendReply() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'email_reply', appId: 'email', appName: 'Email' });
+      return;
+    }
     if (!selectedMessage || !replyBody.trim() || !activeAddress) return;
     sending = true;
     actionStatus = '';
@@ -201,6 +227,10 @@
   }
 
   async function sendCompose() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'email_compose', appId: 'email', appName: 'Email' });
+      return;
+    }
     if (!composeRecipients.length || !composeBody.trim() || !activeAddress) return;
     sending = true;
     actionStatus = '';
@@ -237,6 +267,10 @@
   }
 
   async function sendDraft() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'email_send', appId: 'email', appName: 'Email' });
+      return;
+    }
     const draftId = detail?.draft?.id;
     if (!draftId) return;
     sending = true;
@@ -263,6 +297,10 @@
   }
 
   async function emailApprovalLink() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'email_send', appId: 'email', appName: 'Email' });
+      return;
+    }
     const draftId = detail?.draft?.id;
     if (!draftId) return;
     sending = true;
@@ -285,6 +323,10 @@
   }
 
   function openCompose() {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'email_compose', appId: 'email', appName: 'Email' });
+      return;
+    }
     composeOpen = true;
     replyOpen = false;
     detailPaneOpen = true;

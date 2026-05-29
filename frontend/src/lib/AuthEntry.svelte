@@ -17,7 +17,7 @@
     data-login-view       — login view container
     data-passkey-error    — passkey ceremony error message area
 -->
-<script>
+<script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
   export let passkeyError = '';
@@ -81,8 +81,8 @@
 
 <div class="auth-entry" data-auth-entry>
   <div class="auth-card">
-    <h1>Welcome to go-choir</h1>
-    <p class="tagline">Distributed Multiagent Operating System</p>
+    <h1>Choir</h1>
+    <p class="tagline">Keep previewing. Sign in only when an action needs your computer.</p>
 
     <div class="view-tabs">
       <button
@@ -107,8 +107,8 @@
 
     {#if view === 'register'}
       <div class="auth-view" data-register-view>
-        <h2>Create Account</h2>
-        <p class="view-desc">Register a new account with a passkey. No passwords needed.</p>
+        <h2>Create a passkey</h2>
+        <p class="view-desc">Use this for saving, publishing, sending, importing, and private state.</p>
 
         <form on:submit|preventDefault={handleRegister}>
           <label for="register-email">Email</label>
@@ -116,7 +116,7 @@
             id="register-email"
             type="email"
             bind:value={email}
-            placeholder="Enter your email address"
+            placeholder="you@example.com"
             autocomplete="email"
             disabled={ceremonyInProgress}
             required
@@ -125,15 +125,15 @@
             {#if ceremonyInProgress}
               Creating passkey…
             {:else}
-              Register with Passkey
+              Create passkey
             {/if}
           </button>
         </form>
       </div>
     {:else}
       <div class="auth-view" data-login-view>
-        <h2>Sign In</h2>
-        <p class="view-desc">Log in with your registered passkey.</p>
+        <h2>Use your passkey</h2>
+        <p class="view-desc">Return to your durable computer, mailbox, traces, and saved documents.</p>
 
         <form on:submit|preventDefault={handleLogin}>
           <label for="login-email">Email</label>
@@ -141,7 +141,7 @@
             id="login-email"
             type="email"
             bind:value={email}
-            placeholder="Enter your email address"
+            placeholder="you@example.com"
             autocomplete="email"
             disabled={ceremonyInProgress}
             required
@@ -150,7 +150,7 @@
             {#if ceremonyInProgress}
               Signing in…
             {:else}
-              Sign In with Passkey
+              Sign in
             {/if}
           </button>
         </form>
@@ -173,26 +173,29 @@
   }
 
   .auth-card {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 12px;
-    padding: 2.5rem 2rem;
+    background: var(--choir-sheet-bg, #101827);
+    border: 1px solid var(--choir-border-strong, rgba(130, 156, 255, 0.44));
+    border-radius: var(--choir-radius-panel, 22px);
+    padding: 2rem;
     width: 100%;
-    max-width: 400px;
+    max-width: 430px;
     text-align: center;
+    box-shadow: var(--choir-shadow-floating, 0 26px 90px rgba(0,0,0,.46));
+    color: var(--choir-fg, #f7faff);
   }
 
   h1 {
-    font-size: 1.75rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    color: #ffffff;
+    font-family: var(--choir-font-display, inherit);
+    font-size: 2.15rem;
+    font-weight: 760;
+    letter-spacing: 0;
+    color: var(--choir-fg, #ffffff);
     margin-bottom: 0.25rem;
   }
 
   .tagline {
     font-size: 0.9rem;
-    color: #888;
+    color: var(--choir-muted, #9aa9c0);
     margin-bottom: 1.5rem;
   }
 
@@ -200,9 +203,9 @@
     display: flex;
     gap: 0;
     margin-bottom: 1.5rem;
-    border-radius: 8px;
+    border-radius: var(--choir-radius-control-sm, 10px);
     overflow: hidden;
-    border: 1px solid #2a2a2a;
+    border: 1px solid var(--choir-border, rgba(148, 163, 184, 0.18));
   }
 
   .tab {
@@ -211,20 +214,20 @@
     font-size: 0.9rem;
     font-weight: 500;
     background: transparent;
-    color: #999;
+    color: var(--choir-muted, #999);
     border: none;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
   }
 
   .tab:hover {
-    background: #222;
-    color: #ccc;
+    background: var(--choir-panel-soft, #222);
+    color: var(--choir-fg, #ccc);
   }
 
   .tab.active {
-    background: #2a2a2a;
-    color: #ffffff;
+    background: var(--choir-selected, #2a2a2a);
+    color: var(--choir-fg, #ffffff);
   }
 
   .auth-view {
@@ -234,13 +237,13 @@
   .auth-view h2 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--choir-fg, #e0e0e0);
     margin-bottom: 0.5rem;
   }
 
   .view-desc {
     font-size: 0.85rem;
-    color: #888;
+    color: var(--choir-muted, #888);
     margin-bottom: 1.25rem;
   }
 
@@ -254,26 +257,26 @@
   label {
     font-size: 0.8rem;
     font-weight: 500;
-    color: #aaa;
+    color: var(--choir-muted, #aaa);
   }
 
   input[type="email"] {
     padding: 0.7rem 0.85rem;
     font-size: 0.95rem;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 8px;
-    color: #e0e0e0;
+    background: var(--choir-input-bg, #111);
+    border: 1px solid var(--choir-border, #333);
+    border-radius: var(--choir-radius-control-sm, 10px);
+    color: var(--choir-fg, #e0e0e0);
     outline: none;
     transition: border-color 0.2s;
   }
 
   input[type="email"]:focus {
-    border-color: #555;
+    border-color: var(--choir-accent, #6d8dff);
   }
 
   input[type="email"]::placeholder {
-    color: #555;
+    color: var(--choir-subtle, #65748d);
   }
 
   .primary-action {
@@ -281,27 +284,27 @@
     padding: 0.8rem 1rem;
     font-size: 1rem;
     font-weight: 600;
-    background: #3b82f6;
-    color: #ffffff;
+    background: var(--choir-accent, #3b82f6);
+    color: var(--choir-on-accent, #ffffff);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--choir-radius-control-sm, 10px);
     cursor: pointer;
     transition: background 0.2s;
   }
 
   .primary-action:hover {
-    background: #2563eb;
+    filter: brightness(1.08);
   }
 
   .primary-action:disabled {
-    background: #1e3a5f;
-    color: #667;
+    background: var(--choir-control-bg, #1e3a5f);
+    color: var(--choir-subtle, #667);
     cursor: not-allowed;
   }
 
   .error {
     margin-top: 1rem;
-    color: #f87171;
+    color: var(--choir-danger, #f87171);
     font-size: 0.85rem;
   }
 </style>

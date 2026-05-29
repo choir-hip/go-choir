@@ -6,8 +6,8 @@
     - floating controls handle prompt/apply and version navigation
     - prompt/apply creates a user revision, then invokes the vtext appagent
 -->
-<script>
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+<script lang="ts">
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     cancelAgentRevision,
@@ -25,8 +25,10 @@
     submitPublicationProposal,
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { demoVTextDocument } from './demo-fixtures';
 
   export let currentUser = null;
+  export let authenticated = false;
   export let appContext = {};
   export let windowId = '';
 
@@ -649,6 +651,10 @@
 
   async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
     if (!currentDoc) return null;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return null;
+    }
     if (autosavePromise) {
       saveStatus = 'Finishing draft save...';
       await autosavePromise;
@@ -682,7 +688,7 @@
   }
 
   function shouldAutosave() {
-    if (!currentDoc || loading || submitting || agentPending || isViewingHistorical || isPublishedReadOnly) return false;
+    if (!authenticated || !currentDoc || loading || submitting || agentPending || isViewingHistorical || isPublishedReadOnly) return false;
     const savedContent = currentRevision?.content || '';
     if (editorValue === savedContent || editorValue === lastAutosavedContent) return false;
     if (!currentRevision && editorValue.trim() === '') return false;
@@ -864,6 +870,10 @@
       publishResult = null;
 
       if (shouldShowRecentLanding(appContext)) {
+        if (!authenticated) {
+          loadGuestDocument();
+          return;
+        }
         showRecent = true;
         saveStatus = 'Recent VTexts';
         await loadRecentDocuments();
@@ -876,6 +886,11 @@
       }
 
       const initialValue = appContext.initialContent ?? appContext.seedPrompt ?? '';
+
+      if (!authenticated) {
+        loadGuestDocument(initialValue);
+        return;
+      }
 
       if (appContext.docId) {
         currentDoc = await getDocument(appContext.docId);
@@ -922,6 +937,32 @@
     } finally {
       loading = false;
     }
+  }
+
+  function loadGuestDocument(initialValue = '') {
+    const content = initialValue || demoVTextDocument.content;
+    currentDoc = {
+      doc_id: demoVTextDocument.doc_id,
+      title: normalizeTitle(appContext) || demoVTextDocument.title,
+      current_revision_id: demoVTextDocument.revisions[demoVTextDocument.revisions.length - 1].revision_id,
+    };
+    revisions = demoVTextDocument.revisions.map((revision, index) => ({
+      revision_id: revision.revision_id,
+      content: index === demoVTextDocument.revisions.length - 1 ? content : `${content}\n\nPreview ${revision.label}: ${revision.summary}`,
+      author_kind: index === 1 ? 'agent' : 'user',
+      author_label: index === 1 ? 'Preview agent' : 'Local preview',
+      created_at: new Date(Date.now() - (demoVTextDocument.revisions.length - index) * 90_000).toISOString(),
+      metadata: { summary: revision.summary, preview: true },
+    }));
+    activeRevisionIndex = revisions.length - 1;
+    currentRevision = revisions[activeRevisionIndex];
+    editorValue = currentRevision.content || content;
+    latestHeadRevisionId = currentRevision.revision_id;
+    lastAutosavedContent = editorValue;
+    showRecent = false;
+    saveStatus = 'Local preview - sign in to save';
+    publishCurrentDocumentContext(currentDoc.title);
+    tick().then(() => syncEditorSurface(renderMarkdown(editorValue), { force: true }));
   }
 
   async function loadPublishedContext(routePath) {
@@ -1013,6 +1054,11 @@
   }
 
   async function handleNewDocument() {
+    if (!authenticated) {
+      loadGuestDocument('');
+      saveStatus = 'New local preview - sign in to save';
+      return;
+    }
     loading = true;
     clearAutosaveTimer();
     showRecent = false;
@@ -1045,6 +1091,10 @@
 
   async function handlePrompt() {
     if (!currentDoc || loading || submitting || agentPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
 
     submitting = true;
     clearAutosaveTimer();
@@ -1096,6 +1146,10 @@
 
   async function handlePublishCurrent() {
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
     publishedActionPending = true;
     error = '';
     publishResult = null;

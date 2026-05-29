@@ -40,7 +40,7 @@ async function waitForBootstrapData(page, timeout = 10_000) {
 }
 
 async function waitForLiveConnected(page, timeout = 10_000) {
-  // In the rewritten desktop, the connection status is in the bottom bar.
+  // In the rewritten desktop, the connection status is in the prompt surface.
   // Wait for the liveStatus store to be 'connected'.
   await page.waitForFunction(
     () => {

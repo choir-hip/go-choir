@@ -1,0 +1,209 @@
+<!-- Rename/replace the old shell control component with this file:
+     frontend/src/lib/PromptSurface.svelte
+     Do not keep a component named after a bottom-only placement. -->
+<script>
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import TetraMark from './TetraMark.svelte';
+  import DeskSheet from './DeskSheet.svelte';
+  import {
+    activeWindowId,
+    openWindows,
+    restoreWindow,
+    focusWindow,
+    APP_REGISTRY,
+    liveStatus as desktopLiveStatus,
+  } from './stores/desktop.js';
+  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+
+  export let currentUser = null;
+  export let authenticated = false;
+  export let promptDisabled = false;
+  export let promptPlaceholder = 'Ask anything...';
+  export let promptStatus = '';
+  export let placement = 'bottom'; // 'bottom' | 'top'
+
+  const dispatch = createEventDispatcher();
+  let promptValue = '';
+  let promptInputEl;
+  let surfaceEl;
+  let resizeObserver;
+  let sheetOpen = false;
+  let promptFocused = false;
+  let chyronItems = [];
+  let removeLiveListener = () => {};
+
+  const launcherAppIds = [
+    'files', 'browser', 'compute-monitor', 'vtext', 'trace', 'podcast',
+    'image', 'audio', 'video', 'pdf', 'epub', 'apps-changes', 'terminal', 'settings',
+  ];
+  const deskApps = launcherAppIds.map((id) => APP_REGISTRY.find((app) => app.id === id)).filter(Boolean);
+
+  $: normalizedPlacement = placement === 'top' ? 'top' : 'bottom';
+  $: online = $desktopLiveStatus === 'connected';
+  $: onlineLabel = $desktopLiveStatus === 'connected'
+    ? 'Online'
+    : $desktopLiveStatus === 'connecting'
+      ? 'Connecting'
+      : $desktopLiveStatus === 'error'
+        ? 'Connection error'
+        : 'Offline';
+
+  function publishSurfaceMetrics() {
+    if (!surfaceEl || typeof document === 'undefined') return;
+    const size = surfaceEl.offsetHeight || 64;
+    const root = document.documentElement;
+    root.style.setProperty('--choir-prompt-surface-size', `${size}px`);
+    root.style.setProperty('--choir-prompt-surface-top-offset', normalizedPlacement === 'top' ? `${size}px` : '0px');
+    root.style.setProperty('--choir-prompt-surface-bottom-offset', normalizedPlacement === 'bottom' ? `${size}px` : '0px');
+    root.dataset.promptSurfacePlacement = normalizedPlacement;
+  }
+
+  function handlePromptKeydown(event) {
+    if (promptDisabled) return;
+    if (event.key === 'Enter' && !event.shiftKey && promptValue.trim()) {
+      event.preventDefault();
+      dispatch('promptsubmit', { text: promptValue.trim() });
+      promptValue = '';
+      tick().then(resizePromptInput);
+    } else if (event.key === 'Escape') {
+      event.currentTarget.blur();
+    }
+  }
+
+  function resizePromptInput() {
+    if (!promptInputEl) return;
+    const lineHeight = Number.parseFloat(getComputedStyle(promptInputEl).lineHeight) || 22;
+    const collapsedHeight = Math.max(44, Math.ceil(lineHeight + 18));
+    const maxHeight = Math.min(128, Math.max(72, window.innerHeight * 0.22));
+    promptInputEl.style.height = `${collapsedHeight}px`;
+    const nextHeight = promptValue.trim() ? Math.min(promptInputEl.scrollHeight, maxHeight) : collapsedHeight;
+    promptInputEl.style.height = `${Math.max(collapsedHeight, nextHeight)}px`;
+    promptInputEl.style.overflowY = promptInputEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    tick().then(publishSurfaceMetrics);
+  }
+
+  function openWindowFromTray(win) {
+    if (win.mode === 'minimized') restoreWindow(win.windowId);
+    else focusWindow(win.windowId);
+    sheetOpen = false;
+  }
+
+  function launchApp(app) {
+    dispatch('launchapp', {
+      appId: app.id,
+      appName: app.name,
+      icon: app.icon,
+      appContext: app.id === 'podcast' ? { appHint: 'podcast', windowTitle: 'Podcast' } : {},
+    });
+    sheetOpen = false;
+  }
+
+  function handleLiveEvent(message) {
+    const kind = liveEventKind(message);
+    if (!['tool.invoked', 'tool.result', 'channel.message', 'loop.submitted', 'loop.started', 'loop.completed', 'loop.failed'].includes(kind)) return;
+    const payload = liveEventPayload(message);
+    const agent = String(message?.agent_id || payload.agent_id || payload.from || payload.role || 'agent').split(':').pop();
+    const text = kind === 'channel.message'
+      ? `${agent}: ${String(payload.content || '').replace(/\s+/g, ' ').trim().slice(0, 120)}`
+      : `${agent} ${kind.replace('.', ' ')}`;
+    chyronItems = [...chyronItems, { id: `${message.stream_seq || Date.now()}-${Math.random()}`, text }].slice(-10);
+  }
+
+  onMount(() => {
+    publishSurfaceMetrics();
+    resizePromptInput();
+    removeLiveListener = addLiveEventListener(handleLiveEvent);
+    if (typeof ResizeObserver !== 'undefined' && surfaceEl) {
+      resizeObserver = new ResizeObserver(publishSurfaceMetrics);
+      resizeObserver.observe(surfaceEl);
+    }
+    window.addEventListener('resize', resizePromptInput);
+  });
+
+  onDestroy(() => {
+    removeLiveListener();
+    resizeObserver?.disconnect();
+    window.removeEventListener('resize', resizePromptInput);
+  });
+</script>
+
+{#if sheetOpen}
+  <DeskSheet
+    {normalizedPlacement}
+    {deskApps}
+    openWindows={$openWindows}
+    {authenticated}
+    {currentUser}
+    on:close={() => (sheetOpen = false)}
+    on:showoverview={() => { sheetOpen = false; dispatch('showoverview'); }}
+    on:showdesktop={() => { sheetOpen = false; dispatch('showdesktop'); }}
+    on:launchapp={(event) => launchApp(event.detail.app)}
+    on:authrequest={() => dispatch('authrequest')}
+    on:logout={() => dispatch('logout')}
+  />
+{/if}
+
+<div
+  class="prompt-surface placement-{normalizedPlacement}"
+  class:sheet-open={sheetOpen}
+  data-prompt-surface
+  data-placement={normalizedPlacement}
+  data-desk-sheet-open={sheetOpen ? 'true' : 'false'}
+  bind:this={surfaceEl}
+>
+  <button
+    class="desk-mark-button"
+    data-desk-menu-button
+    type="button"
+    aria-label="Open Desk, {$openWindows.length} open windows"
+    aria-expanded={sheetOpen ? 'true' : 'false'}
+    on:click={() => (sheetOpen = !sheetOpen)}
+  >
+    <TetraMark />
+    {#if $openWindows.length > 0}<span class="window-count" data-window-count>{$openWindows.length}</span>{/if}
+  </button>
+
+  <div class="window-tray" data-window-tray>
+    {#each $openWindows as win (win.windowId)}
+      <button
+        class:active={win.windowId === $activeWindowId}
+        class:minimized={win.mode === 'minimized'}
+        class="window-tray-item"
+        data-window-tray-item
+        data-window-tray-item-active={win.windowId === $activeWindowId ? 'true' : 'false'}
+        data-window-id={win.windowId}
+        title={win.title}
+        on:click={() => openWindowFromTray(win)}
+      >
+        <span>{win.icon || '□'}</span><small>{win.title}</small>
+      </button>
+    {/each}
+  </div>
+
+  <div class="command-field" data-command-field>
+    {#if chyronItems.length > 0 && !sheetOpen}
+      <div class:focused={promptFocused} class="agent-chyron" data-agent-chyron aria-live="polite">
+        <div>{#each [...chyronItems, ...chyronItems] as item, index (`${item.id}-${index}`)}<span>{item.text}</span>{/each}</div>
+      </div>
+    {/if}
+    {#if promptStatus}<div class="prompt-status" data-prompt-status>{promptStatus}</div>{/if}
+    <textarea
+      bind:this={promptInputEl}
+      bind:value={promptValue}
+      data-prompt-input
+      rows="1"
+      placeholder={promptPlaceholder}
+      disabled={promptDisabled}
+      aria-label="Command prompt"
+      on:keydown={handlePromptKeydown}
+      on:input={resizePromptInput}
+      on:focus={() => (promptFocused = true)}
+      on:blur={() => (promptFocused = false)}
+    />
+  </div>
+
+  <button class="voice-button" data-agent-audio-button type="button" aria-label="Agent audio input">
+    <span aria-hidden="true">▥</span>
+  </button>
+  <span class:online class="online-indicator" data-online-indicator data-live-status={$desktopLiveStatus} aria-label={onlineLabel}></span>
+</div>

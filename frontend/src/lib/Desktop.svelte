@@ -1,10 +1,10 @@
 <!--
-  Desktop — ChoirOS desktop shell with floating desktop icons, floating windows, and bottom bar.
+  Desktop — Choir desktop shell with floating desktop icons, floating windows, and PromptSurface.
 
   Layout:
     - Floating desktop icons freely draggable on the desktop surface
     - Floating windows draggable/resizable on top of icons
-    - Bottom bar fixed at viewport bottom
+    - PromptSurface fixed at viewport bottom
 
   Responsive layout across three breakpoints:
     - Desktop (>1024px): full floating icons with labels, floating draggable windows
@@ -37,7 +37,7 @@
     renewDriverLease,
   } from './live-events.js';
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
-  import BottomBar from './BottomBar.svelte';
+  import PromptSurface from './PromptSurface.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
   import TraceApp from './TraceApp.svelte';
@@ -63,6 +63,7 @@
     iconPositions,
     showDesktopMode,
     selectedIconId,
+    toggleShowDesktop,
     openApp,
     closeWindow,
     focusWindow,
@@ -91,6 +92,7 @@
   export let promptReplay = null;
   export let appReplay = null;
   export let publicRoutePath = '';
+  export let theme = null;
 
   const dispatch = createEventDispatcher();
 
@@ -140,7 +142,7 @@
   let desktopOverviewOpen = false;
   let overviewViewportWidth = 1280;
   let overviewViewportHeight = 800;
-  let overviewBottomBarHeight = 56;
+  let overviewPromptSurfaceSize = 64;
 
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
   const RESTORE_RECOVERY_WINDOW_LIMIT = 12;
@@ -151,6 +153,7 @@
   const OVERVIEW_STAGE_BOTTOM_RAIL_DESKTOP = 196;
   $: desktopReady = bootstrapStable && stateLoaded;
   $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
+  $: promptSurfacePlacement = theme?.layout?.promptSurfacePlacement === 'top' ? 'top' : 'bottom';
   $: if (mounted && authenticated !== lastAuthenticated) {
     const wasAuthenticated = lastAuthenticated === true;
     lastAuthenticated = authenticated;
@@ -226,8 +229,56 @@
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    setWindows([], '');
+    seedPublicPreviewWindows();
     setIconPositions(getDefaultIconPositions());
+  }
+
+  function seedPublicPreviewWindows() {
+    const previewWindows = [
+      {
+        windowId: 'public-preview-vtext',
+        appId: 'vtext',
+        title: 'VText Preview',
+        icon: getAppIcon('vtext'),
+        x: 152,
+        y: 42,
+        width: 640,
+        height: 520,
+        mode: 'normal',
+        zIndex: 2,
+        restoredGeometry: null,
+        appContext: { demo: true, windowTitle: 'VText Preview' },
+      },
+      {
+        windowId: 'public-preview-trace',
+        appId: 'trace',
+        title: 'Trace Preview',
+        icon: getAppIcon('trace'),
+        x: 420,
+        y: 116,
+        width: 720,
+        height: 500,
+        mode: 'normal',
+        zIndex: 3,
+        restoredGeometry: null,
+        appContext: { demo: true, windowTitle: 'Trace Preview' },
+      },
+      {
+        windowId: 'public-preview-files',
+        appId: 'files',
+        title: 'Files Preview',
+        icon: getAppIcon('files'),
+        x: 104,
+        y: 188,
+        width: 520,
+        height: 420,
+        mode: 'minimized',
+        zIndex: 1,
+        restoredGeometry: null,
+        appContext: { demo: true, windowTitle: 'Files Preview' },
+      },
+    ];
+    setWindows(previewWindows, 'public-preview-trace');
   }
 
   async function startAuthenticatedDesktop() {
@@ -489,22 +540,22 @@
     return Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
   }
 
-  function readOverviewBottomBarHeight() {
-    if (typeof document === 'undefined') return 56;
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+  function readOverviewPromptSurfaceSize() {
+    if (typeof document === 'undefined') return 64;
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (promptSurface?.offsetHeight) return promptSurface.offsetHeight;
     const fromTheme = window
       .getComputedStyle(document.documentElement)
-      .getPropertyValue('--choir-bottom-bar-height');
+      .getPropertyValue('--choir-prompt-surface-size');
     const parsed = Number.parseFloat(fromTheme);
-    return Number.isFinite(parsed) ? parsed : 56;
+    return Number.isFinite(parsed) ? parsed : 64;
   }
 
   function refreshOverviewViewport() {
     if (typeof window === 'undefined') return;
     overviewViewportWidth = window.innerWidth || 1280;
     overviewViewportHeight = window.innerHeight || 800;
-    overviewBottomBarHeight = readOverviewBottomBarHeight();
+    overviewPromptSurfaceSize = readOverviewPromptSurfaceSize();
   }
 
   function clampOverviewValue(value, min, max) {
@@ -520,14 +571,14 @@
     const maxWidth = Math.max(minWidth, overviewViewportWidth - margin * 2);
     const maxHeight = Math.max(
       minHeight,
-      overviewViewportHeight - overviewBottomBarHeight - margin * 2
+      overviewViewportHeight - overviewPromptSurfaceSize - margin * 2
     );
     const width = Math.min(Math.max(win.width || 600, minWidth), maxWidth);
     const height = Math.min(Math.max(win.height || 400, minHeight), maxHeight);
     const maxX = Math.max(margin, overviewViewportWidth - width - margin);
     const maxY = Math.max(
       margin,
-      overviewViewportHeight - overviewBottomBarHeight - height - margin
+      overviewViewportHeight - overviewPromptSurfaceSize - height - margin
     );
 
     if (win.mode === 'maximized') {
@@ -535,7 +586,7 @@
         x: 0,
         y: 0,
         width: overviewViewportWidth,
-        height: Math.max(minHeight, overviewViewportHeight - overviewBottomBarHeight),
+        height: Math.max(minHeight, overviewViewportHeight - overviewPromptSurfaceSize),
       };
     }
 
@@ -565,7 +616,7 @@
     const stageWidth = Math.max(260, overviewViewportWidth - stageX * 2);
     const stageHeight = Math.max(
       220,
-      overviewViewportHeight - overviewBottomBarHeight - stageTop - bottomRail
+      overviewViewportHeight - overviewPromptSurfaceSize - stageTop - bottomRail
     );
     const source = renderedWindowGeometryForOverview(win);
     const preferredScale = mobile
@@ -583,7 +634,7 @@
     const targetWidth = source.width * scale;
     const targetHeight = source.height * scale;
     const sourceMaxX = Math.max(1, overviewViewportWidth - source.width);
-    const sourceMaxY = Math.max(1, overviewViewportHeight - overviewBottomBarHeight - source.height);
+    const sourceMaxY = Math.max(1, overviewViewportHeight - overviewPromptSurfaceSize - source.height);
     const normalizedX = clampOverviewValue(source.x / sourceMaxX, 0, 1);
     const normalizedY = clampOverviewValue(source.y / sourceMaxY, 0, 1);
     const liveIndex = Math.max(0, previewDecision.liveIndex);
@@ -1210,7 +1261,13 @@
 
   async function handleOpenTextFile(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'document' });
+      const fileName = event.detail?.fileName || 'Preview document';
+      openApp('vtext', 'VText', getAppIcon('vtext'), {
+        windowTitle: fileName,
+        fileName,
+        initialContent: `# ${fileName}\n\nThis is a local preview opened from demo Files. Sign in to open real private files or save changes.`,
+        allowMultiple: true,
+      });
       return;
     }
     const pathSegments = event.detail?.pathSegments || [];
@@ -1250,10 +1307,6 @@
   }
 
   function handleOpenMediaFile(event) {
-    if (!authenticated) {
-      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'media file' });
-      return;
-    }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -1272,6 +1325,7 @@
       filePath: detail.filePath || (detail.pathSegments || []).join('/'),
       mediaType: detail.mediaType || '',
       appHint: appId,
+      demo: !authenticated,
       allowMultiple: true,
     });
     showToast(`Opened ${detail.fileName || appId}`);
@@ -1362,6 +1416,10 @@
   function handleShowDesktopOverview() {
     refreshOverviewViewport();
     desktopOverviewOpen = true;
+  }
+
+  function handleShowDesktop() {
+    toggleShowDesktop();
   }
 
   function handleCloseDesktopOverview() {
@@ -1619,7 +1677,9 @@
             {:else if win.appId === 'files'}
               <div class="app-content files-content" data-files-app>
                 <FileBrowser
+                  {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
+                  on:authrequired={(event) => requestAuth(event.detail || {})}
                   on:opentextfile={handleOpenTextFile}
                   on:openmediafile={handleOpenMediaFile}
                 />
@@ -1810,10 +1870,11 @@
     </div>
   {/if}
 
-  <!-- Bottom bar -->
-  <BottomBar
+  <!-- PromptSurface -->
+  <PromptSurface
     {currentUser}
     {authenticated}
+    placement={promptSurfacePlacement}
     promptDisabled={!desktopReady}
     {promptPlaceholder}
     {promptStatus}
@@ -1822,6 +1883,7 @@
     on:promptsubmit={handlePromptSubmit}
     on:launchapp={handleLaunchApp}
     on:showoverview={handleShowDesktopOverview}
+    on:showdesktop={handleShowDesktop}
   />
 </div>
 
@@ -1839,8 +1901,8 @@
     visibility: hidden;
   }
 
-  .desktop.desktop-loading :global(.bottom-bar),
-  .desktop.desktop-loading :global(.desktop-menu),
+  .desktop.desktop-loading :global(.prompt-surface),
+  .desktop.desktop-loading :global(.desk-sheet),
   .desktop.desktop-loading .boot-console {
     visibility: visible;
   }
@@ -1854,8 +1916,9 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    height: calc(100dvh - var(--choir-bottom-bar-height, 56px));
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: 100dvh;
+    padding-block-start: var(--choir-prompt-surface-top-offset, 0px);
+    padding-block-end: var(--choir-prompt-surface-bottom-offset, 64px);
   }
 
   /* Prevent flash of empty desktop while state loads (VAL-SHELL-022) */
@@ -1871,7 +1934,7 @@
     position: fixed;
     left: clamp(16px, 6vw, 72px);
     right: clamp(16px, 6vw, 72px);
-    bottom: calc(var(--choir-bottom-bar-height, 56px) + 24px);
+    bottom: calc(var(--choir-prompt-surface-bottom-offset, 64px) + 24px);
     max-width: 760px;
     border: 1px solid rgba(148, 163, 184, 0.24);
     border-radius: 8px;
@@ -2165,7 +2228,7 @@
     .boot-console {
       left: 12px;
       right: 12px;
-      bottom: calc(var(--choir-bottom-bar-height, 56px) + 12px);
+      bottom: calc(var(--choir-prompt-surface-bottom-offset, 64px) + 12px);
     }
 
     .boot-console-header {

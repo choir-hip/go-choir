@@ -1,0 +1,17 @@
+{
+  "name": "choir-redesign-hard-cutover-assets",
+  "date": "2026-05-25",
+  "scope": "PromptSurface hard cutover, TetraMark, top/bottom DeskSheet, schema-v2 themes, app redesign guidance",
+  "themes": [
+    "futuristic-noir",
+    "carbon-fiber-kintsugi",
+    "london-salmon"
+  ],
+  "hard_cutover_rules": [
+    "Do not keep BottomBar.svelte as the implementation filename.",
+    "Do not keep bottom-only CSS variables/selectors in production code.",
+    "Update tests to the new PromptSurface selectors.",
+    "PromptSurface must support top and bottom placement."
+  ],
+  "entry_doc": "choir-redesign-hard-cutover-brief.md"
+}

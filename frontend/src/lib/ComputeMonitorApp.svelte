@@ -1,9 +1,10 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { activeWindowId, focusWindow, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
   import { AuthRequiredError } from './auth.js';
   import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { demoComputeStatus } from './demo-fixtures';
 
   export let windowId = '';
   export let authenticated = false;
@@ -50,7 +51,12 @@
   });
 
   async function refresh() {
-    if (!authenticated) return;
+    if (!authenticated) {
+      status = demoComputeStatus;
+      loading = false;
+      error = '';
+      return;
+    }
     loading = true;
     error = '';
     try {
@@ -67,6 +73,10 @@
   }
 
   async function handleWakeComputer() {
+    if (!authenticated) {
+      actionStatus = 'Sign in to wake or mutate a durable computer.';
+      return;
+    }
     actionStatus = 'Waking current computer...';
     try {
       await wakeCurrentComputer();
@@ -214,10 +224,13 @@
   </div>
 
   <section class="panel recovery-panel" data-compute-monitor-recovery>
-    <div class="panel-heading">
-      <h2>Safe Recovery</h2>
-      <span class="chip">state preserving</span>
-    </div>
+      <div class="panel-heading">
+        <h2>Safe Recovery</h2>
+        <span class="chip">state preserving</span>
+      </div>
+    {#if !authenticated}
+      <p class="compact-copy">Preview telemetry is fixture data. Recovery actions require sign-in because they mutate a durable computer.</p>
+    {/if}
     <div class="action-grid">
       <button type="button" on:click={handleSuspendBackgroundApps}>Suspend background apps</button>
       <button type="button" on:click={handleWakeComputer} disabled={!status?.capabilities?.wake_current_computer}>Wake current computer</button>

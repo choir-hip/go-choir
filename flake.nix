@@ -393,5 +393,19 @@ EOF
           ./nix/node-b.nix
         ];
       };
+
+      nixosConfigurations.go-choir-a = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          goChoirPackages = goChoirPackages;
+          inherit buildCommit sourceRepoRemote;
+          guestRunner = self.nixosConfigurations.go-choir-sandbox-vm.config.microvm.runner.firecracker;
+        };
+        modules = [
+          ./nix/node-a-hardware.nix
+          ./nix/node-a-disks.nix
+          ./nix/node-a.nix
+        ];
+      };
     };
 }
