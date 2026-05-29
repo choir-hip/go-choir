@@ -107,6 +107,27 @@ test('PromptSurface supports top placement without old geometry variables', asyn
   expect(boxes.legacyBottom).toBe('');
 });
 
+test('Settings exposes prompt surface placement toggle', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await expect(page.locator('[data-prompt-surface][data-placement="bottom"]')).toBeVisible();
+
+  await openDeskApp(page, 'settings');
+  const settings = page.locator('[data-settings-window]');
+  await expect(settings).toBeVisible();
+  await expect(settings.locator('[data-settings-prompt-placement]')).toContainText('Pinned to bottom');
+
+  await settings.locator('[data-settings-prompt-placement-top]').click();
+  await expect(page.locator('[data-prompt-surface][data-placement="top"]')).toBeVisible();
+  await expect(settings.locator('[data-settings-prompt-placement]')).toContainText('Pinned to top');
+  await expect(settings.locator('[data-settings-prompt-placement-top]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.locator('[data-settings-prompt-placement-bottom]')).toHaveAttribute('aria-pressed', 'false');
+
+  await settings.locator('[data-settings-prompt-placement-bottom]').click();
+  await expect(page.locator('[data-prompt-surface][data-placement="bottom"]')).toBeVisible();
+  await expect(settings.locator('[data-settings-prompt-placement]')).toContainText('Pinned to bottom');
+  await expect(settings.locator('[data-settings-prompt-placement-bottom]')).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('desktop icons reflow inside the prompt-safe viewport', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 540 });
   await page.goto(BASE_URL);
