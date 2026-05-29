@@ -3725,3 +3725,27 @@ code and deploy:
 - Read-only Node B verification found the new footer string in the deployed
   maild override binary at `/var/lib/go-choir/services/maild/bin/maild` and
   did not find the old `personal workflows` wording.
+
+### Problem Checkpoint: Sent Drafts Still Appear In Drafts
+
+status: problem_documented_before_fix
+timestamp: 2026-05-28T20:50Z
+evidence source: owner bug report and code inspection
+
+problem:
+- After a draft is approved and sent, the email appears in both `Drafts` and
+  `Sent`.
+- Product expectation: once an email is approved and sent, it should disappear
+  from `Drafts` and remain visible only in `Sent`.
+
+root-cause evidence:
+- `MarkDraftSent` correctly updates `email_drafts.status` to `sent`.
+- The Email UI correctly loads the Drafts folder from `/api/email/drafts`.
+- `Store.ListDrafts` selects all drafts for the owner without filtering out
+  rows whose status is already `sent`, so the backend keeps returning sent
+  draft records to the Drafts folder.
+
+fix direction:
+- Make `/api/email/drafts` list only unsent draft records.
+- Add a regression assertion proving an approved/sent draft is present in Sent
+  messages but absent from Drafts.
