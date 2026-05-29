@@ -399,7 +399,10 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 	if err := s.seedDefaults(cfg); err != nil {
 		return err
 	}
-	return s.repairSentDraftApprovalTokens()
+	if err := s.repairSentDraftApprovalTokens(); err != nil {
+		return err
+	}
+	return s.repairRejectedDrafts()
 }
 
 func (s *Store) repairSentDraftApprovalTokens() error {
@@ -415,6 +418,33 @@ func (s *Store) repairSentDraftApprovalTokens() error {
 			)`, now)
 	if err != nil {
 		return fmt.Errorf("repair sent draft approval tokens: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) repairRejectedDrafts() error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`UPDATE email_drafts
+		SET status = 'draft_rejected', updated_at = ?
+		WHERE status = 'draft_pending_owner_approval'
+			AND EXISTS (
+				SELECT 1 FROM email_draft_approval_tokens t
+				WHERE t.draft_id = email_drafts.id
+					AND t.owner_id = email_drafts.owner_id
+					AND t.version = email_drafts.version
+					AND t.version_hash = email_drafts.version_hash
+					AND t.status = 'rejected'
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM email_draft_approval_tokens t
+				WHERE t.draft_id = email_drafts.id
+					AND t.owner_id = email_drafts.owner_id
+					AND t.version = email_drafts.version
+					AND t.version_hash = email_drafts.version_hash
+					AND t.status = 'active'
+			)`, now)
+	if err != nil {
+		return fmt.Errorf("repair rejected drafts: %w", err)
 	}
 	return nil
 }

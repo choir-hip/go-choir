@@ -105,6 +105,47 @@ func TestEnsureSchemaRepairsActiveApprovalTokensForSentDrafts(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaRepairsRejectedDrafts(t *testing.T) {
+	store, cfg := newTestStore(t)
+	alias, err := store.ResolveAlias(context.Background(), "choir.news", "000")
+	if err != nil {
+		t.Fatalf("ResolveAlias: %v", err)
+	}
+	draft, err := store.CreateDraft(context.Background(), "user-root", alias, createDraftRequest{
+		ToAddresses: []string{"friend@example.com"},
+		Subject:     "Rejected repair",
+		TextBody:    "Do not send.",
+	})
+	if err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	token, err := store.CreateDraftApprovalToken(context.Background(), draft, "owner@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateDraftApprovalToken: %v", err)
+	}
+	if err := store.UseDraftApprovalToken(context.Background(), token.ID, "rejected"); err != nil {
+		t.Fatalf("UseDraftApprovalToken rejected: %v", err)
+	}
+
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema repair: %v", err)
+	}
+	repaired, err := store.GetDraft(context.Background(), "user-root", draft.ID)
+	if err != nil {
+		t.Fatalf("GetDraft: %v", err)
+	}
+	if repaired.Status != "draft_rejected" {
+		t.Fatalf("draft status = %q, want draft_rejected", repaired.Status)
+	}
+	drafts, err := store.ListDrafts(context.Background(), "user-root", 10)
+	if err != nil {
+		t.Fatalf("ListDrafts: %v", err)
+	}
+	if len(drafts) != 0 {
+		t.Fatalf("repaired rejected draft still listed: %+v", drafts)
+	}
+}
+
 func TestRecordWebhookEventIdempotent(t *testing.T) {
 	store, _ := newTestStore(t)
 	event := WebhookEvent{
