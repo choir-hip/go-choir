@@ -270,14 +270,12 @@ Start here:
 - [docs/frontend-app-building-api.md](docs/frontend-app-building-api.md): current frontend app registry, preview, theme, and shell contract.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
 - [docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision.
-- [docs/mission-promotion-substrate-preflight-hard-cutover-v0.md](docs/mission-promotion-substrate-preflight-hard-cutover-v0.md): completed promotion-substrate preflight hard cutover.
-- [docs/mission-source-lineage-promotion-control-plane-v0.md](docs/mission-source-lineage-promotion-control-plane-v0.md): source-lineage and divergent-computer promotion design.
+- [docs/legacy-promotion-experiments-learnings.md](docs/legacy-promotion-experiments-learnings.md): consolidated lessons from pruned patchset-promotion experiments.
 - [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
 - [docs/north-star.md](docs/north-star.md): longer product direction.
 
-Many dated `docs/*-proof-2026-05-13.md` files are evidence artifacts from
-earlier runs. Keep them as history unless a cleanup mission explicitly deletes
-or archives them.
+Many stale dated proof files have been pruned. Preserve their reusable lessons
+in consolidated docs instead of keeping obsolete success paths alive.
 
 ## Repository Shape
 
@@ -289,7 +287,6 @@ internal/vmctl/      VM ownership/lifecycle API
 internal/gateway/    LLM/search gateway
 internal/runtime/    agent runtime, product APIs, VText/Trace/browser/control surfaces
 internal/store/      runtime persistence plus embedded VText/Dolt workspace
-internal/promotion/  candidate-world integration and promotion helpers
 frontend/            Svelte desktop and Playwright tests
 nix/                 deployment and NixOS configuration
 docs/                architecture, missions, proofs, and historical notes

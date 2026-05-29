@@ -7,7 +7,8 @@ Completion notes:
 
 - Proof transcript: `docs/run-memory-v0-dogfood-2026-05-13.md`
 - Next frontier: `docs/run-memory-next-frontier-2026-05-13.md`
-- Next mission doc: `docs/mission-candidate-world-promotion-v0.md`
+- Later promotion work replaced the old patchset candidate direction with
+  AppChangePackage/adoption; see `docs/legacy-promotion-experiments-learnings.md`.
 
 ## Real Artifact
 

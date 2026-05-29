@@ -893,14 +893,14 @@ risks, and the next realism axis.
 Mission file:
 
 ```text
-docs/mission-source-lineage-promotion-control-plane-v0.md
+docs/mission-campaign-compiler-selfdev-v0.md
 ```
 
 Goal string:
 
 ```text
-/goal Run docs/mission-source-lineage-promotion-control-plane-v0.md
-as a Codex-operated MissionGradient mission: build the simplest real
+/goal Run docs/mission-campaign-compiler-selfdev-v0.md
+as a Choir-native Campaign Compiler mission: build the next honest
 implementation of divergent-computer app promotion. Implement enough
 source-lineage, AppChangePackage, candidate adoption, matched runtime/UI
 rebuild, verifier evidence, rollback, Trace, and product inspection to support

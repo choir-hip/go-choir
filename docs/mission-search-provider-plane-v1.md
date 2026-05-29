@@ -102,7 +102,8 @@ believed_current_artifact_state:
 
 evidence_for_belief:
   - docs/design-search-provider-plane-v1.md
-  - docs/review-search-vtext-context-2026-05-26.md
+  - older search/VText context review notes were pruned after their useful
+    state was folded into this mission
   - node-b: curl /health lists search_providers; authenticated search returns hits.
 
 main_uncertainties:
@@ -274,7 +275,8 @@ next executable probe:
 suggested resume goal string:
   /goal Continue docs/mission-search-provider-plane-v1.md: push search plane to origin/main, complete landing loop (CI + staging deploy identity), then run Gates B–D staging probes (P-healthy through P-product). Record evidence in the mission ledger. Do not start VText or mail work. Set status complete only when acceptance criteria met.
 evidence artifact refs:
-  - docs/omp-session-resume-search-provider-plane-2026-05-26.md
+  - prior OMP session resume notes were pruned after their state was folded into
+    this mission ledger
   - Gate A command output (local, 2026-05-26)
 rollback refs:
   - Revert deploy via git revert of search plane commit(s) + redeploy previous gateway closure if Gate D fails.
@@ -303,9 +305,9 @@ supports_promotion: yes | no
 | Work | Relationship |
 |------|----------------|
 | [design-search-provider-plane-v1.md](./design-search-provider-plane-v1.md) | Canonical architecture (this mission implements and proves it) |
-| [design-vtext-platform-v3.md](./design-vtext-platform-v3.md) | **Blocked until** this mission completes or explicitly defers with blocker |
+| VText platform design | **Blocked until** this mission completes or explicitly defers with blocker |
 | [mission-research-runtime-evidence-cadence-v1.md](./mission-research-runtime-evidence-cadence-v1.md) | Downstream consumer of gateway projections; do not duplicate gateway policy here |
-| [mission-vtext-lineage-aware-runtime-cadence-v2.md](./mission-vtext-lineage-aware-runtime-cadence-v2.md) | Do not start VText cadence mission work until search plane is live |
+| VText live cadence repair | Do not start VText cadence mission work until search plane is live |
 
 ---
 

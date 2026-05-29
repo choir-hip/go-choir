@@ -3,7 +3,8 @@
 **Status:** checkpoint_incomplete — substrate deployed at `a8b02af`, model/gateway smoke found ChatGPT auth refresh failure, Chyron human proof still unproven
 **Date:** 2026-05-23
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
-**Depends on:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
+**Depends on:** async supervision runtime hardening lessons now folded into
+runtime invariants and the current campaign compiler mission.
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 
 ## One-Line Goal String
@@ -441,7 +442,7 @@ next executable probe:
 suggested resume goal string:
   Use the one-line goal string in this file.
 evidence artifact refs:
-  docs/mission-async-supervision-runtime-hardening-v0.md;
+  the folded async supervision runtime hardening lessons;
   docs/mission-runtime-model-context-substrate-v0.md;
   /Users/wiz/go-choir/test-results/chyron-sequential-b808696-20260523T201837Z;
   /Users/wiz/go-choir/test-results/frontend-tests-chiron-sequ-68a22-evidence-or-precise-blocker

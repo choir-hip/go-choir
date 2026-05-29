@@ -9,7 +9,10 @@ Choir as a durable self-developing computer: a learning-control system that rece
 
 This is one continuous deformation from today's Codex-operated repo to Choir developing Choir inside Choir.
 
-The mission must not collapse into a checklist of disconnected features. App launcher, file uploads, themes, podcast/radio, Obscura-backed browser, skills, run memory, promotion queue, vsuper, and continuation are all projections of one object:
+The mission must not collapse into a checklist of disconnected features. App
+launcher, file uploads, themes, podcast/radio, Obscura-backed browser, skills,
+run memory, typed app-change adoption, vsuper, and continuation are all
+projections of one object:
 
 ```text
 signal -> evidence -> objective -> candidate world -> verifier contract -> promotion -> compaction -> next objective
@@ -23,7 +26,9 @@ This is homotopy, not ladder. A smaller slice is valid only when it preserves th
 
 - Foreground desktop and canonical repo state remain stable unless a verified promotion occurs.
 - Candidate worlds mutate in background VM or integration-branch boundaries.
-- Every candidate has owner, source run, candidate run, VM/snapshot identity, base SHA, worker head, patchset, verifier contracts, report, promotion decision, and rollback point.
+- Every candidate has owner, source run, candidate run, VM/snapshot identity,
+  base ref, candidate ref, typed package/adoption record, verifier contracts,
+  report, promotion decision, and rollback point.
 - Super owns orchestration and promotion. Vsuper owns one candidate world. Cosupers are subordinate helpers. Researchers write epistemic state. Appagents own semantic artifacts.
 - Workers never promote. Verifiers are contracts/phases, not a privileged agent caste.
 - Every automatic continuation has objective, reason, authority profile, lease, verifier target, stop condition, and durable source evidence.
@@ -78,11 +83,16 @@ Increase realism continuously along these axes:
 
 ## Dense Feedback Channels
 
-- Go tests for store, runtime, promotion, shipper, vmctl, vmmanager, gateway, and server.
+- Go tests for store, runtime, AppChangePackage/adoption, vmctl, vmmanager,
+  gateway, and server.
 - Frontend build and focused Playwright tests for every product surface touched.
-- Product-path Playwright dogfood: prompt bar -> app/super -> worker VM -> export -> promotion queue -> verification -> promotion -> continuation.
-- Trace assertions for roles, tool calls, candidate records, verifier results, promotion events, continuation events, and compactions.
-- Git assertions for base SHA, worker head, integration branch, destination branch, dirty state, divergence, and rollback command.
+- Product-path Playwright dogfood: prompt bar -> app/super -> worker VM ->
+  AppChangePackage publication -> adoption -> verification -> promotion ->
+  continuation.
+- Trace assertions for roles, tool calls, candidate records, verifier results,
+  package/adoption events, continuation events, and compactions.
+- Git/source-lineage assertions for base ref, candidate ref, dirty state,
+  divergence, and rollback command.
 - VM assertions for worker identity, snapshot/lease metadata, export artifacts, and disposal/recovery.
 - Run memory assertions for compaction before continuation and defined behavior near context limits.
 - UI screenshots only when they prove real UI state, not cosmetic presence.
@@ -169,14 +179,14 @@ VM:
 
 - every worker has VM/snapshot/lease identity;
 - failed worlds can be discarded;
-- successful worlds export patchsets and evidence before teardown;
+- successful worlds publish typed packages and evidence before teardown;
 - live rollback proof is required before claiming full VM safety.
 
 Database/runtime:
 
 - migrations are additive;
 - run memory entries are append-only;
-- promotion/continuation records are state machines with audit trail;
+- adoption/promotion/continuation records are state machines with audit trail;
 - context-limit failures become blocked/recoverable states, not undefined behavior.
 
 Product:
@@ -193,7 +203,7 @@ Every loop must write durable learning:
 - mission doc updates;
 - dogfood proof reports;
 - next-frontier reports;
-- promotion reports;
+- adoption/promotion reports;
 - failed-candidate reports;
 - run compactions;
 - verifier contract improvements.
@@ -207,47 +217,27 @@ Classify discoveries:
 ## Dogfood Evidence
 
 - 2026-05-13 product-pressure slice: `docs/choir-grand-deformation-product-slice-2026-05-13.md`
-- 2026-05-13 promotion queue product bridge: `docs/promotion-queue-product-bridge-2026-05-13.md`
-- 2026-05-13 local vmctl product path proof: `docs/local-vmctl-product-path-proof-2026-05-13.md`
-- 2026-05-13 promotion queue owner review proof: `docs/promotion-queue-owner-review-2026-05-13.md`
-- 2026-05-13 live product mutable-work blocker: `docs/choir-in-choir-live-product-blocker-2026-05-13.md`
-- 2026-05-13 local worktree worker fallback proof: `docs/local-worktree-worker-fallback-proof-2026-05-13.md`
-- 2026-05-13 prompt product-path worker promotion proof: `docs/prompt-product-path-worker-promotion-proof-2026-05-13.md`
-- 2026-05-13 live Playwright worker dogfood proof: `docs/live-playwright-worker-dogfood-proof-2026-05-13.md`
-- 2026-05-13 inbox delivery idempotency proof: `docs/inbox-delivery-idempotency-proof-2026-05-13.md`
-- 2026-05-13 worker lease portfolio control proof: `docs/worker-lease-portfolio-control-proof-2026-05-13.md`
-- 2026-05-13 objective fingerprint promotion dedupe proof: `docs/objective-fingerprint-promotion-dedupe-proof-2026-05-13.md`
-- 2026-05-13 continuation objective fingerprint proof: `docs/continuation-objective-fingerprint-proof-2026-05-13.md`
-- 2026-05-13 live Playwright recurrence control proof: `docs/live-playwright-recurrence-control-proof-2026-05-13.md`
+- Legacy patchset-promotion proof files were pruned. Their durable lessons are
+  preserved in `docs/legacy-promotion-experiments-learnings.md`.
 - 2026-05-13 context limit recovery proof: `docs/context-limit-recovery-proof-2026-05-13.md`
-- 2026-05-13 Trace run geometry visibility proof: `docs/trace-run-geometry-visibility-proof-2026-05-13.md`
-- 2026-05-13 Trace control artifact links proof: `docs/trace-control-artifact-links-proof-2026-05-13.md`
+- Old Trace promotion-candidate artifact proof was pruned with the legacy
+  patchset queue.
 - 2026-05-13 podcast radio brief proof: `docs/podcast-radio-brief-proof-2026-05-13.md`
-- 2026-05-13 Obscura browser-in-VM frontier: `docs/obscura-browser-in-vm-frontier-2026-05-13.md`
-- 2026-05-13 backend browser capability contract proof: `docs/backend-browser-capability-contract-proof-2026-05-13.md`
-- 2026-05-13 backend Obscura browser session proof: `docs/backend-obscura-browser-session-proof-2026-05-13.md`
-- 2026-05-13 backend browser Trace events proof: `docs/backend-browser-trace-events-proof-2026-05-13.md`
-- 2026-05-13 backend browser link snapshot proof: `docs/backend-browser-link-snapshot-proof-2026-05-13.md`
-- 2026-05-13 backend browser HTML snapshot proof: `docs/backend-browser-html-snapshot-proof-2026-05-13.md`
-- 2026-05-13 backend browser session lifecycle proof: `docs/backend-browser-session-lifecycle-proof-2026-05-13.md`
-- 2026-05-13 backend browser substrate contract proof: `docs/backend-browser-substrate-contract-proof-2026-05-13.md`
-- 2026-05-13 Obscura CDP screenshot substrate proof: `docs/obscura-cdp-screenshot-substrate-proof-2026-05-13.md`
-- 2026-05-13 backend browser CDP screenshot product proof: `docs/backend-browser-cdp-screenshot-product-proof-2026-05-13.md`
-- 2026-05-13 backend browser persistent CDP lifecycle proof: `docs/backend-browser-persistent-cdp-lifecycle-proof-2026-05-13.md`
-- 2026-05-13 backend browser bounded control proof: `docs/backend-browser-bounded-control-proof-2026-05-13.md`
-- 2026-05-13 backend browser candidate-world identity proof: `docs/backend-browser-candidate-world-identity-proof-2026-05-13.md`
-- 2026-05-13 backend browser VM-local execution blocker: `docs/backend-browser-vm-local-execution-blocker-2026-05-13.md`
-- 2026-05-13 run control memory synthesis proof: `docs/run-control-memory-synthesis-proof-2026-05-13.md`
+- Backend browser proof shards were pruned. Their durable lessons are preserved
+  in `docs/backend-browser-substrate-learnings.md`.
 
 ## Stopping Condition
 
 Stop only when one of these is true:
 
-- Choir has made a real product improvement through its own product path, candidate-world execution, verifier contracts, promotion queue, explicit promotion, compaction, and automatic continuation into the next bounded objective; or
+- Choir has made a real product improvement through its own product path,
+  candidate-computer execution, verifier contracts, typed package/adoption,
+  explicit promotion, compaction, and automatic continuation into the next
+  bounded objective; or
 - the run is blocked by an invariant-level issue, with rollback point, failed evidence, and the next smallest safe probe documented.
 
 Completion requires a next-state decision. If a goal finishes and a safe next objective exists, the system should continue or record the next continuation instead of ending as a dead stop.
 
 ## One-Line Goal
 
-`/goal Use MissionGradient to execute docs/mission-choir-grand-deformation-v0.md end to end as one continuous Choir-in-Choir deformation, verifying and promoting only through candidate-world invariants, and continuing until real self-development works or an invariant-level blocker is documented.`
+`/goal Use MissionGradient to execute docs/mission-choir-grand-deformation-v0.md end to end as one continuous Choir-in-Choir deformation, verifying and promoting only through candidate-world invariants and typed AppChangePackage/adoption records, and continuing until real self-development works or an invariant-level blocker is documented.`

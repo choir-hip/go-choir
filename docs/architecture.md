@@ -11,7 +11,7 @@
 > model, Dolt boundaries, phase boundaries, and current deployed domain
 > (`https://choir.news`). Where this older sketch over-focuses local runtime
 > mechanics, scheduler abstractions, shared-worker assumptions, stale
-> authority/lease ideas, or old `draft.choir-ip.com` / `choir-ip.com` deployment
+> authority/lease ideas, or old pre-`choir.news` deployment
 > wording, the newer docs take precedence.
 
 ---
@@ -1938,7 +1938,7 @@ Each service can be built and tested incrementally. The real distributed archite
 ### 8.5 Deployment Target: OVH Node B (`choir.news`)
 
 go-choir deploys to **OVH node B** and is served publicly at
-`https://choir.news`. The old `draft.choir-ip.com` host redirects to
+`https://choir.news`. Old pre-`choir.news` hosts should not be used for
 `https://choir.news`. The old `choir-ip.com` apex is legacy DNS and still needs
 Cloudflare authority/credentials before it can redirect reliably to the current
 primary domain.

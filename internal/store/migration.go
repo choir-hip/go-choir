@@ -17,7 +17,6 @@ var runtimeTables = []string{
 	"channel_messages",
 	"inbox_deliveries",
 	"run_memory_entries",
-	"promotion_candidates",
 	"run_acceptances",
 	"run_continuations",
 	"browser_sessions",
@@ -105,10 +104,18 @@ func (s *Store) importSQLiteTable(ctx context.Context, source *sql.DB, table str
 	if err := validateIdentifier(table); err != nil {
 		return err
 	}
-	cols, err := sqliteTableColumns(source, table)
+	sourceCols, err := sqliteTableColumns(source, table)
 	if err != nil {
 		return err
 	}
+	if len(sourceCols) == 0 {
+		return nil
+	}
+	destinationCols, err := s.destinationTableColumns(ctx, table)
+	if err != nil {
+		return err
+	}
+	cols := intersectColumns(sourceCols, destinationCols)
 	if len(cols) == 0 {
 		return nil
 	}
@@ -199,6 +206,44 @@ func sqliteTableColumns(db *sql.DB, table string) ([]string, error) {
 		return nil, fmt.Errorf("iterate legacy sqlite table_info(%s): %w", table, err)
 	}
 	return cols, nil
+}
+
+func (s *Store) destinationTableColumns(ctx context.Context, table string) (map[string]bool, error) {
+	if err := validateIdentifier(table); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?`, table)
+	if err != nil {
+		return nil, fmt.Errorf("inspect destination table %s columns: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan destination table %s column: %w", table, err)
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate destination table %s columns: %w", table, err)
+	}
+	return cols, nil
+}
+
+func intersectColumns(source []string, destination map[string]bool) []string {
+	cols := make([]string, 0, len(source))
+	for _, col := range source {
+		if destination[col] {
+			cols = append(cols, col)
+		}
+	}
+	return cols
 }
 
 func joinIdentifiers(cols []string) string {

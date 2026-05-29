@@ -1637,16 +1637,11 @@ fi
 	}
 }
 
-func TestBrowserSessionRejectsLegacyPromotionCandidateBinding(t *testing.T) {
+func TestBrowserSessionRejectsDirectWorldBinding(t *testing.T) {
 	_, handler := testAPISetup(t)
 	forged := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
 	if forged.Code != http.StatusBadRequest {
 		t.Fatalf("forged vm_id status = %d, want 400; body=%s", forged.Code, forged.Body.String())
-	}
-
-	legacy := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"promotion_candidate_id":"candidate-browser-world"}`, "user-alice")
-	if legacy.Code != http.StatusBadRequest {
-		t.Fatalf("legacy promotion_candidate_id status = %d, want 400; body=%s", legacy.Code, legacy.Body.String())
 	}
 }
 

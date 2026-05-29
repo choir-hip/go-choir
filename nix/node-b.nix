@@ -183,11 +183,6 @@ in
         }
       '';
     };
-    virtualHosts."draft.choir-ip.com" = {
-      extraConfig = ''
-        redir https://choir.news{uri} permanent
-      '';
-    };
     virtualHosts."choir-ip.com" = {
       extraConfig = ''
         redir https://choir.news{uri} permanent

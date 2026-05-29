@@ -2,7 +2,8 @@
 
 Date: 2026-05-12
 
-Mission document: `docs/mission-gradient-choir-in-choir-2026-05-11.md`
+Mission document: historical Choir-in-Choir mission-gradient run; the original
+mission doc was pruned after its durable lessons were folded forward.
 
 ## Result
 
@@ -11,9 +12,14 @@ The mission produced a deployed, evidence-backed bootstrap of the Choir self-dev
 Completed:
 
 - Active desktop VM state now survives direct vmctl restarts and GitHub Actions staging deploys.
-- Background worker VM creation, discard safety, mutable work, and patchset export are proven on staging.
-- A platform shipper boundary exists. Worker contexts export manifests and patchsets without broad GitHub credentials; platform import can push a branch and trigger GitHub CI.
-- VText product-path proofs cover prompt bar -> conductor -> VText -> researcher/super -> background worker VM -> patchset export -> VText current-state revision.
+- Background worker VM creation, discard safety, mutable work, and source-delta
+  export were proven on staging.
+- A platform shipper boundary existed. Worker contexts exported manifests and
+  source deltas without broad GitHub credentials; this was later superseded by
+  typed AppChangePackage/adoption work.
+- VText product-path proofs covered prompt bar -> conductor -> VText ->
+  researcher/super -> background worker VM -> source-delta export -> VText
+  current-state revision.
 - VText mobile/tablet/desktop UX was improved enough to stop controls overlapping text and to preserve usable geometry.
 - Trace, Settings, app registry, and theme configuration were cleaned up and verified through product-safe surfaces.
 - A shared content substrate exists for URL import, extraction provenance, media classification, and app routing.
@@ -82,9 +88,13 @@ Not yet exercised:
 
 The next MissionGradient run should target the continuous product loop:
 
-`prompt bar -> VText -> researcher/Super -> background VM -> patchset export -> platform shipper -> GitHub PR/CI -> deployed staging proof -> Trace/VText provenance`
+Historical target, now superseded:
 
-The critical value criterion is not "more apps." It is reducing divergence between the product trajectory and the shipping trajectory while preserving authority boundaries.
+`prompt bar -> VText -> researcher/Super -> background VM -> source-delta export -> platform shipper -> GitHub PR/CI -> deployed staging proof -> Trace/VText provenance`
+
+The carried-forward criterion is not "more apps." It is reducing divergence
+between the product trajectory and the shipping/adoption trajectory while
+preserving authority boundaries.
 
 Concrete next work:
 

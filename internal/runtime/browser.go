@@ -459,18 +459,17 @@ func (h *APIHandler) HandleBrowserSessionClose(w http.ResponseWriter, r *http.Re
 
 func (rt *Runtime) emitBrowserSessionEvent(ctx context.Context, rec types.BrowserSessionRecord, kind types.EventKind, phase string, extra map[string]any) {
 	payload := map[string]any{
-		"session_id":             rec.SessionID,
-		"provider":               rec.Provider,
-		"mode":                   rec.Mode,
-		"state":                  rec.State,
-		"current_url":            rec.CurrentURL,
-		"title":                  rec.Title,
-		"world_kind":             rec.WorldKind,
-		"promotion_candidate_id": rec.CandidateID,
-		"vm_id":                  rec.VMID,
-		"snapshot_id":            rec.SnapshotID,
-		"source_loop_id":         rec.SourceRunID,
-		"candidate_trace_id":     rec.CandidateTraceID,
+		"session_id":         rec.SessionID,
+		"provider":           rec.Provider,
+		"mode":               rec.Mode,
+		"state":              rec.State,
+		"current_url":        rec.CurrentURL,
+		"title":              rec.Title,
+		"world_kind":         rec.WorldKind,
+		"vm_id":              rec.VMID,
+		"snapshot_id":        rec.SnapshotID,
+		"source_loop_id":     rec.SourceRunID,
+		"candidate_trace_id": rec.CandidateTraceID,
 	}
 	for key, value := range extra {
 		payload[key] = value

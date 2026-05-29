@@ -17,7 +17,7 @@ choir.news/:handle      -> public surface for a user-selected handle
 ```
 
 `choir.news` is also the current deployed staging/primary domain. Legacy
-`draft.choir-ip.com` traffic redirects to it. Legacy `choir-ip.com` is not a
+Legacy `choir-ip.com` is not a
 reliable alias yet because its DNS still requires Cloudflare
 authority/credentials before it can be pointed at Node B and certified.
 

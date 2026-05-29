@@ -1134,17 +1134,17 @@ func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *te
 	}
 }
 
-func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
+func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) {
 	registry := NewToolRegistry()
 	var mu sync.Mutex
-	exports := 0
+	publishes := 0
 	if err := registry.Register(Tool{
 		Name: "publish_app_change_package",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
-			exports++
+			publishes++
 			mu.Unlock()
-			return "export ok", nil
+			return "publish ok", nil
 		},
 	}); err != nil {
 		t.Fatalf("register publish_app_change_package: %v", err)
@@ -1162,16 +1162,16 @@ func TestExecuteToolsCoSuperSkipsDuplicateExportPatchset(t *testing.T) {
 	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
-	gotExports := exports
+	gotPublishes := publishes
 	mu.Unlock()
-	if gotExports != 1 {
-		t.Fatalf("exports executed = %d, want one", gotExports)
+	if gotPublishes != 1 {
+		t.Fatalf("publishes executed = %d, want one", gotPublishes)
 	}
 	if results[0].IsError {
-		t.Fatalf("first export = %#v, want success", results[0])
+		t.Fatalf("first publish = %#v, want success", results[0])
 	}
 	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate publish_app_change_package") {
-		t.Fatalf("second export = %#v, want duplicate skip", results[1])
+		t.Fatalf("second publish = %#v, want duplicate skip", results[1])
 	}
 }
 

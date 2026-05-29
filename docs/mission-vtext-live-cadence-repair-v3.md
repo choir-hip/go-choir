@@ -4,19 +4,15 @@ Last updated: 2026-05-28
 
 Reference:
 
-- [design-vtext-platform-v3.md](design-vtext-platform-v3.md)
-- [review-search-vtext-context-2026-05-26.md](review-search-vtext-context-2026-05-26.md)
-- [mission-vtext-lineage-aware-runtime-cadence-v2.md](mission-vtext-lineage-aware-runtime-cadence-v2.md)
 - [mission-research-runtime-evidence-cadence-v1.md](mission-research-runtime-evidence-cadence-v1.md)
 
 ## Goal Prompt
 
 ```text
 /goal Run a Codex-operated MissionGradient mission to repair the current live
-VText product path, starting from docs/design-vtext-platform-v3.md and
-docs/review-search-vtext-context-2026-05-26.md but treating stale review
-findings as hypotheses, not truth. First reproduce the owner-visible failure on
-staging where VText reaches v1 but does not reliably continue into research,
+VText product path, treating older search/VText review notes as folded
+hypotheses, not live source material. First reproduce the owner-visible failure
+on staging where VText reaches v1 but does not reliably continue into research,
 coding/execution, or later grounded revisions. Use product-path evidence only:
 prompt bar, VText APIs, Trace, deployed health/build identity, model-policy
 evidence, VText mutation/controller state, worker request events,

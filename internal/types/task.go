@@ -233,26 +233,6 @@ const (
 	// rejects or fails a bounded input/control action.
 	EventBrowserControlFailed EventKind = "browser.control.failed"
 
-	// EventPromotionCandidateQueued is emitted when a candidate-world patchset
-	// enters the durable promotion queue.
-	EventPromotionCandidateQueued EventKind = "promotion.candidate.queued"
-
-	// EventPromotionCandidateVerified is emitted when verifier contracts accept
-	// an integrated candidate.
-	EventPromotionCandidateVerified EventKind = "promotion.candidate.verified"
-
-	// EventPromotionCandidateFailed is emitted when verifier contracts reject an
-	// integrated candidate.
-	EventPromotionCandidateFailed EventKind = "promotion.candidate.failed"
-
-	// EventPromotionCandidatePromoted is emitted when an approved verified
-	// candidate advances canonical git state.
-	EventPromotionCandidatePromoted EventKind = "promotion.candidate.promoted"
-
-	// EventPromotionCandidateReviewed is emitted when the owning user records
-	// an explicit approve/reject decision for a candidate.
-	EventPromotionCandidateReviewed EventKind = "promotion.candidate.reviewed"
-
 	// EventAppChangePackagePublished is emitted when a candidate app change is
 	// exported as a product-visible AppChangePackage.
 	EventAppChangePackagePublished EventKind = "app_change_package.published"
@@ -426,44 +406,6 @@ type RunMemoryEntry struct {
 	Model            string             `json:"model,omitempty"`
 	Details          map[string]any     `json:"details,omitempty"`
 	CreatedAt        time.Time          `json:"created_at"`
-}
-
-// PromotionCandidateStatus is the state of a candidate-world patchset as it
-// moves from worker export through verification and optional promotion.
-type PromotionCandidateStatus string
-
-const (
-	PromotionCandidateQueued             PromotionCandidateStatus = "queued"
-	PromotionCandidateIntegrated         PromotionCandidateStatus = "integrated"
-	PromotionCandidateVerified           PromotionCandidateStatus = "verified"
-	PromotionCandidateVerificationFailed PromotionCandidateStatus = "verification_failed"
-	PromotionCandidatePromoted           PromotionCandidateStatus = "promoted"
-	PromotionCandidateRejected           PromotionCandidateStatus = "rejected"
-)
-
-// PromotionCandidateRecord is the runtime queue record that makes a background
-// VM patchset reviewable before canonical promotion.
-type PromotionCandidateRecord struct {
-	CandidateID       string                   `json:"candidate_id"`
-	OwnerID           string                   `json:"owner_id"`
-	Status            PromotionCandidateStatus `json:"status"`
-	SourceRunID       string                   `json:"source_loop_id,omitempty"`
-	TraceID           string                   `json:"trace_id,omitempty"`
-	VMID              string                   `json:"vm_id,omitempty"`
-	SnapshotID        string                   `json:"snapshot_id,omitempty"`
-	BaseSHA           string                   `json:"base_sha,omitempty"`
-	WorkerHeadSHA     string                   `json:"worker_head_sha,omitempty"`
-	ManifestPath      string                   `json:"manifest_path,omitempty"`
-	PatchsetPath      string                   `json:"patchset_path,omitempty"`
-	IntegrationBranch string                   `json:"integration_branch,omitempty"`
-	DestinationBranch string                   `json:"destination_branch,omitempty"`
-	Summary           string                   `json:"summary,omitempty"`
-	CandidateJSON     json.RawMessage          `json:"candidate_json,omitempty"`
-	ContractsJSON     json.RawMessage          `json:"contracts_json,omitempty"`
-	ReportJSON        json.RawMessage          `json:"report_json,omitempty"`
-	Error             string                   `json:"error,omitempty"`
-	CreatedAt         time.Time                `json:"created_at"`
-	UpdatedAt         time.Time                `json:"updated_at"`
 }
 
 // RunContinuationStatus is the lifecycle of a durable next-goal selection.

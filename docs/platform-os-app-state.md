@@ -76,7 +76,7 @@ platform docs record the common baseline and the desired divergence semantics.
 - **Source of truth:** GitHub `origin/main` for tracked platform files.
 - **Deploy model:** GitHub Actions deploys tracked platform changes to Node B.
   Documentation-only commits intentionally skip CI/CD.
-- **Legacy domains:** `draft.choir-ip.com` redirects to `choir.news`.
+- **Legacy domains:** old pre-`choir.news` hostnames are not acceptance targets.
   `choir-ip.com` is legacy DNS and still needs Cloudflare authority/credentials
   before it can redirect reliably to the current primary domain.
 - **Runtime shape:** Go proxy/runtime services, Svelte frontend, `vmctl`, NixOS
@@ -263,7 +263,7 @@ Known gaps:
 ## Current Proof Anchors
 
 The current primary staging origin is `https://choir.news`. Older proof commands
-below that name `https://draft.choir-ip.com` are historical evidence from before
+below old staging hostnames are historical evidence from before
 the 2026-05-26 domain cutover, not current instructions for new acceptance runs.
 
 Recent deployed platform proof for the primary-domain cutover:
@@ -273,7 +273,7 @@ Recent deployed platform proof for the primary-domain cutover:
   `7fd49beee9b1ed517e73bc0885a6f3f8a2d1e6a5`, and
   `2b2243394ce86cc8a79d62e615fc6039c8c658a9`;
 - final evidence checkpoint:
-  `a077efa` in `docs/mission-move-to-choir-news-v0.md`;
+  `a077efa` from the pruned primary-domain cutover mission;
 - CI/deploy run:
   `https://github.com/choir-hip/go-choir/actions/runs/26441752735`;
 - staging health reported proxy and sandbox commit/deployed_commit
@@ -303,7 +303,7 @@ Recent deployed platform proof for live multi-device computer sync:
   `8c0b941c36ce620d3f6cc5ed0b5fbcdb471cac65`, built at
   `20260522181828`, deployed at `2026-05-22T18:20:17Z`;
 - deployed Playwright:
-  `LIVE_SYNC_EVIDENCE_DIR=/Users/wiz/go-choir/test-results/live-sync-driver-lease-staging-20260522T182540Z CHOIR_AUTH_STATE=/Users/wiz/go-choir/test-results/live-sync-driver-lease-auth-20260522T182540Z/storage.json PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com BASE_URL=https://draft.choir-ip.com npx playwright test tests/live-sync-driver-lease-deployed.tmp.spec.js --project=chromium --workers=1 --timeout=420000 --reporter=list`;
+  historical live-sync proof command against the old staging hostname;
 - result: `1 passed`;
 - proof used one desktop context at `1440x920` and one mobile context at
   `390x844` for the same fresh authenticated user computer;
@@ -472,7 +472,7 @@ Recent deployed platform proof for mobile real desktop and Desktop Overview:
 - staging health reported proxy and upstream commit
   `79b14e2cf6057ee33154dd1d2700ae8cf26ce355`;
 - deployed Playwright:
-  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+  historical mobile overview proof command against the old staging hostname;
 - result: `2 passed`;
 - proof covered Files, VText, Trace, and Podcast as overlapping non-fullscreen
   windows on `390x844` and desktop, with drag, resize, minimize, restore,
@@ -486,7 +486,7 @@ Recent deployed platform proof for heavy-session Desktop Overview:
 - staging health reported proxy and sandbox commit
   `b148461dafc6125fa321de9b10814cdc6af285b6`;
 - deployed heavy-session Playwright:
-  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/desktop-overview-heavy-session.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+  historical desktop heavy-session proof command against the old staging hostname;
 - result: `2 passed`;
 - proof opened 12 real app windows through the Desk, persisted and reloaded the
   session, exercised restore recovery, and verified on both `390x844` and
@@ -507,13 +507,13 @@ Recent deployed platform proof for live-spatial Desktop Overview previews:
   `2f8ad7adc2697d6faff00dbc90991057c19781e9`, built at
   `20260520002859`, deployed at `2026-05-20T00:31:14Z`;
 - deployed ordinary-session Playwright:
-  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/mobile-real-desktop-overview.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+  historical mobile overview proof command against the old staging hostname;
 - result: `2 passed`;
 - ordinary proof covered Files, VText, Trace, and Podcast as overlapping
   windows on `390x844` and desktop, with bounded live Overview previews and
   fallback cards;
 - deployed heavy-session Playwright:
-  `PLAYWRIGHT_BASE_URL=https://draft.choir-ip.com GO_CHOIR_DESKTOP_BOOT_TIMEOUT_MS=300000 npx playwright test tests/desktop-overview-heavy-session.spec.js --project=chromium --workers=1 --timeout=360000 --reporter=line`;
+  historical desktop heavy-session proof command against the old staging hostname;
 - result: `2 passed`;
 - mobile and desktop heavy DOM metrics: 12 visible windows, 11 heavy windows,
   10 suspended windows, 1 mounted heavy app body, 66 overlap pairs, 2 live

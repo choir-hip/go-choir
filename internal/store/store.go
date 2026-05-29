@@ -154,29 +154,6 @@ CREATE TABLE IF NOT EXISTS run_memory_entries (
 	UNIQUE(loop_id, seq)
 );
 
-CREATE TABLE IF NOT EXISTS promotion_candidates (
-	candidate_id        VARCHAR(255) PRIMARY KEY,
-	owner_id            VARCHAR(255) NOT NULL DEFAULT '',
-	status              VARCHAR(64) NOT NULL,
-	source_loop_id      VARCHAR(255) NOT NULL DEFAULT '',
-	trace_id            VARCHAR(255) NOT NULL DEFAULT '',
-	vm_id               VARCHAR(255) NOT NULL DEFAULT '',
-	snapshot_id         VARCHAR(255) NOT NULL DEFAULT '',
-	base_sha            VARCHAR(128) NOT NULL DEFAULT '',
-	worker_head_sha     VARCHAR(128) NOT NULL DEFAULT '',
-	manifest_path       LONGTEXT NOT NULL DEFAULT '',
-	patchset_path       LONGTEXT NOT NULL DEFAULT '',
-	integration_branch  LONGTEXT NOT NULL DEFAULT '',
-	destination_branch  LONGTEXT NOT NULL DEFAULT '',
-	summary             LONGTEXT NOT NULL DEFAULT '',
-	candidate_json      LONGTEXT NOT NULL DEFAULT '{}',
-	contracts_json      LONGTEXT NOT NULL DEFAULT '[]',
-	report_json         LONGTEXT NOT NULL DEFAULT '{}',
-	error               LONGTEXT NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL,
-	updated_at          DATETIME NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS computer_source_lineages (
 	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
 	computer_id          VARCHAR(255) NOT NULL DEFAULT '',
@@ -300,7 +277,6 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
 	execution_scope  VARCHAR(64) NOT NULL DEFAULT '',
 	backend_session_id VARCHAR(255) NOT NULL DEFAULT '',
 	world_kind      VARCHAR(64) NOT NULL DEFAULT '',
-	promotion_candidate_id VARCHAR(255) NOT NULL DEFAULT '',
 	vm_id           VARCHAR(255) NOT NULL DEFAULT '',
 	snapshot_id     VARCHAR(255) NOT NULL DEFAULT '',
 	source_loop_id  VARCHAR(255) NOT NULL DEFAULT '',
@@ -417,9 +393,6 @@ CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(c
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(parent_entry_id);
-CREATE INDEX IF NOT EXISTS idx_promotion_candidates_owner_status ON promotion_candidates(owner_id, status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_promotion_candidates_source_loop ON promotion_candidates(source_loop_id);
-CREATE INDEX IF NOT EXISTS idx_promotion_candidates_trace_id ON promotion_candidates(trace_id);
 CREATE INDEX IF NOT EXISTS idx_computer_source_lineages_owner_kind ON computer_source_lineages(owner_id, computer_kind, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_owner_status ON app_change_packages(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_visibility ON app_change_packages(visibility, updated_at);
@@ -596,7 +569,6 @@ func (s *Store) bootstrap() error {
 		{"browser_sessions", "execution_scope", "VARCHAR(64) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "backend_session_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "world_kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "promotion_candidate_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "vm_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "snapshot_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"browser_sessions", "source_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},

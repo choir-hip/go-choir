@@ -39,9 +39,10 @@ New durable product truth should not be added to SQLite by default.
 ## Implementation Note: Runtime Cutover
 
 As of 2026-05-15, the sandbox runtime/control product tables for runs, events,
-Trace, run memory, continuations, promotion candidates, run acceptances, browser
-sessions, researcher findings, worker updates, and desktop state are opened in
-the same per-user embedded Dolt workspace that already owns VText state.
+Trace, run memory, continuations, app change/adoption state, run acceptances,
+browser sessions, researcher findings, worker updates, and desktop state are
+opened in the same per-user embedded Dolt workspace that already owns VText
+state.
 
 The current filesystem path convention still uses the old runtime path as a
 marker and legacy-import source, but the canonical writer is the embedded Dolt

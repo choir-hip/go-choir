@@ -37,11 +37,11 @@ func (s *Store) CreateBrowserSession(ctx context.Context, rec types.BrowserSessi
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO browser_sessions (
 			session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-			world_kind, promotion_candidate_id, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
+			world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
 			state, current_url,
 			title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
 			error, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.SessionID,
 		rec.OwnerID,
 		rec.Provider,
@@ -49,7 +49,6 @@ func (s *Store) CreateBrowserSession(ctx context.Context, rec types.BrowserSessi
 		rec.ExecutionScope,
 		rec.BackendSessionID,
 		rec.WorldKind,
-		rec.CandidateID,
 		rec.VMID,
 		rec.SnapshotID,
 		rec.SourceRunID,
@@ -89,7 +88,6 @@ func (s *Store) UpdateBrowserSession(ctx context.Context, rec types.BrowserSessi
 		        execution_scope = ?,
 		        backend_session_id = ?,
 		        world_kind = ?,
-		        promotion_candidate_id = ?,
 		        vm_id = ?,
 		        snapshot_id = ?,
 		        source_loop_id = ?,
@@ -109,7 +107,6 @@ func (s *Store) UpdateBrowserSession(ctx context.Context, rec types.BrowserSessi
 		rec.ExecutionScope,
 		rec.BackendSessionID,
 		rec.WorldKind,
-		rec.CandidateID,
 		rec.VMID,
 		rec.SnapshotID,
 		rec.SourceRunID,
@@ -149,7 +146,7 @@ func (s *Store) GetBrowserSession(ctx context.Context, ownerID, sessionID string
 	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-		        world_kind, promotion_candidate_id, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
+		        world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
 		        state, current_url, title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
 		        error, created_at, updated_at
 		   FROM browser_sessions
@@ -170,7 +167,7 @@ func (s *Store) ListBrowserSessions(ctx context.Context, ownerID string, limit i
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-		        world_kind, promotion_candidate_id, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
+		        world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
 		        state, current_url, title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
 		        error, created_at, updated_at
 		   FROM browser_sessions
@@ -213,7 +210,6 @@ func scanBrowserSession(scanner interface {
 		&rec.ExecutionScope,
 		&rec.BackendSessionID,
 		&rec.WorldKind,
-		&rec.CandidateID,
 		&rec.VMID,
 		&rec.SnapshotID,
 		&rec.SourceRunID,

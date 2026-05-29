@@ -1,6 +1,6 @@
 # Choir Mission Geometry
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-29
 
 Choir is a learning system.
 
@@ -44,16 +44,22 @@ durable learning control over versioned artifacts
 A general artifact-native learning control system has:
 
 - persistent computers;
+- campaigns;
+- mission compiler;
+- mission geometry;
 - canonical state;
 - candidate worlds;
 - artifact owners;
 - workers;
 - messages;
+- work orders;
+- evidence packets;
 - obligations;
 - leases;
 - verifiers;
 - promotion;
 - compaction;
+- reentry;
 - external event feeds;
 - sparse high-value human judgment.
 
@@ -68,6 +74,8 @@ Choir is one concrete product ontology over that science object.
 Choir-specific concepts include:
 
 - persistent computers;
+- campaigns;
+- mission compiler;
 - `vtext`;
 - appagents;
 - automatic computer;
@@ -91,6 +99,39 @@ The automatic computer exists to make long-running work possible without forcing
 This is the substrate layer. If this layer is wrong, everything above it becomes slop.
 
 Read [computer-ontology.md](computer-ontology.md) for the ledger split between VM/runtime, Dolt/app state, source/build state, blobs, artifact provenance, and routes. The key distinction is that users can evolve their own computers quickly without global platform deploys, while shared/platform changes require typed artifacts and higher-ceremony promotion.
+
+## Campaign compiler
+
+Campaign Compiler is the control layer that turns intent and signals into
+bounded, evidence-bearing work across computers, agents, runtimes, users, and
+perspectives.
+
+It is not a better prompt format. It is not a Codex `/goal` upgrade. It is the
+Choir-native layer that keeps durable campaigns coherent while many missions
+start, stop, fail, promote, roll back, and reenter the human.
+
+The durable object is:
+
+```text
+Campaign
+-> compiled MissionGeometry
+-> WorkOrders
+-> candidate/computer/runtimes
+-> EvidencePackets
+-> VText / Trace updates
+-> promotion or rollback
+-> ReentryDigest
+-> campaign memory
+```
+
+Campaign Compiler should select cognitive transforms as part of compilation.
+Transforms are not decorative lenses. A transform is retained when it changes
+the route, verifier, evidence plan, scope, capability envelope, or stopping
+condition.
+
+This is the bridge from automatic computer to automatic newspaper. A newspaper
+is not a single goal; it is a standing campaign over public evidence streams,
+source histories, claims, corrections, publications, and reentries.
 
 ## Automatic newspaper
 
@@ -144,6 +185,9 @@ Meaning is owned by appagents.
 Computation is orchestrated by super.
 Mutation happens in candidate worlds.
 Computers diverge.
+Campaigns preserve durable intent across missions.
+Mission Compiler emits bounded work with capability envelopes.
+Workers return evidence packets, not authority.
 Canonical state changes only by promotion.
 Radio is a traversal of promoted meaning.
 ```

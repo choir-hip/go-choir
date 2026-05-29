@@ -2,7 +2,7 @@
 
 **Status:** draft
 **Date:** 2026-05-25
-**Supersedes:** `docs/mission-vtext-runtime-progress-cadence-v0.md` as the active mission frame
+**Supersedes:** the pruned VText runtime progress cadence v0 mission frame
 **Purpose:** make Choir's research substrate fast, evidence-preserving, model-portable, and suitable as the bedrock for autopaper.
 
 ## One-Line Goal String
@@ -412,7 +412,7 @@ highest-impact remaining uncertainty: whether to use the existing generic `next_
 next executable probe: prototype the smallest generic tool-contract gate that does not fork the shared harness: after the first successful `web_search` in a researcher run, require the next tool call to be `submit_research_findings` when that tool is available, then prove with tests and the same staging sports prompt that the sequence becomes `web_search -> submit_research_findings` before any additional search-only turn. If that fails or overconstrains behavior, revert and switch to an event-driven VText wakeup design.
 suggested resume goal string: use the One-Line Goal String above.
 evidence artifact refs: frontend/test-results/vtext-model-cadence-smoke-20260525T173217Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-smoke-cooldown-20260525T173521Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-20260525T173734Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-promptfix-20260525T174501Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-firstpass-20260525T175345Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-instrumented-20260525T180626Z/fireworks-deepseek-v4-flash-none.json; frontend/test-results/vtext-model-cadence-sports-projectionhint-20260525T181317Z/fireworks-deepseek-v4-flash-none.json.
-rollback refs: v0 mission remains in docs/mission-vtext-runtime-progress-cadence-v0.md; platform rollback target before this run is f482da6.
+rollback refs: platform rollback target before this run is f482da6.
 ```
 
 ## Checkpoint: Required First Findings Helped, But Manual Stalls Remain

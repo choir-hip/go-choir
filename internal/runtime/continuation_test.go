@@ -35,11 +35,11 @@ func TestRunContinuationCompactsAndStartsBoundedNextGoal(t *testing.T) {
 	}
 
 	selected, err := rt.SelectRunContinuation(ctx, done.RunID, "user-alice", ContinuationProposal{
-		Objective:        "continue with the next candidate-world product patch",
+		Objective:        "continue with the next candidate-computer product change",
 		Reason:           "mission gradient selects the next verifier-dense product increment",
 		AuthorityProfile: AgentProfileVSuper,
 		LeaseSeconds:     60,
-		Details:          map[string]any{"mission_doc": "docs/mission-choir-in-choir-deformation-v0.md"},
+		Details:          map[string]any{"mission_doc": "docs/mission-campaign-compiler-selfdev-v0.md"},
 	})
 	if err != nil {
 		t.Fatalf("select continuation: %v", err)

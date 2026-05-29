@@ -5,7 +5,7 @@ Method: MissionGradient
 Architecture inputs:
 [computer-ontology.md](computer-ontology.md),
 [stable-platform-divergent-computers-architecture-2026-05-17.md](stable-platform-divergent-computers-architecture-2026-05-17.md),
-[mission-source-lineage-promotion-control-plane-v0.md](mission-source-lineage-promotion-control-plane-v0.md)
+[legacy-promotion-experiments-learnings.md](legacy-promotion-experiments-learnings.md)
 
 ## Real Artifact
 

@@ -48,7 +48,8 @@ Completed substrate:
 - Per-user embedded Dolt now stores private VText plus runtime/control product
   state in one workspace per user computer.
 - The accepted staging run proved VText, Trace, desktop state, worker
-  delegation, promotion candidates, and run acceptances through product APIs.
+  delegation, and run acceptances through product APIs. Later cleanup replaced
+  the old patchset promotion-candidate path with AppChangePackage/adoption.
 - Node B disk inspection showed fresh active and worker computers with zero-byte
   `/state` markers and Dolt state under `/state.vtext/vtext/.dolt`; no
   `/state-wal` or `/state-shm` runtime SQLite pair existed for those computers.
@@ -209,7 +210,7 @@ Design consequences for Choir:
 
 - Keep normalized provenance primitives even if public APIs expose friendlier
   names:
-  - entity: VText revision, artifact blob, claim, source span, patchset,
+  - entity: VText revision, artifact blob, claim, source span, source delta,
     generated media, public version;
   - activity: edit, retrieve, synthesize, verify, publish, retract, supersede,
     cite, transclude;
@@ -333,7 +334,7 @@ Design consequences for Choir:
   - evidence refs;
   - verification method/root of trust;
   - validity/revocation/supersession state.
-- Source/build patchset promotion should use SLSA-like provenance concepts.
+- Source/build package adoption should use SLSA-like provenance concepts.
   VText publication should use a lighter content/provenance manifest with
   content binding and author consent.
 
@@ -835,7 +836,7 @@ Early countermeasures:
 3. Public route/reader for one published version.
 4. Retrieval source/span manifest generation for published versions.
 5. Citation candidate and accepted citation edge path.
-6. Promotion consent layer improvements for source/build patchsets.
+6. Promotion consent layer improvements for source/build packages.
 7. Broader publication UX: redaction, editions, retraction, supersession.
 8. Search/radio over published retrieval graph.
 9. Citation quality scoring and later CHIPS-compatible economics.

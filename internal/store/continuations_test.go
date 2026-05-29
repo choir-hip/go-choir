@@ -15,7 +15,7 @@ func TestRunContinuationsRecordSelectedAndStartedNextGoal(t *testing.T) {
 		OwnerID:          "owner-1",
 		SourceRunID:      "run-source",
 		Objective:        "continue with uploads after launcher proof",
-		Reason:           "promotion queue produced a verified patch",
+		Reason:           "app adoption produced a verified candidate",
 		AuthorityProfile: "vsuper",
 		LeaseSeconds:     3600,
 		Details:          map[string]any{"mission": "choir-in-choir"},

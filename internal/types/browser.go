@@ -28,7 +28,6 @@ type BrowserSessionRecord struct {
 	ExecutionScope   string        `json:"execution_scope,omitempty"`
 	BackendSessionID string        `json:"backend_session_id,omitempty"`
 	WorldKind        string        `json:"world_kind,omitempty"`
-	CandidateID      string        `json:"promotion_candidate_id,omitempty"`
 	VMID             string        `json:"vm_id,omitempty"`
 	SnapshotID       string        `json:"snapshot_id,omitempty"`
 	SourceRunID      string        `json:"source_loop_id,omitempty"`

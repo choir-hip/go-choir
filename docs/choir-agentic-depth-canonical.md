@@ -1,21 +1,31 @@
 # Choir Agentic Depth: Sweeps, Flys, and Cycles
 
-**Status:** canonical architecture vocabulary  
-**Last updated:** 2026-05-15  
-**Scope:** agentic run geometry, mission bags, sweeps, flys, cycles, and verification roles
+**Status:** canonical architecture vocabulary
+**Last updated:** 2026-05-29
+**Scope:** campaign compiler, agentic run geometry, mission bags, sweeps, flys, cycles, and verification roles
 
 This document names the core run geometry for Choir.
 
 Choir should not be built primarily around goals. Goals are useful, but they are too discrete to serve as the top-level ontology for long-running agentic work. Real work accumulates unordered small tasks, partial repairs, research questions, speculative branches, stale docs, weak tests, ambiguous signals, and opportunities for improvement. These do not naturally form one clean goal. They form a bag.
 
-The core shift is:
+The earlier core shift was:
 
 ```text
 Do not batch tasks into goals.
 Put work in a bag and sweep it under a mission gradient.
 ```
 
-A goal completes. A sweep improves a region. A fly runs a bounded campaign. A cycle keeps the system alive.
+That remains true for execution, but the Campaign Compiler work adds the layer
+above it:
+
+```text
+Do not treat prompts as the top-level object.
+Attach intent to durable campaigns, then compile bounded missions.
+```
+
+A goal completes. A mission has a stopping condition. A campaign has durable
+identity. A sweep improves a region. A fly runs a bounded campaign interval. A
+cycle keeps the system alive.
 
 ## Core Thesis
 
@@ -23,15 +33,97 @@ Agentic depth is the ability of a system to sustain useful agency over longer ho
 
 Agentic depth is not raw autonomy. It is not more agents. It is not bigger context. It is not a longer checklist. It is the ability to keep moving uphill without drifting, reward-hacking, corrupting canonical state, or consuming too much human crystal attention.
 
-The primary primitives are:
+The primary primitives are now:
 
 ```text
-MissionGradient -> MissionBag -> Sweep -> Fly -> Cycle
+Campaign -> MissionCompiler -> MissionGeometry -> MissionGradient
+-> MissionBag -> Sweep -> Fly -> Cycle
 ```
 
 Goals remain as item types inside a bag. They do not define the architecture.
 
+## Campaign Compiler Layer
+
+Campaign Compiler is the Choir-native control layer that sits above
+MissionGradient. It is not a Codex `/goal` improvement project.
+
+Campaign Compiler turns raw user intent, campaign pressure, external signals,
+and prior evidence into executable mission state:
+
+```text
+Intent / Signal / Campaign Pressure
+-> Campaign
+-> Mission Compiler
+-> MissionGeometry
+-> WorkOrders
+-> EvidencePackets
+-> VText / Trace / Promotion / Reentry
+```
+
+Campaign Compiler should choose cognitive transforms by default, not only when
+the user remembers to request them. A transform invocation is useful only when
+it changes the route, verifier, evidence plan, scope, capability envelope, or
+stopping condition.
+
+This layer is required for Choir-in-Choir because the target system is not a
+single long run. It is a 24/7 multiagent, multi-computer, multi-runtime,
+multi-user, multi-perspective system that preserves campaign identity while
+bounded missions start, stop, fail, promote, roll back, and reenter the human.
+
+The negative rule:
+
+```text
+Do not implement Campaign Compiler as mission-document generation.
+```
+
+Mission documents are audit surfaces. The product object is durable campaign
+state plus typed transitions through candidate worlds, evidence packets,
+promotion gates, and reentry.
+
 ## Definitions
+
+### Campaign
+
+A Campaign is a durable objective field. It persists across many missions,
+users, computers, agents, failures, promotions, publications, and reentries.
+
+A campaign owns:
+
+- standing objective;
+- standing invariants;
+- current belief state;
+- open MissionBags;
+- active and historical MissionGeometry records;
+- default cognitive transforms;
+- evidence and Trace refs;
+- promotion and rollback refs;
+- reentry policy;
+- human attention requests;
+- cycle health when always-on behavior exists.
+
+Campaigns are continuous, but they do not authorize unbounded work. Bounded
+missions, capability envelopes, evidence packets, and promotion gates keep the
+campaign from becoming ambient slop.
+
+### MissionCompiler
+
+MissionCompiler transforms raw intent or campaign pressure into executable
+MissionGeometry. It estimates mission mass, selects cognitive transforms,
+chooses a semantic/register style appropriate to the actor, emits capability
+envelopes, creates WorkOrders, defines evidence contracts, and chooses reentry
+policy.
+
+The compiler should scale down as well as up. Micro tasks should remain light.
+Promotion or source-mutation missions should be strict.
+
+### MissionGeometry
+
+MissionGeometry is the compiled bounded mission object: real artifact,
+objective, progress criterion, invariants, capability envelope, selected
+transforms, coagent topology, WorkOrders, feedback channels, rollback policy,
+and stopping condition.
+
+MissionGradient is the local orientation field inside this geometry.
 
 ### MissionGradient
 
@@ -854,4 +946,3 @@ Orchestrators meta-verify and promote.
 Do not batch tasks into goals.
 Put them in a bag and sweep under a mission gradient.
 ```
-

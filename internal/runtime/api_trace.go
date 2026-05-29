@@ -155,18 +155,16 @@ type traceMomentReferences struct {
 	EvidenceIDs          []string `json:"evidence_ids,omitempty"`
 	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
 	ContinuationID       string   `json:"continuation_id,omitempty"`
-	PromotionCandidateID string   `json:"promotion_candidate_id,omitempty"`
 	AppChangePackageID   string   `json:"app_change_package_id,omitempty"`
 	AppAdoptionID        string   `json:"app_adoption_id,omitempty"`
 	ObjectiveFingerprint string   `json:"objective_fingerprint,omitempty"`
 }
 
 type traceMomentArtifacts struct {
-	RunMemory          *types.RunMemoryEntry           `json:"run_memory,omitempty"`
-	Continuation       *types.RunContinuationRecord    `json:"continuation,omitempty"`
-	PromotionCandidate *types.PromotionCandidateRecord `json:"promotion_candidate,omitempty"`
-	AppChangePackage   *types.AppChangePackageRecord   `json:"app_change_package,omitempty"`
-	AppAdoption        *types.AppAdoptionRecord        `json:"app_adoption,omitempty"`
+	RunMemory        *types.RunMemoryEntry         `json:"run_memory,omitempty"`
+	Continuation     *types.RunContinuationRecord  `json:"continuation,omitempty"`
+	AppChangePackage *types.AppChangePackageRecord `json:"app_change_package,omitempty"`
+	AppAdoption      *types.AppAdoptionRecord      `json:"app_adoption,omitempty"`
 }
 
 type traceTrajectoryBundle struct {
@@ -1175,7 +1173,6 @@ func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 		EvidenceIDs:          payloadStringSlice(payload, "evidence_ids"),
 		RunMemoryEntryID:     payloadString(payload, "entry_id"),
 		ContinuationID:       payloadString(payload, "continuation_id"),
-		PromotionCandidateID: payloadString(payload, "candidate_id"),
 		AppChangePackageID:   payloadString(payload, "package_id"),
 		AppAdoptionID:        payloadString(payload, "adoption_id"),
 		ObjectiveFingerprint: payloadString(payload, "objective_fingerprint"),
@@ -1195,11 +1192,6 @@ func (h *APIHandler) buildTraceMomentArtifacts(ctx context.Context, ownerID stri
 	if refs.ContinuationID != "" {
 		if rec, err := h.rt.Store().GetRunContinuation(ctx, ownerID, refs.ContinuationID); err == nil {
 			artifacts.Continuation = &rec
-		}
-	}
-	if refs.PromotionCandidateID != "" {
-		if rec, err := h.rt.Store().GetPromotionCandidate(ctx, ownerID, refs.PromotionCandidateID); err == nil {
-			artifacts.PromotionCandidate = &rec
 		}
 	}
 	if refs.AppChangePackageID != "" {
@@ -1436,22 +1428,6 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return fmt.Sprintf("started continuation %s", shortTraceID(nextRunID))
 		}
 		return "started continuation"
-	case types.EventPromotionCandidateQueued:
-		if candidateID := payloadString(payload, "candidate_id"); candidateID != "" {
-			return fmt.Sprintf("queued promotion candidate %s", shortTraceID(candidateID))
-		}
-		return "queued promotion candidate"
-	case types.EventPromotionCandidateVerified:
-		return "promotion candidate verified"
-	case types.EventPromotionCandidateFailed:
-		return "promotion candidate failed verification"
-	case types.EventPromotionCandidatePromoted:
-		return "promotion candidate promoted"
-	case types.EventPromotionCandidateReviewed:
-		if decision := payloadString(payload, "decision"); decision != "" {
-			return fmt.Sprintf("promotion %s", decision)
-		}
-		return "promotion reviewed"
 	case types.EventAppChangePackagePublished:
 		if packageID := payloadString(payload, "package_id"); packageID != "" {
 			return fmt.Sprintf("published app package %s", shortTraceID(packageID))
@@ -1514,11 +1490,11 @@ func traceEventTone(ev types.EventRecord) string {
 	switch ev.Kind {
 	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventVTextAgentRevisionFailed:
 		return "error"
-	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventPromotionCandidateVerified, types.EventPromotionCandidatePromoted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
+	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventVTextAgentRevisionCompleted, types.EventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
-	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventPromotionCandidateQueued, types.EventPromotionCandidateReviewed, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
+	case types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
 		return "active"
-	case types.EventPromotionCandidateFailed, types.EventAppAdoptionBlocked, types.EventAppAdoptionRolledBack, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
+	case types.EventAppAdoptionBlocked, types.EventAppAdoptionRolledBack, types.EventBrowserNavigationFailed, types.EventBrowserControlFailed:
 		return "error"
 	case types.EventChannelMessage:
 		return "message"

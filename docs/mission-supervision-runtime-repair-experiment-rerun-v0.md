@@ -2,7 +2,8 @@
 
 **Status:** superseded by [mission-supervision-continuation-experiment-rerun-v0.md](mission-supervision-continuation-experiment-rerun-v0.md)
 **Date:** 2026-05-23
-**Supersedes immediate continuation of:** [mission-async-supervision-runtime-hardening-v0.md](mission-async-supervision-runtime-hardening-v0.md)
+**Supersedes immediate continuation of:** folded async supervision runtime
+hardening work
 **Resumes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
 

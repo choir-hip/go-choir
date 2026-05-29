@@ -521,7 +521,7 @@ func TestWaitAgentToolReceivesChildResult(t *testing.T) {
 
 	go func() {
 		time.Sleep(25 * time.Millisecond)
-		_, _ = rt.PostChildResult(WithToolExecutionContext(context.Background(), &child), parent.ChannelID, child.RunID, "implementation committed abc123 and exported a reviewable patchset")
+		_, _ = rt.PostChildResult(WithToolExecutionContext(context.Background(), &child), parent.ChannelID, child.RunID, "implementation committed abc123 and published a reviewable app change package")
 	}()
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
@@ -555,7 +555,7 @@ func TestWaitAgentToolReceivesChildResult(t *testing.T) {
 		t.Fatalf("messages = %d, want 1: %+v", len(resp.Messages), resp.Messages)
 	}
 	msg := resp.Messages[0]
-	if msg.FromAgentID != child.AgentID || msg.FromLoopID != child.RunID || msg.Role != "result" || !strings.Contains(msg.Content, "exported a reviewable patchset") {
+	if msg.FromAgentID != child.AgentID || msg.FromLoopID != child.RunID || msg.Role != "result" || !strings.Contains(msg.Content, "published a reviewable app change package") {
 		t.Fatalf("unexpected waited message: %+v", msg)
 	}
 }
@@ -3687,7 +3687,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		},
 		&ToolLoopResponse{
 			StopReason: "end_turn",
-			Text:       "Exported background worker patchset.",
+			Text:       "Published background worker AppChangePackage.",
 		},
 	)
 	workerRT := New(Config{
@@ -3731,7 +3731,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-proof",
 		"vm_id": "vm-worker-proof",
-		"objective": "Export the committed worker patchset.",
+		"objective": "Publish the committed worker AppChangePackage.",
 		"profile": "co-super",
 		"timeout_seconds": 10
 	}`, srv.URL)))
@@ -3762,7 +3762,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		t.Fatalf("worker package was not mirrored into active product store: %+v\nraw=%s", result.AppChangePackages, raw)
 	}
 	if len(result.AppAdoptions) != 0 {
-		t.Fatalf("delegate_worker_vm must not queue old promotion candidates, got %+v", result.AppAdoptions)
+		t.Fatalf("delegate_worker_vm must not create recipient adoptions during package collection, got %+v", result.AppAdoptions)
 	}
 	packageID, _ := result.AppChangePackages[0]["package_id"].(string)
 	mirrored, err := activeStore.GetAppChangePackageForViewer(context.Background(), "user-bob", packageID)
@@ -4061,7 +4061,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 			Payload: json.RawMessage(`{
 				"tool":"publish_app_change_package",
 				"is_error":false,
-				"output":"{\"status\":\"exported\",\"manifest_json\":\"{\\\"run_id\\\":\\\"worker-child\\\"}\",\"patchset_content\":\"diff --git a/TRACE.md b/TRACE.md\\n+TRACE_PROVENANCE_CHILD_FOLLOW\\n\",\"base_sha\":\"base-child\",\"worker_head\":\"head-child\",\"snapshot_id\":\"snapshot-child\"}"
+				"output":"{\"status\":\"published\",\"package_id\":\"pkg-child\",\"app_id\":\"trace-proof\",\"base_sha\":\"base-child\",\"candidate_head_sha\":\"head-child\",\"package_manifest_sha256\":\"manifest-child\",\"runtime_source_delta_sha256\":\"runtime-child\",\"ui_source_delta_sha256\":\"ui-child\"}"
 			}`),
 		},
 	}
@@ -4099,7 +4099,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 				AgentProfile: AgentProfileCoSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
-				Result:       "exported child patchset",
+				Result:       "published child AppChangePackage",
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/runtime/runs/worker-child/events":
 			mu.Lock()
@@ -4164,7 +4164,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 		t.Fatalf("child run follow-up evidence missing: %+v states=%+v raw=%s", result.WorkerChildRunIDs, result.WorkerChildStates, raw)
 	}
 	if len(result.AppAdoptions) != 0 {
-		t.Fatalf("child package should not queue an old promotion candidate, got %+v\nraw=%s", result.AppAdoptions, raw)
+		t.Fatalf("child package collection should not create recipient adoptions, got %+v\nraw=%s", result.AppAdoptions, raw)
 	}
 }
 
@@ -5070,7 +5070,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		t.Fatalf("child status evidence missing: %+v\nraw=%s", result.WorkerChildRunStates, raw)
 	}
 	if len(result.AppAdoptions) != 0 {
-		t.Fatalf("timeout package must not queue old promotion candidates: %+v\nraw=%s", result.AppAdoptions, raw)
+		t.Fatalf("timeout package collection should not create recipient adoptions: %+v\nraw=%s", result.AppAdoptions, raw)
 	}
 	if len(result.WorkerSpawnedProfiles) != 1 || result.WorkerSpawnedProfiles[0] != "co-super" {
 		t.Fatalf("spawn profile evidence missing: %+v\nraw=%s", result, raw)
@@ -5504,7 +5504,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 		},
 		&ToolLoopResponse{
 			StopReason: "end_turn",
-			Text:       "Exported local worktree patchset.",
+			Text:       "Published local worktree AppChangePackage.",
 		},
 	)
 	workerRT := New(Config{

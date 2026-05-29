@@ -4,9 +4,15 @@ Date: 2026-05-13
 
 ## Position
 
-Run memory v0 gives Choir a durable context substrate for tool-loop runs. The next object is not more summarization. It is candidate-world promotion: background VMs mutate isolated state, produce patchsets plus evidence, and super promotes only verified deltas into canonical state.
+Run memory v0 gives Choir a durable context substrate for tool-loop runs. This
+note originally pointed at patchset-based candidate-world promotion. That path
+has been pruned. The remaining frontier is the durable memory/control pattern:
+background candidates mutate isolated state, publish typed evidence, and only a
+verified AppChangePackage/adoption transition can change active state.
 
-The practical next frontier is a narrow Choir-in-Choir demo where Choir changes Choir through a background VM path, then exports and promotes the result with rollback evidence.
+The practical next frontier is a narrow Choir-in-Choir demo where Choir changes
+Choir through a background candidate path, then publishes, adopts, verifies,
+promotes, and can roll back the result with durable evidence.
 
 ## Candidate Worlds
 
@@ -16,7 +22,7 @@ Candidate worlds should be first-class records, not just spawned processes. Each
 - base repo SHA and base artifact graph checkpoint;
 - branch/worktree identity;
 - lease deadline and authority profile;
-- patchset/export path;
+- package publication/adoption path;
 - verification contract and results;
 - promotion decision and rollback point.
 
@@ -24,28 +30,34 @@ The governing rule stays the same: foreground is stable, background mutates, can
 
 ## Git And Rollback Geometry
 
-Use branch-per-candidate-VM as the default mental model. A VM can have a local worktree or clone, but its exported object should be a patchset/branch delta with:
+Use branch-per-candidate-VM as the default mental model. A VM can have a local
+worktree or clone, but its product object should be a typed package/adoption
+delta with:
 
 - `base_sha`;
-- `worker_head_sha`;
+- `candidate_head_sha`;
 - dirty-state manifest;
 - files changed;
 - commands run;
 - tests passed/failed;
 - uncommitted files, if any, explicitly named;
-- patch application instructions.
+- package/adoption verification instructions.
 
 Rollback should be simple because canonical state is not mutated until promotion. Before promotion, rollback means discard or archive the candidate. After promotion, rollback is a normal git revert or reset to the recorded promotion parent, depending on whether the delta landed as a commit or patch application.
 
-User divergence is handled by treating foreground user changes as canonical input, not as merge noise. If the user changes the same file while a VM is working, super should not blindly apply the candidate patch. It should rebase/merge into an integration candidate and run verification there.
+User divergence is handled by treating foreground user changes as canonical
+input, not as merge noise. If the user changes the same file while a candidate
+is working, super should not blindly apply the candidate delta. It should route
+the package through recipient adoption, merge/rebuild in the candidate
+computer, and run verification there.
 
 ## Promotion Protocol
 
 The minimal protocol:
 
 1. Super creates a candidate-world record and requests a background VM.
-2. Vsuper mutates only inside that VM and commits or exports a patchset.
-3. Super imports the patchset into an integration candidate.
+2. Vsuper mutates only inside that VM and publishes an AppChangePackage.
+3. Super routes the package into recipient adoption.
 4. Verification contracts run against the integrated candidate.
 5. Appagents accept semantic artifact changes when relevant.
 6. Super promotes the verified computational delta into canonical state.
@@ -87,16 +99,19 @@ A narrow demo is feasible next if it avoids pretending to solve full self-hostin
 
 - foreground super starts a background VM;
 - background co-super makes a small Choir improvement;
-- worker exports a patchset with evidence;
-- super imports into an integration candidate;
+- worker publishes a typed change package with evidence;
+- super routes it through recipient adoption;
 - verifier contract runs;
 - user reviews promotion report;
 - canonical repo changes only after explicit promotion.
 
 The first target should be a small product-visible improvement with meaningful tests. The best wedge is probably the launcher/uploads/themes cluster because it is user-visible and bounded. The second-best wedge is podcast/radio, because it aligns with vtext as semantic substrate but risks scope growth. Browser backend/Obscura is important but has more infrastructure uncertainty.
 
-Recommendation: next run should build candidate-world promotion v0 and use one small launcher/uploads/themes improvement as the dogfood patch. Keep podcast/radio as the next larger Choir-in-Choir win after promotion is real.
+Historical note: the original recommendation was patchset-based candidate-world
+promotion. That direction was pruned. The carried-forward lesson is stable
+foreground state, candidate mutation, independent verification, owner review,
+promotion, and rollback through typed AppChangePackage/adoption records.
 
 ## Next Goal
 
-`/goal Use MissionGradient to execute docs/mission-candidate-world-promotion-v0.md end to end, proving branch-per-background-VM rollback, verifier contracts, and one narrow Choir-in-Choir product patch promoted only after verification.`
+`/goal Use MissionGradient to execute docs/mission-campaign-compiler-selfdev-v0.md end to end, proving a typed AppChangePackage/adoption loop before widening to longer Choir-in-Choir campaigns.`

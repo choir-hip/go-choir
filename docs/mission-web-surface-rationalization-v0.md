@@ -134,7 +134,8 @@ Completion requires evidence, not just code presence: focused Go tests, focused 
 
 ## Completion Evidence
 
-- 2026-05-13 proof report: `docs/web-surface-rationalization-proof-2026-05-13.md`
+- Consolidated browser proof learnings:
+  `docs/backend-browser-substrate-learnings.md`
 
 ## One-Line Goal
 

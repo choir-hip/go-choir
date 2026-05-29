@@ -3,7 +3,9 @@
 **Status:** draft design
 **Date:** 2026-05-20
 **Audience:** Choir shell/UI agents, MissionGradient supervisors, design reviewers
-**Related mission:** [mission-alternate-computer-ux-experiment-portfolio-v0.md](mission-alternate-computer-ux-experiment-portfolio-v0.md)
+**Related mission:** historical alternate-computer portfolio docs were pruned
+during Campaign Compiler cleanup; keep this document only as the design note
+for the Liquid material direction.
 
 ## Thesis
 

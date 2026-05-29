@@ -208,13 +208,6 @@ test('Settings renders AppChangePackages and adoptions without browser-internal 
   expect(session.authenticated).toBe(true);
   expect(session.user?.id).toBeTruthy();
 
-  const legacyPromotionsRoute = await page.evaluate(async () => {
-    const res = await fetch('/api/promotions', { credentials: 'include' });
-    return { status: res.status, body: await res.text() };
-  });
-  expect(legacyPromotionsRoute.status).toBe(404);
-  expect(legacyPromotionsRoute.body).not.toContain('PromotionCandidate');
-
   const seeded = await createAppPackageAndAdoption(page, 'settings');
 
   await openApp(page, 'settings');

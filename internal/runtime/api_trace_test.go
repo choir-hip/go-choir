@@ -228,7 +228,7 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 		EvidenceRefs: []types.RunAcceptanceEvidenceRef{{
 			RefID:   "event:trace-test",
 			Kind:    "tool.result",
-			Summary: "worker run exported concrete patchset evidence",
+			Summary: "worker run published concrete AppChangePackage evidence",
 			RunID:   child.RunID,
 			EventID: "event-trace-test",
 			Details: map[string]any{
@@ -293,7 +293,7 @@ func TestHandleTraceTrajectorySnapshotIncludesGraphAndMoments(t *testing.T) {
 	if resp.MobileSummary.AgentCount < 2 || resp.MobileSummary.EvidenceRefCount != 1 || resp.MobileSummary.RollbackRefCount != 1 {
 		t.Fatalf("mobile_summary counts = %+v", resp.MobileSummary)
 	}
-	if len(resp.MobileSummary.ReadableEvidence) != 1 || !strings.Contains(resp.MobileSummary.ReadableEvidence[0], "exported concrete patchset") {
+	if len(resp.MobileSummary.ReadableEvidence) != 1 || !strings.Contains(resp.MobileSummary.ReadableEvidence[0], "published concrete AppChangePackage") {
 		t.Fatalf("mobile_summary evidence = %+v", resp.MobileSummary.ReadableEvidence)
 	}
 	if resp.MobileSummary.PrimaryRollbackRef == "" || !strings.Contains(resp.MobileSummary.PrimaryRollbackRef, "discard candidate") {

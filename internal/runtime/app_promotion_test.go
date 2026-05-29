@@ -189,7 +189,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		}
 	}
 
-	acceptanceBody := `{"target_mission_id":"mission-source-lineage-promotion-control-plane-v0","trajectory_id":"` + traceID + `","source_prompt_or_objective":"make the first podcast app migrate"}`
+	acceptanceBody := `{"target_mission_id":"mission-campaign-compiler-selfdev-v0","trajectory_id":"` + traceID + `","source_prompt_or_objective":"make the first podcast app migrate"}`
 	acceptanceW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", acceptanceBody, ownerID)
 	if acceptanceW.Code != http.StatusAccepted {
 		t.Fatalf("acceptance status = %d body=%s", acceptanceW.Code, acceptanceW.Body.String())

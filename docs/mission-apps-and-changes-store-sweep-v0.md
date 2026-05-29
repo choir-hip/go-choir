@@ -3,9 +3,9 @@
 **Status:** complete
 **Date:** 2026-05-21
 **State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
-**Prior portfolio:** [mission-alternate-computer-ux-experiment-portfolio-v0.md](mission-alternate-computer-ux-experiment-portfolio-v0.md)
-**Portfolio certificate:** [alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md](alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md)
-**Portfolio epoch review:** [alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md](alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md)
+**Prior portfolio:** historical alternate-computer portfolio docs were pruned
+during Campaign Compiler cleanup. The retained current path is
+AppChangePackage -> adoption -> recipient build -> verify -> promote/rollback.
 
 ## One-Line Goal String
 
@@ -693,8 +693,8 @@ next executable probe: move the four experiment Change records out of frontend
 suggested resume goal string: define a new mission around durable Change
   publication records plus one verified inverse uninstall/disable contract.
 evidence artifact refs:
-  - docs/alternate-computer-ux-experiment-portfolio-certificate-2026-05-20.md
-  - docs/alternate-computer-ux-experiment-portfolio-epoch-review-2026-05-20.md
+  - historical alternate-computer portfolio docs pruned during Campaign
+    Compiler cleanup
   - test-results/apps-changes-store-staging-2026-05-21T00-16-29-145Z/apps-changes-staging-proof.json
   - test-results/apps-changes-store-staging-2026-05-21T00-16-29-145Z/desktop-apps-changes-open.png
   - test-results/apps-changes-store-staging-2026-05-21T00-16-29-145Z/mobile-apps-changes-open-390x844.png
