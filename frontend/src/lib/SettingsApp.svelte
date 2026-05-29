@@ -89,6 +89,21 @@
     applyTheme(selectedTheme);
   }
 
+  function setPromptSurfacePlacement(placement) {
+    const nextTheme = normalizeThemeConfig({
+      ...selectedTheme,
+      layout: {
+        ...selectedTheme.layout,
+        promptSurfacePlacement: placement,
+      },
+    });
+    selectedTheme = nextTheme;
+    themeJSON = JSON.stringify(nextTheme, null, 2);
+    themeError = '';
+    themeNotice = `Prompt surface moved to the ${placement}`;
+    applyTheme(nextTheme);
+  }
+
   function handleThemeJSONInput(event) {
     themeJSON = event.currentTarget.value;
     themeNotice = '';
@@ -195,7 +210,33 @@
     <section class="settings-card" data-settings-desktop>
       <div>
         <h3>Desktop layout</h3>
-        <p class="muted">Reset open windows and icon positions if old persisted geometry gets in the way.</p>
+        <p class="muted">Place the prompt surface for QA, or reset open windows and icon positions.</p>
+      </div>
+      <div class="layout-setting" data-settings-prompt-placement>
+        <div>
+          <strong>Prompt surface</strong>
+          <span>{selectedTheme.layout.promptSurfacePlacement === 'top' ? 'Pinned to top' : 'Pinned to bottom'}</span>
+        </div>
+        <div class="segmented-control" role="group" aria-label="Prompt surface placement">
+          <button
+            type="button"
+            class:active={selectedTheme.layout.promptSurfacePlacement !== 'top'}
+            data-settings-prompt-placement-bottom
+            aria-pressed={selectedTheme.layout.promptSurfacePlacement !== 'top'}
+            on:click={() => setPromptSurfacePlacement('bottom')}
+          >
+            Bottom
+          </button>
+          <button
+            type="button"
+            class:active={selectedTheme.layout.promptSurfacePlacement === 'top'}
+            data-settings-prompt-placement-top
+            aria-pressed={selectedTheme.layout.promptSurfacePlacement === 'top'}
+            on:click={() => setPromptSurfacePlacement('top')}
+          >
+            Top
+          </button>
+        </div>
       </div>
       <div class="settings-actions">
         <button class="secondary-action" data-settings-open-compute-monitor on:click={handleOpenComputeMonitor}>
@@ -317,6 +358,55 @@
     flex-wrap: wrap;
     gap: 0.55rem;
     margin-top: 0.8rem;
+  }
+
+  .layout-setting {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.85rem;
+    border-radius: var(--choir-radius-control, 20px);
+    background: color-mix(in srgb, var(--choir-control-bg, rgba(15, 23, 42, 0.8)) 76%, transparent);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    padding: 0.72rem;
+  }
+
+  .layout-setting strong,
+  .layout-setting span {
+    display: block;
+  }
+
+  .layout-setting span {
+    margin-top: 0.16rem;
+    color: var(--choir-muted, #a8b3c7);
+    font-size: 0.78rem;
+  }
+
+  .segmented-control {
+    display: flex;
+    gap: 0.28rem;
+    border-radius: var(--choir-radius-pill, 30px);
+    background: color-mix(in srgb, var(--choir-bg, #020617) 42%, transparent);
+    padding: 0.22rem;
+  }
+
+  .segmented-control button {
+    min-width: 4.75rem;
+    border: 0;
+    border-radius: var(--choir-radius-pill, 30px);
+    background: transparent;
+    color: var(--choir-muted, #a8b3c7);
+    cursor: pointer;
+    padding: 0.5rem 0.68rem;
+    font-weight: 760;
+  }
+
+  .segmented-control button.active {
+    background: var(--choir-selected, rgba(96, 165, 250, 0.12));
+    color: var(--choir-fg, #e0ecff);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
   }
 
   .theme-swatch {
