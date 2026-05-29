@@ -268,20 +268,20 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-app] {
-  background: #fffaf7 !important;
+  background: #fffcfa !important;
   color: #3a1517 !important;
 }
 
 :root[data-theme-id='london-salmon'] :is(.vtext-editor, [data-vtext-editor]) {
   background:
     linear-gradient(rgba(91, 28, 31, .025) 1px, transparent 1px),
-    #fffaf7 !important;
+    #fffcfa !important;
   background-size: 100% 30px, auto !important;
   color: #3a1517 !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-toolbar] {
-  background: rgba(253, 240, 236, .98) !important;
+  background: rgba(254, 246, 243, .98) !important;
   color: #3a1517 !important;
   box-shadow: 0 1px 0 rgba(91, 28, 31, .07), 0 10px 18px rgba(91, 58, 40, .06) !important;
 }
@@ -305,7 +305,7 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-editor-area] {
-  background: #fffaf7 !important;
+  background: #fffcfa !important;
   color: #3a1517 !important;
 }
 
@@ -344,7 +344,7 @@ body {
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 400 !important;
-  color: #5f403c !important;
+  color: #62433f !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app] small, [data-desk-overview] small) {

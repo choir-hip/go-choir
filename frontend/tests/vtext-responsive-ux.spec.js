@@ -121,9 +121,15 @@ test('mobile VText is full-screen-like, editable rendered Markdown, and quiet ac
   });
   await page.mouse.move(180, 520);
   await expect(page.locator('[data-vtext-toolbar]')).toHaveClass(/toolbar-hidden/);
+  await editor.evaluate((node) => {
+    node.scrollTop = 168;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(page.locator('[data-vtext-toolbar]')).toHaveClass(/toolbar-hidden/);
   await page.waitForTimeout(220);
   const hiddenLayout = await getVTextLayout(page);
   expect(hiddenLayout.toolbar.height).toBeLessThan(8);
+  await page.waitForTimeout(120);
   await editor.evaluate((node) => {
     node.scrollTop = 60;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));

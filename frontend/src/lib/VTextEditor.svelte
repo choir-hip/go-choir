@@ -57,6 +57,7 @@
   let surfaceFocused = false;
   let toolbarHidden = false;
   let lastDocumentScrollTop = 0;
+  let toolbarHideSettleUntil = 0;
   let autosaveTimer = null;
   let autosavePromise = null;
   let autosaveInFlight = false;
@@ -75,6 +76,7 @@
   const AUTOSAVE_DELAY_MS = 900;
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
   const TOOLBAR_HIDE_SCROLL_TOP = 56;
+  const TOOLBAR_HIDE_SETTLE_MS = 260;
 
   function escapeHTML(value) {
     return String(value || '')
@@ -860,6 +862,7 @@
     surfaceFocused = false;
     toolbarHidden = false;
     lastDocumentScrollTop = 0;
+    toolbarHideSettleUntil = 0;
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
@@ -1069,6 +1072,7 @@
     surfaceFocused = false;
     toolbarHidden = false;
     lastDocumentScrollTop = 0;
+    toolbarHideSettleUntil = 0;
     error = '';
     try {
       currentDoc = await createDocument('Untitled VText');
@@ -1287,12 +1291,20 @@
   function handleDocumentScroll(event) {
     const scrollTop = event.currentTarget.scrollTop || 0;
     const delta = scrollTop - lastDocumentScrollTop;
+    const now = Date.now();
     if (scrollTop <= TOOLBAR_HIDE_SCROLL_TOP) {
       toolbarHidden = false;
+      toolbarHideSettleUntil = 0;
     } else if (delta > TOOLBAR_HIDE_SCROLL_DELTA) {
-      toolbarHidden = true;
+      if (!toolbarHidden) {
+        toolbarHidden = true;
+        toolbarHideSettleUntil = now + TOOLBAR_HIDE_SETTLE_MS;
+      }
     } else if (delta < -TOOLBAR_HIDE_SCROLL_DELTA) {
-      toolbarHidden = false;
+      if (!toolbarHidden || now > toolbarHideSettleUntil) {
+        toolbarHidden = false;
+        toolbarHideSettleUntil = 0;
+      }
     }
     lastDocumentScrollTop = Math.max(0, scrollTop);
   }
@@ -1728,6 +1740,7 @@
     min-height: 0;
     height: auto;
     overflow: auto;
+    overflow-anchor: none;
     padding: clamp(1.1rem, 2.2vw, 2rem);
     line-height: 1.72;
     color: #f8fafc;

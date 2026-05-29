@@ -75,9 +75,15 @@ test('logged-out shell uses PromptSurface, DeskSheet, and fixture previews', asy
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
   await expect(vtextToolbar).toHaveClass(/toolbar-hidden/);
+  await vtextEditor.evaluate((node) => {
+    node.scrollTop = 300;
+    node.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  await expect(vtextToolbar).toHaveClass(/toolbar-hidden/);
   await page.waitForTimeout(220);
   const hiddenToolbarHeight = await vtextToolbar.evaluate((el) => el.getBoundingClientRect().height);
   expect(hiddenToolbarHeight).toBeLessThan(toolbarHeight / 3);
+  await page.waitForTimeout(120);
   await vtextEditor.evaluate((node) => {
     node.scrollTop = 160;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
@@ -276,7 +282,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
 
   await assertThemeOnShells('futuristic-noir', { bg: '#050912', accent: '#6D8DFF', panel: '#0D1628' });
   await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#FFD86B', panel: '#151719', blur: '4px' });
-  await assertThemeOnShells('london-salmon', { bg: '#FBEAE6', accent: '#964A43', panel: '#FFFAF7', blur: '0px' });
+  await assertThemeOnShells('london-salmon', { bg: '#FDF1EE', accent: '#9C5852', panel: '#FFFCFA', blur: '0px' });
 
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet]')).toBeVisible();
