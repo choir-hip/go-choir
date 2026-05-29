@@ -596,6 +596,9 @@ func extractEmailDraftIntent(prompt, content string) (emailDraftIntent, bool) {
 	if body == "" {
 		return emailDraftIntent{}, false
 	}
+	if looksLikeUnresolvedEmailBodyPlaceholder(lower, body) {
+		return emailDraftIntent{}, false
+	}
 	if !bodyLabeled && looksLikeComplexEmailPlaceholder(lower) {
 		return emailDraftIntent{}, false
 	}
@@ -700,6 +703,50 @@ func looksLikeComplexEmailPlaceholder(lower string) bool {
 	} {
 		if strings.Contains(lower, marker) {
 			return true
+		}
+	}
+	return false
+}
+
+func looksLikeUnresolvedEmailBodyPlaceholder(promptLower, body string) bool {
+	bodyLower := strings.ToLower(strings.TrimSpace(body))
+	if bodyLower == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"whatever you find",
+		"what you find",
+		"that fact",
+		"the fact",
+		"the answer",
+		"the result",
+		"the results",
+		"your findings",
+		"the findings",
+		"the research",
+		"part of the results",
+	} {
+		if strings.Contains(bodyLower, marker) {
+			return true
+		}
+	}
+	if strings.Contains(bodyLower, "summary") {
+		for _, generated := range []string{"fact", "result", "findings", "research", "what you find"} {
+			if strings.Contains(bodyLower, generated) {
+				return true
+			}
+		}
+	}
+	if looksLikeComplexEmailPlaceholder(promptLower) {
+		for _, placeholder := range []string{
+			"short plain-language summary",
+			"plain-language summary",
+			"brief summary",
+			"summary of",
+		} {
+			if strings.Contains(bodyLower, placeholder) {
+				return true
+			}
 		}
 	}
 	return false

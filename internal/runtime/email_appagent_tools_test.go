@@ -535,6 +535,14 @@ func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {
 	}
 }
 
+func TestExtractEmailDraftIntentRejectsGeneratedBodyPlaceholder(t *testing.T) {
+	prompt := "Find one concrete fact from Trace, then create an Email appagent draft to yusefnathanson@me.com " +
+		"with subject: Choir Email research draft proof. Body: a short plain-language summary of that fact. Draft only; do not send."
+	if intent, ok := extractEmailDraftIntent(prompt, ""); ok {
+		t.Fatalf("extractEmailDraftIntent returned placeholder draft: %+v", intent)
+	}
+}
+
 func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
