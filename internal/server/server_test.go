@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -296,30 +295,33 @@ func TestGracefulShutdownOnSIGINT(t *testing.T) {
 
 func TestGracefulShutdownWaitsForInFlightRequest(t *testing.T) {
 	s := NewServer("test-inflight", "0")
+	s.shutdownTimeout = 2 * time.Second
 
-	// Add a slow handler before starting
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+
 	s.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(500 * time.Millisecond)
+		startedOnce.Do(func() { close(started) })
+		<-release
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("done"))
 	})
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	startDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
 		s.Start()
+		close(startDone)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
 	addr := s.Addr()
 
-	// Start a slow request
 	slowDone := make(chan struct{})
 	go func() {
 		resp, err := http.Get("http://" + addr + "/slow")
 		if err != nil {
-			t.Logf("slow request error: %v", err)
+			t.Errorf("slow request error: %v", err)
 			close(slowDone)
 			return
 		}
@@ -330,21 +332,59 @@ func TestGracefulShutdownWaitsForInFlightRequest(t *testing.T) {
 		close(slowDone)
 	}()
 
-	// Give the slow request a moment to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Trigger shutdown while slow request is in flight
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = s.httpServer.Shutdown(ctx)
-
-	// The slow request should still complete
 	select {
-	case <-slowDone:
-		// Good: in-flight request completed
-	case <-time.After(3 * time.Second):
-		t.Fatal("in-flight request was not completed during graceful shutdown")
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow request did not start")
 	}
 
-	wg.Wait()
+	select {
+	case <-startDone:
+		t.Fatal("server returned from Start before shutdown was requested")
+	default:
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		s.Shutdown()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-startDone:
+		t.Fatal("Start returned before the in-flight request completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-slowDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight request was not completed during graceful shutdown")
+	}
+	select {
+	case <-shutdownDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not complete after in-flight request finished")
+	}
+	select {
+	case <-startDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not return after graceful shutdown completed")
+	}
+}
+
+func TestShutdownTimeoutFromEnv(t *testing.T) {
+	t.Setenv("SERVER_SHUTDOWN_TIMEOUT", "11m")
+	if got := ShutdownTimeoutFromEnv(); got != 11*time.Minute {
+		t.Fatalf("timeout = %s, want 11m", got)
+	}
+}
+
+func TestShutdownTimeoutFromEnvInvalidFallsBack(t *testing.T) {
+	t.Setenv("SERVER_SHUTDOWN_TIMEOUT", "not-a-duration")
+	if got := ShutdownTimeoutFromEnv(); got != defaultShutdownTimeout {
+		t.Fatalf("timeout = %s, want %s", got, defaultShutdownTimeout)
+	}
 }

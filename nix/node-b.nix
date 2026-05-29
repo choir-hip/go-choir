@@ -497,6 +497,7 @@ in
       ExecStart = "${serviceExec "gateway" goChoirPackages.gateway}";
       Restart = "on-failure";
       RestartSec = 3;
+      TimeoutStopSec = "11min";
       # Provider credentials (LLM and search) are injected via an EnvironmentFile
       # that lives in a writable runtime location outside the Nix store. The file is
       # created/updated by the deploy script and never committed to git.
@@ -523,6 +524,7 @@ in
         # loopback at the handler layer, but let the process accept guest
         # traffic on tap addresses.
         "SERVER_HOST=0.0.0.0"
+        "SERVER_SHUTDOWN_TIMEOUT=10m30s"
         "GATEWAY_PORT=8084"
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"
         "GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini"

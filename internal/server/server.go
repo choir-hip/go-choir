@@ -26,14 +26,15 @@ type healthResponse struct {
 
 // Server wraps an http.Server with go-choir service configuration.
 type Server struct {
-	serviceName   string
-	httpServer    *http.Server
-	mux           *http.ServeMux
-	addr          string
-	listener      net.Listener
-	once          sync.Once
-	done          chan struct{}
-	healthHandler http.HandlerFunc
+	serviceName     string
+	httpServer      *http.Server
+	mux             *http.ServeMux
+	addr            string
+	listener        net.Listener
+	once            sync.Once
+	done            chan struct{}
+	healthHandler   http.HandlerFunc
+	shutdownTimeout time.Duration
 }
 
 // defaultBindHost is the default host address that services bind to.
@@ -43,6 +44,8 @@ type Server struct {
 // VAL-DEPLOY-007: only the Caddy edge (ports 80/443) should be
 // internet-reachable on Node B.
 const defaultBindHost = "127.0.0.1"
+
+const defaultShutdownTimeout = 10 * time.Second
 
 // NewServer creates a new Server for the given service name and port.
 // The port should be a string like "8081". Use PortFromEnv to resolve
@@ -61,11 +64,12 @@ func NewServer(serviceName, port string) *Server {
 	bindHost := BindHostFromEnv()
 	addr := fmt.Sprintf("%s:%s", bindHost, port)
 	s := &Server{
-		serviceName:   serviceName,
-		mux:           mux,
-		addr:          addr,
-		done:          make(chan struct{}),
-		healthHandler: nil, // set below after method receiver is available
+		serviceName:     serviceName,
+		mux:             mux,
+		addr:            addr,
+		done:            make(chan struct{}),
+		healthHandler:   nil, // set below after method receiver is available
+		shutdownTimeout: ShutdownTimeoutFromEnv(),
 	}
 	// Set the default health handler and register the /health route.
 	s.healthHandler = s.defaultHealthHandler
@@ -129,6 +133,7 @@ func (s *Server) Start() {
 	// Set up signal channel for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(quit)
 
 	go func() {
 		sig := <-quit
@@ -148,12 +153,12 @@ func (s *Server) Start() {
 		log.Fatalf("%s: server error: %v", s.serviceName, err)
 	}
 
-	s.once.Do(func() { close(s.done) })
+	<-s.done
 }
 
-// Shutdown gracefully shuts down the server with a 10-second timeout.
+// Shutdown gracefully shuts down the server with the configured timeout.
 func (s *Server) Shutdown() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		log.Printf("%s: shutdown error: %v", s.serviceName, err)
@@ -179,4 +184,14 @@ func BindHostFromEnv() string {
 		return v
 	}
 	return defaultBindHost
+}
+
+// ShutdownTimeoutFromEnv reads SERVER_SHUTDOWN_TIMEOUT as a Go duration.
+func ShutdownTimeoutFromEnv() time.Duration {
+	if v := os.Getenv("SERVER_SHUTDOWN_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultShutdownTimeout
 }
