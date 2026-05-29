@@ -261,6 +261,27 @@
       display: none;
     }
 
+    .overview-card {
+      grid-template-columns: 1.8rem minmax(0, 1fr);
+      gap: 0.7rem;
+      align-items: center;
+      min-height: 4rem;
+      padding: 0.64rem 0.78rem;
+    }
+
+    .overview-card span {
+      grid-row: auto;
+      width: 1.8rem;
+      height: 1.8rem;
+      font-size: 1.28rem;
+    }
+
+    .overview-card strong {
+      align-self: center;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
     footer {
       font-size: 0.72rem;
     }
