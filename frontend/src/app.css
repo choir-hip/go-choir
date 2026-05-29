@@ -318,7 +318,8 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is(button, [role='button']),
-:root[data-theme-id='london-salmon'] [data-prompt-surface] :is(button, [role='button']) {
+:root[data-theme-id='london-salmon'] [data-prompt-surface] :is(button, [role='button']),
+:root[data-theme-id='london-salmon'] [data-desktop-overview] button {
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 430 !important;

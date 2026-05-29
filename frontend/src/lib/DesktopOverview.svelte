@@ -37,6 +37,7 @@
     : mountedHeavyCount >= 3 || openWindows.length >= 10
     ? 'elevated'
     : 'steady';
+  $: unavailablePreviewCount = previewSummary.suspended + previewSummary.redacted;
 
   function refreshViewport() {
     if (typeof window === 'undefined') return;
@@ -74,13 +75,25 @@
   }
 
   function modeLabel(win) {
-    const previewState = getOverviewPreviewDecision(previewDecisions, win.windowId).state;
-    if (previewState === 'live') return 'live';
-    if (previewState === 'redacted') return 'redacted';
+    if (win.windowId === activeWindowId) return 'active';
     if (win.restoreSuspended) return 'suspended';
     if (win.mode === 'minimized') return 'minimized';
     if (win.mode === 'maximized') return 'maximized';
-    return win.windowId === activeWindowId ? 'active' : 'open';
+    return 'open';
+  }
+
+  function previewLabel(win) {
+    const state = previewState(win);
+    if (state === 'live') return 'live preview';
+    if (state === 'redacted') return 'private';
+    if (state === 'suspended') return 'parked';
+    return 'card preview';
+  }
+
+  function resourceLabel(win) {
+    if (!isHeavyAppId(win.appId)) return 'light';
+    if (win.restoreSuspended || win.mode === 'minimized') return 'heavy, parked';
+    return 'heavy, mounted';
   }
 
   function previewState(win) {
@@ -120,7 +133,7 @@
     <header class="overview-header">
       <div>
         <p class="overview-kicker">Desktop Overview</p>
-        <h2 id="desktop-overview-title">Open windows</h2>
+        <h2 id="desktop-overview-title">{openWindows.length} open window{openWindows.length === 1 ? '' : 's'}</h2>
         <p
           class="overview-summary"
           data-overview-summary
@@ -136,7 +149,7 @@
           data-overview-suspended-preview-count={previewSummary.suspended}
           data-overview-pressure={pressureLevel}
         >
-          {openWindows.length} open, {previewSummary.live} live, {previewSummary.suspended} suspended, {previewSummary.redacted} redacted
+          Active: {activeWindow?.title || 'none'} · {minimizedCount} minimized · {previewSummary.live} live preview{previewSummary.live === 1 ? '' : 's'}
         </p>
       </div>
       <button class="overview-close" type="button" on:click={closeOverview} data-overview-close aria-label="Close Desktop Overview">Close</button>
@@ -150,60 +163,125 @@
     {:else}
       <div class="overview-pressure" class:high={pressureLevel === 'high'} class:elevated={pressureLevel === 'elevated'} data-overview-pressure-panel>
         <div>
-          <span>Restore pressure</span>
-          <strong>{pressureLevel}</strong>
-        </div>
-        <div>
-          <span>Mounted heavy apps</span>
-          <strong>{mountedHeavyCount}/{heavyCount}</strong>
-        </div>
-        <div>
-          <span>Active window</span>
+          <span>Active</span>
           <strong>{activeWindow?.title || 'none'}</strong>
         </div>
         <div>
-          <span>Live previews</span>
+          <span>Minimized</span>
+          <strong>{minimizedCount}</strong>
+        </div>
+        <div>
+          <span>Heavy apps</span>
+          <strong>{mountedHeavyCount}/{heavyCount} mounted</strong>
+        </div>
+        <div>
+          <span>Previews</span>
           <strong>{previewSummary.live}/{openWindows.length}</strong>
         </div>
       </div>
 
       <div class="overview-live-hint" data-overview-live-hint>
-        <span>{previewSummary.live} live window{previewSummary.live === 1 ? '' : 's'} arranged from the real desktop</span>
-        <span>{previewSummary.suspended + previewSummary.redacted + previewSummary.card} honest card fallback{previewSummary.suspended + previewSummary.redacted + previewSummary.card === 1 ? '' : 's'}</span>
+        <span>{visibleCount} visible</span>
+        <span>{previewSummary.card} card preview{previewSummary.card === 1 ? '' : 's'}</span>
+        <span>{unavailablePreviewCount} private or parked</span>
       </div>
 
-      <div
-        class="overview-map"
-        class:dense={openWindows.length >= 10}
-        data-overview-map
-        aria-label="Spatial map of open windows"
-      >
-        {#each openWindows as win (win.windowId)}
-          <button
-            class:active={win.windowId === activeWindowId}
-            class:minimized={win.mode === 'minimized'}
-            class:suspended={win.restoreSuspended}
-            class="map-window"
-            type="button"
-            style={mapStyle(win)}
-            on:click={() => focusWindow(win.windowId)}
-            data-overview-map-window
-            data-overview-map-window-id={win.windowId}
-            data-overview-map-window-app-id={win.appId}
-            data-overview-map-window-state={modeLabel(win)}
-            data-overview-map-window-preview-state={previewState(win)}
-            aria-label="Focus {win.title}"
+      <div class="overview-body">
+        <section class="overview-stage" aria-labelledby="overview-stage-title">
+          <div class="section-heading">
+            <p>Window Map</p>
+            <h3 id="overview-stage-title">Current layout</h3>
+          </div>
+          <div
+            class="overview-map"
+            class:dense={openWindows.length >= 10}
+            data-overview-map
+            aria-label="Spatial map of open windows"
           >
-            <span>{win.icon || '□'}</span>
-            <strong>{win.title}</strong>
-            <em>{modeLabel(win)}</em>
-          </button>
-        {/each}
+            {#each openWindows as win (win.windowId)}
+              <button
+                class:active={win.windowId === activeWindowId}
+                class:minimized={win.mode === 'minimized'}
+                class:suspended={win.restoreSuspended}
+                class="map-window"
+                type="button"
+                style={mapStyle(win)}
+                on:click={() => focusWindow(win.windowId)}
+                data-overview-map-window
+                data-overview-map-window-id={win.windowId}
+                data-overview-map-window-app-id={win.appId}
+                data-overview-map-window-state={modeLabel(win)}
+                data-overview-map-window-preview-state={previewState(win)}
+                aria-label="Focus {win.title}"
+              >
+                <span>{win.icon || '□'}</span>
+                <strong>{win.title}</strong>
+                <em>{modeLabel(win)}</em>
+              </button>
+            {/each}
+          </div>
+        </section>
+
+        <section class="overview-window-list" aria-labelledby="overview-window-list-title">
+          <div class="section-heading">
+            <p>Windows</p>
+            <h3 id="overview-window-list-title">Switch or clean up</h3>
+          </div>
+          <div class="overview-cards" data-overview-cards>
+            {#each layeredWindows as win, index (win.windowId)}
+              <article
+                class:active={win.windowId === activeWindowId}
+                class:heavy={isHeavyAppId(win.appId)}
+                class:minimized={win.mode === 'minimized'}
+                class:suspended={win.restoreSuspended}
+                class="overview-card"
+                data-overview-card
+                data-overview-card-window-id={win.windowId}
+                data-overview-card-app-id={win.appId}
+                data-overview-card-state={modeLabel(win)}
+                data-overview-card-preview-state={previewState(win)}
+                data-overview-card-heavy={isHeavyAppId(win.appId) ? 'true' : 'false'}
+                data-overview-card-suspended={win.restoreSuspended ? 'true' : 'false'}
+              >
+                <button class="card-main" type="button" on:click={() => focusWindow(win.windowId)} data-overview-focus-window>
+                  <span class="card-icon">{win.icon || '□'}</span>
+                  <span class="card-copy">
+                    <strong>{win.title}</strong>
+                    <small>{modeLabel(win)} · {previewLabel(win)} · layer {layeredWindows.length - index}</small>
+                  </span>
+                </button>
+                <div class="card-badges" aria-label="Window state">
+                  {#if win.windowId === activeWindowId}
+                    <span class="badge active-badge">active</span>
+                  {/if}
+                  <span class="badge">{previewLabel(win)}</span>
+                  <span class="badge">{resourceLabel(win)}</span>
+                  {#if win.mode === 'minimized'}
+                    <span class="badge">minimized</span>
+                  {/if}
+                </div>
+                <div class="card-actions">
+                  <button class="primary-card-action" type="button" on:click={() => focusWindow(win.windowId)} data-overview-card-focus>Focus</button>
+                  <button type="button" on:click={() => minimizeWindow(win.windowId)} disabled={win.mode === 'minimized'} data-overview-card-minimize>Minimize</button>
+                  <button
+                    type="button"
+                    on:click={() => suspendWindow(win.windowId)}
+                    disabled={!isHeavyAppId(win.appId) || win.restoreSuspended || win.windowId === activeWindowId}
+                    data-overview-card-suspend
+                  >
+                    Park
+                  </button>
+                  <button class="danger" type="button" on:click={() => closeWindow(win.windowId)} data-overview-card-close>Close</button>
+                </div>
+              </article>
+            {/each}
+          </div>
+        </section>
       </div>
 
       <div class="overview-actions" data-overview-actions>
         <button type="button" on:click={() => dispatch('suspendbackground')} data-overview-suspend-background>
-          Suspend background apps
+          Park background apps
         </button>
         {#if authenticated}
           <button type="button" on:click={() => dispatch('opencomputemonitor')} data-overview-open-compute-monitor>
@@ -222,69 +300,6 @@
           </button>
         {/if}
       </div>
-
-      <div class="overview-cards" data-overview-cards>
-        {#each layeredWindows as win, index (win.windowId)}
-          <article
-            class:active={win.windowId === activeWindowId}
-            class:heavy={isHeavyAppId(win.appId)}
-            class:minimized={win.mode === 'minimized'}
-            class:suspended={win.restoreSuspended}
-            class="overview-card"
-            data-overview-card
-            data-overview-card-window-id={win.windowId}
-            data-overview-card-app-id={win.appId}
-            data-overview-card-state={modeLabel(win)}
-            data-overview-card-preview-state={previewState(win)}
-            data-overview-card-heavy={isHeavyAppId(win.appId) ? 'true' : 'false'}
-            data-overview-card-suspended={win.restoreSuspended ? 'true' : 'false'}
-          >
-            <button class="card-main" type="button" on:click={() => focusWindow(win.windowId)} data-overview-focus-window>
-              <span class="card-icon">{win.icon || '□'}</span>
-              <span class="card-copy">
-                <strong>{win.title}</strong>
-                <small>{win.appId} · layer {layeredWindows.length - index} · {modeLabel(win)}</small>
-              </span>
-            </button>
-            <div class="card-badges" aria-label="Window state">
-              {#if win.windowId === activeWindowId}
-                <span class="badge active-badge">active</span>
-              {/if}
-              {#if previewState(win) === 'live'}
-                <span class="badge live-badge">live</span>
-              {:else if previewState(win) === 'redacted'}
-                <span class="badge redacted-badge">redacted</span>
-              {:else if previewState(win) === 'card'}
-                <span class="badge">card</span>
-              {/if}
-              {#if isHeavyAppId(win.appId)}
-                <span class="badge heavy-badge">heavy</span>
-              {/if}
-              {#if win.restoreSuspended}
-                <span class="badge suspended-badge">suspended</span>
-              {:else if isHeavyAppId(win.appId) && win.mode !== 'minimized'}
-                <span class="badge mounted-badge">mounted</span>
-              {/if}
-              {#if win.mode === 'minimized'}
-                <span class="badge">minimized</span>
-              {/if}
-            </div>
-            <div class="card-actions">
-              <button type="button" on:click={() => focusWindow(win.windowId)} data-overview-card-focus>Focus</button>
-              <button type="button" on:click={() => minimizeWindow(win.windowId)} disabled={win.mode === 'minimized'} data-overview-card-minimize>Minimize</button>
-              <button
-                type="button"
-                on:click={() => suspendWindow(win.windowId)}
-                disabled={!isHeavyAppId(win.appId) || win.restoreSuspended || win.windowId === activeWindowId}
-                data-overview-card-suspend
-              >
-                Suspend
-              </button>
-              <button class="danger" type="button" on:click={() => closeWindow(win.windowId)} data-overview-card-close>Close</button>
-            </div>
-          </article>
-        {/each}
-      </div>
     {/if}
   </div>
 </section>
@@ -293,8 +308,8 @@
   .desktop-overview {
     position: fixed;
     inset: 0;
-    z-index: 12000;
-    color: #e5eefc;
+    z-index: 13000;
+    color: var(--choir-fg, #e5eefc);
     pointer-events: none;
   }
 
@@ -303,45 +318,47 @@
     inset: 0;
     border: 0;
     background:
-      radial-gradient(circle at 50% 42%, rgba(37, 99, 235, 0.12), transparent 42%),
-      rgba(3, 7, 18, 0.46);
+      radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent), transparent 44%),
+      color-mix(in srgb, var(--choir-bg, #050912) 76%, transparent);
     cursor: default;
-    pointer-events: none;
+    pointer-events: auto;
   }
 
   .overview-panel {
     position: absolute;
-    inset: clamp(12px, 3vw, 28px);
+    inset:
+      clamp(10px, 2.5vw, 24px)
+      clamp(10px, 2.5vw, 24px)
+      calc(var(--choir-prompt-surface-bottom-offset, 64px) + clamp(10px, 2.5vw, 24px))
+      clamp(10px, 2.5vw, 24px);
     display: grid;
-    grid-template-rows: auto auto auto minmax(120px, 1fr) auto minmax(0, 150px);
-    gap: 0.85rem;
-    overflow: hidden;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    overflow: auto;
     border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
+    border-radius: 24px;
+    background-color: var(--choir-panel, rgba(15, 23, 42, 0.94));
+    background-image: var(--choir-sheet-bg, none);
+    box-shadow: var(--choir-shadow-floating, 0 28px 90px rgba(0, 0, 0, 0.42));
     padding: clamp(0.8rem, 2vw, 1.1rem);
-    pointer-events: none;
+    pointer-events: auto;
+    scrollbar-width: thin;
   }
 
   .overview-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    max-width: min(44rem, calc(100vw - 2rem));
-    border: 1px solid rgba(125, 211, 252, 0.18);
-    border-radius: 16px;
-    background: rgba(5, 10, 20, 0.68);
-    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
-    padding: 0.75rem 0.85rem;
-    pointer-events: auto;
-    backdrop-filter: blur(16px);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--choir-panel, #0d1628) 90%, transparent);
+    box-shadow: var(--choir-shadow-soft, 0 18px 54px rgba(0, 0, 0, 0.28));
+    padding: 0.85rem 0.95rem;
   }
 
   .overview-kicker {
     margin: 0 0 0.2rem;
-    color: #7dd3fc;
+    color: var(--choir-accent-2, #7dd3fc);
     font-size: 0.74rem;
     font-weight: 850;
     letter-spacing: 0.16em;
@@ -350,14 +367,14 @@
 
   .overview-header h2 {
     margin: 0;
-    color: #f8fafc;
+    color: var(--choir-fg, #f8fafc);
     font-size: clamp(1.35rem, 4vw, 2rem);
     line-height: 1.05;
   }
 
   .overview-summary {
     margin: 0.28rem 0 0;
-    color: #aebbd3;
+    color: var(--choir-muted, #aebbd3);
     font-size: 0.9rem;
   }
 
@@ -365,16 +382,15 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.55rem;
-    max-width: min(58rem, calc(100vw - 2rem));
-    pointer-events: auto;
   }
 
   .overview-pressure > div {
     min-width: 0;
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 12px;
-    background: rgba(15, 23, 42, 0.64);
-    padding: 0.58rem 0.7rem;
+    border: 0;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--choir-panel-soft, rgba(18, 31, 55, 0.72)) 92%, transparent);
+    box-shadow: var(--choir-control-shadow, 0 12px 30px rgba(0, 0, 0, 0.16));
+    padding: 0.66rem 0.76rem;
   }
 
   .overview-live-hint {
@@ -382,19 +398,16 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
-    max-width: min(48rem, calc(100vw - 2rem));
-    pointer-events: auto;
   }
 
   .overview-live-hint span {
-    border: 1px solid rgba(125, 211, 252, 0.18);
+    border: 0;
     border-radius: 999px;
-    background: rgba(5, 10, 20, 0.58);
-    color: #cbd5e1;
+    background: color-mix(in srgb, var(--choir-selected, rgba(91, 123, 255, 0.22)) 72%, transparent);
+    color: var(--choir-fg, #cbd5e1);
     font-size: 0.74rem;
     font-weight: 760;
     padding: 0.35rem 0.55rem;
-    backdrop-filter: blur(14px);
   }
 
   .overview-pressure span,
@@ -407,7 +420,7 @@
   }
 
   .overview-pressure span {
-    color: #94a3b8;
+    color: var(--choir-muted, #94a3b8);
     font-size: 0.68rem;
     font-weight: 820;
     letter-spacing: 0.1em;
@@ -416,7 +429,7 @@
 
   .overview-pressure strong {
     margin-top: 0.18rem;
-    color: #dbeafe;
+    color: var(--choir-fg, #dbeafe);
     font-size: 0.94rem;
   }
 
@@ -431,10 +444,11 @@
   .overview-close,
   .overview-actions button,
   .card-actions button {
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 10px;
-    background: rgba(15, 23, 42, 0.74);
-    color: #dbeafe;
+    border: 0;
+    border-radius: 999px;
+    background: var(--choir-control-bg, rgba(15, 23, 42, 0.74));
+    color: var(--choir-fg, #dbeafe);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0, 0, 0, 0.18));
     cursor: pointer;
     font: inherit;
     font-size: 0.82rem;
@@ -446,8 +460,7 @@
   .overview-close:hover,
   .overview-actions button:hover,
   .card-actions button:hover:not(:disabled) {
-    border-color: rgba(125, 211, 252, 0.55);
-    background: rgba(30, 64, 175, 0.38);
+    background: var(--choir-selected, rgba(30, 64, 175, 0.38));
   }
 
   button:disabled {
@@ -455,23 +468,61 @@
     opacity: 0.44;
   }
 
+  .overview-body {
+    display: grid;
+    grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.25fr);
+    gap: 0.75rem;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .overview-stage,
+  .overview-window-list {
+    min-width: 0;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--choir-panel, rgba(15, 23, 42, 0.74)) 88%, transparent);
+    box-shadow: var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.2));
+    padding: 0.8rem;
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.62rem;
+  }
+
+  .section-heading p,
+  .section-heading h3 {
+    margin: 0;
+  }
+
+  .section-heading p {
+    color: var(--choir-accent-2, #7dd3fc);
+    font-size: 0.7rem;
+    font-weight: 840;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .section-heading h3 {
+    color: var(--choir-fg, #f8fafc);
+    font-size: 1rem;
+  }
+
   .overview-map {
     position: relative;
     overflow: hidden;
-    align-self: end;
-    max-width: min(24rem, calc(100vw - 2rem));
-    min-height: 120px;
-    max-height: 180px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    min-height: clamp(180px, 34vh, 320px);
+    border: 0;
     border-radius: 14px;
     background:
-      linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-      rgba(2, 6, 23, 0.48);
+      linear-gradient(color-mix(in srgb, var(--choir-border, rgba(148, 163, 184, 0.16)) 42%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--choir-border, rgba(148, 163, 184, 0.16)) 42%, transparent) 1px, transparent 1px),
+      color-mix(in srgb, var(--choir-bg, #020617) 78%, var(--choir-panel, #0d1628));
     background-size: 32px 32px;
-    opacity: 0.72;
-    pointer-events: none;
-    backdrop-filter: blur(12px);
+    pointer-events: auto;
   }
 
   .overview-map.dense {
@@ -488,20 +539,22 @@
     min-width: 4.8rem;
     min-height: 3.2rem;
     overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.28);
+    border: 0;
     border-radius: 9px;
-    background: rgba(15, 23, 42, 0.88);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
-    color: #dbeafe;
+    background: color-mix(in srgb, var(--choir-panel-strong, #13213b) 92%, transparent);
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--choir-bg, #020617) 36%, transparent);
+    color: var(--choir-fg, #dbeafe);
     cursor: pointer;
-    pointer-events: none;
+    pointer-events: auto;
     padding: 0.45rem;
     text-align: left;
   }
 
   .map-window.active {
-    border-color: rgba(59, 130, 246, 0.9);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.28), 0 14px 34px rgba(37, 99, 235, 0.28);
+    background: var(--choir-selected, rgba(59, 130, 246, 0.24));
+    box-shadow:
+      0 14px 34px color-mix(in srgb, var(--choir-accent, #6d8dff) 18%, transparent),
+      inset 0 0 28px color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent);
   }
 
   .map-window.minimized,
@@ -513,7 +566,7 @@
     grid-column: 1 / -1;
     min-width: 0;
     overflow: hidden;
-    color: #94a3b8;
+    color: var(--choir-muted, #94a3b8);
     font-size: 0.6rem;
     font-style: normal;
     font-weight: 760;
@@ -533,40 +586,39 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
-    pointer-events: auto;
+    position: relative;
+    z-index: 2;
   }
 
   .overview-cards {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(min(18rem, 82vw), 22rem);
+    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
     gap: 0.65rem;
     min-height: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 0 0.15rem 0.25rem 0;
-    pointer-events: auto;
+    overflow: visible;
+    padding: 0;
   }
 
   .overview-card {
     display: grid;
     gap: 0.6rem;
     min-width: 0;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 0;
     border-radius: 14px;
-    background: rgba(15, 23, 42, 0.76);
+    background: color-mix(in srgb, var(--choir-panel-soft, rgba(15, 23, 42, 0.76)) 92%, transparent);
+    box-shadow: var(--choir-control-shadow, 0 12px 30px rgba(0, 0, 0, 0.18));
     padding: 0.65rem;
-    backdrop-filter: blur(16px);
   }
 
   .overview-card[data-overview-card-preview-state='live'] {
-    background: rgba(8, 18, 32, 0.58);
-    opacity: 0.72;
+    background: color-mix(in srgb, var(--choir-panel-soft, rgba(8, 18, 32, 0.58)) 86%, var(--choir-selected, transparent));
   }
 
   .overview-card.active {
-    border-color: rgba(96, 165, 250, 0.6);
-    background: rgba(30, 64, 175, 0.22);
+    background: var(--choir-selected, rgba(30, 64, 175, 0.22));
+    box-shadow:
+      var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.2)),
+      inset 0 0 34px color-mix(in srgb, var(--choir-accent, #6d8dff) 12%, transparent);
   }
 
   .overview-card.heavy {
@@ -602,6 +654,7 @@
     height: 2rem;
     border-radius: 10px;
     background: rgba(96, 165, 250, 0.13);
+    background: color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent);
   }
 
   .card-copy {
@@ -619,12 +672,12 @@
   }
 
   .card-copy strong {
-    color: #f8fafc;
+    color: var(--choir-fg, #f8fafc);
     font-size: 0.93rem;
   }
 
   .card-copy small {
-    color: #94a3b8;
+    color: var(--choir-muted, #94a3b8);
     font-size: 0.74rem;
   }
 
@@ -641,10 +694,10 @@
   }
 
   .badge {
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    border: 0;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.7);
-    color: #aebbd3;
+    background: color-mix(in srgb, var(--choir-selected, rgba(91, 123, 255, 0.22)) 62%, transparent);
+    color: var(--choir-fg, #aebbd3);
     font-size: 0.66rem;
     font-weight: 820;
     letter-spacing: 0.02em;
@@ -654,53 +707,31 @@
   }
 
   .active-badge {
-    border-color: rgba(96, 165, 250, 0.48);
-    color: #bfdbfe;
-  }
-
-  .live-badge {
-    border-color: rgba(45, 212, 191, 0.42);
-    color: #99f6e4;
-  }
-
-  .redacted-badge {
-    border-color: rgba(216, 180, 254, 0.36);
-    color: #e9d5ff;
-  }
-
-  .heavy-badge {
-    border-color: rgba(125, 211, 252, 0.34);
-    color: #bae6fd;
-  }
-
-  .suspended-badge {
-    border-color: rgba(251, 191, 36, 0.34);
-    color: #fde68a;
-  }
-
-  .mounted-badge {
-    border-color: rgba(134, 239, 172, 0.32);
-    color: #bbf7d0;
+    background: color-mix(in srgb, var(--choir-accent, #6d8dff) 24%, transparent);
   }
 
   .card-actions .danger {
-    border-color: rgba(248, 113, 113, 0.32);
-    color: #fecaca;
+    color: var(--choir-danger, #fecaca);
+  }
+
+  .primary-card-action {
+    background: var(--choir-selected, rgba(91, 123, 255, 0.22)) !important;
   }
 
   .overview-empty {
     display: grid;
     place-content: center;
     min-height: 16rem;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 0;
     border-radius: 14px;
-    color: #94a3b8;
+    background: color-mix(in srgb, var(--choir-panel-soft, rgba(15, 23, 42, 0.72)) 92%, transparent);
+    color: var(--choir-muted, #94a3b8);
     text-align: center;
   }
 
   .overview-empty h3 {
     margin: 0 0 0.3rem;
-    color: #f8fafc;
+    color: var(--choir-fg, #f8fafc);
   }
 
   .overview-empty p {
@@ -709,10 +740,14 @@
 
   @media (max-width: 768px) {
     .overview-panel {
-      inset: 8px;
-      grid-template-rows: auto auto auto minmax(170px, 1fr) auto minmax(0, 138px);
+      inset:
+        8px
+        8px
+        calc(var(--choir-prompt-surface-bottom-offset, 64px) + 8px)
+        8px;
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
       gap: 0.65rem;
-      border-radius: 14px;
+      border-radius: 20px;
       padding: 0.7rem;
     }
 
@@ -736,7 +771,7 @@
 
     .overview-actions {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .overview-actions button {
@@ -771,14 +806,42 @@
       padding: 0.28rem 0.44rem;
     }
 
+    .overview-body {
+      grid-template-columns: 1fr;
+      padding-bottom: 0.25rem;
+    }
+
+    .overview-stage,
+    .overview-window-list {
+      padding: 0.65rem;
+    }
+
     .overview-map {
-      max-width: min(18rem, calc(100vw - 1.4rem));
-      min-height: 116px;
-      max-height: 132px;
+      min-height: 128px;
+    }
+
+    .map-window {
+      grid-template-columns: 1fr;
+      align-content: center;
+      justify-items: center;
+      gap: 0;
+      min-width: 2.1rem;
+      min-height: 2.1rem;
+      padding: 0.25rem;
+    }
+
+    .map-window strong,
+    .map-window em {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
     }
 
     .overview-cards {
-      grid-auto-columns: minmax(min(15.5rem, 78vw), 17.5rem);
+      grid-template-columns: 1fr;
     }
   }
 </style>

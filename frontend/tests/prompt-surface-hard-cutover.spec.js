@@ -39,8 +39,10 @@ const THEMED_APP_SHELLS = [
 
 function parseRgb(value) {
   const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-  if (!match) return null;
-  return match.slice(1, 4).map(Number);
+  if (match) return match.slice(1, 4).map(Number);
+  const srgb = value.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  if (srgb) return srgb.slice(1, 4).map((channel) => Math.round(Number(channel) * 255));
+  return null;
 }
 
 async function openDeskApp(page, appId) {
@@ -340,4 +342,62 @@ test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({
   await expect(mobile.locator('[data-mobile-switcher-open="true"] [data-prompt-input]')).toHaveCount(0);
   await expect(mobile.locator('[data-mobile-app-switcher] button')).not.toHaveCount(0);
   await mobile.close();
+});
+
+test('Desktop Overview is theme-native and action-oriented', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await openDeskApp(page, 'settings');
+
+  const expectations = {
+    'futuristic-noir': { light: false },
+    'carbon-fiber-kintsugi': { light: false },
+    'london-salmon': { light: true },
+  };
+
+  for (const [themeId, expected] of Object.entries(expectations)) {
+    await page.locator(`[data-settings-window] [data-theme-preset="${themeId}"]`).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme-id', themeId);
+
+    await page.locator('[data-desk-menu-button]').click();
+    await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+    await page.locator('[data-desk-overview]').click();
+    const overview = page.locator('[data-desktop-overview]');
+    await expect(overview).toBeVisible();
+    await expect(overview).toContainText('Switch or clean up');
+    await expect(overview).not.toContainText('Restore pressure');
+    await expect(overview).not.toContainText('honest card');
+    await expect(page.locator('[data-overview-map-window]').first()).toBeEnabled();
+
+    const sample = await overview.evaluate((node) => {
+      const panel = node.querySelector('.overview-panel');
+      const card = node.querySelector('[data-overview-card]');
+      const action = node.querySelector('[data-overview-card-focus]');
+      const panelStyle = getComputedStyle(panel);
+      const cardStyle = getComputedStyle(card);
+      const actionStyle = getComputedStyle(action);
+      return {
+        panelBg: panelStyle.backgroundColor,
+        cardBg: cardStyle.backgroundColor,
+        actionBg: actionStyle.backgroundColor,
+        actionColor: actionStyle.color,
+        actionFontStyle: actionStyle.fontStyle,
+      };
+    });
+    const panelRgb = parseRgb(sample.panelBg);
+    const cardRgb = parseRgb(sample.cardBg);
+    expect(panelRgb, `${themeId} panel background`).not.toBeNull();
+    expect(cardRgb, `${themeId} card background`).not.toBeNull();
+    if (expected.light) {
+      expect(panelRgb[0]).toBeGreaterThanOrEqual(248);
+      expect(panelRgb[1]).toBeGreaterThanOrEqual(235);
+      expect(cardRgb[0]).toBeGreaterThanOrEqual(245);
+      expect(sample.actionFontStyle).toBe('italic');
+    } else {
+      expect(Math.max(...panelRgb)).toBeLessThan(245);
+      expect(Math.max(...cardRgb)).toBeLessThan(245);
+    }
+
+    await page.locator('[data-overview-close]').click();
+    await expect(overview).toHaveCount(0);
+  }
 });
