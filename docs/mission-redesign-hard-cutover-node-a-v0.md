@@ -1,6 +1,6 @@
 # MissionGradient: Choir Redesign Hard Cutover on Node A - v0
 
-Status: Node A deployed for owner review  
+Status: checkpoint_incomplete; Node A is deployed, but owner QA found the logged-out app/theme cut incomplete
 Target branch: `codex/redesign-hard-cutover-node-a`  
 Target host: `node-a`  
 Target public URL: `https://choir-ip.com`  
@@ -10,7 +10,7 @@ Primary asset source: `docs/choir-redesign-hard-cutover-assets/`
 ## Goal String
 
 ```text
-/goal Run docs/mission-redesign-hard-cutover-node-a-v0.md as a Codex-operated MissionGradient mission: create a disposable Node A design lab for a hard-cut Choir frontend redesign without touching choir.news or main. Work on branch codex/redesign-hard-cutover-node-a. Wipe the stale choiros-rs runtime from ssh alias node-a, disable old services, and deploy go-choir from this branch to https://choir-ip.com with fresh local state. Do not clone choir.news auth, passkeys, mail routing, Resend mail behavior, or production secrets unless already required for ordinary go-choir operation on Node A. Configure Node A for choir-ip.com fresh auth if needed, but do not make auth the proof bottleneck. Implement the liberal logged-out preview rule: the shell and major apps are visible and interactive with frontend mock/demo data while logged out, and auth is requested only for durable/shared/private mutation, provider spend, account data, publish/send/import/activate, or other owner-scoped actions. Then perform the Svelte + TypeScript hard cutover using docs/choir-redesign-hard-cutover-assets as design direction: delete BottomBar compatibility, introduce PromptSurface, DeskSheet, TetraMark, schema-v2 themes with exactly futuristic-noir, carbon-fiber-kintsugi, and london-salmon, convert new/redesigned components to <script lang="ts"> and directly touched view-model helpers to .ts where useful, retokenize the shell/windows/apps, redesign Auth, Desktop Overview, Compute Monitor, Trace, VText preview/version progression, Files, Podcast, PDF, EPUB, Image, Video, Audio, Email preview, and tiny browser details such as favicon/page titles/copy/typography. Use frontend-only demo fixtures for logged-out private surfaces, including Trace trajectories/swimlanes, VText docs/version animation, files, podcasts, media libraries, compute samples, and a cleaned bounded Chyron ticker. Demo fixtures must never be used as backend proof or written to authenticated user state. Use Computer Use as the primary visual verifier across desktop and mobile-sized viewports; use build/typecheck/Playwright only as regression support. Optimize for quality, deletion, taste, and coherence over speed. If Node A reaches a 90%+ reviewable visual/product cut by Computer Use and owner QA, prepare the branch for later merge-back to main; do not merge or deploy to Node B in this mission. Stop with Node A deployed evidence, screenshots/Computer Use observations, branch/commit/CI identity, deleted-code diffstat, residual visual issues, typecheck/build status, and notes for morning review.
+/goal Continue docs/mission-redesign-hard-cutover-node-a-v0.md as a Codex-operated MissionGradient mission from the 2026-05-29 owner QA redirect checkpoint. Stay on branch codex/redesign-hard-cutover-node-a and keep Node A as the disposable live design lab at https://choir-ip.com; do not touch main, Node B, choir.news, production auth, production mail routing, Resend behavior, or production secrets. The mission is incomplete until every app in the product app registry is visible and meaningfully interactive while logged out using frontend-only demo fixtures, and all three schema-v2 themes, exactly futuristic-noir, carbon-fiber-kintsugi, and london-salmon, can be switched and visually QA'd while logged out. Settings must open logged out so theme switching is always available. Email, Files, VText, Trace, Desktop Overview, Compute Monitor, Podcast, PDF, EPUB, Image, Video, Audio, Features if present, Terminal/Web Lens shells, Auth, PromptSurface, DeskSheet, desktop icons, window chrome, mobile app switching, empty/loading/error states, favicon/page titles/copy/typography, and tiny browser details must share one coherent tokenized style. Trace must include the reference-mockup swimlane/timeline model: horizontal lanes per agent/tool, duration bars, moment dots, failure ticks, and linked graph/timeline/inspector selection. Auth is requested only for durable/shared/private mutation, provider spend, account data, real prompt submission, save/revise/publish, send, import, activate, upload, rollback/roll-forward, or other owner-scoped actions; app opening, theme switching, fixture browsing, local VText typing, and preview inspection must not be auth gated. Remove hard outlines and mismatched old styles across all apps, including VText buttons and app controls; use coordinated radii, shadows, blur, depth, and theme tokens instead. Fix all overlap, navigation, and viewport safety issues: DeskSheet/tray content must never overlap, text must fit its containers, the Desk menu must be dense enough to show fully without scrolling in normal desktop and compact QA viewports, desktop icons must never go under the PromptSurface or off screen and must reflow under small or magnified viewports, and mobile must support open-app switching from the PromptSurface by tapping TetraMark to temporarily replace the prompt field with icons for currently open apps. Keep iterating after first correctness: use Computer Use as the primary visual verifier across desktop and mobile-sized viewports for every app and all three themes; use build/typecheck/Playwright only as regression support. Toward the end of the trajectory, perform a deliberate theme-convergence pass for each theme against docs/choir-redesign-hard-cutover-assets/reference-mockups: Futuristic Noir should recover the Trace/prompt reference's dark navy glass and luminous cyan/blue depth, Carbon Fiber Kintsugi should recover the dark industrial carbon texture and precise gold repair/glow language, and London Salmon should recover the salmon paper, oxblood/ink, serif, bespoke broadsheet character without becoming cute pastel. Deploy each reviewable checkpoint to Node A through the branch workflow, verify health/deployed commit, and stop only when Node A has a 90%+ owner-reviewable logged-out product cut with all apps/all themes proven, or when an invariant-level/external blocker is documented with the smallest safe next probe. Final report must include Node A deployed evidence, Computer Use observations, screenshot refs, app/theme QA matrix, branch/commit/CI identity, deleted-code diffstat, residual visual issues, build/typecheck/test status, and notes for morning review.
 ```
 
 ## Mission Identity
@@ -19,33 +19,52 @@ This mission is not a theme swap and not a local mockup. The real artifact is a 
 
 Node A is disposable. It should stop being an old `choiros-rs` host and become a `go-choir` design lab. Node B remains the production source of truth. The branch is the bridge back to production after human review.
 
+## Owner QA Redirect - 2026-05-29
+
+The previous run reached a deployed Node A checkpoint but stopped too early. Prompt polish, Node A health, and a couple of shell screenshots are not mission completion.
+
+Owner corrections now define the active loss function:
+
+- Do not let any desktop app icon go underneath the PromptSurface or off screen; under small or magnified viewports, icons must reflow and remain visible.
+- DeskSheet must be dense enough to show the whole menu without scrolling in normal desktop and compact QA viewports; a scrollable Desk menu is a design failure, not a fallback.
+- Nothing in DeskSheet, the prompt tray, app cards, buttons, labels, tabs, or app bodies may overlap.
+- All app surfaces must use the same visual system. VText still showed button outlines; similar old controls across other apps must be found and retokenized.
+- Settings must open while logged out because theme switching is required for QA.
+- Email, Files, and every other app shell must open while logged out with frontend-only fixture/demo state. Auth belongs at protected action time, not app-open time.
+- All three themes must be visible, switchable, and QA'd while logged out.
+- Mobile app switching must be solved. TetraMark must still open DeskSheet and show the app tray; on mobile-sized viewports while the sheet is open, the prompt field should temporarily become icons for the currently open apps, so the old mobile app tray behavior is preserved inside the new PromptSurface model.
+- Trace must include swimlanes, not only run cards or summary panels. The reference mockup shows horizontal lanes per agent/tool, bars for duration, dots for moments, failure ticks, and selection linked across graph, lane chart, and inspector.
+- The final third of the trajectory must include a deliberate per-theme convergence pass against the reference mockups, not only generic token cleanup.
+
+This redirect supersedes any earlier interpretation of "major apps" as "some apps." The acceptance surface is every app in the app registry, plus the shell and auth boundary.
+
 ## Current Belief State
 
 Known:
 
-- `node-a` currently reports hostname `choiros-a`.
-- `node-a` currently runs `caddy.service` and `hypervisor.service`.
-- `node-a` has old code/state under `/opt/choiros` and `/var/lib/choiros`.
-- `node-a` Caddy currently serves `choir-ip.com` by reverse proxying `127.0.0.1:9090`.
+- Node A now serves `go-choir` at `https://choir-ip.com` from branch `codex/redesign-hard-cutover-node-a`.
+- The latest deployed health evidence before this redirect reported commit `00a3000d6105b8415b56be1e68ce853a230a7860`.
+- The old `choiros-rs` runtime path was removed/disabled during the earlier Node A cutover.
 - `node-b` currently runs `go-choir` services for `choir.news`.
 - `go-choir` Node B auth is configured for WebAuthn RP ID `choir.news`, so passkey/auth DB cloning to `choir-ip.com` is not a valid equivalence target.
 - The redesign asset bundle includes a hard-cutover brief, Svelte snippets, theme tokens, three theme presets, TetraMark assets, selector mapping, and desktop/trace/theme reference mockups.
+- Owner QA has found that the current Node A cut is not mission-complete: some app opens are still auth gated, Settings is not reliably available logged out for theme switching, VText and likely other app controls still carry old outline styling, DeskSheet can overlap in compressed viewports, and desktop icons need prompt-safe reflow.
 
 Uncertain:
 
-- Whether GitHub Actions already has the secrets needed to deploy to Node A.
-- Whether the existing Node B deploy workflow can be parameterized cleanly for Node A, or should be copied into a separate branch-only Node A workflow.
-- Whether Node A has enough disk/build capacity for the same host/frontend/guest artifacts as Node B.
-- Whether fresh `choir-ip.com` passkey registration can be completed unattended. This should not block logged-out visual proof.
-- How much of the existing frontend can be cleanly converted to TypeScript during the cutover without creating a repo-wide migration tarpit.
+- Which app-opening paths still call `requestAuth` before showing a logged-out fixture shell.
+- Which apps still use old borders, old button treatment, or app-local visual systems instead of the theme tokens.
+- Whether all app surfaces remain readable and non-overlapping under all three themes and compact/magnified viewports.
+- Whether any fixture/demo state accidentally crosses into authenticated persistence paths.
+- Whether the current uncommitted icon-safe patch should be retained as-is after full Computer Use QA or adjusted with the DeskSheet overlap fix.
 
 Highest-impact uncertainty:
 
-Can `https://choir-ip.com` become a branch-deployed `go-choir` frontend lab through CI without touching `choir.news` or `main`?
+Can the deployed Node A branch become a coherent logged-out product review surface where every app and every theme is visible without auth, while protected actions still request auth at the moment of durable/private mutation?
 
 Next high-information probe:
 
-Create the branch, inspect GitHub deploy secret feasibility for Node A, inspect Node A disk/services/Caddy, and establish the smallest CI or branch deploy route that can serve `go-choir` on `choir-ip.com`.
+Audit app launch/auth gates, theme switching, and app-local styling; then fix the smallest set of shell/app boundaries that makes Settings and every app registry entry open logged out with fixtures before doing another Computer Use full-surface QA pass.
 
 ## Cognitive Transforms
 
@@ -229,6 +248,7 @@ Behavior:
 - Window geometry respects top/bottom prompt surface offsets.
 - Prompt input remains usable and visually central.
 - Window tray is useful but not visually noisy.
+- On mobile-sized viewports, TetraMark still opens DeskSheet and shows the app tray. While the sheet is open, the prompt input area becomes a compact open-app switcher until an app is chosen, the sheet is dismissed, or the user returns to prompt entry.
 - TetraMark replaces the old four-square desk glyph.
 
 ### Theme System
@@ -254,6 +274,15 @@ Remove product exposure of old presets:
 Legacy stored themes normalize to `futuristic-noir`.
 
 Theme tokens should cover shell, windows, sheets, Auth, Overview, Compute Monitor, Trace, Podcast, VText, Files, Email preview, and media apps.
+
+Theme convergence pass:
+
+- Run this toward the end of the trajectory, after all apps open logged out and the overlap/navigation problems are fixed.
+- Compare against `docs/choir-redesign-hard-cutover-assets/reference-mockups/trace-reference.png`, `carbon-fiber-kintsugi-suite.png`, `london-salmon-suite.png`, `desktop-overview-reference.png`, and `prompt-surface-reference.png`.
+- Futuristic Noir: recover the reference Trace/PromptSurface language: dark navy glass, restrained luminous cyan/blue depth, sparse panels, soft shadows, and no hard outline grid.
+- Carbon Fiber Kintsugi: recover dark industrial carbon material, precise expensive controls, gold repair seams/glow as emphasis, and mechanical density without orange/brown drift.
+- London Salmon: recover salmon paper, oxblood/ink accents, serif heading character, broadsheet/Savile Row restraint, and avoid cute pastel or beige SaaS.
+- For each theme, inspect PromptSurface, DeskSheet, Settings, VText, Trace, Files, Email, Compute Monitor, Podcast, and at least one media viewer before considering the pass complete.
 
 ### Auth UX
 
@@ -373,6 +402,9 @@ Trace:
 - Failure states visible at a glance.
 - Inspector is useful but not dominant.
 - Mobile uses tabs/panels: Runs, Graph, Timeline, Inspector.
+- The swimlane/timeline chart is required. It must use horizontal lanes per agent/tool, duration bars, moment dots, failure ticks, and a visible now/selection marker where useful.
+- Selecting a graph node, lane item, or timeline moment should update the selected inspector detail and visually link the related graph/lane state.
+- Logged-out Trace fixtures must include enough agent/tool diversity and failures to exercise the swimlane design honestly.
 
 VText:
 
@@ -474,6 +506,7 @@ Required evidence:
 - Logged-out VText local editing observation.
 - Logged-out protected-action auth prompt observation.
 - Trace fixture graph/swimlane observation.
+- Trace swimlane/timeline observation with bars, dots, failure ticks, and linked inspector selection.
 - VText version progression observation.
 - Chyron bounded ticker observation.
 - Three-theme observations.
@@ -515,13 +548,17 @@ Manual/Computer Use:
 - Inspect Auth UI.
 - Use logged-out desktop.
 - Open DeskSheet.
+- Verify DeskSheet shows the complete menu without internal scrolling or overlap in desktop and compact viewports.
+- Verify mobile app switching: with multiple windows open, tap TetraMark and confirm DeskSheet opens, the app tray is visible, the prompt field is replaced by open-app icons, switching works, and prompt entry can return without overlap.
 - Open VText, type locally, try protected save/revise/publish and verify auth prompt.
 - Open Trace and inspect graph/timeline/swimlane.
+- In Trace, verify swimlanes are visible and interactive enough to link graph/timeline/inspector state.
 - Open Desktop Overview.
 - Open Compute Monitor.
 - Open Podcast.
 - Open Files and media apps.
 - Switch all three themes.
+- Near the end, run one Computer Use pass per theme against the reference mockups and record theme-specific residual issues.
 - Test mobile-sized viewport visually.
 - Watch Chyron and VText version animation complete without metadata line noise or stuck streaming.
 
@@ -530,12 +567,18 @@ Manual/Computer Use:
 Complete:
 
 - Node A serves branch `go-choir` at `https://choir-ip.com`.
-- Redesign hard cut is implemented enough for owner QA.
-- Logged-out preview rule works across major surfaces.
-- Three themes are coherent.
+- Redesign hard cut is implemented enough for owner QA across every app.
+- Logged-out preview rule works across every app registry entry, not only major surfaces.
+- Three themes are coherent and can be switched while logged out through Settings.
+- Each theme has received a late convergence pass against the reference mockups and has app-by-app Computer Use observations.
 - PromptSurface/DeskSheet/TetraMark are real production code.
 - Auth UI is redesigned.
 - Fixture-backed app surfaces are visually reviewable.
+- Trace includes a visible swimlane/timeline chart with bars, dots, failure markers, and linked selection.
+- DeskSheet is dense and fully visible without internal scrolling in normal desktop and compact QA viewports.
+- No visible overlap remains in app trays, DeskSheet, window chrome, app bodies, or controls.
+- Desktop icons stay inside the prompt-safe viewport and reflow under small or magnified viewports.
+- Mobile app switching works from TetraMark without reintroducing the old BottomBar or hiding open apps behind the prompt.
 - Computer Use desktop/mobile observations are recorded.
 - Build/typecheck/focused tests are reported.
 - `choir.news` and `main` remain untouched.
@@ -635,29 +678,29 @@ Remaining error field:
 
 status: checkpoint_incomplete
 
-last checkpoint: Node A pre-wipe and deploy-secret inventory recorded before code or host mutation.
+last checkpoint: 2026-05-29T08:12Z local owner-QA redirect pass after the all-app/all-theme logged-out fixes, before the next Node A deploy.
 
-current artifact state: branch exists locally; Node A still runs old `choiros-rs`; frontend hard cutover not started.
+current artifact state: local branch code now opens every app registry entry while logged out with frontend-only demo/preview state; Settings opens logged out and switches exactly the three schema-v2 themes; Trace has visible swimlanes; DeskSheet is dense and non-scroll in normal and mobile-sized support checks; TetraMark still opens DeskSheet and, on mobile while the sheet is open, replaces the prompt field with open-app icons. Node A still serves the prior deployed commit until the next branch workflow completes.
 
-what shipped: nothing yet.
+what shipped: prior Node A branch deploy path, hard-cut shell, schema-v2 theme set, PromptSurface/DeskSheet/TetraMark, initial logged-out VText/Trace preview, and prompt geometry polish.
 
-what was proven: Node A stale runtime facts; GitHub secret/key deploy-path mismatch; `choir.news` and `main` untouched.
+what was proven: locally, `pnpm build` passed; the focused hard-cutover Playwright suite passed 5/5; Computer Use observed desktop/compact DeskSheet and Trace swimlanes; support screenshots covered all three themes and mobile Tetra switching. Node A deployment proof for this checkpoint is still pending.
 
-unproven or partial claims: Node A go-choir serving, branch CI, hard-cutover UI, logged-out preview, Computer Use observations.
+unproven or partial claims: live Node A proof for this checkpoint, deeper owner visual approval across every app body in all three themes, full interactive mobile Computer Use proof, and merge-back readiness.
 
-belief-state changes: Node A has capacity; first deploy likely needs tracked Node A config plus local SSH bootstrap before branch CI can own subsequent deploys.
+belief-state changes: the live deployment route works; the owner QA redirect exposed product completeness gaps rather than infrastructure gaps; local evidence now shows the major logged-out visibility, theme switching, mobile switching, and swimlane requirements are implemented.
 
-remaining error field: old Node A services/state, missing branch CI host secret, frontend redesign scope, DNS uncertainty.
+remaining error field: live Node A deploy/health identity for the latest commit, deployed Computer Use screenshots/observations, residual theme taste gaps, and possible fixture honesty gaps.
 
-highest-impact remaining uncertainty: whether `https://choir-ip.com` can be made to serve the branch from Node A without owner DNS action.
+highest-impact remaining uncertainty: whether the deployed Node A build matches the local 90%+ reviewable cut under real browser/network conditions.
 
-next executable probe: create tracked Node A deploy/config path and Svelte hard-cutover surface, then bootstrap Node A with local SSH and verify direct/public health.
+next executable probe: commit and push only the intended branch changes, let the Node A redesign workflow deploy them, then verify `https://choir-ip.com` health/build identity and repeat deployed desktop/mobile visual QA.
 
-suggested resume goal string: Continue `docs/mission-redesign-hard-cutover-node-a-v0.md` from the 2026-05-29 Node A deploy-path checkpoint; implement tracked Node A go-choir config, hard-cutover frontend, deploy to Node A, and verify with Computer Use.
+suggested resume goal string: use the `Goal String` section above.
 
-evidence artifact refs: this mission doc.
+evidence artifact refs: this mission doc; local screenshots `/tmp/choir-local-futuristic-noir.png`, `/tmp/choir-local-carbon-fiber-kintsugi.png`, `/tmp/choir-local-london-salmon-v2.png`, and `/tmp/choir-local-mobile-tetra.png`; previous deployed screenshot refs `/tmp/choir-prompt-polish-deployed-desktop.png` and `/tmp/choir-prompt-polish-deployed-mobile.png`.
 
-rollback refs: Node A disposable; no Node B/main mutation performed.
+rollback refs: Node A disposable; branch previous deployed commit `00a3000d6105b8415b56be1e68ce853a230a7860`; no Node B/main mutation performed.
 
 ### 2026-05-29T07:16Z - Node A Frontend Nix Dependency Blocker
 
@@ -725,3 +768,34 @@ Remaining error field:
 
 - Owner QA should review `https://choir-ip.com` directly and decide whether this is the right visual direction.
 - Before merge-back to `main`, clean the ticker repetition, do deeper mobile Computer Use or device proof, decide whether to keep Node A workflow/assets in the branch, and reverify production auth/mail/private paths on Node B in a separate landing mission.
+
+### 2026-05-29T08:12Z - Owner QA Redirect Local Cut
+
+Claim: the local branch now satisfies the owner redirect well enough to redeploy Node A for another review cut.
+
+Evidence:
+
+- Build: `pnpm build` passed in `frontend/`; only the existing Vite chunk-size warnings remained.
+- Focused regression: `PLAYWRIGHT_BASE_URL=http://localhost:5173 pnpm exec playwright test tests/prompt-surface-hard-cutover.spec.js --project=chromium --reporter=line` passed 5/5.
+- No typecheck script exists in `frontend/package.json`; `pnpm check` returned "Command check not found", so the available Svelte/TypeScript regression proof is Vite build plus Playwright.
+- Computer Use desktop observation on local Comet: TetraMark opened DeskSheet, DeskSheet showed the complete app tray without internal overlap or scrolling, and the prompt field was removed in compact switcher state while open-app icons remained visible.
+- Computer Use Trace observation: Trace defaults to the Timeline panel in compact windows and shows the Agent graph plus Swimlanes; hard button outlines around graph nodes were removed by the app-content retokenization layer.
+- Local Playwright support metrics: all app registry entries opened while logged out; Settings exposed 3 theme presets; Trace rendered 4 swimlanes and 7 swimlane moments; Terminal showed logged-out preview mode; desktop icons stayed above the PromptSurface in the 1440x900 fixture.
+- Mobile support metrics at 390x844: DeskSheet visible, `sheetOverflow=0`, mobile app switcher visible, prompt input absent while switcher open, 3 switcher buttons all inside viewport.
+- Theme support screenshots: `/tmp/choir-local-futuristic-noir.png`, `/tmp/choir-local-carbon-fiber-kintsugi.png`, `/tmp/choir-local-london-salmon-v2.png`, and `/tmp/choir-local-mobile-tetra.png`.
+
+Changes made in response to owner QA:
+
+- App-open auth gates were removed for logged-out app shells; protected actions still request auth at mutation/spend/account boundaries.
+- Settings, Features, Terminal, VText-open-from-content, and Trace-open-from-content now have logged-out preview/demo behavior instead of app-open auth prompts.
+- Trace now includes real swimlane rows with lane labels, duration bars, moment dots, failure ticks, and selected moment linkage to inspector state.
+- PromptSurface keeps TetraMark as the DeskSheet opener; on mobile while the sheet is open, the command field becomes the open-app switcher.
+- DeskSheet was made denser and non-scroll in the normal/compact support viewports.
+- Desktop icons reflow within the PromptSurface-safe viewport under small/magnified layouts.
+- App window controls and cards received a no-hard-outline retokenization layer; London Salmon Settings contrast was corrected after screenshot review.
+
+Remaining before stopping:
+
+- Commit and push this cut.
+- Let the branch-scoped Node A workflow deploy it.
+- Verify deployed health/build identity, deployed Computer Use observations, and deployed screenshots before claiming the live Node A review checkpoint.

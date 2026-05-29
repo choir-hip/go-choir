@@ -21,6 +21,7 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import {
     DESKTOP_ICON_APPS,
     windows,
@@ -31,12 +32,108 @@
   } from './stores/desktop.js';
 
   const dispatch = createEventDispatcher();
+  const DESKTOP_ICON_WIDTH = 80;
+  const DESKTOP_ICON_HEIGHT = 76;
+  const MOBILE_ICON_WIDTH = 72;
+  const MOBILE_ICON_HEIGHT = 66;
+  const ICON_GRID_X = 24;
+  const ICON_GRID_Y = 24;
+  const ICON_GRID_COL_WIDTH = 96;
+  const ICON_GRID_ROW_HEIGHT = 86;
 
   // ---- Drag state ----
   let dragging = false;
   let dragAppId = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  let surfaceEl;
+  let resizeObserver;
+  let normalizeFrame = 0;
+
+  function iconMetrics() {
+    const iconEl = surfaceEl?.querySelector('[data-desktop-icon]');
+    if (iconEl) {
+      const rect = iconEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+      }
+    }
+    const compact = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+    return compact
+      ? { width: MOBILE_ICON_WIDTH, height: MOBILE_ICON_HEIGHT }
+      : { width: DESKTOP_ICON_WIDTH, height: DESKTOP_ICON_HEIGHT };
+  }
+
+  function safeBounds() {
+    const rect = surfaceEl?.getBoundingClientRect();
+    const metrics = iconMetrics();
+    const width = Math.max(metrics.width, rect?.width || 0);
+    const height = Math.max(metrics.height, rect?.height || 0);
+    return {
+      width,
+      height,
+      iconWidth: metrics.width,
+      iconHeight: metrics.height,
+      maxX: Math.max(0, width - metrics.width),
+      maxY: Math.max(0, height - metrics.height),
+    };
+  }
+
+  function clampPosition(pos, bounds = safeBounds()) {
+    return {
+      x: Math.max(0, Math.min(Number(pos?.x) || 0, bounds.maxX)),
+      y: Math.max(0, Math.min(Number(pos?.y) || 0, bounds.maxY)),
+    };
+  }
+
+  function gridPosition(index, bounds) {
+    const usableHeight = Math.max(bounds.iconHeight, bounds.height - ICON_GRID_Y);
+    const rows = Math.max(1, Math.floor((usableHeight + ICON_GRID_ROW_HEIGHT - bounds.iconHeight) / ICON_GRID_ROW_HEIGHT));
+    const row = index % rows;
+    const col = Math.floor(index / rows);
+    return clampPosition(
+      {
+        x: ICON_GRID_X + col * ICON_GRID_COL_WIDTH,
+        y: ICON_GRID_Y + row * ICON_GRID_ROW_HEIGHT,
+      },
+      bounds
+    );
+  }
+
+  function positionIsVisible(pos, bounds) {
+    return (
+      pos &&
+      Number.isFinite(pos.x) &&
+      Number.isFinite(pos.y) &&
+      pos.x >= 0 &&
+      pos.y >= 0 &&
+      pos.x <= bounds.maxX &&
+      pos.y <= bounds.maxY
+    );
+  }
+
+  function normalizeIconPositions() {
+    if (!surfaceEl) return;
+    const bounds = safeBounds();
+    const positions = $iconPositions || {};
+    const needsReflow = DESKTOP_ICON_APPS.some((app) => !positionIsVisible(positions[app.id], bounds));
+    if (!needsReflow) return;
+
+    const nextPositions = {};
+    DESKTOP_ICON_APPS.forEach((app, index) => {
+      nextPositions[app.id] = gridPosition(index, bounds);
+    });
+    iconPositions.set(nextPositions);
+    dispatch('iconpositionschanged');
+  }
+
+  function scheduleNormalizeIconPositions() {
+    if (normalizeFrame) cancelAnimationFrame(normalizeFrame);
+    normalizeFrame = requestAnimationFrame(() => {
+      normalizeFrame = 0;
+      normalizeIconPositions();
+    });
+  }
 
   /** Check if an app has an open (non-closed) window */
   function isAppOpen($windows, appId) {
@@ -68,9 +165,10 @@
     dragging = true;
     dragAppId = app.id;
 
+    const surfaceRect = surfaceEl?.getBoundingClientRect();
     const pos = $iconPositions[app.id] || { x: 0, y: 0 };
-    dragOffsetX = event.clientX - pos.x;
-    dragOffsetY = event.clientY - pos.y;
+    dragOffsetX = event.clientX - (surfaceRect?.left || 0) - pos.x;
+    dragOffsetY = event.clientY - (surfaceRect?.top || 0) - pos.y;
 
     selectedIconId.set(app.id);
   }
@@ -79,12 +177,12 @@
   function handleMouseMove(event) {
     if (!dragging || !dragAppId) return;
 
-    const surfaceEl = document.querySelector('[data-desktop-surface]');
     if (!surfaceEl) return;
 
     const rect = surfaceEl.getBoundingClientRect();
-    const newX = Math.max(0, Math.min(event.clientX - dragOffsetX, rect.width - 80));
-    const newY = Math.max(0, Math.min(event.clientY - dragOffsetY, rect.height - 80));
+    const bounds = safeBounds();
+    const newX = Math.max(0, Math.min(event.clientX - rect.left - dragOffsetX, bounds.maxX));
+    const newY = Math.max(0, Math.min(event.clientY - rect.top - dragOffsetY, bounds.maxY));
 
     moveIcon(dragAppId, newX, newY);
   }
@@ -111,9 +209,10 @@
     touchDragging = true;
     touchAppId = app.id;
 
+    const surfaceRect = surfaceEl?.getBoundingClientRect();
     const pos = $iconPositions[app.id] || { x: 0, y: 0 };
-    touchOffsetX = touch.clientX - pos.x;
-    touchOffsetY = touch.clientY - pos.y;
+    touchOffsetX = touch.clientX - (surfaceRect?.left || 0) - pos.x;
+    touchOffsetY = touch.clientY - (surfaceRect?.top || 0) - pos.y;
 
     selectedIconId.set(app.id);
   }
@@ -123,12 +222,12 @@
     event.preventDefault();
 
     const touch = event.touches[0];
-    const surfaceEl = document.querySelector('[data-desktop-surface]');
     if (!surfaceEl) return;
 
     const rect = surfaceEl.getBoundingClientRect();
-    const newX = Math.max(0, Math.min(touch.clientX - touchOffsetX, rect.width - 80));
-    const newY = Math.max(0, Math.min(touch.clientY - touchOffsetY, rect.height - 80));
+    const bounds = safeBounds();
+    const newX = Math.max(0, Math.min(touch.clientX - rect.left - touchOffsetX, bounds.maxX));
+    const newY = Math.max(0, Math.min(touch.clientY - rect.top - touchOffsetY, bounds.maxY));
 
     moveIcon(touchAppId, newX, newY);
   }
@@ -141,21 +240,27 @@
     }
   }
 
-  // Wire global mouse/touch events
-  import { onMount, onDestroy } from 'svelte';
-
   onMount(() => {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('resize', scheduleNormalizeIconPositions);
+    window.visualViewport?.addEventListener('resize', scheduleNormalizeIconPositions);
+    resizeObserver = new ResizeObserver(scheduleNormalizeIconPositions);
+    if (surfaceEl) resizeObserver.observe(surfaceEl);
+    scheduleNormalizeIconPositions();
   });
 
   onDestroy(() => {
+    if (normalizeFrame) cancelAnimationFrame(normalizeFrame);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
     window.removeEventListener('touchmove', handleTouchMove);
     window.removeEventListener('touchend', handleTouchEnd);
+    window.removeEventListener('resize', scheduleNormalizeIconPositions);
+    window.visualViewport?.removeEventListener('resize', scheduleNormalizeIconPositions);
+    resizeObserver?.disconnect();
   });
 </script>
 
@@ -163,6 +268,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="desktop-surface"
+  bind:this={surfaceEl}
   data-desktop-surface
   on:click={() => selectedIconId.set('')}
 >
@@ -198,10 +304,10 @@
 <style>
   .desktop-surface {
     position: absolute;
-    top: 0;
+    top: var(--choir-prompt-surface-top-offset, 0px);
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--choir-prompt-surface-bottom-offset, 64px);
     z-index: 1; /* Below windows (which start at z-index 2+) */
     overflow: hidden;
   }

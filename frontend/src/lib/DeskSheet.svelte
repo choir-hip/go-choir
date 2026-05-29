@@ -69,11 +69,11 @@
     right: max(12px, env(safe-area-inset-right));
     z-index: 9999;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-    gap: 0.85rem;
-    height: min(var(--choir-desk-sheet-height, 56dvh), calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px));
-    overflow: auto;
-    padding: 1rem;
+    grid-template-rows: auto auto auto auto auto;
+    gap: 0.48rem;
+    max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px);
+    overflow: hidden;
+    padding: 0.72rem;
     background: var(--choir-sheet-bg);
     color: var(--choir-fg);
     box-shadow: var(--choir-shadow-floating), 0 -18px 70px color-mix(in srgb, var(--choir-accent) 12%, transparent);
@@ -124,7 +124,7 @@
 
   header h2 {
     font-family: var(--choir-font-display);
-    font-size: 1.8rem;
+    font-size: clamp(1.25rem, 2.6vw, 1.55rem);
     letter-spacing: 0;
   }
 
@@ -140,25 +140,24 @@
   header button,
   footer button,
   .plain-row {
-    padding: 0.65rem 0.85rem;
+    padding: 0.48rem 0.64rem;
   }
 
   .overview-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.5rem 0.8rem;
+    gap: 0.12rem 0.55rem;
     align-self: start;
     align-items: center;
-    min-height: 4.5rem;
-    height: auto;
-    padding: 0.9rem;
+    min-height: 2.9rem;
+    padding: 0.5rem 0.58rem;
     text-align: left;
     border-radius: var(--choir-radius-control);
   }
 
   .overview-card span {
     grid-row: span 2;
-    font-size: 1.4rem;
+    font-size: 1.18rem;
   }
 
   .overview-card small,
@@ -168,21 +167,33 @@
 
   .app-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-    gap: 0.65rem;
+    grid-template-columns: repeat(auto-fit, minmax(7.6rem, 1fr));
+    gap: 0.38rem;
   }
 
   .app-grid button {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.25rem 0.65rem;
-    padding: 0.75rem;
+    gap: 0.04rem 0.42rem;
+    align-items: center;
+    min-height: 2.58rem;
+    padding: 0.42rem 0.48rem;
     text-align: left;
   }
 
   .app-grid button span {
     grid-row: span 2;
-    font-size: 1.35rem;
+    font-size: 1.05rem;
+  }
+
+  .app-grid strong {
+    font-size: 0.78rem;
+    line-height: 1.05;
+  }
+
+  .app-grid small {
+    font-size: 0.66rem;
+    line-height: 1.05;
   }
 
   .app-grid strong,
@@ -201,11 +212,36 @@
     .desk-sheet {
       left: 8px;
       right: 8px;
-      height: min(62dvh, calc(100dvh - var(--choir-prompt-surface-size, 64px) - 20px));
+      max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 20px);
+      padding: 0.58rem;
+      gap: 0.38rem;
     }
 
     .app-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.32rem;
+    }
+
+    .app-grid button {
       grid-template-columns: 1fr;
+      justify-items: center;
+      min-height: 3.35rem;
+      gap: 0.16rem;
+      padding: 0.38rem 0.28rem;
+      text-align: center;
+    }
+
+    .app-grid button span {
+      grid-row: auto;
+    }
+
+    .app-grid small,
+    .overview-card small {
+      display: none;
+    }
+
+    footer {
+      font-size: 0.72rem;
     }
   }
 </style>

@@ -25,6 +25,7 @@
   let surfaceEl: HTMLDivElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let sheetOpen = false;
+  let mobileSwitcherOpen = false;
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
@@ -82,6 +83,7 @@
     if (win.mode === 'minimized') restoreWindow(win.windowId);
     else focusWindow(win.windowId);
     sheetOpen = false;
+    mobileSwitcherOpen = false;
   }
 
   function launchApp(app: any) {
@@ -92,6 +94,18 @@
       appContext: app.id === 'podcast' ? { appHint: 'podcast', windowTitle: 'Podcast' } : {},
     });
     sheetOpen = false;
+    mobileSwitcherOpen = false;
+  }
+
+  function isMobileViewport() {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  }
+
+  function handleDeskButtonClick() {
+    const nextSheetOpen = !sheetOpen;
+    sheetOpen = nextSheetOpen;
+    mobileSwitcherOpen = nextSheetOpen && isMobileViewport() && $openWindows.length > 0;
+    tick().then(publishSurfaceMetrics);
   }
 
   function summarizeLiveEvent(message: any) {
@@ -148,6 +162,8 @@
   });
 
   $: if (authenticated && chyronItems.some((item) => item.id.startsWith('public-'))) chyronItems = [];
+  $: if ($openWindows.length === 0 && mobileSwitcherOpen) mobileSwitcherOpen = false;
+  $: if (!sheetOpen && mobileSwitcherOpen) mobileSwitcherOpen = false;
 
   onDestroy(() => {
     removeLiveListener();
@@ -175,18 +191,20 @@
 <div
   class="prompt-surface placement-{normalizedPlacement}"
   class:sheet-open={sheetOpen}
+  class:mobile-switcher-open={mobileSwitcherOpen}
   data-prompt-surface
   data-placement={normalizedPlacement}
   data-desk-sheet-open={sheetOpen ? 'true' : 'false'}
+  data-mobile-switcher-open={mobileSwitcherOpen ? 'true' : 'false'}
   bind:this={surfaceEl}
 >
   <button
     class="desk-mark-button"
     data-desk-menu-button
     type="button"
-    aria-label="Open Desk, {$openWindows.length} open windows"
-    aria-expanded={sheetOpen ? 'true' : 'false'}
-    on:click={() => (sheetOpen = !sheetOpen)}
+    aria-label="Open app switcher or Desk, {$openWindows.length} open windows"
+    aria-expanded={sheetOpen || mobileSwitcherOpen ? 'true' : 'false'}
+    on:click={handleDeskButtonClick}
   >
     <TetraMark />
     {#if $openWindows.length > 0}<span class="window-count" data-window-count>{$openWindows.length}</span>{/if}
@@ -211,25 +229,42 @@
   </div>
 
   <div class="command-field" data-command-field>
-    {#if chyronTickerItems.length > 0 && !sheetOpen}
+    {#if mobileSwitcherOpen}
+      <div class="mobile-app-switcher" data-mobile-app-switcher aria-label="Open apps">
+        {#each $openWindows as win (win.windowId)}
+          <button
+            class:active={win.windowId === $activeWindowId}
+            class="mobile-app-switcher-item"
+            type="button"
+            title={win.title}
+            aria-label={`Switch to ${win.title}`}
+            on:click={() => openWindowFromTray(win)}
+          >
+            <span>{win.icon || '□'}</span>
+          </button>
+        {/each}
+      </div>
+    {:else if chyronTickerItems.length > 0 && !sheetOpen}
       <div class:focused={promptFocused} class="agent-chyron" data-agent-chyron data-prompt-chyron aria-live="polite">
         <div>{#each chyronTickerItems as item, index (`${item.id}-${index}`)}<span>{item.text}</span>{/each}</div>
       </div>
     {/if}
-    {#if promptStatus}<div class="prompt-status" data-prompt-status>{promptStatus}</div>{/if}
-    <textarea
-      bind:this={promptInputEl}
-      bind:value={promptValue}
-      data-prompt-input
-      rows="1"
-      placeholder={promptPlaceholder}
-      disabled={promptDisabled}
-      aria-label="Command prompt"
-      on:keydown={handlePromptKeydown}
-      on:input={resizePromptInput}
-      on:focus={() => (promptFocused = true)}
-      on:blur={() => (promptFocused = false)}
-    />
+    {#if !mobileSwitcherOpen}
+      {#if promptStatus}<div class="prompt-status" data-prompt-status>{promptStatus}</div>{/if}
+      <textarea
+        bind:this={promptInputEl}
+        bind:value={promptValue}
+        data-prompt-input
+        rows="1"
+        placeholder={promptPlaceholder}
+        disabled={promptDisabled}
+        aria-label="Command prompt"
+        on:keydown={handlePromptKeydown}
+        on:input={resizePromptInput}
+        on:focus={() => (promptFocused = true)}
+        on:blur={() => (promptFocused = false)}
+      />
+    {/if}
   </div>
 
   <button class="voice-button" data-agent-audio-button type="button" aria-label="Agent audio input">
@@ -370,6 +405,50 @@
     font-size: 1rem;
     line-height: 1.35;
     padding: 1.05rem 1.15rem;
+  }
+
+  .mobile-app-switcher {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 4.3rem;
+    overflow-x: auto;
+    padding: 0.62rem;
+    scrollbar-width: none;
+  }
+
+  .mobile-app-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-app-switcher-item {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 2.72rem;
+    height: 2.72rem;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm);
+    background: var(--choir-control-bg);
+    color: var(--choir-fg);
+    box-shadow: var(--choir-control-shadow);
+  }
+
+  .mobile-app-switcher-item.active {
+    background: var(--choir-selected);
+    box-shadow: 0 0 26px color-mix(in srgb, var(--choir-accent) 20%, transparent);
+  }
+
+  .mobile-app-switcher-item span {
+    font-size: 1.16rem;
+    line-height: 1;
+  }
+
+  .mobile-app-switcher-item :global(svg) {
+    width: 1.15rem;
+    height: 1.15rem;
   }
 
   .prompt-status {

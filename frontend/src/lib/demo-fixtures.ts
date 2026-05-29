@@ -113,10 +113,13 @@ export const demoTraceSnapshot = {
     { from_agent_id: 'vsuper-node-a', to_agent_id: 'researcher-fixtures', kind: 'data-flow' },
   ],
   moments: [
-    { moment_id: 'm1', kind: 'inventory.recorded', state: 'completed', title: 'Node A pre-wipe facts recorded', created_at: '2026-05-29T06:47:00Z', loop_id: 'demo-redesign-cutover' },
-    { moment_id: 'm2', kind: 'deploy.path.blocker', state: 'blocked', title: 'Branch CI needs Node A deploy authority', created_at: '2026-05-29T06:48:00Z', loop_id: 'demo-redesign-cutover' },
-    { moment_id: 'm3', kind: 'frontend.prompt_surface', state: 'running', title: 'PromptSurface replaces the old shelf', created_at: '2026-05-29T06:55:00Z', loop_id: 'demo-redesign-cutover' },
-    { moment_id: 'm4', kind: 'verification.visual', state: 'pending', title: 'Computer Use desktop/mobile pass', created_at: '2026-05-29T07:05:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm1', agent_id: 'super', agent_label: 'super', kind: 'inventory.recorded', state: 'completed', tone: 'success', title: 'Node A pre-wipe facts recorded', summary: 'Node A pre-wipe facts recorded', timestamp: '2026-05-29T06:47:00Z', created_at: '2026-05-29T06:47:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm2', agent_id: 'super', agent_label: 'super', kind: 'deploy.path.blocker', state: 'failed', tone: 'error', title: 'Branch CI needs Node A deploy authority', summary: 'Branch CI needs Node A deploy authority', timestamp: '2026-05-29T06:49:00Z', created_at: '2026-05-29T06:49:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm3', agent_id: 'vsuper-node-a', agent_label: 'Node A vsuper', kind: 'deploy.bootstrap', state: 'completed', tone: 'success', title: 'Node A deploy path bootstrapped', summary: 'Node A deploy path bootstrapped', timestamp: '2026-05-29T06:54:00Z', created_at: '2026-05-29T06:54:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm4', agent_id: 'researcher-fixtures', agent_label: 'fixture researcher', kind: 'fixtures.prepared', state: 'completed', tone: 'tool', title: 'Frontend fixture libraries prepared', summary: 'Frontend fixture libraries prepared', timestamp: '2026-05-29T06:58:00Z', created_at: '2026-05-29T06:58:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm5', agent_id: 'vsuper-node-a', agent_label: 'Node A vsuper', kind: 'frontend.prompt_surface', state: 'completed', tone: 'message', title: 'PromptSurface replaces the old shelf', summary: 'PromptSurface replaces the old shelf', timestamp: '2026-05-29T07:03:00Z', created_at: '2026-05-29T07:03:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm6', agent_id: 'verifier-visual', agent_label: 'visual verifier', kind: 'verification.visual', state: 'running', tone: 'active', title: 'Computer Use desktop/mobile pass', summary: 'Computer Use desktop/mobile pass', timestamp: '2026-05-29T07:08:00Z', created_at: '2026-05-29T07:08:00Z', loop_id: 'demo-redesign-cutover' },
+    { moment_id: 'm7', agent_id: 'verifier-visual', agent_label: 'visual verifier', kind: 'qa.owner_redirect', state: 'failed', tone: 'error', title: 'Owner QA found app/theme gaps', summary: 'Owner QA found app/theme gaps', timestamp: '2026-05-29T07:18:00Z', created_at: '2026-05-29T07:18:00Z', loop_id: 'demo-redesign-cutover' },
   ],
   search: {
     providers: [
@@ -217,5 +220,53 @@ export const demoPodcastItems = [
     media_type: 'application/rss+xml',
     app_hint: 'podcast',
     text_content: `<?xml version="1.0"?><rss><channel><title>Design Systems Field Notes</title><description>Operating-surface critiques and product taste reviews.</description><item><title>Hard cutovers that work</title><description>Why naming and deletion matter.</description><pubDate>Fri, 29 May 2026 06:00:00 GMT</pubDate><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item></channel></rss>`,
+  },
+];
+
+export const demoFeaturePackages = [
+  {
+    package_id: 'demo-trace-swimlanes',
+    app_id: 'trace',
+    manifest_json: JSON.stringify({
+      title: 'Trace swimlane viewer',
+      summary: 'Adds agent/tool lanes with duration bars, moment dots, and failure ticks for logged-out review.',
+    }),
+    provenance_refs_json: JSON.stringify({
+      screenshot: ['reference-mockups/trace-reference.png'],
+      narrative: ['Frontend-only preview fixture'],
+    }),
+    candidate_source_ref: 'demo-trace-swimlanes',
+    source_runtime_artifact_digest: 'fixture-runtime',
+    source_ui_artifact_digest: 'fixture-ui',
+  },
+  {
+    package_id: 'demo-theme-convergence',
+    app_id: 'settings',
+    manifest_json: JSON.stringify({
+      title: 'Theme convergence pass',
+      summary: 'Brings Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon closer to the reference suites.',
+    }),
+    provenance_refs_json: JSON.stringify({
+      screenshot: ['reference-mockups/carbon-fiber-kintsugi-suite.png', 'reference-mockups/london-salmon-suite.png'],
+      narrative: ['Frontend-only preview fixture'],
+    }),
+    candidate_source_ref: 'demo-theme-convergence',
+    source_runtime_artifact_digest: 'fixture-runtime',
+    source_ui_artifact_digest: 'fixture-ui',
+  },
+];
+
+export const demoFeatureAdoptions = [
+  {
+    adoption_id: 'demo-adoption-theme-convergence',
+    package_id: 'demo-theme-convergence',
+    app_id: 'settings',
+    status: 'verified',
+    trace_id: 'demo-redesign-cutover',
+    updated_at: '2026-05-29T07:12:00Z',
+    rollback_profile_json: JSON.stringify({ previous_active_source_ref: 'demo-before-theme-pass' }),
+    candidate_source_ref: 'demo-theme-convergence',
+    runtime_artifact_digest: 'fixture-runtime',
+    ui_artifact_digest: 'fixture-ui',
   },
 ];

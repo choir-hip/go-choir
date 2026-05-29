@@ -2,9 +2,11 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { demoFeatureAdoptions, demoFeaturePackages } from './demo-fixtures';
 
   export let appContext = {};
   export let currentUser = null;
+  export let authenticated = false;
 
   const dispatch = createEventDispatcher();
   const TARGET_COMPUTER_ID = 'primary';
@@ -206,6 +208,12 @@
   async function refreshFeatures(preserved = []) {
     loading = true;
     error = '';
+    if (!authenticated) {
+      packages = demoFeaturePackages;
+      adoptions = mergeAdoptions(demoFeatureAdoptions, preserved);
+      loading = false;
+      return;
+    }
     try {
       const [packageBody, adoptionBody] = await Promise.all([
         fetchJSON('/api/app-change-packages?limit=100', { method: 'GET' }),
@@ -239,6 +247,10 @@
 
   async function importFeature(feature) {
     if (!feature?.id) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'feature_import', appId: 'features', appName: 'Features' });
+      return;
+    }
     actionError = '';
     acting = `import:${feature.id}`;
     actionStatus = `Importing ${feature.title}. Choir will email ${ownerEmail} when it is ready or blocked.`;
@@ -324,6 +336,10 @@
 
   async function runFeatureAction(adoption, action) {
     if (!adoption?.adoption_id) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: `feature_${action}`, appId: 'features', appName: 'Features' });
+      return;
+    }
     const feature = features.find((item) => item.id === adoption.package_id);
     actionError = '';
     acting = `${action}:${adoption.adoption_id}`;

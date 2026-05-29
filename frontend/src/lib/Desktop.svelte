@@ -80,6 +80,7 @@
     setIconPositions,
     getDefaultIconPositions,
     getAppIcon,
+    APP_REGISTRY,
     isHeavyAppId,
   } from './stores/desktop.js';
   import {
@@ -1098,31 +1099,20 @@
   }
 
   function handleLaunchApp(event) {
-    if (!authenticated) {
-      const publicApps = new Set(['podcast', 'image', 'audio', 'video', 'pdf', 'epub', 'trace', 'vtext', 'browser']);
-      const appId = event.detail?.appId || '';
-      if (publicApps.has(appId)) {
-        openApp(appId, event.detail?.appName || appId, event.detail?.icon || '', {
-          ...(event.detail?.appContext || {}),
-          guestMode: true,
-        });
-        return;
-      }
-      requestAuth({
-        kind: 'app_launch',
-        appId,
-        appName: event.detail?.appName || 'app',
-        icon: event.detail?.icon || '',
-        appContext: event.detail?.appContext || {},
-      });
+    const appId = event.detail?.appId || '';
+    const appDef = APP_REGISTRY.find((app) => app.id === appId);
+    if (!appDef) {
+      showToast(`Could not open ${event.detail?.appName || 'app'}`, { kind: 'error' });
       return;
     }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
     }
-    openApp(event.detail.appId, event.detail.appName, event.detail.icon, {
+    openApp(appId, event.detail.appName || appDef.name, event.detail.icon || appDef.icon, {
       ...(event.detail.appContext || {}),
+      guestMode: !authenticated,
+      demo: !authenticated,
     });
   }
 
@@ -1333,7 +1323,20 @@
 
   function handleOpenVTextFromContent(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'open_vtext', title: event.detail?.title || 'document' });
+      const detail = event.detail || {};
+      openApp('vtext', 'VText', getAppIcon('vtext'), {
+        windowTitle: detail.title || 'Preview note',
+        initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from fixture content. Sign in to save it as durable VText.`,
+        seedPrompt: detail.seedPrompt || '',
+        sourceUrl: detail.sourceUrl || '',
+        sourceContentId: detail.sourceContentId || '',
+        appHint: detail.appHint || '',
+        allowMultiple: true,
+        guestMode: true,
+        demo: true,
+        createdFrom: detail.createdFrom || 'content_viewer_preview',
+      });
+      showToast(detail.toastMessage || 'Opened local VText preview');
       return;
     }
     if (!desktopReady) {
@@ -1359,7 +1362,15 @@
 
   function handleOpenTraceFromContent(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'open_trace', title: event.detail?.title || 'Trace evidence' });
+      const detail = event.detail || {};
+      openApp('trace', 'Trace', getAppIcon('trace'), {
+        windowTitle: detail.title || 'Trace Preview',
+        trajectoryId: detail.trajectoryId || detail.traceId || '',
+        acceptanceId: detail.acceptanceId || '',
+        guestMode: true,
+        demo: true,
+      });
+      showToast(detail.toastMessage || 'Opened Trace preview');
       return;
     }
     if (!desktopReady) {
@@ -1706,14 +1717,16 @@
                 <FeaturesApp
                   appContext={win.appContext}
                   {currentUser}
+                  {authenticated}
                   on:authexpired={() => dispatch('authexpired')}
+                  on:authrequired={(event) => requestAuth(event.detail || {})}
                   on:openvtext={handleOpenVTextFromContent}
                   on:opentrace={handleOpenTraceFromContent}
                 />
               </div>
             {:else if win.appId === 'terminal'}
               <div class="app-content terminal-content" data-terminal-app>
-                <TerminalApp windowId={win.windowId} />
+                <TerminalApp windowId={win.windowId} {authenticated} />
               </div>
             {:else if win.appId === 'compute-monitor'}
               <div class="app-content compute-monitor-content" data-compute-monitor-window>

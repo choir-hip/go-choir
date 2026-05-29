@@ -38,7 +38,7 @@
   let continuationError = '';
   let selectedContinuation = null;
   let selectedAcceptanceId = appContext?.acceptanceId || '';
-  let mobilePanel = 'summary';
+  let mobilePanel = 'timeline';
   let lastAppContextTarget = '';
   let copyLogsBusy = false;
   let copyLogsStatus = '';
@@ -147,6 +147,63 @@
 
   function hasArtifacts(artifacts) {
     return !!(artifacts?.run_memory || artifacts?.continuation || artifacts?.app_change_package || artifacts?.app_adoption);
+  }
+
+  function momentTime(moment) {
+    return parseDate(moment?.timestamp || moment?.created_at || moment?.started_at || moment?.updated_at);
+  }
+
+  function laneTone(moment) {
+    if (moment?.tone) return moment.tone;
+    return stateTone(moment?.state);
+  }
+
+  function buildSwimlanes(agents, items) {
+    const laneMap = new Map();
+    for (const agent of agents || []) {
+      laneMap.set(agent.agent_id, {
+        id: agent.agent_id,
+        label: agent.label || excerpt(agent.agent_id, 18),
+        role: agent.role || '',
+        moments: [],
+      });
+    }
+    for (const moment of items || []) {
+      const agentId = moment.agent_id || moment.agent_label || 'system';
+      if (!laneMap.has(agentId)) {
+        laneMap.set(agentId, {
+          id: agentId,
+          label: moment.agent_label || excerpt(agentId, 18),
+          role: 'moment source',
+          moments: [],
+        });
+      }
+      laneMap.get(agentId).moments.push(moment);
+    }
+
+    const times = (items || []).map(momentTime).filter((time) => time > 0);
+    const start = times.length ? Math.min(...times) : Date.now();
+    const end = times.length ? Math.max(...times) : start + 60_000;
+    const range = Math.max(60_000, end - start);
+
+    return [...laneMap.values()].map((lane) => {
+      const sorted = [...lane.moments].sort((a, b) => momentTime(a) - momentTime(b));
+      return {
+        ...lane,
+        moments: sorted.map((moment, index) => {
+          const time = momentTime(moment) || start + index * 10_000;
+          const nextTime = momentTime(sorted[index + 1]) || Math.min(start + range, time + Math.max(18_000, range / Math.max(4, sorted.length + 1)));
+          const left = Math.max(0, Math.min(96, ((time - start) / range) * 100));
+          const width = Math.max(4.5, Math.min(36, ((nextTime - time) / range) * 100));
+          return {
+            ...moment,
+            laneLeft: left,
+            laneWidth: Math.min(width, 100 - left),
+            laneTone: laneTone(moment),
+          };
+        }),
+      };
+    });
   }
 
   function latestRunId(items) {
@@ -481,7 +538,7 @@
       if (!selected) return;
       selectedTrajectoryId = trajectoryId;
       snapshot = { ...demoTraceSnapshot, trajectory: selected };
-      mobilePanel = 'summary';
+      mobilePanel = 'timeline';
       return;
     }
     if (!trajectoryId || trajectoryId === selectedTrajectoryId) return;
@@ -492,7 +549,7 @@
     selectedContinuation = null;
     selectedAcceptanceId = '';
     continuationError = '';
-    mobilePanel = 'summary';
+    mobilePanel = 'timeline';
     userPinnedTrajectory = true;
     await loadTrajectorySnapshot(trajectoryId);
   }
@@ -512,7 +569,7 @@
     momentDetails = {};
     selectedContinuation = null;
     continuationError = '';
-    mobilePanel = 'summary';
+    mobilePanel = 'timeline';
     await loadTrajectorySnapshot(trajectoryId);
   }
 
@@ -598,6 +655,7 @@
   $: activeAcceptance =
     acceptances.find((item) => item.acceptance_id === selectedAcceptanceId) || acceptances[0] || null;
   $: graphLayout = buildGraphLayout(graphAgents, graphEdges);
+  $: swimlanes = buildSwimlanes(graphAgents, moments);
   $: activeMoment = moments.find((moment) => moment.moment_id === selectedMomentId) || moments[moments.length - 1] || null;
   $: activeDetail = selectedMomentId ? momentDetails[selectedMomentId] : null;
   $: geometry = runGeometryStats(moments);
@@ -623,7 +681,7 @@
         selectedContinuation = null;
         selectedAcceptanceId = '';
         continuationError = '';
-        mobilePanel = 'summary';
+        mobilePanel = 'timeline';
         scheduleSnapshotRefresh();
       }
       scheduleTrajectoryIndexRefresh();
@@ -1082,11 +1140,11 @@
             {/if}
           </section>
 
-          <section class="panel strip-panel" data-trace-moment-strip>
+          <section class="panel strip-panel" data-trace-swimlanes>
             <div class="panel-header">
               <div>
-                <h4>Trajectory moments</h4>
-                <p>Each dot is a durable causal moment, not a raw log line.</p>
+                <h4>Swimlanes</h4>
+                <p>Agent and tool duration bars with failure ticks and selectable moments.</p>
               </div>
               {#if selectedAgentId}
                 <span class="status-pill neutral">
@@ -1098,22 +1156,39 @@
             {#if moments.length === 0}
               <div class="empty-state">No moments captured yet for this trajectory.</div>
             {:else}
-              <div class="moment-strip">
-                {#each moments as moment (moment.moment_id)}
-                  <button
-                    class:selected={selectedMomentId === moment.moment_id}
-                    class:muted={selectedAgentId && selectedAgentId !== moment.agent_id}
-                    class={`moment-chip tone-${moment.tone}`}
-                    data-trace-moment
-                    data-trace-moment-id={moment.moment_id}
-                    on:click={() => selectMoment(moment.moment_id)}
-                  >
-                    <span class="moment-dot" aria-hidden="true"></span>
-                    <span class="moment-agent">{moment.agent_label || 'agent'}</span>
-                    <span class="moment-summary">{excerpt(moment.summary, 72)}</span>
-                    <span class="moment-meta">{moment.kind} · {formatTime(moment.timestamp)}</span>
-                  </button>
+              <div class="swimlane-chart" data-trace-swimlane-chart>
+                {#each swimlanes as lane (lane.id)}
+                  <div class:selected={selectedAgentId === lane.id} class:muted={selectedAgentId && selectedAgentId !== lane.id} class="swimlane-row" data-trace-swimlane data-trace-swimlane-id={lane.id}>
+                    <button class="swimlane-label" type="button" on:click={() => toggleAgent(lane.id)}>
+                      <strong>{lane.label}</strong>
+                      <small>{lane.role || 'agent'}</small>
+                    </button>
+                    <div class="swimlane-rail">
+                      {#each lane.moments as moment (moment.moment_id)}
+                        <button
+                          class:selected={selectedMomentId === moment.moment_id}
+                          class:failed={moment.laneTone === 'error'}
+                          class={`swimlane-moment tone-${moment.laneTone}`}
+                          style={`left: ${moment.laneLeft}%; width: ${moment.laneWidth}%;`}
+                          type="button"
+                          data-trace-moment
+                          data-trace-moment-id={moment.moment_id}
+                          title={`${moment.agent_label || lane.label}: ${moment.summary || moment.title || moment.kind}`}
+                          on:click={() => selectMoment(moment.moment_id)}
+                        >
+                          <span class="swimlane-bar"></span>
+                          <span class="swimlane-dot"></span>
+                          {#if moment.laneTone === 'error'}<span class="failure-tick" aria-label="failed"></span>{/if}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
                 {/each}
+                <div class="swimlane-legend">
+                  <span><i class="legend-dot success"></i>Completed</span>
+                  <span><i class="legend-dot active"></i>In progress</span>
+                  <span><i class="legend-dot error"></i>Failed</span>
+                </div>
               </div>
             {/if}
           </section>
@@ -1976,6 +2051,171 @@
     grid-column: 2 / -1;
     color: #94a3b8;
     font-size: 0.74rem;
+  }
+
+  .swimlane-chart {
+    margin-top: 0.9rem;
+    display: grid;
+    gap: 0.58rem;
+    min-width: 0;
+  }
+
+  .swimlane-row {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 0.24fr) minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: center;
+    min-width: 0;
+    opacity: 1;
+  }
+
+  .swimlane-row.muted {
+    opacity: 0.42;
+  }
+
+  .swimlane-row.selected .swimlane-label {
+    color: var(--choir-accent, #60a5fa);
+  }
+
+  .swimlane-label {
+    min-width: 0;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: rgba(15, 23, 42, 0.42);
+    color: #cbd5e1;
+    padding: 0.42rem 0.5rem;
+    text-align: left;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+    cursor: pointer;
+  }
+
+  .swimlane-label strong,
+  .swimlane-label small {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .swimlane-label strong {
+    font-size: 0.78rem;
+  }
+
+  .swimlane-label small {
+    color: #94a3b8;
+    font-size: 0.68rem;
+  }
+
+  .swimlane-rail {
+    position: relative;
+    min-width: 0;
+    height: 2.1rem;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background:
+      linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px) 0 0 / 12.5% 100%,
+      rgba(2, 6, 23, 0.34);
+    box-shadow: inset 0 10px 20px rgba(255, 255, 255, 0.018), 0 12px 28px rgba(0, 0, 0, 0.16);
+  }
+
+  .swimlane-moment {
+    position: absolute;
+    top: 50%;
+    display: block;
+    min-width: 1.4rem;
+    height: 1.1rem;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: transparent;
+    padding: 0;
+    transform: translateY(-50%);
+    cursor: pointer;
+  }
+
+  .swimlane-bar {
+    position: absolute;
+    inset: 0.3rem 0;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.34;
+    box-shadow: 0 0 18px currentColor;
+  }
+
+  .swimlane-dot {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 0.68rem;
+    height: 0.68rem;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translate(-10%, -50%);
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .swimlane-moment.selected .swimlane-bar {
+    opacity: 0.54;
+  }
+
+  .swimlane-moment.selected .swimlane-dot {
+    width: 0.82rem;
+    height: 0.82rem;
+  }
+
+  .failure-tick {
+    position: absolute;
+    right: -0.1rem;
+    top: 50%;
+    width: 0.82rem;
+    height: 0.82rem;
+    border-radius: 999px;
+    background: #ef4444;
+    transform: translate(50%, -50%);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.8);
+  }
+
+  .swimlane-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.72rem;
+  }
+
+  .swimlane-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+  }
+
+  .legend-dot {
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .legend-dot.success,
+  .tone-success {
+    color: #86efac;
+  }
+
+  .legend-dot.active,
+  .tone-active {
+    color: #60a5fa;
+  }
+
+  .legend-dot.error,
+  .tone-error {
+    color: #f87171;
+  }
+
+  .tone-tool {
+    color: #38bdf8;
+  }
+
+  .tone-message {
+    color: #a78bfa;
   }
 
   .inspector-panel {
