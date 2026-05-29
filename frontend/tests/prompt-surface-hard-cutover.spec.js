@@ -19,6 +19,30 @@ const DESK_APP_IDS = [
   'settings',
 ];
 
+const THEMED_APP_SHELLS = [
+  '[data-files-app]',
+  '[data-browser-app-container]',
+  '[data-email-window]',
+  '[data-compute-monitor-window]',
+  '[data-vtext-app]',
+  '[data-trace-window]',
+  '[data-podcast-window]',
+  '[data-image-window]',
+  '[data-audio-window]',
+  '[data-video-window]',
+  '[data-pdf-window]',
+  '[data-epub-window]',
+  '[data-features-window]',
+  '[data-terminal-app]',
+  '[data-settings-window]',
+];
+
+function parseRgb(value) {
+  const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return null;
+  return match.slice(1, 4).map(Number);
+}
+
 async function openDeskApp(page, appId) {
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet]')).toBeVisible();
@@ -155,6 +179,48 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await expect(page.locator('[data-settings-window] [data-theme-preset="carbon-fiber-kintsugi"]')).toBeVisible();
   await expect(page.locator('[data-settings-window] [data-theme-preset="london-salmon"]')).toBeVisible();
   await expect(page.locator('[data-settings-window] [data-theme-editor]')).toBeHidden();
+
+  const assertThemeOnShells = async (themeId, expectedVars) => {
+    await page.locator(`[data-settings-window] [data-theme-preset="${themeId}"]`).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme-id', themeId);
+    const sample = await page.evaluate((selectors) => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        vars: {
+          bg: root.getPropertyValue('--choir-bg').trim(),
+          accent: root.getPropertyValue('--choir-accent').trim(),
+          panel: root.getPropertyValue('--choir-panel').trim(),
+        },
+        shells: selectors.map((selector) => {
+          const element = document.querySelector(selector);
+          const style = element ? getComputedStyle(element) : null;
+          return {
+            selector,
+            exists: !!element,
+            backgroundColor: style?.backgroundColor || '',
+            color: style?.color || '',
+          };
+        }),
+      };
+    }, THEMED_APP_SHELLS);
+    expect(sample.vars).toMatchObject(expectedVars);
+    for (const shell of sample.shells) {
+      expect(shell.exists, `${themeId} ${shell.selector} exists`).toBe(true);
+      const rgb = parseRgb(shell.backgroundColor);
+      expect(rgb, `${themeId} ${shell.selector} background ${shell.backgroundColor}`).not.toBeNull();
+      if (themeId === 'london-salmon') {
+        expect(rgb[0], `${shell.selector} red channel`).toBeGreaterThanOrEqual(245);
+        expect(rgb[1], `${shell.selector} green channel`).toBeGreaterThanOrEqual(215);
+        expect(rgb[2], `${shell.selector} blue channel`).toBeGreaterThanOrEqual(210);
+      } else {
+        expect(Math.max(...rgb), `${themeId} ${shell.selector} should not retain light salmon panel`).toBeLessThan(245);
+      }
+    }
+  };
+
+  await assertThemeOnShells('futuristic-noir', { bg: '#050912', accent: '#6D8DFF', panel: '#0D1628' });
+  await assertThemeOnShells('carbon-fiber-kintsugi', { bg: '#0B0C0D', accent: '#F0C84B', panel: '#151719' });
+  await assertThemeOnShells('london-salmon', { bg: '#F2B7AA', accent: '#B65045', panel: '#FFE1DA' });
 });
 
 test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({ page, browser }) => {

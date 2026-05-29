@@ -2103,48 +2103,49 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    background: var(--choir-panel, #0d1628);
+    color: var(--choir-fg, #f7faff);
   }
 
   .vtext-content {
     padding: 0;
-    background: #12131c;
+    background: var(--choir-panel, #0d1628);
   }
 
   .terminal-content {
     padding: 0;
-    background: #1a1b26;
+    background: var(--choir-panel, #0d1628);
   }
 
   .trace-content {
     padding: 0;
-    background: #0a0d14;
+    background: var(--choir-panel, #0d1628);
   }
 
   .podcast-content {
     padding: 0;
-    background: #080d18;
+    background: var(--choir-panel, #0d1628);
   }
 
   .settings-content {
     padding: 0;
-    background: #171827;
+    background: var(--choir-panel, #0d1628);
   }
 
   .compute-monitor-content {
     padding: 0;
-    background: #080d18;
+    background: var(--choir-panel, #0d1628);
   }
 
   .features-content {
     padding: 0;
-    background: #07111e;
+    background: var(--choir-panel, #0d1628);
   }
 
   .suspended-app-content {
     align-items: center;
     justify-content: center;
-    background:
-      linear-gradient(135deg, rgba(8, 13, 24, 0.96), rgba(15, 23, 42, 0.96));
+    background: var(--choir-panel-strong, #09101f);
   }
 
   .suspended-card {

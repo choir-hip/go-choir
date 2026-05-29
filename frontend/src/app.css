@@ -15,6 +15,189 @@ body {
   color: var(--choir-fg);
 }
 
+.window,
+.floating-window,
+[data-window],
+[data-floating-window] {
+  background: var(--choir-panel, #0d1628) !important;
+  color: var(--choir-fg, #f7faff) !important;
+  border-color: transparent !important;
+}
+
+.window :is(.titlebar, [data-window-titlebar]),
+.floating-window :is(.titlebar, [data-window-titlebar]) {
+  background: color-mix(in srgb, var(--choir-panel-strong, #09101f) 86%, transparent) !important;
+  color: var(--choir-fg, #f7faff) !important;
+  border-color: transparent !important;
+}
+
+.window :is(.titlvtext, .title, [data-window-title]),
+.floating-window :is(.titlvtext, .title, [data-window-title]) {
+  color: var(--choir-fg, #f7faff) !important;
+}
+
+.window :is(.ctrl-btn, [data-window-minimize], [data-window-maximize], [data-window-close]),
+.floating-window :is(.ctrl-btn, [data-window-minimize], [data-window-maximize], [data-window-close]) {
+  color: var(--choir-muted, #9aa9c0) !important;
+}
+
+.app-content {
+  background: var(--choir-panel, #0d1628) !important;
+  color: var(--choir-fg, #f7faff) !important;
+}
+
+.app-content :is(
+  .vtext-editor,
+  .trace-frame,
+  .trace-app,
+  .settings-app,
+  .compute-monitor,
+  .features-app,
+  .terminal-preview,
+  .file-browser,
+  .browser-app,
+  .email-app,
+  .podcast-app,
+  .image-app,
+  .audio-app,
+  .video-app,
+  .pdf-app,
+  .epub-app,
+  .desktop-overview,
+  [data-media-app],
+  [data-file-list],
+  [data-email-app],
+  [data-browser-app],
+  [data-compute-monitor-app],
+  [data-features-app],
+  [data-vtext-editor],
+  [data-trace-app],
+  [data-terminal-preview]
+) {
+  background: var(--choir-panel, #0d1628) !important;
+  color: var(--choir-fg, #f7faff) !important;
+}
+
+.app-content :is(
+  .panel,
+  .card,
+  .recent-card,
+  .detail-card,
+  .message-card,
+  .library-card,
+  .media-card,
+  .document-card,
+  .feature-card,
+  .metric-card,
+  .status-card,
+  .app-card,
+  .trajectory-item,
+  .acceptance-card,
+  .acceptance-row,
+  .evidence-detail,
+  .file-item,
+  .folder-item,
+  .result-row,
+  .episode-row,
+  .show-row,
+  .message-list,
+  .message-detail,
+  .mail-rail,
+  .browser-toolbar,
+  .browser-sidebar,
+  .terminal-preview,
+  .audio-player,
+  .audio-info,
+  .video-control-panel,
+  .video-info,
+  .image-info,
+  .pdf-meta,
+  .epub-meta,
+  .pdf-controls,
+  .epub-controls,
+  .reader-toolbar,
+  .reader-panel,
+  .swimlane,
+  .lane-card,
+  .event-card,
+  .theme-preset,
+  .settings-panel
+) {
+  background: var(--choir-panel-soft, rgba(18, 31, 55, 0.68)) !important;
+  color: var(--choir-fg, #f7faff) !important;
+  border-color: transparent !important;
+}
+
+.app-content :is(
+  button,
+  input,
+  textarea,
+  select,
+  .button,
+  .icon-button,
+  .primary-action,
+  .secondary-action,
+  .toolbar-button,
+  .control-button,
+  .play-button,
+  .audio-play,
+  .video-play
+) {
+  background: var(--choir-control-bg, rgba(19, 32, 59, 0.84)) !important;
+  color: var(--choir-fg, #f7faff) !important;
+  border-color: transparent !important;
+  box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24)) !important;
+}
+
+.app-content :is(
+  button.active,
+  button.selected,
+  [aria-selected='true'],
+  .active,
+  .selected,
+  .is-active,
+  .theme-preset.active,
+  .current,
+  .primary-action
+) {
+  background: var(--choir-selected, rgba(91, 123, 255, 0.22)) !important;
+}
+
+.app-content :is(
+  p,
+  small,
+  .status,
+  .subtle,
+  .muted,
+  .summary,
+  .snippet,
+  .metadata,
+  .meta,
+  .metric-label,
+  .detail-meta,
+  .compact-copy,
+  .audio-position-note,
+  .video-position-note,
+  .empty-state
+) {
+  color: var(--choir-muted, #9aa9c0) !important;
+}
+
+.app-content :is(
+  a,
+  .eyebrow,
+  .kicker,
+  .state-pill,
+  .chip,
+  .badge,
+  .reader-badge,
+  .theme-status,
+  .accent,
+  .link
+) {
+  color: var(--choir-accent-2, #45d7ff) !important;
+}
+
 .app-content :is(button, input, textarea, select) {
   border-color: transparent !important;
   outline: 0;
@@ -76,6 +259,6 @@ body {
 
 :root[data-theme-id='london-salmon'] body::before {
   opacity: 0.16;
-  background-image: radial-gradient(rgba(89, 57, 42, .16) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(159, 69, 62, .18) 1px, transparent 1px);
   background-size: 7px 7px;
 }
