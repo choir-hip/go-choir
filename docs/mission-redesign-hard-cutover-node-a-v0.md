@@ -658,3 +658,27 @@ suggested resume goal string: Continue `docs/mission-redesign-hard-cutover-node-
 evidence artifact refs: this mission doc.
 
 rollback refs: Node A disposable; no Node B/main mutation performed.
+
+### 2026-05-29T07:16Z - Node A Frontend Nix Dependency Blocker
+
+Claim: the first branch CI deploy reached Node A and built the host closure, but failed before activation because the frontend Nix derivation did not have a package-lock cache entry for the newly added TypeScript dependency.
+
+Evidence:
+
+- GitHub Actions run `26623653598` on branch `codex/redesign-hard-cutover-node-a` reached job `Deploy Node A Design Lab`, step `Deploy branch to Node A`.
+- The remote deploy cloned `/opt/go-choir`, reset it to commit `870d4d4`, disabled stale `choiros-rs` services, removed stale `/opt/choiros` and `/var/lib/choiros`, and built `.#nixosConfigurations.go-choir-a.config.system.build.toplevel`.
+- The deploy then failed during `nix build .#frontend`.
+- The Nix log reported `npm error code ENOTCACHED` and `request to https://registry.npmjs.org/typescript failed: cache mode is 'only-if-cached' but no cached response is available`.
+- `flake.nix` documents that local frontend development uses `pnpm-lock.yaml`, while the Nix build uses `frontend/package-lock.json` and `npmDepsHash`.
+
+Belief-state update:
+
+- The TypeScript cutover changed `package.json` and `pnpm-lock.yaml` but did not update `frontend/package-lock.json` and the flake `npmDepsHash`.
+- This is a reproducibility/deploy packaging blocker, not a product-path frontend runtime blocker.
+- The correct fix is to update the npm lockfile and Nix npm dependency hash in a follow-up code commit, then rerun the same branch-scoped Node A deploy workflow.
+
+Remaining error field:
+
+- Need update `frontend/package-lock.json` for `typescript`.
+- Need update `flake.nix` `npmDepsHash` from the Nix build error after the lockfile changes.
+- Need rerun branch CI and then verify Node A health and visual behavior.
