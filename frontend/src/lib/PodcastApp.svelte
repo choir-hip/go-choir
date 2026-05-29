@@ -1,10 +1,11 @@
-<script>
+<script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { buildListenPath, formatTime, parsePodcastFeed } from './podcast.js';
   import { loadMediaProgress, saveMediaPosition } from './media-utils.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { previewPodcastItems } from './public-preview-data';
 
   export let appContext = {};
   export let authenticated = false;
@@ -74,6 +75,7 @@
       return;
     }
     if (!authenticated) {
+      library = previewPodcastItems;
       libraryLoading = false;
       libraryError = '';
       return;
@@ -124,6 +126,7 @@
 
   async function loadLibrary({ force = false } = {}) {
     if (!authenticated) {
+      library = previewPodcastItems;
       libraryLoading = false;
       libraryError = '';
       return;

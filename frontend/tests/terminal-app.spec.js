@@ -143,8 +143,8 @@ test('minimize then restore preserves terminal', async ({ page, authenticator })
   // Terminal window should be hidden (not visible)
   await expect(page.locator('[data-terminal-app]')).not.toBeVisible({ timeout: 5000 });
 
-  // Click the minimized indicator in the bottom bar to restore
-  const restoreBtn = page.locator('[data-bottom-bar] [data-minimized-indicator]').first();
+  // Click the minimized indicator in the prompt surface to restore
+  const restoreBtn = page.locator('[data-prompt-surface] [data-window-tray-item]').first();
   await restoreBtn.click();
 
   // Terminal window should be visible again

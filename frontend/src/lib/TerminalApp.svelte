@@ -33,6 +33,7 @@
   } from './stores/terminal.js';
 
   export let windowId = '';
+  export let authenticated = false;
 
   // Reactive access to this session's error state
   $: session = $terminalSessions[windowId] || {};
@@ -240,10 +241,12 @@
   }
 
   onMount(() => {
+    if (!authenticated) return;
     initTerminal();
   });
 
   onDestroy(() => {
+    if (!authenticated) return;
     cleanup();
   });
 </script>
@@ -253,7 +256,21 @@
   bind:this={terminalContainer}
   data-terminal
 >
-  <!-- ghostty-web renders its canvas here via term.open() -->
+  {#if !authenticated}
+    <div class="terminal-preview" data-terminal-preview>
+      <p class="terminal-kicker">Terminal preview</p>
+      <h2>Shell access requires sign-in</h2>
+      <p>
+        This window opens in logged-out review so every app is visible. A real PTY can inspect or mutate private computer state, so connecting asks for auth.
+      </p>
+      <pre>$ choir status
+public-preview: ready
+$ open apps --preview
+files email trace vtext settings podcast media</pre>
+    </div>
+  {/if}
+
+  <!-- ghostty-web renders its canvas here via term.open() when authenticated -->
 
   <!-- Error display overlay -->
   {#if errorMessage}
@@ -270,9 +287,44 @@
   .terminal-wrapper {
     width: 100%;
     height: 100%;
-    background: #1a1b26;
+    background: var(--choir-panel, #1a1b26);
     overflow: hidden;
     position: relative;
+  }
+
+  .terminal-preview {
+    display: grid;
+    align-content: center;
+    gap: 0.75rem;
+    min-height: 100%;
+    padding: clamp(1rem, 3vw, 2rem);
+    color: var(--choir-fg, #e5edf9);
+    background:
+      radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--choir-accent, #60a5fa) 14%, transparent), transparent 34%),
+      var(--choir-panel, #0b1020);
+  }
+
+  .terminal-kicker,
+  .terminal-preview h2,
+  .terminal-preview p {
+    margin: 0;
+  }
+
+  .terminal-kicker {
+    color: var(--choir-accent, #60a5fa);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .terminal-preview pre {
+    margin: 0;
+    overflow: auto;
+    border-radius: var(--choir-radius-control, 20px);
+    background: color-mix(in srgb, var(--choir-bg, #020617) 82%, transparent);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    padding: 1rem;
+    color: var(--choir-muted, #a8b3c7);
   }
 
   /* Ensure ghostty-web canvas fills the container */

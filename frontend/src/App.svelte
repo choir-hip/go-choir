@@ -20,11 +20,11 @@
   Passkey ceremony errors (cancel/failure) keep the user in a retryable
   guest auth state and never reveal the authenticated shell.
 -->
-<script>
+<script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession } from './lib/auth.js';
-  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme.js';
+  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
@@ -88,20 +88,26 @@
   }
 
   function getAuthIntentMessage(intent) {
-    if (!intent) return 'Sign in to continue.';
+    if (!intent) return 'Choose when to make this preview durable.';
     if (intent.kind === 'prompt') {
-      return `Sign in to run: ${intent.text}`;
+      return `This prompt will run on your computer: ${intent.text}`;
     }
     if (intent.kind === 'session_expired') {
-      return 'Your session expired. Sign in to continue.';
+      return 'Your session ended. Use your passkey to continue.';
     }
     if (intent.kind === 'app_launch') {
-      return `Sign in to open ${intent.appName || 'this app'}.`;
+      return `Open ${intent.appName || 'this app'} with your private computer state.`;
     }
+    if (intent.kind === 'save_vtext') return 'Save this VText revision to your computer.';
+    if (intent.kind === 'publish_vtext') return 'Publish this VText as owner-scoped work.';
+    if (intent.kind === 'file_upload') return 'Upload files into your private computer.';
+    if (intent.kind === 'file_mutation') return 'Change files on your private computer.';
+    if (String(intent.kind || '').startsWith('email')) return 'Use your mailbox, drafts, and send approval.';
+    if (String(intent.kind || '').startsWith('podcast')) return 'Subscribe, import, search providers, or sync playback.';
     if (intent.kind === 'published_vtext_edit') {
-      return `Sign in to edit your version of ${intent.title || 'this published VText'}.`;
+      return `Edit your version of ${intent.title || 'this published VText'}.`;
     }
-    return 'Sign in to continue.';
+    return 'Continue with private computer state.';
   }
 
   function clearAuthOverlay() {
@@ -334,26 +340,27 @@
       {promptReplay}
       {appReplay}
       {publicRoutePath}
+      theme={currentTheme}
       on:logout={handleLogout}
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}
     />
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay>
-        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to continue">
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
           <button
             class="auth-overlay-close"
             data-auth-overlay-close
             type="button"
             on:click={clearAuthOverlay}
-            aria-label="Close sign in"
+            aria-label="Close passkey sign in"
           >
             x
           </button>
-          <p class="auth-intent" data-auth-intent>{authIntentMessage}</p>
           <AuthEntry
             {passkeyError}
             {ceremonyInProgress}
+            intentMessage={authIntentMessage}
             on:authbegin={handleAuthBegin}
             on:clearpasskeyerror={handleClearPasskeyError}
           />
@@ -421,47 +428,39 @@
   .auth-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 20000;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: rgba(3, 7, 18, 0.62);
+    background: color-mix(in srgb, var(--choir-bg, #030712) 58%, transparent);
     backdrop-filter: blur(10px);
   }
 
   .auth-overlay-panel {
     position: relative;
-    width: min(100%, 430px);
+    width: min(100%, 480px);
   }
 
   .auth-overlay-close {
     position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
+    top: 0.85rem;
+    right: 0.85rem;
     z-index: 2;
-    width: 2rem;
-    height: 2rem;
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    width: 2.15rem;
+    height: 2.15rem;
+    border: 0;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.86);
-    color: #e2e8f0;
+    background: var(--choir-control-bg, rgba(15, 23, 42, 0.86));
+    color: var(--choir-fg, #e2e8f0);
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.95rem;
     line-height: 1;
+    box-shadow: var(--choir-control-shadow, 0 12px 28px rgba(0, 0, 0, 0.24));
   }
 
   .auth-overlay-close:hover {
-    background: rgba(30, 41, 59, 0.95);
-  }
-
-  .auth-intent {
-    margin: 0 0 0.65rem;
-    color: #dbeafe;
-    font-size: 0.86rem;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-    text-align: center;
+    background: var(--choir-selected, rgba(30, 41, 59, 0.95));
   }
 
   .auth-overlay :global(.auth-entry) {
@@ -469,6 +468,12 @@
   }
 
   .auth-overlay :global(.auth-card) {
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+    max-width: 480px;
+    box-shadow: var(--choir-shadow-floating, 0 24px 70px rgba(0, 0, 0, 0.46));
+  }
+
+  :global(:root[data-theme-id='london-salmon']) .auth-overlay-close {
+    font-family: var(--choir-font-ui, Georgia, serif);
+    font-style: italic;
   }
 </style>

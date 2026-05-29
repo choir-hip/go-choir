@@ -233,7 +233,7 @@ test('minimized window state preserved after reload', async ({
   await expect(filesWindow).not.toBeVisible();
 
   // Minimized indicator should show
-  const indicator = page.locator('[data-minimized-indicator]');
+  const indicator = page.locator('[data-window-tray-item]');
   await expect(indicator).toHaveCount(1);
 
   // Wait for state save
@@ -249,7 +249,7 @@ test('minimized window state preserved after reload', async ({
   await expect(restoredFilesWindow).not.toBeVisible();
 
   // Minimized indicator should be present
-  await expect(page.locator('[data-minimized-indicator]')).toHaveCount(1);
+  await expect(page.locator('[data-window-tray-item]')).toHaveCount(1);
 
   // Browser window should still be visible
   const visibleWindows = page.locator('[data-window]:visible');

@@ -34,8 +34,8 @@ async function registerAndReloadShell(page, authenticator, email) {
 }
 
 async function openDesktopMenu(page) {
-  await page.locator('[data-show-desktop-btn]').click();
-  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet]').waitFor({ state: 'visible', timeout: 5000 });
 }
 
 // ---------------------------------------------------------------
@@ -174,7 +174,7 @@ test('clicking logout returns to public desktop', async ({
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 
   await openDesktopMenu(page);
-  await expect(page.locator('[data-shell-login]')).toBeVisible();
+  await expect(page.locator('[data-prompt-surface-login]')).toBeVisible();
   await expect(page.locator('[data-shell-logout]')).toHaveCount(0);
 
   // Session should be signed out.

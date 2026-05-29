@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError } from './auth.js';
   import {
@@ -11,6 +11,7 @@
     synthesizeContinuation,
   } from './trace.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { previewTraceSnapshot, previewTraceTrajectories } from './public-preview-data';
 
   const dispatch = createEventDispatcher();
 
@@ -37,7 +38,7 @@
   let continuationError = '';
   let selectedContinuation = null;
   let selectedAcceptanceId = appContext?.acceptanceId || '';
-  let mobilePanel = 'summary';
+  let mobilePanel = 'timeline';
   let lastAppContextTarget = '';
   let copyLogsBusy = false;
   let copyLogsStatus = '';
@@ -148,6 +149,63 @@
     return !!(artifacts?.run_memory || artifacts?.continuation || artifacts?.app_change_package || artifacts?.app_adoption);
   }
 
+  function momentTime(moment) {
+    return parseDate(moment?.timestamp || moment?.created_at || moment?.started_at || moment?.updated_at);
+  }
+
+  function laneTone(moment) {
+    if (moment?.tone) return moment.tone;
+    return stateTone(moment?.state);
+  }
+
+  function buildSwimlanes(agents, items) {
+    const laneMap = new Map();
+    for (const agent of agents || []) {
+      laneMap.set(agent.agent_id, {
+        id: agent.agent_id,
+        label: agent.label || excerpt(agent.agent_id, 18),
+        role: agent.role || '',
+        moments: [],
+      });
+    }
+    for (const moment of items || []) {
+      const agentId = moment.agent_id || moment.agent_label || 'system';
+      if (!laneMap.has(agentId)) {
+        laneMap.set(agentId, {
+          id: agentId,
+          label: moment.agent_label || excerpt(agentId, 18),
+          role: 'moment source',
+          moments: [],
+        });
+      }
+      laneMap.get(agentId).moments.push(moment);
+    }
+
+    const times = (items || []).map(momentTime).filter((time) => time > 0);
+    const start = times.length ? Math.min(...times) : Date.now();
+    const end = times.length ? Math.max(...times) : start + 60_000;
+    const range = Math.max(60_000, end - start);
+
+    return [...laneMap.values()].map((lane) => {
+      const sorted = [...lane.moments].sort((a, b) => momentTime(a) - momentTime(b));
+      return {
+        ...lane,
+        moments: sorted.map((moment, index) => {
+          const time = momentTime(moment) || start + index * 10_000;
+          const nextTime = momentTime(sorted[index + 1]) || Math.min(start + range, time + Math.max(18_000, range / Math.max(4, sorted.length + 1)));
+          const left = Math.max(0, Math.min(96, ((time - start) / range) * 100));
+          const width = Math.max(4.5, Math.min(36, ((nextTime - time) / range) * 100));
+          return {
+            ...moment,
+            laneLeft: left,
+            laneWidth: Math.min(width, 100 - left),
+            laneTone: laneTone(moment),
+          };
+        }),
+      };
+    });
+  }
+
   function latestRunId(items) {
     for (let index = (items || []).length - 1; index >= 0; index -= 1) {
       const runId = (items[index]?.loop_id || '').trim();
@@ -181,12 +239,20 @@
     snapshotLoading = false;
     detailLoading = false;
     error = '';
-    trajectories = [];
-    snapshot = null;
-    selectedTrajectoryId = '';
+    trajectories = previewTraceTrajectories;
+    snapshot = previewTraceSnapshot;
+    selectedTrajectoryId = previewTraceSnapshot.trajectory.trajectory_id;
     selectedAgentId = '';
-    selectedMomentId = '';
-    momentDetails = {};
+    selectedMomentId = previewTraceSnapshot.moments[previewTraceSnapshot.moments.length - 1]?.moment_id || '';
+    momentDetails = {
+      [selectedMomentId]: {
+        moment: previewTraceSnapshot.moments[previewTraceSnapshot.moments.length - 1],
+        payload: {
+          preview: true,
+          note: 'Local Trace preview. Private run evidence loads after sign-in.',
+        },
+      },
+    };
     selectedContinuation = null;
     selectedAcceptanceId = '';
     continuationError = '';
@@ -467,7 +533,14 @@
   }
 
   async function selectTrajectory(trajectoryId) {
-    if (!authenticated) return;
+    if (!authenticated) {
+      const selected = previewTraceTrajectories.find((item) => item.trajectory_id === trajectoryId);
+      if (!selected) return;
+      selectedTrajectoryId = trajectoryId;
+      snapshot = { ...previewTraceSnapshot, trajectory: selected };
+      mobilePanel = 'timeline';
+      return;
+    }
     if (!trajectoryId || trajectoryId === selectedTrajectoryId) return;
     selectedTrajectoryId = trajectoryId;
     selectedAgentId = '';
@@ -476,7 +549,7 @@
     selectedContinuation = null;
     selectedAcceptanceId = '';
     continuationError = '';
-    mobilePanel = 'summary';
+    mobilePanel = 'timeline';
     userPinnedTrajectory = true;
     await loadTrajectorySnapshot(trajectoryId);
   }
@@ -496,12 +569,23 @@
     momentDetails = {};
     selectedContinuation = null;
     continuationError = '';
-    mobilePanel = 'summary';
+    mobilePanel = 'timeline';
     await loadTrajectorySnapshot(trajectoryId);
   }
 
   async function selectMoment(momentId) {
-    if (!authenticated) return;
+    if (!authenticated) {
+      selectedMomentId = momentId;
+      mobilePanel = 'inspector';
+      momentDetails = {
+        ...momentDetails,
+        [momentId]: {
+          moment: previewTraceSnapshot.moments.find((item) => item.moment_id === momentId),
+          payload: { preview: true, note: 'Local inspector detail; not backend proof.' },
+        },
+      };
+      return;
+    }
     if (!momentId) return;
     selectedMomentId = momentId;
     mobilePanel = 'inspector';
@@ -571,6 +655,7 @@
   $: activeAcceptance =
     acceptances.find((item) => item.acceptance_id === selectedAcceptanceId) || acceptances[0] || null;
   $: graphLayout = buildGraphLayout(graphAgents, graphEdges);
+  $: swimlanes = buildSwimlanes(graphAgents, moments);
   $: activeMoment = moments.find((moment) => moment.moment_id === selectedMomentId) || moments[moments.length - 1] || null;
   $: activeDetail = selectedMomentId ? momentDetails[selectedMomentId] : null;
   $: geometry = runGeometryStats(moments);
@@ -596,7 +681,7 @@
         selectedContinuation = null;
         selectedAcceptanceId = '';
         continuationError = '';
-        mobilePanel = 'summary';
+        mobilePanel = 'timeline';
         scheduleSnapshotRefresh();
       }
       scheduleTrajectoryIndexRefresh();
@@ -647,9 +732,7 @@
     </div>
 
     <div class="trajectory-list" data-trace-trajectory-list>
-      {#if !authenticated}
-        <div class="empty-state" data-trace-guest-sidebar>Sign in to inspect private trajectories.</div>
-      {:else if loadingIndex}
+      {#if loadingIndex}
         <div class="empty-state">Loading trajectories…</div>
       {:else if trajectories.length === 0}
         <div class="empty-state">No trajectories yet. Start with the prompt bar or open VText.</div>
@@ -679,22 +762,12 @@
     </aside>
 
     <section class="trace-main">
-    {#if !authenticated}
-      <section class="panel guest-trace-panel" data-trace-guest>
-        <div class="panel-header">
-          <div>
-            <h4>Trace evidence is private</h4>
-            <p>Use the public desktop without loading run evidence. Sign in when you need trajectories, moments, worker provenance, or continuation controls.</p>
-          </div>
-          <span class="status-pill neutral">read shell</span>
+      {#if !authenticated}
+        <div class="preview-banner" data-trace-guest>
+          <span>Local preview</span>
+          <button class="ghost-btn" data-trace-guest-sign-in on:click={requestTraceAuth}>Sign in for private Trace</button>
         </div>
-        <div class="guest-trace-actions">
-          <button class="ghost-btn" data-trace-guest-sign-in on:click={requestTraceAuth}>
-            Sign in for Trace
-          </button>
-        </div>
-      </section>
-    {:else}
+      {/if}
       {#if error}
         <div class="error-banner">{error}</div>
       {/if}
@@ -1067,11 +1140,11 @@
             {/if}
           </section>
 
-          <section class="panel strip-panel" data-trace-moment-strip>
+          <section class="panel strip-panel" data-trace-swimlanes>
             <div class="panel-header">
               <div>
-                <h4>Trajectory moments</h4>
-                <p>Each dot is a durable causal moment, not a raw log line.</p>
+                <h4>Swimlanes</h4>
+                <p>Agent and tool duration bars with failure ticks and selectable moments.</p>
               </div>
               {#if selectedAgentId}
                 <span class="status-pill neutral">
@@ -1083,22 +1156,39 @@
             {#if moments.length === 0}
               <div class="empty-state">No moments captured yet for this trajectory.</div>
             {:else}
-              <div class="moment-strip">
-                {#each moments as moment (moment.moment_id)}
-                  <button
-                    class:selected={selectedMomentId === moment.moment_id}
-                    class:muted={selectedAgentId && selectedAgentId !== moment.agent_id}
-                    class={`moment-chip tone-${moment.tone}`}
-                    data-trace-moment
-                    data-trace-moment-id={moment.moment_id}
-                    on:click={() => selectMoment(moment.moment_id)}
-                  >
-                    <span class="moment-dot" aria-hidden="true"></span>
-                    <span class="moment-agent">{moment.agent_label || 'agent'}</span>
-                    <span class="moment-summary">{excerpt(moment.summary, 72)}</span>
-                    <span class="moment-meta">{moment.kind} · {formatTime(moment.timestamp)}</span>
-                  </button>
+              <div class="swimlane-chart" data-trace-swimlane-chart>
+                {#each swimlanes as lane (lane.id)}
+                  <div class:selected={selectedAgentId === lane.id} class:muted={selectedAgentId && selectedAgentId !== lane.id} class="swimlane-row" data-trace-swimlane data-trace-swimlane-id={lane.id}>
+                    <button class="swimlane-label" type="button" on:click={() => toggleAgent(lane.id)}>
+                      <strong>{lane.label}</strong>
+                      <small>{lane.role || 'agent'}</small>
+                    </button>
+                    <div class="swimlane-rail">
+                      {#each lane.moments as moment (moment.moment_id)}
+                        <button
+                          class:selected={selectedMomentId === moment.moment_id}
+                          class:failed={moment.laneTone === 'error'}
+                          class={`swimlane-moment tone-${moment.laneTone}`}
+                          style={`left: ${moment.laneLeft}%; width: ${moment.laneWidth}%;`}
+                          type="button"
+                          data-trace-moment
+                          data-trace-moment-id={moment.moment_id}
+                          title={`${moment.agent_label || lane.label}: ${moment.summary || moment.title || moment.kind}`}
+                          on:click={() => selectMoment(moment.moment_id)}
+                        >
+                          <span class="swimlane-bar"></span>
+                          <span class="swimlane-dot"></span>
+                          {#if moment.laneTone === 'error'}<span class="failure-tick" aria-label="failed"></span>{/if}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
                 {/each}
+                <div class="swimlane-legend">
+                  <span><i class="legend-dot success"></i>Completed</span>
+                  <span><i class="legend-dot active"></i>In progress</span>
+                  <span><i class="legend-dot error"></i>Failed</span>
+                </div>
               </div>
             {/if}
           </section>
@@ -1291,7 +1381,6 @@
       {:else if !loadingIndex}
         <div class="empty-state">Select a trajectory to inspect its graph, moments, and message flow.</div>
       {/if}
-    {/if}
     </section>
   </div>
 </div>
@@ -1310,8 +1399,8 @@
   .trace-app {
     display: grid;
     grid-template-columns: 292px minmax(0, 1fr);
-    background: #0a0d14;
-    color: #e2e8f0;
+    background: var(--choir-panel, #0a0d14);
+    color: var(--choir-fg, #e2e8f0);
     overscroll-behavior: contain;
     touch-action: pan-y;
   }
@@ -1331,14 +1420,16 @@
   }
 
   .trace-sidebar {
-    border-right: 1px solid rgba(148, 163, 184, 0.12);
     padding: 0.9rem;
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
     min-height: 0;
     overflow: hidden;
-    background: rgba(9, 12, 19, 0.92);
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--choir-accent, #60a5fa) 10%, transparent), transparent 96%),
+      var(--choir-panel-soft, rgba(9, 12, 19, 0.92));
+    box-shadow: var(--choir-card-shadow, 18px 0 36px rgba(0, 0, 0, 0.14));
   }
 
   .trace-main {
@@ -1399,9 +1490,10 @@
     justify-content: center;
     gap: 0.3rem;
     padding: 0.18rem 0.5rem;
-    border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: var(--choir-radius-control-sm, 14px);
+    border: 0;
     background: rgba(15, 23, 42, 0.65);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
     font-size: 0.72rem;
     color: #cbd5e1;
   }
@@ -1444,9 +1536,10 @@
   .detail-card,
   .empty-state,
   .error-banner {
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    border: 0;
     background: rgba(15, 23, 42, 0.55);
-    border-radius: 14px;
+    border-radius: var(--choir-radius-control, 20px);
+    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22);
   }
 
   .trajectory-item {
@@ -1459,8 +1552,9 @@
   }
 
   .trajectory-item.selected {
-    border-color: rgba(96, 165, 250, 0.38);
-    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.28);
+    box-shadow:
+      0 16px 38px rgba(0, 0, 0, 0.22),
+      0 0 34px rgba(96, 165, 250, 0.2);
   }
 
   .trajectory-title {
@@ -1524,8 +1618,8 @@
   }
 
   .mobile-summary-strip span {
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 999px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(2, 6, 23, 0.34);
     color: #cbd5e1;
     font-size: 0.74rem;
@@ -1583,8 +1677,8 @@
   .acceptance-tab {
     min-width: 0;
     padding: 0.55rem 0.65rem;
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: var(--choir-radius-control-sm, 14px);
+    border: 0;
     background: rgba(2, 6, 23, 0.42);
     color: #cbd5e1;
     cursor: pointer;
@@ -1594,8 +1688,8 @@
   }
 
   .acceptance-tab.selected {
-    border-color: rgba(96, 165, 250, 0.42);
     background: rgba(15, 23, 42, 0.74);
+    box-shadow: 0 0 30px rgba(96, 165, 250, 0.18);
   }
 
   .acceptance-tab small {
@@ -1614,9 +1708,10 @@
   .evidence-detail {
     min-width: 0;
     max-width: 100%;
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    border-radius: 12px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(2, 6, 23, 0.34);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
   }
 
   .acceptance-card {
@@ -1714,8 +1809,8 @@
   }
 
   .geometry-chip {
-    border: 1px solid rgba(96, 165, 250, 0.2);
-    border-radius: 12px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(15, 23, 42, 0.58);
     padding: 0.72rem 0.78rem;
     display: flex;
@@ -1763,8 +1858,8 @@
   }
 
   .search-card {
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    border-radius: 14px;
+    border: 0;
+    border-radius: var(--choir-radius-control, 20px);
     padding: 0.75rem;
     background: rgba(2, 6, 23, 0.34);
     display: grid;
@@ -1772,11 +1867,11 @@
   }
 
   .search-card.success {
-    border-color: rgba(134, 239, 172, 0.24);
+    box-shadow: 0 0 28px rgba(134, 239, 172, 0.12);
   }
 
   .search-card.error {
-    border-color: rgba(252, 165, 165, 0.34);
+    box-shadow: 0 0 28px rgba(252, 165, 165, 0.14);
   }
 
   .search-card-top,
@@ -1802,8 +1897,8 @@
     min-height: 360px;
     margin-top: 1rem;
     background: rgba(2, 6, 23, 0.45);
-    border-radius: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.08);
+    border-radius: var(--choir-radius-control, 20px);
+    border: 0;
     overflow: hidden;
   }
 
@@ -1828,11 +1923,10 @@
     width: 168px;
     min-height: 68px;
     padding: 0.7rem;
-    border-radius: 14px;
+    border-radius: var(--choir-radius-control, 20px);
     text-align: left;
     color: inherit;
     background: rgba(9, 14, 23, 0.96);
-    border: 1px solid rgba(148, 163, 184, 0.16);
     box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
     cursor: pointer;
     display: grid;
@@ -1840,8 +1934,7 @@
   }
 
   .agent-node.selected {
-    border-color: rgba(96, 165, 250, 0.48);
-    box-shadow: 0 12px 30px rgba(30, 41, 59, 0.32), inset 0 0 0 1px rgba(96, 165, 250, 0.35);
+    box-shadow: 0 12px 30px rgba(30, 41, 59, 0.32), 0 0 34px rgba(96, 165, 250, 0.18);
   }
 
   .agent-node.dimmed {
@@ -1873,8 +1966,8 @@
 
   .ghost-btn {
     padding: 0.35rem 0.65rem;
-    border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: var(--choir-radius-control-sm, 14px);
+    border: 0;
     background: rgba(15, 23, 42, 0.42);
     color: #cbd5e1;
     cursor: pointer;
@@ -1920,8 +2013,8 @@
     gap: 0.35rem 0.75rem;
     align-items: center;
     padding: 0.7rem 0.8rem;
-    border-radius: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: var(--choir-radius-control, 20px);
+    border: 0;
     background: rgba(2, 6, 23, 0.4);
     text-align: left;
     color: inherit;
@@ -1929,8 +2022,8 @@
   }
 
   .moment-chip.selected {
-    border-color: rgba(96, 165, 250, 0.38);
     background: rgba(15, 23, 42, 0.72);
+    box-shadow: 0 0 30px rgba(96, 165, 250, 0.16);
   }
 
   .moment-chip.muted {
@@ -1960,6 +2053,171 @@
     font-size: 0.74rem;
   }
 
+  .swimlane-chart {
+    margin-top: 0.9rem;
+    display: grid;
+    gap: 0.58rem;
+    min-width: 0;
+  }
+
+  .swimlane-row {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 0.24fr) minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: center;
+    min-width: 0;
+    opacity: 1;
+  }
+
+  .swimlane-row.muted {
+    opacity: 0.42;
+  }
+
+  .swimlane-row.selected .swimlane-label {
+    color: var(--choir-accent, #60a5fa);
+  }
+
+  .swimlane-label {
+    min-width: 0;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: rgba(15, 23, 42, 0.42);
+    color: #cbd5e1;
+    padding: 0.42rem 0.5rem;
+    text-align: left;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+    cursor: pointer;
+  }
+
+  .swimlane-label strong,
+  .swimlane-label small {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .swimlane-label strong {
+    font-size: 0.78rem;
+  }
+
+  .swimlane-label small {
+    color: #94a3b8;
+    font-size: 0.68rem;
+  }
+
+  .swimlane-rail {
+    position: relative;
+    min-width: 0;
+    height: 2.1rem;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background:
+      linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px) 0 0 / 12.5% 100%,
+      rgba(2, 6, 23, 0.34);
+    box-shadow: inset 0 10px 20px rgba(255, 255, 255, 0.018), 0 12px 28px rgba(0, 0, 0, 0.16);
+  }
+
+  .swimlane-moment {
+    position: absolute;
+    top: 50%;
+    display: block;
+    min-width: 1.4rem;
+    height: 1.1rem;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: transparent;
+    padding: 0;
+    transform: translateY(-50%);
+    cursor: pointer;
+  }
+
+  .swimlane-bar {
+    position: absolute;
+    inset: 0.3rem 0;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.34;
+    box-shadow: 0 0 18px currentColor;
+  }
+
+  .swimlane-dot {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 0.68rem;
+    height: 0.68rem;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translate(-10%, -50%);
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .swimlane-moment.selected .swimlane-bar {
+    opacity: 0.54;
+  }
+
+  .swimlane-moment.selected .swimlane-dot {
+    width: 0.82rem;
+    height: 0.82rem;
+  }
+
+  .failure-tick {
+    position: absolute;
+    right: -0.1rem;
+    top: 50%;
+    width: 0.82rem;
+    height: 0.82rem;
+    border-radius: 999px;
+    background: #ef4444;
+    transform: translate(50%, -50%);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.8);
+  }
+
+  .swimlane-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.72rem;
+  }
+
+  .swimlane-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+  }
+
+  .legend-dot {
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .legend-dot.success,
+  .tone-success {
+    color: #86efac;
+  }
+
+  .legend-dot.active,
+  .tone-active {
+    color: #60a5fa;
+  }
+
+  .legend-dot.error,
+  .tone-error {
+    color: #f87171;
+  }
+
+  .tone-tool {
+    color: #38bdf8;
+  }
+
+  .tone-message {
+    color: #a78bfa;
+  }
+
   .inspector-panel {
     min-height: 0;
     display: flex;
@@ -1969,9 +2227,9 @@
 
   .inspector-summary {
     padding: 0.85rem;
-    border-radius: 14px;
+    border-radius: var(--choir-radius-control, 20px);
     background: rgba(2, 6, 23, 0.42);
-    border: 1px solid rgba(148, 163, 184, 0.08);
+    border: 0;
     display: grid;
     gap: 0.55rem;
   }
@@ -2040,7 +2298,7 @@
   .empty-state,
   .error-banner {
     padding: 0.85rem;
-    border-radius: 14px;
+    border-radius: var(--choir-radius-control, 20px);
     font-size: 0.82rem;
   }
 
@@ -2053,7 +2311,7 @@
   .error-banner {
     color: #fecaca;
     background: rgba(127, 29, 29, 0.82);
-    border: 1px solid rgba(248, 113, 113, 0.26);
+    box-shadow: 0 0 30px rgba(248, 113, 113, 0.18);
   }
 
   @media (max-width: 1100px) {
@@ -2090,7 +2348,7 @@
 
     .trace-sidebar {
       border-right: none;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
       max-height: min(44vh, 18rem);
     }
 
@@ -2200,8 +2458,8 @@
       gap: 0.4rem;
       overflow-x: auto;
       padding: 0.55rem 0.65rem;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      background: rgba(9, 12, 19, 0.96);
+      background: var(--choir-panel-soft, rgba(9, 12, 19, 0.96));
+      box-shadow: var(--choir-card-shadow, 0 16px 32px rgba(0, 0, 0, 0.18));
       scrollbar-width: none;
     }
 
@@ -2212,18 +2470,18 @@
     .mobile-trace-tabs button {
       flex: 1 0 auto;
       min-height: 34px;
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 10px;
-      background: rgba(15, 23, 42, 0.74);
-      color: #cbd5e1;
+      border: 0;
+      border-radius: var(--choir-radius-control-sm, 14px);
+      background: var(--choir-control-bg, rgba(15, 23, 42, 0.74));
+      color: var(--choir-fg, #cbd5e1);
       cursor: pointer;
       font-weight: 820;
     }
 
     .mobile-trace-tabs button.selected {
-      border-color: rgba(96, 165, 250, 0.52);
-      background: rgba(37, 99, 235, 0.26);
-      color: #eff6ff;
+      background: var(--choir-selected, rgba(37, 99, 235, 0.26));
+      box-shadow: var(--choir-control-shadow, 0 0 30px rgba(96, 165, 250, 0.18));
+      color: var(--choir-fg, #eff6ff);
     }
 
     .trace-app[data-mobile-panel='timeline'] .trace-sidebar,
@@ -2258,7 +2516,7 @@
 
     .trace-sidebar {
       border-right: none;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
     }
 
     .sidebar-header,

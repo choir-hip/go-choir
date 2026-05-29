@@ -38,7 +38,7 @@ function uniqueEmail() {
 /**
  * Wait for the desktop shell's live channel to show "Connected".
  * After the M6 desktop rewrite, the live status is rendered by the
- * BottomBar component inside the Desktop.
+ * PromptSurface component inside the Desktop.
  *
  * NOTE: In some test environments the WebSocket may not reach
  * "Connected" state due to proxy timing. This helper also accepts
@@ -137,7 +137,7 @@ test('session renewal keeps the desktop shell stable after access cookie expiry'
   await expect(page.locator('[data-shell]')).toBeVisible();
   await expect(page.locator('[data-auth-entry]')).not.toBeVisible();
 
-  // The live channel status should be visible in the bottom bar.
+  // The live channel status should be visible in the prompt surface.
   await expect(page.locator('[data-shell-live-status]')).toBeVisible();
 });
 

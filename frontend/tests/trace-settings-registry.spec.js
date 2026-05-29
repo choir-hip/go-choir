@@ -128,15 +128,15 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
       bg: style.getPropertyValue('--choir-bg').trim(),
       panel: style.getPropertyValue('--choir-panel').trim(),
       border: style.getPropertyValue('--choir-border').trim(),
-      bottomBarHeight: style.getPropertyValue('--choir-bottom-bar-height').trim(),
+      promptSurfaceSize: style.getPropertyValue('--choir-prompt-surface-size').trim(),
     };
   });
-  expect(rootTheme.id).toBe('system-noir');
-  expect(rootTheme.bg).toBe('#0b0d10');
-  expect(rootTheme.panel).toBe('#171827');
-  expect(rootTheme.border).toBe('rgba(148, 163, 184, 0.18)');
-  expect(rootTheme.bottomBarHeight).toMatch(/^\d+px$/);
-  expect(Number.parseInt(rootTheme.bottomBarHeight, 10)).toBeGreaterThanOrEqual(56);
+  expect(rootTheme.id).toBe('futuristic-noir');
+  expect(rootTheme.bg).toBe('#050912');
+  expect(rootTheme.panel).toBe('#0D1628');
+  expect(rootTheme.border).toBe('rgba(133, 159, 211, 0.22)');
+  expect(rootTheme.promptSurfaceSize).toMatch(/^\d+px$/);
+  expect(Number.parseInt(rootTheme.promptSurfaceSize, 10)).toBeGreaterThanOrEqual(56);
 
   const expectedApps = [
     ['files', 'Files', '📁'],
@@ -159,17 +159,17 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   await expect(settings.locator('[data-settings-account]')).toContainText(email);
   await expect(settings.locator('[data-settings-theme-validation]')).toContainText('valid config');
   await expect(settings.locator('[data-theme-presets]')).toBeVisible();
-  await expect(settings.locator('[data-theme-preset="next-workstation"]')).toBeVisible();
-  await settings.locator('[data-theme-preset="frutiger-aero"]').click();
-  await expect(settings.locator('[data-settings-theme-validation]')).toContainText('Frutiger Aero: valid config');
+  await expect(settings.locator('[data-theme-preset="carbon-fiber-kintsugi"]')).toBeVisible();
+  await settings.locator('[data-theme-preset="london-salmon"]').click();
+  await expect(settings.locator('[data-settings-theme-validation]')).toContainText('London Salmon: valid config');
   const appliedTheme = await page.locator('.app-root').evaluate((node) => ({
     id: node.getAttribute('data-theme-id'),
     accent: getComputedStyle(node).getPropertyValue('--choir-accent').trim(),
   }));
-  expect(appliedTheme.id).toBe('frutiger-aero');
-  expect(appliedTheme.accent).toBe('#7bd923');
+  expect(appliedTheme.id).toBe('london-salmon');
+  expect(appliedTheme.accent).toBe('#A44F38');
   const editorValue = await settings.locator('[data-theme-editor]').inputValue();
-  expect(editorValue).toContain('"id": "frutiger-aero"');
+  expect(editorValue).toContain('"id": "london-salmon"');
   await expect(settings.locator('[data-settings-runtime-status]')).toBeVisible();
   await expect(settings.locator('[data-settings-promotions]')).toBeVisible();
   const promotionEvidence =

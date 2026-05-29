@@ -42,9 +42,9 @@ function uniqueEmail() {
 /**
  * Wait for the desktop shell's live channel to show "Connected".
  * After the M6 desktop rewrite, the live status is rendered by the
- * BottomBar component inside the Desktop (not the old Shell component).
+ * PromptSurface component inside the Desktop (not the old Shell component).
  * The data-shell-live-status alias is preserved on the connection
- * status dot in the bottom bar.
+ * status dot in the prompt surface.
  *
  * NOTE: In some test environments the WebSocket may not reach
  * "Connected" state due to proxy timing. This helper also accepts
@@ -85,8 +85,8 @@ async function setupAuthenticatedShell(page) {
 }
 
 async function clickShellLogout(page) {
-  await page.locator('[data-show-desktop-btn]').click();
-  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet]').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('[data-shell-logout]').click();
 }
 
@@ -210,7 +210,7 @@ test('VAL-CROSS-101: new user sees live channel status after registration', asyn
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   // NOTE: Bootstrap accordion ([data-shell-bootstrap]) was removed in M6
-  // desktop rewrite. The live channel status should be visible in the bottom bar.
+  // desktop rewrite. The live channel status should be visible in the prompt surface.
   const liveStatus = page.locator('[data-shell-live-status]');
   await expect(liveStatus).toBeVisible();
 });
@@ -278,7 +278,7 @@ test('VAL-CROSS-102: returning user sees live channel status after login', async
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   // NOTE: Bootstrap accordion removed in M6 rewrite.
-  // The live channel status should be visible in the bottom bar.
+  // The live channel status should be visible in the prompt surface.
   const liveStatus = page.locator('[data-shell-live-status]');
   await expect(liveStatus).toBeVisible();
 });

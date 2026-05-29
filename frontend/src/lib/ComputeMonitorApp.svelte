@@ -1,16 +1,15 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { activeWindowId, focusWindow, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
+  import { activeWindowId, focusWindow, isHeavyAppId, restoreWindow, suspendBackgroundHeavyWindows, windows } from './stores/desktop.js';
   import { AuthRequiredError } from './auth.js';
   import { fetchComputeStatus, wakeCurrentComputer } from './compute-monitor.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { previewComputeStatus } from './public-preview-data';
 
   export let windowId = '';
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
-  const HEAVY_APPS = new Set(['browser', 'features', 'terminal', 'vtext', 'trace', 'podcast', 'image', 'audio', 'video', 'pdf', 'epub']);
-
   let status = null;
   let loading = false;
   let error = '';
@@ -23,7 +22,7 @@
   $: runtime = status?.runtime || {};
   $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
   $: visibleWindows = currentWindows.filter((win) => win.mode !== 'minimized');
-  $: heavyWindows = visibleWindows.filter((win) => HEAVY_APPS.has(win.appId));
+  $: heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
   $: suspendedWindows = visibleWindows.filter((win) => win.restoreSuspended);
   $: healthState = !status
     ? 'loading'
@@ -50,7 +49,12 @@
   });
 
   async function refresh() {
-    if (!authenticated) return;
+    if (!authenticated) {
+      status = previewComputeStatus;
+      loading = false;
+      error = '';
+      return;
+    }
     loading = true;
     error = '';
     try {
@@ -67,6 +71,10 @@
   }
 
   async function handleWakeComputer() {
+    if (!authenticated) {
+      actionStatus = 'Sign in to wake or mutate a durable computer.';
+      return;
+    }
     actionStatus = 'Waking current computer...';
     try {
       await wakeCurrentComputer();
@@ -214,10 +222,13 @@
   </div>
 
   <section class="panel recovery-panel" data-compute-monitor-recovery>
-    <div class="panel-heading">
-      <h2>Safe Recovery</h2>
-      <span class="chip">state preserving</span>
-    </div>
+      <div class="panel-heading">
+        <h2>Safe Recovery</h2>
+        <span class="chip">state preserving</span>
+      </div>
+    {#if !authenticated}
+      <p class="compact-copy">Preview telemetry is local UI data. Recovery actions require sign-in because they mutate a durable computer.</p>
+    {/if}
     <div class="action-grid">
       <button type="button" on:click={handleSuspendBackgroundApps}>Suspend background apps</button>
       <button type="button" on:click={handleWakeComputer} disabled={!status?.capabilities?.wake_current_computer}>Wake current computer</button>
@@ -252,7 +263,7 @@
             <span class="window-icon">{win.icon || '□'}</span>
             <span class="window-copy">
               <strong>{win.title}</strong>
-              <small>{win.appId} · {win.mode}{HEAVY_APPS.has(win.appId) ? ' · heavy' : ''}{win.restoreSuspended ? ' · suspended' : ''}</small>
+              <small>{win.appId} · {win.mode}{isHeavyAppId(win.appId) ? ' · heavy' : ''}{win.restoreSuspended ? ' · suspended' : ''}</small>
             </span>
           </button>
         {/each}

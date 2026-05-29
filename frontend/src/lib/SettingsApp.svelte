@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import { BUILD_INFO } from './build-info.js';
@@ -10,16 +10,17 @@
     normalizeThemeConfig,
     themeCSSVariables,
     validateThemeConfig,
-  } from './theme.js';
+  } from './theme';
 
   export let currentUser = null;
+  export let currentTheme = DEFAULT_THEME;
 
   const dispatch = createEventDispatcher();
 
   let loading = true;
   let error = '';
   let health = null;
-  let selectedTheme = DEFAULT_THEME;
+  let selectedTheme = normalizeThemeConfig(currentTheme);
   let themeJSON = JSON.stringify(DEFAULT_THEME, null, 2);
   let themeError = '';
   let themeNotice = '';
@@ -58,6 +59,11 @@
 
   function handleOpenComputeMonitor() {
     dispatch('opencomputemonitor');
+  }
+
+  $: if (!currentUser?.email && currentTheme?.id && currentTheme.id !== selectedTheme.id) {
+    selectedTheme = normalizeThemeConfig(currentTheme);
+    themeJSON = JSON.stringify(selectedTheme, null, 2);
   }
 
   async function loadStoredTheme() {
@@ -104,7 +110,7 @@
   let removeLiveListener = () => {};
 
   onMount(async () => {
-    selectedTheme = await loadStoredTheme();
+    selectedTheme = currentUser?.email ? await loadStoredTheme() : normalizeThemeConfig(currentTheme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
     removeLiveListener = addLiveEventListener((message) => {
@@ -137,9 +143,9 @@
     <section class="settings-card" data-settings-account>
       <div>
         <h3>Account</h3>
-        <p class="muted">Signed in as</p>
+        <p class="muted">{currentUser?.email ? 'Signed in as' : 'Logged-out review'}</p>
       </div>
-      <strong class="account-email">{currentUser?.email || 'unknown'}</strong>
+      <strong class="account-email">{currentUser?.email || 'Public preview'}</strong>
     </section>
 
     <section class="settings-card" data-settings-theme>
@@ -168,15 +174,17 @@
           </button>
         {/each}
       </div>
-      <label class="theme-editor-label" for="theme-editor">Theme JSON</label>
-      <textarea
-        id="theme-editor"
-        class="theme-editor"
-        data-theme-editor
-        spellcheck="false"
-        value={themeJSON}
-        on:input={handleThemeJSONInput}
-      ></textarea>
+      <details class="theme-dev-panel">
+        <summary>Developer theme JSON</summary>
+        <textarea
+          id="theme-editor"
+          class="theme-editor"
+          data-theme-editor
+          spellcheck="false"
+          value={themeJSON}
+          on:input={handleThemeJSONInput}
+        ></textarea>
+      </details>
       {#if themeError}
         <p class="theme-error" data-theme-error>{themeError}</p>
       {:else if themeNotice}
@@ -272,7 +280,7 @@
   h2 {
     margin-bottom: 0.4rem;
     font-size: clamp(1.55rem, 4vw, 2.5rem);
-    letter-spacing: -0.05em;
+    letter-spacing: 0;
   }
 
   h3 {
@@ -291,9 +299,9 @@
   }
 
   .settings-card {
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    border-radius: var(--choir-radius-lg, 18px);
-    background: rgba(15, 23, 42, 0.52);
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
+    background: var(--choir-panel-soft, rgba(15, 23, 42, 0.52));
     padding: 1rem;
     box-shadow: var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.28));
   }
@@ -321,7 +329,7 @@
     width: 2.3rem;
     height: 2.3rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
   }
 
   .theme-swatch span:nth-child(1) {
@@ -338,7 +346,7 @@
 
   .theme-status {
     margin-top: 0.65rem;
-    color: #bfdbfe;
+    color: var(--choir-accent-2, #bfdbfe);
     font-size: 0.78rem;
     font-weight: 700;
   }
@@ -355,10 +363,11 @@
     align-items: center;
     gap: 0.45rem;
     min-height: 2.25rem;
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: var(--choir-radius-md, 12px);
-    background: rgba(15, 23, 42, 0.56);
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: var(--choir-control-bg, rgba(15, 23, 42, 0.56));
     color: var(--choir-fg, #e2e8f0);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
     cursor: pointer;
     padding: 0.45rem 0.6rem;
     text-align: left;
@@ -366,33 +375,39 @@
 
   .theme-preset:hover,
   .theme-preset.active {
-    border-color: rgba(96, 165, 250, 0.48);
-    background: rgba(96, 165, 250, 0.12);
+    background: var(--choir-selected, rgba(96, 165, 250, 0.12));
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24)), var(--choir-shadow-glow, 0 0 42px rgba(89,125,255,.22));
   }
 
   .preset-dot {
     width: 0.78rem;
     height: 0.78rem;
-    border: 1px solid rgba(255, 255, 255, 0.42);
     border-radius: 50%;
+    box-shadow: 0 0 14px currentColor;
     flex-shrink: 0;
   }
 
-  .theme-editor-label {
-    display: block;
+  .theme-dev-panel {
     margin-top: 0.9rem;
+    border-radius: var(--choir-radius-control, 20px);
+    background: color-mix(in srgb, var(--choir-bg, #020617) 46%, transparent);
+    padding: 0.62rem;
+  }
+
+  .theme-dev-panel summary {
     color: var(--choir-muted, #94a3b8);
     font-size: 0.78rem;
     font-weight: 800;
+    cursor: pointer;
   }
 
   .theme-editor {
     width: 100%;
     min-height: 12rem;
     margin-top: 0.4rem;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: var(--choir-radius-md, 12px);
-    background: rgba(2, 6, 23, 0.58);
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: color-mix(in srgb, var(--choir-bg, #020617) 74%, transparent);
     color: var(--choir-fg, #e2e8f0);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.78rem;
@@ -409,27 +424,27 @@
   }
 
   .theme-error {
-    color: #fecaca;
+    color: var(--choir-danger, #fecaca);
   }
 
   .theme-notice {
-    color: #bbf7d0;
+    color: var(--choir-success, #bbf7d0);
   }
 
   .secondary-action {
     margin-top: 0.85rem;
-    border: 1px solid rgba(96, 165, 250, 0.28);
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.8);
-    color: #e0ecff;
+    border: 0;
+    border-radius: var(--choir-radius-pill, 30px);
+    background: var(--choir-control-bg, rgba(15, 23, 42, 0.8));
+    color: var(--choir-fg, #e0ecff);
+    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
     cursor: pointer;
     padding: 0.62rem 0.9rem;
     font-weight: 750;
   }
 
   .secondary-action:hover:enabled {
-    border-color: rgba(147, 197, 253, 0.5);
-    background: rgba(30, 41, 59, 0.92);
+    background: var(--choir-selected, rgba(30, 41, 59, 0.92));
   }
 
   .secondary-action:disabled {

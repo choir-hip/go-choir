@@ -126,8 +126,8 @@ test('floating window minimize hides and preserves geometry', async ({ page, aut
   // Window should be hidden
   await expect(windowEl).not.toBeVisible();
 
-  // Minimized indicator in bottom bar
-  const indicator = page.locator('[data-minimized-indicator]');
+  // Minimized indicator in prompt surface
+  const indicator = page.locator('[data-window-tray-item]');
   await expect(indicator).toHaveCount(1);
   await expect(indicator.first()).toBeVisible();
 
@@ -222,7 +222,7 @@ test('floating window restore from maximized preserves geometry', async ({ page,
 // ---------------------------------------------------------------
 // Test: floating window restore from minimized (VAL-SHELL-016)
 // ---------------------------------------------------------------
-test('floating window restore from minimized via bottom bar', async ({ page, authenticator }) => {
+test('floating window restore from minimized via prompt surface', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -236,8 +236,8 @@ test('floating window restore from minimized via bottom bar', async ({ page, aut
   await page.waitForTimeout(200);
   await expect(windowEl).not.toBeVisible();
 
-  // Restore via bottom bar indicator
-  await page.locator('[data-minimized-indicator]').first().click();
+  // Restore via prompt surface indicator
+  await page.locator('[data-window-tray-item]').first().click();
   await page.waitForTimeout(200);
 
   // Window should be visible and active

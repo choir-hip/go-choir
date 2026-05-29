@@ -40,7 +40,7 @@ async function waitForBootstrapData(page, timeout = 10_000) {
 }
 
 async function waitForLiveConnected(page, timeout = 10_000) {
-  // In the rewritten desktop, the connection status is in the bottom bar.
+  // In the rewritten desktop, the connection status is in the prompt surface.
   // Wait for the liveStatus store to be 'connected'.
   await page.waitForFunction(
     () => {
@@ -86,8 +86,8 @@ async function setupAuthenticatedShell(page) {
 }
 
 async function clickShellLogout(page) {
-  await page.locator('[data-show-desktop-btn]').click();
-  await page.locator('[data-desktop-menu]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet]').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('[data-shell-logout]').click();
 }
 

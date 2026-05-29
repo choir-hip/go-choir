@@ -87,7 +87,7 @@ test('registered user sees desktop shell with live channel after mount', async (
   await expect(userArea).toBeVisible();
   await expect(userArea).toContainText(email);
 
-  // The live channel status should be visible in the bottom bar.
+  // The live channel status should be visible in the prompt surface.
   const liveStatus = page.locator('[data-shell-live-status]');
   await expect(liveStatus).toBeVisible();
 });
@@ -199,7 +199,7 @@ test('returning user has live channel connected after login', async ({
   await page.reload();
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // Live channel status should be visible in the bottom bar.
+  // Live channel status should be visible in the prompt surface.
   // NOTE: In some test environments the WebSocket may not reach
   // "Connected" state due to proxy timing, so we verify the status
   // element is visible and has content (any connection state is valid).

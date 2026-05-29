@@ -6,8 +6,8 @@
     - floating controls handle prompt/apply and version navigation
     - prompt/apply creates a user revision, then invokes the vtext appagent
 -->
-<script>
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+<script lang="ts">
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     cancelAgentRevision,
@@ -25,8 +25,10 @@
     submitPublicationProposal,
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { previewVTextDocument } from './public-preview-data';
 
   export let currentUser = null;
+  export let authenticated = false;
   export let appContext = {};
   export let windowId = '';
 
@@ -53,7 +55,9 @@
   let recentDocuments = [];
   let editorSurface = null;
   let surfaceFocused = false;
-  let toolbarFaded = false;
+  let toolbarHidden = false;
+  let lastDocumentScrollTop = 0;
+  let toolbarHideSettleUntil = 0;
   let autosaveTimer = null;
   let autosavePromise = null;
   let autosaveInFlight = false;
@@ -70,6 +74,9 @@
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
+  const TOOLBAR_HIDE_SCROLL_DELTA = 8;
+  const TOOLBAR_HIDE_SCROLL_TOP = 56;
+  const TOOLBAR_HIDE_SETTLE_MS = 260;
 
   function escapeHTML(value) {
     return String(value || '')
@@ -649,6 +656,10 @@
 
   async function ensureCurrentRevisionSaved(statusPrefix = 'Saving user version…') {
     if (!currentDoc) return null;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return null;
+    }
     if (autosavePromise) {
       saveStatus = 'Finishing draft save...';
       await autosavePromise;
@@ -682,7 +693,7 @@
   }
 
   function shouldAutosave() {
-    if (!currentDoc || loading || submitting || agentPending || isViewingHistorical || isPublishedReadOnly) return false;
+    if (!authenticated || !currentDoc || loading || submitting || agentPending || isViewingHistorical || isPublishedReadOnly) return false;
     const savedContent = currentRevision?.content || '';
     if (editorValue === savedContent || editorValue === lastAutosavedContent) return false;
     if (!currentRevision && editorValue.trim() === '') return false;
@@ -849,7 +860,9 @@
     latestHeadRevisionId = '';
     showRecent = false;
     surfaceFocused = false;
-    toolbarFaded = false;
+    toolbarHidden = false;
+    lastDocumentScrollTop = 0;
+    toolbarHideSettleUntil = 0;
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
@@ -864,6 +877,10 @@
       publishResult = null;
 
       if (shouldShowRecentLanding(appContext)) {
+        if (!authenticated) {
+          loadGuestDocument();
+          return;
+        }
         showRecent = true;
         saveStatus = 'Recent VTexts';
         await loadRecentDocuments();
@@ -876,6 +893,11 @@
       }
 
       const initialValue = appContext.initialContent ?? appContext.seedPrompt ?? '';
+
+      if (!authenticated) {
+        loadGuestDocument(initialValue);
+        return;
+      }
 
       if (appContext.docId) {
         currentDoc = await getDocument(appContext.docId);
@@ -922,6 +944,32 @@
     } finally {
       loading = false;
     }
+  }
+
+  function loadGuestDocument(initialValue = '') {
+    const content = initialValue || previewVTextDocument.content;
+    currentDoc = {
+      doc_id: previewVTextDocument.doc_id,
+      title: normalizeTitle(appContext) || previewVTextDocument.title,
+      current_revision_id: previewVTextDocument.revisions[previewVTextDocument.revisions.length - 1].revision_id,
+    };
+    revisions = previewVTextDocument.revisions.map((revision, index) => ({
+      revision_id: revision.revision_id,
+      content: index === previewVTextDocument.revisions.length - 1 ? content : `${content}\n\nPreview ${revision.label}: ${revision.summary}`,
+      author_kind: index === 1 ? 'agent' : 'user',
+      author_label: index === 1 ? 'Preview agent' : 'Local preview',
+      created_at: new Date(Date.now() - (previewVTextDocument.revisions.length - index) * 90_000).toISOString(),
+      metadata: { summary: revision.summary, preview: true },
+    }));
+    activeRevisionIndex = revisions.length - 1;
+    currentRevision = revisions[activeRevisionIndex];
+    editorValue = currentRevision.content || content;
+    latestHeadRevisionId = currentRevision.revision_id;
+    lastAutosavedContent = editorValue;
+    showRecent = false;
+    saveStatus = 'Local preview - sign in to save';
+    publishCurrentDocumentContext(currentDoc.title);
+    tick().then(() => syncEditorSurface(renderMarkdown(editorValue), { force: true }));
   }
 
   async function loadPublishedContext(routePath) {
@@ -1013,11 +1061,18 @@
   }
 
   async function handleNewDocument() {
+    if (!authenticated) {
+      loadGuestDocument('');
+      saveStatus = 'New local preview - sign in to save';
+      return;
+    }
     loading = true;
     clearAutosaveTimer();
     showRecent = false;
     surfaceFocused = false;
-    toolbarFaded = false;
+    toolbarHidden = false;
+    lastDocumentScrollTop = 0;
+    toolbarHideSettleUntil = 0;
     error = '';
     try {
       currentDoc = await createDocument('Untitled VText');
@@ -1045,6 +1100,10 @@
 
   async function handlePrompt() {
     if (!currentDoc || loading || submitting || agentPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'save_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
 
     submitting = true;
     clearAutosaveTimer();
@@ -1096,6 +1155,10 @@
 
   async function handlePublishCurrent() {
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
     publishedActionPending = true;
     error = '';
     publishResult = null;
@@ -1226,7 +1289,24 @@
   }
 
   function handleDocumentScroll(event) {
-    toolbarFaded = event.currentTarget.scrollTop > 32;
+    const scrollTop = event.currentTarget.scrollTop || 0;
+    const delta = scrollTop - lastDocumentScrollTop;
+    const now = Date.now();
+    if (scrollTop <= TOOLBAR_HIDE_SCROLL_TOP) {
+      toolbarHidden = false;
+      toolbarHideSettleUntil = 0;
+    } else if (delta > TOOLBAR_HIDE_SCROLL_DELTA) {
+      if (!toolbarHidden) {
+        toolbarHidden = true;
+        toolbarHideSettleUntil = now + TOOLBAR_HIDE_SETTLE_MS;
+      }
+    } else if (delta < -TOOLBAR_HIDE_SCROLL_DELTA) {
+      if (!toolbarHidden || now > toolbarHideSettleUntil) {
+        toolbarHidden = false;
+        toolbarHideSettleUntil = 0;
+      }
+    }
+    lastDocumentScrollTop = Math.max(0, scrollTop);
   }
 
   $: contextKey = getContextKey(appContext);
@@ -1307,7 +1387,7 @@
       </div>
     </section>
   {:else}
-    <div class="doc-toolbar" class:toolbar-faded={toolbarFaded && !surfaceFocused} data-vtext-toolbar>
+    <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-vtext-toolbar>
       <div class="version-controls">
         <span class="nav-version" data-vtext-version>{versionLabel}</span>
         <button
@@ -1525,19 +1605,46 @@
     padding: 0.58rem 0.72rem;
     border-bottom: 1px solid rgba(148, 163, 184, 0.12);
     background: rgba(17, 24, 39, 0.58);
-    transition: opacity 180ms ease, transform 180ms ease;
-    will-change: opacity, transform;
+    max-height: 4.2rem;
+    overflow: hidden;
+    transition:
+      opacity 180ms ease,
+      transform 180ms ease,
+      max-height 180ms ease,
+      padding 180ms ease,
+      border-color 180ms ease;
+    will-change: opacity, transform, max-height;
   }
 
-  .doc-toolbar.toolbar-faded {
-    opacity: 0.16;
-    transform: translateY(-0.4rem);
+  .doc-toolbar.toolbar-hidden {
+    height: 0;
+    max-height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-color: transparent;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
   }
 
-  .doc-toolbar.toolbar-faded:hover,
-  .doc-toolbar.toolbar-faded:focus-within {
+  .doc-toolbar.toolbar-hidden > * {
+    visibility: hidden;
+  }
+
+  .doc-toolbar.toolbar-hidden:focus-within {
+    height: auto;
+    max-height: 4.2rem;
+    padding-top: 0.58rem;
+    padding-bottom: 0.58rem;
+    border-bottom-color: rgba(148, 163, 184, 0.12);
     opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
+  }
+
+  .doc-toolbar.toolbar-hidden:focus-within > * {
+    visibility: visible;
   }
 
   .version-controls,
@@ -1633,6 +1740,7 @@
     min-height: 0;
     height: auto;
     overflow: auto;
+    overflow-anchor: none;
     padding: clamp(1.1rem, 2.2vw, 2rem);
     line-height: 1.72;
     color: #f8fafc;

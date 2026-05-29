@@ -5,13 +5,13 @@
     - Title bar drag (no drag on buttons)
     - Single resize handle at bottom-right corner (no 8-handle system)
     - Minimum dimensions: width >= 200px, height >= 120px
-    - Maximized fills desktop area excluding left rail and bottom bar
+    - Maximized fills desktop area excluding the prompt surface
     - Maximize button icon changes to restore icon when maximized
     - Restore returns to pre-maximize geometry
-    - Minimize hides window, shows indicator in bottom bar
+    - Minimize hides window, shows indicator in the prompt surface tray
     - Restore from minimized returns to pre-minimize geometry
     - Clicking window brings it to front (z-index management)
-    - Active window has blue border (#3b82f6) and enhanced shadow
+    - Active window uses elevated shadow and accent glow
     - Cascade positioning: 30px offset per window, wraps after 8
     - Window close transfers focus to next highest z-index window
 
@@ -55,14 +55,14 @@
   const MIN_HEIGHT = 120;
   const DEFAULT_VIEWPORT_WIDTH = 1280;
   const DEFAULT_VIEWPORT_HEIGHT = 800;
-  const DEFAULT_BOTTOM_BAR_HEIGHT = 56;
+  const DEFAULT_PROMPT_SURFACE_SIZE = 64;
   const MOBILE_BREAKPOINT = 768;
   const TABLET_BREAKPOINT = 1024;
 
   let viewportWidth = DEFAULT_VIEWPORT_WIDTH;
   let viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
-  let bottomBarHeight = DEFAULT_BOTTOM_BAR_HEIGHT;
-  let bottomBarObserver = null;
+  let promptSurfaceSize = DEFAULT_PROMPT_SURFACE_SIZE;
+  let promptSurfaceObserver = null;
 
   // ---- Drag state ----
   let dragging = false;
@@ -89,16 +89,16 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
-  function readBottomBarHeight() {
-    if (typeof document === 'undefined') return DEFAULT_BOTTOM_BAR_HEIGHT;
+  function readPromptSurfaceSize() {
+    if (typeof document === 'undefined') return DEFAULT_PROMPT_SURFACE_SIZE;
 
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (promptSurface?.offsetHeight) return promptSurface.offsetHeight;
 
     const fromTheme = window
       .getComputedStyle(document.documentElement)
-      .getPropertyValue('--choir-bottom-bar-height');
-    return parsePixelValue(fromTheme, DEFAULT_BOTTOM_BAR_HEIGHT);
+      .getPropertyValue('--choir-prompt-surface-size');
+    return parsePixelValue(fromTheme, DEFAULT_PROMPT_SURFACE_SIZE);
   }
 
   function refreshViewportBounds() {
@@ -106,7 +106,7 @@
 
     viewportWidth = window.innerWidth || DEFAULT_VIEWPORT_WIDTH;
     viewportHeight = window.innerHeight || DEFAULT_VIEWPORT_HEIGHT;
-    bottomBarHeight = readBottomBarHeight();
+    promptSurfaceSize = readPromptSurfaceSize();
   }
 
   function trySetPointerCapture(target, pointerId) {
@@ -251,10 +251,10 @@
     window.addEventListener('pointercancel', handleResizeEnd);
     window.addEventListener('resize', refreshViewportBounds);
 
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (typeof ResizeObserver !== 'undefined' && bottomBar) {
-      bottomBarObserver = new ResizeObserver(refreshViewportBounds);
-      bottomBarObserver.observe(bottomBar);
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (typeof ResizeObserver !== 'undefined' && promptSurface) {
+      promptSurfaceObserver = new ResizeObserver(refreshViewportBounds);
+      promptSurfaceObserver.observe(promptSurface);
     }
   });
 
@@ -266,7 +266,7 @@
     window.removeEventListener('pointercancel', handleDragEnd);
     window.removeEventListener('pointercancel', handleResizeEnd);
     window.removeEventListener('resize', refreshViewportBounds);
-    bottomBarObserver?.disconnect();
+    promptSurfaceObserver?.disconnect();
   });
 
   // ---- Computed styles ----
@@ -279,14 +279,14 @@
   $: maxNormalWidth = Math.max(MIN_WIDTH, viewportWidth - viewportMargin * 2);
   $: maxNormalHeight = Math.max(
     MIN_HEIGHT,
-    viewportHeight - bottomBarHeight - viewportMargin * 2
+    viewportHeight - promptSurfaceSize - viewportMargin * 2
   );
   $: renderedWidth = Math.min(Math.max(width, MIN_WIDTH), maxNormalWidth);
   $: renderedHeight = Math.min(Math.max(height, MIN_HEIGHT), maxNormalHeight);
   $: maxRenderedX = Math.max(viewportMargin, viewportWidth - renderedWidth - viewportMargin);
   $: maxRenderedY = Math.max(
     viewportMargin,
-    viewportHeight - bottomBarHeight - renderedHeight - viewportMargin
+    viewportHeight - promptSurfaceSize - renderedHeight - viewportMargin
   );
   $: renderedX = clamp(x, viewportMargin, maxRenderedX);
   $: renderedY = clamp(y, viewportMargin, maxRenderedY);
@@ -376,15 +376,17 @@
     display: flex;
     flex-direction: column;
     background: #1e1e2e;
-    border: 1px solid #333;
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      0 28px 80px rgba(0, 0, 0, 0.48),
+      0 10px 30px color-mix(in srgb, var(--choir-accent, #3b82f6) 10%, transparent);
     transform-origin: top left;
-    transition: box-shadow 0.15s, border-color 0.15s;
+    transition: box-shadow 0.15s, filter 0.15s;
     user-select: none;
     max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 16px);
+    max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 16px);
   }
 
   .window.overview-preview {
@@ -403,18 +405,15 @@
     transition:
       transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1),
       box-shadow 0.2s ease,
-      border-color 0.2s ease,
       opacity 0.2s ease;
     box-shadow:
       0 24px 70px rgba(0, 0, 0, 0.52),
-      0 0 0 1px rgba(125, 211, 252, 0.18);
+      0 12px 42px color-mix(in srgb, var(--choir-accent, #7dd3fc) 14%, transparent);
   }
 
   .window.overview-preview-live.window-active {
-    border-color: rgba(125, 211, 252, 0.95);
     box-shadow:
       0 28px 86px rgba(37, 99, 235, 0.32),
-      0 0 0 2px rgba(125, 211, 252, 0.28),
       0 0 44px rgba(59, 130, 246, 0.24);
   }
 
@@ -431,8 +430,9 @@
   }
 
   .window-active {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.3);
+    box-shadow:
+      0 30px 88px rgba(0, 0, 0, 0.52),
+      0 0 54px color-mix(in srgb, var(--choir-accent, #3b82f6) 24%, transparent);
   }
 
   /* ---- Title bar ---- */
@@ -443,8 +443,8 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background: #181825;
-    border-bottom: 1px solid #2a2a3a;
+    background: color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
     cursor: grab;
     flex-shrink: 0;
     touch-action: none;
@@ -475,7 +475,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--choir-radius-control-sm, 14px);
     font-size: 0.7rem;
     cursor: pointer;
     color: #888;
@@ -536,8 +536,8 @@
     right: 3px;
     width: 8px;
     height: 8px;
-    border-right: 2px solid rgba(255, 255, 255, 0.2);
-    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+    background: radial-gradient(circle at 100% 100%, rgba(255, 255, 255, 0.28), transparent 60%);
+    border-radius: 999px;
   }
 
   @media (max-width: 1024px) and (min-width: 769px) {
@@ -549,7 +549,7 @@
   @media (max-width: 768px) {
     .window {
       max-width: calc(100vw - 16px);
-      max-height: calc(100dvh - var(--choir-bottom-bar-height, 56px) - 8px);
+      max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 8px);
     }
 
     .titlebar {

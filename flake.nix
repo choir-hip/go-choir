@@ -112,6 +112,7 @@
               base != "node_modules" && base != "test-results" && base != ".cache"
             else
               (pkgs.lib.hasSuffix ".js" path) ||
+              (pkgs.lib.hasSuffix ".ts" path) ||
               (pkgs.lib.hasSuffix ".svelte" path) ||
               (pkgs.lib.hasSuffix ".css" path) ||
               (pkgs.lib.hasSuffix ".html" path) ||
@@ -120,7 +121,7 @@
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };
-        npmDepsHash = "sha256-ZfP7bP6pjN7X8mZ6ZVDoYkVUnTHFWqJcASbB4mdg2B0=";
+        npmDepsHash = "sha256-1ivvmDrQmaHDTUu38BoEsyajT9TP9xdzie2gGU2DJtA=";
         npmBuildScript = "build";
         VITE_CHOIR_BUILD_VERSION = goModuleVersion;
         VITE_CHOIR_BUILD_SHA = buildCommit;
@@ -393,5 +394,6 @@ EOF
           ./nix/node-b.nix
         ];
       };
+
     };
 }

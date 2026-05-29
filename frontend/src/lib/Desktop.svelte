@@ -1,10 +1,10 @@
 <!--
-  Desktop — ChoirOS desktop shell with floating desktop icons, floating windows, and bottom bar.
+  Desktop — Choir desktop shell with floating desktop icons, floating windows, and PromptSurface.
 
   Layout:
     - Floating desktop icons freely draggable on the desktop surface
     - Floating windows draggable/resizable on top of icons
-    - Bottom bar fixed at viewport bottom
+    - PromptSurface fixed at viewport bottom
 
   Responsive layout across three breakpoints:
     - Desktop (>1024px): full floating icons with labels, floating draggable windows
@@ -37,25 +37,11 @@
     renewDriverLease,
   } from './live-events.js';
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
-  import BottomBar from './BottomBar.svelte';
+  import PromptSurface from './PromptSurface.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
-  import TraceApp from './TraceApp.svelte';
-  import VTextEditor from './VTextEditor.svelte';
-  import SettingsApp from './SettingsApp.svelte';
+  import AppHost from './AppHost.svelte';
   import { openFileDocument } from './vtext.js';
-  import FileBrowser from './FileBrowser.svelte';
-  import BrowserApp from './BrowserApp.svelte';
-  import EmailApp from './EmailApp.svelte';
-  import FeaturesApp from './FeaturesApp.svelte';
-  import TerminalApp from './TerminalApp.svelte';
-  import ComputeMonitorApp from './ComputeMonitorApp.svelte';
-  import PodcastApp from './PodcastApp.svelte';
-  import ImageApp from './ImageApp.svelte';
-  import AudioApp from './AudioApp.svelte';
-  import VideoApp from './VideoApp.svelte';
-  import PdfApp from './PdfApp.svelte';
-  import EpubApp from './EpubApp.svelte';
   import {
     windows,
     activeWindowId,
@@ -63,6 +49,7 @@
     iconPositions,
     showDesktopMode,
     selectedIconId,
+    toggleShowDesktop,
     openApp,
     closeWindow,
     focusWindow,
@@ -79,6 +66,7 @@
     setIconPositions,
     getDefaultIconPositions,
     getAppIcon,
+    APP_REGISTRY,
     isHeavyAppId,
   } from './stores/desktop.js';
   import {
@@ -91,6 +79,7 @@
   export let promptReplay = null;
   export let appReplay = null;
   export let publicRoutePath = '';
+  export let theme = null;
 
   const dispatch = createEventDispatcher();
 
@@ -99,7 +88,7 @@
   let bootstrapError = '';
   let bootstrapStable = false;
   let desktopReady = false;
-  let promptPlaceholder = 'Connecting to desktop...';
+  let promptPlaceholder = '';
   let promptStatus = '';
   let mounted = false;
   let authenticatedStartupRunning = false;
@@ -140,7 +129,7 @@
   let desktopOverviewOpen = false;
   let overviewViewportWidth = 1280;
   let overviewViewportHeight = 800;
-  let overviewBottomBarHeight = 56;
+  let overviewPromptSurfaceSize = 64;
 
   const RESTORE_RECOVERY_COMPACT_BREAKPOINT = 768;
   const RESTORE_RECOVERY_WINDOW_LIMIT = 12;
@@ -150,7 +139,8 @@
   const OVERVIEW_STAGE_BOTTOM_RAIL_MOBILE = 190;
   const OVERVIEW_STAGE_BOTTOM_RAIL_DESKTOP = 196;
   $: desktopReady = bootstrapStable && stateLoaded;
-  $: promptPlaceholder = desktopReady ? 'Ask anything...' : bootPromptPlaceholder;
+  $: promptPlaceholder = desktopReady ? '' : bootPromptPlaceholder;
+  $: promptSurfacePlacement = theme?.layout?.promptSurfacePlacement === 'top' ? 'top' : 'bottom';
   $: if (mounted && authenticated !== lastAuthenticated) {
     const wasAuthenticated = lastAuthenticated === true;
     lastAuthenticated = authenticated;
@@ -215,7 +205,7 @@
     desktopReady = true;
     bootLines = [];
     bootPromptPlaceholder = 'Booting user computer...';
-    promptPlaceholder = 'Ask anything...';
+    promptPlaceholder = '';
     promptStatus = '';
     authenticatedStartupRunning = false;
     restoreRecovery = null;
@@ -226,8 +216,56 @@
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    setWindows([], '');
+    seedPublicPreviewWindows();
     setIconPositions(getDefaultIconPositions());
+  }
+
+  function seedPublicPreviewWindows() {
+    const previewWindows = [
+      {
+        windowId: 'public-preview-vtext',
+        appId: 'vtext',
+        title: 'VText Preview',
+        icon: getAppIcon('vtext'),
+        x: 152,
+        y: 42,
+        width: 640,
+        height: 520,
+        mode: 'normal',
+        zIndex: 2,
+        restoredGeometry: null,
+        appContext: { preview: true, windowTitle: 'VText Preview' },
+      },
+      {
+        windowId: 'public-preview-trace',
+        appId: 'trace',
+        title: 'Trace Preview',
+        icon: getAppIcon('trace'),
+        x: 420,
+        y: 116,
+        width: 720,
+        height: 500,
+        mode: 'normal',
+        zIndex: 3,
+        restoredGeometry: null,
+        appContext: { preview: true, windowTitle: 'Trace Preview' },
+      },
+      {
+        windowId: 'public-preview-files',
+        appId: 'files',
+        title: 'Files Preview',
+        icon: getAppIcon('files'),
+        x: 104,
+        y: 188,
+        width: 520,
+        height: 420,
+        mode: 'minimized',
+        zIndex: 1,
+        restoredGeometry: null,
+        appContext: { preview: true, windowTitle: 'Files Preview' },
+      },
+    ];
+    setWindows(previewWindows, 'public-preview-trace');
   }
 
   async function startAuthenticatedDesktop() {
@@ -489,22 +527,22 @@
     return Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
   }
 
-  function readOverviewBottomBarHeight() {
-    if (typeof document === 'undefined') return 56;
-    const bottomBar = document.querySelector('[data-bottom-bar]');
-    if (bottomBar?.offsetHeight) return bottomBar.offsetHeight;
+  function readOverviewPromptSurfaceSize() {
+    if (typeof document === 'undefined') return 64;
+    const promptSurface = document.querySelector('[data-prompt-surface]');
+    if (promptSurface?.offsetHeight) return promptSurface.offsetHeight;
     const fromTheme = window
       .getComputedStyle(document.documentElement)
-      .getPropertyValue('--choir-bottom-bar-height');
+      .getPropertyValue('--choir-prompt-surface-size');
     const parsed = Number.parseFloat(fromTheme);
-    return Number.isFinite(parsed) ? parsed : 56;
+    return Number.isFinite(parsed) ? parsed : 64;
   }
 
   function refreshOverviewViewport() {
     if (typeof window === 'undefined') return;
     overviewViewportWidth = window.innerWidth || 1280;
     overviewViewportHeight = window.innerHeight || 800;
-    overviewBottomBarHeight = readOverviewBottomBarHeight();
+    overviewPromptSurfaceSize = readOverviewPromptSurfaceSize();
   }
 
   function clampOverviewValue(value, min, max) {
@@ -520,14 +558,14 @@
     const maxWidth = Math.max(minWidth, overviewViewportWidth - margin * 2);
     const maxHeight = Math.max(
       minHeight,
-      overviewViewportHeight - overviewBottomBarHeight - margin * 2
+      overviewViewportHeight - overviewPromptSurfaceSize - margin * 2
     );
     const width = Math.min(Math.max(win.width || 600, minWidth), maxWidth);
     const height = Math.min(Math.max(win.height || 400, minHeight), maxHeight);
     const maxX = Math.max(margin, overviewViewportWidth - width - margin);
     const maxY = Math.max(
       margin,
-      overviewViewportHeight - overviewBottomBarHeight - height - margin
+      overviewViewportHeight - overviewPromptSurfaceSize - height - margin
     );
 
     if (win.mode === 'maximized') {
@@ -535,7 +573,7 @@
         x: 0,
         y: 0,
         width: overviewViewportWidth,
-        height: Math.max(minHeight, overviewViewportHeight - overviewBottomBarHeight),
+        height: Math.max(minHeight, overviewViewportHeight - overviewPromptSurfaceSize),
       };
     }
 
@@ -565,7 +603,7 @@
     const stageWidth = Math.max(260, overviewViewportWidth - stageX * 2);
     const stageHeight = Math.max(
       220,
-      overviewViewportHeight - overviewBottomBarHeight - stageTop - bottomRail
+      overviewViewportHeight - overviewPromptSurfaceSize - stageTop - bottomRail
     );
     const source = renderedWindowGeometryForOverview(win);
     const preferredScale = mobile
@@ -583,7 +621,7 @@
     const targetWidth = source.width * scale;
     const targetHeight = source.height * scale;
     const sourceMaxX = Math.max(1, overviewViewportWidth - source.width);
-    const sourceMaxY = Math.max(1, overviewViewportHeight - overviewBottomBarHeight - source.height);
+    const sourceMaxY = Math.max(1, overviewViewportHeight - overviewPromptSurfaceSize - source.height);
     const normalizedX = clampOverviewValue(source.x / sourceMaxX, 0, 1);
     const normalizedY = clampOverviewValue(source.y / sourceMaxY, 0, 1);
     const liveIndex = Math.max(0, previewDecision.liveIndex);
@@ -1047,31 +1085,20 @@
   }
 
   function handleLaunchApp(event) {
-    if (!authenticated) {
-      const publicApps = new Set(['podcast', 'image', 'audio', 'video', 'pdf', 'epub', 'trace', 'vtext', 'browser']);
-      const appId = event.detail?.appId || '';
-      if (publicApps.has(appId)) {
-        openApp(appId, event.detail?.appName || appId, event.detail?.icon || '', {
-          ...(event.detail?.appContext || {}),
-          guestMode: true,
-        });
-        return;
-      }
-      requestAuth({
-        kind: 'app_launch',
-        appId,
-        appName: event.detail?.appName || 'app',
-        icon: event.detail?.icon || '',
-        appContext: event.detail?.appContext || {},
-      });
+    const appId = event.detail?.appId || '';
+    const appDef = APP_REGISTRY.find((app) => app.id === appId);
+    if (!appDef) {
+      showToast(`Could not open ${event.detail?.appName || 'app'}`, { kind: 'error' });
       return;
     }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
     }
-    openApp(event.detail.appId, event.detail.appName, event.detail.icon, {
+    openApp(appId, event.detail.appName || appDef.name, event.detail.icon || appDef.icon, {
       ...(event.detail.appContext || {}),
+      guestMode: !authenticated,
+      preview: !authenticated,
     });
   }
 
@@ -1210,7 +1237,13 @@
 
   async function handleOpenTextFile(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'document' });
+      const fileName = event.detail?.fileName || 'Preview document';
+      openApp('vtext', 'VText', getAppIcon('vtext'), {
+        windowTitle: fileName,
+        fileName,
+        initialContent: `# ${fileName}\n\nThis is a local preview opened from Files. Sign in to open real private files or save changes.`,
+        allowMultiple: true,
+      });
       return;
     }
     const pathSegments = event.detail?.pathSegments || [];
@@ -1250,10 +1283,6 @@
   }
 
   function handleOpenMediaFile(event) {
-    if (!authenticated) {
-      requestAuth({ kind: 'file_open', fileName: event.detail?.fileName || 'media file' });
-      return;
-    }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -1272,6 +1301,7 @@
       filePath: detail.filePath || (detail.pathSegments || []).join('/'),
       mediaType: detail.mediaType || '',
       appHint: appId,
+      preview: !authenticated,
       allowMultiple: true,
     });
     showToast(`Opened ${detail.fileName || appId}`);
@@ -1279,7 +1309,20 @@
 
   function handleOpenVTextFromContent(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'open_vtext', title: event.detail?.title || 'document' });
+      const detail = event.detail || {};
+      openApp('vtext', 'VText', getAppIcon('vtext'), {
+        windowTitle: detail.title || 'Preview note',
+        initialContent: detail.initialContent || `# ${detail.title || 'Preview note'}\n\nThis is a local preview opened from public content. Sign in to save it as durable VText.`,
+        seedPrompt: detail.seedPrompt || '',
+        sourceUrl: detail.sourceUrl || '',
+        sourceContentId: detail.sourceContentId || '',
+        appHint: detail.appHint || '',
+        allowMultiple: true,
+        guestMode: true,
+        preview: true,
+        createdFrom: detail.createdFrom || 'content_viewer_preview',
+      });
+      showToast(detail.toastMessage || 'Opened local VText preview');
       return;
     }
     if (!desktopReady) {
@@ -1305,7 +1348,15 @@
 
   function handleOpenTraceFromContent(event) {
     if (!authenticated) {
-      requestAuth({ kind: 'open_trace', title: event.detail?.title || 'Trace evidence' });
+      const detail = event.detail || {};
+      openApp('trace', 'Trace', getAppIcon('trace'), {
+        windowTitle: detail.title || 'Trace Preview',
+        trajectoryId: detail.trajectoryId || detail.traceId || '',
+        acceptanceId: detail.acceptanceId || '',
+        guestMode: true,
+        preview: true,
+      });
+      showToast(detail.toastMessage || 'Opened Trace preview');
       return;
     }
     if (!desktopReady) {
@@ -1362,6 +1413,10 @@
   function handleShowDesktopOverview() {
     refreshOverviewViewport();
     desktopOverviewOpen = true;
+  }
+
+  function handleShowDesktop() {
+    toggleShowDesktop();
   }
 
   function handleCloseDesktopOverview() {
@@ -1616,146 +1671,24 @@
                   <button type="button" on:click={() => handleWindowFocus({ detail: { windowId: win.windowId } })}>Resume app</button>
                 </div>
               </div>
-            {:else if win.appId === 'files'}
-              <div class="app-content files-content" data-files-app>
-                <FileBrowser
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:opentextfile={handleOpenTextFile}
-                  on:openmediafile={handleOpenMediaFile}
-                />
-              </div>
-            {:else if win.appId === 'browser'}
-              <div class="app-content browser-content" data-browser-app-container>
-                <BrowserApp
-                  appContext={win.appContext}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:openvtext={handleOpenVTextFromContent}
-                />
-              </div>
-            {:else if win.appId === 'email'}
-              <div class="app-content email-content" data-email-window>
-                <EmailApp
-                  appContext={win.appContext}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                />
-              </div>
-            {:else if win.appId === 'features'}
-              <div class="app-content features-content" data-features-window>
-                <FeaturesApp
-                  appContext={win.appContext}
-                  {currentUser}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:openvtext={handleOpenVTextFromContent}
-                  on:opentrace={handleOpenTraceFromContent}
-                />
-              </div>
-            {:else if win.appId === 'terminal'}
-              <div class="app-content terminal-content" data-terminal-app>
-                <TerminalApp windowId={win.windowId} />
-              </div>
-            {:else if win.appId === 'compute-monitor'}
-              <div class="app-content compute-monitor-content" data-compute-monitor-window>
-                <ComputeMonitorApp
-                  windowId={win.windowId}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:clearsavedwindows={handleClearDesktopWindows}
-                  on:keepwindowonly={handleKeepWindowOnly}
-                />
-              </div>
-            {:else if win.appId === 'settings'}
-              <div class="app-content settings-content" data-settings-window>
-                <SettingsApp
-                  {currentUser}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:resetdesktop={handleResetDesktop}
-                  on:opencomputemonitor={handleOpenComputeMonitor}
-                />
-              </div>
-            {:else if win.appId === 'vtext'}
-              <div class="app-content vtext-content" data-vtext-app>
-                <VTextEditor
-                  windowId={win.windowId}
-                  {currentUser}
-                  {authenticated}
-                  appContext={win.appContext}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'trace'}
-              <div class="app-content trace-content" data-trace-window>
-                <TraceApp
-                  {authenticated}
-                  appContext={win.appContext}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                />
-              </div>
-            {:else if win.appId === 'podcast'}
-              <div class="app-content podcast-content" data-podcast-window>
-                <PodcastApp
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  {authenticated}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:authrequired={(event) => requestAuth(event.detail || {})}
-                  on:openvtext={handleOpenVTextFromContent}
-                />
-              </div>
-            {:else if win.appId === 'image'}
-              <div class="app-content image-content" data-image-window>
-                <ImageApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'audio'}
-              <div class="app-content audio-content" data-audio-window>
-                <AudioApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'video'}
-              <div class="app-content video-content" data-video-window>
-                <VideoApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'pdf'}
-              <div class="app-content pdf-content" data-pdf-window>
-                <PdfApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
-            {:else if win.appId === 'epub'}
-              <div class="app-content epub-content" data-epub-window>
-                <EpubApp
-                  windowId={win.windowId}
-                  appContext={{ ...win.appContext, appId: win.appId }}
-                  on:authexpired={() => dispatch('authexpired')}
-                  on:contextchange={handleWindowAppContextChange}
-                />
-              </div>
             {:else}
-              <div class="app-content">
-                <div class="app-header">
-                  <span class="app-label">{win.title}</span>
-                </div>
-              </div>
+              <AppHost
+                {win}
+                {currentUser}
+                {authenticated}
+                {theme}
+                on:authexpired={() => dispatch('authexpired')}
+                on:authrequired={(event) => requestAuth(event.detail || {})}
+                on:opentextfile={handleOpenTextFile}
+                on:openmediafile={handleOpenMediaFile}
+                on:openvtext={handleOpenVTextFromContent}
+                on:opentrace={handleOpenTraceFromContent}
+                on:clearsavedwindows={handleClearDesktopWindows}
+                on:keepwindowonly={handleKeepWindowOnly}
+                on:resetdesktop={handleResetDesktop}
+                on:opencomputemonitor={handleOpenComputeMonitor}
+                on:contextchange={handleWindowAppContextChange}
+              />
             {/if}
           </FloatingWindow>
         {/if}
@@ -1810,10 +1743,11 @@
     </div>
   {/if}
 
-  <!-- Bottom bar -->
-  <BottomBar
+  <!-- PromptSurface -->
+  <PromptSurface
     {currentUser}
     {authenticated}
+    placement={promptSurfacePlacement}
     promptDisabled={!desktopReady}
     {promptPlaceholder}
     {promptStatus}
@@ -1822,6 +1756,7 @@
     on:promptsubmit={handlePromptSubmit}
     on:launchapp={handleLaunchApp}
     on:showoverview={handleShowDesktopOverview}
+    on:showdesktop={handleShowDesktop}
   />
 </div>
 
@@ -1839,8 +1774,8 @@
     visibility: hidden;
   }
 
-  .desktop.desktop-loading :global(.bottom-bar),
-  .desktop.desktop-loading :global(.desktop-menu),
+  .desktop.desktop-loading :global(.prompt-surface),
+  .desktop.desktop-loading :global(.desk-sheet),
   .desktop.desktop-loading .boot-console {
     visibility: visible;
   }
@@ -1854,8 +1789,9 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    height: calc(100dvh - var(--choir-bottom-bar-height, 56px));
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: 100dvh;
+    padding-block-start: var(--choir-prompt-surface-top-offset, 0px);
+    padding-block-end: var(--choir-prompt-surface-bottom-offset, 64px);
   }
 
   /* Prevent flash of empty desktop while state loads (VAL-SHELL-022) */
@@ -1871,10 +1807,10 @@
     position: fixed;
     left: clamp(16px, 6vw, 72px);
     right: clamp(16px, 6vw, 72px);
-    bottom: calc(var(--choir-bottom-bar-height, 56px) + 24px);
+    bottom: calc(var(--choir-prompt-surface-bottom-offset, 64px) + 24px);
     max-width: 760px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(5, 8, 14, 0.92);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38);
     color: #d1fae5;
@@ -1886,7 +1822,7 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
     padding: 0.65rem 0.8rem;
     color: #bfdbfe;
     font-size: 0.72rem;
@@ -1945,10 +1881,10 @@
     display: grid;
     gap: 1rem;
     padding: 1.1rem;
-    border: 1px solid rgba(96, 165, 250, 0.34);
-    border-radius: 12px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(8, 13, 24, 0.94);
-    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(15, 23, 42, 0.82);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 48px rgba(96, 165, 250, 0.14);
     color: #e5edf9;
     z-index: 85;
   }
@@ -1995,8 +1931,8 @@
 
   .recovery-actions button {
     min-height: 40px;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(15, 23, 42, 0.86);
     color: #dbeafe;
     padding: 0.55rem 0.78rem;
@@ -2007,7 +1943,7 @@
   }
 
   .recovery-actions button:hover {
-    border-color: rgba(147, 197, 253, 0.62);
+    box-shadow: 0 14px 34px rgba(96, 165, 250, 0.16);
     background: rgba(30, 41, 59, 0.94);
   }
 
@@ -2017,67 +1953,22 @@
   }
 
   .recovery-actions .recovery-primary {
-    border-color: rgba(96, 165, 250, 0.62);
     background: rgba(30, 64, 175, 0.72);
     color: #f8fbff;
-  }
-
-  /* App content inside windows */
-  .app-content {
-    padding: 1rem;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .vtext-content {
-    padding: 0;
-    background: #12131c;
-  }
-
-  .terminal-content {
-    padding: 0;
-    background: #1a1b26;
-  }
-
-  .trace-content {
-    padding: 0;
-    background: #0a0d14;
-  }
-
-  .podcast-content {
-    padding: 0;
-    background: #080d18;
-  }
-
-  .settings-content {
-    padding: 0;
-    background: #171827;
-  }
-
-  .compute-monitor-content {
-    padding: 0;
-    background: #080d18;
-  }
-
-  .features-content {
-    padding: 0;
-    background: #07111e;
   }
 
   .suspended-app-content {
     align-items: center;
     justify-content: center;
-    background:
-      linear-gradient(135deg, rgba(8, 13, 24, 0.96), rgba(15, 23, 42, 0.96));
+    background: var(--choir-panel-strong, #09101f);
   }
 
   .suspended-card {
     max-width: 28rem;
     display: grid;
     gap: 0.65rem;
-    border: 1px solid rgba(251, 191, 36, 0.28);
-    border-radius: 8px;
+    border: 0;
+    border-radius: var(--choir-radius-panel, 26px);
     background: rgba(2, 6, 23, 0.68);
     padding: 1rem;
     color: #e5edf9;
@@ -2109,8 +2000,8 @@
   .suspended-card button {
     justify-self: start;
     min-height: 2.35rem;
-    border: 1px solid rgba(96, 165, 250, 0.38);
-    border-radius: 7px;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
     background: rgba(30, 64, 175, 0.46);
     color: #eff6ff;
     cursor: pointer;
@@ -2135,8 +2026,8 @@
   .toast {
     background: rgba(17, 24, 39, 0.95);
     color: #edf2ff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
+    border: 0;
+    border-radius: var(--choir-radius-pill, 30px);
     padding: 0.6rem 0.95rem;
     font-size: 0.82rem;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
@@ -2144,28 +2035,15 @@
 
   .toast.error {
     background: rgba(69, 10, 10, 0.94);
-    border-color: rgba(248, 113, 113, 0.42);
+    box-shadow: 0 12px 32px rgba(248, 113, 113, 0.18);
     color: #fee2e2;
-  }
-
-  .app-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .app-label {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #c0c0d0;
   }
 
   @media (max-width: 768px) {
     .boot-console {
       left: 12px;
       right: 12px;
-      bottom: calc(var(--choir-bottom-bar-height, 56px) + 12px);
+      bottom: calc(var(--choir-prompt-surface-bottom-offset, 64px) + 12px);
     }
 
     .boot-console-header {
