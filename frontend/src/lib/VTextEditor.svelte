@@ -25,6 +25,7 @@
     submitPublicationProposal,
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
+  import { youtubeEmbedURL } from './media-utils.js';
   import { previewVTextDocument } from './public-preview-data';
 
   export let currentUser = null;
@@ -211,12 +212,59 @@
     return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
   }
 
+  function revisionMediaSourceRefs() {
+    const refs = currentRevision?.metadata?.media_source_refs;
+    return Array.isArray(refs) ? refs : [];
+  }
+
+  function renderMediaSourceBlocks(refs) {
+    if (!Array.isArray(refs) || refs.length === 0) return '';
+    const cards = refs
+      .map((ref) => {
+        const kind = String(ref?.kind || '').toLowerCase();
+        const title = escapeHTML(ref?.title || (kind === 'youtube' ? 'YouTube source' : 'Image source'));
+        const canonical = ref?.canonical_url || ref?.url || '';
+        const sourceURL = ref?.url || ref?.canonical_url || '';
+        const contentID = escapeHTML(ref?.content_id || '');
+        const transcript = escapeHTML(ref?.transcript_availability || '');
+        const research = escapeHTML(ref?.research_state || 'pending');
+        let media = '';
+        if (kind === 'youtube') {
+          const embed = youtubeEmbedURL(canonical || sourceURL);
+          if (embed) {
+            media = `<div class="vtext-source-video"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+          }
+        } else if (kind === 'image') {
+          const src = sourceURL || canonical;
+          if (src) {
+            media = `<div class="vtext-source-image"><img src="${escapeHTML(src)}" alt="${title}" loading="lazy"></div>`;
+          }
+        }
+        return `<article class="vtext-source-card" data-vtext-source-card contenteditable="false">
+          ${media}
+          <div class="vtext-source-meta">
+            <div class="vtext-source-kind">${escapeHTML(kind || 'source')}</div>
+            <div class="vtext-source-title">${title}</div>
+            <a href="${escapeHTML(canonical || sourceURL)}" target="_blank" rel="noreferrer">${escapeHTML(canonical || sourceURL)}</a>
+            <div class="vtext-source-facts">
+              ${contentID ? `<span>content ${contentID}</span>` : ''}
+              ${transcript ? `<span>transcript ${transcript}</span>` : ''}
+              <span>research ${research}</span>
+            </div>
+          </div>
+        </article>`;
+      })
+      .join('');
+    return `<section class="vtext-source-deck" data-vtext-source-card contenteditable="false">${cards}</section>`;
+  }
+
   function serializeInlineMarkdown(node) {
     if (!node) return '';
     if (node.nodeType === Node.TEXT_NODE) {
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    if (node.closest?.('[data-vtext-source-card]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (tag === 'br') return '\n';
@@ -238,6 +286,7 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    if (node.matches?.('[data-vtext-source-card]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (/^h[1-4]$/.test(tag)) {
@@ -1344,7 +1393,7 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
-  $: renderedMarkdown = renderMarkdown(editorValue);
+  $: renderedMarkdown = renderMediaSourceBlocks(revisionMediaSourceRefs()) + renderMarkdown(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
   onMount(() => {
@@ -1897,6 +1946,98 @@
 
   .rendered-doc :global(blockquote p:last-child) {
     margin-bottom: 0;
+  }
+
+  .rendered-doc :global(.vtext-source-deck) {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0 0 1.1rem;
+  }
+
+  .rendered-doc :global(.vtext-source-card) {
+    display: grid;
+    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+    gap: 0.75rem;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.72);
+  }
+
+  .rendered-doc :global(.vtext-source-video),
+  .rendered-doc :global(.vtext-source-image) {
+    min-height: 8rem;
+    background: rgba(2, 6, 23, 0.72);
+  }
+
+  .rendered-doc :global(.vtext-source-video iframe) {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+  }
+
+  .rendered-doc :global(.vtext-source-image img) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 16rem;
+    object-fit: contain;
+  }
+
+  .rendered-doc :global(.vtext-source-meta) {
+    min-width: 0;
+    padding: 0.72rem 0.76rem 0.72rem 0;
+  }
+
+  .rendered-doc :global(.vtext-source-kind) {
+    margin-bottom: 0.26rem;
+    color: rgba(147, 197, 253, 0.86);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .rendered-doc :global(.vtext-source-title) {
+    margin-bottom: 0.34rem;
+    color: #f8fafc;
+    font-size: 0.98rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .rendered-doc :global(.vtext-source-card a) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.82rem;
+  }
+
+  .rendered-doc :global(.vtext-source-facts) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.34rem;
+    margin-top: 0.54rem;
+  }
+
+  .rendered-doc :global(.vtext-source-facts span) {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 999px;
+    padding: 0.14rem 0.42rem;
+    color: rgba(226, 232, 240, 0.78);
+    background: rgba(15, 23, 42, 0.64);
+    font-size: 0.72rem;
+  }
+
+  @media (max-width: 720px) {
+    .rendered-doc :global(.vtext-source-card) {
+      grid-template-columns: 1fr;
+    }
+
+    .rendered-doc :global(.vtext-source-meta) {
+      padding: 0 0.72rem 0.72rem;
+    }
   }
 
   .rendered-doc :global(.table-scroll) {

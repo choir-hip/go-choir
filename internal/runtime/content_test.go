@@ -165,6 +165,53 @@ func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 	}
 }
 
+func TestContentImportURLDedupesYouTubeSourcePackets(t *testing.T) {
+	t.Setenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH", "1")
+	_, handler := testAPISetup(t)
+	body := `{"url":"https://youtu.be/dQw4w9WgXcQ?si=test"}`
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", body, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("first status = %d body=%s", w.Code, w.Body.String())
+	}
+	var first struct {
+		ContentID    string         `json:"content_id"`
+		MediaType    string         `json:"media_type"`
+		AppHint      string         `json:"app_hint"`
+		CanonicalURL string         `json:"canonical_url"`
+		Metadata     map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	if first.MediaType != "video/youtube" || first.AppHint != "video" {
+		t.Fatalf("media/app = %q/%q, want video/youtube/video", first.MediaType, first.AppHint)
+	}
+	if first.CanonicalURL != "https://www.youtube.com/watch?v=dQw4w9WgXcQ" {
+		t.Fatalf("canonical_url = %q", first.CanonicalURL)
+	}
+	if first.Metadata["transcript_availability"] != "unavailable" {
+		t.Fatalf("transcript availability = %#v", first.Metadata["transcript_availability"])
+	}
+
+	req = authenticatedRequest(http.MethodPost, "/api/content/import-url", `{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}`, "user-content")
+	w = httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("second status = %d body=%s", w.Code, w.Body.String())
+	}
+	var second struct {
+		ContentID string `json:"content_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &second); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if second.ContentID != first.ContentID {
+		t.Fatalf("duplicate import content_id = %q, want existing %q", second.ContentID, first.ContentID)
+	}
+}
+
 func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
 	_, handler := testAPISetup(t)
 	body := `{"text":"https://example.com/report.pdf"}`

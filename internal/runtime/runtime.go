@@ -1998,6 +1998,8 @@ var durableMetadataKeys = []string{
 	"seed_prompt",
 	"source_path",
 	"conductor_loop_id",
+	"media_source_refs",
+	"media_source_research_required",
 	runMetadataOwnerEmail,
 }
 

@@ -82,6 +82,22 @@ type fetchedURLContent struct {
 	Warnings    []string
 }
 
+type youtubeTranscriptSegment struct {
+	Start    float64 `json:"start"`
+	Duration float64 `json:"duration,omitempty"`
+	Text     string  `json:"text"`
+}
+
+type youtubeTranscriptFetchResult struct {
+	Availability string
+	Language     string
+	Kind         string
+	Provider     string
+	Text         string
+	Segments     []youtubeTranscriptSegment
+	Error        string
+}
+
 func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -259,6 +275,12 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	if err != nil {
 		return types.ContentItem{}, err
 	}
+	if isYouTubeURL(normalizedURL) {
+		return rt.importYouTubeURLContent(ctx, ownerID, normalizedURL)
+	}
+	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, normalizedURL, ""); ok {
+		return existing, nil
+	}
 	started := time.Now().UTC()
 	rungs := []extractionRung{}
 	warnings := []string{}
@@ -311,8 +333,12 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 		"http_content_type":  selected.ContentType,
 		"retrieval_strategy": retrievalStrategy(rungs),
 	})
+	sourceType := "extracted_url"
+	if !isHTMLMedia(selected.MediaType) && !isTextMedia(selected.MediaType) {
+		sourceType = "url"
+	}
 	itemReq := contentCreateRequest{
-		SourceType:   "extracted_url",
+		SourceType:   sourceType,
 		MediaType:    selected.MediaType,
 		AppHint:      appHintForMedia(selected.MediaType, selected.URL, ""),
 		Title:        selected.Title,
@@ -409,6 +435,338 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 		result.Warnings = append(result.Warnings, "extracted text truncated at 300KiB")
 	}
 	return result, nil
+}
+
+func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normalizedURL string) (types.ContentItem, error) {
+	videoID := youtubeVideoID(normalizedURL)
+	if videoID == "" {
+		return types.ContentItem{}, fmt.Errorf("youtube url is missing a video id")
+	}
+	canonicalURL := "https://www.youtube.com/watch?v=" + videoID
+	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, canonicalURL, "video/youtube"); ok {
+		return existing, nil
+	}
+
+	now := time.Now().UTC()
+	videoContentID := uuid.NewString()
+	transcript := fetchYouTubeTranscript(ctx, videoID)
+	transcriptContentID := ""
+	if strings.TrimSpace(transcript.Text) != "" || transcript.Availability != "" {
+		transcriptContentID = uuid.NewString()
+	}
+	metadata := map[string]any{
+		"platform":                "youtube",
+		"video_id":                videoID,
+		"transcript_availability": firstNonEmpty(transcript.Availability, "unavailable"),
+	}
+	if transcriptContentID != "" {
+		metadata["transcript_content_id"] = transcriptContentID
+	}
+	videoMetadata, _ := json.Marshal(metadata)
+	videoProvenance, _ := json.Marshal(map[string]any{
+		"source_url":              normalizedURL,
+		"canonical_url":           canonicalURL,
+		"registered_at":           now.Format(time.RFC3339Nano),
+		"rights_scope":            "private_user_source",
+		"untrusted_source_media":  true,
+		"transcript_provider":     firstNonEmpty(transcript.Provider, "youtube_caption_tracks"),
+		"transcript_fetch_status": firstNonEmpty(transcript.Availability, "unavailable"),
+	})
+	videoItem := types.ContentItem{
+		ContentID:    videoContentID,
+		OwnerID:      ownerID,
+		SourceType:   "url",
+		MediaType:    "video/youtube",
+		AppHint:      "video",
+		Title:        "YouTube " + videoID,
+		SourceURL:    normalizedURL,
+		CanonicalURL: canonicalURL,
+		ContentHash:  contentHash(canonicalURL),
+		Metadata:     videoMetadata,
+		Provenance:   videoProvenance,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := rt.Store().CreateContentItem(ctx, videoItem); err != nil {
+		return types.ContentItem{}, err
+	}
+	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(videoItem))
+
+	if transcriptContentID != "" {
+		transcriptMetadata, _ := json.Marshal(map[string]any{
+			"platform":         "youtube",
+			"video_content_id": videoContentID,
+			"video_id":         videoID,
+			"language":         transcript.Language,
+			"kind":             transcript.Kind,
+			"provider":         firstNonEmpty(transcript.Provider, "youtube_caption_tracks"),
+			"segments":         transcript.Segments,
+			"fetched_at":       now.Format(time.RFC3339Nano),
+			"availability":     firstNonEmpty(transcript.Availability, "unavailable"),
+			"error":            transcript.Error,
+		})
+		transcriptProvenance, _ := json.Marshal(map[string]any{
+			"source_url":            canonicalURL,
+			"rights_scope":          "private_user_source",
+			"untrusted_source_text": true,
+		})
+		transcriptItem := types.ContentItem{
+			ContentID:    transcriptContentID,
+			OwnerID:      ownerID,
+			SourceType:   "derived_transcript",
+			MediaType:    "text/x-youtube-transcript",
+			AppHint:      "vtext",
+			Title:        "Transcript for YouTube " + videoID,
+			SourceURL:    canonicalURL,
+			CanonicalURL: "youtube://" + videoID + "/transcript/" + firstNonEmpty(transcript.Language, "unknown"),
+			TextContent:  strings.TrimSpace(transcript.Text),
+			ContentHash:  contentHash(strings.TrimSpace(transcript.Text)),
+			Metadata:     transcriptMetadata,
+			Provenance:   transcriptProvenance,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if transcriptItem.ContentHash == "" {
+			transcriptItem.ContentHash = contentHash(transcriptItem.CanonicalURL + ":" + firstNonEmpty(transcript.Availability, "unavailable") + ":" + transcript.Error)
+		}
+		if err := rt.Store().CreateContentItem(ctx, transcriptItem); err != nil {
+			return types.ContentItem{}, err
+		}
+		_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(transcriptItem))
+	}
+	return videoItem, nil
+}
+
+func (rt *Runtime) findExistingURLContentItem(ctx context.Context, ownerID, canonicalURL, mediaType string) (types.ContentItem, bool) {
+	if rt == nil || rt.Store() == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(canonicalURL) == "" {
+		return types.ContentItem{}, false
+	}
+	items, err := rt.Store().ListContentItems(ctx, ownerID, 1000)
+	if err != nil {
+		return types.ContentItem{}, false
+	}
+	normalizedMedia := normalizeMediaType(mediaType)
+	for _, item := range items {
+		if normalizedMedia != "" && normalizeMediaType(item.MediaType) != normalizedMedia {
+			continue
+		}
+		if sameNormalizedURL(item.CanonicalURL, canonicalURL) || sameNormalizedURL(item.SourceURL, canonicalURL) || strings.TrimSpace(item.CanonicalURL) == strings.TrimSpace(canonicalURL) {
+			return item, true
+		}
+	}
+	return types.ContentItem{}, false
+}
+
+func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscriptFetchResult {
+	result := youtubeTranscriptFetchResult{
+		Availability: "unavailable",
+		Provider:     "youtube_caption_tracks",
+	}
+	videoID = strings.TrimSpace(videoID)
+	if videoID == "" {
+		result.Error = "missing video id"
+		return result
+	}
+	if os.Getenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH") == "1" {
+		result.Error = "transcript fetch disabled"
+		return result
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	client := &http.Client{Timeout: 6 * time.Second}
+	watchURL := "https://www.youtube.com/watch?v=" + url.QueryEscape(videoID) + "&hl=en"
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, watchURL, nil)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir.news)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		result.Error = resp.Status
+		return result
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	playerJSON := extractYouTubePlayerResponse(raw)
+	if len(playerJSON) == 0 {
+		result.Error = "caption tracks not found"
+		return result
+	}
+	var player struct {
+		Captions struct {
+			PlayerCaptionsTracklistRenderer struct {
+				CaptionTracks []struct {
+					BaseURL      string `json:"baseUrl"`
+					LanguageCode string `json:"languageCode"`
+					Kind         string `json:"kind"`
+				} `json:"captionTracks"`
+			} `json:"playerCaptionsTracklistRenderer"`
+		} `json:"captions"`
+	}
+	if err := json.Unmarshal(playerJSON, &player); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	tracks := player.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks
+	if len(tracks) == 0 {
+		result.Error = "caption tracks unavailable"
+		return result
+	}
+	track := tracks[0]
+	for _, candidate := range tracks {
+		if strings.HasPrefix(strings.ToLower(candidate.LanguageCode), "en") {
+			track = candidate
+			break
+		}
+	}
+	if strings.TrimSpace(track.BaseURL) == "" {
+		result.Error = "caption track missing base url"
+		return result
+	}
+	captionURL := track.BaseURL
+	if !strings.Contains(captionURL, "fmt=") {
+		sep := "&"
+		if !strings.Contains(captionURL, "?") {
+			sep = "?"
+		}
+		captionURL += sep + "fmt=json3"
+	}
+	captionReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, captionURL, nil)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	captionReq.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir.news)")
+	captionResp, err := client.Do(captionReq)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer func() { _ = captionResp.Body.Close() }()
+	if captionResp.StatusCode < 200 || captionResp.StatusCode >= 400 {
+		result.Error = captionResp.Status
+		return result
+	}
+	captionRaw, err := io.ReadAll(io.LimitReader(captionResp.Body, maxImportedContentBytes))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	segments, text := parseYouTubeJSON3Transcript(captionRaw)
+	if strings.TrimSpace(text) == "" {
+		result.Error = "caption track had no text"
+		return result
+	}
+	result.Availability = "available"
+	result.Language = track.LanguageCode
+	result.Kind = firstNonEmpty(track.Kind, "caption")
+	result.Segments = segments
+	result.Text = text
+	result.Error = ""
+	return result
+}
+
+func extractYouTubePlayerResponse(raw []byte) []byte {
+	source := string(raw)
+	for _, marker := range []string{"ytInitialPlayerResponse =", "ytInitialPlayerResponse="} {
+		idx := strings.Index(source, marker)
+		if idx < 0 {
+			continue
+		}
+		start := strings.Index(source[idx+len(marker):], "{")
+		if start < 0 {
+			continue
+		}
+		start += idx + len(marker)
+		if data := extractJSONObjectAt(source, start); len(data) > 0 {
+			return []byte(data)
+		}
+	}
+	return nil
+}
+
+func extractJSONObjectAt(source string, start int) string {
+	if start < 0 || start >= len(source) || source[start] != '{' {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(source); i++ {
+		ch := source[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return source[start : i+1]
+			}
+		}
+	}
+	return ""
+}
+
+func parseYouTubeJSON3Transcript(raw []byte) ([]youtubeTranscriptSegment, string) {
+	var parsed struct {
+		Events []struct {
+			TStartMs    int `json:"tStartMs"`
+			DDurationMs int `json:"dDurationMs"`
+			Segs        []struct {
+				UTF8 string `json:"utf8"`
+			} `json:"segs"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, ""
+	}
+	segments := make([]youtubeTranscriptSegment, 0, len(parsed.Events))
+	lines := []string{}
+	for _, event := range parsed.Events {
+		parts := []string{}
+		for _, seg := range event.Segs {
+			if text := collapseWhitespace(seg.UTF8); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		text := strings.TrimSpace(strings.Join(parts, " "))
+		if text == "" {
+			continue
+		}
+		segments = append(segments, youtubeTranscriptSegment{
+			Start:    float64(event.TStartMs) / 1000,
+			Duration: float64(event.DDurationMs) / 1000,
+			Text:     text,
+		})
+		lines = append(lines, text)
+	}
+	return segments, strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 func shouldRunSearXNGDiscovery(query string, selected fetchedURLContent, primaryErr error) bool {
@@ -681,7 +1039,7 @@ func classifyPromptBarContentIntent(text string) (appHint, sourceURL, mediaType 
 
 func normalizeContentSourceType(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "upload", "file", "url", "extracted_url", "text":
+	case "upload", "file", "url", "extracted_url", "derived_transcript", "text":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return ""
@@ -700,6 +1058,9 @@ func normalizeMediaType(value string) string {
 }
 
 func detectMediaType(sourceURL, filePath, contentType string) string {
+	if isYouTubeURL(sourceURL) {
+		return "video/youtube"
+	}
 	if normalized := normalizeMediaType(contentType); normalized != "" && normalized != "application/octet-stream" {
 		if normalized == "application/xml" && strings.Contains(strings.ToLower(sourceURL), "rss") {
 			return "application/rss+xml"
@@ -738,9 +1099,6 @@ func detectMediaType(sourceURL, filePath, contentType string) string {
 		return "video/quicktime"
 	case ".rss", ".xml":
 		return "application/rss+xml"
-	}
-	if isYouTubeURL(sourceURL) {
-		return "video/youtube"
 	}
 	return "application/octet-stream"
 }
@@ -799,6 +1157,44 @@ func isYouTubeURL(raw string) bool {
 	}
 	host := strings.ToLower(parsed.Hostname())
 	return host == "youtube.com" || host == "www.youtube.com" || host == "youtu.be" || host == "m.youtube.com"
+}
+
+func youtubeVideoID(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	switch host {
+	case "youtu.be":
+		return sanitizeYouTubeVideoID(strings.Trim(strings.TrimSpace(parsed.Path), "/"))
+	case "youtube.com", "www.youtube.com", "m.youtube.com":
+		if id := sanitizeYouTubeVideoID(parsed.Query().Get("v")); id != "" {
+			return id
+		}
+		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		if len(parts) >= 2 {
+			switch parts[0] {
+			case "embed", "shorts", "live":
+				return sanitizeYouTubeVideoID(parts[1])
+			}
+		}
+	}
+	return ""
+}
+
+func sanitizeYouTubeVideoID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(value, "?&#/"); idx >= 0 {
+		value = value[:idx]
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_-]{6,}$`).MatchString(value) {
+		return value
+	}
+	return ""
 }
 
 func statusForHTTP(code int) string {

@@ -4313,6 +4313,80 @@ func TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt(t *testing.T) {
 	}
 }
 
+func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
+	t.Setenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH", "1")
+	h, s, rt := vtextAPISetupWithRuntime(t)
+
+	image := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("png-bytes"))
+	}))
+	defer image.Close()
+
+	docID, _ := createDocWithUserRevision(t, h)
+	content := "Review these sources:\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ\n\n" + image.URL + "/cover.png"
+	revReq := vtextCreateRevisionRequest{
+		Content:     content,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "alice",
+	}
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revisions", revReq)
+	w := httptest.NewRecorder()
+	h.HandleVTextRevisions(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create media revision: status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+		map[string]string{"intent": "revise"})
+	w = httptest.NewRecorder()
+	h.HandleVTextAgentRevision(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("revise status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp vtextAgentRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	run, err := rt.GetRun(context.Background(), resp.RunID, "user-1")
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	refs := decodeVTextMediaSourceRefs(run.Metadata["media_source_refs"])
+	if len(refs) != 2 {
+		t.Fatalf("media_source_refs len = %d, want 2: %#v", len(refs), refs)
+	}
+	if !metadataBoolValue(run.Metadata, "media_source_research_required") {
+		t.Fatalf("media_source_research_required not set: %#v", run.Metadata)
+	}
+	if !strings.Contains(run.Prompt, "Detected durable media source refs") || !strings.Contains(run.Prompt, "researcher-maintained source representations") {
+		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
+	}
+	byKind := map[string]vtextMediaSourceRef{}
+	for _, ref := range refs {
+		byKind[ref.Kind] = ref
+	}
+	if byKind["youtube"].VideoID != "dQw4w9WgXcQ" || byKind["youtube"].TranscriptAvailability != "unavailable" {
+		t.Fatalf("youtube ref = %#v", byKind["youtube"])
+	}
+	if byKind["image"].MediaType != "image/png" || byKind["image"].ContentID == "" {
+		t.Fatalf("image ref = %#v", byKind["image"])
+	}
+	dedupedRefs, added := rt.registerVTextMediaSourceRefs(context.Background(), "user-1", content, map[string]any{
+		"media_source_refs": refs,
+	})
+	if added || len(dedupedRefs) != 2 {
+		t.Fatalf("re-register added=%v len=%d, want no new refs and len 2: %#v", added, len(dedupedRefs), dedupedRefs)
+	}
+	items, err := s.ListContentItems(context.Background(), "user-1", 20)
+	if err != nil {
+		t.Fatalf("list content items: %v", err)
+	}
+	if len(items) < 3 {
+		t.Fatalf("content items = %d, want video, transcript status, and image refs: %#v", len(items), items)
+	}
+}
+
 // TestVTextAgentRevisionDocumentNotFound verifies that requesting an
 // agent revision for a non-existent document returns 404.
 func TestVTextAgentRevisionDocumentNotFound(t *testing.T) {

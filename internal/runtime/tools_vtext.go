@@ -170,6 +170,18 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	if prompt == "" || vtextPromptAllowsUngroundedCreativeDraft(prompt) {
 		return vtextRequiredContinuation{}, false
 	}
+	mediaSourceRefs := decodeVTextMediaSourceRefs(rec.Metadata["media_source_refs"])
+	if metadataBoolValue(rec.Metadata, "media_source_research_required") && len(mediaSourceRefs) > 0 {
+		return vtextRequiredContinuation{
+			Tool: "spawn_agent",
+			Args: map[string]any{
+				"role":       AgentProfileResearcher,
+				"channel_id": docID,
+				"objective":  buildVTextMediaSourceResearchObjective(mediaSourceRefs, prompt),
+			},
+			Instruction: "The first VText revision is now stored and new durable media source packets exist. Call spawn_agent next with the provided researcher arguments so transcript/media understanding flows through source representations before the review makes source claims. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
+		}, true
+	}
 	if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
 		if baseRevision.AuthorKind == types.AuthorUser || grounded {
 			return vtextRequiredContinuation{
@@ -244,6 +256,9 @@ func vtextPromptNeedsResearchContinuation(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
+	}
+	if len(extractVTextMediaSourceURLs(prompt)) > 0 {
+		return true
 	}
 	researchMarkers := []string{
 		"latest",
