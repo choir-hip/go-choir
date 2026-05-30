@@ -559,18 +559,46 @@ fetched and then parsed as JSON. This blocks the real-transcript acceptance case
 until the caption URL format is forced to JSON3 or a transcript provider adapter
 replaces the direct YouTube timedtext path.
 
+### 2026-05-30 Deployed Source-Packet Proof
+
+Commit `673a8ed38113b3822725598599739ae87d76b206` deployed successfully to
+staging after CI run `26676482105`. Product-path API and browser proof with QA
+user `qa-1780121526346-qb1lh6@example.com` created VText document
+`594ecf95-8ae8-4add-b2ac-a1a018cb4494`, pasted two YouTube links and one
+direct image link, and submitted Revise through
+`07d1bdd0-4039-495a-b637-66904a5452bf`.
+
+Evidence from the deployed path:
+
+- appagent revision `b7a7ec01-6b3a-4bf9-af45-91939fa23cca` carried 3
+  `media_source_refs`;
+- one researcher update was consumed into the VText revision metadata;
+- content items included 2 `video/youtube` refs, 2 derived transcript status
+  refs, and 1 `image/jpeg` ref;
+- repeated Revise returned a new run handle without increasing relevant
+  content item count (`5 -> 5`);
+- desktop rendering showed 3 source cards, 2 YouTube iframes, and 1 image;
+- mobile 390x844 rendering showed the same 3 source cards with no horizontal
+  overflow.
+
+The same proof still did not satisfy the real-transcript acceptance case:
+YouTube transcript items remained `unavailable` (`caption track had no text` or
+`caption tracks unavailable`). The source-packet and researcher-mediated review
+path is now deployed at low resolution, but transcript acquisition needs a
+stronger provider strategy before the mission can be complete.
+
 ```text
 status: checkpoint_incomplete
-last checkpoint: first code pass adds source-packet registration for VText Revise and frontend embedded source cards
-current artifact state: Content import now special-cases YouTube URLs into owner-scoped video ContentItems, best-effort transcript ContentItems with availability/provenance, and canonical video-id dedupe; VText Revise scans current document content for YouTube/direct-image URLs, imports/registers missing source packets, stores durable media_source_refs in revision/run metadata, and marks researcher work required only when new source refs are added; appagent revisions carry those refs forward; VText renders source cards for YouTube and image refs from revision metadata without frontend-local persistence.
-what shipped: local source changes only; not committed, pushed, deployed, or staging-verified yet
-what was proven: focused comprehensive runtime tests prove YouTube import dedupe, revise-time mixed YouTube/image source-ref registration, prompt source contract, unavailable transcript state, image source registration, durable metadata propagation input, and repeated source registration dedupe; frontend production build proves the embedded-card code compiles
-unproven or partial claims: real public YouTube transcript acquisition in staging, transcript segment quality, researcher source-representation delivery and integration back into VText, bare prompt-surface link opening as Review VText, optional source expansion, publication safeguards, reload/device proof, mobile rendering proof, and deployed product-path behavior
-belief-state changes: ContentItem plus VText metadata appear sufficient for the first low-resolution source-packet path; the next realism axis is proving live transcript acquisition and researcher representation flow rather than adding a first-class SourcePacket table immediately
+last checkpoint: deployed product-path source-packet proof at 673a8ed
+current artifact state: Content import special-cases YouTube URLs into owner-scoped video ContentItems, best-effort transcript status ContentItems with availability/provenance, and canonical video-id dedupe; VText Revise scans current document content for YouTube/direct-image URLs, imports/registers missing source packets, stores durable media_source_refs in revision/run metadata, and marks researcher work required only when new source refs are added; appagent revisions carry those refs forward; VText renders source cards for YouTube and image refs from revision metadata without frontend-local persistence.
+what shipped: commits 0e4fbaa, 78d4092, and 673a8ed pushed to main and deployed to staging
+what was proven: focused comprehensive runtime tests prove YouTube import dedupe, revise-time mixed YouTube/image source-ref registration, prompt source contract, unavailable transcript state, image source registration, durable metadata propagation input, and repeated source registration dedupe; frontend production build proves embedded-card code compiles; deployed staging proof proves mixed YouTube/image Revise registration, researcher update consumption, relevant content-item dedupe, desktop embedded source cards, and mobile no-overflow rendering
+unproven or partial claims: real public YouTube transcript acquisition in staging, transcript segment quality, bare prompt-surface link opening as Review VText, optional source expansion, publication safeguards, reload/device proof beyond persisted VText window restoration, and source-aware model-context retrieval over full transcript text
+belief-state changes: ContentItem plus VText metadata are sufficient for the first low-resolution source-packet path; direct YouTube HTML/timedtext transcript scraping is not reliable enough from staging and should be replaced or wrapped by a stronger transcript provider adapter
 remaining error field: transcript provider brittleness against YouTube HTML/caption changes, image materialization/cache policy, source-card editing ergonomics, source-ref removal semantics, researcher update schema for source representations/excerpts, model-context retrieval over transcripts, public rights filtering, staging deploy proof
 highest-impact remaining uncertainty: whether the best-effort YouTube caption-track fetch works reliably enough on staging for real public videos or needs a dedicated transcript provider adapter/service before product acceptance
-next executable probe: run a staging/product-path proof after commit/push/deploy: paste real transcript-backed YouTube, transcript-unavailable YouTube, direct image, and mixed links into an existing VText; click Revise; verify content items, source refs, embedded cards, researcher spawn/update behavior, dedupe on repeated Revise, reload, and mobile layout
+next executable probe: implement or configure a stronger transcript acquisition adapter, then rerun the same staging product-path proof with a real public video whose transcript item reaches availability=available with non-empty timestamped segments
 suggested resume goal string: /goal Run docs/mission-youtube-review-studio-v0.md through the first receding-horizon loop: document the current baseline behavior and feature contract, inspect the content/VText revise/researcher/publication code paths, implement the smallest durable source-packet and transcript acquisition path that preserves the mission invariants, make paste-YouTube-or-image-link-then-Revise register and embed one or more media sources in the existing VText while routing transcript/media understanding through researcher source representations, and verify on staging with real transcript, transcript-unavailable, direct image, mixed multi-link, researcher representation, and repeated-revise dedupe cases.
-evidence artifact refs: nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent|TestContentCreateSupportsDurableMediaReferences|TestContentImportURLDedupesYouTubeSourcePackets|TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt|TestVTextAgentRevisionRegistersMediaSourceRefs'; nix develop -c go test ./internal/runtime -run TestDoesNotExist; npm run build in frontend
-rollback refs: revert the behavior commit once created; content artifacts are owner-scoped and addressable by content id, but explicit source-ref deletion/removal UX remains unimplemented
+evidence artifact refs: CI 26676482105; staging /health proxy+sandbox deployed_commit 673a8ed38113b3822725598599739ae87d76b206; local tests `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent|TestContentCreateSupportsDurableMediaReferences|TestContentImportURLDedupesYouTubeSourcePackets|TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt|TestVTextAgentRevisionRegistersMediaSourceRefs'`; `nix develop -c go test ./internal/runtime -run TestDoesNotExist`; `npm run build` in frontend; screenshots `/tmp/choir-vtext-media-source-cards-673a8ed.png` and `/tmp/choir-vtext-media-source-cards-mobile-673a8ed.png`
+rollback refs: revert commits 673a8ed and 0e4fbaa if needed; content artifacts are owner-scoped and addressable by content id, but explicit source-ref deletion/removal UX remains unimplemented
 ```
