@@ -678,3 +678,22 @@ transcript acceptance case. Staging does not appear to have a configured
 transcript provider yet, so the remaining next step is to configure a managed
 provider behind the adapter or implement another durable provider path that can
 return real transcript segments from staging.
+
+### 2026-05-30 InnerTube Android Transcript Path
+
+A direct probe of YouTube's Android InnerTube player path returned usable
+caption tracks where the web watch-page and timedtext path returned empty
+bodies or `FAILED_PRECONDITION`. The runtime now tries transcript acquisition
+in this order:
+
+1. configured managed provider, when `CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER` is
+   present;
+2. built-in Android InnerTube player request
+   (`youtube_innertube_android`) to discover caption tracks and fetch JSON3
+   caption segments;
+3. legacy web watch-page caption-track scrape as an unavailable-state fallback.
+
+This still preserves the mission boundary: InnerTube output is normalized into
+the same private transcript `ContentItem` with timestamp segments and
+untrusted-source provenance. It does not summarize, excerpt, or rewrite the
+review deterministically; researcher/VText still own source interpretation.

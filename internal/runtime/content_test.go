@@ -328,6 +328,63 @@ func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
 	}
 }
 
+func TestFetchYouTubeTranscriptUsesInnerTubeAndroidFallback(t *testing.T) {
+	var source *httptest.Server
+	source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/player":
+			if r.Method != http.MethodPost {
+				t.Fatalf("player method = %s", r.Method)
+			}
+			if got := r.Header.Get("X-YouTube-Client-Name"); got != "3" {
+				t.Fatalf("client name header = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"playabilityStatus": {"status": "OK"},
+				"captions": {"playerCaptionsTracklistRenderer": {"captionTracks": [
+					{"baseUrl": "` + source.URL + `/caption?fmt=srv3&lang=en", "languageCode": "en", "kind": ""}
+				]}}
+			}`))
+		case "/caption":
+			if r.URL.Query().Get("fmt") != "json3" {
+				t.Fatalf("caption fmt = %q", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"events":[{"tStartMs":1000,"dDurationMs":2500,"segs":[{"utf8":"InnerTube line."}]}]}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer source.Close()
+	t.Setenv("CHOIR_YOUTUBE_INNERTUBE_PLAYER_URL", source.URL+"/player")
+
+	got := fetchYouTubeTranscript(context.Background(), "dQw4w9WgXcQ")
+	if got.Availability != "available" || got.Provider != "youtube_innertube_android" {
+		t.Fatalf("availability/provider = %q/%q error=%q", got.Availability, got.Provider, got.Error)
+	}
+	if got.Language != "en" || got.Kind != "caption" {
+		t.Fatalf("language/kind = %q/%q", got.Language, got.Kind)
+	}
+	if len(got.Segments) != 1 || got.Segments[0].Start != 1 || got.Segments[0].Duration != 2.5 {
+		t.Fatalf("segments = %#v", got.Segments)
+	}
+	if got.Text != "InnerTube line." {
+		t.Fatalf("text = %q", got.Text)
+	}
+}
+
+func TestChooseYouTubeCaptionTrackPrefersHumanEnglish(t *testing.T) {
+	got, ok := chooseYouTubeCaptionTrack([]youtubeCaptionTrack{
+		{BaseURL: "first", LanguageCode: "es"},
+		{BaseURL: "auto", LanguageCode: "en", Kind: "asr"},
+		{BaseURL: "manual", LanguageCode: "en"},
+	})
+	if !ok || got.BaseURL != "manual" {
+		t.Fatalf("track = %#v ok=%v, want manual English", got, ok)
+	}
+}
+
 func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing.T) {
 	raw := []byte(`{
 		"data": [{

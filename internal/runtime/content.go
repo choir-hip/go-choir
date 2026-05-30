@@ -106,6 +106,12 @@ type youtubeTranscriptProviderConfig struct {
 	AuthScheme string
 }
 
+type youtubeCaptionTrack struct {
+	BaseURL      string `json:"baseUrl"`
+	LanguageCode string `json:"languageCode"`
+	Kind         string `json:"kind"`
+}
+
 func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -587,9 +593,22 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 		result.Error = providerResult.Error
 		result.Provider = providerResult.Provider
 	}
+	innerTubeResult := fetchYouTubeTranscriptFromInnerTube(ctx, videoID)
+	if innerTubeResult.Availability == "available" {
+		return innerTubeResult
+	}
 	captionResult := fetchYouTubeTranscriptFromCaptionTracks(ctx, videoID)
 	if captionResult.Availability == "available" {
 		return captionResult
+	}
+	if innerTubeResult.Error != "" {
+		if result.Error == "" {
+			result.Error = innerTubeResult.Error
+			result.Provider = innerTubeResult.Provider
+		} else {
+			result.Error += "; " + innerTubeResult.Error
+			result.Provider += "+" + innerTubeResult.Provider
+		}
 	}
 	if result.Error != "" {
 		captionErr := captionResult.Error
@@ -600,6 +619,124 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 		captionResult.Provider = result.Provider + "+youtube_caption_tracks"
 	}
 	return captionResult
+}
+
+func fetchYouTubeTranscriptFromInnerTube(ctx context.Context, videoID string) youtubeTranscriptFetchResult {
+	result := youtubeTranscriptFetchResult{
+		Availability: "unavailable",
+		Provider:     "youtube_innertube_android",
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	client := &http.Client{Timeout: 8 * time.Second}
+	playerURL := youtubeInnerTubePlayerEndpoint()
+	body, _ := json.Marshal(map[string]any{
+		"context": map[string]any{
+			"client": map[string]any{
+				"clientName":        "ANDROID",
+				"clientVersion":     "20.10.38",
+				"androidSdkVersion": 35,
+				"hl":                "en",
+				"gl":                "US",
+				"userAgent":         "com.google.android.youtube/20.10.38 (Linux; U; Android 15) gzip",
+			},
+		},
+		"videoId": videoID,
+	})
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodPost, playerURL, bytes.NewReader(body))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	applyYouTubeInnerTubeHeaders(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		result.Error = fmt.Sprintf("innertube player returned status %s: %s", resp.Status, strings.TrimSpace(string(raw)))
+		return result
+	}
+	var player struct {
+		PlayabilityStatus struct {
+			Status string `json:"status"`
+			Reason string `json:"reason"`
+		} `json:"playabilityStatus"`
+		Captions struct {
+			PlayerCaptionsTracklistRenderer struct {
+				CaptionTracks []youtubeCaptionTrack `json:"captionTracks"`
+			} `json:"playerCaptionsTracklistRenderer"`
+		} `json:"captions"`
+	}
+	if err := json.Unmarshal(raw, &player); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if status := strings.TrimSpace(player.PlayabilityStatus.Status); status != "" && status != "OK" {
+		result.Error = strings.TrimSpace(status + " " + player.PlayabilityStatus.Reason)
+		return result
+	}
+	track, ok := chooseYouTubeCaptionTrack(player.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks)
+	if !ok {
+		result.Error = "caption tracks unavailable"
+		return result
+	}
+	captionURL := youtubeJSON3CaptionURL(track.BaseURL)
+	captionReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, captionURL, nil)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	applyYouTubeInnerTubeHeaders(captionReq)
+	captionResp, err := client.Do(captionReq)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer func() { _ = captionResp.Body.Close() }()
+	if captionResp.StatusCode < 200 || captionResp.StatusCode >= 400 {
+		result.Error = captionResp.Status
+		return result
+	}
+	captionRaw, err := io.ReadAll(io.LimitReader(captionResp.Body, maxImportedContentBytes))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	segments, text := parseYouTubeJSON3Transcript(captionRaw)
+	if strings.TrimSpace(text) == "" {
+		result.Error = "caption track had no text"
+		return result
+	}
+	result.Availability = "available"
+	result.Language = track.LanguageCode
+	result.Kind = firstNonEmpty(track.Kind, "caption")
+	result.Segments = segments
+	result.Text = text
+	result.Error = ""
+	return result
+}
+
+func youtubeInnerTubePlayerEndpoint() string {
+	if value := strings.TrimSpace(os.Getenv("CHOIR_YOUTUBE_INNERTUBE_PLAYER_URL")); value != "" {
+		return value
+	}
+	return "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+}
+
+func applyYouTubeInnerTubeHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 15) gzip")
+	req.Header.Set("Origin", "https://www.youtube.com")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-YouTube-Client-Name", "3")
+	req.Header.Set("X-YouTube-Client-Version", "20.10.38")
 }
 
 func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string) youtubeTranscriptFetchResult {
@@ -641,11 +778,7 @@ func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string
 	var player struct {
 		Captions struct {
 			PlayerCaptionsTracklistRenderer struct {
-				CaptionTracks []struct {
-					BaseURL      string `json:"baseUrl"`
-					LanguageCode string `json:"languageCode"`
-					Kind         string `json:"kind"`
-				} `json:"captionTracks"`
+				CaptionTracks []youtubeCaptionTrack `json:"captionTracks"`
 			} `json:"playerCaptionsTracklistRenderer"`
 		} `json:"captions"`
 	}
@@ -653,17 +786,10 @@ func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string
 		result.Error = err.Error()
 		return result
 	}
-	tracks := player.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks
-	if len(tracks) == 0 {
+	track, ok := chooseYouTubeCaptionTrack(player.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks)
+	if !ok {
 		result.Error = "caption tracks unavailable"
 		return result
-	}
-	track := tracks[0]
-	for _, candidate := range tracks {
-		if strings.HasPrefix(strings.ToLower(candidate.LanguageCode), "en") {
-			track = candidate
-			break
-		}
 	}
 	if strings.TrimSpace(track.BaseURL) == "" {
 		result.Error = "caption track missing base url"
@@ -703,6 +829,28 @@ func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string
 	result.Text = text
 	result.Error = ""
 	return result
+}
+
+func chooseYouTubeCaptionTrack(tracks []youtubeCaptionTrack) (youtubeCaptionTrack, bool) {
+	if len(tracks) == 0 {
+		return youtubeCaptionTrack{}, false
+	}
+	for _, candidate := range tracks {
+		if strings.EqualFold(candidate.LanguageCode, "en") && strings.TrimSpace(candidate.Kind) == "" {
+			return candidate, true
+		}
+	}
+	for _, candidate := range tracks {
+		if strings.EqualFold(candidate.LanguageCode, "en") {
+			return candidate, true
+		}
+	}
+	for _, candidate := range tracks {
+		if strings.HasPrefix(strings.ToLower(candidate.LanguageCode), "en") {
+			return candidate, true
+		}
+	}
+	return tracks[0], true
 }
 
 func configuredYouTubeTranscriptProvider() (youtubeTranscriptProviderConfig, bool) {
