@@ -1,7 +1,7 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-30
 **Baseline checked:** `choir.news` primary-domain cutover, WebAuthn hard reset,
 VM retention/pruning policy hardening, deploy-speed, and disk-pressure work.
 
@@ -206,7 +206,7 @@ Known gaps:
 | App | Current state | Known gaps / next realism axis |
 | --- | --- | --- |
 | **Files** | First-class file browser with navigation, upload, text-to-VText open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
-| **VText** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. | Continue flicker/focus/coexistence hardening, especially while Trace or live updates are open. Improve document/read surfaces without mixing worker patches directly into canonical text. |
+| **VText** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested VTexts. | Continue flicker/focus/coexistence hardening, especially while Trace or live updates are open. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
 | **Trace** | Evidence app for trajectories, runs, summaries, timelines, inspectors, search/provider stats, and run-acceptance surfaces. | Eliminate confusing multi-scroll layouts on mobile except bounded code/payload blocks. Make run/candidate/promotion evidence easier to drill into on desktop and mobile. |
 | **Web Lens / Browser** | Browser-style URL input with backend Web Lens snapshots when authenticated/configured and iframe fallback for guest/external pages. | Backend control/screenshot support remains a distinct substrate frontier. Browser should remain an app, not a bypass around product APIs. |
 | **Terminal** | Floating terminal backed by `ghostty-web` and `/api/terminal/ws`, with independent PTY sessions per window. | Keep guarded as a signed-in/mutation surface. Do not treat terminal proof as product proof for app/VM/promotion behavior. |
@@ -232,6 +232,17 @@ Known gaps:
   everything-viewer.
 - Files, launcher, prompt/conductor decisions, and public routes should converge
   on the same app identity for the same artifact.
+- VText may embed snippets from other apps, but the full-control surface remains
+  the owning app. Embedded snippets are durable artifact references and layout
+  intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,
+  EPUB, Trace, Apps & Changes, or Browser back into a generic viewer.
+- Each VText snippet should expose an expansion target that opens the relevant
+  app/window while preserving the reader's VText position. Multi-window reading
+  is a core affordance for sources, demos, media, nested VTexts, and evidence.
+- Candidate coding work intended for human approval should be video-first when
+  visual or temporal behavior matters. The VText approval packet should embed
+  the demo video if available, then link package/diff refs, verifier evidence,
+  Trace/run-acceptance refs, rollback path, risks, and follow-up requests.
 - Primary app chrome should expose the user's task first. Provenance, source
   hashes, debug ids, and raw manifests belong in secondary details or Trace,
   not at the top of ordinary app workflows.

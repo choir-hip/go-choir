@@ -2,7 +2,7 @@
 
 ## Status
 
-Problem checkpoint, 2026-05-29.
+Problem checkpoint, 2026-05-29. App-state checkpoint updated 2026-05-30.
 
 The next Choir-in-Choir campaign is tabled until the everyday product surface is more reliable during demos. The acceptance target is not a large new self-development loop; it is a smaller stability foundation: the visible desktop and VText surfaces must truthfully reflect durable background work across reloads, closed tabs, and signed-out visits.
 
@@ -17,6 +17,19 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
 - Product observation in Comet on `https://choir.news/` showed the live tab in a session-expired/signed-out state with the auth overlay over many open preview/user-like windows. This confirms the public-first-view issue and makes the session-sync problem concrete rather than theoretical.
 - After passkey reauthentication in Comet as `yusefnathanson@me.com`, the desktop restored to a Trace window for "Make an app that is a minesweeper game". Trace showed the trajectory completed at 2026-05-29 16:34:22, with conductor and super completed and five VText runs. The Desk still showed 11 open windows, including multiple duplicate email-draft VText windows, which reinforces that stale open-window state needs canonical cleanup and cross-session convergence.
 - Code inspection found session-local desktop placement authority: `GetDesktopStateForSession` preferred the current browser session's old placement row before the owner's latest placement, so phone/desktop sessions could diverge for the same user.
+- On 2026-05-30, mobile Safari staging evidence showed reload restoring the
+  Email app as a small, translucent window opened to Drafts even when the owner
+  had placed the system in other visible states. The Email content overflowed
+  the window and overlapped a Trace window behind it. This is no longer just a
+  stale `?app=email` problem; it shows app-owned view state, window geometry,
+  foreground stack, and visual opacity can fail to round-trip as one coherent
+  product state.
+- Local reproduction found two concrete persistence hazards behind the Email
+  reload failure: browser-derived fractional window geometry could make
+  `/api/desktop/state` reject saves with `400 invalid request body`, and a
+  stale desktop live-event merge could overwrite the current driver session's
+  newer app context with an older `{guestMode, preview}` context before
+  reload/pagehide flushed state.
 
 ## Invariants
 
@@ -27,6 +40,20 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
 - All sessions for one owner should converge on the same active desktop state. Session IDs are provenance and driver-lease metadata, not separate authoritative desktops.
 - Public signed-out desktop state should be intentionally sparse: blank desktop or one explanatory VText, not multiple owner-like work windows.
 - Progress UI should make uncertainty legible. "Working", "pending verification", "stalled", "failed", and "complete but not adopted" should not collapse into the same quiet text.
+- App view state must be durable through a universal app protocol, not ad hoc
+  per-app browser variables. Each app should expose serializable state,
+  hydrate from the persisted state, and emit state changes through the desktop
+  shell/API so reload, cross-device sessions, and app promotion have one
+  consistent contract.
+- Window persistence must carry enough layout invariants to prevent restored
+  windows from becoming smaller than their content or visually transparent in a
+  way that obscures foreground/background ownership.
+- Desktop persistence payloads must be normalized before crossing the universal
+  API boundary. Browser layout can produce fractional pixels; persisted window
+  geometry is integer pixel state.
+- While a browser session is the active driver, remote/live desktop merges may
+  converge shared placement but must not regress that driver's fresher local
+  app context with older remote context.
 
 ## First Stability Slice
 
@@ -35,6 +62,10 @@ This pass should stay small:
 1. Simplify the signed-out public desktop to a single explanatory VText preview.
 2. Make stale `?app=email` URL app launch one-shot so it does not keep overriding restored desktop state on reload.
 3. Strengthen VText pending feedback by making document-level pending state visible and animated after stream snapshots/reconnects.
+4. Add the first universal app-state persistence path: app surfaces can emit a
+   context/state change, the desktop shell saves it in server-backed
+   `app_context`, and restored apps hydrate from that state. Email Drafts is
+   the initial regression because it currently exposes the gap.
 
 Broader verification-state semantics, video QA capture, and campaign compiler promotion safety remain important, but they should follow after the basic visible/durable continuity loop is less ambiguous.
 
@@ -48,3 +79,7 @@ The rewritten frontend still uses Svelte stores and component variables in place
 - An authenticated reload with a stale Email URL intent does not repeatedly force Email above the restored active desktop state after the intent is consumed.
 - A VText document with a pending agent mutation shows a clear visible working indicator after initial load or SSE reconnect.
 - Backend VText stream snapshot behavior remains covered: snapshots include pending mutation state and clear stale terminal mutations before reporting pending.
+- Switching the Email mailbox/view and reloading restores that Email state from
+  server-backed desktop/app state, without relying on browser local storage.
+- Restored mobile Email geometry is usable: it should not be smaller than its
+  main content or become unintentionally transparent over another app.

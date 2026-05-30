@@ -1,6 +1,6 @@
 # Choir North Star
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-30
 
 The Automatic Computer already exists in deployed form: web desktop, backend
 services, appagents, and NixOS-on-NixOS VM infrastructure. The product object is
@@ -31,7 +31,12 @@ files, and local preferences may diverge from the platform baseline. Some
 desktop apps grow into appagents; most can remain plain display/control
 surfaces. The first appagent is `vtext`: a durable, versioned semantic artifact
 that accumulates user edits, appagent synthesis, worker findings, evidence,
-artifacts, and later publication history.
+artifacts, and later publication history. Its target shape is not flat text but
+a multimedia computational essay: prose plus typed snippets for sources,
+images, audio, podcasts, video, web captures, PDF/EPUB excerpts, interactive
+graphics, animations, Trace evidence, candidate demo videos, and nested VTexts.
+Those snippets should be readable in the VText flow and expandable into their
+own desktop app windows without losing the reader's place.
 
 The automatic newspaper is the public memory projection: selected vtexts,
 sources, claims, corrections, citations, and track records become discoverable,
@@ -50,10 +55,11 @@ making raw agent orchestration the primary UI.
 
 1. Stabilize `vtext`, researcher, super, user edits, and Trace.
 2. Add ingestion skills for URLs, YouTube transcripts, text/Markdown/PDF/EPUB
-   uploads, and later multimedia display apps whose content can be transcluded
-   into `vtext`.
+   uploads, and later multimedia display apps whose content can be embedded as
+   typed `vtext` snippets and expanded into owning app windows.
 3. Add publication.
-4. Add Pretext-based rendering/transclusion.
+4. Add Pretext-based responsive rendering/transclusion for computational
+   essays, source-rich publications, and campaign/candidate approval reports.
 5. Add citation mechanics.
 6. Add CHIPS and citation/compute economics.
 

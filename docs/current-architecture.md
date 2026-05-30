@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-30
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
@@ -112,12 +112,12 @@ access to the live private document.
    text/content, YouTube transcripts, text/Markdown/PDF/EPUB upload, real PDF
    and EPUB readers, and app-grade image/audio/video surfaces so uploaded,
    linked, or agent-retrieved media can open in the desktop and become available
-   for `vtext` transclusion. Current app state is tracked in
+   for typed `vtext` snippets. Current app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
 4. Harden publication UX and review: retraction, supersession, route
    management, richer review evidence, and proposal inbox/acceptance flows.
-5. Deepen Pretext-based text rendering/transclusion for published `vtext` and
-   web content.
+5. Deepen Pretext-based responsive rendering and transclusion for published
+   `vtext`, computational essays, evidence reports, and web content.
 6. Add richer citation mechanics.
 7. Add CHIPS and citation/compute economics.
 
@@ -149,6 +149,52 @@ citations + compute accounting -> CHIPS economics
 `vtext` is the first appagent and the version-native control plane. It replaces
 chat as the main surface for multiagent work.
 
+The target shape of `vtext` is hypermedia, not flat text. A `vtext` should be
+able to become a computational essay or owner-readable campaign/report packet:
+prose plus typed snippets for images, audio, podcasts, video, web captures,
+PDF/EPUB excerpts, code diffs, interactive graphics, animations, Trace excerpts,
+run-acceptance records, app-change packages, candidate demo videos, sources,
+and nested VTexts. Those snippets are durable artifact references with layout
+intent, provenance, and expansion targets, not pasted browser-local state.
+
+Pretext is the preferred layout primitive for this direction: use it for
+accurate multiline text measurement, responsive text flow, rich inline
+measurement, magazine-style columns, and text wrapping around embedded objects.
+Pretext should not become the VText data model or a replacement for app
+ownership. Choir owns the semantic block/snippet model; Pretext helps render
+that model with stable responsive geometry.
+
+Every embedded snippet should have two forms:
+
+- an inline or embedded form that reads naturally in the VText flow;
+- an expanded form that opens the owning desktop app/window without losing the
+  reader's place in the VText.
+
+For example, an embedded video expands into the Video app, a podcast excerpt
+expands into Podcast, a PDF source excerpt expands into PDF, an image expands
+into Image, a Trace excerpt expands into Trace, and an embedded VText expands
+into another VText window. This preserves app boundaries while making VText the
+composition and reentry surface.
+
+The multi-window desktop is part of the reading model. Sources, demos, and
+media should be worth opening because opening them does not destroy the current
+reading context. A user reading a computational essay can click through a
+source, inspect an animation or candidate demo, play a clip, or compare another
+VText in a new window, then return to the same place in the essay.
+
+The canonical example is an article that is also a computational essay. The
+user should be able to ask Choir to make an article that combines argument,
+sources, interactive graphics, animations, multimedia clips, generated or
+uploaded media, and reviewable evidence. The generated VText should not flatten
+those materials into links at the bottom. It should arrange them as readable
+snippets in the essay, with sources and media tempting enough to open because
+the desktop preserves context. Clicking a source opens Browser/Web Lens or the
+appropriate reader; clicking a graphic opens the owning interactive app or
+viewer; clicking a nested argument opens another VText; clicking a candidate
+demo opens the review/approval context. This is one reason VText must stay a
+composition surface over typed artifacts instead of becoming a monolithic media
+app.
+
 Not every app is an appagent. Apps can be simple desktop surfaces. An app becomes
 an appagent when it needs durable domain ownership, prompts, or dynamic agentic
 UI. Likely sequence: `vtext` first, browser next, then mail, then calendar.
@@ -173,6 +219,13 @@ updates: findings, evidence, source references, artifact refs, branch/commit
 refs, preview refs, test results, questions, constraints, or proposal summaries.
 The `vtext` appagent/writer decides whether and how those updates become a new
 document version.
+
+For candidate coding work and human approval, the default owner-review artifact
+should be video-first when the behavior is visual or temporal. A candidate
+approval VText should embed a short demo video when available, then provide the
+summary, package/diff refs, verifier status, rollback path, risks, and links to
+Trace or run acceptance. Diffs and logs are still important, but they should not
+be the only human proof for interactive product behavior.
 
 The first implementation can create a new `vtext` revision after each meaningful
 worker update. That policy should be isolated so it can later debounce, batch, or
@@ -221,6 +274,16 @@ appagent.
 it needs prompts, dynamic behavior, or canonical state. Appagents mutate their
 own typed app state through product APIs. They do not get broad shell or
 arbitrary filesystem mutation by default.
+
+Every desktop app that has user-visible view state must participate in the
+shared app-state protocol. The shell owns a universal `app_context` persistence
+path for each window: apps hydrate from the context they receive, emit typed
+context/state changes back to the shell, and the shell saves that state through
+the server-backed desktop API. Folder selection, selected document/message,
+reader position, media source identity, candidate review selection, and similar
+view state must not live only in browser component variables. Per-app code can
+define the shape of its typed context, but persistence and reload semantics must
+use the universal shell/API path.
 
 `vtext` is the single writer for canonical document versions. It synthesizes user
 edits and worker updates into durable document state.

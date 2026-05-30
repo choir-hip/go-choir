@@ -1,7 +1,7 @@
 # Choir Project Goals
 
 **Status:** canonical current goals
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-30
 
 This file replaces the old root `PROJECT-GOALS.md`. It keeps the live direction
 from that file while removing completed checklists and stale continuation
@@ -61,6 +61,9 @@ Ideal direction:
 - Useful local changes can become typed packages or public proposals.
 - Platform updates merge into divergent user computers ledger by ledger.
 - VText becomes the semantic substrate for publication and radio traversal.
+- VText becomes a multimedia computational-essay surface where durable snippets
+  can embed and expand into the desktop's source, media, evidence, and app
+  windows without losing the reader's place.
 - The artifact graph records evidence, claims, deltas, verifiers, promotions,
   failures, and reuse so future work starts with more structure than the last.
 
@@ -71,6 +74,13 @@ Ideal direction:
 `vtext` should feel like the document itself:
 
 - one primary version-native writing surface;
+- computational-essay support: prose, sources, interactive graphics,
+  animations, images, audio, podcasts, video, web captures, PDF/EPUB excerpts,
+  code diffs, evidence, and nested VTexts as typed snippets;
+- magazine-quality responsive reading built on Choir's document model and
+  Pretext-powered layout/measurement where appropriate;
+- embedded snippets that can expand into their owning desktop app/window while
+  preserving the VText reading position;
 - minimal chrome;
 - user edits become user-authored versions;
 - appagent synthesis becomes agent-authored versions;
@@ -131,6 +141,9 @@ or chat wrapper:
 - Settings as the place for user preferences, prompts, themes, and provider
   policy where appropriate;
 - Podcast/Radio as an early proof that `vtext` can become screenless traversal;
+- multi-window reading as a first-class affordance: sources, snippets, media,
+  Trace, and related VTexts can open beside the current essay without collapsing
+  the user's place or task context;
 - theme creation/editing as a user-facing demonstration of local computer
   divergence and personal promotion.
 
@@ -163,7 +176,10 @@ After the `vtext` loop is reliable, add ingestion and publication pressure:
 - URL/content extraction;
 - YouTube transcript pulling;
 - text, Markdown, PDF, EPUB, image, audio, and video uploads;
-- media display apps whose content can be transcluded into `vtext`;
+- media display apps whose content can be embedded as typed VText snippets and
+  expanded into their full app windows;
+- computational essays that combine prose, citations, interactive or animated
+  graphics, multimedia evidence, source excerpts, and nested VTexts;
 - immutable publication events over selected private versions/artifact refs;
 - citation graph mechanics over published refs;
 - radio traversal over promoted meaning.
