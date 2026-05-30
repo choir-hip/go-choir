@@ -402,7 +402,7 @@
     position: absolute;
     display: flex;
     flex-direction: column;
-    background: #1e1e2e;
+    background: #0d1628;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
     overflow: hidden;
@@ -470,7 +470,11 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background: color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent);
+    background-color: #09101f;
+    background-image: linear-gradient(
+      color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent),
+      color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent)
+    );
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
     cursor: grab;
     flex-shrink: 0;
@@ -525,6 +529,7 @@
     overflow: auto;
     position: relative;
     min-height: 0;
+    background-color: #0d1628;
     user-select: text;
   }
 

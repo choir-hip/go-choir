@@ -26,7 +26,10 @@
     flex-direction: column;
     height: 100%;
     padding: 1rem;
-    background: var(--choir-panel, #0d1628);
+    background:
+      linear-gradient(var(--choir-panel, #0d1628), var(--choir-panel, #0d1628)),
+      #0d1628;
+    background-color: #0d1628 !important;
     color: var(--choir-fg, #f7faff);
   }
 

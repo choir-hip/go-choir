@@ -1399,7 +1399,10 @@
   .trace-app {
     display: grid;
     grid-template-columns: 292px minmax(0, 1fr);
-    background: var(--choir-panel, #0a0d14);
+    background:
+      linear-gradient(var(--choir-panel, #0a0d14), var(--choir-panel, #0a0d14)),
+      #0d1628;
+    background-color: #0d1628 !important;
     color: var(--choir-fg, #e2e8f0);
     overscroll-behavior: contain;
     touch-action: pan-y;

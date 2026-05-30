@@ -159,6 +159,47 @@ test('email app view state persists through universal app context after reload',
   await expect(restoredEmail.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
 });
 
+test('window shell keeps opaque backing under alpha app themes', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+  await openApp(page, 'trace');
+  await page.locator('[data-window][data-window-app-id="trace"]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-window][data-window-app-id="trace"] [data-trace-app]').waitFor({ state: 'visible', timeout: 10000 });
+
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--choir-panel', 'rgba(9, 12, 19, 0.2)');
+    document.documentElement.style.setProperty('--choir-panel-strong', 'rgba(9, 16, 31, 0.2)');
+  });
+
+  const alphaValues = await page.evaluate(() => {
+    function alphaFor(selector) {
+      const el = document.querySelector(selector);
+      if (!el) throw new Error(`missing element: ${selector}`);
+      const color = getComputedStyle(el).backgroundColor;
+      const match = color.match(/rgba?\(([^)]+)\)/);
+      if (!match) return 1;
+      const parts = match[1].split(',').map((part) => part.trim());
+      return parts.length >= 4 ? Number(parts[3]) : 1;
+    }
+    return {
+      windowContent: alphaFor('[data-window][data-window-app-id="trace"] [data-window-content]'),
+      appSurface: alphaFor('[data-window][data-window-app-id="trace"] [data-app-host]'),
+      traceApp: alphaFor('[data-window][data-window-app-id="trace"] .trace-app'),
+      titlebar: alphaFor('[data-window][data-window-app-id="trace"] [data-window-titlebar]'),
+    };
+  });
+
+  expect(alphaValues).toEqual({
+    windowContent: 1,
+    appSurface: 1,
+    traceApp: 1,
+    titlebar: 1,
+  });
+});
+
 // ---------------------------------------------------------------
 // Test: multiple windows with z-index restored after reload
 // (VAL-SHELL-022)
