@@ -264,18 +264,18 @@
     position: absolute;
     display: flex;
     flex-direction: column;
-    background: #1e1e2e;
-    border: 1px solid #333;
+    background: var(--choir-state-selected);
+    border: 1px solid var(--choir-border);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--choir-shadow-color) 40%, transparent);
     transition: box-shadow 0.15s;
     user-select: none;
   }
 
   .window-active {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.25);
+    border-color: var(--choir-border-strong);
+    box-shadow: 0 4px 24px var(--choir-state-active-glow);
   }
 
   /* ---- Title bar ---- */
@@ -286,8 +286,8 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background: #181825;
-    border-bottom: 1px solid #2a2a3a;
+    background: var(--choir-state-selected);
+    border-bottom: 1px solid var(--choir-border-strong);
     cursor: default;
     flex-shrink: 0;
   }
@@ -295,7 +295,7 @@
   .titlvtext {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #c0c0d0;
+    color: var(--choir-text-accent);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -320,18 +320,18 @@
     border-radius: 4px;
     font-size: 0.7rem;
     cursor: pointer;
-    color: #888;
+    color: var(--choir-text-muted);
     transition: background 0.15s, color 0.15s;
   }
 
   .ctrl-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ddd;
+    background: color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
+    color: var(--choir-text-primary);
   }
 
   .close-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
-    color: #f87171;
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   /* ---- Content area ---- */

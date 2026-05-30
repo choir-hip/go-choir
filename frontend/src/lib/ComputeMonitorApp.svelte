@@ -292,8 +292,8 @@
     overflow: auto;
     padding: 1rem;
     background:
-      linear-gradient(135deg, rgba(8, 13, 24, 0.98), rgba(11, 18, 32, 0.98) 46%, rgba(6, 16, 18, 0.98));
-    color: #e5edf9;
+      linear-gradient(135deg, var(--choir-state-selected), var(--choir-state-selected) 46%, var(--choir-state-selected));
+    color: var(--choir-text-accent);
   }
 
   .monitor-top {
@@ -312,7 +312,7 @@
   }
 
   .eyebrow {
-    color: #7dd3fc;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.12em;
@@ -321,14 +321,14 @@
 
   h1 {
     margin-top: 0.2rem;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1.72rem;
     letter-spacing: 0;
     line-height: 1.05;
   }
 
   h2 {
-    color: #f1f5f9;
+    color: var(--choir-text-accent);
     font-size: 0.96rem;
     letter-spacing: 0;
   }
@@ -337,7 +337,7 @@
   .compact-copy,
   .policy-copy span,
   .event-list {
-    color: #9fb0c6;
+    color: var(--choir-text-accent);
     font-size: 0.84rem;
     line-height: 1.4;
   }
@@ -359,10 +359,10 @@
     display: inline-flex;
     align-items: center;
     min-height: 1.55rem;
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.75);
-    color: #dbeafe;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     padding: 0.22rem 0.58rem;
     font-size: 0.7rem;
     font-weight: 820;
@@ -370,22 +370,22 @@
   }
 
   .health-pill.ok {
-    border-color: rgba(74, 222, 128, 0.34);
-    color: #bbf7d0;
+    border-color: var(--choir-status-success);
+    color: var(--choir-status-success);
   }
 
   .health-pill.warn {
-    border-color: rgba(251, 191, 36, 0.38);
-    color: #fde68a;
+    border-color: var(--choir-status-warning);
+    color: var(--choir-status-warning);
   }
 
   .icon-button {
     width: 2.2rem;
     height: 2.2rem;
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.82);
-    color: #e0f2fe;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-size: 1.05rem;
   }
@@ -397,18 +397,18 @@
 
   .notice {
     margin-bottom: 0.75rem;
-    border: 1px solid rgba(125, 211, 252, 0.25);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
-    background: rgba(8, 47, 73, 0.38);
-    color: #dff7ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     padding: 0.62rem 0.72rem;
     font-size: 0.82rem;
   }
 
   .notice.error {
-    border-color: rgba(248, 113, 113, 0.34);
-    background: rgba(69, 10, 10, 0.38);
-    color: #fee2e2;
+    border-color: var(--choir-status-danger);
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   .metric-strip {
@@ -420,10 +420,10 @@
 
   .metric-card,
   .panel {
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
-    background: rgba(15, 23, 42, 0.72);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    background: var(--choir-state-selected);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-shadow-color) 4%, transparent);
   }
 
   .metric-card {
@@ -433,7 +433,7 @@
   }
 
   .metric-label {
-    color: #93a4ba;
+    color: var(--choir-text-accent);
     font-size: 0.68rem;
     font-weight: 840;
     letter-spacing: 0.08em;
@@ -441,13 +441,13 @@
   }
 
   .metric-card strong {
-    color: #f8fafc;
+    color: var(--choir-text-accent);
     font-size: 1.2rem;
     line-height: 1;
   }
 
   .metric-card small {
-    color: #8da0b8;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
   }
 
@@ -455,26 +455,26 @@
     overflow: hidden;
     height: 0.45rem;
     border-radius: 999px;
-    background: rgba(30, 41, 59, 0.92);
+    background: var(--choir-state-selected);
   }
 
   .meter span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #22c55e, #38bdf8);
+    background: linear-gradient(90deg, var(--choir-status-success), var(--choir-state-selected));
   }
 
   .meter.cpu span {
-    background: linear-gradient(90deg, #38bdf8, #f59e0b);
+    background: linear-gradient(90deg, var(--choir-state-selected), var(--choir-status-warning));
   }
 
   .meter.io span {
-    background: linear-gradient(90deg, #2dd4bf, #f97316);
+    background: linear-gradient(90deg, var(--choir-state-selected), var(--choir-status-warning));
   }
 
   .meter.apps span {
-    background: linear-gradient(90deg, #60a5fa, #f87171);
+    background: linear-gradient(90deg, var(--choir-state-selected), var(--choir-status-danger));
   }
 
   .monitor-grid {
@@ -505,14 +505,14 @@
 
   .facts div {
     min-width: 0;
-    border: 1px solid rgba(148, 163, 184, 0.12);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 6px;
-    background: rgba(2, 6, 23, 0.32);
+    background: var(--choir-state-selected);
     padding: 0.5rem;
   }
 
   dt {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.66rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -522,7 +522,7 @@
   dd {
     margin: 0.16rem 0 0;
     overflow: hidden;
-    color: #e2e8f0;
+    color: var(--choir-text-accent);
     font-size: 0.86rem;
     font-weight: 760;
     text-overflow: ellipsis;
@@ -535,7 +535,7 @@
   }
 
   .policy-copy strong {
-    color: #d9f99d;
+    color: var(--choir-status-success);
     font-size: 0.8rem;
   }
 
@@ -554,10 +554,10 @@
 
   .action-grid button {
     min-height: 2.45rem;
-    border: 1px solid rgba(96, 165, 250, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 7px;
-    background: rgba(30, 64, 175, 0.34);
-    color: #eff6ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font: inherit;
     font-size: 0.78rem;
@@ -566,14 +566,14 @@
   }
 
   .action-grid button:hover:not(:disabled) {
-    border-color: rgba(125, 211, 252, 0.55);
-    background: rgba(37, 99, 235, 0.42);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-selected);
   }
 
   .action-grid button.danger {
-    border-color: rgba(248, 113, 113, 0.32);
-    background: rgba(127, 29, 29, 0.28);
-    color: #fee2e2;
+    border-color: var(--choir-status-danger);
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   .action-grid button:disabled {
@@ -596,14 +596,14 @@
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     gap: 0.75rem;
     padding: 0.75rem;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 0.75rem;
-    background: rgba(2, 6, 23, 0.42);
+    background: var(--choir-state-selected);
   }
 
   .computer-row.current {
-    border-color: rgba(125, 211, 252, 0.32);
-    background: rgba(14, 165, 233, 0.08);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-hover);
   }
 
   .computer-row span {
@@ -621,7 +621,7 @@
 
   .computer-row small {
     margin-top: 0.18rem;
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
   }
 
@@ -631,22 +631,22 @@
     gap: 0.58rem;
     align-items: center;
     width: 100%;
-    border: 1px solid rgba(148, 163, 184, 0.12);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 7px;
-    background: rgba(2, 6, 23, 0.32);
-    color: #e5edf9;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 0.52rem;
     text-align: left;
   }
 
   .window-row.active {
-    border-color: rgba(96, 165, 250, 0.52);
-    background: rgba(30, 64, 175, 0.25);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-selected);
   }
 
   .window-row.suspended {
-    border-color: rgba(251, 191, 36, 0.3);
+    border-color: var(--choir-status-warning);
   }
 
   .window-icon {
@@ -668,12 +668,12 @@
   }
 
   .window-copy strong {
-    color: #f8fafc;
+    color: var(--choir-text-accent);
     font-size: 0.84rem;
   }
 
   .window-copy small {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
   }
 

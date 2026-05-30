@@ -214,21 +214,21 @@
 
   .auth-card {
     background:
-      linear-gradient(145deg, color-mix(in srgb, var(--choir-accent, #7dd3fc) 8%, transparent), transparent 42%),
-      var(--choir-sheet-bg, #101827);
+      linear-gradient(145deg, color-mix(in srgb, var(--choir-accent) 8%, transparent), transparent 42%),
+      var(--choir-sheet-bg, var(--choir-state-selected));
     border: 0;
     border-radius: var(--choir-radius-panel, 22px);
     padding: 1.55rem;
     width: 100%;
     max-width: 480px;
     text-align: left;
-    box-shadow: var(--choir-shadow-floating, 0 26px 90px rgba(0,0,0,.46));
-    color: var(--choir-fg, #f7faff);
+    box-shadow: var(--choir-shadow-floating);
+    color: var(--choir-text-primary);
   }
 
   .auth-kicker {
     margin: 0 0 0.45rem;
-    color: var(--choir-accent, #7dd3fc);
+    color: var(--choir-accent);
     font-size: 0.72rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -242,7 +242,7 @@
     font-weight: 780;
     line-height: 0.98;
     letter-spacing: 0;
-    color: var(--choir-fg, #ffffff);
+    color: var(--choir-text-primary);
     margin: 0 0 0.65rem;
   }
 
@@ -250,7 +250,7 @@
     max-width: 34rem;
     font-size: 0.96rem;
     line-height: 1.45;
-    color: var(--choir-muted, #9aa9c0);
+    color: var(--choir-text-muted);
     margin: 0 0 1.1rem;
   }
 
@@ -258,18 +258,18 @@
     margin: 0 0 1rem;
     padding: 0.75rem 0.9rem;
     border-radius: var(--choir-radius-control, 16px);
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(18, 31, 55, 0.72)) 82%, transparent);
-    color: var(--choir-fg, #dbeafe);
+    background: color-mix(in srgb, var(--choir-surface-card) 82%, transparent);
+    color: var(--choir-text-primary);
     font-size: 0.92rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-fg, #fff) 6%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
   }
 
   .auth-intent span {
     display: block;
     margin-bottom: 0.22rem;
-    color: var(--choir-accent, #7dd3fc);
+    color: var(--choir-accent);
     font-size: 0.68rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -286,8 +286,8 @@
     margin-bottom: 1.2rem;
     padding: 0.28rem;
     border-radius: var(--choir-radius-control, 16px);
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(18, 31, 55, 0.68)) 78%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-fg, #fff) 7%, transparent);
+    background: color-mix(in srgb, var(--choir-surface-card) 78%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 7%, transparent);
   }
 
   .tab {
@@ -297,7 +297,7 @@
     font-size: 0.88rem;
     font-weight: 760;
     background: transparent;
-    color: var(--choir-muted, #999);
+    color: var(--choir-text-muted);
     border: none;
     border-radius: var(--choir-radius-control-sm, 12px);
     cursor: pointer;
@@ -305,14 +305,14 @@
   }
 
   .tab:hover {
-    background: color-mix(in srgb, var(--choir-control-bg, #222) 72%, transparent);
-    color: var(--choir-fg, #ccc);
+    background: color-mix(in srgb, var(--choir-surface-control) 72%, transparent);
+    color: var(--choir-text-primary);
   }
 
   .tab.active {
-    background: var(--choir-selected, #2a2a2a);
-    color: var(--choir-fg, #ffffff);
-    box-shadow: var(--choir-control-shadow, 0 10px 26px rgba(0, 0, 0, 0.18));
+    background: var(--choir-state-selected);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
   }
 
   .auth-view {
@@ -328,7 +328,7 @@
     font-size: 1.28rem;
     font-weight: 760;
     line-height: 1.1;
-    color: var(--choir-fg, #e0e0e0);
+    color: var(--choir-text-primary);
     margin: 0 0 0.45rem;
   }
 
@@ -347,20 +347,20 @@
     margin-left: 0.05rem;
     border: 0;
     border-radius: 999px;
-    background: var(--choir-control-bg, rgba(20, 34, 60, 0.72));
-    color: var(--choir-accent, #7dd3fc);
+    background: var(--choir-surface-control);
+    color: var(--choir-accent);
     cursor: pointer;
     font: inherit;
     font-size: 0.86rem;
     line-height: 1;
-    box-shadow: var(--choir-control-shadow, 0 8px 22px rgba(0, 0, 0, 0.2));
+    box-shadow: var(--choir-control-shadow);
   }
 
   .view-desc {
     max-width: 32rem;
     font-size: 0.92rem;
     line-height: 1.4;
-    color: var(--choir-muted, #888);
+    color: var(--choir-text-muted);
     margin: 0 0 0.8rem;
   }
 
@@ -369,9 +369,9 @@
     margin: 0 0 0.95rem;
     padding: 0.85rem 0.95rem;
     border-radius: var(--choir-radius-control, 16px);
-    background: var(--choir-panel-soft, rgba(18, 31, 55, 0.72));
-    color: var(--choir-fg, #eef6ff);
-    box-shadow: var(--choir-card-shadow, 0 14px 34px rgba(0, 0, 0, 0.18));
+    background: var(--choir-surface-card);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-card-shadow, 0 14px 34px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent));
     font-size: 0.88rem;
     line-height: 1.42;
   }
@@ -392,32 +392,32 @@
   label {
     font-size: 0.8rem;
     font-weight: 720;
-    color: var(--choir-muted, #aaa);
+    color: var(--choir-text-muted);
   }
 
   input[type="email"] {
     min-height: 3rem;
     padding: 0.78rem 0.95rem;
     font-size: 1rem;
-    background: var(--choir-input-bg, #111);
+    background: var(--choir-surface-input);
     border: 0;
     border-radius: var(--choir-radius-control, 16px);
-    color: var(--choir-fg, #e0e0e0);
+    color: var(--choir-text-primary);
     outline: none;
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--choir-fg, #fff) 8%, transparent),
-      0 10px 28px rgba(0, 0, 0, 0.12);
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent),
+      0 10px 28px color-mix(in srgb, var(--choir-shadow-color) 12%, transparent);
     transition: box-shadow 0.2s;
   }
 
   input[type="email"]:focus {
     box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--choir-accent, #6d8dff) 28%, transparent),
-      0 14px 30px rgba(0, 0, 0, 0.16);
+      0 0 0 3px color-mix(in srgb, var(--choir-accent) 28%, transparent),
+      0 14px 30px color-mix(in srgb, var(--choir-shadow-color) 16%, transparent);
   }
 
   input[type="email"]::placeholder {
-    color: var(--choir-subtle, #65748d);
+    color: var(--choir-text-subtle);
   }
 
   .primary-action {
@@ -426,12 +426,12 @@
     padding: 0.85rem 1rem;
     font-size: 1rem;
     font-weight: 820;
-    background: var(--choir-accent, #3b82f6);
-    color: var(--choir-on-accent, #ffffff);
+    background: var(--choir-accent);
+    color: var(--choir-text-on-accent, var(--choir-text-primary));
     border: none;
     border-radius: var(--choir-radius-control, 16px);
     cursor: pointer;
-    box-shadow: var(--choir-control-shadow, 0 14px 34px rgba(0, 0, 0, 0.2));
+    box-shadow: var(--choir-control-shadow);
     transition: filter 0.2s, transform 0.2s;
   }
 
@@ -441,21 +441,21 @@
   }
 
   .primary-action:disabled {
-    background: var(--choir-control-bg, #1e3a5f);
-    color: var(--choir-subtle, #667);
+    background: var(--choir-surface-control);
+    color: var(--choir-text-subtle);
     cursor: not-allowed;
   }
 
   .error {
     margin-top: 1rem;
-    color: var(--choir-danger, #f87171);
+    color: var(--choir-status-danger);
     font-size: 0.9rem;
     line-height: 1.35;
   }
 
   .fine-print {
     margin: 0.85rem 0 0;
-    color: var(--choir-muted, #9aa9c0);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
     line-height: 1.42;
   }
@@ -477,7 +477,7 @@
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-kicker {
-    color: var(--choir-muted, #7c4f49);
+    color: var(--choir-text-muted);
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-intent p {

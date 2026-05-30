@@ -692,10 +692,10 @@
     height: 100%;
     min-height: 0;
     padding: 16px;
-    color: var(--choir-fg, #f5f7ff);
+    color: var(--choir-text-primary);
     background:
-      radial-gradient(circle at 16% 0%, rgba(68, 121, 212, 0.22), transparent 30%),
-      linear-gradient(180deg, rgba(11, 18, 32, 0.98), rgba(6, 8, 16, 0.98));
+      radial-gradient(circle at 16% 0%, var(--choir-state-selected), transparent 30%),
+      linear-gradient(180deg, var(--choir-state-selected), var(--choir-state-selected));
     overflow: hidden;
   }
 
@@ -714,7 +714,7 @@
   .title-group p,
   .show-count {
     margin: 0;
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -728,10 +728,10 @@
 
   button,
   select {
-    border: 1px solid rgba(99, 153, 255, 0.46);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
-    color: #ecf3ff;
-    background: rgba(18, 32, 56, 0.82);
+    color: var(--choir-text-accent);
+    background: var(--choir-state-selected);
   }
 
   button {
@@ -771,23 +771,23 @@
 
   input {
     min-width: 0;
-    border: 1px solid rgba(120, 135, 170, 0.34);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
     padding: 10px 12px;
-    color: var(--choir-fg, #f5f7ff);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--choir-text-primary);
+    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
   }
 
   .advanced-import {
-    border: 1px solid rgba(120, 135, 170, 0.24);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
     padding: 8px 10px;
-    background: rgba(10, 15, 27, 0.7);
+    background: var(--choir-state-selected);
   }
 
   .advanced-import summary {
     cursor: pointer;
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.86rem;
     font-weight: 750;
   }
@@ -836,14 +836,14 @@
     align-items: center;
     width: 100%;
     text-align: left;
-    border-color: rgba(120, 135, 170, 0.28);
-    background: rgba(12, 18, 31, 0.88);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-selected);
   }
 
   .result-row {
     grid-template-columns: minmax(0, 1fr) auto;
     padding: 12px;
-    border: 1px solid rgba(120, 135, 170, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 14px;
   }
 
@@ -858,7 +858,7 @@
   .result-row span,
   .status,
   .error {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
   }
 
   .cover-mark {
@@ -867,8 +867,8 @@
     width: 42px;
     height: 42px;
     border-radius: 12px;
-    color: #dbe8ff;
-    background: linear-gradient(135deg, rgba(72, 118, 255, 0.7), rgba(40, 196, 165, 0.55));
+    color: var(--choir-text-accent);
+    background: linear-gradient(135deg, var(--choir-state-selected), var(--choir-status-success));
     font-size: 0.7rem;
     font-weight: 900;
   }
@@ -882,10 +882,10 @@
   }
 
   .show-strip {
-    border: 1px solid rgba(120, 135, 170, 0.24);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
     padding: 12px;
-    background: rgba(8, 13, 24, 0.76);
+    background: var(--choir-state-selected);
   }
 
   .show-strip h3 {
@@ -900,7 +900,7 @@
     -webkit-box-orient: vertical;
     margin: 0;
     overflow: hidden;
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
   }
 
   .episode-list {
@@ -912,14 +912,14 @@
   }
 
   .episode-row {
-    border: 1px solid rgba(120, 135, 170, 0.25);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 14px;
-    background: rgba(10, 16, 29, 0.84);
+    background: var(--choir-state-selected);
   }
 
   .episode-row.selected {
-    border-color: rgba(99, 153, 255, 0.72);
-    background: rgba(33, 72, 148, 0.26);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-selected);
   }
 
   .episode-main {
@@ -937,7 +937,7 @@
 
   .episode-main span,
   .episode-main small {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
   }
 
   .episode-main small {
@@ -952,11 +952,11 @@
     display: grid;
     flex: 0 0 auto;
     gap: 8px;
-    border: 1px solid rgba(99, 153, 255, 0.42);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
     padding: 10px;
-    background: rgba(7, 12, 23, 0.96);
-    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.22);
+    background: var(--choir-state-selected);
+    box-shadow: 0 -12px 30px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
   }
 
   .podcast-player audio {
@@ -970,7 +970,7 @@
   }
 
   .player-title span {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.72rem;
     font-weight: 850;
     text-transform: uppercase;
@@ -1008,7 +1008,7 @@
   }
 
   .timeline span {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
   }
@@ -1016,7 +1016,7 @@
   .timeline input[type='range'] {
     width: 100%;
     min-width: 0;
-    accent-color: #7aa2ff;
+    accent-color: var(--choir-text-accent);
   }
 
   .status,
@@ -1024,11 +1024,11 @@
     margin: 0;
     border-radius: 14px;
     padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
   }
 
   .error {
-    color: #ffd6d6;
+    color: var(--choir-status-danger);
   }
 
   .error.compact {

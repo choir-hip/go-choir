@@ -330,26 +330,26 @@
   }
 
   .desktop-icon:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
   }
 
   .desktop-icon:focus-visible {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid var(--choir-border-strong);
     outline-offset: 2px;
   }
 
   .desktop-icon.icon-selected {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+    border-color: color-mix(in srgb, var(--choir-border) 15%, transparent);
   }
 
   .desktop-icon.icon-active {
-    background: rgba(59, 130, 246, 0.12);
-    border-color: rgba(59, 130, 246, 0.3);
+    background: var(--choir-state-hover);
+    border-color: var(--choir-border-strong);
   }
 
   .desktop-icon.icon-active .icon-label {
-    color: #e0e0e0;
+    color: var(--choir-text-primary);
   }
 
   .icon-emoji {
@@ -361,7 +361,7 @@
   .icon-label {
     font-size: 0.7rem;
     font-weight: 500;
-    color: #999;
+    color: var(--choir-text-muted);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -378,7 +378,7 @@
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: #3b82f6;
+    background: var(--choir-state-selected);
     pointer-events: none;
   }
 

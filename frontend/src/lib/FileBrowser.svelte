@@ -718,8 +718,8 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background: #1a1a2a;
-    color: #c0c0d0;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     font-size: 0.85rem;
   }
 
@@ -729,8 +729,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #181825;
-    border-bottom: 1px solid #2a2a3a;
+    background: var(--choir-state-selected);
+    border-bottom: 1px solid var(--choir-border-strong);
     flex-shrink: 0;
     flex-wrap: wrap;
   }
@@ -748,16 +748,16 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: 1px solid #333;
+    border: 1px solid var(--choir-border);
     border-radius: 4px;
-    color: #c0c0d0;
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-size: 1rem;
     transition: background 0.15s;
   }
 
   .nav-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
   }
 
   .nav-btn:disabled {
@@ -783,7 +783,7 @@
   .breadcrumb-segment {
     background: transparent;
     border: none;
-    color: #8888aa;
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-size: 0.8rem;
     padding: 2px 6px;
@@ -793,12 +793,12 @@
   }
 
   .breadcrumb-segment:hover {
-    color: #e0e0f0;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--choir-text-accent);
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
   }
 
   .breadcrumb-sep {
-    color: #555;
+    color: var(--choir-text-subtle);
     font-size: 0.75rem;
     flex-shrink: 0;
   }
@@ -806,10 +806,10 @@
   /* ---- Action buttons ---- */
   .action-btn {
     padding: 6px 12px;
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--choir-state-hover);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 4px;
-    color: #7eb8ff;
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-size: 0.8rem;
     white-space: nowrap;
@@ -817,7 +817,7 @@
   }
 
   .action-btn:hover {
-    background: rgba(59, 130, 246, 0.25);
+    background: var(--choir-state-selected);
   }
 
   .action-btn:disabled {
@@ -839,8 +839,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: rgba(59, 130, 246, 0.05);
-    border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+    background: var(--choir-state-hover);
+    border-bottom: 1px solid var(--choir-border-strong);
     flex-shrink: 0;
   }
 
@@ -851,17 +851,17 @@
   .folder-name-input {
     flex: 1;
     padding: 6px 10px;
-    background: #11111b;
-    border: 1px solid #333;
+    background: var(--choir-state-selected);
+    border: 1px solid var(--choir-border);
     border-radius: 4px;
-    color: #e0e0e0;
+    color: var(--choir-text-primary);
     font-size: 0.85rem;
     min-width: 0;
   }
 
   .folder-name-input:focus {
     outline: none;
-    border-color: #3b82f6;
+    border-color: var(--choir-border-strong);
   }
 
   .inline-confirm-btn,
@@ -879,25 +879,25 @@
   }
 
   .inline-confirm-btn {
-    background: rgba(34, 197, 94, 0.2);
-    color: #4ade80;
+    background: var(--choir-status-success-soft);
+    color: var(--choir-status-success);
   }
 
   .inline-confirm-btn:hover {
-    background: rgba(34, 197, 94, 0.35);
+    background: var(--choir-status-success-soft);
   }
 
   .inline-cancel-btn {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   .inline-cancel-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
+    background: var(--choir-status-danger-soft);
   }
 
   .inline-error {
-    color: #f87171;
+    color: var(--choir-status-danger);
     font-size: 0.8rem;
     white-space: nowrap;
   }
@@ -908,9 +908,9 @@
     align-items: center;
     gap: 8px;
     padding: 12px 16px;
-    background: rgba(239, 68, 68, 0.1);
-    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
-    color: #fca5a5;
+    background: var(--choir-status-danger-soft);
+    border-bottom: 1px solid var(--choir-status-danger);
+    color: var(--choir-status-danger);
     font-size: 0.85rem;
     flex-shrink: 0;
   }
@@ -921,9 +921,9 @@
 
   .status-message {
     padding: 10px 16px;
-    background: rgba(34, 197, 94, 0.1);
-    border-bottom: 1px solid rgba(34, 197, 94, 0.22);
-    color: #bbf7d0;
+    background: var(--choir-status-success-soft);
+    border-bottom: 1px solid var(--choir-status-success);
+    color: var(--choir-status-success);
     font-size: 0.85rem;
     flex-shrink: 0;
   }
@@ -935,7 +935,7 @@
     justify-content: center;
     gap: 8px;
     padding: 32px;
-    color: #888;
+    color: var(--choir-text-muted);
     font-size: 0.9rem;
   }
 
@@ -943,8 +943,8 @@
     display: inline-block;
     width: 16px;
     height: 16px;
-    border: 2px solid #333;
-    border-top-color: #3b82f6;
+    border: 2px solid var(--choir-border);
+    border-top-color: var(--choir-border-strong);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
@@ -961,7 +961,7 @@
     justify-content: center;
     gap: 8px;
     padding: 40px 16px;
-    color: #888;
+    color: var(--choir-text-muted);
     font-size: 0.9rem;
   }
 
@@ -976,7 +976,7 @@
     overflow-y: auto;
     padding: 4px 0;
     scrollbar-width: thin;
-    scrollbar-color: #333 transparent;
+    scrollbar-color: var(--choir-border) transparent;
   }
 
   .file-listing::-webkit-scrollbar {
@@ -984,7 +984,7 @@
   }
 
   .file-listing::-webkit-scrollbar-thumb {
-    background: #333;
+    background: var(--choir-surface-inset);
     border-radius: 3px;
   }
 
@@ -1000,7 +1000,7 @@
   }
 
   .file-item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
   }
 
   .file-icon {
@@ -1016,12 +1016,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #c0c0d0;
+    color: var(--choir-text-accent);
     font-size: 0.85rem;
   }
 
   .file-size {
-    color: #666;
+    color: var(--choir-text-subtle);
     font-size: 0.75rem;
     flex-shrink: 0;
     margin-right: 4px;
@@ -1050,17 +1050,17 @@
 
   .delete-btn:hover {
     opacity: 1 !important;
-    background: rgba(239, 68, 68, 0.2);
+    background: var(--choir-status-danger-soft);
   }
 
   /* ---- Delete confirmation row ---- */
   .delete-confirm-row {
-    background: rgba(239, 68, 68, 0.06);
+    background: var(--choir-status-danger-soft);
     cursor: default;
   }
 
   .delete-prompt {
-    color: #fca5a5;
+    color: var(--choir-status-danger);
     font-size: 0.8rem;
     white-space: nowrap;
   }
@@ -1076,21 +1076,21 @@
   }
 
   .delete-confirm-btn {
-    background: rgba(239, 68, 68, 0.25);
-    color: #f87171;
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   .delete-confirm-btn:hover {
-    background: rgba(239, 68, 68, 0.4);
+    background: var(--choir-status-danger-soft);
   }
 
   .delete-cancel-btn {
-    background: rgba(255, 255, 255, 0.08);
-    color: #999;
+    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+    color: var(--choir-text-muted);
   }
 
   .delete-cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--choir-surface-card);
   }
 
   /* ---- Mobile responsive ---- */

@@ -242,10 +242,10 @@
     height: 100%;
     min-height: 0;
     padding: 0;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     background:
-      radial-gradient(circle at 50% 26%, rgba(37, 99, 235, 0.24), transparent 38%),
-      linear-gradient(150deg, #050814 0%, #071322 52%, #050814 100%);
+      radial-gradient(circle at 50% 26%, var(--choir-state-selected), transparent 38%),
+      linear-gradient(150deg, var(--choir-state-selected) 0%, var(--choir-state-selected) 52%, var(--choir-state-selected) 100%);
     overflow: hidden;
   }
 
@@ -265,23 +265,23 @@
     display: grid;
     width: min(100%, 820px);
     gap: 16px;
-    border: 1px solid rgba(126, 180, 255, 0.24);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 18px;
     padding: clamp(18px, 4vw, 34px);
-    background: rgba(4, 9, 21, 0.72);
-    box-shadow: 0 22px 80px rgba(0, 0, 0, 0.32);
+    background: var(--choir-state-selected);
+    box-shadow: 0 22px 80px color-mix(in srgb, var(--choir-shadow-color) 32%, transparent);
   }
 
   .audio-art {
     display: grid;
     place-items: center;
     min-height: 150px;
-    border: 1px solid rgba(99, 153, 255, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
     background:
-      linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(20, 184, 166, 0.12)),
-      rgba(255, 255, 255, 0.04);
-    color: rgba(226, 232, 240, 0.72);
+      linear-gradient(135deg, var(--choir-state-selected), var(--choir-state-hover)),
+      color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
+    color: var(--choir-text-accent);
     font-size: clamp(1.4rem, 6vw, 3.2rem);
     font-weight: 860;
     letter-spacing: 0.18em;
@@ -298,10 +298,10 @@
   .audio-transport button,
   .audio-transport select {
     min-height: 40px;
-    border: 1px solid rgba(126, 180, 255, 0.34);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(20, 38, 72, 0.82);
-    color: #eef5ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font: inherit;
     font-weight: 760;
@@ -310,19 +310,19 @@
 
   .audio-transport button:hover,
   .audio-transport select:hover {
-    background: rgba(39, 73, 128, 0.88);
+    background: var(--choir-state-selected);
   }
 
   .audio-transport .audio-play {
     min-width: 94px;
-    background: rgba(45, 118, 255, 0.82);
+    background: var(--choir-state-selected);
   }
 
   .audio-transport label {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #a8adbd;
+    color: var(--choir-text-accent);
     font-size: 0.86rem;
   }
 
@@ -331,7 +331,7 @@
     grid-template-columns: auto minmax(100px, 1fr) auto;
     align-items: center;
     gap: 10px;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -362,12 +362,12 @@
     margin: auto;
     border-radius: 14px;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #a8adbd;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
   }
 
   .audio-error {
-    color: #fecaca;
+    color: var(--choir-status-danger);
   }
 
   .audio-empty {
@@ -382,14 +382,14 @@
   .audio-recent {
     display: grid;
     gap: 8px;
-    border: 1px solid rgba(126, 180, 255, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
-    background: rgba(4, 9, 21, 0.7);
+    background: var(--choir-state-selected);
     padding: 12px;
   }
 
   .audio-recent > span {
-    color: #93c5fd;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -399,10 +399,10 @@
   .audio-recent button {
     display: grid;
     gap: 2px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.055);
-    color: #e5eefc;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 9px 10px;
     text-align: left;
@@ -410,8 +410,8 @@
 
   .audio-recent button:hover,
   .audio-recent button:focus-visible {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: rgba(96, 165, 250, 0.12);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-hover);
   }
 
   .audio-recent strong,
@@ -423,7 +423,7 @@
   }
 
   .audio-recent small {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
   }
 
@@ -434,7 +434,7 @@
     bottom: 10px;
     width: max-content;
     max-width: min(520px, calc(100% - 20px));
-    color: #a8adbd;
+    color: var(--choir-text-accent);
   }
 
   .audio-info summary {
@@ -442,12 +442,12 @@
     width: 34px;
     height: 34px;
     place-items: center;
-    border: 1px solid rgba(126, 180, 255, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(4, 9, 21, 0.64);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-size: 0;
     font-weight: 820;
     list-style: none;
@@ -467,16 +467,16 @@
   .audio-info[open] {
     left: 10px;
     width: auto;
-    border: 1px solid rgba(126, 180, 255, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
     padding: 8px 10px;
-    background: rgba(4, 9, 21, 0.82);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
   }
 
   .audio-info h2 {
     margin: 10px 0;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1rem;
     overflow-wrap: anywhere;
   }
@@ -489,7 +489,7 @@
   }
 
   .audio-info dt {
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-weight: 760;
   }
 
@@ -500,7 +500,7 @@
   }
 
   .audio-info a {
-    color: #bfdbfe;
+    color: var(--choir-text-accent);
   }
 
   @media (max-width: 720px) {

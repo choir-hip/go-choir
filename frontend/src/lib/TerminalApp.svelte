@@ -6,7 +6,7 @@
   parent container provided by FloatingWindow.
 
   Features:
-    - Dark theme (#1a1b26 background, #a9b1d6 foreground)
+    - Theme-native terminal colors
     - Cursor blink enabled
     - 10000 line scrollback
     - Copy/paste via keyboard shortcuts (Cmd+C/V on macOS, Ctrl+Shift+C/V on Linux)
@@ -69,6 +69,38 @@
            navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
   }
 
+  function themeColor(name, fallback = 'CanvasText') {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function currentTerminalTheme() {
+    return {
+      background: themeColor('--choir-surface-media', 'Canvas'),
+      foreground: themeColor('--choir-text-primary'),
+      cursor: themeColor('--choir-text-accent'),
+      cursorAccent: themeColor('--choir-surface-media', 'Canvas'),
+      selectionBackground: themeColor('--choir-state-selected'),
+      selectionForeground: themeColor('--choir-text-primary'),
+      black: themeColor('--choir-surface-media', 'Canvas'),
+      red: themeColor('--choir-status-danger'),
+      green: themeColor('--choir-status-success'),
+      yellow: themeColor('--choir-status-warning'),
+      blue: themeColor('--choir-chart-1'),
+      magenta: themeColor('--choir-chart-4'),
+      cyan: themeColor('--choir-chart-2'),
+      white: themeColor('--choir-text-muted'),
+      brightBlack: themeColor('--choir-text-subtle'),
+      brightRed: themeColor('--choir-status-danger'),
+      brightGreen: themeColor('--choir-status-success'),
+      brightYellow: themeColor('--choir-status-warning'),
+      brightBlue: themeColor('--choir-chart-1'),
+      brightMagenta: themeColor('--choir-chart-4'),
+      brightCyan: themeColor('--choir-chart-2'),
+      brightWhite: themeColor('--choir-text-primary'),
+    };
+  }
+
   /**
    * Initialize the terminal: create session, init WASM, create Terminal,
    * connect WebSocket, attach FitAddon + ResizeObserver.
@@ -87,7 +119,7 @@
       const ghosttyWeb = await import('ghostty-web');
       const { Terminal, FitAddon } = ghosttyWeb;
 
-      // Create Terminal instance with dark theme
+      // Create Terminal instance using the active desktop theme.
       const term = new Terminal({
         fontSize: 14,
         fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
@@ -95,30 +127,7 @@
         cursorStyle: 'block',
         scrollback: 10000,
         convertEol: false,
-        theme: {
-          background: '#1a1b26',
-          foreground: '#a9b1d6',
-          cursor: '#c0caf5',
-          cursorAccent: '#1a1b26',
-          selectionBackground: 'rgba(122, 158, 212, 0.3)',
-          selectionForeground: '#c0caf5',
-          black: '#15161e',
-          red: '#f7768e',
-          green: '#9ece6a',
-          yellow: '#e0af68',
-          blue: '#7aa2f7',
-          magenta: '#bb9af7',
-          cyan: '#7dcfff',
-          white: '#a9b1d6',
-          brightBlack: '#414868',
-          brightRed: '#f7768e',
-          brightGreen: '#9ece6a',
-          brightYellow: '#e0af68',
-          brightBlue: '#7aa2f7',
-          brightMagenta: '#bb9af7',
-          brightCyan: '#7dcfff',
-          brightWhite: '#c0caf5',
-        },
+        theme: currentTerminalTheme(),
       });
 
       // Create FitAddon
@@ -287,7 +296,7 @@ files email trace vtext settings podcast media</pre>
   .terminal-wrapper {
     width: 100%;
     height: 100%;
-    background: var(--choir-panel, #1a1b26);
+    background: var(--choir-surface-app);
     overflow: hidden;
     position: relative;
   }
@@ -298,10 +307,10 @@ files email trace vtext settings podcast media</pre>
     gap: 0.75rem;
     min-height: 100%;
     padding: clamp(1rem, 3vw, 2rem);
-    color: var(--choir-fg, #e5edf9);
+    color: var(--choir-text-primary);
     background:
-      radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--choir-accent, #60a5fa) 14%, transparent), transparent 34%),
-      var(--choir-panel, #0b1020);
+      radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--choir-accent) 14%, transparent), transparent 34%),
+      var(--choir-surface-app);
   }
 
   .terminal-kicker,
@@ -311,7 +320,7 @@ files email trace vtext settings podcast media</pre>
   }
 
   .terminal-kicker {
-    color: var(--choir-accent, #60a5fa);
+    color: var(--choir-accent);
     font-size: 0.72rem;
     font-weight: 850;
     text-transform: uppercase;
@@ -321,10 +330,10 @@ files email trace vtext settings podcast media</pre>
     margin: 0;
     overflow: auto;
     border-radius: var(--choir-radius-control, 20px);
-    background: color-mix(in srgb, var(--choir-bg, #020617) 82%, transparent);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    background: color-mix(in srgb, var(--choir-bg) 82%, transparent);
+    box-shadow: var(--choir-control-shadow);
     padding: 1rem;
-    color: var(--choir-muted, #a8b3c7);
+    color: var(--choir-text-muted);
   }
 
   /* Ensure ghostty-web canvas fills the container */
@@ -342,8 +351,8 @@ files email trace vtext settings podcast media</pre>
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(26, 27, 38, 0.92);
-    color: #f7768e;
+    background: var(--choir-state-selected);
+    color: var(--choir-status-danger);
     font-family: monospace;
     font-size: 0.85rem;
     padding: 1rem;

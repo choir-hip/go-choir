@@ -309,7 +309,7 @@
     position: fixed;
     inset: 0;
     z-index: 13000;
-    color: var(--choir-fg, #e5eefc);
+    color: var(--choir-text-primary);
     pointer-events: none;
   }
 
@@ -318,8 +318,8 @@
     inset: 0;
     border: 0;
     background:
-      radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent), transparent 44%),
-      color-mix(in srgb, var(--choir-bg, #050912) 76%, transparent);
+      radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--choir-accent) 16%, transparent), transparent 44%),
+      color-mix(in srgb, var(--choir-bg) 76%, transparent);
     cursor: default;
     pointer-events: auto;
   }
@@ -337,9 +337,9 @@
     overflow: auto;
     border: 0;
     border-radius: 24px;
-    background-color: var(--choir-panel, rgba(15, 23, 42, 0.94));
+    background-color: var(--choir-surface-app);
     background-image: var(--choir-sheet-bg, none);
-    box-shadow: var(--choir-shadow-floating, 0 28px 90px rgba(0, 0, 0, 0.42));
+    box-shadow: var(--choir-shadow-floating);
     padding: clamp(0.8rem, 2vw, 1.1rem);
     pointer-events: auto;
     scrollbar-width: thin;
@@ -351,14 +351,14 @@
     justify-content: space-between;
     gap: 1rem;
     border-radius: 18px;
-    background: color-mix(in srgb, var(--choir-panel, #0d1628) 90%, transparent);
-    box-shadow: var(--choir-shadow-soft, 0 18px 54px rgba(0, 0, 0, 0.28));
+    background: color-mix(in srgb, var(--choir-surface-app) 90%, transparent);
+    box-shadow: var(--choir-shadow-soft);
     padding: 0.85rem 0.95rem;
   }
 
   .overview-kicker {
     margin: 0 0 0.2rem;
-    color: var(--choir-accent-2, #7dd3fc);
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 850;
     letter-spacing: 0.16em;
@@ -367,14 +367,14 @@
 
   .overview-header h2 {
     margin: 0;
-    color: var(--choir-fg, #f8fafc);
+    color: var(--choir-text-primary);
     font-size: clamp(1.35rem, 4vw, 2rem);
     line-height: 1.05;
   }
 
   .overview-summary {
     margin: 0.28rem 0 0;
-    color: var(--choir-muted, #aebbd3);
+    color: var(--choir-text-muted);
     font-size: 0.9rem;
   }
 
@@ -388,8 +388,8 @@
     min-width: 0;
     border: 0;
     border-radius: 14px;
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(18, 31, 55, 0.72)) 92%, transparent);
-    box-shadow: var(--choir-control-shadow, 0 12px 30px rgba(0, 0, 0, 0.16));
+    background: color-mix(in srgb, var(--choir-surface-card) 92%, transparent);
+    box-shadow: var(--choir-control-shadow);
     padding: 0.66rem 0.76rem;
   }
 
@@ -403,8 +403,8 @@
   .overview-live-hint span {
     border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--choir-selected, rgba(91, 123, 255, 0.22)) 72%, transparent);
-    color: var(--choir-fg, #cbd5e1);
+    background: color-mix(in srgb, var(--choir-state-selected) 72%, transparent);
+    color: var(--choir-text-primary);
     font-size: 0.74rem;
     font-weight: 760;
     padding: 0.35rem 0.55rem;
@@ -420,7 +420,7 @@
   }
 
   .overview-pressure span {
-    color: var(--choir-muted, #94a3b8);
+    color: var(--choir-text-muted);
     font-size: 0.68rem;
     font-weight: 820;
     letter-spacing: 0.1em;
@@ -429,16 +429,16 @@
 
   .overview-pressure strong {
     margin-top: 0.18rem;
-    color: var(--choir-fg, #dbeafe);
+    color: var(--choir-text-primary);
     font-size: 0.94rem;
   }
 
   .overview-pressure.elevated > div:first-child {
-    border-color: rgba(251, 191, 36, 0.36);
+    border-color: var(--choir-status-warning);
   }
 
   .overview-pressure.high > div:first-child {
-    border-color: rgba(248, 113, 113, 0.44);
+    border-color: var(--choir-status-danger);
   }
 
   .overview-close,
@@ -446,9 +446,9 @@
   .card-actions button {
     border: 0;
     border-radius: 999px;
-    background: var(--choir-control-bg, rgba(15, 23, 42, 0.74));
-    color: var(--choir-fg, #dbeafe);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0, 0, 0, 0.18));
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
     cursor: pointer;
     font: inherit;
     font-size: 0.82rem;
@@ -460,7 +460,7 @@
   .overview-close:hover,
   .overview-actions button:hover,
   .card-actions button:hover:not(:disabled) {
-    background: var(--choir-selected, rgba(30, 64, 175, 0.38));
+    background: var(--choir-state-selected);
   }
 
   button:disabled {
@@ -480,8 +480,8 @@
   .overview-window-list {
     min-width: 0;
     border-radius: 18px;
-    background: color-mix(in srgb, var(--choir-panel, rgba(15, 23, 42, 0.74)) 88%, transparent);
-    box-shadow: var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.2));
+    background: color-mix(in srgb, var(--choir-surface-app) 88%, transparent);
+    box-shadow: var(--choir-shadow-soft);
     padding: 0.8rem;
   }
 
@@ -499,7 +499,7 @@
   }
 
   .section-heading p {
-    color: var(--choir-accent-2, #7dd3fc);
+    color: var(--choir-text-accent);
     font-size: 0.7rem;
     font-weight: 840;
     letter-spacing: 0.12em;
@@ -507,7 +507,7 @@
   }
 
   .section-heading h3 {
-    color: var(--choir-fg, #f8fafc);
+    color: var(--choir-text-primary);
     font-size: 1rem;
   }
 
@@ -518,9 +518,9 @@
     border: 0;
     border-radius: 14px;
     background:
-      linear-gradient(color-mix(in srgb, var(--choir-border, rgba(148, 163, 184, 0.16)) 42%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--choir-border, rgba(148, 163, 184, 0.16)) 42%, transparent) 1px, transparent 1px),
-      color-mix(in srgb, var(--choir-bg, #020617) 78%, var(--choir-panel, #0d1628));
+      linear-gradient(color-mix(in srgb, var(--choir-border) 42%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--choir-border) 42%, transparent) 1px, transparent 1px),
+      color-mix(in srgb, var(--choir-bg) 78%, var(--choir-surface-app));
     background-size: 32px 32px;
     pointer-events: auto;
   }
@@ -541,9 +541,9 @@
     overflow: hidden;
     border: 0;
     border-radius: 9px;
-    background: color-mix(in srgb, var(--choir-panel-strong, #13213b) 92%, transparent);
-    box-shadow: 0 10px 26px color-mix(in srgb, var(--choir-bg, #020617) 36%, transparent);
-    color: var(--choir-fg, #dbeafe);
+    background: color-mix(in srgb, var(--choir-surface-pane) 92%, transparent);
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--choir-bg) 36%, transparent);
+    color: var(--choir-text-primary);
     cursor: pointer;
     pointer-events: auto;
     padding: 0.45rem;
@@ -560,10 +560,10 @@
   }
 
   .map-window.active {
-    background: var(--choir-selected, rgba(59, 130, 246, 0.24));
+    background: var(--choir-state-selected);
     box-shadow:
-      0 14px 34px color-mix(in srgb, var(--choir-accent, #6d8dff) 18%, transparent),
-      inset 0 0 28px color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent);
+      0 14px 34px color-mix(in srgb, var(--choir-accent) 18%, transparent),
+      inset 0 0 28px color-mix(in srgb, var(--choir-accent) 16%, transparent);
   }
 
   .map-window.minimized,
@@ -575,7 +575,7 @@
     grid-column: 1 / -1;
     min-width: 0;
     overflow: hidden;
-    color: var(--choir-muted, #94a3b8);
+    color: var(--choir-text-muted);
     font-size: 0.6rem;
     font-style: normal;
     font-weight: 760;
@@ -614,24 +614,24 @@
     min-width: 0;
     border: 0;
     border-radius: 14px;
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(15, 23, 42, 0.76)) 92%, transparent);
-    box-shadow: var(--choir-control-shadow, 0 12px 30px rgba(0, 0, 0, 0.18));
+    background: color-mix(in srgb, var(--choir-surface-card) 92%, transparent);
+    box-shadow: var(--choir-control-shadow);
     padding: 0.65rem;
   }
 
   .overview-card[data-overview-card-preview-state='live'] {
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(8, 18, 32, 0.58)) 86%, var(--choir-selected, transparent));
+    background: color-mix(in srgb, var(--choir-surface-card) 86%, var(--choir-state-selected));
   }
 
   .overview-card.active {
-    background: var(--choir-selected, rgba(30, 64, 175, 0.22));
+    background: var(--choir-state-selected);
     box-shadow:
-      var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.2)),
-      inset 0 0 34px color-mix(in srgb, var(--choir-accent, #6d8dff) 12%, transparent);
+      var(--choir-shadow-soft),
+      inset 0 0 34px color-mix(in srgb, var(--choir-accent) 12%, transparent);
   }
 
   .overview-card.heavy {
-    border-color: rgba(125, 211, 252, 0.22);
+    border-color: var(--choir-border-strong);
   }
 
   .overview-card.suspended {
@@ -661,8 +661,8 @@
     width: 2rem;
     height: 2rem;
     border-radius: 10px;
-    background: rgba(96, 165, 250, 0.13);
-    background: color-mix(in srgb, var(--choir-accent, #6d8dff) 16%, transparent);
+    background: var(--choir-state-hover);
+    background: color-mix(in srgb, var(--choir-accent) 16%, transparent);
     font-size: 1.15rem;
     line-height: 1;
   }
@@ -682,12 +682,12 @@
   }
 
   .card-copy strong {
-    color: var(--choir-fg, #f8fafc);
+    color: var(--choir-text-primary);
     font-size: 0.93rem;
   }
 
   .card-copy small {
-    color: var(--choir-muted, #94a3b8);
+    color: var(--choir-text-muted);
     font-size: 0.74rem;
   }
 
@@ -709,8 +709,8 @@
     justify-content: center;
     border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--choir-selected, rgba(91, 123, 255, 0.22)) 62%, transparent);
-    color: var(--choir-fg, #aebbd3);
+    background: color-mix(in srgb, var(--choir-state-selected) 62%, transparent);
+    color: var(--choir-text-primary);
     font-size: 0.66rem;
     font-weight: 820;
     letter-spacing: 0.02em;
@@ -720,15 +720,15 @@
   }
 
   .active-badge {
-    background: color-mix(in srgb, var(--choir-accent, #6d8dff) 24%, transparent);
+    background: color-mix(in srgb, var(--choir-accent) 24%, transparent);
   }
 
   .card-actions .danger {
-    color: var(--choir-danger, #fecaca);
+    color: var(--choir-status-danger);
   }
 
   .primary-card-action {
-    background: var(--choir-selected, rgba(91, 123, 255, 0.22)) !important;
+    background: var(--choir-state-selected) !important;
   }
 
   .overview-empty {
@@ -737,14 +737,14 @@
     min-height: 16rem;
     border: 0;
     border-radius: 14px;
-    background: color-mix(in srgb, var(--choir-panel-soft, rgba(15, 23, 42, 0.72)) 92%, transparent);
-    color: var(--choir-muted, #94a3b8);
+    background: color-mix(in srgb, var(--choir-surface-card) 92%, transparent);
+    color: var(--choir-text-muted);
     text-align: center;
   }
 
   .overview-empty h3 {
     margin: 0 0 0.3rem;
-    color: var(--choir-fg, #f8fafc);
+    color: var(--choir-text-primary);
   }
 
   .overview-empty p {

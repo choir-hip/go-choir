@@ -1750,7 +1750,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100dvh;
-    background: var(--choir-bg, #0f0f0f);
+    background: var(--choir-bg);
     overflow: hidden;
   }
 
@@ -1795,9 +1795,9 @@
     max-width: 760px;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
-    background: rgba(5, 8, 14, 0.92);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38);
-    color: #d1fae5;
+    background: var(--choir-state-selected);
+    box-shadow: 0 20px 60px color-mix(in srgb, var(--choir-shadow-color) 38%, transparent);
+    color: var(--choir-status-success);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     z-index: 90;
   }
@@ -1806,9 +1806,9 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 16px 32px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent);
     padding: 0.65rem 0.8rem;
-    color: #bfdbfe;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -1826,21 +1826,21 @@
     gap: 0.6rem;
     align-items: baseline;
     min-width: 0;
-    color: #bbf7d0;
+    color: var(--choir-status-success);
     font-size: 0.8rem;
     line-height: 1.35;
   }
 
   .boot-line.warn {
-    color: #fde68a;
+    color: var(--choir-status-warning);
   }
 
   .boot-line.error {
-    color: #fecaca;
+    color: var(--choir-status-danger);
   }
 
   .boot-time {
-    color: #7dd3fc;
+    color: var(--choir-text-accent);
     font-size: 0.72rem;
   }
 
@@ -1867,9 +1867,9 @@
     padding: 1.1rem;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
-    background: rgba(8, 13, 24, 0.94);
-    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), 0 0 48px rgba(96, 165, 250, 0.14);
-    color: #e5edf9;
+    background: var(--choir-state-selected);
+    box-shadow: 0 28px 70px color-mix(in srgb, var(--choir-shadow-color) 42%, transparent), 0 0 48px var(--choir-state-active-glow);
+    color: var(--choir-text-accent);
     z-index: 85;
   }
 
@@ -1885,12 +1885,12 @@
   }
 
   .desktop-recovery p {
-    color: #aebbd0;
+    color: var(--choir-text-accent);
     line-height: 1.45;
   }
 
   .recovery-kicker {
-    color: #93c5fd !important;
+    color: var(--choir-text-accent) !important;
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.12em;
@@ -1899,12 +1899,12 @@
 
   .recovery-top-window {
     margin-top: 0.7rem !important;
-    color: #dbeafe !important;
+    color: var(--choir-text-accent) !important;
   }
 
   .recovery-status {
     margin-top: 0.7rem !important;
-    color: #fecaca !important;
+    color: var(--choir-status-danger) !important;
   }
 
   .recovery-actions {
@@ -1917,8 +1917,8 @@
     min-height: 40px;
     border: 0;
     border-radius: var(--choir-radius-control-sm, 14px);
-    background: rgba(15, 23, 42, 0.86);
-    color: #dbeafe;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     padding: 0.55rem 0.78rem;
     font: inherit;
     font-size: 0.82rem;
@@ -1927,8 +1927,8 @@
   }
 
   .recovery-actions button:hover {
-    box-shadow: 0 14px 34px rgba(96, 165, 250, 0.16);
-    background: rgba(30, 41, 59, 0.94);
+    box-shadow: 0 14px 34px var(--choir-state-active-glow);
+    background: var(--choir-state-selected);
   }
 
   .recovery-actions button:disabled {
@@ -1937,14 +1937,14 @@
   }
 
   .recovery-actions .recovery-primary {
-    background: rgba(30, 64, 175, 0.72);
-    color: #f8fbff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
   }
 
   .suspended-app-content {
     align-items: center;
     justify-content: center;
-    background: var(--choir-panel-strong, #09101f);
+    background: var(--choir-surface-pane);
   }
 
   .suspended-card {
@@ -1953,9 +1953,9 @@
     gap: 0.65rem;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
-    background: rgba(2, 6, 23, 0.68);
+    background: var(--choir-state-selected);
     padding: 1rem;
-    color: #e5edf9;
+    color: var(--choir-text-accent);
   }
 
   .suspended-card h2,
@@ -1969,12 +1969,12 @@
   }
 
   .suspended-card p {
-    color: #aebbd0;
+    color: var(--choir-text-accent);
     line-height: 1.45;
   }
 
   .suspended-kicker {
-    color: #fde68a !important;
+    color: var(--choir-status-warning) !important;
     font-size: 0.7rem;
     font-weight: 850;
     letter-spacing: 0.12em;
@@ -1986,8 +1986,8 @@
     min-height: 2.35rem;
     border: 0;
     border-radius: var(--choir-radius-control-sm, 14px);
-    background: rgba(30, 64, 175, 0.46);
-    color: #eff6ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font: inherit;
     font-size: 0.82rem;
@@ -2008,19 +2008,19 @@
   }
 
   .toast {
-    background: rgba(17, 24, 39, 0.95);
-    color: #edf2ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     border: 0;
     border-radius: var(--choir-radius-pill, 30px);
     padding: 0.6rem 0.95rem;
     font-size: 0.82rem;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-shadow-color) 25%, transparent);
   }
 
   .toast.error {
-    background: rgba(69, 10, 10, 0.94);
-    box-shadow: 0 12px 32px rgba(248, 113, 113, 0.18);
-    color: #fee2e2;
+    background: var(--choir-status-danger);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-status-danger) 18%, transparent);
+    color: var(--choir-status-danger);
   }
 
   @media (max-width: 768px) {

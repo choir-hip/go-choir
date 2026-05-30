@@ -461,8 +461,8 @@
     display: block;
     height: 100%;
     min-height: 0;
-    color: #f5f7ff;
-    background: #050814;
+    color: var(--choir-text-accent);
+    background: var(--choir-state-selected);
     overflow: hidden;
   }
 
@@ -474,7 +474,7 @@
     width: max-content;
     max-width: min(760px, calc(100% - 20px));
     max-height: calc(100% - 20px);
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     overflow: auto;
     transform: translateX(-34%);
   }
@@ -484,9 +484,9 @@
     width: 32px;
     height: 32px;
     place-items: center;
-    border: 1px solid rgba(99, 153, 255, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(8, 14, 28, 0.54);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
     font-size: 0;
@@ -506,9 +506,9 @@
 
   .epub-controls[open] {
     left: 10px;
-    border: 1px solid rgba(99, 153, 255, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
-    background: rgba(8, 14, 28, 0.86);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     transform: none;
   }
@@ -523,17 +523,17 @@
 
   .epub-toolbar button {
     min-height: 34px;
-    border: 1px solid rgba(126, 180, 255, 0.32);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 9px;
-    background: rgba(37, 64, 108, 0.72);
-    color: #eef5ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-weight: 760;
     padding: 7px 10px;
   }
 
   .epub-toolbar button:hover {
-    background: rgba(56, 96, 160, 0.82);
+    background: var(--choir-state-selected);
   }
 
   .epub-toolbar button:disabled {
@@ -546,16 +546,16 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #a8adbd;
+    color: var(--choir-text-accent);
     font-size: 0.84rem;
   }
 
   .epub-toolbar select,
   .epub-toolbar input[type='search'] {
-    border: 1px solid rgba(99, 153, 255, 0.34);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
-    background: rgba(5, 10, 22, 0.72);
-    color: #f8fbff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     padding: 7px 8px;
   }
 
@@ -563,7 +563,7 @@
     position: absolute;
     inset: 0;
     min-height: 0;
-    background: #070b16;
+    background: var(--choir-state-selected);
     overflow: auto;
   }
 
@@ -571,7 +571,7 @@
     max-width: var(--reader-measure, 72ch);
     margin: 0 auto;
     padding: 32px;
-    color: #e8eefc;
+    color: var(--choir-text-accent);
     font-size: var(--reader-font-size, 18px);
     line-height: 1.62;
   }
@@ -585,21 +585,21 @@
 
   .epub-reader h4 {
     margin: 1.3em 0 0.45em;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1.08em;
   }
 
   .epub-reader blockquote {
     margin-left: 0;
-    border-left: 3px solid rgba(147, 197, 253, 0.56);
+    border-left: 3px solid var(--choir-border-strong);
     padding-left: 16px;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
   }
 
   .epub-reader pre {
     border-radius: 10px;
     padding: 12px;
-    background: rgba(2, 6, 23, 0.72);
+    background: var(--choir-state-selected);
     white-space: pre-wrap;
   }
 
@@ -615,7 +615,7 @@
   }
 
   .epub-chapter-header span {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
     font-weight: 820;
     text-transform: uppercase;
@@ -653,10 +653,10 @@
     width: 30px;
     height: 54px;
     place-items: center;
-    border: 1px solid rgba(126, 180, 255, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(5, 10, 22, 0.34);
-    color: #eaf2ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font: inherit;
     font-size: 1.3rem;
@@ -692,27 +692,27 @@
     margin: 0;
     border-radius: 14px;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #a8adbd;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
   }
 
   .epub-blocker {
     display: grid;
     gap: 6px;
-    color: #dce6ff;
+    color: var(--choir-text-accent);
   }
 
   .epub-recent {
     display: grid;
     gap: 8px;
-    border: 1px solid rgba(126, 180, 255, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
-    background: rgba(8, 14, 28, 0.74);
+    background: var(--choir-state-selected);
     padding: 12px;
   }
 
   .epub-recent > span {
-    color: #93c5fd;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -722,10 +722,10 @@
   .epub-recent button {
     display: grid;
     gap: 2px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.055);
-    color: #e5eefc;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 9px 10px;
     text-align: left;
@@ -733,8 +733,8 @@
 
   .epub-recent button:hover,
   .epub-recent button:focus-visible {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: rgba(96, 165, 250, 0.12);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-hover);
   }
 
   .epub-recent strong,
@@ -746,7 +746,7 @@
   }
 
   .epub-recent small {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
   }
 
@@ -765,17 +765,17 @@
   .reader-results button {
     display: grid;
     gap: 3px;
-    border: 1px solid rgba(99, 153, 255, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 9px;
-    background: rgba(13, 24, 44, 0.82);
-    color: #eaf2ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 8px 10px;
     text-align: left;
   }
 
   .reader-results span {
-    color: var(--choir-muted, #a8adbd);
+    color: var(--choir-text-muted);
     font-size: 0.82rem;
   }
 
@@ -786,7 +786,7 @@
     bottom: 10px;
     width: max-content;
     max-width: min(520px, calc(100% - 20px));
-    color: #a8adbd;
+    color: var(--choir-text-accent);
   }
 
   .epub-meta:not([open]) {
@@ -799,12 +799,12 @@
     width: 30px;
     height: 30px;
     place-items: center;
-    border: 1px solid rgba(120, 135, 170, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(10, 15, 27, 0.52);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-size: 0;
     font-weight: 800;
     list-style: none;
@@ -825,17 +825,17 @@
     left: 10px;
     right: 10px;
     width: auto;
-    border: 1px solid rgba(120, 135, 170, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 10px;
     padding: 7px 9px;
-    background: rgba(10, 15, 27, 0.76);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     transform: none;
   }
 
   .epub-meta h2 {
     margin: 10px 0;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1rem;
     overflow-wrap: anywhere;
   }
@@ -848,7 +848,7 @@
   }
 
   .epub-meta dt {
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-weight: 760;
   }
 
@@ -859,7 +859,7 @@
   }
 
   .epub-meta a {
-    color: #bfdbfe;
+    color: var(--choir-text-accent);
   }
 
   @media (max-width: 720px) {

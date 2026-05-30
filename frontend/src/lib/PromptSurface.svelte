@@ -340,7 +340,7 @@
     place-items: center;
     border-radius: var(--choir-radius-control-sm);
     background: var(--choir-accent);
-    color: var(--choir-on-accent);
+    color: var(--choir-text-on-accent);
     font-size: 0.66rem;
     font-weight: 850;
   }
@@ -370,7 +370,7 @@
     color: var(--choir-muted);
     padding: 0.26rem 0.5rem;
     min-height: 1.95rem;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent);
     cursor: pointer;
   }
 
@@ -411,8 +411,8 @@
     min-height: 3.05rem;
     height: 3.05rem;
     box-shadow:
-      inset 0 14px 28px rgba(255, 255, 255, 0.018),
-      0 12px 30px rgba(0, 0, 0, 0.22);
+      inset 0 14px 28px color-mix(in srgb, var(--choir-shadow-color) 2%, transparent),
+      0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
   }
 
   .command-field textarea {

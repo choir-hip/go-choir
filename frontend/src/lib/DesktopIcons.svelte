@@ -71,15 +71,15 @@
     top: 0;
     bottom: var(--choir-prompt-surface-bottom-offset, 64px);
     width: 180px;
-    background: #11111b;
-    border-right: 1px solid #2a2a3a;
+    background: var(--choir-state-selected);
+    border-right: 1px solid var(--choir-border-strong);
     display: flex;
     flex-direction: column;
     z-index: 50;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
-    scrollbar-color: #333 transparent;
+    scrollbar-color: var(--choir-border) transparent;
     transition: width 0.2s ease;
   }
 
@@ -88,7 +88,7 @@
   }
 
   .desktop-rail::-webkit-scrollbar-thumb {
-    background: #333;
+    background: var(--choir-surface-inset);
     border-radius: 2px;
   }
 
@@ -114,24 +114,24 @@
     border: 2px solid transparent;
     border-radius: 8px;
     cursor: pointer;
-    color: #c0c0d0;
+    color: var(--choir-text-accent);
     transition: background 0.15s, border-color 0.15s;
     position: relative;
     flex-shrink: 0;
   }
 
   .rail-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--choir-text-primary) 5%, transparent);
   }
 
   .rail-item:focus-visible {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid var(--choir-border-strong);
     outline-offset: 2px;
   }
 
   .rail-item.active {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.3);
+    background: var(--choir-state-hover);
+    border-color: var(--choir-border-strong);
   }
 
   .rail-icon {
@@ -142,7 +142,7 @@
   .rail-label {
     font-size: 0.7rem;
     font-weight: 500;
-    color: #999;
+    color: var(--choir-text-muted);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -152,7 +152,7 @@
   }
 
   .rail-item.active .rail-label {
-    color: #e0e0e0;
+    color: var(--choir-text-primary);
   }
 
   .active-dot {
@@ -162,7 +162,7 @@
     transform: translateY(-50%);
     width: 3px;
     height: 16px;
-    background: #3b82f6;
+    background: var(--choir-state-selected);
     border-radius: 2px;
   }
 
@@ -203,9 +203,9 @@
       bottom: 0;
       width: 200px;
       z-index: 200; /* Above backdrop (190), so rail items remain clickable */
-      background: #11111b;
-      border-right: 1px solid #2a2a3a;
-      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+      background: var(--choir-state-selected);
+      border-right: 1px solid var(--choir-border-strong);
+      box-shadow: 4px 0 20px color-mix(in srgb, var(--choir-shadow-color) 50%, transparent);
     }
 
     .desktop-rail.mobile-open .rail-item {

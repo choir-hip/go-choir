@@ -59,7 +59,7 @@
     inset: 0;
     z-index: 9998;
     border: 0;
-    background: rgba(0, 0, 0, 0.18);
+    background: var(--choir-surface-media);
     cursor: default;
   }
 

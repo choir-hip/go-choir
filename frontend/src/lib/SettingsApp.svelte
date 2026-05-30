@@ -292,10 +292,10 @@
     min-height: 0;
     overflow: auto;
     padding: clamp(1rem, 2.3vw, 1.7rem);
-    color: var(--choir-fg, #f8fafc);
+    color: var(--choir-text-primary);
     background:
-      radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 32%),
-      var(--choir-panel, #171827);
+      radial-gradient(circle at top left, var(--choir-state-hover), transparent 32%),
+      var(--choir-surface-app);
   }
 
   .settings-hero {
@@ -305,7 +305,7 @@
 
   .eyebrow {
     margin: 0 0 0.35rem;
-    color: var(--choir-accent, #60a5fa);
+    color: var(--choir-accent);
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.16em;
@@ -330,7 +330,7 @@
 
   .settings-hero p,
   .muted {
-    color: var(--choir-muted, #a8b3c7);
+    color: var(--choir-text-muted);
     line-height: 1.45;
   }
 
@@ -342,9 +342,9 @@
   .settings-card {
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
-    background: var(--choir-panel-soft, rgba(15, 23, 42, 0.52));
+    background: var(--choir-surface-card);
     padding: 1rem;
-    box-shadow: var(--choir-shadow-soft, 0 16px 42px rgba(0, 0, 0, 0.28));
+    box-shadow: var(--choir-shadow-soft);
   }
 
   .account-email {
@@ -368,8 +368,8 @@
     align-items: center;
     margin-top: 0.85rem;
     border-radius: var(--choir-radius-control, 20px);
-    background: color-mix(in srgb, var(--choir-control-bg, rgba(15, 23, 42, 0.8)) 76%, transparent);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    background: color-mix(in srgb, var(--choir-surface-control) 76%, transparent);
+    box-shadow: var(--choir-control-shadow);
     padding: 0.72rem;
   }
 
@@ -380,7 +380,7 @@
 
   .layout-setting span {
     margin-top: 0.16rem;
-    color: var(--choir-muted, #a8b3c7);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
   }
 
@@ -388,7 +388,7 @@
     display: flex;
     gap: 0.28rem;
     border-radius: var(--choir-radius-pill, 30px);
-    background: color-mix(in srgb, var(--choir-bg, #020617) 42%, transparent);
+    background: color-mix(in srgb, var(--choir-bg) 42%, transparent);
     padding: 0.22rem;
   }
 
@@ -397,16 +397,16 @@
     border: 0;
     border-radius: var(--choir-radius-pill, 30px);
     background: transparent;
-    color: var(--choir-muted, #a8b3c7);
+    color: var(--choir-text-muted);
     cursor: pointer;
     padding: 0.5rem 0.68rem;
     font-weight: 760;
   }
 
   .segmented-control button.active {
-    background: var(--choir-selected, rgba(96, 165, 250, 0.12));
-    color: var(--choir-fg, #e0ecff);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    background: var(--choir-state-selected);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
   }
 
   .theme-swatch {
@@ -419,7 +419,7 @@
     width: 2.3rem;
     height: 2.3rem;
     border-radius: 999px;
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    box-shadow: var(--choir-control-shadow);
   }
 
   .theme-swatch span:nth-child(1) {
@@ -436,7 +436,7 @@
 
   .theme-status {
     margin-top: 0.65rem;
-    color: var(--choir-accent-2, #bfdbfe);
+    color: var(--choir-text-accent);
     font-size: 0.78rem;
     font-weight: 700;
   }
@@ -455,9 +455,9 @@
     min-height: 2.25rem;
     border: 0;
     border-radius: var(--choir-radius-control-sm, 14px);
-    background: var(--choir-control-bg, rgba(15, 23, 42, 0.56));
-    color: var(--choir-fg, #e2e8f0);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
     cursor: pointer;
     padding: 0.45rem 0.6rem;
     text-align: left;
@@ -465,8 +465,8 @@
 
   .theme-preset:hover,
   .theme-preset.active {
-    background: var(--choir-selected, rgba(96, 165, 250, 0.12));
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24)), var(--choir-shadow-glow, 0 0 42px rgba(89,125,255,.22));
+    background: var(--choir-state-selected);
+    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
   }
 
   .preset-dot {
@@ -480,12 +480,12 @@
   .theme-dev-panel {
     margin-top: 0.9rem;
     border-radius: var(--choir-radius-control, 20px);
-    background: color-mix(in srgb, var(--choir-bg, #020617) 46%, transparent);
+    background: color-mix(in srgb, var(--choir-bg) 46%, transparent);
     padding: 0.62rem;
   }
 
   .theme-dev-panel summary {
-    color: var(--choir-muted, #94a3b8);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
     font-weight: 800;
     cursor: pointer;
@@ -497,8 +497,8 @@
     margin-top: 0.4rem;
     border: 0;
     border-radius: var(--choir-radius-control-sm, 14px);
-    background: color-mix(in srgb, var(--choir-bg, #020617) 74%, transparent);
-    color: var(--choir-fg, #e2e8f0);
+    background: color-mix(in srgb, var(--choir-bg) 74%, transparent);
+    color: var(--choir-text-primary);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.78rem;
     line-height: 1.45;
@@ -514,27 +514,27 @@
   }
 
   .theme-error {
-    color: var(--choir-danger, #fecaca);
+    color: var(--choir-status-danger);
   }
 
   .theme-notice {
-    color: var(--choir-success, #bbf7d0);
+    color: var(--choir-status-success);
   }
 
   .secondary-action {
     margin-top: 0.85rem;
     border: 0;
     border-radius: var(--choir-radius-pill, 30px);
-    background: var(--choir-control-bg, rgba(15, 23, 42, 0.8));
-    color: var(--choir-fg, #e0ecff);
-    box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24));
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
+    box-shadow: var(--choir-control-shadow);
     cursor: pointer;
     padding: 0.62rem 0.9rem;
     font-weight: 750;
   }
 
   .secondary-action:hover:enabled {
-    background: var(--choir-selected, rgba(30, 41, 59, 0.92));
+    background: var(--choir-state-selected);
   }
 
   .secondary-action:disabled {
@@ -568,23 +568,23 @@
   }
 
   dt {
-    color: var(--choir-muted, #94a3b8);
+    color: var(--choir-text-muted);
     font-size: 0.78rem;
   }
 
   dd {
     margin: 0;
-    color: #e2e8f0;
+    color: var(--choir-text-accent);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.8rem;
     overflow-wrap: anywhere;
   }
 
   .settings-error {
-    border: 1px solid rgba(248, 113, 113, 0.34);
+    border: 1px solid var(--choir-status-danger);
     border-radius: 14px;
-    background: rgba(127, 29, 29, 0.42);
-    color: #fecaca;
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
     padding: 0.75rem;
   }
 

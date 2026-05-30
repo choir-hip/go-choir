@@ -11,23 +11,16 @@
 }
 
 body {
-  background: var(--choir-bg);
-  color: var(--choir-fg);
+  background: var(--choir-body-background);
+  color: var(--choir-text-primary);
 }
 
 :root[data-theme-id='carbon-fiber-kintsugi'] body {
-  background:
-    linear-gradient(115deg, rgba(255, 232, 164, .09), transparent 16%, transparent 78%, rgba(255, 232, 164, .07)),
-    repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 3px, transparent 3px 9px),
-    repeating-linear-gradient(-45deg, rgba(255,255,255,.032) 0 3px, transparent 3px 9px),
-    repeating-linear-gradient(90deg, rgba(0,0,0,.34) 0 1px, transparent 1px 7px),
-    var(--choir-bg);
+  background: var(--choir-body-background);
 }
 
 :root[data-theme-id='london-salmon'] body {
-  background:
-    linear-gradient(rgba(122, 69, 52, .03) 1px, transparent 1px),
-    var(--choir-bg);
+  background: var(--choir-body-background);
   background-size: 100% 28px, auto;
 }
 
@@ -35,43 +28,43 @@ body {
 .floating-window,
 [data-window],
 [data-floating-window] {
-  background: var(--choir-panel, #0d1628) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: var(--choir-surface-app) !important;
+  color: var(--choir-text-primary) !important;
   border-color: transparent !important;
 }
 
 :root[data-theme-id='carbon-fiber-kintsugi'] :is(.window, .floating-window, [data-window], [data-floating-window]) {
   box-shadow:
-    0 18px 36px rgba(0, 0, 0, 0.58),
-    0 0 18px rgba(255, 216, 107, 0.16) !important;
+    0 18px 36px color-mix(in srgb, var(--choir-shadow-color) 58%, transparent),
+    0 0 18px color-mix(in srgb, var(--choir-status-warning) 16%, transparent) !important;
 }
 
 :root[data-theme-id='london-salmon'] :is(.window, .floating-window, [data-window], [data-floating-window]) {
   box-shadow:
-    0 8px 16px rgba(91, 58, 40, 0.11),
-    0 1px 0 rgba(255, 255, 255, 0.72) inset !important;
+    0 8px 16px color-mix(in srgb, var(--choir-status-warning) 14%, transparent),
+    0 1px 0 color-mix(in srgb, var(--choir-shadow-color) 72%, transparent) inset !important;
 }
 
 .window :is(.titlebar, [data-window-titlebar]),
 .floating-window :is(.titlebar, [data-window-titlebar]) {
-  background: color-mix(in srgb, var(--choir-panel-strong, #09101f) 86%, transparent) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: color-mix(in srgb, var(--choir-surface-pane) 86%, transparent) !important;
+  color: var(--choir-text-primary) !important;
   border-color: transparent !important;
 }
 
 .window :is(.titlvtext, .title, [data-window-title]),
 .floating-window :is(.titlvtext, .title, [data-window-title]) {
-  color: var(--choir-fg, #f7faff) !important;
+  color: var(--choir-text-primary) !important;
 }
 
 .window :is(.ctrl-btn, [data-window-minimize], [data-window-maximize], [data-window-close]),
 .floating-window :is(.ctrl-btn, [data-window-minimize], [data-window-maximize], [data-window-close]) {
-  color: var(--choir-muted, #9aa9c0) !important;
+  color: var(--choir-text-muted) !important;
 }
 
 .app-content {
-  background: var(--choir-panel-opaque, var(--choir-panel, #0d1628)) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: var(--choir-surface-app) !important;
+  color: var(--choir-text-primary) !important;
 }
 
 .app-content :is(
@@ -102,8 +95,8 @@ body {
   [data-trace-app],
   [data-terminal-preview]
 ) {
-  background: var(--choir-panel-opaque, var(--choir-panel, #0d1628)) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: var(--choir-surface-app) !important;
+  color: var(--choir-text-primary) !important;
 }
 
 .app-content :is(
@@ -155,8 +148,8 @@ body {
   .theme-preset,
   .settings-panel
 ) {
-  background: var(--choir-panel-soft, rgba(18, 31, 55, 0.68)) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: var(--choir-surface-card) !important;
+  color: var(--choir-text-primary) !important;
   border-color: transparent !important;
 }
 
@@ -175,11 +168,11 @@ body {
 ) {
   background:
     linear-gradient(
-      var(--choir-panel-opaque, var(--choir-panel, #0d1628)),
-      var(--choir-panel-opaque, var(--choir-panel, #0d1628))
+      var(--choir-surface-app),
+      var(--choir-surface-app)
     ),
-    #0d1628 !important;
-  background-color: var(--choir-panel-opaque, var(--choir-panel, #0d1628)) !important;
+    var(--choir-state-selected) !important;
+  background-color: var(--choir-surface-app) !important;
   background-clip: padding-box;
 }
 
@@ -198,10 +191,10 @@ body {
   .audio-play,
   .video-play
 ) {
-  background: var(--choir-control-bg, rgba(19, 32, 59, 0.84)) !important;
-  color: var(--choir-fg, #f7faff) !important;
+  background: var(--choir-surface-control) !important;
+  color: var(--choir-text-primary) !important;
   border-color: transparent !important;
-  box-shadow: var(--choir-control-shadow, 0 12px 32px rgba(0,0,0,.24)) !important;
+  box-shadow: var(--choir-control-shadow) !important;
 }
 
 .app-content :is(
@@ -215,7 +208,7 @@ body {
   .current,
   .primary-action
 ) {
-  background: var(--choir-selected, rgba(91, 123, 255, 0.22)) !important;
+  background: var(--choir-state-selected) !important;
 }
 
 .app-content :is(
@@ -235,7 +228,7 @@ body {
   .video-position-note,
   .empty-state
 ) {
-  color: var(--choir-muted, #9aa9c0) !important;
+  color: var(--choir-text-muted) !important;
 }
 
 .app-content :is(
@@ -250,7 +243,7 @@ body {
   .accent,
   .link
 ) {
-  color: var(--choir-accent-2, #45d7ff) !important;
+  color: var(--choir-text-accent) !important;
 }
 
 [data-vtext-app],
@@ -295,29 +288,29 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-app] {
-  background: #fffcfa !important;
-  color: #3a1517 !important;
+  background: var(--choir-surface-document) !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] :is(.vtext-editor, [data-vtext-editor]) {
   background:
-    linear-gradient(rgba(91, 28, 31, .025) 1px, transparent 1px),
-    #fffcfa !important;
+    linear-gradient(color-mix(in srgb, var(--choir-text-primary) 3%, transparent) 1px, transparent 1px),
+    var(--choir-surface-document) !important;
   background-size: 100% 30px, auto !important;
-  color: #3a1517 !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-toolbar] {
-  background: rgba(254, 246, 243, .98) !important;
-  color: #3a1517 !important;
-  box-shadow: 0 1px 0 rgba(91, 28, 31, .07), 0 10px 18px rgba(91, 58, 40, .06) !important;
+  background: var(--choir-surface-pane) !important;
+  color: var(--choir-text-primary) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--choir-border) 24%, transparent), 0 10px 18px color-mix(in srgb, var(--choir-shadow-color) 6%, transparent) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is([data-vtext-state], [data-vtext-version], button) {
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 430 !important;
-  color: #3a1517 !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is(button, [data-vtext-version]) {
@@ -327,21 +320,21 @@ body {
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-toolbar] :is(button:hover, button:focus-visible) {
-  background: rgba(91, 28, 31, .055) !important;
-  box-shadow: 0 6px 14px rgba(91, 58, 40, .06) !important;
+  background: var(--choir-state-hover) !important;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--choir-shadow-color) 6%, transparent) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-editor-area] {
-  background: #fffcfa !important;
-  color: #3a1517 !important;
+  background: var(--choir-surface-document) !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-editor-area] :is(h1, h2, h3, h4) {
-  color: #5b1c1f !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-vtext-editor-area] :is(p, li, blockquote) {
-  color: #604844 !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is(button, [role='button']),
@@ -350,7 +343,7 @@ body {
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 430 !important;
-  color: #3a1517 !important;
+  color: var(--choir-text-primary) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button),
@@ -364,7 +357,7 @@ body {
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app], [data-desk-overview], [data-desk-show-desktop], header button, footer button):focus-visible,
 :root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .mobile-app-button, .voice-button):hover,
 :root[data-theme-id='london-salmon'] [data-prompt-surface] :is([data-window-tray-item], .mobile-app-button, .voice-button):focus-visible {
-  background: rgba(91, 28, 31, .055) !important;
+  background: var(--choir-state-hover) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app] strong, [data-desk-overview] strong),
@@ -372,7 +365,7 @@ body {
   font-family: var(--choir-font-ui, Georgia, 'Times New Roman', ui-serif, serif) !important;
   font-style: italic !important;
   font-weight: 400 !important;
-  color: #62433f !important;
+  color: var(--choir-text-muted) !important;
 }
 
 :root[data-theme-id='london-salmon'] [data-desk-sheet] :is([data-desk-sheet-app] small, [data-desk-overview] small) {
@@ -397,7 +390,7 @@ body {
   font-style: italic !important;
   font-weight: 430 !important;
   background: transparent !important;
-  color: #3a1517 !important;
+  color: var(--choir-text-primary) !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
@@ -415,7 +408,7 @@ body {
   .current,
   .primary-action
 ) {
-  background: rgba(91, 28, 31, .055) !important;
+  background: var(--choir-state-hover) !important;
   box-shadow: none !important;
 }
 
@@ -455,14 +448,14 @@ body {
 .app-content :is(input, textarea, select) {
   border-width: 0 !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.035),
-    0 12px 30px rgba(0, 0, 0, 0.13);
+    inset 0 1px 0 color-mix(in srgb, var(--choir-shadow-color) 4%, transparent),
+    0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 13%, transparent);
 }
 
 .app-content :is(button, input, textarea, select):focus-visible {
   box-shadow:
-    0 0 0 0.22rem var(--choir-focus-shadow, rgba(96, 165, 250, 0.2)),
-    0 16px 36px rgba(0, 0, 0, 0.2) !important;
+    0 0 0 0.22rem var(--choir-focus-shadow, var(--choir-state-active-glow)),
+    0 16px 36px color-mix(in srgb, var(--choir-shadow-color) 20%, transparent) !important;
 }
 
 .app-content :is(
@@ -497,12 +490,11 @@ body {
 
 :root[data-theme-id='carbon-fiber-kintsugi'] body::before {
   opacity: 0.54;
-  background:
-    linear-gradient(115deg, rgba(255, 232, 164, .08), transparent 18%, transparent 76%, rgba(255, 232, 164, .06));
+  background: var(--choir-body-overlay);
 }
 
 :root[data-theme-id='london-salmon'] body::before {
   opacity: 0.12;
-  background: linear-gradient(90deg, rgba(122, 69, 52, .08) 1px, transparent 1px);
+  background: var(--choir-body-overlay);
   background-size: 64px 100%;
 }

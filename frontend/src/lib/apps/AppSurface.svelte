@@ -28,14 +28,14 @@
     padding: 1rem;
     background:
       linear-gradient(
-        var(--choir-panel-opaque, var(--choir-panel, #0d1628)),
-        var(--choir-panel-opaque, var(--choir-panel, #0d1628))
+        var(--choir-surface-app),
+        var(--choir-surface-app)
       ),
-      #0d1628;
-    background-color: var(--choir-panel-opaque, var(--choir-panel, #0d1628)) !important;
+      var(--choir-state-selected);
+    background-color: var(--choir-surface-app) !important;
     background-clip: padding-box;
     isolation: isolate;
-    color: var(--choir-fg, #f7faff);
+    color: var(--choir-text-primary);
   }
 
   .app-content[data-app-surface='document'],

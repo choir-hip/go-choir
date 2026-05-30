@@ -705,8 +705,8 @@
     height: 100%;
     display: grid;
     grid-template-columns: 220px minmax(260px, 0.95fr) minmax(320px, 1.25fr);
-    background: #07101d;
-    color: #edf4ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     overflow: hidden;
   }
 
@@ -720,12 +720,12 @@
   .message-detail {
     min-width: 0;
     min-height: 0;
-    border-right: 1px solid rgba(118, 151, 194, 0.18);
+    border-right: 1px solid var(--choir-border-strong);
   }
 
   .mail-rail {
     padding: 18px;
-    background: #081321;
+    background: var(--choir-state-selected);
   }
 
   .mail-title {
@@ -752,14 +752,14 @@
   .detail-header p,
   .metadata,
   .snippet {
-    color: #9ba9bf;
+    color: var(--choir-text-accent);
   }
 
   .address-dot {
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    background: #20d47c;
+    background: var(--choir-status-success);
     margin-top: 9px;
   }
 
@@ -778,9 +778,9 @@
   .compose-actions button,
   .list-actions button,
   .icon-button {
-    border: 1px solid rgba(121, 147, 194, 0.24);
-    background: rgba(21, 35, 58, 0.72);
-    color: #edf4ff;
+    border: 1px solid var(--choir-border-strong);
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     border-radius: 8px;
     cursor: pointer;
   }
@@ -792,14 +792,14 @@
 
   .folder-list button.active,
   .message-row.selected {
-    border-color: #3c78ff;
-    background: rgba(40, 76, 150, 0.42);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-selected);
   }
 
   .message-list {
     display: flex;
     flex-direction: column;
-    background: #07101d;
+    background: var(--choir-state-selected);
   }
 
   .list-header,
@@ -809,7 +809,7 @@
     align-items: flex-start;
     gap: 14px;
     padding: 18px 20px;
-    border-bottom: 1px solid rgba(118, 151, 194, 0.18);
+    border-bottom: 1px solid var(--choir-border-strong);
   }
 
   .list-actions {
@@ -868,7 +868,7 @@
 
   .time {
     grid-area: time;
-    color: #9ba9bf;
+    color: var(--choir-text-accent);
     font-size: 12px;
   }
 
@@ -885,13 +885,13 @@
 
   .trust {
     grid-area: trust;
-    color: #86b4ff;
+    color: var(--choir-text-accent);
     font-size: 12px;
   }
 
   .attachment-indicator {
     grid-area: attachment;
-    color: #c7d4e8;
+    color: var(--choir-text-accent);
     font-size: 14px;
     line-height: 1;
     justify-self: end;
@@ -900,14 +900,14 @@
   .message-detail {
     display: flex;
     flex-direction: column;
-    background: #08111d;
+    background: var(--choir-state-selected);
     overflow: auto;
   }
 
   .detail-trust {
     flex: none;
-    border: 1px solid rgba(76, 124, 255, 0.5);
-    color: #bdd0ff;
+    border: 1px solid var(--choir-border-strong);
+    color: var(--choir-text-accent);
     border-radius: 999px;
     padding: 5px 10px;
     font-size: 12px;
@@ -937,15 +937,15 @@
   }
 
   .message-details {
-    border: 1px solid rgba(118, 151, 194, 0.18);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
-    color: #cbd8ea;
+    color: var(--choir-text-accent);
   }
 
   .message-details summary {
     cursor: pointer;
     padding: 10px 12px;
-    color: #edf4ff;
+    color: var(--choir-text-accent);
   }
 
   .message-details dl {
@@ -962,7 +962,7 @@
   }
 
   .message-details dt {
-    color: #91a4bf;
+    color: var(--choir-text-accent);
     overflow-wrap: anywhere;
   }
 
@@ -978,7 +978,7 @@
 
   .attachments h3 {
     font-size: 14px;
-    color: #c7d4e8;
+    color: var(--choir-text-accent);
   }
 
   .attachment {
@@ -986,12 +986,12 @@
     justify-content: space-between;
     gap: 12px;
     padding: 10px 12px;
-    border: 1px solid rgba(118, 151, 194, 0.18);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
   }
 
   .attachment strong {
-    color: #ffb15c;
+    color: var(--choir-status-warning);
   }
 
   .actions {
@@ -1028,22 +1028,22 @@
   }
 
   .compose-header p {
-    color: #9ba9bf;
+    color: var(--choir-text-accent);
   }
 
   .reply-box label,
   .compose-box label {
     display: grid;
     gap: 8px;
-    color: #9ba9bf;
+    color: var(--choir-text-accent);
   }
 
   input,
   select,
   textarea {
-    border: 1px solid rgba(121, 147, 194, 0.3);
-    background: rgba(5, 11, 20, 0.8);
-    color: #edf4ff;
+    border: 1px solid var(--choir-border-strong);
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     border-radius: 8px;
     padding: 10px;
     font: inherit;
@@ -1065,11 +1065,11 @@
   }
 
   .mail-error {
-    color: #ff8c8c;
+    color: var(--choir-status-danger);
   }
 
   .empty-state {
-    color: #9ba9bf;
+    color: var(--choir-text-accent);
   }
 
   @media (max-width: 760px) {
@@ -1090,8 +1090,8 @@
       align-items: flex-end;
       gap: 12px;
       padding: 14px 16px 12px;
-      border-bottom: 1px solid rgba(118, 151, 194, 0.18);
-      background: #081321;
+      border-bottom: 1px solid var(--choir-border-strong);
+      background: var(--choir-state-selected);
       min-width: 0;
     }
 
@@ -1102,7 +1102,7 @@
 
     .mobile-mailbar p,
     .mobile-mailbar span {
-      color: #9ba9bf;
+      color: var(--choir-text-accent);
       font-size: 12px;
     }
 
@@ -1170,7 +1170,7 @@
 
     .message-detail {
       display: none;
-      border-top: 1px solid rgba(118, 151, 194, 0.18);
+      border-top: 1px solid var(--choir-border-strong);
       border-right: 0;
       min-height: 0;
     }
@@ -1186,9 +1186,9 @@
       margin: 12px 16px 0;
       min-height: 36px;
       padding: 7px 11px;
-      border: 1px solid rgba(121, 147, 194, 0.24);
-      background: rgba(21, 35, 58, 0.72);
-      color: #edf4ff;
+      border: 1px solid var(--choir-border-strong);
+      background: var(--choir-state-selected);
+      color: var(--choir-text-accent);
       border-radius: 8px;
       cursor: pointer;
     }

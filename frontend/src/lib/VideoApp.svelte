@@ -263,8 +263,8 @@
     display: block;
     height: 100%;
     min-height: 0;
-    color: #f8fbff;
-    background: #02040a;
+    color: var(--choir-text-accent);
+    background: var(--choir-state-selected);
     overflow: hidden;
   }
 
@@ -277,8 +277,8 @@
     min-height: 0;
     place-items: center;
     background:
-      radial-gradient(circle at 50% 45%, rgba(55, 65, 81, 0.24), transparent 42%),
-      #000;
+      radial-gradient(circle at 50% 45%, var(--choir-state-selected), transparent 42%),
+      var(--choir-surface-media);
     overflow: hidden;
   }
 
@@ -289,7 +289,7 @@
     min-height: 240px;
     border: 0;
     object-fit: contain;
-    background: #000;
+    background: var(--choir-surface-media);
   }
 
   .video-embed-controls {
@@ -297,7 +297,7 @@
     top: 12px;
     right: 12px;
     z-index: 2;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     font-size: 0.82rem;
     width: max-content;
   }
@@ -308,9 +308,9 @@
     width: 36px;
     height: 36px;
     place-items: center;
-    border: 1px solid rgba(126, 180, 255, 0.26);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(4, 9, 21, 0.64);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
     font-size: 0;
@@ -331,9 +331,9 @@
   }
 
   .video-embed-controls[open] {
-    border: 1px solid rgba(126, 180, 255, 0.26);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
-    background: rgba(4, 9, 21, 0.74);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
   }
 
@@ -342,16 +342,16 @@
     right: 12px;
     bottom: 12px;
     width: max-content;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
   }
 
   .video-controls[open] {
     left: 12px;
     width: auto;
-    border: 1px solid rgba(126, 180, 255, 0.28);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 14px;
-    background: rgba(4, 9, 21, 0.82);
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+    background: var(--choir-state-selected);
+    box-shadow: 0 18px 60px color-mix(in srgb, var(--choir-shadow-color) 40%, transparent);
     backdrop-filter: blur(12px);
   }
 
@@ -376,10 +376,10 @@
   .video-transport button,
   .video-transport select {
     min-height: 36px;
-    border: 1px solid rgba(126, 180, 255, 0.34);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(20, 38, 72, 0.86);
-    color: #eef5ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font: inherit;
     font-weight: 760;
@@ -388,19 +388,19 @@
 
   .video-transport button:hover,
   .video-transport select:hover {
-    background: rgba(39, 73, 128, 0.9);
+    background: var(--choir-state-selected);
   }
 
   .video-transport .video-play {
     min-width: 92px;
-    background: rgba(45, 118, 255, 0.82);
+    background: var(--choir-state-selected);
   }
 
   .video-transport label {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     font-size: 0.84rem;
   }
 
@@ -409,7 +409,7 @@
     grid-template-columns: auto minmax(100px, 1fr) auto;
     align-items: center;
     gap: 10px;
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -419,7 +419,7 @@
 
   .video-position-note {
     margin: 0;
-    color: #a8adbd;
+    color: var(--choir-text-accent);
     font-size: 0.82rem;
     text-align: center;
   }
@@ -430,12 +430,12 @@
     margin: 0;
     border-radius: 14px;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #a8adbd;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
   }
 
   .video-error {
-    color: #fecaca;
+    color: var(--choir-status-danger);
   }
 
   .video-empty {
@@ -450,14 +450,14 @@
   .video-recent {
     display: grid;
     gap: 8px;
-    border: 1px solid rgba(126, 180, 255, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 16px;
-    background: rgba(4, 9, 21, 0.74);
+    background: var(--choir-state-selected);
     padding: 12px;
   }
 
   .video-recent > span {
-    color: #93c5fd;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -467,10 +467,10 @@
   .video-recent button {
     display: grid;
     gap: 2px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.055);
-    color: #e5eefc;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 9px 10px;
     text-align: left;
@@ -478,8 +478,8 @@
 
   .video-recent button:hover,
   .video-recent button:focus-visible {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: rgba(96, 165, 250, 0.12);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-hover);
   }
 
   .video-recent strong,
@@ -491,7 +491,7 @@
   }
 
   .video-recent small {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
   }
 
@@ -502,7 +502,7 @@
     z-index: 3;
     width: max-content;
     max-width: min(520px, calc(100% - 24px));
-    color: #a8adbd;
+    color: var(--choir-text-accent);
   }
 
   .video-info summary {
@@ -510,12 +510,12 @@
     width: 34px;
     height: 34px;
     place-items: center;
-    border: 1px solid rgba(126, 180, 255, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(4, 9, 21, 0.64);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-size: 0;
     font-weight: 820;
     list-style: none;
@@ -532,15 +532,15 @@
   }
 
   .video-info[open] {
-    border: 1px solid rgba(126, 180, 255, 0.22);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
     padding: 8px 10px;
-    background: rgba(4, 9, 21, 0.82);
+    background: var(--choir-state-selected);
   }
 
   .video-info h2 {
     margin: 10px 0;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1rem;
     overflow-wrap: anywhere;
   }
@@ -553,7 +553,7 @@
   }
 
   .video-info dt {
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-weight: 760;
   }
 
@@ -564,7 +564,7 @@
   }
 
   .video-info a {
-    color: #bfdbfe;
+    color: var(--choir-text-accent);
   }
 
   @media (max-width: 720px) {

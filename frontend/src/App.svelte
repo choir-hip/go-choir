@@ -441,7 +441,7 @@
     align-items: center;
     justify-content: center;
     min-height: 100dvh;
-    color: #888;
+    color: var(--choir-text-muted);
   }
 
   .auth-overlay {
@@ -452,7 +452,7 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: color-mix(in srgb, var(--choir-bg, #030712) 58%, transparent);
+    background: color-mix(in srgb, var(--choir-bg) 58%, transparent);
     backdrop-filter: blur(10px);
   }
 
@@ -470,16 +470,16 @@
     height: 2.15rem;
     border: 0;
     border-radius: 999px;
-    background: var(--choir-control-bg, rgba(15, 23, 42, 0.86));
-    color: var(--choir-fg, #e2e8f0);
+    background: var(--choir-surface-control);
+    color: var(--choir-text-primary);
     cursor: pointer;
     font-size: 0.95rem;
     line-height: 1;
-    box-shadow: var(--choir-control-shadow, 0 12px 28px rgba(0, 0, 0, 0.24));
+    box-shadow: var(--choir-control-shadow);
   }
 
   .auth-overlay-close:hover {
-    background: var(--choir-selected, rgba(30, 41, 59, 0.95));
+    background: var(--choir-state-selected);
   }
 
   .auth-overlay :global(.auth-entry) {
@@ -488,7 +488,7 @@
 
   .auth-overlay :global(.auth-card) {
     max-width: 480px;
-    box-shadow: var(--choir-shadow-floating, 0 24px 70px rgba(0, 0, 0, 0.46));
+    box-shadow: var(--choir-shadow-floating);
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-overlay-close {

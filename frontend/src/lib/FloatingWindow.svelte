@@ -402,7 +402,7 @@
     position: absolute;
     display: flex;
     flex-direction: column;
-    background: #0d1628;
+    background: var(--choir-state-selected);
     background-clip: padding-box;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
@@ -410,8 +410,8 @@
     isolation: isolate;
     contain: paint;
     box-shadow:
-      0 28px 80px rgba(0, 0, 0, 0.48),
-      0 10px 30px color-mix(in srgb, var(--choir-accent, #3b82f6) 10%, transparent);
+      0 28px 80px color-mix(in srgb, var(--choir-shadow-color) 48%, transparent),
+      0 10px 30px color-mix(in srgb, var(--choir-accent) 10%, transparent);
     transform-origin: top left;
     transition: box-shadow 0.15s, filter 0.15s;
     user-select: none;
@@ -437,14 +437,14 @@
       box-shadow 0.2s ease,
       opacity 0.2s ease;
     box-shadow:
-      0 24px 70px rgba(0, 0, 0, 0.52),
-      0 12px 42px color-mix(in srgb, var(--choir-accent, #7dd3fc) 14%, transparent);
+      0 24px 70px color-mix(in srgb, var(--choir-shadow-color) 52%, transparent),
+      0 12px 42px color-mix(in srgb, var(--choir-accent) 14%, transparent);
   }
 
   .window.overview-preview-live.window-active {
     box-shadow:
-      0 28px 86px rgba(37, 99, 235, 0.32),
-      0 0 44px rgba(59, 130, 246, 0.24);
+      0 28px 86px var(--choir-state-active-glow),
+      0 0 44px var(--choir-state-active-glow);
   }
 
   .window.overview-preview-card,
@@ -461,8 +461,8 @@
 
   .window-active {
     box-shadow:
-      0 30px 88px rgba(0, 0, 0, 0.52),
-      0 0 54px color-mix(in srgb, var(--choir-accent, #3b82f6) 24%, transparent);
+      0 30px 88px color-mix(in srgb, var(--choir-shadow-color) 52%, transparent),
+      0 0 54px color-mix(in srgb, var(--choir-accent) 24%, transparent);
   }
 
   /* ---- Title bar ---- */
@@ -473,12 +473,12 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background-color: #09101f;
+    background-color: var(--choir-state-selected);
     background-image: linear-gradient(
-      color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent),
-      color-mix(in srgb, var(--choir-panel-strong, #181825) 86%, transparent)
+      color-mix(in srgb, var(--choir-surface-pane) 86%, transparent),
+      color-mix(in srgb, var(--choir-surface-pane) 86%, transparent)
     );
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent);
     cursor: grab;
     flex-shrink: 0;
     touch-action: none;
@@ -487,7 +487,7 @@
   .titlvtext {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #c0c0d0;
+    color: var(--choir-text-accent);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -512,18 +512,18 @@
     border-radius: var(--choir-radius-control-sm, 14px);
     font-size: 0.7rem;
     cursor: pointer;
-    color: #888;
+    color: var(--choir-text-muted);
     transition: background 0.15s, color 0.15s;
   }
 
   .ctrl-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ddd;
+    background: color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
+    color: var(--choir-text-primary);
   }
 
   .close-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
-    color: #f87171;
+    background: var(--choir-status-danger-soft);
+    color: var(--choir-status-danger);
   }
 
   /* ---- Content area ---- */
@@ -532,7 +532,7 @@
     overflow: auto;
     position: relative;
     min-height: 0;
-    background-color: #0d1628;
+    background-color: var(--choir-state-selected);
     background-clip: padding-box;
     isolation: isolate;
     user-select: text;
@@ -573,7 +573,7 @@
     right: 3px;
     width: 8px;
     height: 8px;
-    background: radial-gradient(circle at 100% 100%, rgba(255, 255, 255, 0.28), transparent 60%);
+    background: radial-gradient(circle at 100% 100%, var(--choir-surface-card), transparent 60%);
     border-radius: 999px;
   }
 

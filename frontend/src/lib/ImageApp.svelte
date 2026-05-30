@@ -165,12 +165,12 @@
     height: 100%;
     min-height: 0;
     background:
-      linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-      linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-      #050814;
+      linear-gradient(45deg, color-mix(in srgb, var(--choir-text-primary) 4%, transparent) 25%, transparent 25%),
+      linear-gradient(-45deg, color-mix(in srgb, var(--choir-text-primary) 4%, transparent) 25%, transparent 25%),
+      var(--choir-state-selected);
     background-position: 0 0, 0 10px;
     background-size: 20px 20px;
-    color: #f5f7ff;
+    color: var(--choir-text-accent);
     overflow: hidden;
   }
 
@@ -207,7 +207,7 @@
     left: 10px;
     width: max-content;
     max-width: min(520px, calc(100% - 20px));
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
   }
 
   .image-controls summary {
@@ -215,9 +215,9 @@
     width: 36px;
     height: 36px;
     place-items: center;
-    border: 1px solid rgba(99, 153, 255, 0.24);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(5, 10, 22, 0.64);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
     font-size: 0;
@@ -236,9 +236,9 @@
   }
 
   .image-controls[open] {
-    border: 1px solid rgba(99, 153, 255, 0.24);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 12px;
-    background: rgba(5, 10, 22, 0.76);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
   }
 
@@ -252,10 +252,10 @@
 
   .image-control-panel button {
     min-height: 32px;
-    border: 1px solid rgba(126, 180, 255, 0.32);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 9px;
-    background: rgba(37, 64, 108, 0.72);
-    color: #eef5ff;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     cursor: pointer;
     font-weight: 760;
     padding: 6px 9px;
@@ -263,11 +263,11 @@
 
   .image-control-panel button:hover,
   .image-control-panel button.selected {
-    background: rgba(56, 96, 160, 0.86);
+    background: var(--choir-state-selected);
   }
 
   .image-control-panel span {
-    color: #cbd5e1;
+    color: var(--choir-text-accent);
     font-size: 0.82rem;
     font-weight: 760;
   }
@@ -279,7 +279,7 @@
     bottom: 10px;
     width: max-content;
     max-width: min(520px, calc(100% - 20px));
-    color: #a8adbd;
+    color: var(--choir-text-accent);
   }
 
   .image-info summary {
@@ -287,12 +287,12 @@
     width: 34px;
     height: 34px;
     place-items: center;
-    border: 1px solid rgba(120, 135, 170, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
-    background: rgba(10, 15, 27, 0.64);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
     cursor: pointer;
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-size: 0;
     font-weight: 800;
     list-style: none;
@@ -312,16 +312,16 @@
   .image-info[open] {
     left: 10px;
     width: auto;
-    border: 1px solid rgba(120, 135, 170, 0.2);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 10px;
     padding: 7px 9px;
-    background: rgba(10, 15, 27, 0.72);
+    background: var(--choir-state-selected);
     backdrop-filter: blur(12px);
   }
 
   .image-info h2 {
     margin: 10px 0;
-    color: #f8fbff;
+    color: var(--choir-text-accent);
     font-size: 1rem;
     overflow-wrap: anywhere;
   }
@@ -334,7 +334,7 @@
   }
 
   .image-info dt {
-    color: #dbeafe;
+    color: var(--choir-text-accent);
     font-weight: 760;
   }
 
@@ -345,7 +345,7 @@
   }
 
   .image-info a {
-    color: #bfdbfe;
+    color: var(--choir-text-accent);
   }
 
   .image-status,
@@ -355,12 +355,12 @@
     margin: 0;
     border-radius: 14px;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #a8adbd;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
   }
 
   .image-error {
-    color: #ffd6d6;
+    color: var(--choir-status-danger);
   }
 
   .image-empty {
@@ -373,14 +373,14 @@
   .image-recent {
     display: grid;
     gap: 8px;
-    border: 1px solid rgba(126, 180, 255, 0.18);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 14px;
-    background: rgba(5, 10, 22, 0.68);
+    background: var(--choir-state-selected);
     padding: 12px;
   }
 
   .image-recent > span {
-    color: #93c5fd;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -390,10 +390,10 @@
   .image-recent button {
     display: grid;
     gap: 2px;
-    border: 1px solid rgba(148, 163, 184, 0.16);
+    border: 1px solid var(--choir-border-strong);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.055);
-    color: #e5eefc;
+    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    color: var(--choir-text-accent);
     cursor: pointer;
     padding: 9px 10px;
     text-align: left;
@@ -401,8 +401,8 @@
 
   .image-recent button:hover,
   .image-recent button:focus-visible {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: rgba(96, 165, 250, 0.12);
+    border-color: var(--choir-border-strong);
+    background: var(--choir-state-hover);
   }
 
   .image-recent strong,
@@ -414,7 +414,7 @@
   }
 
   .image-recent small {
-    color: #94a3b8;
+    color: var(--choir-text-accent);
     font-size: 0.74rem;
   }
 </style>

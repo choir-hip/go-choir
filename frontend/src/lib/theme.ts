@@ -161,13 +161,15 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
   const c = normalized.colors;
   const r = normalized.radii;
   const e = normalized.effects;
+  const panelOpaque = opaqueColor(c.panel, DEFAULT_THEME.colors.panel);
+  const panelStrongOpaque = opaqueColor(c.panelStrong, DEFAULT_THEME.colors.panelStrong);
   return {
     '--choir-bg': c.bg,
     '--choir-bg-2': c.bg2,
     '--choir-panel': c.panel,
-    '--choir-panel-opaque': opaqueColor(c.panel, DEFAULT_THEME.colors.panel),
+    '--choir-panel-opaque': panelOpaque,
     '--choir-panel-strong': c.panelStrong,
-    '--choir-panel-strong-opaque': opaqueColor(c.panelStrong, DEFAULT_THEME.colors.panelStrong),
+    '--choir-panel-strong-opaque': panelStrongOpaque,
     '--choir-panel-soft': c.panelSoft,
     '--choir-fg': c.fg,
     '--choir-muted': c.muted,
@@ -186,6 +188,34 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-sheet-bg': c.sheetBg,
     '--choir-control-bg': c.controlBg,
     '--choir-tetramark-color': c.tetramarkColor,
+    '--choir-surface-app': panelOpaque,
+    '--choir-surface-pane': panelStrongOpaque,
+    '--choir-surface-card': c.panelSoft,
+    '--choir-surface-control': c.controlBg,
+    '--choir-surface-input': c.inputBg,
+    '--choir-surface-inset': panelStrongOpaque,
+    '--choir-surface-media': '#000000',
+    '--choir-surface-document': panelOpaque,
+    '--choir-text-primary': c.fg,
+    '--choir-text-muted': c.muted,
+    '--choir-text-subtle': c.subtle,
+    '--choir-text-accent': c.accent2,
+    '--choir-text-on-accent': c.onAccent,
+    '--choir-state-selected': c.selected,
+    '--choir-state-hover': colorMix(c.accent, 12),
+    '--choir-state-focus': colorMix(c.accent, 32),
+    '--choir-state-active-glow': colorMix(c.accent, 24),
+    '--choir-status-success': c.success,
+    '--choir-status-success-soft': colorMix(c.success, 22),
+    '--choir-status-warning': c.warning,
+    '--choir-status-warning-soft': colorMix(c.warning, 22),
+    '--choir-status-danger': c.danger,
+    '--choir-status-danger-soft': colorMix(c.danger, 24),
+    '--choir-shadow-color': 'rgb(0, 0, 0)',
+    '--choir-light-overlay': colorMix(c.fg, 8),
+    '--choir-grid-line': colorMix(c.borderStrong || c.border, 28),
+    '--choir-body-background': themeBodyBackground(normalized),
+    '--choir-body-overlay': themeBodyOverlay(normalized),
     '--choir-chart-1': c.chart1,
     '--choir-chart-2': c.chart2,
     '--choir-chart-3': c.chart3,
@@ -211,6 +241,39 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-font-display': normalized.fonts.display,
     '--choir-font-mono': normalized.fonts.mono,
   };
+}
+
+function colorMix(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+}
+
+function themeBodyBackground(theme: ChoirTheme): string {
+  if (theme.id === 'carbon-fiber-kintsugi') {
+    return [
+      `linear-gradient(115deg, ${colorMix(theme.colors.accent2, 9)}, transparent 16%, transparent 78%, ${colorMix(theme.colors.accent2, 7)})`,
+      `repeating-linear-gradient(45deg, ${colorMix(theme.colors.fg, 4)} 0 3px, transparent 3px 9px)`,
+      `repeating-linear-gradient(-45deg, ${colorMix(theme.colors.fg, 3)} 0 3px, transparent 3px 9px)`,
+      `repeating-linear-gradient(90deg, ${colorMix('#000000', 34)} 0 1px, transparent 1px 7px)`,
+      theme.colors.bg,
+    ].join(', ');
+  }
+  if (theme.id === 'london-salmon') {
+    return [
+      `linear-gradient(${colorMix(theme.colors.accent, 3)} 1px, transparent 1px)`,
+      theme.colors.bg,
+    ].join(', ');
+  }
+  return theme.colors.bg;
+}
+
+function themeBodyOverlay(theme: ChoirTheme): string {
+  if (theme.id === 'carbon-fiber-kintsugi') {
+    return `linear-gradient(115deg, ${colorMix(theme.colors.accent2, 8)}, transparent 18%, transparent 76%, ${colorMix(theme.colors.accent2, 6)})`;
+  }
+  if (theme.id === 'london-salmon') {
+    return `linear-gradient(90deg, ${colorMix(theme.colors.accent, 8)} 1px, transparent 1px)`;
+  }
+  return 'none';
 }
 
 function opaqueColor(value: string | undefined, fallback: string): string {
