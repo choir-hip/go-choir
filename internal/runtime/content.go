@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -96,6 +97,13 @@ type youtubeTranscriptFetchResult struct {
 	Text         string
 	Segments     []youtubeTranscriptSegment
 	Error        string
+}
+
+type youtubeTranscriptProviderConfig struct {
+	Name       string
+	BaseURL    string
+	APIKey     string
+	AuthScheme string
 }
 
 func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
@@ -571,6 +579,34 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 		result.Error = "transcript fetch disabled"
 		return result
 	}
+	if cfg, ok := configuredYouTubeTranscriptProvider(); ok {
+		providerResult := fetchConfiguredYouTubeTranscript(ctx, videoID, cfg)
+		if providerResult.Availability == "available" {
+			return providerResult
+		}
+		result.Error = providerResult.Error
+		result.Provider = providerResult.Provider
+	}
+	captionResult := fetchYouTubeTranscriptFromCaptionTracks(ctx, videoID)
+	if captionResult.Availability == "available" {
+		return captionResult
+	}
+	if result.Error != "" {
+		captionErr := captionResult.Error
+		if captionErr == "" {
+			captionErr = "caption-track fallback unavailable"
+		}
+		captionResult.Error = result.Error + "; " + captionErr
+		captionResult.Provider = result.Provider + "+youtube_caption_tracks"
+	}
+	return captionResult
+}
+
+func fetchYouTubeTranscriptFromCaptionTracks(ctx context.Context, videoID string) youtubeTranscriptFetchResult {
+	result := youtubeTranscriptFetchResult{
+		Availability: "unavailable",
+		Provider:     "youtube_caption_tracks",
+	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	client := &http.Client{Timeout: 6 * time.Second}
@@ -667,6 +703,287 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 	result.Text = text
 	result.Error = ""
 	return result
+}
+
+func configuredYouTubeTranscriptProvider() (youtubeTranscriptProviderConfig, bool) {
+	cfg := youtubeTranscriptProviderConfig{
+		Name:       strings.TrimSpace(os.Getenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER")),
+		BaseURL:    strings.TrimSpace(os.Getenv("CHOIR_YOUTUBE_TRANSCRIPT_API_URL")),
+		APIKey:     strings.TrimSpace(os.Getenv("CHOIR_YOUTUBE_TRANSCRIPT_API_KEY")),
+		AuthScheme: strings.TrimSpace(os.Getenv("CHOIR_YOUTUBE_TRANSCRIPT_AUTH_SCHEME")),
+	}
+	if cfg.Name == "" && cfg.BaseURL == "" && cfg.APIKey == "" {
+		return youtubeTranscriptProviderConfig{}, false
+	}
+	cfg.Name = strings.ToLower(cfg.Name)
+	if cfg.Name == "" {
+		cfg.Name = "generic"
+	}
+	if cfg.AuthScheme == "" {
+		cfg.AuthScheme = "bearer"
+	}
+	if cfg.BaseURL == "" {
+		switch cfg.Name {
+		case "gettranscript":
+			cfg.BaseURL = "https://gettranscript.io/api/get-transcript"
+		case "transcriptapi":
+			cfg.BaseURL = "https://transcriptapi.com/api/v2/youtube/transcript"
+		case "youtube-transcript-io":
+			cfg.BaseURL = "https://www.youtube-transcript.io/api/transcripts"
+		}
+	}
+	return cfg, cfg.BaseURL != ""
+}
+
+func fetchConfiguredYouTubeTranscript(ctx context.Context, videoID string, cfg youtubeTranscriptProviderConfig) youtubeTranscriptFetchResult {
+	result := youtubeTranscriptFetchResult{
+		Availability: "unavailable",
+		Provider:     firstNonEmpty(cfg.Name, "configured"),
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	req, err := buildYouTubeTranscriptProviderRequest(fetchCtx, videoID, cfg)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	applyYouTubeTranscriptProviderAuth(req, cfg)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		result.Error = fmt.Sprintf("%s returned status %s: %s", result.Provider, resp.Status, strings.TrimSpace(string(raw)))
+		return result
+	}
+	segments, text, language, kind, err := parseYouTubeTranscriptProviderPayload(raw, videoID)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if strings.TrimSpace(text) == "" {
+		result.Error = "configured transcript provider returned no text"
+		return result
+	}
+	result.Availability = "available"
+	result.Language = firstNonEmpty(language, "unknown")
+	result.Kind = firstNonEmpty(kind, "provider")
+	result.Text = text
+	result.Segments = segments
+	result.Error = ""
+	return result
+}
+
+func buildYouTubeTranscriptProviderRequest(ctx context.Context, videoID string, cfg youtubeTranscriptProviderConfig) (*http.Request, error) {
+	provider := strings.ToLower(strings.TrimSpace(cfg.Name))
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		return nil, fmt.Errorf("configured transcript provider missing base URL")
+	}
+	canonicalURL := "https://www.youtube.com/watch?v=" + url.QueryEscape(videoID)
+	switch provider {
+	case "youtube-transcript-io":
+		body, _ := json.Marshal(map[string]any{"ids": []string{videoID}})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	case "generic-post":
+		body, _ := json.Marshal(map[string]any{"video_id": videoID, "url": canonicalURL})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	default:
+		parsed, err := url.Parse(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		q := parsed.Query()
+		switch provider {
+		case "transcriptapi":
+			q.Set("video_url", canonicalURL)
+			q.Set("format", "json")
+		default:
+			q.Set("videoId", videoID)
+		}
+		parsed.RawQuery = q.Encode()
+		return http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	}
+}
+
+func applyYouTubeTranscriptProviderAuth(req *http.Request, cfg youtubeTranscriptProviderConfig) {
+	if req == nil || cfg.APIKey == "" {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.AuthScheme)) {
+	case "none":
+		return
+	case "basic":
+		req.SetBasicAuth(cfg.APIKey, "")
+	case "x-api-key":
+		req.Header.Set("X-API-Key", cfg.APIKey)
+	default:
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+}
+
+func parseYouTubeTranscriptProviderPayload(raw []byte, videoID string) ([]youtubeTranscriptSegment, string, string, string, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var value any
+	if err := dec.Decode(&value); err != nil {
+		return nil, "", "", "", err
+	}
+	segments, text, language, kind, ok := extractYouTubeTranscriptProviderCandidate(value, videoID)
+	if !ok {
+		return nil, "", "", "", fmt.Errorf("configured transcript provider payload has no transcript text")
+	}
+	if strings.TrimSpace(text) == "" && len(segments) > 0 {
+		lines := make([]string, 0, len(segments))
+		for _, segment := range segments {
+			if segment.Text != "" {
+				lines = append(lines, segment.Text)
+			}
+		}
+		text = strings.Join(lines, "\n")
+	}
+	if len(segments) == 0 && strings.TrimSpace(text) != "" {
+		segments = []youtubeTranscriptSegment{{Start: 0, Text: strings.TrimSpace(text)}}
+	}
+	return segments, strings.TrimSpace(text), language, kind, nil
+}
+
+func extractYouTubeTranscriptProviderCandidate(value any, videoID string) ([]youtubeTranscriptSegment, string, string, string, bool) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			segments, text, language, kind, ok := extractYouTubeTranscriptProviderCandidate(item, videoID)
+			if ok && (matchesTranscriptVideoID(item, videoID) || strings.TrimSpace(text) != "" || len(segments) > 0) {
+				return segments, text, language, kind, true
+			}
+		}
+	case map[string]any:
+		if errText := providerStringField(typed, "error", "message"); errText != "" && providerStringField(typed, "text", "transcript") == "" {
+			return nil, "", "", "", false
+		}
+		language := providerStringField(typed, "language", "language_code", "lang")
+		kind := providerStringField(typed, "kind", "type")
+		if rawSegments, ok := firstProviderField(typed, "segments", "transcript", "transcripts", "captions", "items"); ok {
+			if segments, text := parseProviderTranscriptSegments(rawSegments); strings.TrimSpace(text) != "" || len(segments) > 0 {
+				return segments, text, language, kind, true
+			}
+			if segments, text, childLanguage, childKind, ok := extractYouTubeTranscriptProviderCandidate(rawSegments, videoID); ok {
+				return segments, text, firstNonEmpty(language, childLanguage), firstNonEmpty(kind, childKind), true
+			}
+		}
+		if text := providerStringField(typed, "text", "transcript", "content", "body"); strings.TrimSpace(text) != "" {
+			return nil, strings.TrimSpace(text), language, kind, true
+		}
+		for _, key := range []string{"data", "result", "results"} {
+			if child, ok := typed[key]; ok {
+				segments, text, childLanguage, childKind, childOK := extractYouTubeTranscriptProviderCandidate(child, videoID)
+				if childOK {
+					return segments, text, firstNonEmpty(language, childLanguage), firstNonEmpty(kind, childKind), true
+				}
+			}
+		}
+	}
+	return nil, "", "", "", false
+}
+
+func parseProviderTranscriptSegments(value any) ([]youtubeTranscriptSegment, string) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, ""
+	}
+	segments := make([]youtubeTranscriptSegment, 0, len(items))
+	lines := []string{}
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := providerStringField(m, "text", "utf8", "content", "caption")
+		if text == "" {
+			continue
+		}
+		segment := youtubeTranscriptSegment{
+			Start:    providerFloatField(m, "start", "start_seconds", "offset", "offset_seconds"),
+			Duration: providerFloatField(m, "duration", "duration_seconds", "dur"),
+			Text:     collapseWhitespace(text),
+		}
+		segments = append(segments, segment)
+		lines = append(lines, segment.Text)
+	}
+	return segments, strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func firstProviderField(m map[string]any, keys ...string) (any, bool) {
+	for _, key := range keys {
+		if value, ok := m[key]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func providerStringField(m map[string]any, keys ...string) string {
+	for _, key := range keys {
+		switch value := m[key].(type) {
+		case string:
+			if strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		case json.Number:
+			return value.String()
+		}
+	}
+	return ""
+}
+
+func providerFloatField(m map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		switch value := m[key].(type) {
+		case float64:
+			return value
+		case int:
+			return float64(value)
+		case json.Number:
+			if parsed, err := strconv.ParseFloat(value.String(), 64); err == nil {
+				return parsed
+			}
+		case string:
+			if parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+				return parsed
+			}
+		}
+	}
+	return 0
+}
+
+func matchesTranscriptVideoID(value any, videoID string) bool {
+	m, ok := value.(map[string]any)
+	if !ok || videoID == "" {
+		return false
+	}
+	for _, key := range []string{"video_id", "videoId", "id"} {
+		if providerStringField(m, key) == videoID {
+			return true
+		}
+	}
+	return false
 }
 
 func youtubeJSON3CaptionURL(raw string) string {

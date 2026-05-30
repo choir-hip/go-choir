@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -219,6 +220,137 @@ func TestYouTubeJSON3CaptionURLForcesFormat(t *testing.T) {
 	}
 	if strings.Contains(got, "fmt=srv3") {
 		t.Fatalf("caption URL retained stale fmt: %q", got)
+	}
+}
+
+func TestFetchYouTubeTranscriptUsesConfiguredProvider(t *testing.T) {
+	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER", "gettranscript")
+	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_API_KEY", "secret")
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("videoId") != "jNQXAC9IVRw" {
+			t.Fatalf("videoId query = %q", r.URL.RawQuery)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer secret" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"language": "en",
+			"kind": "manual",
+			"segments": [
+				{"start": 0.0, "duration": 1.2, "text": "First line."},
+				{"start": 1.2, "duration": 2.4, "text": "Second line."}
+			]
+		}`))
+	}))
+	defer source.Close()
+	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_API_URL", source.URL)
+
+	got := fetchYouTubeTranscript(context.Background(), "jNQXAC9IVRw")
+	if got.Availability != "available" || got.Provider != "gettranscript" {
+		t.Fatalf("availability/provider = %q/%q error=%q", got.Availability, got.Provider, got.Error)
+	}
+	if got.Language != "en" || got.Kind != "manual" {
+		t.Fatalf("language/kind = %q/%q", got.Language, got.Kind)
+	}
+	if len(got.Segments) != 2 || got.Segments[1].Start != 1.2 {
+		t.Fatalf("segments = %#v", got.Segments)
+	}
+	if got.Text != "First line.\nSecond line." {
+		t.Fatalf("text = %q", got.Text)
+	}
+}
+
+func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
+	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER", "gettranscript")
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("videoId") != "jNQXAC9IVRw" {
+			t.Fatalf("videoId query = %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"language": "en",
+			"segments": [{"start": 0, "duration": 2, "text": "Stored transcript line."}]
+		}`))
+	}))
+	defer source.Close()
+	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_API_URL", source.URL)
+
+	_, handler := testAPISetup(t)
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", `{"url":"https://youtu.be/jNQXAC9IVRw"}`, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var video struct {
+		MediaType string         `json:"media_type"`
+		Metadata  map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &video); err != nil {
+		t.Fatalf("decode video response: %v", err)
+	}
+	if video.MediaType != "video/youtube" || video.Metadata["transcript_availability"] != "available" {
+		t.Fatalf("video response = %#v", video)
+	}
+	transcriptID, _ := video.Metadata["transcript_content_id"].(string)
+	if transcriptID == "" {
+		t.Fatalf("missing transcript_content_id: %#v", video.Metadata)
+	}
+
+	req = authenticatedRequest(http.MethodGet, "/api/content/items/"+transcriptID, "", "user-content")
+	w = httptest.NewRecorder()
+	handler.HandleContentItem(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get transcript status = %d body=%s", w.Code, w.Body.String())
+	}
+	var transcript struct {
+		SourceType  string         `json:"source_type"`
+		MediaType   string         `json:"media_type"`
+		TextContent string         `json:"text_content"`
+		Metadata    map[string]any `json:"metadata"`
+		Provenance  map[string]any `json:"provenance"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &transcript); err != nil {
+		t.Fatalf("decode transcript: %v", err)
+	}
+	if transcript.SourceType != "derived_transcript" || transcript.MediaType != "text/x-youtube-transcript" {
+		t.Fatalf("transcript item type = %q/%q", transcript.SourceType, transcript.MediaType)
+	}
+	if transcript.TextContent != "Stored transcript line." {
+		t.Fatalf("transcript text = %q", transcript.TextContent)
+	}
+	if transcript.Metadata["availability"] != "available" || transcript.Metadata["provider"] != "gettranscript" {
+		t.Fatalf("transcript metadata = %#v", transcript.Metadata)
+	}
+	if transcript.Provenance["rights_scope"] != "private_user_source" || transcript.Provenance["untrusted_source_text"] != true {
+		t.Fatalf("transcript provenance = %#v", transcript.Provenance)
+	}
+}
+
+func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing.T) {
+	raw := []byte(`{
+		"data": [{
+			"video_id": "abc123",
+			"lang": "en",
+			"transcript": [
+				{"offset": "3.5", "duration": "1.0", "text": "Nested line one."},
+				{"offset": "4.5", "duration": "1.5", "text": "Nested line two."}
+			]
+		}]
+	}`)
+	segments, text, language, _, err := parseYouTubeTranscriptProviderPayload(raw, "abc123")
+	if err != nil {
+		t.Fatalf("parse provider payload: %v", err)
+	}
+	if language != "en" {
+		t.Fatalf("language = %q", language)
+	}
+	if len(segments) != 2 || segments[0].Start != 3.5 || segments[1].Duration != 1.5 {
+		t.Fatalf("segments = %#v", segments)
+	}
+	if text != "Nested line one.\nNested line two." {
+		t.Fatalf("text = %q", text)
 	}
 }
 

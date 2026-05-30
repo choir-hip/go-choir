@@ -624,3 +624,24 @@ state when no configured provider or direct YouTube fallback can return
 segments. The adapter must still store transcript output only as private
 `ContentItem` source material for researcher-mediated source representations,
 not as deterministic review prose.
+
+### 2026-05-30 Transcript Adapter Contract
+
+The next runtime slice adds a transcript-provider boundary while keeping the
+existing direct YouTube caption-track fetch as an unavailable-state fallback.
+The configured-provider path is selected with:
+
+```text
+CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER=gettranscript|transcriptapi|youtube-transcript-io|generic-post|generic
+CHOIR_YOUTUBE_TRANSCRIPT_API_URL=https://provider.example/...
+CHOIR_YOUTUBE_TRANSCRIPT_API_KEY=...
+CHOIR_YOUTUBE_TRANSCRIPT_AUTH_SCHEME=bearer|basic|x-api-key|none
+```
+
+The adapter accepts common provider response shapes with either a root
+`segments` array, nested `transcript`/`captions` arrays, or text fields. The
+normalized output remains the same private transcript `ContentItem`: full text,
+timestamp segments when present, language/kind/provider metadata, and
+untrusted-source provenance. If the configured provider fails or returns no
+text, Choir falls back to the direct caption-track probe and stores the durable
+unavailable/error state instead of inventing a transcript.
