@@ -718,3 +718,60 @@ research tool registry, expose private transcript text/segments with
 provenance and truncation metadata, and update the VText media-source research
 objective to prefer `read_content_item` for every listed `content_id` and
 `transcript_content_id` before falling back to URL import or web fetch.
+
+### 2026-05-30 Deployed Researcher Source-Artifact Proof
+
+Commit `e4479a758fb372fe7b19bcc199539e4b3604d8a5` deployed to staging after CI
+run `26677725324` and FlakeHub run `26677725334`. Staging `/health` reported
+both proxy and sandbox `deployed_commit` as
+`e4479a758fb372fe7b19bcc199539e4b3604d8a5`, deployed at
+`2026-05-30T07:12:10Z`.
+
+Local proof:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestResearcherReadContentItemReturnsPrivateSourceArtifact|TestVTextAgentRevisionRegistersMediaSourceRefs|TestMarkVTextMediaSourceRefsResearchState'`
+- `nix develop -c go test ./internal/runtime -run TestDoesNotExist`
+
+Deployed product-path proof with QA user
+`playwright-state-1780125219958-0foc67@example.com` created VText document
+`7383ea16-8544-4d73-b893-cf1ef9f53de2`, pasted two YouTube links and one
+direct image link, and submitted Revise through
+`f9e28bf3-e16d-4f97-81c9-4d5e36e69933`.
+
+Evidence from the deployed path:
+
+- real transcript source `dQw4w9WgXcQ` created video ContentItem
+  `7820888d-ca0f-4b3d-af9f-37375701879e` and private transcript ContentItem
+  `5ba1d970-013d-4b74-bf31-f7b29bfd01c6` with
+  `availability=available`, `provider=youtube_innertube_android`, 61
+  timestamped segments, and private/untrusted provenance;
+- unavailable transcript source `00000000000` created video ContentItem
+  `0c23c674-3299-4337-a6a3-c74edcb1a5a0` and transcript status ContentItem
+  `dd6992d9-4f93-432e-a8e0-ef6cd0cb2009` with
+  `availability=unavailable` and a precise unavailable-video/caption blocker;
+- direct image source created image ContentItem
+  `b6280b9f-250f-40b4-8eae-7e7130e069a9` with `media_type=image/jpeg`;
+- Trace for the initial revise trajectory contained 10 `read_content_item`
+  moments, proving the researcher used stored source artifacts rather than only
+  re-probing public URLs;
+- the head VText revision consumed one researcher update, carried exactly three
+  `media_source_refs`, and marked all three refs `research_state=represented`;
+- repeated Revise through `c494b0cf-250b-46f2-8216-e3dfc526321f` preserved the
+  same three source refs and did not duplicate source packets for the pasted
+  URLs;
+- the VText UI rendered three source cards on desktop and mobile: two YouTube
+  iframes, one image, represented research labels, and no horizontal overflow.
+
+```text
+status: first_receding_horizon_slice_complete
+what shipped: durable YouTube/image source-packet registration, Android
+InnerTube transcript acquisition, private transcript ContentItems, VText
+embedded source cards, researcher read_content_item access to stored source
+artifacts, source-ref represented state after researcher consumption, and
+repeated-revise source-packet dedupe.
+remaining error field: image cache/materialization policy, source-ref removal
+semantics, richer typed source-representation schema, model-context retrieval
+over large/multiple transcripts, public rights filtering, optional source
+expansion windows, and bare prompt-surface URL-to-review defaults.
+```
