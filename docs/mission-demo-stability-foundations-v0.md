@@ -59,6 +59,15 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   app host themselves are opaque. The rendering failure is therefore an
   app-theme layering bug: decorative soft panels are being applied to
   full-window structural panes that must occlude background windows.
+- Follow-up staging verification after the opaque-pane patch caught a second
+  theme regression: the opacity guard still carried hard-coded Future Noir
+  fallback colors such as `#0d1628` as `background-color`, so broader theme
+  tests could report noir app hosts under London Salmon even when the current
+  theme variables were light. This confirms the sharper model: opacity and
+  theming are not competing goals. The theme system needs typed, theme-native
+  opaque surfaces for structural panes, and translucent `panelSoft` should
+  remain reserved for decorative cards or app surfaces that explicitly opt into
+  glass.
 
 ## Invariants
 
@@ -94,6 +103,10 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   panes. Full-height panes, sidebars, detail panes, readers, toolbars, and
   app-stage surfaces inside a floating window need solid backing unless the app
   explicitly opts into transparency with a proven foreground-ownership design.
+- Opaque structural pane fixes must still be theme-native. They may use opaque
+  theme tokens such as `--choir-panel`, but must not reintroduce hard-coded
+  Future Noir fallback colors as the effective `background-color` under other
+  themes.
 
 ## First Stability Slice
 
