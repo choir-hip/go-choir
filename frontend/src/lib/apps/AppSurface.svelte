@@ -27,9 +27,12 @@
     height: 100%;
     padding: 1rem;
     background:
-      linear-gradient(var(--choir-panel, #0d1628), var(--choir-panel, #0d1628)),
+      linear-gradient(
+        var(--choir-panel-opaque, var(--choir-panel, #0d1628)),
+        var(--choir-panel-opaque, var(--choir-panel, #0d1628))
+      ),
       #0d1628;
-    background-color: var(--choir-panel, #0d1628) !important;
+    background-color: var(--choir-panel-opaque, var(--choir-panel, #0d1628)) !important;
     background-clip: padding-box;
     isolation: isolate;
     color: var(--choir-fg, #f7faff);

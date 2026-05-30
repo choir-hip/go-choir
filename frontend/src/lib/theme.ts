@@ -165,7 +165,9 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-bg': c.bg,
     '--choir-bg-2': c.bg2,
     '--choir-panel': c.panel,
+    '--choir-panel-opaque': opaqueColor(c.panel, DEFAULT_THEME.colors.panel),
     '--choir-panel-strong': c.panelStrong,
+    '--choir-panel-strong-opaque': opaqueColor(c.panelStrong, DEFAULT_THEME.colors.panelStrong),
     '--choir-panel-soft': c.panelSoft,
     '--choir-fg': c.fg,
     '--choir-muted': c.muted,
@@ -209,6 +211,19 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-font-display': normalized.fonts.display,
     '--choir-font-mono': normalized.fonts.mono,
   };
+}
+
+function opaqueColor(value: string | undefined, fallback: string): string {
+  const color = String(value || '').trim();
+  const rgba = color.match(/^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*[0-9.]+\s*)?\)$/i);
+  if (rgba) {
+    return `rgb(${Math.round(Number(rgba[1]))}, ${Math.round(Number(rgba[2]))}, ${Math.round(Number(rgba[3]))})`;
+  }
+  const rgbSlash = color.match(/^rgb\(\s*([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*[0-9.]+%?\s*)?\)$/i);
+  if (rgbSlash) {
+    return `rgb(${Math.round(Number(rgbSlash[1]))}, ${Math.round(Number(rgbSlash[2]))}, ${Math.round(Number(rgbSlash[3]))})`;
+  }
+  return color || fallback;
 }
 
 export function themeStyleString(theme: unknown = DEFAULT_THEME): string {

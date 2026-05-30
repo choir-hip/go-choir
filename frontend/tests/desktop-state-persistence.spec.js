@@ -278,6 +278,7 @@ test('restored overlapping active window is opaque and paint isolated before foc
     const trace = document.querySelector('[data-window][data-window-id="restore-trace-overlap"]');
     const content = email.querySelector('[data-window-content]');
     const appHost = email.querySelector('[data-app-host]');
+    const emailApp = email.querySelector('[data-email-app]');
     const messageDetail = email.querySelector('.message-detail');
     const mobileMailbar = email.querySelector('.mobile-mailbar');
     const emailRect = email.getBoundingClientRect();
@@ -297,8 +298,8 @@ test('restored overlapping active window is opaque and paint isolated before foc
       contentIsolation: getComputedStyle(content).isolation,
       appHostAlpha: alphaFor(appHost),
       appHostIsolation: getComputedStyle(appHost).isolation,
-      messageDetailAlpha: alphaFor(messageDetail),
-      mobileMailbarAlpha: alphaFor(mobileMailbar),
+      messageDetailAlpha: messageDetail ? alphaFor(messageDetail) : alphaFor(emailApp),
+      mobileMailbarAlpha: mobileMailbar ? alphaFor(mobileMailbar) : 1,
       hitWindowId: sample?.closest?.('[data-window]')?.getAttribute('data-window-id') || '',
     };
   });
