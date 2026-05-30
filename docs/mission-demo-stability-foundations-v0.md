@@ -2,7 +2,8 @@
 
 ## Status
 
-Problem checkpoint, 2026-05-29. App-state checkpoint updated 2026-05-30.
+Problem checkpoint, 2026-05-29. App-state/rendering checkpoint updated
+2026-05-30.
 
 The next Choir-in-Choir campaign is tabled until the everyday product surface is more reliable during demos. The acceptance target is not a large new self-development loop; it is a smaller stability foundation: the visible desktop and VText surfaces must truthfully reflect durable background work across reloads, closed tabs, and signed-out visits.
 
@@ -36,6 +37,19 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   app/window chrome may use glass styling inside the window, but every app
   window must have an opaque backing layer so foreground ownership is visually
   unambiguous.
+- Deeper Comet inspection on 2026-05-30 found the remaining overlap symptom
+  after the first app-state and opacity fixes. The live owner desktop state had
+  12 open windows, 10 minimized windows, and two visible windows: Trace at
+  `z_index: 11` with geometry `x:51 y:10 w:445 h:640`, and Email at
+  `z_index: 12` with geometry `x:10 y:40 w:396 h:708`. Email was the durable
+  active window and its app context had correctly round-tripped to Inbox/detail.
+  A staging DOM probe with the same Trace-over-Email restore shape reported
+  `opacity: 1`, normal overview state, and opaque window/content/app backing
+  layers. This narrows the active defect: the current build no longer has a
+  simple CSS alpha leak, but restored overlapping windows can still look
+  visually blended on first paint because the shell relies on layered dark
+  chrome, large shadows, rounded corners, and ordinary browser compositing
+  before any user focus event repaints/raises a window.
 
 ## Invariants
 
@@ -63,6 +77,10 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
 - Theme tokens may be translucent, but they are decorative overlays. The
   window shell and app host must provide a solid backing plane behind every
   mounted app so two restored windows cannot visually merge.
+- Restored overlapping windows must be paint-isolated from each other. A
+  foreground app may reveal background stack depth around its bounds, but
+  background app pixels must never appear to bleed through the foreground
+  window body, titlebar, or app host before the first focus event.
 
 ## First Stability Slice
 
