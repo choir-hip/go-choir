@@ -402,7 +402,7 @@
     position: absolute;
     display: flex;
     flex-direction: column;
-    background: var(--choir-state-selected);
+    background: var(--choir-surface-app);
     background-clip: padding-box;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
@@ -473,7 +473,7 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background-color: var(--choir-state-selected);
+    background-color: var(--choir-surface-pane);
     background-image: linear-gradient(
       color-mix(in srgb, var(--choir-surface-pane) 86%, transparent),
       color-mix(in srgb, var(--choir-surface-pane) 86%, transparent)
@@ -532,7 +532,7 @@
     overflow: auto;
     position: relative;
     min-height: 0;
-    background-color: var(--choir-state-selected);
+    background-color: var(--choir-surface-app);
     background-clip: padding-box;
     isolation: isolate;
     user-select: text;

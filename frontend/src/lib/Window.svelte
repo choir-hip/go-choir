@@ -264,7 +264,7 @@
     position: absolute;
     display: flex;
     flex-direction: column;
-    background: var(--choir-state-selected);
+    background: var(--choir-surface-app);
     border: 1px solid var(--choir-border);
     border-radius: 8px;
     overflow: hidden;
@@ -286,7 +286,7 @@
     padding: 0 0.5rem 0 0.75rem;
     height: 36px;
     min-height: 36px;
-    background: var(--choir-state-selected);
+    background: var(--choir-surface-pane);
     border-bottom: 1px solid var(--choir-border-strong);
     cursor: default;
     flex-shrink: 0;
@@ -339,6 +339,7 @@
     flex: 1;
     overflow: auto;
     position: relative;
+    background: var(--choir-surface-app);
   }
 
   /* ---- Resize handles ---- */
