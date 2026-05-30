@@ -189,6 +189,9 @@ test('window shell keeps opaque backing under alpha app themes', async ({
       appSurface: alphaFor('[data-window][data-window-app-id="trace"] [data-app-host]'),
       traceApp: alphaFor('[data-window][data-window-app-id="trace"] .trace-app'),
       titlebar: alphaFor('[data-window][data-window-app-id="trace"] [data-window-titlebar]'),
+      windowIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).isolation,
+      windowContain: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).contain,
+      appSurfaceIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"] [data-app-host]')).isolation,
     };
   });
 
@@ -197,6 +200,114 @@ test('window shell keeps opaque backing under alpha app themes', async ({
     appSurface: 1,
     traceApp: 1,
     titlebar: 1,
+    windowIsolation: 'isolate',
+    windowContain: 'paint',
+    appSurfaceIsolation: 'isolate',
+  });
+});
+
+test('restored overlapping active window is opaque and paint isolated before focus', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const windows = [
+    {
+      window_id: 'restore-trace-overlap',
+      app_id: 'trace',
+      title: 'Trace',
+      geometry: { x: 51, y: 10, width: 445, height: 640 },
+      mode: 'normal',
+      z_index: 11,
+      app_context: { windowTitle: 'Trace' },
+    },
+    {
+      window_id: 'restore-email-overlap',
+      app_id: 'email',
+      title: 'Email',
+      geometry: { x: 10, y: 40, width: 396, height: 708 },
+      mode: 'normal',
+      z_index: 12,
+      app_context: {
+        activeFolder: 'inbox',
+        detailPaneOpen: false,
+        selectedId: '',
+        windowTitle: 'Email',
+      },
+    },
+  ];
+
+  await page.evaluate(async ({ windows }) => {
+    const res = await fetch('/api/desktop/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        windows,
+        active_window_id: 'restore-email-overlap',
+      }),
+    });
+    if (!res.ok) throw new Error(`desktop state save failed: ${res.status}`);
+  }, { windows });
+
+  await page.reload();
+  await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
+    state: 'visible',
+    timeout: 120000,
+  });
+  const emailWindow = page.locator('[data-window][data-window-id="restore-email-overlap"]');
+  const traceWindow = page.locator('[data-window][data-window-id="restore-trace-overlap"]');
+  await expect(emailWindow).toBeVisible({ timeout: 10000 });
+  await expect(traceWindow).toBeVisible({ timeout: 10000 });
+
+  const metrics = await page.evaluate(() => {
+    function alphaFor(el) {
+      const color = getComputedStyle(el).backgroundColor;
+      const match = color.match(/rgba?\(([^)]+)\)/);
+      if (!match) return 1;
+      const parts = match[1].split(',').map((part) => part.trim());
+      return parts.length >= 4 ? Number(parts[3]) : 1;
+    }
+    const email = document.querySelector('[data-window][data-window-id="restore-email-overlap"]');
+    const trace = document.querySelector('[data-window][data-window-id="restore-trace-overlap"]');
+    const content = email.querySelector('[data-window-content]');
+    const appHost = email.querySelector('[data-app-host]');
+    const emailRect = email.getBoundingClientRect();
+    const sample = document.elementFromPoint(
+      Math.min(emailRect.right - 24, emailRect.left + 180),
+      Math.min(emailRect.bottom - 24, emailRect.top + 240),
+    );
+    return {
+      active: email.getAttribute('data-window-active'),
+      overviewState: email.getAttribute('data-overview-preview-state'),
+      emailZ: Number(getComputedStyle(email).zIndex),
+      traceZ: Number(getComputedStyle(trace).zIndex),
+      emailOpacity: getComputedStyle(email).opacity,
+      emailIsolation: getComputedStyle(email).isolation,
+      emailContain: getComputedStyle(email).contain,
+      contentAlpha: alphaFor(content),
+      contentIsolation: getComputedStyle(content).isolation,
+      appHostAlpha: alphaFor(appHost),
+      appHostIsolation: getComputedStyle(appHost).isolation,
+      hitWindowId: sample?.closest?.('[data-window]')?.getAttribute('data-window-id') || '',
+    };
+  });
+
+  expect(metrics).toEqual({
+    active: 'true',
+    overviewState: 'normal',
+    emailZ: 2,
+    traceZ: 1,
+    emailOpacity: '1',
+    emailIsolation: 'isolate',
+    emailContain: 'paint',
+    contentAlpha: 1,
+    contentIsolation: 'isolate',
+    appHostAlpha: 1,
+    appHostIsolation: 'isolate',
+    hitWindowId: 'restore-email-overlap',
   });
 });
 

@@ -403,9 +403,12 @@
     display: flex;
     flex-direction: column;
     background: #0d1628;
+    background-clip: padding-box;
     border: 0;
     border-radius: var(--choir-radius-panel, 26px);
     overflow: hidden;
+    isolation: isolate;
+    contain: paint;
     box-shadow:
       0 28px 80px rgba(0, 0, 0, 0.48),
       0 10px 30px color-mix(in srgb, var(--choir-accent, #3b82f6) 10%, transparent);
@@ -530,6 +533,8 @@
     position: relative;
     min-height: 0;
     background-color: #0d1628;
+    background-clip: padding-box;
+    isolation: isolate;
     user-select: text;
   }
 
