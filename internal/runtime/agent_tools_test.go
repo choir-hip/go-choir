@@ -2744,6 +2744,84 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 }
 
+func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default agent tools: %v", err)
+	}
+
+	now := time.Now().UTC()
+	item := types.ContentItem{
+		ContentID:    "content-transcript-1",
+		OwnerID:      "user-alice",
+		SourceType:   "derived_transcript",
+		MediaType:    "text/x-youtube-transcript",
+		AppHint:      "vtext",
+		Title:        "Transcript",
+		SourceURL:    "https://www.youtube.com/watch?v=abc12345678",
+		CanonicalURL: "youtube://abc12345678/transcript/en",
+		TextContent:  "first segment text\nsecond segment text",
+		Metadata:     json.RawMessage(`{"availability":"available","provider":"unit","segments":[{"start":0,"duration":1.2,"text":"first segment text"},{"start":1.2,"duration":1.1,"text":"second segment text"}]}`),
+		Provenance:   json.RawMessage(`{"rights_scope":"private_user_source","untrusted_source_text":true}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.CreateContentItem(context.Background(), item); err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+
+	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataChannelID:    "doc-1",
+		runMetadataAgentID:      "vtext:doc-1",
+	})
+	if err != nil {
+		t.Fatalf("submit vtext task: %v", err)
+	}
+	researcherTask, err := rt.StartChildRun(context.Background(), vtextTask.RunID, "read source packet", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    "doc-1",
+	})
+	if err != nil {
+		t.Fatalf("submit researcher task: %v", err)
+	}
+
+	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "read_content_item", json.RawMessage(`{
+		"content_id":"content-transcript-1",
+		"max_text_chars":12,
+		"max_segments":1
+	}`))
+	if err != nil {
+		t.Fatalf("read_content_item: %v", err)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode read_content_item: %v", err)
+	}
+	if got := resp["text_content"]; got != "first segmen" {
+		t.Fatalf("text_content = %#v, want truncated transcript prefix", got)
+	}
+	if got := resp["text_truncated"]; got != true {
+		t.Fatalf("text_truncated = %#v, want true", got)
+	}
+	if got := int(resp["segment_count"].(float64)); got != 2 {
+		t.Fatalf("segment_count = %d, want 2", got)
+	}
+	if segments, _ := resp["segments"].([]any); len(segments) != 1 {
+		t.Fatalf("segments len = %d, want 1; resp=%#v", len(segments), resp)
+	}
+	provenance, _ := resp["provenance"].(map[string]any)
+	if provenance["rights_scope"] != "private_user_source" || provenance["untrusted_source_text"] != true {
+		t.Fatalf("provenance = %#v", provenance)
+	}
+	if got := resp["next_required_tool"]; got != "submit_coagent_update" {
+		t.Fatalf("next_required_tool = %#v, want submit_coagent_update", got)
+	}
+}
+
 func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {

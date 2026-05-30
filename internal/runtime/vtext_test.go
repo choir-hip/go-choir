@@ -4359,7 +4359,9 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	if !metadataBoolValue(run.Metadata, "media_source_research_required") {
 		t.Fatalf("media_source_research_required not set: %#v", run.Metadata)
 	}
-	if !strings.Contains(run.Prompt, "Detected durable media source refs") || !strings.Contains(run.Prompt, "researcher-maintained source representations") {
+	if !strings.Contains(run.Prompt, "Detected durable media source refs") ||
+		!strings.Contains(run.Prompt, "researcher-maintained source representations") ||
+		!strings.Contains(buildVTextMediaSourceResearchObjective(refs, ""), "first call read_content_item") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}
 	byKind := map[string]vtextMediaSourceRef{}
@@ -4384,6 +4386,29 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	}
 	if len(items) < 3 {
 		t.Fatalf("content items = %d, want video, transcript status, and image refs: %#v", len(items), items)
+	}
+}
+
+func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
+	metadata := map[string]any{
+		"media_source_research_required": true,
+		"media_source_refs": []vtextMediaSourceRef{
+			{Kind: "youtube", CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", ResearchState: "pending"},
+			{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
+		},
+	}
+	markVTextMediaSourceRefsResearchState(metadata, "represented")
+	refs := decodeVTextMediaSourceRefs(metadata["media_source_refs"])
+	if len(refs) != 2 {
+		t.Fatalf("refs len = %d, want 2", len(refs))
+	}
+	for _, ref := range refs {
+		if ref.ResearchState != "represented" {
+			t.Fatalf("research state = %q, want represented in %#v", ref.ResearchState, refs)
+		}
+	}
+	if metadataBoolValue(metadata, "media_source_research_required") {
+		t.Fatalf("media_source_research_required should be false after representation: %#v", metadata)
 	}
 }
 

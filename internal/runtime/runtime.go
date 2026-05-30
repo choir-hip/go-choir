@@ -2034,7 +2034,11 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			}
 		}
 	}
-	for key, value := range rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation) {
+	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation)
+	if vtextWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
+		markVTextMediaSourceRefsResearchState(meta, "represented")
+	}
+	for key, value := range workerUpdateMeta {
 		meta[key] = value
 	}
 
@@ -2043,6 +2047,29 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		return json.RawMessage(`{"source":"edit_vtext","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
+}
+
+func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return false
+	}
+	switch updates := value.(type) {
+	case []vtextWorkerUpdateMetadata:
+		for _, update := range updates {
+			if strings.TrimSpace(update.Role) == role {
+				return true
+			}
+		}
+	case []any:
+		for _, raw := range updates {
+			item, _ := raw.(map[string]any)
+			if strings.TrimSpace(fmt.Sprint(item["role"])) == role {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type vtextWorkerUpdateMetadata struct {
