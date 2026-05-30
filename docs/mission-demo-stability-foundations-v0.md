@@ -30,6 +30,12 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   stale desktop live-event merge could overwrite the current driver session's
   newer app context with an older `{guestMode, preview}` context before
   reload/pagehide flushed state.
+- Follow-up mobile evidence showed Trace and Email restored in overlapping
+  windows, with the front Trace panels visually blending with Email content
+  underneath. This is a rendering invariant problem, not just persistence:
+  app/window chrome may use glass styling inside the window, but every app
+  window must have an opaque backing layer so foreground ownership is visually
+  unambiguous.
 
 ## Invariants
 
@@ -54,6 +60,9 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
 - While a browser session is the active driver, remote/live desktop merges may
   converge shared placement but must not regress that driver's fresher local
   app context with older remote context.
+- Theme tokens may be translucent, but they are decorative overlays. The
+  window shell and app host must provide a solid backing plane behind every
+  mounted app so two restored windows cannot visually merge.
 
 ## First Stability Slice
 
