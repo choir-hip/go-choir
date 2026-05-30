@@ -697,3 +697,24 @@ This still preserves the mission boundary: InnerTube output is normalized into
 the same private transcript `ContentItem` with timestamp segments and
 untrusted-source provenance. It does not summarize, excerpt, or rewrite the
 review deterministically; researcher/VText still own source interpretation.
+
+### 2026-05-30 Researcher Source-Artifact Access Gap
+
+Fresh staging proof at deployed commit `b84a6052f1f293aee41aa6ce5dcb844587349c7a`
+showed that YouTube transcripts now materialize as private transcript
+`ContentItem` records and VText can ask a researcher for source
+representations. The researcher delivery was consumed by a later VText
+revision, but the researcher did not have a direct tool for reading an existing
+`content_id` or `transcript_content_id`. It could import URLs and fetch/search
+the web, so it treated the source packet refs as identifiers and then
+re-probed public URLs instead of reading the already stored transcript
+artifact.
+
+That is misaligned with the core invariant for this mission. Deterministic
+ingestion may fetch and store source artifacts, but researcher understanding
+must be grounded in the durable owner-scoped content substrate when those refs
+exist. The next code change should add a read-only content item tool to the
+research tool registry, expose private transcript text/segments with
+provenance and truncation metadata, and update the VText media-source research
+objective to prefer `read_content_item` for every listed `content_id` and
+`transcript_content_id` before falling back to URL import or web fetch.
