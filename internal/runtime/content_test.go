@@ -212,6 +212,16 @@ func TestContentImportURLDedupesYouTubeSourcePackets(t *testing.T) {
 	}
 }
 
+func TestYouTubeJSON3CaptionURLForcesFormat(t *testing.T) {
+	got := youtubeJSON3CaptionURL("https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=srv3")
+	if !strings.Contains(got, "fmt=json3") {
+		t.Fatalf("caption URL = %q, want fmt=json3", got)
+	}
+	if strings.Contains(got, "fmt=srv3") {
+		t.Fatalf("caption URL retained stale fmt: %q", got)
+	}
+}
+
 func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
 	_, handler := testAPISetup(t)
 	body := `{"text":"https://example.com/report.pdf"}`

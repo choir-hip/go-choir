@@ -633,14 +633,7 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 		result.Error = "caption track missing base url"
 		return result
 	}
-	captionURL := track.BaseURL
-	if !strings.Contains(captionURL, "fmt=") {
-		sep := "&"
-		if !strings.Contains(captionURL, "?") {
-			sep = "?"
-		}
-		captionURL += sep + "fmt=json3"
-	}
+	captionURL := youtubeJSON3CaptionURL(track.BaseURL)
 	captionReq, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, captionURL, nil)
 	if err != nil {
 		result.Error = err.Error()
@@ -674,6 +667,24 @@ func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscri
 	result.Text = text
 	result.Error = ""
 	return result
+}
+
+func youtubeJSON3CaptionURL(raw string) string {
+	captionURL := strings.TrimSpace(raw)
+	if parsedCaptionURL, err := url.Parse(captionURL); err == nil {
+		q := parsedCaptionURL.Query()
+		q.Set("fmt", "json3")
+		parsedCaptionURL.RawQuery = q.Encode()
+		return parsedCaptionURL.String()
+	}
+	if !strings.Contains(captionURL, "fmt=") {
+		sep := "&"
+		if !strings.Contains(captionURL, "?") {
+			sep = "?"
+		}
+		captionURL += sep + "fmt=json3"
+	}
+	return captionURL
 }
 
 func extractYouTubePlayerResponse(raw []byte) []byte {
