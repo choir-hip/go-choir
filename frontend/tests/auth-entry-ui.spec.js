@@ -97,6 +97,46 @@ test('register view has a clear primary action to begin passkey flow', async ({
   await expect(registerAction).toContainText('Passkey');
 });
 
+test('passkey info hover uses Pretext popover without resizing auth card', async ({
+  page,
+}) => {
+  await page.goto(BASE_URL);
+  await openAuthOverlay(page);
+
+  const card = page.locator('[data-auth-entry] .auth-card');
+  const infoButton = page.locator('[data-register-view] [data-passkey-info-button]');
+  const before = await card.boundingBox();
+  expect(before).not.toBeNull();
+
+  await infoButton.hover();
+  const tooltip = page.locator('[data-register-view] [data-pretext-tooltip]');
+  await expect(tooltip).toBeVisible();
+  expect(await tooltip.locator('[data-pretext-line]').count()).toBeGreaterThan(1);
+
+  const afterHover = await card.boundingBox();
+  expect(afterHover).not.toBeNull();
+  expect(Math.abs(afterHover.height - before.height)).toBeLessThan(1);
+
+  await infoButton.click();
+  await page.mouse.move(10, 10);
+  await expect(tooltip).toBeVisible();
+  const afterPinned = await card.boundingBox();
+  expect(afterPinned).not.toBeNull();
+  expect(Math.abs(afterPinned.height - before.height)).toBeLessThan(1);
+
+  await page.locator('[data-login-toggle]').click();
+  const loginBefore = await card.boundingBox();
+  expect(loginBefore).not.toBeNull();
+  const loginInfoButton = page.locator('[data-login-view] [data-passkey-info-button]');
+  await loginInfoButton.hover();
+  const loginTooltip = page.locator('[data-login-view] [data-pretext-tooltip]');
+  await expect(loginTooltip).toBeVisible();
+  await expect(loginTooltip).toContainText('device lock');
+  const loginAfterHover = await card.boundingBox();
+  expect(loginAfterHover).not.toBeNull();
+  expect(Math.abs(loginAfterHover.height - loginBefore.height)).toBeLessThan(1);
+});
+
 test('login view has a clear primary action to begin passkey flow', async ({
   page,
 }) => {
