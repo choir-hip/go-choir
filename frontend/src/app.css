@@ -161,6 +161,26 @@ body {
 }
 
 .app-content :is(
+  .message-list,
+  .message-detail,
+  .mail-rail,
+  .mobile-mailbar,
+  .trace-sidebar,
+  .trace-main,
+  .browser-toolbar,
+  .browser-sidebar,
+  .terminal-preview,
+  .reader-toolbar,
+  .reader-panel
+) {
+  background:
+    linear-gradient(var(--choir-panel, #0d1628), var(--choir-panel, #0d1628)),
+    #0d1628 !important;
+  background-color: #0d1628 !important;
+  background-clip: padding-box;
+}
+
+.app-content :is(
   button,
   input,
   textarea,

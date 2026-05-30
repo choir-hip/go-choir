@@ -192,6 +192,8 @@ test('window shell keeps opaque backing under alpha app themes', async ({
       windowIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).isolation,
       windowContain: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).contain,
       appSurfaceIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"] [data-app-host]')).isolation,
+      traceMain: alphaFor('[data-window][data-window-app-id="trace"] .trace-main'),
+      traceSidebar: alphaFor('[data-window][data-window-app-id="trace"] .trace-sidebar'),
     };
   });
 
@@ -203,6 +205,8 @@ test('window shell keeps opaque backing under alpha app themes', async ({
     windowIsolation: 'isolate',
     windowContain: 'paint',
     appSurfaceIsolation: 'isolate',
+    traceMain: 1,
+    traceSidebar: 1,
   });
 });
 
@@ -233,7 +237,7 @@ test('restored overlapping active window is opaque and paint isolated before foc
       z_index: 12,
       app_context: {
         activeFolder: 'inbox',
-        detailPaneOpen: false,
+        detailPaneOpen: true,
         selectedId: '',
         windowTitle: 'Email',
       },
@@ -274,6 +278,8 @@ test('restored overlapping active window is opaque and paint isolated before foc
     const trace = document.querySelector('[data-window][data-window-id="restore-trace-overlap"]');
     const content = email.querySelector('[data-window-content]');
     const appHost = email.querySelector('[data-app-host]');
+    const messageDetail = email.querySelector('.message-detail');
+    const mobileMailbar = email.querySelector('.mobile-mailbar');
     const emailRect = email.getBoundingClientRect();
     const sample = document.elementFromPoint(
       Math.min(emailRect.right - 24, emailRect.left + 180),
@@ -291,6 +297,8 @@ test('restored overlapping active window is opaque and paint isolated before foc
       contentIsolation: getComputedStyle(content).isolation,
       appHostAlpha: alphaFor(appHost),
       appHostIsolation: getComputedStyle(appHost).isolation,
+      messageDetailAlpha: alphaFor(messageDetail),
+      mobileMailbarAlpha: alphaFor(mobileMailbar),
       hitWindowId: sample?.closest?.('[data-window]')?.getAttribute('data-window-id') || '',
     };
   });
@@ -307,6 +315,8 @@ test('restored overlapping active window is opaque and paint isolated before foc
     contentIsolation: 'isolate',
     appHostAlpha: 1,
     appHostIsolation: 'isolate',
+    messageDetailAlpha: 1,
+    mobileMailbarAlpha: 1,
     hitWindowId: 'restore-email-overlap',
   });
 });
