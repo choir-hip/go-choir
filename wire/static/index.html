@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Choir Global Wire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #111; --muted: #666; --light: #999; --rule: #ccc;
+    --accent: #b5000e; --bg: #f7f5f0;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--serif); }
+
+  /* ── MASTHEAD ── */
+  #masthead {
+    border-bottom: 4px double var(--ink);
+    padding: 18px 24px 14px;
+    text-align: center;
+  }
+  #masthead .kicker {
+    font-family: var(--sans); font-size: 0.6rem;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+  }
+  #masthead h1 {
+    font-family: var(--display);
+    font-size: clamp(2.8rem, 7vw, 5.5rem);
+    font-weight: 900; line-height: 1; letter-spacing: -0.02em;
+  }
+  .meta-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    margin-top: 10px; padding: 5px 0;
+    font-family: var(--sans); font-size: 0.68rem; color: var(--muted);
+  }
+  .live-dot {
+    display: inline-block; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%; margin-right: 5px;
+    animation: blink 2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  /* ── FRONT PAGE GRID ── */
+  #front-page { max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; }
+
+  #story-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    border-top: 2px solid var(--ink);
+    margin-top: 20px;
+  }
+  .story-lead { grid-column: span 2; border-right: 1px solid var(--rule); padding: 20px 24px 20px 0; }
+  .story-rail { grid-column: span 1; padding: 20px 0 20px 24px; }
+  .story-rail .story-card + .story-card {
+    border-top: 1px solid var(--rule); margin-top: 20px; padding-top: 20px;
+  }
+
+  #below-fold {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+    border-top: 2px solid var(--ink); margin-top: 0;
+  }
+  #below-fold .story-card { padding: 20px 20px 20px 0; border-right: 1px solid var(--rule); }
+  #below-fold .story-card:nth-child(3n) { border-right: none; }
+
+  /* ── STORY CARD ── */
+  .story-section-label {
+    font-family: var(--sans); font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .story-headline {
+    font-family: var(--display); font-weight: 700; line-height: 1.2;
+    color: var(--ink); margin-bottom: 8px; cursor: pointer;
+  }
+  .story-lead .story-headline { font-size: clamp(1.5rem, 3vw, 2.2rem); }
+  .story-rail .story-headline { font-size: 1.15rem; }
+  #below-fold .story-headline { font-size: 1.1rem; }
+  .story-headline:hover { color: var(--accent); }
+
+  /* Wire Edge — editorial reasoning, always visible */
+  .wire-edge {
+    font-family: var(--sans); font-size: 0.72rem; line-height: 1.5;
+    color: #555; border-left: 2px solid var(--accent);
+    padding: 5px 8px; margin: 6px 0 10px; font-style: italic;
+  }
+
+  .story-lede { font-size: 0.95rem; line-height: 1.65; color: #333; margin-bottom: 10px; }
+  .story-lead .story-lede { font-size: 1.05rem; }
+
+  .story-byline {
+    font-family: var(--sans); font-size: 0.65rem; color: var(--light);
+    letter-spacing: 0.05em; margin-bottom: 10px;
+  }
+
+  .read-more-btn {
+    font-family: var(--sans); font-size: 0.68rem; font-weight: 600;
+    color: var(--accent); background: none; border: none; cursor: pointer;
+    padding: 0; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .read-more-btn:hover { text-decoration: underline; }
+
+  .story-body { display: none; margin-top: 14px; border-top: 1px solid var(--rule); padding-top: 14px; }
+  .story-body.open { display: block; }
+  .story-body p { font-size: 0.95rem; line-height: 1.75; color: #222; margin-bottom: 0.85rem; }
+  .story-body strong { font-weight: 600; }
+  .story-body em { font-style: italic; color: var(--muted); font-size: 0.88rem; }
+  .story-body h3 {
+    font-family: var(--sans); font-size: 0.65rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 1.2rem 0 0.2rem;
+  }
+  .story-body blockquote {
+    border-left: 2px solid var(--rule); padding-left: 10px;
+    margin: 1rem 0; color: var(--muted); font-style: italic; font-size: 0.9rem;
+  }
+
+  /* Citation links */
+  .cite-link {
+    font-family: var(--sans); font-size: 0.72rem; color: var(--accent);
+    text-decoration: none; border-bottom: 1px dotted var(--accent); white-space: nowrap;
+  }
+  .cite-link:hover { border-bottom-style: solid; }
+
+  /* ── ARCHIVE ── */
+  #archive-section { max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; }
+  .archive-day { margin-bottom: 20px; }
+  .archive-day-label {
+    font-family: var(--sans); font-size: 0.65rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 8px;
+  }
+  .archive-entry {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 5px 0; border-bottom: 1px dotted var(--rule);
+    cursor: pointer; text-decoration: none; color: var(--ink);
+  }
+  .archive-entry:hover .archive-hed { color: var(--accent); }
+  .archive-issue-num { font-family: var(--sans); font-size: 0.65rem; color: var(--light); white-space: nowrap; flex-shrink: 0; width: 52px; }
+  .archive-time { font-family: var(--sans); font-size: 0.65rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; width: 52px; }
+  .archive-hed { font-family: var(--serif); font-size: 0.9rem; line-height: 1.4; flex: 1; }
+
+  /* ── LOADING ── */
+  #loading { text-align: center; padding: 80px 20px; font-family: var(--sans); font-size: 0.85rem; color: var(--muted); }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    #story-grid { grid-template-columns: 1fr; }
+    .story-lead { grid-column: span 1; border-right: none; padding: 16px 0; }
+    .story-rail { padding: 0; }
+    .story-rail .story-card { border-top: 1px solid var(--rule); padding-top: 16px; margin-top: 0; }
+    #below-fold { grid-template-columns: 1fr; }
+    #below-fold .story-card { border-right: none; border-top: 1px solid var(--rule); padding: 16px 0; }
+    #masthead { padding: 14px 16px 10px; }
+    .meta-bar { flex-wrap: wrap; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="masthead">
+  <div class="kicker">Automatic Newspaper of Record &middot; Planet Earth</div>
+  <h1>Choir Global Wire</h1>
+  <div class="meta-bar">
+    <span><span class="live-dot"></span>Live &mdash; updates every 15 min</span>
+    <span id="issue-meta">Loading&hellip;</span>
+    <span>Multilingual &middot; Open &middot; <a href="/about" style="color:var(--accent);text-decoration:none;font-family:var(--serif);font-style:italic">About</a></span>
+  </div>
+</div>
+
+<div id="front-page">
+  <div id="loading">Fetching the latest global signals&hellip;</div>
+  <div id="story-grid" style="display:none"></div>
+  <div id="below-fold" style="display:none"></div>
+</div>
+
+<div id="archive-section" style="display:none">
+  <div style="border-top:2px solid var(--ink);padding-top:20px">
+    <h2 style="font-family:var(--display);font-size:1.4rem;font-weight:700;margin-bottom:16px">Archive</h2>
+    <div id="archive-list"></div>
+  </div>
+</div>
+
+<footer style="text-align:center;padding:24px 16px;font-family:var(--sans);font-size:0.65rem;color:var(--light);border-top:1px solid var(--rule);">
+  Choir Global Wire &middot; 48 sources across 8 verticals &middot; Multilingual &middot; Real-Time
+</footer>
+
+<script>
+// ── Pretext: load async, don't block render ──
+let pretextPrepare = null, pretextLayout = null;
+import('/static/pretext.js?v=2')
+  .then(m => { pretextPrepare = m.prepare; pretextLayout = m.layout; })
+  .catch(() => {});
+</script>
+<script>
+
+// ── Linkify [S1] citations ──
+function linkifyCitations(html, sourceMap) {
+  return html.replace(/\[S(\d+)\]/g, (match, num) => {
+    const src = sourceMap['S' + num];
+    if (src && src.url) {
+      const label = (src.source || '').replace(/_/g, ' ') || src.title;
+      return `<a href="${src.url}" target="_blank" rel="noopener" class="cite-link" title="${src.title}">[S${num}: ${label}]</a>`;
+    }
+    return match;
+  });
+}
+
+// ── Build source map ──
+function buildSourceMap(sources) {
+  const map = {};
+  if (!sources) return map;
+  for (const s of sources) map[s.id] = s;
+  return map;
+}
+
+// ── Parse issue markdown into story objects ──
+function parseIssue(markdown, sourceMap, issueTime) {
+  const stories = [];
+  const sections = markdown.split(/\n(?=## )/);
+
+  for (const section of sections) {
+    const lines = section.trim().split('\n');
+    if (!lines[0].startsWith('## ')) continue;
+    const headline = lines[0].replace(/^## /, '').trim();
+    if (/editor.s note/i.test(headline)) continue;
+
+    // Wire Edge from blockquote
+    const wireEdgeMatch = section.match(/^>\s*\*\*Wire Edge:\*\*\s*(.+?)$/m);
+    const wireEdge = wireEdgeMatch ? wireEdgeMatch[1].trim() : null;
+
+    // Scores (used for ordering only, not displayed)
+    const scoresMatch = section.match(/\*\*Importance:\*\*\s*(\d)\s*\|\s*\*\*Rarity:\*\*\s*(\d)\s*\|\s*\*\*Priority:\*\*\s*(\d+)/);
+    const importance = scoresMatch ? parseInt(scoresMatch[1]) : 3;
+    const rarity     = scoresMatch ? parseInt(scoresMatch[2]) : 3;
+    const priority   = scoresMatch ? parseInt(scoresMatch[3]) : importance * rarity;
+
+    // Lede from The Signal
+    const signalMatch = section.match(/\*\*The Signal:\*\*\s*(.+?)(?:\n|$)/);
+    const lede = signalMatch ? signalMatch[1].trim() : lines.slice(1, 3).join(' ').trim();
+
+    // Vertical detection
+    const lower = section.toLowerCase();
+    let vertical = 'World';
+    if (/ebola|pandemic|disease|vaccine|outbreak|health system|hospital/.test(lower)) vertical = 'Health';
+    else if (/nato|troop|military|war|conflict|weapon|drone|missile|ceasefire|insurgency/.test(lower)) vertical = 'Security';
+    else if (/election|democracy|parliament|vote|protest|lgbtq|human rights|judicial|coup/.test(lower)) vertical = 'Politics';
+    else if (/economy|gdp|inflation|trade war|tariff|imf|recession|currency|bond/.test(lower)) vertical = 'Economy';
+    else if (/\bai\b|artificial intelligence|llm|openai|wearable|software|tech giant|silicon/.test(lower)) vertical = 'Technology';
+    else if (/culture|art|music|film|literature|religion|heritage|philosophy/.test(lower)) vertical = 'Culture';
+    else if (/supply chain|semiconductor|shipping|port|manufacturing|logistics/.test(lower)) vertical = 'Supply Chain';
+    else if (/science|research|study|climate|environment|species|biodiversity/.test(lower)) vertical = 'Science';
+
+    // Body HTML
+    const bodyMd = section.replace(/^## .+\n/, '').trim();
+    let bodyHtml = marked.parse(bodyMd);
+    bodyHtml = linkifyCitations(bodyHtml, sourceMap);
+
+    stories.push({ headline, lede, vertical, bodyHtml, wireEdge, importance, rarity, priority, issueTime });
+  }
+
+  // Sort by priority descending
+  stories.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  // Editor's Note at the bottom
+  const noteMatch = markdown.match(/##\s*Editor.s Note([\s\S]*?)(?=\n---\n|\n## |$)/i);
+  if (noteMatch) {
+    const noteBody = noteMatch[1].trim();
+    stories.push({
+      headline: "Editor\u2019s Note",
+      lede: noteBody.slice(0, 200).replace(/[*#>]/g, ''),
+      vertical: 'Wire',
+      bodyHtml: marked.parse(noteBody),
+      wireEdge: null, importance: 0, rarity: 0, priority: -1, issueTime
+    });
+  }
+
+  return stories;
+}
+
+// ── Build a story card ──
+function buildCard(story, size) {
+  const card = document.createElement('div');
+  card.className = 'story-card';
+
+  const label = document.createElement('div');
+  label.className = 'story-section-label';
+  label.textContent = story.vertical;
+
+  const hed = document.createElement('h2');
+  hed.className = 'story-headline';
+  hed.textContent = story.headline;
+
+  // Wire Edge — always visible, no scores shown
+  let wireEdgeEl = null;
+  if (story.wireEdge) {
+    wireEdgeEl = document.createElement('div');
+    wireEdgeEl.className = 'wire-edge';
+    wireEdgeEl.textContent = story.wireEdge;
+  }
+
+  const lede = document.createElement('p');
+  lede.className = 'story-lede';
+  lede.textContent = (story.lede || '').replace(/<[^>]+>/g, '').slice(0, size === 'lead' ? 280 : 180);
+
+  const byline = document.createElement('div');
+  byline.className = 'story-byline';
+  byline.textContent = `Choir Global Wire \u00b7 ${story.issueTime || ''}`;
+
+  const btn = document.createElement('button');
+  btn.className = 'read-more-btn';
+  btn.textContent = 'Continue reading \u203a';
+
+  const body = document.createElement('div');
+  body.className = 'story-body';
+  body.innerHTML = story.bodyHtml;
+
+  const toggle = () => {
+    body.classList.toggle('open');
+    btn.textContent = body.classList.contains('open') ? '\u2039 Collapse' : 'Continue reading \u203a';
+  };
+  btn.addEventListener('click', toggle);
+  hed.addEventListener('click', toggle);
+
+  card.appendChild(label);
+  card.appendChild(hed);
+  if (wireEdgeEl) card.appendChild(wireEdgeEl);
+  card.appendChild(lede);
+  card.appendChild(byline);
+  card.appendChild(btn);
+  card.appendChild(body);
+  return card;
+}
+
+// ── Render front page ──
+function renderFrontPage(stories) {
+  const grid = document.getElementById('story-grid');
+  const belowFold = document.getElementById('below-fold');
+  grid.innerHTML = '';
+  belowFold.innerHTML = '';
+
+  if (!stories.length) {
+    grid.innerHTML = '<p style="padding:20px;color:#666">No stories yet.</p>';
+    grid.style.display = 'block';
+    return;
+  }
+
+  // Lead (first story, 2 cols)
+  const leadWrap = document.createElement('div');
+  leadWrap.className = 'story-lead';
+  leadWrap.appendChild(buildCard(stories[0], 'lead'));
+  grid.appendChild(leadWrap);
+
+  // Rail (2nd and 3rd)
+  const rail = document.createElement('div');
+  rail.className = 'story-rail';
+  if (stories[1]) rail.appendChild(buildCard(stories[1], 'rail'));
+  if (stories[2]) rail.appendChild(buildCard(stories[2], 'rail'));
+  grid.appendChild(rail);
+
+  // Below fold
+  for (let i = 3; i < stories.length; i++) {
+    belowFold.appendChild(buildCard(stories[i], 'normal'));
+  }
+
+  grid.style.display = 'grid';
+  if (stories.length > 3) belowFold.style.display = 'grid';
+}
+
+// ── Archive ──
+async function loadArchive() {
+  try {
+    const res = await fetch('/api/archive');
+    const entries = await res.json();
+    if (!entries || entries.length <= 1) return;
+
+    const list = document.getElementById('archive-list');
+    list.innerHTML = '';
+    const byDay = {};
+    for (const e of entries) {
+      const day = e.timestamp.slice(0, 10);
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push(e);
+    }
+
+    for (const day of Object.keys(byDay).sort().reverse()) {
+      const dayEl = document.createElement('div');
+      dayEl.className = 'archive-day';
+      const label = document.createElement('div');
+      label.className = 'archive-day-label';
+      const d = new Date(day + 'T12:00:00Z');
+      label.textContent = d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'UTC' });
+      dayEl.appendChild(label);
+
+      for (const entry of byDay[day]) {
+        const a = document.createElement('a');
+        a.className = 'archive-entry';
+        a.href = '#';
+        a.addEventListener('click', async ev => {
+          ev.preventDefault();
+          await loadIssue(entry.id);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        const numEl = document.createElement('span');
+        numEl.className = 'archive-issue-num';
+        numEl.textContent = `#${entry.issue_number}`;
+        const timeEl = document.createElement('span');
+        timeEl.className = 'archive-time';
+        timeEl.textContent = entry.timestamp.slice(11, 16);
+        const hed = document.createElement('span');
+        hed.className = 'archive-hed';
+        hed.textContent = entry.headline;
+        a.appendChild(numEl); a.appendChild(timeEl); a.appendChild(hed);
+        dayEl.appendChild(a);
+      }
+      list.appendChild(dayEl);
+    }
+    document.getElementById('archive-section').style.display = 'block';
+  } catch(e) {}
+}
+
+// ── Load a specific past issue ──
+async function loadIssue(issueId) {
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('loading').textContent = 'Loading issue\u2026';
+  document.getElementById('story-grid').style.display = 'none';
+  document.getElementById('below-fold').style.display = 'none';
+  try {
+    const res = await fetch(`/api/issue/${issueId}`);
+    const data = await res.json();
+    document.getElementById('issue-meta').textContent =
+      `Vol. ${data.volume || 1}, No. ${data.issue_number || 1} \u00b7 ${data.timestamp}`;
+    document.getElementById('loading').style.display = 'none';
+    const sourceMap = buildSourceMap(data.sources);
+    renderFrontPage(parseIssue(data.content || '', sourceMap, data.timestamp));
+  } catch(e) {
+    document.getElementById('loading').textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Fetch latest and render ──
+async function fetchAndRender() {
+  try {
+    const res = await fetch('/api/latest');
+    const data = await res.json();
+    document.getElementById('issue-meta').textContent =
+      `Vol. ${data.volume || 1}, No. ${data.issue_number || 1} \u00b7 ${data.timestamp}`;
+    document.getElementById('loading').style.display = 'none';
+    const sourceMap = buildSourceMap(data.sources);
+    renderFrontPage(parseIssue(data.content || '', sourceMap, data.timestamp));
+    loadArchive();
+
+    // Pretext measurement (progressive enhancement)
+    requestAnimationFrame(() => {
+      if (!pretextPrepare || !pretextLayout) return;
+      document.querySelectorAll('.story-lede').forEach(el => {
+        const w = el.offsetWidth;
+        if (w < 10) return;
+        try {
+          const p = pretextPrepare(el.textContent, '0.95rem Source Serif 4');
+          pretextLayout(p, w, 28);
+        } catch(e) {}
+      });
+    });
+  } catch(e) {
+    document.getElementById('loading').textContent = 'Error loading issue: ' + e.message;
+  }
+}
+
+fetchAndRender();
+setInterval(fetchAndRender, 15 * 60 * 1000);
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!pretextPrepare || !pretextLayout) return;
+    document.querySelectorAll('.story-lede').forEach(el => {
+      const w = el.offsetWidth;
+      if (w < 10) return;
+      try { pretextLayout(pretextPrepare(el.textContent, '0.95rem Source Serif 4'), w, 28); } catch(e) {}
+    });
+  }, 150);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "user_agent": "ChoirGlobalWire/0.1 (+https://choir.news)",
+  "sources": [
+    {
+      "id": "gdelt:15min",
+      "type": "gdelt",
+      "name": "GDELT 15-Minute Global Event Stream",
+      "url": "http://data.gdeltproject.org/gdeltv2/lastupdate.txt",
+      "verticals": ["supply_chain", "conflict", "elections", "ai", "health", "culture"],
+      "poll_interval_seconds": 900
+    },
+    {
+      "id": "telegram:conflict_monitor",
+      "type": "telegram",
+      "name": "Conflict Monitor (Telegram)",
+      "url": "https://t.me/s/conflict_monitor",
+      "verticals": ["conflict"],
+      "poll_interval_seconds": 900
+    },
+    {
+      "id": "arxiv:cs_ai",
+      "type": "rss",
+      "name": "arXiv cs.AI",
+      "url": "https://rss.arxiv.org/rss/cs.AI",
+      "verticals": ["ai"],
+      "poll_interval_seconds": 3600
+    },
+    {
+      "id": "rss:nikkei_asia",
+      "type": "rss",
+      "name": "Nikkei Asia",
+      "url": "https://asia.nikkei.com/rss/feed/nar",
+      "verticals": ["supply_chain"],
+      "poll_interval_seconds": 1800
+    },
+    {
+      "id": "polymarket:global",
+      "type": "polymarket",
+      "name": "Polymarket Global Events",
+      "url": "https://gamma-api.polymarket.com/events",
+      "verticals": ["elections", "conflict", "ai"],
+      "poll_interval_seconds": 900
+    }
+  ]
+}

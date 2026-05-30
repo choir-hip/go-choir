@@ -1,0 +1,22 @@
+# Compiled binaries
+ingest-engine
+newspaper-server
+
+# Runtime data
+vanguard.db
+vanguard.db-shm
+vanguard.db-wal
+*.db
+
+# Logs
+cycle.log
+nohup.out
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env

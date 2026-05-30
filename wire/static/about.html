@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — Choir Global Wire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #111; --muted: #666; --light: #999; --rule: #ccc; --accent: #b5000e;
+    --bg: #f7f5f0;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--serif); }
+
+  header {
+    border-bottom: 4px double var(--ink);
+    padding: 18px 24px 14px;
+    text-align: center;
+  }
+  header h1 {
+    font-family: var(--display);
+    font-size: clamp(2.4rem, 6vw, 4.5rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+  header .sub {
+    font-family: var(--sans);
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  header nav {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 10px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 5px 0;
+  }
+  header nav a { color: var(--accent); text-decoration: none; margin: 0 8px; }
+  header nav a:hover { text-decoration: underline; }
+
+  .article-wrap {
+    max-width: 760px;
+    margin: 48px auto;
+    padding: 0 24px 80px;
+  }
+
+  .article-kicker {
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .article-hed {
+    font-family: var(--display);
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 16px;
+  }
+
+  .article-byline {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+
+  .article-body h2 {
+    font-family: var(--display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 2.2rem 0 0.6rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .article-body h3 {
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 1.5rem 0 0.3rem;
+  }
+
+  .article-body p {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #1a1a1a;
+    margin-bottom: 1rem;
+  }
+
+  .article-body ul, .article-body ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+
+  .article-body li {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin-bottom: 0.3rem;
+  }
+
+  .article-body a {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .source-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-table th {
+    text-align: left;
+    border-bottom: 2px solid var(--ink);
+    padding: 6px 8px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.65rem;
+  }
+  .source-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  .source-table tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block;
+    background: #eee;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-right: 3px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 24px 16px;
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    color: var(--light);
+    border-top: 1px solid var(--rule);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="sub">Automatic Newspaper of Record &middot; Planet Earth</div>
+  <h1>Choir Global Wire</h1>
+  <nav>
+    <a href="/">← Front Page</a>
+    <span style="color:var(--rule)">|</span>
+    <a href="/about">About</a>
+  </nav>
+</header>
+
+<div class="article-wrap">
+  <div class="article-kicker">Architecture &amp; Mission</div>
+  <h1 class="article-hed">How the Automatic Newspaper Works: Sources, Architecture, and the Vision for Planetary Coverage</h1>
+  <div class="article-byline">Choir Global Wire &mdash; Published May 30, 2026 &mdash; Updated continuously</div>
+
+  <div class="article-body">
+
+    <p>The Choir Global Wire is a prototype of a new kind of publication: one that reads the world continuously, in many languages, and synthesizes what it finds into journalism every fifteen minutes. It is the first public artifact of <a href="https://choir.news">Choir</a> — a platform for building a live, global, open knowledge base that anyone can contribute to and query.</p>
+
+    <p>This page describes how it works, what sources it draws from, and why it is built the way it is.</p>
+
+    <h2>The Core Loop</h2>
+
+    <p>Every fifteen minutes, the system runs a three-phase cycle:</p>
+
+    <ol>
+      <li><strong>Ingestion.</strong> A Go daemon polls 34 validated RSS feeds and one Telegram channel simultaneously, using HTTP conditional requests (<code>ETag</code> / <code>If-Modified-Since</code>) to avoid redundant downloads. New items are deduplicated by URL hash and stored in a local SQLite database.</li>
+      <li><strong>Synthesis.</strong> The 50 most recent items — drawn from sources across Asia, Africa, Latin America, the Middle East, and Europe — are passed to a large language model with a structured prompt. The model is instructed to write five original stories of 400–600 words each, with inline source citations, cross-regional analysis, and explicit attention to what non-English sources reveal that the English-language wire misses.</li>
+      <li><strong>Publication.</strong> The synthesized issue is stored in the database and immediately served to the frontend. The page auto-refreshes every fifteen minutes to display the latest issue.</li>
+    </ol>
+
+    <p>The frontend is a static HTML page served by a lightweight Go HTTP server. It uses <a href="https://github.com/chenglou/pretext" target="_blank">Pretext</a> — a pure JavaScript library for text measurement without DOM reflow — for progressive layout enhancement, and <a href="https://marked.js.org" target="_blank">marked.js</a> for Markdown-to-HTML rendering in the browser.</p>
+
+    <h2>Why Multilingual Sources Matter</h2>
+
+    <p>The English-language wire — Reuters, AP, AFP — covers the world, but it covers it from a particular vantage point. Stories that matter deeply in Nairobi, São Paulo, Karachi, or Guangzhou often appear in English-language media days late, stripped of context, or not at all.</p>
+
+    <p>The Choir Global Wire is built on the premise that the most valuable signal is often the one that hasn't crossed the language barrier yet. When <em>Welt am Sonntag</em> breaks a story about US troop withdrawals from Europe, or when <em>Folha de S.Paulo</em> covers Brazil's response to US foreign policy in Portuguese, or when RFI Afrique reports on an Ebola outbreak in French before the English wire picks it up — that is the "extra signal" this system is designed to surface.</p>
+
+    <p>The synthesis model reads and reasons across all of these sources simultaneously, producing English-language journalism that cites its multilingual origins explicitly.</p>
+
+    <h2>Current Source List</h2>
+
+    <p>The following 34 sources are currently active. Sources marked with a language tag other than EN are non-English primary sources.</p>
+
+    <table class="source-table">
+      <thead>
+        <tr><th>Source</th><th>Region</th><th>Vertical</th><th>Language</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>BBC World</td><td>Global</td><td>World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Al Jazeera</td><td>Global / MENA</td><td>World, Politics</td><td><span class="tag">EN</span><span class="tag">AR</span></td></tr>
+        <tr><td>France 24</td><td>Global / Francophone</td><td>World</td><td><span class="tag">EN</span><span class="tag">FR</span></td></tr>
+        <tr><td>Deutsche Welle</td><td>Global / Europe</td><td>World</td><td><span class="tag">EN</span><span class="tag">DE</span></td></tr>
+        <tr><td>RFI English</td><td>Africa / Global</td><td>World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Nikkei Asia</td><td>Asia</td><td>Economy, Supply Chain</td><td><span class="tag">EN</span><span class="tag">JA</span></td></tr>
+        <tr><td>South China Morning Post</td><td>China / HK</td><td>World, Economy</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>The Hindu</td><td>India</td><td>World, Politics</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Straits Times</td><td>Southeast Asia</td><td>World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Vietnam News</td><td>Vietnam</td><td>World</td><td><span class="tag">EN</span><span class="tag">VI</span></td></tr>
+        <tr><td>Bangkok Post</td><td>Thailand</td><td>World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Dawn Pakistan</td><td>Pakistan</td><td>World, Politics</td><td><span class="tag">EN</span><span class="tag">UR</span></td></tr>
+        <tr><td>Arab News</td><td>Saudi Arabia / MENA</td><td>World, Economy</td><td><span class="tag">EN</span><span class="tag">AR</span></td></tr>
+        <tr><td>Middle East Eye</td><td>MENA</td><td>Politics, Security</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Al-Monitor</td><td>MENA</td><td>Politics, Security</td><td><span class="tag">EN</span><span class="tag">AR</span><span class="tag">HE</span><span class="tag">FA</span></td></tr>
+        <tr><td>The Africa Report</td><td>Africa</td><td>World, Economy</td><td><span class="tag">EN</span><span class="tag">FR</span></td></tr>
+        <tr><td>Premium Times Nigeria</td><td>Nigeria / West Africa</td><td>Politics, World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Nation Africa</td><td>Kenya / East Africa</td><td>World, Politics</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>RFI Afrique</td><td>Francophone Africa</td><td>World</td><td><span class="tag">FR</span></td></tr>
+        <tr><td>MercoPress</td><td>South America</td><td>World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Folha de S.Paulo</td><td>Brazil</td><td>World, Politics</td><td><span class="tag">PT</span></td></tr>
+        <tr><td>La Nación Argentina</td><td>Argentina</td><td>World, Politics</td><td><span class="tag">ES</span></td></tr>
+        <tr><td>The Verge</td><td>Global</td><td>Technology</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>TechCrunch</td><td>Global</td><td>Technology</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>MIT Technology Review</td><td>Global</td><td>Technology, AI</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Wired</td><td>Global</td><td>Technology</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Rest of World</td><td>Global South Tech</td><td>Technology</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>STAT News</td><td>Global</td><td>Health</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Financial Times</td><td>Global</td><td>Economy</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>The Economist</td><td>Global</td><td>Economy, World</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>ICG Crisis Alerts</td><td>Global</td><td>Security, Conflict</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Bellingcat</td><td>Global</td><td>Security, OSINT</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Aeon Magazine</td><td>Global</td><td>Culture, Ideas</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>The Baffler</td><td>Global</td><td>Culture, Politics</td><td><span class="tag">EN</span></td></tr>
+        <tr><td>Conflict Monitor (Telegram)</td><td>Global</td><td>Security, Conflict</td><td><span class="tag">EN</span><span class="tag">Multi</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2>Technology Stack</h2>
+
+    <ul>
+      <li><strong>Ingestion engine:</strong> Go 1.25, using <a href="https://github.com/mmcdole/gofeed" target="_blank">gofeed</a> for RSS/Atom parsing and standard <code>net/http</code> for Telegram web preview scraping.</li>
+      <li><strong>Storage:</strong> SQLite via <a href="https://pkg.go.dev/modernc.org/sqlite" target="_blank">modernc.org/sqlite</a> (pure Go, no CGo). Two tables: <code>items</code> (raw signals) and <code>issues</code> (synthesized output).</li>
+      <li><strong>Synthesis:</strong> Python 3, <a href="https://platform.openai.com" target="_blank">OpenAI-compatible API</a> with <code>gpt-4.1-mini</code>. Prompt engineering for structured journalism with inline citations and multilingual analysis.</li>
+      <li><strong>Web server:</strong> Go <code>net/http</code>, serving static files and a JSON API (<code>/api/latest</code>).</li>
+      <li><strong>Frontend:</strong> Vanilla HTML/CSS/JS. <a href="https://github.com/chenglou/pretext" target="_blank">Pretext</a> for text measurement without DOM reflow; <a href="https://marked.js.org" target="_blank">marked.js</a> for Markdown rendering; <a href="https://fonts.google.com" target="_blank">Google Fonts</a> (Playfair Display, Source Serif 4, Inter).</li>
+      <li><strong>Cycle runner:</strong> Python subprocess loop, 15-minute interval, orchestrating ingest → synthesis → publish.</li>
+    </ul>
+
+    <h2>What Comes Next</h2>
+
+    <p>This is Version 0 — a proof of concept built in a single day. The roadmap includes:</p>
+
+    <ul>
+      <li><strong>More sources:</strong> Telegram public channels (regional conflict monitors, government feeds, investigative journalists), GDELT 15-minute event stream, Bluesky Jetstream, Wikipedia recent changes, arXiv preprints, prediction markets (Polymarket, Kalshi), maritime AIS data, and public health biosurveillance feeds.</li>
+      <li><strong>Deeper multilingual coverage:</strong> Direct ingestion from Arabic, Chinese, Hindi, Swahili, and Hausa sources via RSSHub bridges for platforms like Weibo, Zhihu, and regional news aggregators.</li>
+      <li><strong>Integration with Choir:</strong> Stories will become <em>VTexts</em> — versioned, citable, multimedia content objects — in the Choir knowledge base, retrievable by agents and linkable by users.</li>
+      <li><strong>Cross-validation and adversarial evals:</strong> Multiple models checking each other's synthesis for factual consistency, source fidelity, and framing bias.</li>
+      <li><strong>Custom domains:</strong> Private computers running their own instance of the Global Wire, filtered to their interests, published at their own domain.</li>
+    </ul>
+
+    <p>The long-term vision is a planetary knowledge base: every noteworthy event on Earth, covered in the language it happened in, synthesized into a shared record that anyone can read, query, and contribute to.</p>
+
+    <p>Choir is open. The code lives at <a href="https://github.com/choir-hip/go-choir" target="_blank">github.com/choir-hip/go-choir</a>.</p>
+
+  </div>
+</div>
+
+<footer>
+  Choir Global Wire &middot; choir.news &middot; 34 sources &middot; 6 verticals &middot; Multilingual
+</footer>
+
+</body>
+</html>
