@@ -68,6 +68,14 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   opaque surfaces for structural panes, and translucent `panelSoft` should
   remain reserved for decorative cards or app surfaces that explicitly opt into
   glass.
+- Carbon Fiber Kintsugi remains visually incomplete after the transparency
+  repair: many component-level styles still contain blue/cyan literals or
+  blue-oriented fallbacks. The existing theme API exposes palette nouns
+  (`panel`, `panelSoft`, `accent`) but does not provide a small semantic
+  contract for app authors: app backing, structural pane, decorative card,
+  control, active/selected state, accent text, focus ring, and status colors.
+  That gap invites every app to re-invent its own blue-ish controls, then
+  forces global rescue selectors to patch symptoms after the fact.
 
 ## Invariants
 
@@ -107,6 +115,11 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   theme tokens such as `--choir-panel`, but must not reintroduce hard-coded
   Future Noir fallback colors as the effective `background-color` under other
   themes.
+- App theme comprehensiveness should be enforced through a compact semantic
+  token protocol, not app-specific color patches. Shared shell and app CSS
+  should prefer `--choir-surface-*`, `--choir-state-*`, and
+  `--choir-status-*` tokens; legacy palette tokens remain compatibility aliases
+  for older code but should not be the first thing new app CSS reaches for.
 
 ## First Stability Slice
 

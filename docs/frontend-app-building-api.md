@@ -44,6 +44,31 @@ New apps inherit the three schema-v2 themes through shared primitives and
 information density; it should not redefine theme palettes, toolbar colors, or
 button systems unless the shared primitives are missing a real capability.
 
+The app-facing theme contract is semantic:
+
+- `--choir-surface-app` for full app backings.
+- `--choir-surface-pane` for full-height structural panes, sidebars, readers,
+  and toolbars that must occlude windows behind them.
+- `--choir-surface-card` for decorative cards and list rows that may use softer
+  material.
+- `--choir-surface-control` for buttons, inputs, segmented controls, and
+  command controls.
+- `--choir-state-selected` and `--choir-state-hover` for active rows, selected
+  tabs, and hover affordances.
+- `--choir-state-focus` for focus rings and active-window glow.
+- `--choir-text-primary`, `--choir-text-muted`, `--choir-text-subtle`,
+  `--choir-text-accent`, and `--choir-text-on-accent` for text.
+- `--choir-status-success`, `--choir-status-warning`, and
+  `--choir-status-danger` for semantic status. Do not encode success,
+  warning, danger, active, or selected states as fixed blue/green/red literals.
+
+Legacy palette tokens such as `--choir-panel`, `--choir-panel-soft`,
+`--choir-accent`, and `--choir-selected` remain compatibility aliases. New app
+CSS should use semantic tokens first. Hard-coded design colors in app CSS are a
+theme protocol violation unless the value is outside the theme system by
+definition, such as transparent, currentColor, or media-intrinsic black in a
+video canvas.
+
 Current theme ids are:
 
 - `futuristic-noir`
