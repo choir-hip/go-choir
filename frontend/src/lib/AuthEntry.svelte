@@ -18,9 +18,8 @@
     data-passkey-error    — passkey ceremony error message area
 -->
 <script lang="ts">
-  import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
   import { createEventDispatcher } from 'svelte';
-  import { onMount } from 'svelte';
+  import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
 
   export let passkeyError = '';
   export let intentMessage = 'Choose when to make this preview durable.';
@@ -41,40 +40,10 @@
 
   /** Combined error to display: validation error takes precedence, then passkeyError. */
   $: displayError = error || passkeyError;
-  let passkeyInfoOpen = false;
-  let passkeyInfoHover = false;
-  let passkeyInfoFocus = false;
-  let passkeyTooltipWidth = 320;
-  let passkeyTooltipLeft = 16;
-  let passkeyTooltipTop = 0;
-  let passkeyTooltipArrowLeft = 32;
-  let passkeyTooltipAnchor = null;
-  let passkeyTooltipFont = '14px Inter, ui-sans-serif';
-
-  const PASSKEY_TOOLTIP_LINE_HEIGHT = 20;
   const passkeyTooltipCopy = {
     register: 'Passkeys use Face ID, Touch ID, Windows Hello, a device PIN, or a security key. They are phishing-resistant and can work across your devices through your password manager or platform account.',
     login: 'A passkey proves it is you with your device lock or security key. It is safer than a password and can be used from another device when your platform offers that option.',
   };
-  const preparedTooltipCache = new Map();
-
-  $: passkeyInfoVisible = passkeyInfoOpen || passkeyInfoHover || passkeyInfoFocus;
-  $: passkeyTooltipText = passkeyTooltipCopy[view];
-  $: passkeyTooltipLines = layoutPasskeyTooltip(passkeyTooltipText, passkeyTooltipWidth, passkeyTooltipFont);
-  $: passkeyTooltipHeight = passkeyTooltipLines.length * PASSKEY_TOOLTIP_LINE_HEIGHT;
-
-  function preparedTooltip(text, font) {
-    const key = `${font}\n${text}`;
-    if (!preparedTooltipCache.has(key)) {
-      preparedTooltipCache.set(key, prepareWithSegments(text, font));
-    }
-    return preparedTooltipCache.get(key);
-  }
-
-  function layoutPasskeyTooltip(text, width, font) {
-    const prepared = preparedTooltip(text, font);
-    return layoutWithLines(prepared, Math.max(120, width), PASSKEY_TOOLTIP_LINE_HEIGHT).lines;
-  }
 
   /** Simple email format validation. */
   function isValidEmail(value) {
@@ -85,61 +54,9 @@
     view = newView;
     email = '';
     error = '';
-    passkeyInfoOpen = false;
-    passkeyInfoHover = false;
-    passkeyInfoFocus = false;
     // Clear passkeyError when switching views so the user gets a clean retry state.
     dispatch('clearpasskeyerror');
   }
-
-  function positionPasskeyTooltip(anchor) {
-    if (typeof window === 'undefined' || !anchor) return;
-    passkeyTooltipAnchor = anchor;
-    const rect = anchor.getBoundingClientRect();
-    const margin = 16;
-    const width = passkeyTooltipWidth;
-    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
-    const left = Math.min(Math.max(margin, rect.right - width), maxLeft);
-    passkeyTooltipLeft = Math.round(left);
-    passkeyTooltipTop = Math.round(rect.bottom + 8);
-    passkeyTooltipArrowLeft = Math.round(Math.min(width - 24, Math.max(24, rect.right - left - 14)));
-  }
-
-  function showPasskeyInfoFromEvent(event) {
-    passkeyInfoHover = true;
-    positionPasskeyTooltip(event.currentTarget);
-  }
-
-  function focusPasskeyInfoFromEvent(event) {
-    passkeyInfoFocus = true;
-    positionPasskeyTooltip(event.currentTarget);
-  }
-
-  function togglePasskeyInfo(event) {
-    passkeyInfoOpen = !passkeyInfoOpen;
-    positionPasskeyTooltip(event.currentTarget);
-  }
-
-  function updatePasskeyTooltipLayout() {
-    const width = typeof window === 'undefined' ? 320 : window.innerWidth;
-    passkeyTooltipWidth = Math.round(Math.min(352, Math.max(240, width - 64)));
-    if (typeof document !== 'undefined') {
-      const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--choir-font-ui').trim();
-      passkeyTooltipFont = `14px ${fontFamily || 'Inter, ui-sans-serif'}`;
-    }
-    positionPasskeyTooltip(passkeyTooltipAnchor);
-  }
-
-  onMount(() => {
-    updatePasskeyTooltipLayout();
-    window.addEventListener('resize', updatePasskeyTooltipLayout);
-    const handleThemeChange = () => window.setTimeout(updatePasskeyTooltipLayout, 0);
-    window.addEventListener('choir-theme-change', handleThemeChange);
-    return () => {
-      window.removeEventListener('resize', updatePasskeyTooltipLayout);
-      window.removeEventListener('choir-theme-change', handleThemeChange);
-    };
-  });
 
   function handleRegister() {
     error = '';
@@ -201,36 +118,13 @@
 
     {#if view === 'register'}
       <div class="auth-view" data-register-view>
-        <h2>Create a <span
-          class="passkey-label passkey-info-anchor"
-          on:pointerenter={showPasskeyInfoFromEvent}
-          on:pointerleave={() => passkeyInfoHover = false}
-        >passkey<button
-            type="button"
-            class="passkey-info"
-            data-passkey-info-button
-            data-pretext-tooltip-trigger
-            aria-label="What is a passkey?"
-            aria-expanded={passkeyInfoVisible}
-            on:click={togglePasskeyInfo}
-            on:focus={focusPasskeyInfoFromEvent}
-            on:blur={() => passkeyInfoFocus = false}
-          >ⓘ</button>
-          {#if passkeyInfoVisible}
-            <div
-              class="passkey-tooltip"
-              data-passkey-tooltip
-              data-pretext-tooltip
-              role="tooltip"
-              style={`--passkey-tooltip-width: ${passkeyTooltipWidth}px; --passkey-tooltip-height: ${passkeyTooltipHeight}px; --passkey-tooltip-left: ${passkeyTooltipLeft}px; --passkey-tooltip-top: ${passkeyTooltipTop}px; --passkey-tooltip-arrow-left: ${passkeyTooltipArrowLeft}px;`}
-            >
-              {#each passkeyTooltipLines as line, index}
-                <span class="passkey-tooltip-line" data-pretext-line data-line-index={index}>{line.text}</span>
-              {/each}
-            </div>
-          {/if}
-        </span></h2>
-        <p class="view-desc">Use your device lock once. Next time, the same passkey can sign you in without a password.</p>
+        <PretextInlineDisclosure
+          prefix="Create a "
+          subject="passkey"
+          collapsedDetail="Use your device lock once. Next time, the same passkey can sign you in without a password."
+          disclosure={passkeyTooltipCopy.register}
+          ariaLabel="What is a passkey?"
+        />
 
         <form on:submit|preventDefault={handleRegister}>
           <label for="register-email">Email for this computer</label>
@@ -259,36 +153,13 @@
       </div>
     {:else}
       <div class="auth-view" data-login-view>
-        <h2>Use your <span
-          class="passkey-label passkey-info-anchor"
-          on:pointerenter={showPasskeyInfoFromEvent}
-          on:pointerleave={() => passkeyInfoHover = false}
-        >passkey<button
-            type="button"
-            class="passkey-info"
-            data-passkey-info-button
-            data-pretext-tooltip-trigger
-            aria-label="What is a passkey?"
-            aria-expanded={passkeyInfoVisible}
-            on:click={togglePasskeyInfo}
-            on:focus={focusPasskeyInfoFromEvent}
-            on:blur={() => passkeyInfoFocus = false}
-          >ⓘ</button>
-          {#if passkeyInfoVisible}
-            <div
-              class="passkey-tooltip"
-              data-passkey-tooltip
-              data-pretext-tooltip
-              role="tooltip"
-              style={`--passkey-tooltip-width: ${passkeyTooltipWidth}px; --passkey-tooltip-height: ${passkeyTooltipHeight}px; --passkey-tooltip-left: ${passkeyTooltipLeft}px; --passkey-tooltip-top: ${passkeyTooltipTop}px; --passkey-tooltip-arrow-left: ${passkeyTooltipArrowLeft}px;`}
-            >
-              {#each passkeyTooltipLines as line, index}
-                <span class="passkey-tooltip-line" data-pretext-line data-line-index={index}>{line.text}</span>
-              {/each}
-            </div>
-          {/if}
-        </span></h2>
-        <p class="view-desc">Return to your saved documents, mailbox, traces, and private computer state.</p>
+        <PretextInlineDisclosure
+          prefix="Use your "
+          subject="passkey"
+          collapsedDetail="Return to your saved documents, mailbox, traces, and private computer state."
+          disclosure={passkeyTooltipCopy.login}
+          ariaLabel="What is a passkey?"
+        />
 
         <form on:submit|preventDefault={handleLogin}>
           <label for="login-email">Email</label>
@@ -439,96 +310,6 @@
     text-align: left;
   }
 
-  .auth-view h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    flex-wrap: wrap;
-    font-family: var(--choir-font-display, inherit);
-    font-size: 1.28rem;
-    font-weight: 760;
-    line-height: 1.1;
-    color: var(--choir-text-primary);
-    margin: 0 0 0.45rem;
-  }
-
-  .passkey-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    white-space: nowrap;
-  }
-
-  .passkey-info-anchor {
-    position: relative;
-    overflow: visible;
-  }
-
-  .passkey-info {
-    display: inline-grid;
-    place-items: center;
-    width: 1.35rem;
-    height: 1.35rem;
-    margin-left: 0.05rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--choir-surface-control);
-    color: var(--choir-accent);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.86rem;
-    line-height: 1;
-    box-shadow: var(--choir-control-shadow);
-  }
-
-  .view-desc {
-    max-width: 32rem;
-    font-size: 0.92rem;
-    line-height: 1.4;
-    color: var(--choir-text-muted);
-    margin: 0 0 0.8rem;
-  }
-
-  .passkey-tooltip {
-    position: fixed;
-    top: var(--passkey-tooltip-top, 0px);
-    left: var(--passkey-tooltip-left, 1rem);
-    z-index: 20000;
-    width: min(var(--passkey-tooltip-width, 320px), calc(100vw - 3rem));
-    min-height: calc(var(--passkey-tooltip-height, 0px) + 1.7rem);
-    margin: 0;
-    padding: 0.85rem 0.95rem;
-    border-radius: var(--choir-radius-control, 16px);
-    background: var(--choir-surface-pane);
-    color: var(--choir-text-primary);
-    box-shadow: var(--choir-card-shadow, 0 14px 34px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent));
-    font-size: 0.88rem;
-    font-weight: 520;
-    line-height: 20px;
-    pointer-events: auto;
-    text-align: left;
-    white-space: normal;
-  }
-
-  .passkey-tooltip::before {
-    content: '';
-    position: absolute;
-    top: -0.38rem;
-    left: var(--passkey-tooltip-arrow-left, 2rem);
-    width: 0.76rem;
-    height: 0.76rem;
-    background: var(--choir-surface-pane);
-    transform: rotate(45deg);
-  }
-
-  .passkey-tooltip-line {
-    position: relative;
-    z-index: 1;
-    display: block;
-    min-height: 20px;
-    white-space: pre;
-  }
-
   form {
     display: flex;
     flex-direction: column;
@@ -618,8 +399,7 @@
   }
 
   :global(:root[data-theme-id='london-salmon']) .tab,
-  :global(:root[data-theme-id='london-salmon']) .primary-action,
-  :global(:root[data-theme-id='london-salmon']) .passkey-info {
+  :global(:root[data-theme-id='london-salmon']) .primary-action {
     font-style: italic;
   }
 

@@ -97,21 +97,25 @@ test('register view has a clear primary action to begin passkey flow', async ({
   await expect(registerAction).toContainText('Passkey');
 });
 
-test('passkey info hover uses Pretext popover without resizing auth card', async ({
+test('passkey info hover uses Pretext inline disclosure without resizing auth card', async ({
   page,
 }) => {
   await page.goto(BASE_URL);
   await openAuthOverlay(page);
 
   const card = page.locator('[data-auth-entry] .auth-card');
+  const registerDisclosure = page.locator('[data-register-view] [data-pretext-disclosure]');
   const infoButton = page.locator('[data-register-view] [data-passkey-info-button]');
+  await expect(registerDisclosure).toHaveAttribute('data-state', 'collapsed');
+  await expect(registerDisclosure).toContainText('Use your device lock');
   const before = await card.boundingBox();
   expect(before).not.toBeNull();
 
   await infoButton.hover();
-  const tooltip = page.locator('[data-register-view] [data-pretext-tooltip]');
-  await expect(tooltip).toBeVisible();
-  expect(await tooltip.locator('[data-pretext-line]').count()).toBeGreaterThan(1);
+  await expect(registerDisclosure).toHaveAttribute('data-state', 'expanded');
+  await expect(registerDisclosure).toContainText('phishing-resistant');
+  expect(await registerDisclosure.locator('[data-pretext-line]').count()).toBeGreaterThan(1);
+  expect(await registerDisclosure.locator('[data-pretext-fragment]').count()).toBeGreaterThan(2);
 
   const afterHover = await card.boundingBox();
   expect(afterHover).not.toBeNull();
@@ -119,7 +123,7 @@ test('passkey info hover uses Pretext popover without resizing auth card', async
 
   await infoButton.click();
   await page.mouse.move(10, 10);
-  await expect(tooltip).toBeVisible();
+  await expect(registerDisclosure).toHaveAttribute('data-state', 'expanded');
   const afterPinned = await card.boundingBox();
   expect(afterPinned).not.toBeNull();
   expect(Math.abs(afterPinned.height - before.height)).toBeLessThan(1);
@@ -127,11 +131,13 @@ test('passkey info hover uses Pretext popover without resizing auth card', async
   await page.locator('[data-login-toggle]').click();
   const loginBefore = await card.boundingBox();
   expect(loginBefore).not.toBeNull();
+  const loginDisclosure = page.locator('[data-login-view] [data-pretext-disclosure]');
   const loginInfoButton = page.locator('[data-login-view] [data-passkey-info-button]');
+  await expect(loginDisclosure).toHaveAttribute('data-state', 'collapsed');
+  await expect(loginDisclosure).toContainText('Return to your saved documents');
   await loginInfoButton.hover();
-  const loginTooltip = page.locator('[data-login-view] [data-pretext-tooltip]');
-  await expect(loginTooltip).toBeVisible();
-  await expect(loginTooltip).toContainText('device lock');
+  await expect(loginDisclosure).toHaveAttribute('data-state', 'expanded');
+  await expect(loginDisclosure).toContainText('device lock');
   const loginAfterHover = await card.boundingBox();
   expect(loginAfterHover).not.toBeNull();
   expect(Math.abs(loginAfterHover.height - loginBefore.height)).toBeLessThan(1);
