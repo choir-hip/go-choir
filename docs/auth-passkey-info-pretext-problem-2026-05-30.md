@@ -24,15 +24,27 @@ target.
 ## Strategy
 
 Use the installed `@chenglou/pretext` library for the first minimal Pretext
-integration:
+integration, but do not treat Pretext as a line-wrapping helper inside an
+ordinary tooltip. That was a useful mitigation because it removed the normal
+flow block insertion, but it did not exercise the core Pretext model.
 
-- Treat the hint body as a small manually-laid-out text block.
-- Use Pretext to split the text into rendered lines for the current viewport
-  width.
-- Render those lines in an absolutely positioned popover anchored to the
-  `ⓘ` control, outside normal document flow.
-- Remove the `:has()`-driven hover selector so browser hover invalidation does
-  not control card height.
+The passkey heading and disclosure should become one measured inline
+micro-layout:
+
+- Use Pretext's rich-inline flow to prepare heading text, the `ⓘ` affordance as
+  an atomic inline chip, and the explanatory copy as caller-owned fragments.
+- Compute both collapsed and expanded layouts from the current card width and
+  reserve the maximum required disclosure lane height up front.
+- Render the measured lines/fragments directly instead of letting browser text
+  flow decide whether hover changes card geometry.
+- Keep the `ⓘ` as a real button for keyboard, pointer, and touch users, but
+  place it inside the Pretext-rendered fragment stream.
+- Remove the `:has()`-driven hover selector and any normal-flow block insertion
+  caused by hover state.
+
+This is intentionally a small pilot for the future VText/transclusion system:
+Pretext owns text measurement and line reflow, while Choir owns the semantic
+fragments and interactive affordances.
 
 ## Acceptance
 
@@ -40,4 +52,6 @@ integration:
   changing the auth card dimensions.
 - Clicking the `ⓘ` control remains available for touch and keyboard users.
 - Register and login variants both render their specific copy.
-- The implementation imports and exercises `@chenglou/pretext`.
+- The implementation imports and exercises `@chenglou/pretext/rich-inline`, not
+  only `layoutWithLines()` inside a popover.
+- The rendered disclosure exposes measured Pretext lines/fragments for tests.
