@@ -543,6 +543,22 @@ Staging acceptance evidence:
 
 ## Run Checkpoint & Resumption State
 
+### 2026-05-30 Staging Transcript Probe Finding
+
+After commit `0e4fbaa` deployed, staging product-path API proof with a newly
+registered QA user showed that VText Revise created durable source packets for
+two YouTube links and one direct image link, and repeated Revise returned the
+same pending run without duplicating content items. The direct image was stored
+as an owner-scoped `image/jpeg` ContentItem. Both YouTube links created
+`video/youtube` ContentItems plus derived transcript status ContentItems, but
+the nominal transcript-backed public video reported `unavailable` with
+`caption track had no text`. The likely root cause is caption URLs that already
+carry a non-JSON `fmt` parameter; the first implementation only appended
+`fmt=json3` when no `fmt` existed, so a caption URL such as `fmt=srv3` could be
+fetched and then parsed as JSON. This blocks the real-transcript acceptance case
+until the caption URL format is forced to JSON3 or a transcript provider adapter
+replaces the direct YouTube timedtext path.
+
 ```text
 status: checkpoint_incomplete
 last checkpoint: first code pass adds source-packet registration for VText Revise and frontend embedded source cards
