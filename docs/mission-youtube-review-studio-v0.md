@@ -602,3 +602,25 @@ suggested resume goal string: /goal Run docs/mission-youtube-review-studio-v0.md
 evidence artifact refs: CI 26676482105; staging /health proxy+sandbox deployed_commit 673a8ed38113b3822725598599739ae87d76b206; local tests `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURLCreatesProvenanceRecord|TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent|TestContentCreateSupportsDurableMediaReferences|TestContentImportURLDedupesYouTubeSourcePackets|TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt|TestVTextAgentRevisionRegistersMediaSourceRefs'`; `nix develop -c go test ./internal/runtime -run TestDoesNotExist`; `npm run build` in frontend; screenshots `/tmp/choir-vtext-media-source-cards-673a8ed.png` and `/tmp/choir-vtext-media-source-cards-mobile-673a8ed.png`
 rollback refs: revert commits 673a8ed and 0e4fbaa if needed; content artifacts are owner-scoped and addressable by content id, but explicit source-ref deletion/removal UX remains unimplemented
 ```
+
+### 2026-05-30 Transcript Provider Reprobe
+
+Follow-up direct probes showed that the JSON3 format fix is necessary but not
+sufficient. Public watch pages still expose `captionTracks`, but fetching the
+track `baseUrl` for several widely captioned public videos returns HTTP 200
+with an empty response body for `json3`, `srv3`, `ttml`, and `vtt`. The same
+watch pages include a `getTranscriptEndpoint`, but calling the corresponding
+Innertube endpoint with the page's `INNERTUBE_API_KEY`, client version,
+visitor data, YouTube client headers, origin, and referer returns
+`FAILED_PRECONDITION`.
+
+This now looks like YouTube proof-of-origin / subtitle enforcement rather than
+only a caption URL parser bug. The best-effort direct caption-track scraper can
+remain as an unavailable-state fallback, but it is not a durable product
+strategy for staging acceptance. The next implementation step should introduce
+a small transcript-provider adapter boundary, using a configured managed
+transcript provider when available and preserving the existing unavailable
+state when no configured provider or direct YouTube fallback can return
+segments. The adapter must still store transcript output only as private
+`ContentItem` source material for researcher-mediated source representations,
+not as deterministic review prose.
