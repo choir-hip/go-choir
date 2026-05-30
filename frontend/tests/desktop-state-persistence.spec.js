@@ -298,7 +298,7 @@ test('restored overlapping active window is opaque and paint isolated before foc
       contentIsolation: getComputedStyle(content).isolation,
       appHostAlpha: alphaFor(appHost),
       appHostIsolation: getComputedStyle(appHost).isolation,
-      messageDetailAlpha: messageDetail ? alphaFor(messageDetail) : alphaFor(emailApp),
+      messageDetailAlpha: messageDetail ? alphaFor(messageDetail) : alphaFor(emailApp || appHost),
       mobileMailbarAlpha: mobileMailbar ? alphaFor(mobileMailbar) : 1,
       hitWindowId: sample?.closest?.('[data-window]')?.getAttribute('data-window-id') || '',
     };
