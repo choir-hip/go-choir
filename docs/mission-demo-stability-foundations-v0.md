@@ -50,6 +50,15 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   visually blended on first paint because the shell relies on layered dark
   chrome, large shadows, rounded corners, and ordinary browser compositing
   before any user focus event repaints/raises a window.
+- Follow-up visual evidence from mobile Safari still showed Trace cards
+  legible through the foreground Email detail pane. Code inspection found the
+  actual remaining leak: the global theme stylesheet overrides app structural
+  panes such as `.message-detail`, `.message-list`, and `.mail-rail` to
+  `var(--choir-panel-soft, rgba(18, 31, 55, 0.68)) !important`. That defeats
+  Email's app-local opaque pane backgrounds even though the window shell and
+  app host themselves are opaque. The rendering failure is therefore an
+  app-theme layering bug: decorative soft panels are being applied to
+  full-window structural panes that must occlude background windows.
 
 ## Invariants
 
@@ -81,6 +90,10 @@ The next Choir-in-Choir campaign is tabled until the everyday product surface is
   foreground app may reveal background stack depth around its bounds, but
   background app pixels must never appear to bleed through the foreground
   window body, titlebar, or app host before the first focus event.
+- Global theme overrides must distinguish decorative cards from structural app
+  panes. Full-height panes, sidebars, detail panes, readers, toolbars, and
+  app-stage surfaces inside a floating window need solid backing unless the app
+  explicitly opts into transparency with a proven foreground-ownership design.
 
 ## First Stability Slice
 
