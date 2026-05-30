@@ -335,11 +335,14 @@
           zIndex: activeStillExists ? Math.max(1, addedZ++) : (remoteWin.zIndex || 1),
         };
       }
+      const nextAppContext = isDrivingSession()
+        ? { ...(remoteWin.appContext || {}), ...(localWin.appContext || {}) }
+        : { ...(localWin.appContext || {}), ...(remoteWin.appContext || {}) };
       return {
         ...localWin,
         title: remoteWin.title || localWin.title,
         icon: getAppIcon(remoteWin.appId || localWin.appId),
-        appContext: remoteWin.appContext || localWin.appContext,
+        appContext: nextAppContext,
         restoreSuspended: localWin.restoreSuspended,
       };
     });
@@ -677,13 +680,22 @@
     return candidates.reduce((best, win) => ((win.zIndex || 0) > (best.zIndex || 0) ? win : best));
   }
 
+  function serializeWindowGeometry(geometry = {}) {
+    return {
+      x: Math.round(Number(geometry.x) || 0),
+      y: Math.round(Number(geometry.y) || 0),
+      width: Math.max(1, Math.round(Number(geometry.width) || 0)),
+      height: Math.max(1, Math.round(Number(geometry.height) || 0)),
+    };
+  }
+
   function serializeWindowsForSave(nextWindows) {
     return nextWindows.map((w) => ({
       window_id: w.windowId,
       app_id: w.appId,
       title: w.title,
-      geometry: { x: w.x, y: w.y, width: w.width, height: w.height },
-      restored_geometry: w.restoredGeometry,
+      geometry: serializeWindowGeometry({ x: w.x, y: w.y, width: w.width, height: w.height }),
+      restored_geometry: w.restoredGeometry ? serializeWindowGeometry(w.restoredGeometry) : null,
       mode: w.mode,
       z_index: w.zIndex,
       app_context: w.appContext,

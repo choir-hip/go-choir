@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { previewEmailMessages } from './public-preview-data';
 
   export let authenticated = false;
   export let appContext = {};
+  export let windowId = '';
 
   const dispatch = createEventDispatcher();
 
@@ -16,9 +17,9 @@
   ];
 
   let aliases = [];
-  let activeFolder = 'inbox';
+  let activeFolder = normalizeFolder(appContext?.activeFolder) || 'inbox';
   let messages = [];
-  let selectedId = '';
+  let selectedId = appContext?.selectedId || '';
   let detail = null;
   let loading = false;
   let detailLoading = false;
@@ -32,8 +33,9 @@
   let composeBody = '';
   let sending = false;
   let loadedOnce = false;
-  let detailPaneOpen = false;
+  let detailPaneOpen = Boolean(appContext?.detailPaneOpen);
   let openedContextDraftId = '';
+  let appStateEmitTimer: ReturnType<typeof setTimeout> | null = null;
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = aliases[0]?.address || '';
@@ -54,13 +56,66 @@
       loadPreviewMailbox();
     } else {
       void loadAliases();
-      void loadMessages(activeFolder);
+      void loadMessages(activeFolder, {
+        openPane: detailPaneOpen,
+        selectedId,
+        persist: false,
+      });
     }
+  });
+
+  onDestroy(() => {
+    if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
   });
 
   $: if (authenticated && !loadedOnce && !loading) {
     void loadAliases();
-    void loadMessages(activeFolder);
+    void loadMessages(activeFolder, {
+      openPane: detailPaneOpen,
+      selectedId,
+      persist: false,
+    });
+  }
+
+  function normalizeFolder(value) {
+    const id = String(value || '').trim();
+    return folders.some((folder) => folder.id === id) ? id : '';
+  }
+
+  function currentEmailAppContext() {
+    const draftId = activeFolder === 'drafts' && detail?.draft?.id
+      ? detail.draft.id
+      : '';
+    return {
+      activeFolder,
+      selectedId: selectedId || '',
+      detailPaneOpen: Boolean(detailPaneOpen),
+      view: composeOpen ? 'compose' : detailPaneOpen ? 'detail' : 'list',
+      draftId,
+      windowTitle: 'Email',
+    };
+  }
+
+  function scheduleAppStateEmit() {
+    if (!windowId) return;
+    if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
+    appStateEmitTimer = setTimeout(() => {
+      appStateEmitTimer = null;
+      emitAppState();
+    }, 120);
+  }
+
+  function emitAppState() {
+    if (!windowId) return;
+    if (appStateEmitTimer) {
+      clearTimeout(appStateEmitTimer);
+      appStateEmitTimer = null;
+    }
+    dispatch('contextchange', {
+      windowId,
+      appContext: currentEmailAppContext(),
+      title: 'Email',
+    });
   }
 
   async function loadAliases() {
@@ -91,22 +146,27 @@
     loadedOnce = true;
   }
 
-  async function loadMessages(folder) {
+  async function loadMessages(folder, options = {}) {
+    const nextFolder = normalizeFolder(folder) || 'inbox';
     if (!authenticated) {
       loadPreviewMailbox();
-      activeFolder = folder;
+      activeFolder = nextFolder;
+      selectedId = options.selectedId || selectedId;
+      detailPaneOpen = Boolean(options.openPane);
+      if (options.persist !== false) scheduleAppStateEmit();
       return;
     }
     loading = true;
     error = '';
-    activeFolder = folder;
-    detailPaneOpen = false;
+    activeFolder = nextFolder;
+    detailPaneOpen = Boolean(options.openPane);
+    if (options.persist !== false) emitAppState();
     try {
-      if (folder === 'drafts') {
-        await loadDrafts();
+      if (nextFolder === 'drafts') {
+        await loadDrafts(options);
         return;
       }
-      const res = await fetchWithRenewal(`/api/email/messages?folder=${encodeURIComponent(folder)}`);
+      const res = await fetchWithRenewal(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not load mail');
@@ -114,21 +174,25 @@
       const data = await res.json();
       loadedOnce = true;
       messages = data.messages || [];
+      if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
+        selectedId = options.selectedId;
+      }
       if (!messages.some((message) => message.id === selectedId)) {
         selectedId = messages[0]?.id || '';
         detail = null;
       }
       if (selectedId) {
-        await loadDetail(selectedId, { openPane: false });
+        await loadDetail(selectedId, { openPane: Boolean(options.openPane), persist: false });
       }
     } catch (err) {
       handleError(err);
     } finally {
       loading = false;
+      if (options.persist !== false) scheduleAppStateEmit();
     }
   }
 
-  async function loadDrafts() {
+  async function loadDrafts(options = {}) {
     const res = await fetchWithRenewal('/api/email/drafts');
     if (!res.ok) {
       if (res.status === 401) throw new AuthRequiredError();
@@ -137,12 +201,15 @@
     const data = await res.json();
     loadedOnce = true;
     messages = (data.drafts || []).map(draftListItem);
+    if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
+      selectedId = options.selectedId;
+    }
     if (!messages.some((message) => message.id === selectedId)) {
       selectedId = messages[0]?.id || '';
       detail = null;
     }
     if (selectedId) {
-      await loadDetail(selectedId, { openPane: false });
+      await loadDetail(selectedId, { openPane: Boolean(options.openPane), persist: false });
     }
   }
 
@@ -150,7 +217,7 @@
     const id = String(draftId || '').trim();
     if (!id) return;
     openedContextDraftId = id;
-    await loadMessages('drafts');
+    await loadMessages('drafts', { selectedId: id, openPane: true, persist: false });
     await loadDetail(id, { openPane: true });
   }
 
@@ -184,6 +251,7 @@
       handleError(err);
     } finally {
       detailLoading = false;
+      if (options.persist !== false) scheduleAppStateEmit();
     }
   }
 
@@ -217,7 +285,7 @@
       actionStatus = 'Reply draft ready for review';
       activeFolder = 'drafts';
       selectedId = draft.id;
-      await loadMessages('drafts');
+      await loadMessages('drafts', { selectedId: draft.id, openPane: true, persist: false });
       await loadDetail(draft.id, { openPane: true });
     } catch (err) {
       handleError(err);
@@ -257,7 +325,7 @@
       actionStatus = 'Draft ready for review';
       activeFolder = 'drafts';
       selectedId = draft.id;
-      await loadMessages('drafts');
+      await loadMessages('drafts', { selectedId: draft.id, openPane: true, persist: false });
       await loadDetail(draft.id, { openPane: true });
     } catch (err) {
       handleError(err);
@@ -332,6 +400,7 @@
     detailPaneOpen = true;
     actionStatus = '';
     error = '';
+    scheduleAppStateEmit();
   }
 
   function showMessageList() {
@@ -339,6 +408,7 @@
     composeOpen = false;
     replyOpen = false;
     actionStatus = '';
+    scheduleAppStateEmit();
   }
 
   function handleError(err) {
@@ -456,7 +526,7 @@
     </div>
     <label>
       <span>Mailbox</span>
-      <select bind:value={activeFolder} on:change={(event) => loadMessages(event.currentTarget.value)}>
+      <select bind:value={activeFolder} on:change={(event) => loadMessages(event.currentTarget.value)} data-email-folder-select>
         {#each folders as folder}
           <option value={folder.id}>{folder.label}</option>
         {/each}

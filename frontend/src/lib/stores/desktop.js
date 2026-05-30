@@ -150,10 +150,10 @@ function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
   );
 
   return {
-    x: clamp(x, metrics.margin, maxX),
-    y: clamp(y, metrics.workspaceStartY, maxY),
-    width: clampedWidth,
-    height: clampedHeight,
+    x: Math.round(clamp(x, metrics.margin, maxX)),
+    y: Math.round(clamp(y, metrics.workspaceStartY, maxY)),
+    width: Math.round(clampedWidth),
+    height: Math.round(clampedHeight),
   };
 }
 

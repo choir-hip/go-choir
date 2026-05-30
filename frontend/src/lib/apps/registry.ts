@@ -76,7 +76,12 @@ export const APP_REGISTRY = [
     description: 'Mail for your automatic computer',
     component: () => import('../EmailApp.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 30 },
-    window: { singleton: true, heavy: false, desktop: { width: 1120, height: 720, minWidth: 760, minHeight: 520 }, compact: compactDefault },
+    window: {
+      singleton: true,
+      heavy: false,
+      desktop: { width: 1120, height: 720, minWidth: 760, minHeight: 520 },
+      compact: { width: 360, height: 560, minWidth: 340, minHeight: 520 },
+    },
     auth: { preview: 'public-preview', requiresAuthFor: ['email_reply', 'email_compose', 'email_send'] },
     theme: { surface: 'standard', shellDataAttr: 'data-email-window', contentClass: 'email-content' },
   },

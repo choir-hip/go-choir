@@ -121,6 +121,44 @@ test('stale bare email URL intent does not override restored desktop state', asy
   await expect(page).not.toHaveURL(/app=email/);
 });
 
+test('email app view state persists through universal app context after reload', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+  await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
+    state: 'visible',
+    timeout: 120000,
+  });
+
+  await openApp(page, 'email');
+
+  const emailApp = page.locator('[data-email-app]').last();
+  await expect(emailApp).toBeVisible({ timeout: 10000 });
+
+  await emailApp.locator('[data-email-folder="sent"]').click();
+  await expect(emailApp.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+
+  await expect.poll(async () => page.evaluate(async () => {
+    const res = await fetch('/api/desktop/state', { credentials: 'include' });
+    if (!res.ok) return '';
+    const state = await res.json();
+    const emailWindow = (state.windows || []).find((win) => win.app_id === 'email');
+    return emailWindow?.app_context?.activeFolder || '';
+  }), { timeout: 5000 }).toBe('sent');
+
+  await page.reload();
+  await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
+    state: 'visible',
+    timeout: 120000,
+  });
+
+  const restoredEmail = page.locator('[data-email-app]').last();
+  await expect(restoredEmail).toBeVisible({ timeout: 10000 });
+  await expect(restoredEmail.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+});
+
 // ---------------------------------------------------------------
 // Test: multiple windows with z-index restored after reload
 // (VAL-SHELL-022)
