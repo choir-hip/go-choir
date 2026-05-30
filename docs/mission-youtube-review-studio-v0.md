@@ -645,3 +645,36 @@ timestamp segments when present, language/kind/provider metadata, and
 untrusted-source provenance. If the configured provider fails or returns no
 text, Choir falls back to the direct caption-track probe and stores the durable
 unavailable/error state instead of inventing a transcript.
+
+### 2026-05-30 Deployed Transcript Adapter Proof
+
+Commit `5e97651057969019d9e8db66b11324b8b551f391` deployed to staging after CI
+run `26676915145`. Staging `/health` reported both proxy and sandbox
+`deployed_commit` as `5e97651057969019d9e8db66b11324b8b551f391`.
+
+Local proof for the adapter:
+
+- focused comprehensive runtime tests passed for configured-provider fetch,
+  configured-provider `ContentItem` storage, provider payload normalization,
+  JSON3 URL forcing, YouTube source-packet dedupe, and VText revise-time media
+  source refs;
+- normal runtime compile check passed with
+  `nix develop -c go test ./internal/runtime -run TestDoesNotExist`.
+
+Deployed product-path probe with QA user
+`qa-1780122729501-ngbs32@example.com` imported
+`https://www.youtube.com/watch?v=jNQXAC9IVRw` through
+`POST /api/content/import-url`. The deployed runtime created video
+ContentItem `0b29f7e7-2041-47fe-ac6b-938aa3292fd4` and transcript status
+ContentItem `2a705547-1426-4993-a621-3320899e8855` with
+`source_type=derived_transcript`,
+`media_type=text/x-youtube-transcript`,
+`rights_scope=private_user_source`, and `untrusted_source_text=true`.
+
+The transcript item remained `availability=unavailable` with
+`provider=youtube_caption_tracks` and `error=caption tracks unavailable`. This
+proves the deployed fallback and durable unavailable state, but not the real
+transcript acceptance case. Staging does not appear to have a configured
+transcript provider yet, so the remaining next step is to configure a managed
+provider behind the adapter or implement another durable provider path that can
+return real transcript segments from staging.
