@@ -231,8 +231,9 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			rootDir = "."
 		}
 		sourceProjection, err := BootstrapSourceWorkspace(rootDir, SourceWorkspaceOptions{
-			OwnerID:   user,
-			SessionID: sessionID,
+			OwnerID:                 user,
+			SessionID:               sessionID,
+			MaterializeGitCheckouts: true,
 		})
 		if err != nil {
 			return nil, err

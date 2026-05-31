@@ -1,9 +1,11 @@
 package sandbox
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,13 +16,14 @@ const sourceLineageSchemaVersion = 1
 // SourceWorkspaceOptions carries the computer/session identity projected into
 // the local source workspace that zot inspects from Super Console.
 type SourceWorkspaceOptions struct {
-	ComputerID  string
-	Kind        string
-	OwnerID     string
-	DesktopID   string
-	SessionID   string
-	CandidateID string
-	WorkerID    string
+	ComputerID              string
+	Kind                    string
+	OwnerID                 string
+	DesktopID               string
+	SessionID               string
+	CandidateID             string
+	WorkerID                string
+	MaterializeGitCheckouts bool
 }
 
 // SourceWorkspaceProjection is the filesystem-local view of the computer's
@@ -46,6 +49,10 @@ type SourceWorkspaceProjection struct {
 	CurrentRuntimeBuildRef  string    `json:"current_runtime_build_ref,omitempty"`
 	CurrentFrontendBuildRef string    `json:"current_frontend_build_ref,omitempty"`
 	DirtyStateSummary       string    `json:"dirty_state_summary"`
+	PlatformCheckoutStatus  string    `json:"platform_checkout_status,omitempty"`
+	PlatformCheckoutError   string    `json:"platform_checkout_error,omitempty"`
+	CandidateCheckoutStatus string    `json:"candidate_checkout_status,omitempty"`
+	CandidateCheckoutError  string    `json:"candidate_checkout_error,omitempty"`
 	RollbackRef             string    `json:"rollback_ref,omitempty"`
 	LastVerifiedAt          time.Time `json:"last_verified_at"`
 	LineagePath             string    `json:"lineage_path"`
@@ -71,6 +78,9 @@ func BootstrapSourceWorkspace(filesRoot string, opts SourceWorkspaceOptions) (So
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return SourceWorkspaceProjection{}, fmt.Errorf("source workspace: create %s: %w", dir, err)
 		}
+	}
+	if opts.MaterializeGitCheckouts {
+		materializeSourceCheckouts(&projection)
 	}
 	if err := writeSourceLineageProjection(projection); err != nil {
 		return SourceWorkspaceProjection{}, err
@@ -188,6 +198,120 @@ func safeSourceRefPart(value string) string {
 		return "unknown"
 	}
 	return out
+}
+
+func materializeSourceCheckouts(projection *SourceWorkspaceProjection) {
+	if projection == nil {
+		return
+	}
+	repo := strings.TrimSpace(projection.PlatformSourceRepo)
+	baseCommit := strings.TrimSpace(projection.PlatformBaseCommit)
+	platformStatus, platformErr := ensureSourceCheckout(projection.PlatformSourceMount, repo, baseCommit, false)
+	projection.PlatformCheckoutStatus = platformStatus
+	if platformErr != nil {
+		projection.PlatformCheckoutError = platformErr.Error()
+	}
+	candidateStatus, candidateErr := ensureSourceCheckout(projection.CandidateSourceMount, repo, baseCommit, true)
+	projection.CandidateCheckoutStatus = candidateStatus
+	if candidateErr != nil {
+		projection.CandidateCheckoutError = candidateErr.Error()
+	}
+}
+
+func ensureSourceCheckout(dir, repo, baseCommit string, writable bool) (string, error) {
+	dir = filepath.Clean(strings.TrimSpace(dir))
+	repo = strings.TrimSpace(repo)
+	baseCommit = strings.TrimSpace(baseCommit)
+	if dir == "." || dir == "" {
+		return "failed", fmt.Errorf("checkout path is required")
+	}
+	if repo == "" {
+		return "not_configured", nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "failed", err
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		if !os.IsNotExist(err) {
+			return "failed", err
+		}
+		empty, emptyErr := directoryIsEmpty(dir)
+		if emptyErr != nil {
+			return "failed", emptyErr
+		}
+		if !empty {
+			return "blocked_non_git_non_empty", nil
+		}
+		if _, err := runSourceGitCommand(filepath.Dir(dir), "clone", "--filter=blob:none", repo, filepath.Base(dir)); err != nil {
+			return "clone_failed", err
+		}
+	}
+
+	dirty, err := gitCheckoutDirty(dir)
+	if err != nil {
+		return "status_failed", err
+	}
+	if dirty {
+		return "dirty_preserved", nil
+	}
+
+	if _, err := runSourceGitCommand(dir, "fetch", "--all", "--prune"); err != nil {
+		return "fetch_failed", err
+	}
+	if baseCommit == "" || baseCommit == "unknown" {
+		return "ok_default_ref", nil
+	}
+	if writable {
+		if _, err := runSourceGitCommand(dir, "checkout", "-B", "choir-candidate", baseCommit); err != nil {
+			return "checkout_failed", err
+		}
+		return "ok_candidate_at_base", nil
+	}
+	if _, err := runSourceGitCommand(dir, "checkout", "--detach", baseCommit); err != nil {
+		return "checkout_failed", err
+	}
+	if _, err := runSourceGitCommand(dir, "reset", "--hard", baseCommit); err != nil {
+		return "reset_failed", err
+	}
+	if _, err := runSourceGitCommand(dir, "clean", "-fdx"); err != nil {
+		return "clean_failed", err
+	}
+	return "ok_platform_at_base", nil
+}
+
+func directoryIsEmpty(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	return len(entries) == 0, nil
+}
+
+func gitCheckoutDirty(dir string) (bool, error) {
+	output, err := runSourceGitCommand(dir, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(output) != "", nil
+}
+
+func runSourceGitCommand(dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	text := strings.TrimSpace(string(output))
+	if ctx.Err() == context.DeadlineExceeded {
+		return text, fmt.Errorf("git %s timed out", strings.Join(args, " "))
+	}
+	if err != nil {
+		if text != "" {
+			return text, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, text)
+		}
+		return text, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return string(output), nil
 }
 
 func firstNonEmptySourceWorkspace(values ...string) string {
