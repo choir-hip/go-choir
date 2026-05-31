@@ -484,3 +484,29 @@ the current ownership identity into any refreshed VM manager config before boot.
 The acceptance evidence should include a deployed Node B `fc-config.json` whose
 boot args contain the expected `choir.computer_kind`, owner, desktop, and
 worker/candidate identity fields after refresh, not just local tests.
+
+## 2026-05-31 Hot Refresh Is Not Boot-Contract Refresh Gap
+
+Commit `2ef575b3024227e1fa590f46da76f9adaec4c1b1` deployed the vmctl/vmmanager
+identity rehydration fix to staging. CI and deploy succeeded, and
+`https://choir.news/health` reported the same commit for proxy and sandbox.
+
+Live Node B inspection still showed no `choir.computer_kind` boot args in
+`/var/lib/go-choir/vm-state/*/fc-config.json`. Journal evidence explained why:
+the deploy restarted vmctl and reattached existing Firecracker processes, then
+used the sandbox hot-refresh path for active interactive computers. No
+Firecracker config was rewritten after the new commit.
+
+This is a deploy-impact classification bug, not evidence that the identity
+rehydration code failed. Changes to vmctl, vmmanager, or VM boot-contract code
+may not require rebuilding the guest image, but they do require a full active
+computer refresh because kernel args and Firecracker config are only produced
+on VM boot. Sandbox hot-refresh is sufficient for runtime package changes, but
+it cannot prove or apply a boot-contract change.
+
+Next code checkpoint: add an explicit active VM full-refresh deploy impact class
+separate from ordinary guest image rebuild. Mark vmctl/vmmanager and
+boot-contract-affecting vmctl changes with that class, and make manual forced
+deploys able to exercise it. The acceptance proof remains a post-deploy
+`fc-config.json` containing `choir.computer_kind` and the ownership identity
+fields.
