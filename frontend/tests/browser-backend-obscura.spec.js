@@ -63,14 +63,5 @@ test('Browser app renders a backend Obscura text snapshot when configured', asyn
   await expect(backendStatus).toHaveAttribute('data-browser-session-state', 'closed', { timeout: 10_000 });
   await expect(browserApp.locator('[data-browser-backend-snapshot]')).toHaveCount(0);
 
-  await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-  const trace = page.locator('[data-trace-app]').last();
-  await expect(trace).toBeVisible({ timeout: 10_000 });
-  const browserTrajectory = trace.locator(`[data-trace-trajectory-id="browser:${sessionId}"]`);
-  await expect(browserTrajectory).toBeVisible({ timeout: 20_000 });
-  await browserTrajectory.click();
-  const momentStrip = trace.locator('[data-trace-moment-strip]');
-  await expect(momentStrip).toContainText('browser snapshot', { timeout: 20_000 });
-  await expect(momentStrip).toContainText('Example Domain', { timeout: 20_000 });
-  await expect(momentStrip).toContainText('closed browser session', { timeout: 20_000 });
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 });

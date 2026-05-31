@@ -69,15 +69,7 @@ test('Browser app persists a backend Obscura CDP screenshot when enabled', async
   const sessionId = await backendStatus.getAttribute('data-browser-session-id');
   expect(sessionId).toBeTruthy();
 
-  await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-  const trace = page.locator('[data-trace-app]').last();
-  await expect(trace).toBeVisible({ timeout: 10_000 });
-  const browserTrajectory = trace.locator(`[data-trace-trajectory-id="browser:${sessionId}"]`);
-  await expect(browserTrajectory).toBeVisible({ timeout: 20_000 });
-  await browserTrajectory.click();
-  await expect(trace.locator('[data-trace-moment-strip]')).toContainText('browser screenshot', {
-    timeout: 20_000,
-  });
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 });
 
 test('Browser app applies bounded backend control through the persistent CDP session', async ({
@@ -123,14 +115,5 @@ test('Browser app applies bounded backend control through the persistent CDP ses
   );
   await expect(backendStatus).toHaveAttribute('data-browser-backend-session-id', backendSessionId);
 
-  const sessionId = await backendStatus.getAttribute('data-browser-session-id');
-  await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-  const trace = page.locator('[data-trace-app]').last();
-  await expect(trace).toBeVisible({ timeout: 10_000 });
-  const browserTrajectory = trace.locator(`[data-trace-trajectory-id="browser:${sessionId}"]`);
-  await expect(browserTrajectory).toBeVisible({ timeout: 20_000 });
-  await browserTrajectory.click();
-  const momentStrip = trace.locator('[data-trace-moment-strip]');
-  await expect(momentStrip).toContainText('browser fill', { timeout: 20_000 });
-  await expect(momentStrip).toContainText('browser click', { timeout: 20_000 });
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 });

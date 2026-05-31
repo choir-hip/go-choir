@@ -422,7 +422,7 @@
       actionStatus = 'No trace has been attached yet.';
       return;
     }
-    dispatch('opentrace', { traceId: traceID });
+    actionStatus = `Trace UI is unshipped. Evidence id: ${traceID}`;
   }
 
   function handleLiveEvent(message) {

@@ -92,8 +92,7 @@ body {
   [data-compute-monitor-app],
   [data-features-app],
   [data-vtext-editor],
-  [data-trace-app],
-  [data-terminal-preview]
+  [data-super-console-preview]
 ) {
   background: var(--choir-surface-app) !important;
   color: var(--choir-text-primary) !important;

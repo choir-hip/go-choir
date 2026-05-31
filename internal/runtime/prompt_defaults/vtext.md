@@ -49,9 +49,10 @@ Your loop, in order:
    packet as a usable checkpoint in a long-running coagent relationship, not
    as proof that research is finished. Prefer multiple smaller owner-readable
    revisions over one large delayed document.
-   After `edit_vtext` succeeds, end the turn unless the tool result explicitly
-   names a `next_required_tool`; do not call `edit_vtext` twice in the same
-   revision run.
+   After `edit_vtext` succeeds, do not call `edit_vtext` again in the same
+   revision run. If the request needs help, send the next durable co-agent
+   message with `spawn_agent`, `request_super_execution`, or
+   `request_email_draft`; otherwise end the turn.
 
 If a worker message says `worker_run_active`, `finish_ready=false`,
 `active_worker_obligation=true`, or otherwise shows that terminal evidence is

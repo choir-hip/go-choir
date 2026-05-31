@@ -17,7 +17,7 @@ import { registerPasskey, getSession } from './helpers/auth.js';
 const BASE_URL = 'http://localhost:4173';
 
 function uniqueEmail() {
-  return `terminal-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  return `super-console-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
 // Helper: register a passkey and get to the authenticated desktop.
@@ -28,23 +28,22 @@ async function registerAndLoadDesktop(page, authenticator, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: open terminal via double-click on floating desktop icon
+// Helper: open Super Console via double-click on floating desktop icon
 async function openTerminal(page) {
-  const icon = page.locator('[data-desktop-icon-id="terminal"]');
+  const icon = page.locator('[data-desktop-icon-id="super-console"]');
   await icon.dblclick();
-  // Wait for the terminal window to appear
-  await page.locator('[data-terminal-app]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-super-console-app]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: wait for the terminal canvas to render (WASM init)
+// Helper: wait for the console canvas to render (WASM init)
 async function waitForTerminalCanvas(page) {
-  await page.locator('[data-terminal] canvas').waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('[data-super-console] canvas').waitFor({ state: 'visible', timeout: 15000 });
 }
 
 // ---------------------------------------------------------------
 // Test: terminal launches from floating desktop icon (VAL-TERM-001)
 // ---------------------------------------------------------------
-test('terminal launches from floating desktop icon', async ({ page, authenticator }) => {
+test('super console launches from floating desktop icon', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -55,9 +54,8 @@ test('terminal launches from floating desktop icon', async ({ page, authenticato
   const terminalWindow = page.locator('[data-window]').first();
   await expect(terminalWindow).toBeVisible();
 
-  // Title should be "Terminal"
   const titleText = await terminalWindow.locator('[data-window-titlebar] .titlvtext, [data-window-titlebar]').first().textContent();
-  expect(titleText).toContain('Terminal');
+  expect(titleText).toContain('Super Console');
 });
 
 // ---------------------------------------------------------------
@@ -73,7 +71,7 @@ test('ghostty-web WASM init and canvas rendering', async ({ page, authenticator 
   await waitForTerminalCanvas(page);
 
   // Canvas must have non-zero dimensions
-  const canvasBox = await page.locator('[data-terminal] canvas').boundingBox();
+  const canvasBox = await page.locator('[data-super-console] canvas').boundingBox();
   expect(canvasBox).not.toBeNull();
   expect(canvasBox.width).toBeGreaterThan(0);
   expect(canvasBox.height).toBeGreaterThan(0);
@@ -90,7 +88,7 @@ test('dark theme matching desktop aesthetic', async ({ page, authenticator }) =>
   await waitForTerminalCanvas(page);
 
   // Terminal wrapper should have dark background color
-  const wrapper = page.locator('[data-terminal]');
+  const wrapper = page.locator('[data-super-console]');
   const bgColor = await wrapper.evaluate((el) => {
     return window.getComputedStyle(el).backgroundColor;
   });
@@ -111,7 +109,7 @@ test('dark theme matching desktop aesthetic', async ({ page, authenticator }) =>
 // ---------------------------------------------------------------
 // Test: terminal window close cleans up (VAL-TERM-009 partial)
 // ---------------------------------------------------------------
-test('terminal window can be closed', async ({ page, authenticator }) => {
+test('super console window can be closed', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -123,7 +121,7 @@ test('terminal window can be closed', async ({ page, authenticator }) => {
   await closeBtn.click();
 
   // Terminal window should be removed
-  await expect(page.locator('[data-terminal-app]')).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('[data-super-console-app]')).toHaveCount(0, { timeout: 5000 });
 });
 
 // ---------------------------------------------------------------
@@ -141,17 +139,17 @@ test('minimize then restore preserves terminal', async ({ page, authenticator })
   await minimizeBtn.click();
 
   // Terminal window should be hidden (not visible)
-  await expect(page.locator('[data-terminal-app]')).not.toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-super-console-app]')).not.toBeVisible({ timeout: 5000 });
 
   // Click the minimized indicator in the prompt surface to restore
   const restoreBtn = page.locator('[data-prompt-surface] [data-window-tray-item]').first();
   await restoreBtn.click();
 
   // Terminal window should be visible again
-  await expect(page.locator('[data-terminal-app]')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-super-console-app]')).toBeVisible({ timeout: 5000 });
 
   // Canvas should still be present
-  const canvas = page.locator('[data-terminal] canvas');
+  const canvas = page.locator('[data-super-console] canvas');
   await expect(canvas).toBeVisible({ timeout: 5000 });
 });
 
@@ -177,7 +175,7 @@ test('maximize then restore preserves terminal', async ({ page, authenticator })
   await page.waitForTimeout(500);
 
   // Canvas should still be visible
-  await expect(page.locator('[data-terminal] canvas')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-super-console] canvas')).toBeVisible({ timeout: 5000 });
 
   // Restore
   const restoreBtn = page.locator('[data-window] [data-window-maximize]').first();
@@ -187,7 +185,7 @@ test('maximize then restore preserves terminal', async ({ page, authenticator })
   await page.waitForTimeout(500);
 
   // Canvas should still be visible
-  await expect(page.locator('[data-terminal] canvas')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-super-console] canvas')).toBeVisible({ timeout: 5000 });
 });
 
 // ---------------------------------------------------------------
@@ -211,7 +209,7 @@ test('terminal window drag does not disrupt rendering', async ({ page, authentic
   await page.mouse.up();
 
   // Canvas should still be visible after drag
-  await expect(page.locator('[data-terminal] canvas')).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('[data-super-console] canvas')).toBeVisible({ timeout: 3000 });
 });
 
 // ---------------------------------------------------------------
@@ -225,7 +223,7 @@ test('terminal canvas fits container without scrollbars', async ({ page, authent
   await waitForTerminalCanvas(page);
 
   // Check that the terminal container has no overflow (scrollbars)
-  const hasScrollbars = await page.locator('[data-terminal]').evaluate((el) => {
+  const hasScrollbars = await page.locator('[data-super-console]').evaluate((el) => {
     return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
   });
   expect(hasScrollbars).toBe(false);

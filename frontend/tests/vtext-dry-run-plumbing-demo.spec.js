@@ -284,18 +284,7 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'vtext', 'researcher', 'super', 'co-super']));
   expect(traceSnapshot.moments.some((moment) => /Worker update ready|Research findings ready/i.test(moment.summary))).toBe(true);
 
-  await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-  const traceApp = page.locator('[data-trace-app]').last();
-  await expect(traceApp).toBeVisible({ timeout: 10000 });
-  const trajectory = traceApp.locator(`[data-trace-trajectory-id="${conductorSubmitted.submission_id}"]`);
-  await expect(trajectory).toBeVisible({ timeout: 10000 });
-  await trajectory.click();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /conductor/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /vtext/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /researcher/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /^super\b/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /^co-super\b/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-moment]').filter({ hasText: /Worker update ready|Research findings/i }).first()).toBeVisible();
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 
   await page.waitForTimeout(1000);
   expect(manualRevision.loop_id).toBeTruthy();

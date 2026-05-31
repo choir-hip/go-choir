@@ -400,7 +400,6 @@ func newBashTool(cwd string) Tool {
 				"output":    strings.TrimSpace(output),
 			}
 			if isPersistentSuperInboxRun(ctxRunRecord(ctx)) {
-				result["next_required_tool"] = "submit_coagent_update"
 				result["next_instruction"] = "Report this command result to the addressed VText document before running more commands or ending the run. Include the command, exit code, stdout/stderr or error summary, and any blocker so VText can consume the evidence."
 			}
 			return toolResultJSON(result)

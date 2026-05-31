@@ -106,10 +106,6 @@ func newEditVTextTool(rt *Runtime) Tool {
 					result["email_draft_request"] = emailResult
 					result["email_draft_request_status"] = emailResult["status"]
 					result["next_instruction"] = "Email appagent draft handoff completed from the stored VText revision. Do not send mail directly; owner approval remains required."
-				} else {
-					result["next_required_tool"] = continuation.Tool
-					result["next_required_args"] = continuation.Args
-					result["next_instruction"] = continuation.Instruction
 				}
 			}
 			return toolResultJSON(result)
@@ -143,9 +139,6 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	if rt == nil || rt.store == nil || rec == nil || metadataStringValue(rec.Metadata, "type") != "vtext_agent_revision" {
 		return vtextRequiredContinuation{}, false
 	}
-	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
-		return vtextRequiredContinuation{}, false
-	}
 	docID := strings.TrimSpace(in.DocID)
 	baseRevisionID := strings.TrimSpace(in.BaseRevisionID)
 	if docID == "" || baseRevisionID == "" {
@@ -167,20 +160,8 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 	if prompt == "" {
 		prompt = strings.TrimSpace(baseRevision.Content)
 	}
-	if prompt == "" || vtextPromptAllowsUngroundedCreativeDraft(prompt) {
+	if prompt == "" {
 		return vtextRequiredContinuation{}, false
-	}
-	mediaSourceRefs := decodeVTextMediaSourceRefs(rec.Metadata["media_source_refs"])
-	if metadataBoolValue(rec.Metadata, "media_source_research_required") && len(mediaSourceRefs) > 0 {
-		return vtextRequiredContinuation{
-			Tool: "spawn_agent",
-			Args: map[string]any{
-				"role":       AgentProfileResearcher,
-				"channel_id": docID,
-				"objective":  buildVTextMediaSourceResearchObjective(mediaSourceRefs, prompt),
-			},
-			Instruction: "The first VText revision is now stored and new durable media source packets exist. Call spawn_agent next with the provided researcher arguments so transcript/media understanding flows through source representations before the review makes source claims. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
-		}, true
 	}
 	if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
 		if baseRevision.AuthorKind == types.AuthorUser || grounded {
@@ -199,137 +180,7 @@ func (rt *Runtime) requiredContinuationAfterVTextEdit(ctx context.Context, rec *
 			}, true
 		}
 	}
-	if baseRevision.AuthorKind != types.AuthorUser || grounded {
-		return vtextRequiredContinuation{}, false
-	}
-	needsResearch := vtextPromptNeedsResearchContinuation(prompt)
-	needsSuper := vtextPromptNeedsSuperExecution(prompt)
-	if needsResearch && (!needsSuper || vtextPromptExplicitlyAsksResearchFirst(prompt)) {
-		return vtextRequiredContinuation{
-			Tool: "spawn_agent",
-			Args: map[string]any{
-				"role":       AgentProfileResearcher,
-				"channel_id": docID,
-				"objective":  buildVTextResearchContinuationObjective(prompt),
-			},
-			Instruction: "The first VText revision is now stored, but this VText run is not complete yet. Call spawn_agent next with the provided researcher arguments before ending this run; stopping now leaves the required continuation unsatisfied and fails the run. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
-		}, true
-	}
-	if needsSuper {
-		return vtextRequiredContinuation{
-			Tool: "request_super_execution",
-			Args: map[string]any{
-				"channel_id": docID,
-				"objective":  buildVTextSuperContinuationObjective(prompt),
-			},
-			Instruction: "The first VText revision is now stored, but this VText run is not complete yet. Call request_super_execution next with the provided arguments before ending this run; stopping now leaves the required continuation unsatisfied and fails the run. Do not call edit_vtext again in this revision run. Do not claim work is underway unless this tool call succeeds.",
-		}, true
-	}
-	if needsResearch {
-		return vtextRequiredContinuation{
-			Tool: "spawn_agent",
-			Args: map[string]any{
-				"role":       AgentProfileResearcher,
-				"channel_id": docID,
-				"objective":  buildVTextResearchContinuationObjective(prompt),
-			},
-			Instruction: "The first VText revision is now stored, but this VText run is not complete yet. Call spawn_agent next with the provided researcher arguments before ending this run; stopping now leaves the required continuation unsatisfied and fails the run. Do not call edit_vtext again in this revision run. Do not say a researcher was dispatched unless this tool call succeeds.",
-		}, true
-	}
 	return vtextRequiredContinuation{}, false
-}
-
-func vtextPromptExplicitlyAsksResearchFirst(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" {
-		return false
-	}
-	for _, marker := range []string{"research", "look up", "search", "cite", "citation", "sources"} {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func vtextPromptNeedsResearchContinuation(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" {
-		return false
-	}
-	if len(extractVTextMediaSourceURLs(prompt)) > 0 {
-		return true
-	}
-	researchMarkers := []string{
-		"latest",
-		"current",
-		"now",
-		"today",
-		"yesterday",
-		"news",
-		"update",
-		"what's up",
-		"whats up",
-		"what is going on",
-		"what's going on",
-		"last night",
-		"recap",
-		"research",
-		"look up",
-		"search",
-		"cite",
-		"citation",
-		"source",
-		"sources",
-		"weather",
-		"score",
-		"scores",
-		"baseball",
-		"nba",
-		"nfl",
-		"mlb",
-		"nhl",
-	}
-	for _, marker := range researchMarkers {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func buildVTextResearchContinuationObjective(prompt string) string {
-	return strings.TrimSpace(fmt.Sprintf(`Research the user's request for VText.
-
-Temporal grounding:
-- Current UTC date/time at delegation: %s.
-- For relative-date requests such as today, tonight, yesterday, last night, latest, current, or now, anchor search queries and findings to this date/time.
-- If the user's locale or sport timezone is uncertain, state that uncertainty instead of silently choosing a stale date range.
-
-First checkpoint protocol:
-- Run exactly one web_search call before the first submit_coagent_update call. If the target URL is already known, you may run that one web_search plus one targeted fetch_url; otherwise do not issue parallel search calls before the first update.
-- As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update with kind="findings".
-- The first packet is a usable checkpoint, not a final report. Keep it concise and evidence-backed.
-- If you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.
-- If research discovers that another role is needed, include a typed capability_requests entry instead of trying to exercise that capability yourself.
-- For live scores, schedules, current rankings, weather, or similar time-sensitive lookups, make one authoritative date-specific pass first: use the current date above, name the target date/timezone uncertainty, prefer official league/event/source pages or established scoreboards, and report whether you found final results, only matchups, or a precise blocker.
-- For sports/current-score work, do not treat blocked HTML scoreboard pages as terminal by themselves. If official scoreboard fetches block, look for accessible structured league endpoints, boxscore APIs, static JSON, reputable recap pages, or established scoreboard snippets. Clearly label whether each score is verified final, live/pending, scheduled, or snippet-only.
-- After the first packet, continue only if the next pass is likely to materially change the document. Before each additional search/fetch batch, know the missing question it answers; after that batch, call submit_coagent_update again with the new material cluster or blocker before continuing.
-
-User request: %s`, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(prompt)))
-}
-
-func buildVTextSuperContinuationObjective(prompt string) string {
-	return strings.TrimSpace(fmt.Sprintf(`Execute or coordinate the user's request, send significant progress back to VText, and preserve concrete evidence for the next document revision.
-
-Reporting contract:
-- For bounded command/API/scratch work, run the requested work directly when safe.
-- Run each side-effectful command or tool payload at most once per model response; do not emit duplicate same-turn bash calls in parallel. Wait for the first result, then report it.
-- After any command result, call submit_coagent_update with kind="evidence" or kind="findings" before ending the run.
-- If the command fails, still call submit_coagent_update with the command, exit/error summary, stdout/stderr if available, and the precise blocker.
-- Do not leave VText to infer evidence from your local bash result; VText only consumes addressed coagent updates.
-
-User request: %s`, strings.TrimSpace(prompt)))
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {
@@ -510,15 +361,6 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	currentRevision, err := rt.store.GetRevision(ctx, baseRevisionID, rec.OwnerID)
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("get base revision: %w", err)
-	}
-	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
-		grounded, err := rt.channelHasGroundedHistory(ctx, rec.OwnerID, docID, time.Time{})
-		if err != nil {
-			return types.Revision{}, fmt.Errorf("check worker grounding: %w", err)
-		}
-		if !grounded {
-			return types.Revision{}, fmt.Errorf("edit_vtext requires worker grounding for this document seed; request researcher or super work first")
-		}
 	}
 
 	materialized, err := materializeVTextToolEdit(in, currentRevision)

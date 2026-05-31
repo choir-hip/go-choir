@@ -1602,8 +1602,8 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	}
 }
 
-func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
-	provider := newVTextEditToolProvider(vtextReplaceAllResult("Stale AI briefing from model weights only."))
+func TestInitialVTextRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
+	provider := newVTextEditToolProvider(vtextReplaceAllResult("First VText-authored working revision."))
 
 	h, s, rt := vtextAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's new in AI?"}`, "user-1")
@@ -1630,6 +1630,15 @@ func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
 	if decision.DocID == "" || decision.InitialLoopID == "" {
 		t.Fatalf("conductor did not create vtext route: %+v", decision)
 	}
+	if decision.CreateInitialVersion == nil || *decision.CreateInitialVersion {
+		t.Fatalf("conductor create_initial_version = %v, want false", decision.CreateInitialVersion)
+	}
+	if decision.FramingRevisionID != "" {
+		t.Fatalf("conductor framing revision = %q, want empty", decision.FramingRevisionID)
+	}
+	if decision.InitialRevisionID != decision.UserRevisionID {
+		t.Fatalf("initial revision = %q, want user seed %q", decision.InitialRevisionID, decision.UserRevisionID)
+	}
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial vtext state = %q, want completed", state)
 	}
@@ -1637,8 +1646,8 @@ func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get initial vtext run: %v", err)
 	}
-	if !metadataBoolValue(initialRun.Metadata, "requires_worker_grounding") {
-		t.Fatalf("initial vtext run requires_worker_grounding = false, metadata=%+v", initialRun.Metadata)
+	if _, ok := initialRun.Metadata["requires_worker_grounding"]; ok {
+		t.Fatalf("initial vtext run should not carry requires_worker_grounding metadata: %+v", initialRun.Metadata)
 	}
 
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
@@ -1648,71 +1657,21 @@ func TestInitialConductorSeedRejectsVTextPriorsRevision(t *testing.T) {
 	if len(revs) != 2 {
 		t.Fatalf("revision count = %d, want only v0/v1", len(revs))
 	}
+	foundVTextRevision := false
 	for _, rev := range revs {
-		if strings.Contains(rev.Content, "Stale AI briefing") {
-			t.Fatalf("vtext prior answer materialized as revision: %+v", rev)
+		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "First VText-authored working revision") {
+			foundVTextRevision = true
 		}
+	}
+	if !foundVTextRevision {
+		t.Fatalf("expected first VText-authored appagent revision, got %+v", revs)
 	}
 	mutation, err := s.GetAgentMutationByRun(context.Background(), decision.InitialLoopID)
 	if err != nil {
 		t.Fatalf("get initial mutation: %v", err)
 	}
-	if mutation == nil || mutation.State != "failed" {
-		t.Fatalf("initial vtext mutation = %+v, want failed no-write mutation", mutation)
-	}
-}
-
-func TestVTextPromptCreativeDraftClassifierKeepsResearchGrounded(t *testing.T) {
-	if !vtextPromptAllowsUngroundedCreativeDraft("tell me a story about computers") {
-		t.Fatal("expected simple story prompt to allow ungrounded creative drafting")
-	}
-	for _, prompt := range []string{
-		"what's going on with iran deal now",
-		"tell me a story about the latest iran deal now",
-		"write a cited story about today's AI news",
-	} {
-		if vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-			t.Fatalf("prompt %q should require grounded research", prompt)
-		}
-	}
-}
-
-func TestVTextCreativeDraftSkipsWorkerGroundingWithoutDolt(t *testing.T) {
-	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, true) {
-		t.Fatal("creative conductor seed should not require worker grounding")
-	}
-	if !vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, false) {
-		t.Fatal("non-creative conductor seed should require worker grounding")
-	}
-	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorUser, false) {
-		t.Fatal("user-provided text edits should not require worker grounding")
-	}
-	if vtextRevisionRequiresWorkerGrounding(true, types.AuthorAppAgent, false) {
-		t.Fatal("already-grounded documents should not require fresh worker grounding")
-	}
-}
-
-func TestVTextPromptAllowsCreativeDraftWithoutWorkerGrounding(t *testing.T) {
-	current := types.Revision{
-		DocID:      "doc-story",
-		RevisionID: "rev-story",
-		Content:    "# tell me a story\n\ntell me a story about computers",
-		AuthorKind: types.AuthorAppAgent,
-	}
-	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
-		Intent: "initial_conductor_workflow",
-		Prompt: "tell me a story about computers",
-	}, "", false, true, nil, nil)
-
-	for _, want := range []string{
-		"The current conductor seed is for a creative/non-factual draft",
-		"You may call edit_vtext to produce the requested creative document without worker grounding",
-		"Do not spawn researcher or request super for this creative draft",
-		"Do not add factual, current-events, citation, coding, or product claims unless worker evidence exists",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("creative vtext prompt missing %q:\n%s", want, prompt)
-		}
+	if mutation == nil || mutation.State != "completed" {
+		t.Fatalf("initial vtext mutation = %+v, want completed mutation", mutation)
 	}
 }
 
@@ -1726,12 +1685,11 @@ func TestVTextPromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: "what's going on with iran deal now",
-	}, "", false, false, nil, nil)
+	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"For factual/current claims, call spawn_agent with role=\"researcher\"",
+		"For factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\"",
 		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
-		"Do not route them to request_super_execution",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("current-events vtext prompt missing %q:\n%s", want, prompt)
@@ -2869,7 +2827,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 
 	prompt := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
-	}, "", true, false, recent, nil)
+	}, "", true, recent, nil)
 
 	for _, want := range []string{
 		"At least one recent worker message says a delegated worker is still active",
@@ -4067,7 +4025,7 @@ func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestEditVTextInitialWorkingRevisionRequiresActualContinuation(t *testing.T) {
+func TestEditVTextInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *testing.T) {
 	_, s, rt := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
 	doc := types.Document{
@@ -4105,15 +4063,14 @@ func TestEditVTextInitialWorkingRevisionRequiresActualContinuation(t *testing.T)
 		AgentProfile: AgentProfileVText,
 		AgentRole:    AgentProfileVText,
 		Metadata: map[string]any{
-			"type":                      "vtext_agent_revision",
-			"doc_id":                    doc.DocID,
-			"current_revision_id":       userRev.RevisionID,
-			"original_prompt":           "nba update",
-			"requires_worker_grounding": false,
-			runMetadataAgentID:          "vtext:" + doc.DocID,
-			runMetadataChannelID:        doc.DocID,
-			runMetadataAgentRole:        AgentProfileVText,
-			runMetadataAgentProfile:     AgentProfileVText,
+			"type":                  "vtext_agent_revision",
+			"doc_id":                doc.DocID,
+			"current_revision_id":   userRev.RevisionID,
+			"original_prompt":       "nba update",
+			runMetadataAgentID:      "vtext:" + doc.DocID,
+			runMetadataChannelID:    doc.DocID,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentProfile: AgentProfileVText,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -4143,21 +4100,8 @@ func TestEditVTextInitialWorkingRevisionRequiresActualContinuation(t *testing.T)
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	if editResult["next_required_tool"] != "spawn_agent" {
-		t.Fatalf("next_required_tool = %v, want spawn_agent; result=%s", editResult["next_required_tool"], editRaw)
-	}
-	args, _ := editResult["next_required_args"].(map[string]any)
-	if args["role"] != AgentProfileResearcher || args["channel_id"] != doc.DocID {
-		t.Fatalf("next_required_args = %+v, want researcher on doc channel", args)
-	}
-	instruction, _ := editResult["next_instruction"].(string)
-	for _, want := range []string{
-		"Call spawn_agent next",
-		"Do not call edit_vtext again in this revision run",
-	} {
-		if !strings.Contains(instruction, want) {
-			t.Fatalf("next_instruction missing %q: %q", want, instruction)
-		}
+	if _, ok := editResult["next_required_tool"]; ok {
+		t.Fatalf("edit_vtext must not smuggle a required continuation; result=%s", editRaw)
 	}
 
 	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{

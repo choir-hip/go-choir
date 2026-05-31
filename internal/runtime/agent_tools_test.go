@@ -239,8 +239,8 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatalf("decode bash result: %v", err)
 	}
-	if got := fmt.Sprint(payload["next_required_tool"]); got != "submit_coagent_update" {
-		t.Fatalf("next_required_tool = %q, want submit_coagent_update; payload=%#v", got, payload)
+	if _, ok := payload["next_required_tool"]; ok {
+		t.Fatalf("next_required_tool should be omitted from bash result; payload=%#v", payload)
 	}
 	if instruction := fmt.Sprint(payload["next_instruction"]); !strings.Contains(instruction, "Report this command result to the addressed VText document") {
 		t.Fatalf("next_instruction = %q", instruction)

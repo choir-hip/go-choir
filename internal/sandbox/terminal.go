@@ -2,10 +2,12 @@ package sandbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty/v2"
@@ -21,10 +23,10 @@ import (
 //   - {"type":"output","data":"..."} — PTY stdout
 //   - {"type":"error","data":"..."} — error message
 type TerminalMessage struct {
-	Type  string `json:"type"`           // "input", "resize", "output", "error"
-	Data  string `json:"data,omitempty"` // payload for input/output/error
-	Cols  uint16 `json:"cols,omitempty"` // columns for resize
-	Rows  uint16 `json:"rows,omitempty"` // rows for resize
+	Type string `json:"type"`           // "input", "resize", "output", "error"
+	Data string `json:"data,omitempty"` // payload for input/output/error
+	Cols uint16 `json:"cols,omitempty"` // columns for resize
+	Rows uint16 `json:"rows,omitempty"` // rows for resize
 }
 
 // TerminalSession represents a single PTY session associated with a WebSocket
@@ -60,9 +62,12 @@ func (tm *TerminalManager) Sessions() int {
 
 // TerminalHandler provides the WebSocket handler for terminal PTY sessions.
 type TerminalHandler struct {
-	manager  *TerminalManager
-	upgrader websocket.Upgrader
-	shell    string // path to the shell binary
+	manager   *TerminalManager
+	upgrader  websocket.Upgrader
+	shell     string // path to the shell binary for legacy tests
+	command   []string
+	rootDir   string
+	singleton bool
 }
 
 // NewTerminalHandler creates a new terminal handler. It looks for bash first,
@@ -79,6 +84,27 @@ func NewTerminalHandler() *TerminalHandler {
 			},
 		},
 		shell: shell,
+	}
+}
+
+// NewSuperConsoleHandler creates a singleton Super Console handler backed by an
+// out-of-process zot session. It intentionally does not expose a raw shell.
+func NewSuperConsoleHandler(rootDir string) *TerminalHandler {
+	exe, _ := os.Executable()
+	command := []string{exe, "zot-session"}
+	if override := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PATH")); override != "" {
+		command = []string{override}
+	}
+	return &TerminalHandler{
+		manager: NewTerminalManager(),
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
+		command:   command,
+		rootDir:   rootDir,
+		singleton: true,
 	}
 }
 
@@ -108,15 +134,15 @@ func (th *TerminalHandler) HandleTerminalWS(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	session, err := th.newSession(conn)
+	session, err := th.newSession(conn, user)
 	if err != nil {
-		log.Printf("terminal: failed to create PTY session: %v", err)
-		th.sendError(conn, "failed to start shell: "+err.Error())
+		log.Printf("super console: failed to create PTY session: %v", err)
+		th.sendError(conn, "failed to start zot: "+err.Error())
 		_ = conn.Close()
 		return
 	}
 
-	log.Printf("terminal: session %s started for user %s (pid=%d)", session.id, user, session.cmd.Process.Pid)
+	log.Printf("super console: session %s started for user %s (pid=%d)", session.id, user, session.cmd.Process.Pid)
 
 	// Start PTY output reader in a goroutine.
 	ptyDone := make(chan struct{})
@@ -151,22 +177,29 @@ func (th *TerminalHandler) HandleTerminalWS(w http.ResponseWriter, r *http.Reque
 	delete(th.manager.sessions, session.id)
 	th.manager.mu.Unlock()
 
-	log.Printf("terminal: session %s cleaned up", session.id)
+	log.Printf("super console: session %s cleaned up", session.id)
 }
 
 // newSession creates a new PTY session and registers it with the manager.
-func (th *TerminalHandler) newSession(conn *websocket.Conn) (*TerminalSession, error) {
-	// Create the shell command.
-	cmd := exec.Command(th.shell)
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+func (th *TerminalHandler) newSession(conn *websocket.Conn, user string) (*TerminalSession, error) {
+	id := generateSessionID()
+	th.manager.mu.Lock()
+	if th.singleton && len(th.manager.sessions) > 0 {
+		th.manager.mu.Unlock()
+		return nil, fmt.Errorf("super console already has an active zot session")
+	}
+	th.manager.mu.Unlock()
+
+	cmd, err := th.sessionCommand(id, user)
+	if err != nil {
+		return nil, err
+	}
 
 	// Start the command with a PTY.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return nil, err
 	}
-
-	id := generateSessionID()
 	session := &TerminalSession{
 		id:   id,
 		cmd:  cmd,
@@ -180,6 +213,30 @@ func (th *TerminalHandler) newSession(conn *websocket.Conn) (*TerminalSession, e
 	th.manager.mu.Unlock()
 
 	return session, nil
+}
+
+func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, error) {
+	if len(th.command) > 0 {
+		cmd := exec.Command(th.command[0], th.command[1:]...)
+		rootDir := strings.TrimSpace(th.rootDir)
+		if rootDir == "" {
+			rootDir = "."
+		}
+		cmd.Dir = rootDir
+		cmd.Env = append(os.Environ(),
+			"TERM=xterm-256color",
+			"ZOT_SESSION_ID="+sessionID,
+			"ZOT_ROOT_DIR="+rootDir,
+			"ZOT_USER_ID="+user,
+		)
+		return cmd, nil
+	}
+	if strings.TrimSpace(th.shell) == "" {
+		return nil, fmt.Errorf("no zot command configured")
+	}
+	cmd := exec.Command(th.shell)
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	return cmd, nil
 }
 
 // readPTY reads output from the PTY and sends it to the WebSocket client.
@@ -274,7 +331,7 @@ func nextSessionID() string {
 }
 
 func formatSessionID(n uint64) string {
-	return "term-" + uint64ToDec(n)
+	return "zot-" + uint64ToDec(n)
 }
 
 func uint64ToDec(n uint64) string {
@@ -294,6 +351,15 @@ func uint64ToDec(n uint64) string {
 
 // RegisterTerminalRoutes registers the terminal WebSocket route on the given
 // server.
-func RegisterTerminalRoutes(s interface{ HandleFunc(string, http.HandlerFunc) }, th *TerminalHandler) {
+func RegisterTerminalRoutes(s interface {
+	HandleFunc(string, http.HandlerFunc)
+}, th *TerminalHandler) {
 	s.HandleFunc("/api/terminal/ws", th.HandleTerminalWS)
+}
+
+// RegisterSuperConsoleRoutes registers the singleton Super Console route.
+func RegisterSuperConsoleRoutes(s interface {
+	HandleFunc(string, http.HandlerFunc)
+}, th *TerminalHandler) {
+	s.HandleFunc("/api/super-console/ws", th.HandleTerminalWS)
 }

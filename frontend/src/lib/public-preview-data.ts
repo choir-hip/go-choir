@@ -218,17 +218,17 @@ export const previewPodcastItems = [
 
 export const previewFeaturePackages = [
   {
-    package_id: 'preview-trace-swimlanes',
-    app_id: 'trace',
+    package_id: 'preview-super-console-zot',
+    app_id: 'super-console',
     manifest_json: JSON.stringify({
-      title: 'Trace swimlanes',
-      summary: 'Shows how agent and tool lanes will appear when private trajectories are available.',
+      title: 'Super Console zot session',
+      summary: 'Shows the singleton repair console shape without exposing private machine state.',
     }),
     provenance_refs_json: JSON.stringify({
       screenshot: ['local-preview'],
       narrative: ['Local UI preview only'],
     }),
-    candidate_source_ref: 'preview-trace-swimlanes',
+    candidate_source_ref: 'preview-super-console-zot',
     source_runtime_artifact_digest: 'local-preview',
     source_ui_artifact_digest: 'local-preview',
   },

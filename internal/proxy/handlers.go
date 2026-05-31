@@ -426,8 +426,10 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/ws":
 		h.HandleWS(w, r)
 		return
+	case path == "/api/super-console/ws":
+		h.HandleSuperConsoleWS(w, r)
 	case path == "/api/terminal/ws":
-		h.HandleTerminalWS(w, r)
+		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
 		return
 	case path == "/api/platform/vtext/publications":
 		h.HandleVTextPublication(w, r)
@@ -566,12 +568,12 @@ func (h *Handler) sandboxWSURL() string {
 	return sandboxWSURLForBase(h.sandboxURL.String(), "")
 }
 
-// HandleTerminalWS handles GET /api/terminal/ws. It validates the access JWT
+// HandleSuperConsoleWS handles GET /api/super-console/ws. It validates the access JWT
 // cookie, denies requests with missing or invalid auth without upgrading, and
 // relays WebSocket frames bidirectionally between the client and the sandbox
-// terminal PTY endpoint. This allows the browser to connect to the sandbox's
-// PTY shell sessions through the auth-gated proxy (VAL-TERM-004, VAL-TERM-014).
-func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
+// singleton zot PTY endpoint. This allows the browser to connect to zot through
+// the auth-gated proxy without exposing a raw terminal app.
+func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Validate auth BEFORE upgrading.
 	authResult, err := h.validateAccessJWT(r)
 	if err != nil {
@@ -583,7 +585,7 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	desktopID := requestDesktopID(r)
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
-		log.Printf("proxy terminal WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		log.Printf("proxy super console WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
 		return
 	}
@@ -596,7 +598,7 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = clientConn.Close() }()
 
 	// Step 4: Dial the sandbox terminal WebSocket endpoint.
-	terminalWSURL := h.terminalWSURLForTarget(sandboxURL, r.URL.RawQuery)
+	terminalWSURL := h.superConsoleWSURLForTarget(sandboxURL, r.URL.RawQuery)
 	sandboxHeader := http.Header{}
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
@@ -605,7 +607,7 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
 	if err != nil {
-		log.Printf("proxy terminal WS: dial sandbox %s: %v", terminalWSURL, err)
+		log.Printf("proxy super console WS: dial sandbox %s: %v", terminalWSURL, err)
 		_ = clientConn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
 		return
@@ -617,12 +619,12 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, sandboxConn, "client->terminal")
+		h.relayFrames(clientConn, sandboxConn, "client->super-console")
 	}()
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(sandboxConn, clientConn, "terminal->client")
+		h.relayFrames(sandboxConn, clientConn, "super-console->client")
 	}()
 
 	<-relayDone
@@ -635,12 +637,12 @@ func (h *Handler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	<-relayDone
 }
 
-// terminalWSURLForTarget derives the terminal WebSocket URL for a specific
+// superConsoleWSURLForTarget derives the Super Console WebSocket URL for a specific
 // sandbox target URL.
-func (h *Handler) terminalWSURLForTarget(targetURL, rawQuery string) string {
+func (h *Handler) superConsoleWSURLForTarget(targetURL, rawQuery string) string {
 	u, err := url.Parse(targetURL)
 	if err != nil {
-		return "ws://127.0.0.1:8085/api/terminal/ws"
+		return "ws://127.0.0.1:8085/api/super-console/ws"
 	}
 	switch u.Scheme {
 	case "https":
@@ -648,7 +650,7 @@ func (h *Handler) terminalWSURLForTarget(targetURL, rawQuery string) string {
 	case "http":
 		u.Scheme = "ws"
 	}
-	u.Path = "/api/terminal/ws"
+	u.Path = "/api/super-console/ws"
 	u.RawQuery = rawQuery
 	return u.String()
 }

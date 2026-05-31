@@ -107,17 +107,17 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   const surface = page.locator('[data-desktop-surface]');
   await expect(surface).toBeVisible();
 
-  // Should have exactly 7 desktop icons (Files, Browser, Terminal, Settings, VText, Trace, Podcast)
+  // Trace is unshipped and Terminal is replaced by singleton Super Console.
   const icons = surface.locator('[data-desktop-icon]');
-  await expect(icons).toHaveCount(7);
+  await expect(icons).toHaveCount(8);
 
   // Verify each app icon is present
   await expect(surface.locator('[data-desktop-icon-id="files"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="browser"]')).toBeVisible();
-  await expect(surface.locator('[data-desktop-icon-id="terminal"]')).toBeVisible();
+  await expect(surface.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="settings"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="vtext"]')).toBeVisible();
-  await expect(surface.locator('[data-desktop-icon-id="trace"]')).toBeVisible();
+  await expect(surface.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
   await expect(surface.locator('[data-desktop-icon-id="podcast"]')).toBeVisible();
 
   // Each icon should have an emoji and a label
@@ -226,18 +226,14 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 
   await page.locator('[data-start-button]').click();
-  await page.locator('[data-start-app-id="trace"]').click();
+  await expect(page.locator('[data-start-app-id="trace"]')).toHaveCount(0);
+  await page.locator('[data-start-app-id="super-console"]').click();
 
-  const traceApp = page.locator('[data-trace-app]').last();
-  await expect(traceApp).toBeVisible({ timeout: 5000 });
-  await expect(traceApp.locator('[data-trace-guest]')).toBeVisible();
-  await expect(traceApp.locator('[data-trace-guest-sidebar]')).toBeVisible();
+  const superConsole = page.locator('[data-super-console-app]').last();
+  await expect(superConsole).toBeVisible({ timeout: 5000 });
+  await expect(superConsole.locator('[data-super-console-preview]')).toBeVisible();
   expect(protectedAppRequests).toEqual([]);
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
-
-  await traceApp.locator('[data-trace-guest-sign-in]').click();
-  await expect(page.locator('[data-auth-overlay]')).toBeVisible();
-  await expect(page.locator('[data-auth-entry]')).toBeVisible();
 });
 
 test('mobile prompt-surface restore raises the selected app above the current window', async ({ page, authenticator }) => {
@@ -337,47 +333,23 @@ test('VText opens near full mobile workspace and clears the prompt bar', async (
 // ---------------------------------------------------------------
 // Test: Trace appears as a debugging desktop app
 // ---------------------------------------------------------------
-test('Trace appears as a debugging desktop app', async ({ page, authenticator }) => {
+test('Trace is unshipped and Super Console replaces Terminal', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const traceIcon = page.locator('[data-desktop-icon-id="trace"]');
-  await expect(traceIcon).toBeVisible();
-  await expect(traceIcon).toContainText('Trace');
-
-  await traceIcon.dblclick();
-
-  const traceWindow = page.locator('[data-trace-window]');
-  await expect(traceWindow).toBeVisible({ timeout: 5000 });
-  await expect(traceWindow.locator('[data-trace-app]')).toBeVisible();
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
+  await expect(page.locator('[data-desktop-icon-id="terminal"]')).toHaveCount(0);
+  await expect(page.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
 });
 
-test('Trace opens a prompt-bar trajectory without stale route calls', async ({ page, authenticator }) => {
+test('Super Console opens as the singleton repair app', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const staleRequests = [];
-  const failedTraceRequests = [];
-  page.on('response', (response) => {
-    const url = new URL(response.url());
-    if (['/api/agent/topology', '/api/prompts', '/api/events'].includes(url.pathname)) {
-      staleRequests.push(url.pathname);
-    }
-    if (url.pathname.startsWith('/api/trace/') && response.status() >= 400) {
-      failedTraceRequests.push(`${url.pathname}:${response.status()}`);
-    }
-  });
-
-  const prompt = `Trace smoke ${Date.now()}`;
-  await page.locator('[data-prompt-input]').fill(prompt);
-  await page.locator('[data-prompt-input]').press('Enter');
-  await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 10000 });
-
-  await openAppViaIcon(page, 'trace');
-  const traceWindow = page.locator('[data-trace-window]').last();
-  await expect(traceWindow.locator('[data-trace-trajectory]').filter({ hasText: prompt })).toBeVisible({ timeout: 10000 });
-  expect(staleRequests).toHaveLength(0);
-  expect(failedTraceRequests).toHaveLength(0);
+  await openAppViaIcon(page, 'super-console');
+  await openAppViaIcon(page, 'super-console');
+  await expect(page.locator('[data-super-console-app]')).toHaveCount(1);
+  await expect(page.locator('[data-super-console]')).toBeVisible();
 });
 
 // ---------------------------------------------------------------
@@ -518,8 +490,8 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
 
   expect(decision.doc_id).toBeTruthy();
   expect(decision.user_revision_id).toBeTruthy();
-  expect(decision.framing_revision_id).toBeTruthy();
-  expect(decision.initial_revision_id).toBe(decision.framing_revision_id);
+  expect(decision.framing_revision_id || '').toBe('');
+  expect(decision.initial_revision_id).toBe(decision.user_revision_id);
   expect(decision.initial_loop_id || '').toBeTruthy();
 
   const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}`);
@@ -527,29 +499,14 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
 
   const revisionsResponse = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(decision.doc_id)}/revisions`);
   const revisions = revisionsResponse.revisions;
-  expect(revisions.length).toBeGreaterThanOrEqual(2);
+  expect(revisions.length).toBeGreaterThanOrEqual(1);
 
   const userRevision = revisions.find((revision) => revision.revision_id === decision.user_revision_id);
-  const framingRevision = revisions.find((revision) => revision.revision_id === decision.framing_revision_id);
   expect(userRevision).toBeTruthy();
-  expect(framingRevision).toBeTruthy();
   expect(userRevision.author_kind).toBe('user');
   expect(userRevision.content).toBe(prompt);
   expect(userRevision.metadata.source).toBe('user_prompt');
   expect(userRevision.metadata.vtext_version).toBe('v0');
-
-  expect(framingRevision.author_kind).toBe('appagent');
-  expect(framingRevision.author_label).toBe('conductor');
-  expect(framingRevision.parent_revision_id).toBe(userRevision.revision_id);
-  expect(framingRevision.content).toContain(prompt);
-  expect(framingRevision.content).not.toContain('Conductor framing');
-  expect(framingRevision.content).not.toContain('Use this vtext');
-  expect(framingRevision.content).not.toContain('User request:');
-  expect(framingRevision.content).not.toContain('Current requirements:');
-  expect(framingRevision.content).not.toContain('Grounding status:');
-  expect(framingRevision.metadata.source).toBe('initial_vtext_seed');
-  expect(framingRevision.metadata.vtext_version).toBe('v1');
-  expect(framingRevision.metadata.user_revision_id).toBe(userRevision.revision_id);
 
   const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
   expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);

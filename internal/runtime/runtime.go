@@ -1046,7 +1046,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if metadataString(rec.Metadata, "type") == "vtext_agent_revision" {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
-			"edit_vtext",
 			"spawn_agent",
 			"request_super_execution",
 			"request_email_draft",
@@ -1333,8 +1332,9 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 		if strings.TrimSpace(decision.SeedPrompt) == "" {
 			decision.SeedPrompt = seedPrompt
 		}
-		if decision.App == AgentProfileVText && decision.CreateInitialVersion == nil {
+		if decision.App == AgentProfileVText {
 			decision.CreateInitialVersion = ptrBool(false)
+			decision.InitialContent = ""
 		}
 		if rec != nil && rec.Metadata != nil {
 			if decision.SourceURL == "" {
@@ -1404,7 +1404,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 	if rec == nil {
 		out, err := json.Marshal(defaultDecision)
 		if err != nil {
-			return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","initial_content":"","create_initial_version":true}`
+			return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","create_initial_version":false}`
 		}
 		return string(out)
 	}
@@ -1436,7 +1436,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 
 	out, err := json.Marshal(defaultDecision)
 	if err != nil {
-		return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","initial_content":"","create_initial_version":true}`
+		return `{"action":"open_app","app":"vtext","title":"VText","seed_prompt":"","create_initial_version":false}`
 	}
 	return string(out)
 }
@@ -1524,11 +1524,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 
 	now := time.Now().UTC()
 	decision := fillConductorDecisionFromRun(rec, parsedDecision)
-	initialContent = strings.TrimSpace(initialContent)
-	createInitialVersion := decision.CreateInitialVersion != nil && *decision.CreateInitialVersion
-	if createInitialVersion && initialContent == "" {
-		initialContent = fallbackPromptBarInitialContent(rec, decision)
-	}
+	decision.CreateInitialVersion = ptrBool(false)
+	decision.InitialContent = ""
+	initialContent = ""
 	doc := types.Document{
 		DocID:     uuid.New().String(),
 		OwnerID:   rec.OwnerID,
@@ -1544,7 +1542,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 
 	userRevisionID := uuid.New().String()
-	framingRevisionID := uuid.New().String()
 	userRevMeta, _ := json.Marshal(map[string]any{
 		"seed_prompt":         decision.SeedPrompt,
 		"conductor_loop_id":   rec.RunID,
@@ -1570,36 +1567,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, userRev)
 
 	doc.CurrentRevisionID = userRev.RevisionID
-	if createInitialVersion && initialContent != "" {
-		framingRevMeta, _ := json.Marshal(map[string]any{
-			"seed_prompt":         decision.SeedPrompt,
-			"conductor_loop_id":   rec.RunID,
-			runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
-			"created_from":        "conductor",
-			"source":              "initial_vtext_seed",
-			"vtext_version":       "v1",
-			"user_revision_id":    userRevisionID,
-		})
-		framingRev := types.Revision{
-			RevisionID:       framingRevisionID,
-			DocID:            doc.DocID,
-			OwnerID:          rec.OwnerID,
-			AuthorKind:       types.AuthorAppAgent,
-			AuthorLabel:      AgentProfileConductor,
-			Content:          initialContent,
-			Citations:        json.RawMessage("[]"),
-			Metadata:         framingRevMeta,
-			ParentRevisionID: userRevisionID,
-			CreatedAt:        now.Add(time.Nanosecond),
-		}
-		if err := rt.store.CreateRevision(ctx, framingRev); err != nil {
-			return conductorDecision{}, fmt.Errorf("create initial vtext seed revision: %w", err)
-		}
-		rt.emitVTextDocumentRevisionEventForRun(ctx, rec, framingRev)
-		doc.CurrentRevisionID = framingRev.RevisionID
-		decision.FramingRevisionID = framingRev.RevisionID
-		decision.InitialRevisionID = framingRev.RevisionID
-	}
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
 		AgentID:   "vtext:" + doc.DocID,
 		OwnerID:   rec.OwnerID,
@@ -1618,7 +1585,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 
 	decision.DocID = doc.DocID
 	decision.UserRevisionID = userRev.RevisionID
-	decision.InitialContent = initialContent
 	if decision.InitialRevisionID == "" {
 		decision.InitialRevisionID = userRev.RevisionID
 	}
@@ -1645,9 +1611,6 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	}
 	rec.Metadata["doc_id"] = decision.DocID
 	rec.Metadata["user_revision_id"] = decision.UserRevisionID
-	if decision.FramingRevisionID != "" {
-		rec.Metadata["framing_revision_id"] = decision.FramingRevisionID
-	}
 	rec.Metadata["initial_revision_id"] = decision.InitialRevisionID
 	rec.Metadata["initial_loop_id"] = decision.InitialLoopID
 	if out, err := json.Marshal(decision); err == nil {
@@ -1694,36 +1657,7 @@ func initialVTextToolChoice(rec *types.RunRecord) string {
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	if metadataBoolValue(rec.Metadata, "requires_worker_grounding") {
-		if vtextInitialRequestNeedsSuper(rec) {
-			return exactRequiredToolChoice("request_super_execution")
-		}
-		return exactRequiredToolChoice("spawn_agent")
-	}
 	return exactRequiredToolChoice("edit_vtext")
-}
-
-func vtextInitialRequestNeedsSuper(rec *types.RunRecord) bool {
-	if rec == nil {
-		return false
-	}
-	return vtextPromptNeedsSuperExecution(vtextPromptTextFromRun(rec))
-}
-
-func vtextPromptTextFromRun(rec *types.RunRecord) string {
-	if rec == nil {
-		return ""
-	}
-	var parts []string
-	for _, key := range []string{"original_prompt", "request_intent", "seed_prompt"} {
-		if value := metadataStringValue(rec.Metadata, key); value != "" {
-			parts = append(parts, value)
-		}
-	}
-	if strings.TrimSpace(rec.Prompt) != "" {
-		parts = append(parts, rec.Prompt)
-	}
-	return strings.Join(parts, "\n")
 }
 
 func vtextPromptNeedsSuperExecution(prompt string) bool {

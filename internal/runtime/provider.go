@@ -113,17 +113,12 @@ done:
 		result == "Task completed successfully (stub provider)." {
 		seedPrompt := conductorSeedPrompt(task)
 		title := buildInitialVTextTitle(seedPrompt, "")
-		initialContent := "# " + title + "\n\n" + seedPrompt
-		if seedPrompt == "" {
-			initialContent = "# Working Document\n\nStub conductor-created initial document."
-		}
 		decision, _ := json.Marshal(map[string]any{
 			"action":                 "open_app",
 			"app":                    AgentProfileVText,
 			"title":                  title,
 			"seed_prompt":            seedPrompt,
-			"initial_content":        initialContent,
-			"create_initial_version": true,
+			"create_initial_version": false,
 		})
 		result = string(decision)
 	}

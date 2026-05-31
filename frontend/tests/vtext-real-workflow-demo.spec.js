@@ -267,13 +267,5 @@ test('real vtext workflow demo uses live LLM, search, generated artifact, and ve
     (result.output?.command || '').includes(verifyPath)
   )).toBe(true);
 
-  await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-  const traceApp = page.locator('[data-trace-app]').last();
-  await expect(traceApp).toBeVisible({ timeout: 10000 });
-  const trajectory = traceApp.locator(`[data-trace-trajectory-id="${conductorSubmitted.submission_id}"]`);
-  await expect(trajectory).toBeVisible({ timeout: 10000 });
-  await trajectory.click();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /vtext/i })).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /researcher/i }).first()).toBeVisible();
-  await expect(traceApp.locator('[data-trace-agent-node]').filter({ hasText: /^super\b/i }).first()).toBeVisible();
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 });

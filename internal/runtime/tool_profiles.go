@@ -362,7 +362,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
 		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id and either a precise edit list or a complete replacement document.")
-		b.WriteString("\nAfter edit_vtext succeeds, end the turn unless the tool result explicitly names a next_required_tool. Do not call edit_vtext twice in the same revision run.")
+		b.WriteString("\nAfter edit_vtext succeeds, do not call edit_vtext again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. VText owns the first useful document revision.")
 		b.WriteString("\nIf there are no worker messages yet, first call edit_vtext with a short owner-readable working response, then start the needed researcher and/or super work before ending the run.")

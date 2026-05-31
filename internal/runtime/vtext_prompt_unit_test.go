@@ -7,85 +7,25 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestVTextPromptCreativeDraftFastPath(t *testing.T) {
-	prompt := "tell me a story about computers"
-	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-		t.Fatalf("expected %q to allow an ungrounded creative draft", prompt)
-	}
-	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, true) {
-		t.Fatal("creative conductor seed should not require worker grounding")
-	}
-
-	current := types.Revision{
-		DocID:      "doc-story",
-		RevisionID: "rev-story",
-		Content:    "# tell me a story\n\ntell me a story about computers",
-		AuthorKind: types.AuthorAppAgent,
-	}
-	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
-		Intent: "initial_conductor_workflow",
-		Prompt: prompt,
-	}, "", false, true, nil, nil)
-
-	for _, want := range []string{
-		"You may call edit_vtext to produce the requested creative document without worker grounding",
-		"Do not spawn researcher or request super for this creative draft",
-	} {
-		if !strings.Contains(request, want) {
-			t.Fatalf("creative vtext prompt missing %q:\n%s", want, request)
-		}
-	}
-}
-
-func TestVTextPromptShortStoryFastPath(t *testing.T) {
-	prompt := "Tell me a short story about a careful computer. Write it as a VText document, under 120 words."
-	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-		t.Fatalf("expected %q to allow an ungrounded creative draft", prompt)
-	}
-	if vtextRevisionRequiresWorkerGrounding(false, types.AuthorAppAgent, true) {
-		t.Fatal("short story conductor seed should not require worker grounding")
-	}
-}
-
-func TestVTextPromptStoryWithCurrentFactsRequiresGrounding(t *testing.T) {
-	prompt := "What's the story with the Iran deal now?"
-	if vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-		t.Fatalf("%q should require grounded research", prompt)
-	}
-}
-
-func TestVTextPromptExplicitSentenceFastPath(t *testing.T) {
-	prompt := "write one short sentence that says VText wrapper cleanup works"
-	if !vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-		t.Fatalf("expected %q to allow direct drafting without worker grounding", prompt)
-	}
-}
-
-func TestVTextPromptCurrentEventsRequiresResearcher(t *testing.T) {
-	prompt := "what's going on with iran deal now"
-	if vtextPromptAllowsUngroundedCreativeDraft(prompt) {
-		t.Fatalf("%q should require grounded research", prompt)
-	}
-
+func TestVTextPromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-current-events",
 		RevisionID: "rev-current-events",
-		Content:    prompt,
-		AuthorKind: types.AuthorAppAgent,
+		Content:    "what's going on with iran deal now",
+		AuthorKind: types.AuthorUser,
 	}
 	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
-		Prompt: prompt,
-	}, "", false, false, nil, nil)
+		Prompt: "what's going on with iran deal now",
+	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"For factual/current claims, write a brief working revision with explicit uncertainty, then call spawn_agent with role=\"researcher\"",
-		"Do not call edit_vtext with factual claims from model priors",
-		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work",
-		"Do not route them to request_super_execution",
+		"Because VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.",
+		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.",
+		"Worker messages can wake later vtext runs and trigger the next revision.",
 	} {
 		if !strings.Contains(request, want) {
-			t.Fatalf("current-events vtext prompt missing %q:\n%s", want, request)
+			t.Fatalf("initial vtext prompt missing %q:\n%s", want, request)
 		}
 	}
 }
@@ -100,7 +40,7 @@ func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T
 	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: "nba update",
-	}, "", false, false, nil, nil)
+	}, "", false, nil, nil)
 
 	for _, want := range []string{
 		"the first revision should be a short working brief with explicit uncertainty and no ungrounded claims",
@@ -131,7 +71,7 @@ func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 	}, vtextAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
 		Prompt: "Last Night in Baseball",
-	}, "", true, false, recent, nil)
+	}, "", true, recent, nil)
 
 	for _, want := range []string{
 		"This VText run was woken by worker findings",
@@ -159,7 +99,7 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 	request := buildAgentRevisionRequest(current, nil, nil, vtextAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: "The final brief must have exactly these numbered section headings and sections 1, 7, and 12 must contain sentences beginning SECTION 1 UPDATE:, SECTION 7 UPDATE:, and SECTION 12 UPDATE:. The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
-	}, "", false, false, nil, nil)
+	}, "", false, nil, nil)
 
 	for _, want := range []string{
 		"Hard requirements checklist for the next canonical revision:",
@@ -199,7 +139,7 @@ func TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t 
 		"seed_prompt": "The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
 	}, vtextAgentRevisionRequest{
 		Intent: "integrate_super_evidence",
-	}, "", true, false, recent, nil)
+	}, "", true, recent, nil)
 
 	for _, want := range []string{
 		"Final command evidence label: [CMD] (final-only:",
@@ -230,7 +170,7 @@ func TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T
 		"seed_prompt": "Research VText durable drafts and run exactly one command: printf \"durable draft\" | shasum -a 256. The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
 	}, vtextAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
-	}, "", true, false, recent, nil)
+	}, "", true, recent, nil)
 
 	for _, want := range []string{
 		"recent worker messages do not include a super delivery",
@@ -246,63 +186,42 @@ func TestVTextPromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T
 	}
 }
 
-func TestVTextSuperContinuationObjectiveRequiresCoagentUpdate(t *testing.T) {
-	objective := buildVTextSuperContinuationObjective("run printf test")
-	for _, want := range []string{
-		"Reporting contract",
-		"Run each side-effectful command or tool payload at most once per model response",
-		"do not emit duplicate same-turn bash calls in parallel",
-		"After any command result, call submit_coagent_update",
-		"If the command fails, still call submit_coagent_update",
-		"VText only consumes addressed coagent updates",
-	} {
-		if !strings.Contains(objective, want) {
-			t.Fatalf("super continuation objective missing %q:\n%s", want, objective)
-		}
-	}
-}
-
 func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 	tests := []struct {
 		name     string
 		metadata map[string]any
-		prompt   string
 		want     string
 	}{
 		{
-			name: "current factual work starts researcher",
+			name: "current factual work starts with vtext edit",
 			metadata: map[string]any{
-				"type":                      "vtext_agent_revision",
-				"requires_worker_grounding": true,
-				"original_prompt":           "what is the weather in boston now",
+				"type":            "vtext_agent_revision",
+				"original_prompt": "what is the weather in boston now",
 			},
-			want: "function:spawn_agent",
+			want: "function:edit_vtext",
 		},
 		{
-			name: "mutable product work requests super",
+			name: "mutable product work starts with vtext edit",
 			metadata: map[string]any{
-				"type":                      "vtext_agent_revision",
-				"requires_worker_grounding": true,
-				"original_prompt":           "debug and fix the runtime gateway",
+				"type":            "vtext_agent_revision",
+				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:request_super_execution",
+			want: "function:edit_vtext",
 		},
 		{
 			name: "creative direct document work edits vtext",
 			metadata: map[string]any{
-				"type":                      "vtext_agent_revision",
-				"requires_worker_grounding": false,
-				"original_prompt":           "tell me a story about computers",
+				"type":            "vtext_agent_revision",
+				"original_prompt": "tell me a story about computers",
 			},
 			want: "function:edit_vtext",
 		},
 		{
 			name: "worker wake leaves vtext free to choose",
 			metadata: map[string]any{
-				"type":                      "vtext_agent_revision",
-				"requires_worker_grounding": false,
-				"original_prompt":           "research the sources and run one command",
-				"scheduled_message_seq":     int64(3),
+				"type":                  "vtext_agent_revision",
+				"original_prompt":       "research the sources and run one command",
+				"scheduled_message_seq": int64(3),
 			},
 			want: "",
 		},
@@ -310,7 +229,6 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := initialVTextToolChoice(&types.RunRecord{
-				Prompt:   tc.prompt,
 				Metadata: tc.metadata,
 			})
 			if got != tc.want {
@@ -320,65 +238,5 @@ func TestInitialVTextToolChoiceUsesExactTools(t *testing.T) {
 				t.Fatal("VText must not use broad required tool choice")
 			}
 		})
-	}
-}
-
-func TestVTextInitialEditContinuationClassifiesPrompts(t *testing.T) {
-	tests := []struct {
-		prompt       string
-		wantResearch bool
-		wantSuper    bool
-	}{
-		{prompt: "nba update", wantResearch: true},
-		{prompt: "Last Night in Baseball", wantResearch: true},
-		{prompt: "what's the weather in boston now", wantResearch: true},
-		{prompt: "hey"},
-		{prompt: "tell me a story about computers"},
-		{prompt: "write a tiny bash command that counts files", wantSuper: true},
-		{prompt: "research mud brick architecture and write a tiny shell command", wantResearch: true, wantSuper: true},
-		{prompt: "debug and fix the runtime gateway", wantSuper: true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.prompt, func(t *testing.T) {
-			if got := vtextPromptNeedsResearchContinuation(tc.prompt); got != tc.wantResearch {
-				t.Fatalf("vtextPromptNeedsResearchContinuation(%q) = %v, want %v", tc.prompt, got, tc.wantResearch)
-			}
-			if got := vtextPromptNeedsSuperExecution(tc.prompt); got != tc.wantSuper {
-				t.Fatalf("vtextPromptNeedsSuperExecution(%q) = %v, want %v", tc.prompt, got, tc.wantSuper)
-			}
-		})
-	}
-}
-
-func TestVTextExplicitResearchWinsFirstContinuationForMixedPrompt(t *testing.T) {
-	prompt := "research what mud brick architecture means and write a tiny shell command that would create a notes file for it"
-	if !vtextPromptExplicitlyAsksResearchFirst(prompt) {
-		t.Fatalf("expected explicit research-first marker for %q", prompt)
-	}
-	if !vtextPromptNeedsResearchContinuation(prompt) || !vtextPromptNeedsSuperExecution(prompt) {
-		t.Fatalf("mixed prompt should classify as both research and super-capable")
-	}
-}
-
-func TestVTextResearchContinuationObjectiveRequiresFastCheckpoint(t *testing.T) {
-	objective := buildVTextResearchContinuationObjective("nba update")
-	for _, want := range []string{
-		"Temporal grounding",
-		"Current UTC date/time at delegation",
-		"For relative-date requests",
-		"First checkpoint protocol",
-		"Run exactly one web_search call before the first submit_coagent_update call",
-		"do not issue parallel search calls before the first update",
-		"As soon as you have 2-4 grounded facts or a precise blocker, call submit_coagent_update",
-		"omit the evidence array rather than sending malformed evidence",
-		"For live scores, schedules, current rankings, weather, or similar time-sensitive lookups",
-		"prefer official league/event/source pages or established scoreboards",
-		"do not treat blocked HTML scoreboard pages as terminal by themselves",
-		"verified final, live/pending, scheduled, or snippet-only",
-		"after that batch, call submit_coagent_update again with the new material cluster or blocker",
-	} {
-		if !strings.Contains(objective, want) {
-			t.Fatalf("research continuation objective missing %q:\n%s", want, objective)
-		}
 	}
 }

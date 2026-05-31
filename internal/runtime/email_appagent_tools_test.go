@@ -344,11 +344,10 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 			"doc_id":                    doc.DocID,
 			"current_revision_id":       userRev.RevisionID,
 			"original_prompt":           "Create a VText-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that VText requests an Email appagent draft. Do not send the email.",
-			"requires_worker_grounding": false,
-			runMetadataAgentID:          "vtext:" + doc.DocID,
-			runMetadataChannelID:        doc.DocID,
-			runMetadataAgentRole:        AgentProfileVText,
-			runMetadataAgentProfile:     AgentProfileVText,
+			runMetadataAgentID:      "vtext:" + doc.DocID,
+			runMetadataChannelID:    doc.DocID,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentProfile: AgentProfileVText,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -483,11 +482,10 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 			"current_revision_id":       initialRev.RevisionID,
 			"request_intent":            "integrate_worker_findings",
 			"original_prompt":           "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
-			"requires_worker_grounding": false,
-			runMetadataAgentID:          "vtext:" + doc.DocID,
-			runMetadataChannelID:        doc.DocID,
-			runMetadataAgentRole:        AgentProfileVText,
-			runMetadataAgentProfile:     AgentProfileVText,
+			runMetadataAgentID:      "vtext:" + doc.DocID,
+			runMetadataChannelID:    doc.DocID,
+			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentProfile: AgentProfileVText,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {

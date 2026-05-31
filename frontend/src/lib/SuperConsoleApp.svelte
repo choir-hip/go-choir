@@ -1,8 +1,8 @@
 <!--
-  TerminalApp — ghostty-web terminal emulator rendered inside a floating window.
+  SuperConsoleApp — singleton zot repair console rendered inside a floating window.
 
   Initializes ghostty-web WASM (once at module level), creates a Terminal instance
-  with FitAddon, connects to /api/terminal/ws WebSocket, and renders in the
+  with FitAddon, connects to /api/super-console/ws WebSocket, and renders in the
   parent container provided by FloatingWindow.
 
   Features:
@@ -17,9 +17,9 @@
     windowId — unique window identifier for session management
 
   Data attributes for test targeting:
-    data-terminal          — root container div
-    data-terminal-canvas   — the canvas element (set by ghostty-web)
-    data-terminal-error    — error message container
+    data-super-console          — root container div
+    data-super-console-canvas   — the canvas element (set by ghostty-web)
+    data-super-console-error    — error message container
 -->
 <script>
   import { onMount, onDestroy } from 'svelte';
@@ -140,7 +140,7 @@
       // Add data-test attribute to the canvas element
       const canvas = terminalContainer.querySelector('canvas');
       if (canvas) {
-        canvas.setAttribute('data-terminal-canvas', '');
+        canvas.setAttribute('data-super-console-canvas', '');
       }
 
       // Fit to container
@@ -148,7 +148,7 @@
 
       // Connect WebSocket to PTY backend
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = withDesktopSelector(`${protocol}//${window.location.host}/api/terminal/ws`);
+      const wsUrl = withDesktopSelector(`${protocol}//${window.location.host}/api/super-console/ws`);
       const ws = new WebSocket(wsUrl);
 
       // Protocol uses text-based JSON messages (not binary).
@@ -229,7 +229,7 @@
       });
 
     } catch (err) {
-      console.error('[TerminalApp] Failed to initialize:', err);
+      console.error('[SuperConsoleApp] Failed to initialize:', err);
       updateTerminalSession(windowId, {
         error: `Initialization failed: ${err.message}`,
       });
@@ -263,19 +263,19 @@
 <div
   class="terminal-wrapper"
   bind:this={terminalContainer}
-  data-terminal
+  data-super-console
 >
   {#if !authenticated}
-    <div class="terminal-preview" data-terminal-preview>
-      <p class="terminal-kicker">Terminal preview</p>
-      <h2>Shell access requires sign-in</h2>
+    <div class="terminal-preview" data-super-console-preview>
+      <p class="terminal-kicker">Super Console preview</p>
+      <h2>zot repair requires sign-in</h2>
       <p>
-        This window opens in logged-out review so every app is visible. A real PTY can inspect or mutate private computer state, so connecting asks for auth.
+        This window opens in logged-out review so every app is visible. A real zot session can inspect or mutate private computer state, so connecting asks for auth.
       </p>
       <pre>$ choir status
 public-preview: ready
 $ open apps --preview
-files email trace vtext settings podcast media</pre>
+files email vtext settings podcast media super-console</pre>
     </div>
   {/if}
 
@@ -283,7 +283,7 @@ files email trace vtext settings podcast media</pre>
 
   <!-- Error display overlay -->
   {#if errorMessage}
-    <div class="terminal-error" data-terminal-error>
+    <div class="terminal-error" data-super-console-error>
       <div class="terminal-error-content">
         <span class="terminal-error-icon">⚠</span>
         <span class="terminal-error-text">{errorMessage}</span>

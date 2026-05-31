@@ -141,10 +141,9 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   const expectedApps = [
     ['files', 'Files', '📁'],
     ['browser', 'Web Lens', '🌐'],
-    ['terminal', 'Terminal', '💻'],
+    ['super-console', 'Super Console', '⌘'],
     ['settings', 'Settings', '⚙️'],
     ['vtext', 'VText', '📝'],
-    ['trace', 'Trace', '🔎'],
   ];
   for (const [appId, label, icon] of expectedApps) {
     const appIcon = page.locator(`[data-desktop-icon-id="${appId}"]`);
@@ -179,11 +178,10 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   await expect(settings).not.toContainText('Editable role prompt');
   await expect(settings).not.toContainText('/api/prompts');
 
-  await openApp(page, 'trace');
-  const trace = page.locator('[data-trace-window]').last();
-  await expect(trace.locator('[data-trace-app]')).toBeVisible({ timeout: 10000 });
-  await expect(trace.locator('[data-trace-trajectory-list]')).toBeVisible();
-  await expect(trace.locator('[data-trace-app]')).toContainText(/Trace|No trajectories|Select a trajectory/);
+  await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
+  await openApp(page, 'super-console');
+  const superConsole = page.locator('[data-super-console-app]').last();
+  await expect(superConsole.locator('[data-super-console]')).toBeVisible({ timeout: 10000 });
 
   await page.waitForTimeout(500);
   expect(forbiddenRequests).toHaveLength(0);

@@ -542,9 +542,6 @@ func verifyVTextRevisionCausality(revisions []types.Revision, events []types.Eve
 			continue
 		}
 		meta := decodeRevisionMetadata(revision.Metadata)
-		if metadataString(meta, "source") == "initial_vtext_seed" || revision.AuthorLabel == AgentProfileConductor {
-			continue
-		}
 		if metadataString(meta, "source") != "edit_vtext" {
 			return fmt.Errorf("appagent revision %s source = %q, want edit_vtext", revision.RevisionID, metadataString(meta, "source"))
 		}

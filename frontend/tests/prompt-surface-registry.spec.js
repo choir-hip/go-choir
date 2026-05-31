@@ -27,7 +27,7 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
   await expect(page.locator('[data-desk-menu-button]')).toBeVisible();
   await expect(page.locator('[data-window-tray-item]')).toHaveCount(3);
   await expect(page.locator('[data-vtext-editor]')).toContainText('A note before sign-in');
-  await expect(page.locator('[data-trace-app]')).toContainText('Local preview');
+  await expect(page.locator('[data-trace-app]')).toHaveCount(0);
   const favicon = await page.locator('link[rel="icon"][data-tetramark-favicon]').getAttribute('href');
   expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');
   expect(decodeURIComponent(favicon || '')).toContain('M 476.43 455.41');
@@ -233,7 +233,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   for (const appId of appIds) {
     expect(appHostIds, `${appId} app host`).toContain(appId);
   }
-  await expect(page.locator('[data-terminal-preview]')).toBeVisible();
+  await expect(page.locator('[data-super-console-preview]')).toBeVisible();
   await expect(page.locator('[data-settings-window]')).toHaveCount(1);
 
   await expect(page.locator('[data-settings-window] [data-theme-preset]')).toHaveCount(3);
@@ -367,13 +367,11 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await page.locator('[data-desk-sheet-close]').click();
 });
 
-test('Trace renders swimlanes and mobile TetraMark switches open apps', async ({ page, browser }) => {
+test('Super Console appears in desktop and mobile app switchers while Trace is absent', async ({ page, browser }) => {
   await page.goto(BASE_URL);
-  await openDeskApp(page, 'trace');
-  const traceWindow = page.locator('[data-trace-window]').last();
-  await expect(traceWindow.locator('[data-trace-swimlane-chart]')).toBeVisible();
-  await expect(traceWindow.locator('[data-trace-swimlane]')).toHaveCount(4);
-  await expect(traceWindow.locator('[data-trace-swimlane-chart] [data-trace-moment]')).toHaveCount(7);
+  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="trace"]')).toHaveCount(0);
+  await openDeskApp(page, 'super-console');
+  await expect(page.locator('[data-super-console-app]')).toBeVisible();
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await mobile.goto(BASE_URL);

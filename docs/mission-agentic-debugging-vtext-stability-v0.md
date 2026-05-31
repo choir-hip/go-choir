@@ -569,12 +569,15 @@ Record durable learning in:
 
 ```text
 status: in_progress
-last checkpoint: docs-first commit 22f8a8f recorded the regression review,
-  mission geometry, Trace/Super Console boundary, and VText via negativa target.
-current artifact state: staging ba49f0f was probed through the authenticated
-  public product path. Local source still contains old VText state-machine
-  contracts that the mission must delete.
-what shipped: docs checkpoint only; no behavior change yet.
+last checkpoint: local behavior patch drafted after docs-first commits
+  22f8a8f and 1735aa1. The patch has not yet been committed, pushed, deployed,
+  or accepted on staging.
+current artifact state: local source removes the conductor-authored first draft
+  path, deletes VText worker-grounding/classifier/required-tool choreography,
+  unships the visual Trace app registration and component, and replaces the
+  user-facing Terminal app with singleton Super Console backed by out-of-process
+  zot.
+what shipped: docs checkpoints only so far; behavior changes remain local WIP.
 what was proven: two staging prompt-bar probes on ba49f0f did advance backend
   VText versions. Factual/researcher prompt submission
   6d0e6b6d-2b58-4853-8d1a-edba045f652c created doc
@@ -584,28 +587,34 @@ what was proven: two staging prompt-bar probes on ba49f0f did advance backend
   b8fe9fa1-0a40-4429-b73c-47d48c71ecfc with v0 plus two appagent
   edit_vtext revisions. Both conductor decisions reported
   create_initial_version=false and initial_revision_id=user_revision_id.
+what was locally verified: focused Go tests for VText first-writer and
+  Super Console/zot PTY paths passed; full local runtime shard suite passed;
+  `pnpm build` passed and emitted no Trace chunk; direct zot proof wrote
+  `.choir/zot/sessions/proof-1/session.jsonl`, executed `!printf zot_ok`, and
+  wrote `diagnosis.md`.
 unproven or partial claims: owner-visible UI head-follow/version list behavior
-  has not yet been isolated; zot availability in the user computer image,
-  unified log layout, local rollback affordance, and exact Trace/Terminal
-  removal patch remain unproven.
+  has not yet been isolated; deployed Super Console launch inside a live user
+  computer, deployed zot session persistence, and deployed VText version
+  advancement after the patch remain unproven.
 belief-state changes: the immediate reproduced product-path backend graph is
   healthier than the local source contract. The live regression may be
-  intermittent, prompt-specific, or UI/head-follow related, but the local code
-  still preserves the old failure surface: stub/provider conductor seeds,
-  initial_vtext_seed materialization, requires_worker_grounding gates, prompt
-  classifiers, and next_required_tool choreography.
-remaining error field: delete the local VText state-machine contracts while
-  preserving the staging-observed simple path: conductor routes/opens, VText
-  writes v1, co-agent messages wake later VText revisions.
+  intermittent, prompt-specific, or UI/head-follow related. The local WIP now
+  attacks the old failure surface directly by making VText the first appagent
+  writer and making co-agent messaging the only multi-step path.
+remaining error field: land and deploy the behavior patch, then prove on
+  staging that Trace is not launchable, Super Console opens one zot session,
+  zot persists session artifacts, and the reproduced VText case advances
+  product-path versions.
 highest-impact remaining uncertainty: whether removing required-tool/prompt
   classifier scaffolding can preserve researcher/super wake behavior using
-  ordinary durable co-agent messages and focused tests.
-next executable probe: patch the local VText contract and tests so conductor
-  cannot create appagent text and VText no longer gates first edits on hidden
-  worker-grounding state.
-suggested resume goal string: /goal Continue docs/mission-agentic-debugging-vtext-stability-v0.md from the 2026-05-31 in-progress checkpoint: implement the VText via negativa patch, then hard-cut Trace/Terminal to singleton Super Console/zot and prove staging.
+  ordinary durable co-agent messages under real deployed model behavior.
+next executable probe: commit the behavior patch without unrelated source-cycle
+  WIP, push main, monitor CI/deploy, then rerun the permanent
+  `frontend/tests/vtext-version-advancement.spec.js` against `https://choir.news`.
+suggested resume goal string: /goal Continue docs/mission-agentic-debugging-vtext-stability-v0.md from the 2026-05-31 local behavior checkpoint: land the VText/Super Console/Trace hard cutover and prove staging acceptance.
 evidence artifact refs:
   - test-results/vtext-version-advancement-repro-20260531T064944Z/repro-2026-05-31T06-50-25-926Z.json
   - test-results/vtext-version-advancement-repro-coding-20260531T065056Z/repro-2026-05-31T06-51-38-354Z.json
-rollback refs: docs checkpoint 22f8a8f; no behavior change yet.
+rollback refs: docs checkpoints 22f8a8f and 1735aa1; behavior rollback will be
+  the next code commit once created.
 ```

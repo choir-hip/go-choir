@@ -455,7 +455,7 @@ test.describe('Cross-breakpoint checks', () => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
 
-    await openAppViaIcon(page, 'trace');
+    await openAppViaIcon(page, 'super-console');
     const windowEl = page.locator('[data-window]').first();
     await expect(windowEl).toBeVisible({ timeout: 5000 });
 
@@ -465,113 +465,6 @@ test.describe('Cross-breakpoint checks', () => {
     const box = await windowEl.boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(7);
     expect(box.x + box.width).toBeLessThanOrEqual(383);
-  });
-
-  test('Trace mobile trajectory item remains inside its sidebar hit target', async ({ page, authenticator }) => {
-    const email = uniqueEmail();
-    await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
-    const trajectoryId = await mockTraceTrajectory(page);
-
-    await openAppViaIcon(page, 'trace');
-    const trace = page.locator('[data-trace-app]').last();
-    await expect(trace).toBeVisible({ timeout: 5000 });
-    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(300);
-    await trace.locator('[data-trace-mobile-tabs] button').filter({ hasText: 'Runs' }).click();
-    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
-
-    const metrics = await trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`).evaluate((item) => {
-      const sidebar = item.closest('.trace-sidebar');
-      const list = item.closest('[data-trace-trajectory-list]');
-      const itemRect = item.getBoundingClientRect();
-      const sidebarRect = sidebar.getBoundingClientRect();
-      const x = Math.min(itemRect.right - 8, Math.max(itemRect.left + 8, itemRect.left + itemRect.width / 2));
-      const y = Math.min(itemRect.bottom - 8, Math.max(itemRect.top + 8, itemRect.top + itemRect.height / 2));
-      const hit = document.elementFromPoint(x, y);
-      return {
-        itemBottom: itemRect.bottom,
-        sidebarBottom: sidebarRect.bottom,
-        listScrolls: list.scrollHeight > list.clientHeight,
-        hitInsideItem: item === hit || item.contains(hit),
-        hitTag: hit?.tagName || '',
-      };
-    });
-
-    expect(metrics.itemBottom).toBeLessThanOrEqual(metrics.sidebarBottom + 1);
-    expect(metrics.hitInsideItem).toBe(true);
-  });
-
-  test('Trace mobile exposes Runs, Summary, Timeline, and Inspector drill-in panels', async ({ page, authenticator }) => {
-    const email = uniqueEmail();
-    await registerAndLoadDesktop(page, authenticator, email, { width: 390, height: 844 });
-    const trajectoryId = await mockTraceTrajectory(page);
-
-    await openAppViaIcon(page, 'trace');
-    const trace = page.locator('[data-trace-app]').last();
-    await expect(trace).toBeVisible({ timeout: 5000 });
-
-    const tabs = trace.locator('[data-trace-mobile-tabs]');
-    await expect(tabs).toBeVisible();
-    await expect(trace.locator('[data-trace-summary-panel]')).toBeVisible();
-    const summaryTrajectory = trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`);
-    await expect(summaryTrajectory).toBeVisible();
-    await summaryTrajectory.click();
-
-    await tabs.locator('button').filter({ hasText: 'Timeline' }).click();
-    await expect(trace.locator('[data-trace-summary-panel]')).not.toBeVisible();
-    await expect(trace.locator('[data-trace-moment-strip]')).toBeVisible();
-
-    await trace.locator('[data-trace-moment]').first().click();
-    await expect(trace.locator('[data-trace-inspector]')).toBeVisible();
-    await expect(trace.locator('[data-trace-summary-panel]')).not.toBeVisible();
-
-    await tabs.locator('button').filter({ hasText: 'Runs' }).click();
-    await expect(trace.locator('[data-trace-trajectory-list]')).toBeVisible();
-  });
-
-  test('Trace mobile keeps evidence browsing to one vertical app scroll surface', async ({ page, authenticator }) => {
-    const email = uniqueEmail();
-    await registerAndLoadDesktop(page, authenticator, email, { width: 390, height: 844 });
-    const trajectoryId = await mockTraceTrajectory(page, { longEvidence: true });
-
-    await openAppViaIcon(page, 'trace');
-    const trace = page.locator('[data-trace-app]').last();
-    await expect(trace).toBeVisible({ timeout: 5000 });
-    await expect(trace.locator(`[data-trace-trajectory-id="${trajectoryId}"]`)).toBeVisible();
-    await expect(trace.locator('[data-trace-summary-panel]')).toBeVisible();
-
-    const metrics = await trace.evaluate((root) => {
-      const scope = root.closest('[data-window]') || root;
-      const nodes = [scope, ...Array.from(scope.querySelectorAll('*'))];
-      const visible = nodes.filter((node) => {
-        const rect = node.getBoundingClientRect();
-        const style = getComputedStyle(node);
-        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-      });
-      const verticalScrollers = visible
-        .filter((node) => {
-          const style = getComputedStyle(node);
-          return ['auto', 'scroll'].includes(style.overflowY) && node.scrollHeight > node.clientHeight + 2;
-        })
-        .map((node) => ({
-          tag: node.tagName.toLowerCase(),
-          classes: String(node.getAttribute('class') || ''),
-          data: Array.from(node.attributes).find((attr) => attr.name.startsWith('data-'))?.name || '',
-          clientHeight: node.clientHeight,
-          scrollHeight: node.scrollHeight,
-        }));
-      const appLevelScrollers = verticalScrollers.filter(
-        (node) => node.tag !== 'pre' && !node.classes.includes('payload-block'),
-      );
-      return { verticalScrollers, appLevelScrollers };
-    });
-
-    expect(metrics.appLevelScrollers).toHaveLength(1);
-    expect(metrics.appLevelScrollers[0].classes).toContain('trace-app');
-    expect(metrics.appLevelScrollers.some((node) => node.classes.includes('trajectory-list'))).toBe(false);
-    expect(metrics.appLevelScrollers.some((node) => node.classes.includes('trace-main'))).toBe(false);
   });
 
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)

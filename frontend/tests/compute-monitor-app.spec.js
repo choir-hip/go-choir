@@ -117,9 +117,9 @@ test('heavy restored background apps are lazily suspended behind the active wind
       app_context: { windowTitle: 'Compute Monitor' },
     },
     {
-      window_id: 'restore-trace',
-      app_id: 'trace',
-      title: 'Trace',
+      window_id: 'restore-features',
+      app_id: 'features',
+      title: 'Features',
       geometry: { x: 70, y: 48, width: 900, height: 640 },
       mode: 'normal',
       z_index: 2,
@@ -160,6 +160,6 @@ test('heavy restored background apps are lazily suspended behind the active wind
   await expect(page.locator('[data-suspended-app]')).toHaveCount(3);
   await expect(page.locator('[data-compute-monitor-windows]')).toContainText('suspended');
 
-  await page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Trace' }).click();
-  await expect(page.locator('[data-trace-window]')).toBeVisible({ timeout: 10000 });
+  await page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Features' }).click();
+  await expect(page.locator('[data-features-window]')).toBeVisible({ timeout: 10000 });
 });

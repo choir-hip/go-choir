@@ -14,9 +14,18 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "zot-session" {
+		os.Exit(zot.RunSession(zot.SessionConfig{
+			SessionID: os.Getenv("ZOT_SESSION_ID"),
+			RootDir:   os.Getenv("ZOT_ROOT_DIR"),
+			UserID:    os.Getenv("ZOT_USER_ID"),
+		}, os.Stdin, os.Stdout, os.Stderr))
+	}
+
 	cfg := sandbox.LoadConfig()
 
 	s := server.NewServer("sandbox", cfg.Port)
@@ -27,9 +36,10 @@ func main() {
 
 	filesRoot := sandbox.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
 
-	// Initialize the terminal PTY WebSocket handler.
-	terminalHandler := sandbox.NewTerminalHandler()
-	sandbox.RegisterTerminalRoutes(s, terminalHandler)
+	// Initialize the singleton Super Console PTY handler. The PTY process is
+	// zot, not an interactive shell.
+	superConsoleHandler := sandbox.NewSuperConsoleHandler(filesRoot)
+	sandbox.RegisterSuperConsoleRoutes(s, superConsoleHandler)
 
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := runtime.LoadConfig()

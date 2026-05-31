@@ -165,9 +165,9 @@ test('window shell keeps opaque backing under alpha app themes', async ({
 }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
-  await openApp(page, 'trace');
-  await page.locator('[data-window][data-window-app-id="trace"]').waitFor({ state: 'visible', timeout: 10000 });
-  await page.locator('[data-window][data-window-app-id="trace"] [data-trace-app]').waitFor({ state: 'visible', timeout: 10000 });
+  await openApp(page, 'features');
+  await page.locator('[data-window][data-window-app-id="features"]').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('[data-window][data-window-app-id="features"] [data-features-app]').waitFor({ state: 'visible', timeout: 10000 });
 
   await page.evaluate(() => {
     document.documentElement.style.setProperty('--choir-panel', 'rgba(9, 12, 19, 0.2)');
@@ -185,28 +185,26 @@ test('window shell keeps opaque backing under alpha app themes', async ({
       return parts.length >= 4 ? Number(parts[3]) : 1;
     }
     return {
-      windowContent: alphaFor('[data-window][data-window-app-id="trace"] [data-window-content]'),
-      appSurface: alphaFor('[data-window][data-window-app-id="trace"] [data-app-host]'),
-      traceApp: alphaFor('[data-window][data-window-app-id="trace"] .trace-app'),
-      titlebar: alphaFor('[data-window][data-window-app-id="trace"] [data-window-titlebar]'),
-      windowIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).isolation,
-      windowContain: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"]')).contain,
-      appSurfaceIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="trace"] [data-app-host]')).isolation,
-      traceMain: alphaFor('[data-window][data-window-app-id="trace"] .trace-main'),
-      traceSidebar: alphaFor('[data-window][data-window-app-id="trace"] .trace-sidebar'),
+      windowContent: alphaFor('[data-window][data-window-app-id="features"] [data-window-content]'),
+      appSurface: alphaFor('[data-window][data-window-app-id="features"] [data-app-host]'),
+      featuresApp: alphaFor('[data-window][data-window-app-id="features"] .features-app'),
+      titlebar: alphaFor('[data-window][data-window-app-id="features"] [data-window-titlebar]'),
+      windowIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="features"]')).isolation,
+      windowContain: getComputedStyle(document.querySelector('[data-window][data-window-app-id="features"]')).contain,
+      appSurfaceIsolation: getComputedStyle(document.querySelector('[data-window][data-window-app-id="features"] [data-app-host]')).isolation,
+      featuresHeader: alphaFor('[data-window][data-window-app-id="features"] .features-header'),
     };
   });
 
   expect(alphaValues).toEqual({
     windowContent: 1,
     appSurface: 1,
-    traceApp: 1,
+    featuresApp: 1,
     titlebar: 1,
     windowIsolation: 'isolate',
     windowContain: 'paint',
     appSurfaceIsolation: 'isolate',
-    traceMain: 1,
-    traceSidebar: 1,
+    featuresHeader: 1,
   });
 });
 
@@ -220,13 +218,13 @@ test('restored overlapping active window is opaque and paint isolated before foc
 
   const windows = [
     {
-      window_id: 'restore-trace-overlap',
-      app_id: 'trace',
-      title: 'Trace',
+      window_id: 'restore-features-overlap',
+      app_id: 'features',
+      title: 'Features',
       geometry: { x: 51, y: 10, width: 445, height: 640 },
       mode: 'normal',
       z_index: 11,
-      app_context: { windowTitle: 'Trace' },
+      app_context: { windowTitle: 'Features' },
     },
     {
       window_id: 'restore-email-overlap',
@@ -262,7 +260,7 @@ test('restored overlapping active window is opaque and paint isolated before foc
     timeout: 120000,
   });
   const emailWindow = page.locator('[data-window][data-window-id="restore-email-overlap"]');
-  const traceWindow = page.locator('[data-window][data-window-id="restore-trace-overlap"]');
+  const traceWindow = page.locator('[data-window][data-window-id="restore-features-overlap"]');
   await expect(emailWindow).toBeVisible({ timeout: 10000 });
   await expect(traceWindow).toBeVisible({ timeout: 10000 });
 
@@ -383,7 +381,7 @@ test('mobile restore recovery pauses too many heavyweight saved windows', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'trace', 'vtext', 'browser', 'terminal'];
+  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'features', 'vtext', 'browser', 'super-console'];
   const windows = appIds.map((appId, index) => ({
     window_id: `recovery-window-${index + 1}`,
     app_id: appId,

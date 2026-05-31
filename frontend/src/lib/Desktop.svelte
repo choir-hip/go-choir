@@ -1331,46 +1331,8 @@
   }
 
   function handleOpenTraceFromContent(event) {
-    if (!authenticated) {
-      const detail = event.detail || {};
-      openApp('trace', 'Trace', getAppIcon('trace'), {
-        windowTitle: detail.title || 'Trace Preview',
-        trajectoryId: detail.trajectoryId || detail.traceId || '',
-        acceptanceId: detail.acceptanceId || '',
-        guestMode: true,
-        preview: true,
-      });
-      showToast(detail.toastMessage || 'Opened Trace preview');
-      return;
-    }
-    if (!desktopReady) {
-      showToast('Desktop is still connecting');
-      return;
-    }
-
     const detail = event.detail || {};
-    const appContext = {
-      windowTitle: detail.title || 'Trace',
-      trajectoryId: detail.trajectoryId || detail.traceId || '',
-      acceptanceId: detail.acceptanceId || '',
-    };
-    const existing = windowsSnapshot().find((win) =>
-      win.appId === 'trace' &&
-      win.mode !== 'closed' &&
-      win.mode !== 'hidden'
-    );
-    if (existing) {
-      updateWindowAppContext(existing.windowId, appContext, appContext.windowTitle);
-      if (existing.mode === 'minimized') {
-        restoreWindow(existing.windowId);
-      } else {
-        focusWindow(existing.windowId);
-      }
-    } else {
-      openApp('trace', 'Trace', getAppIcon('trace'), appContext);
-    }
-    showToast(detail.toastMessage || 'Opened Trace evidence');
-    scheduleSave();
+    showToast(detail.toastMessage || 'Trace UI is unshipped; machine-readable evidence remains in logs.');
   }
 
   function handleIconPositionsChanged() {

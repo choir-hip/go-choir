@@ -314,7 +314,6 @@ func addResearchFindingsCheckpointRequirement(ctx context.Context, rt *Runtime, 
 	if !shouldRequireResearchFindingsAfterTool(ctx, rt) {
 		return
 	}
-	result["next_required_tool"] = "submit_coagent_update"
 	result["next_instruction"] = "Submit a concise findings update from this latest research batch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the batch only proved that final/current evidence is unavailable, report that blocker."
 }
 
@@ -432,7 +431,6 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		"provider_health_owner": "gateway",
 	}
 	if requireFindingsCheckpoint {
-		model["next_required_tool"] = "submit_coagent_update"
 		model["next_instruction"] = "Submit concise first findings from this search result before any additional search-only turn. Include 2-4 grounded facts, notes, questions, or a precise blocker; evidence entries may be omitted until richer evidence is ready."
 	}
 	if degraded {
@@ -464,7 +462,6 @@ func compactFetchURLProjection(full map[string]any, content string, requireFindi
 		"projection_policy": "bounded excerpt; fetch/read deeper only when needed",
 	}
 	if requireFindingsCheckpoint {
-		model["next_required_tool"] = "submit_coagent_update"
 		model["next_instruction"] = "Submit a concise findings update from this latest fetch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the fetch only proved that final/current evidence is unavailable, report that blocker."
 	}
 	metadata := map[string]any{

@@ -566,7 +566,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 }
 
-func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testing.T) {
+func TestCompactWebSearchProjectionGuidesResearchFindingsCheckpoint(t *testing.T) {
 	resp := &webSearchResponse{
 		Query:    "nba update",
 		Provider: "mock",
@@ -578,8 +578,8 @@ func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testi
 		}},
 	}
 	model, _ := compactWebSearchProjection(map[string]any{"results": resp.Results}, resp, true)
-	if got := fmt.Sprint(model["next_required_tool"]); got != "submit_coagent_update" {
-		t.Fatalf("next_required_tool = %q, want submit_coagent_update", got)
+	if _, ok := model["next_required_tool"]; ok {
+		t.Fatalf("next_required_tool should be omitted from research projections: %#v", model["next_required_tool"])
 	}
 	instruction := fmt.Sprint(model["next_instruction"])
 	if !strings.Contains(instruction, "before any additional search-only turn") {
@@ -593,8 +593,8 @@ func TestCompactWebSearchProjectionCanRequireResearchFindingsCheckpoint(t *testi
 		t.Fatalf("next_required_tool should be omitted when checkpoint is not required: %#v", model["next_required_tool"])
 	}
 	fetchModel, _ := compactFetchURLProjection(map[string]any{"url": "https://example.com"}, "body", true)
-	if got := fmt.Sprint(fetchModel["next_required_tool"]); got != "submit_coagent_update" {
-		t.Fatalf("fetch next_required_tool = %q, want submit_coagent_update", got)
+	if _, ok := fetchModel["next_required_tool"]; ok {
+		t.Fatalf("fetch next_required_tool should be omitted from research projections: %#v", fetchModel["next_required_tool"])
 	}
 }
 
@@ -715,7 +715,7 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	if err := s.CreateRun(ctx, *researcher); err != nil {
 		t.Fatalf("create researcher run: %v", err)
 	}
-	output := `{"query":"baseball last night","provider":"parallel","result_count":1,"results":[{"title":"Box score","url":"https://example.com/box","snippet":"A score."}],"next_required_tool":"submit_coagent_update"}`
+	output := `{"query":"baseball last night","provider":"parallel","result_count":1,"results":[{"title":"Box score","url":"https://example.com/box","snippet":"A score."}]}`
 	payload, _ := json.Marshal(map[string]any{
 		"tool":     "web_search",
 		"call_id":  "call-search",

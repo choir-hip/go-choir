@@ -208,11 +208,9 @@ test('deployed prompt-bar VText flow uses live search for current 2026 evidence'
     expect(finalState.head.content).not.toMatch(/search (?:was )?unavailable|model knowledge through|mid-2024|stub provider/i);
     expect(forbiddenRuntimeRequests).toHaveLength(0);
 
-    await page.locator('[data-desktop-icon-id="trace"]').dblclick();
-    const traceApp = page.locator('[data-trace-app]').last();
-    await expect(traceApp).toBeVisible({ timeout: 15_000 });
-    const trajectory = traceApp.locator(`[data-trace-trajectory-id="${body.submission_id}"]`);
-    await expect(trajectory).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
+    const traceSnapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(body.submission_id)}`);
+    expect(traceSnapshot.trajectory?.trajectory_id || traceSnapshot.trajectory_id).toBe(body.submission_id);
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);
     await context.close();

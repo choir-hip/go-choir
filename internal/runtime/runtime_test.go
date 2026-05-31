@@ -97,7 +97,6 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		App                  string `json:"app"`
 		Title                string `json:"title"`
 		SeedPrompt           string `json:"seed_prompt"`
-		InitialContent       string `json:"initial_content"`
 		CreateInitialVersion bool   `json:"create_initial_version"`
 		DocID                string `json:"doc_id"`
 		UserRevisionID       string `json:"user_revision_id"`
@@ -117,16 +116,8 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.SeedPrompt != "hi" {
 		t.Fatalf("seed_prompt: got %q, want hi", result.SeedPrompt)
 	}
-	if !strings.Contains(result.InitialContent, "hi") ||
-		strings.Contains(result.InitialContent, "Conductor framing") ||
-		strings.Contains(result.InitialContent, "Use this vtext") ||
-		strings.Contains(result.InitialContent, "User request:") ||
-		strings.Contains(result.InitialContent, "Current requirements:") ||
-		strings.Contains(result.InitialContent, "Grounding status:") {
-		t.Fatalf("initial_content should be useful document content, got: %q", result.InitialContent)
-	}
-	if !result.CreateInitialVersion {
-		t.Fatal("create_initial_version: got false, want true")
+	if result.CreateInitialVersion {
+		t.Fatal("create_initial_version: got true, want false")
 	}
 	if result.DocID == "" {
 		t.Fatal("doc_id should not be empty")
@@ -134,11 +125,11 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.UserRevisionID == "" {
 		t.Fatal("user_revision_id should not be empty")
 	}
-	if result.FramingRevisionID == "" {
-		t.Fatal("framing_revision_id should not be empty")
+	if result.FramingRevisionID != "" {
+		t.Fatalf("framing_revision_id = %q, want empty because conductor cannot write appagent text", result.FramingRevisionID)
 	}
-	if result.InitialRevisionID != result.FramingRevisionID {
-		t.Fatalf("initial_revision_id: got %q, want framing revision %q", result.InitialRevisionID, result.FramingRevisionID)
+	if result.InitialRevisionID != result.UserRevisionID {
+		t.Fatalf("initial_revision_id: got %q, want user seed revision %q", result.InitialRevisionID, result.UserRevisionID)
 	}
 	if result.InitialRunID == "" {
 		t.Fatal("initial_loop_id should point to the product-path vtext run")
@@ -148,8 +139,8 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
-	if doc.CurrentRevisionID != result.FramingRevisionID {
-		t.Fatalf("document head: got %q, want v1 framing revision %q", doc.CurrentRevisionID, result.FramingRevisionID)
+	if doc.CurrentRevisionID != result.UserRevisionID {
+		t.Fatalf("document head: got %q, want user seed revision %q before VText writes", doc.CurrentRevisionID, result.UserRevisionID)
 	}
 
 	v0, err := s.GetRevision(ctx, result.UserRevisionID, "user-alice")
@@ -168,35 +159,6 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	}
 	if metadataString(meta, "vtext_version") != "v0" {
 		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "vtext_version"))
-	}
-
-	v1, err := s.GetRevision(ctx, result.FramingRevisionID, "user-alice")
-	if err != nil {
-		t.Fatalf("get v1 revision: %v", err)
-	}
-	if v1.AuthorKind != types.AuthorAppAgent {
-		t.Fatalf("v1 author_kind: got %q, want %q", v1.AuthorKind, types.AuthorAppAgent)
-	}
-	if v1.AuthorLabel != AgentProfileConductor {
-		t.Fatalf("v1 author_label: got %q, want %q", v1.AuthorLabel, AgentProfileConductor)
-	}
-	if v1.ParentRevisionID != v0.RevisionID {
-		t.Fatalf("v1 parent: got %q, want v0 %q", v1.ParentRevisionID, v0.RevisionID)
-	}
-	if !strings.Contains(v1.Content, "hi") ||
-		strings.Contains(v1.Content, "Conductor framing") ||
-		strings.Contains(v1.Content, "Use this vtext") ||
-		strings.Contains(v1.Content, "User request:") ||
-		strings.Contains(v1.Content, "Current requirements:") ||
-		strings.Contains(v1.Content, "Grounding status:") {
-		t.Fatalf("v1 content should be a useful document seed, got %q", v1.Content)
-	}
-	v1Meta := decodeRevisionMetadata(v1.Metadata)
-	if metadataString(v1Meta, "vtext_version") != "v1" {
-		t.Fatalf("v1 metadata version: got %q, want v1", metadataString(v1Meta, "vtext_version"))
-	}
-	if metadataString(v1Meta, "source") != "initial_vtext_seed" {
-		t.Fatalf("v1 source: got %q, want initial_vtext_seed", metadataString(v1Meta, "source"))
 	}
 
 	runs, err := s.ListRunsByOwner(ctx, "user-alice", 20)
