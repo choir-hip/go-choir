@@ -262,6 +262,21 @@ EOF
           choir.maild_url=*)
             echo "RUNTIME_MAILD_URL=''${param#choir.maild_url=}" >> "$ENV_FILE"
             ;;
+          choir.computer_kind=*)
+            echo "CHOIR_COMPUTER_KIND=''${param#choir.computer_kind=}" >> "$ENV_FILE"
+            ;;
+          choir.owner_id=*)
+            echo "CHOIR_OWNER_ID=''${param#choir.owner_id=}" >> "$ENV_FILE"
+            ;;
+          choir.desktop_id=*)
+            echo "CHOIR_DESKTOP_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
+            ;;
+          choir.worker_id=*)
+            echo "CHOIR_WORKER_ID=''${param#choir.worker_id=}" >> "$ENV_FILE"
+            ;;
+          choir.candidate_id=*)
+            echo "CHOIR_CANDIDATE_ID=''${param#choir.candidate_id=}" >> "$ENV_FILE"
+            ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
             ;;

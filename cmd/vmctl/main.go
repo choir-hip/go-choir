@@ -149,6 +149,11 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		PersistentDir:     cfg.PersistentDir,
 		SourceVMID:        cfg.SourceVMID,
 		GatewayToken:      cfg.GatewayToken,
+		ComputerKind:      cfg.ComputerKind,
+		OwnerID:           cfg.OwnerID,
+		DesktopID:         cfg.DesktopID,
+		WorkerID:          cfg.WorkerID,
+		CandidateID:       cfg.CandidateID,
 	})
 	if err != nil {
 		return nil, err

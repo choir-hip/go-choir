@@ -565,6 +565,9 @@ func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testi
 	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 4096 {
 		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 4096 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
 	}
+	if got.ComputerKind != "worker" || got.OwnerID != "user-1" || got.DesktopID != PrimaryDesktopID || got.WorkerID != worker.WorkerID || got.CandidateID != worker.WorkerID {
+		t.Fatalf("BootVM guest identity = %+v, want worker identity for %s", got, worker.WorkerID)
+	}
 }
 
 func TestOwnershipRegistry_RequestPlaywrightWorkerUsesDedicatedImageProfile(t *testing.T) {
@@ -675,6 +678,9 @@ func TestOwnershipRegistry_InteractiveVMUsesBuildCapableMemoryEnvelope(t *testin
 	if got.MachineCPUCount != interactiveVMCPUCount || got.MachineMemSizeMib != interactiveVMMemSizeMib {
 		t.Fatalf("interactive BootVM shape = %d cpu / %d MiB, want %d cpu / %d MiB",
 			got.MachineCPUCount, got.MachineMemSizeMib, interactiveVMCPUCount, interactiveVMMemSizeMib)
+	}
+	if got.ComputerKind != "active" || got.OwnerID != "user-1" || got.DesktopID != PrimaryDesktopID {
+		t.Fatalf("interactive BootVM guest identity = %+v", got)
 	}
 }
 
@@ -1974,6 +1980,9 @@ func TestOwnershipRegistry_ForkDesktopWithVMManagerUsesSourceDataImage(t *testin
 	}
 	if forkBoot.VMID != branch.VMID {
 		t.Fatalf("fork boot VMID = %q, want branch VMID %q", forkBoot.VMID, branch.VMID)
+	}
+	if forkBoot.ComputerKind != "candidate" || forkBoot.OwnerID != "user-1" || forkBoot.DesktopID != "branch-a" || forkBoot.CandidateID != "branch-a" {
+		t.Fatalf("fork boot guest identity = %+v", forkBoot)
 	}
 }
 

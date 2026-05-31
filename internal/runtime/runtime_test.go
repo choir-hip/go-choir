@@ -418,9 +418,11 @@ func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
 			}
 			for _, want := range []string{
 				"Worker candidate repo bootstrap context",
-				"repo_path: go-choir-candidate",
+				"repo_path: Source/candidate",
 				"base_sha: abc123",
-				"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+				"mkdir -p Source/platform Source/user Source/candidate Build .choir",
+				"git clone https://github.com/yusefmosiah/go-choir.git Source/platform",
+				"git clone https://github.com/yusefmosiah/go-choir.git Source/candidate",
 				"git config user.name \"Choir Worker\"",
 				"git reset --hard abc123",
 				"Use set -euo pipefail",

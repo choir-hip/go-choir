@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,34 @@ func TestBootstrapSourceWorkspaceRefreshesOwnerForSuperConsoleSession(t *testing
 	}
 	if projection.ComputerKind != "active" {
 		t.Fatalf("ComputerKind = %q, want active", projection.ComputerKind)
+	}
+}
+
+func TestBootstrapSourceWorkspaceUsesGuestIdentityEnv(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SANDBOX_ID", "vm-worker-123")
+	t.Setenv("CHOIR_COMPUTER_KIND", "worker")
+	t.Setenv("CHOIR_OWNER_ID", "owner@example.com")
+	t.Setenv("CHOIR_DESKTOP_ID", "primary")
+	t.Setenv("CHOIR_WORKER_ID", "worker-abc")
+
+	projection, err := BootstrapSourceWorkspace(root, SourceWorkspaceOptions{})
+	if err != nil {
+		t.Fatalf("BootstrapSourceWorkspace returned error: %v", err)
+	}
+	if projection.ComputerID != "vm-worker-123" {
+		t.Fatalf("ComputerID = %q", projection.ComputerID)
+	}
+	if projection.ComputerKind != "worker" {
+		t.Fatalf("ComputerKind = %q", projection.ComputerKind)
+	}
+	if projection.OwnerID != "owner@example.com" {
+		t.Fatalf("OwnerID = %q", projection.OwnerID)
+	}
+	if projection.DesktopID != "primary" {
+		t.Fatalf("DesktopID = %q", projection.DesktopID)
+	}
+	if !strings.Contains(projection.CandidateSourceRef, "/candidates/worker-abc") {
+		t.Fatalf("CandidateSourceRef = %q", projection.CandidateSourceRef)
 	}
 }

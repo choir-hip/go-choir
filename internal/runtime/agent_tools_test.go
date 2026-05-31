@@ -4563,9 +4563,9 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	}
 	for _, want := range []string{
 		"Remote worker repository bootstrap is available.",
-		"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+		"git clone https://github.com/yusefmosiah/go-choir.git Source/candidate",
 		"git checkout " + base,
-		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
+		"Use repo_path \"Source/candidate\" and base_sha " + base,
 		"Inspect the candidate checkout.",
 	} {
 		if !strings.Contains(workerRun.Prompt, want) {
@@ -5417,14 +5417,16 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 		t.Fatalf("bootstrap provenance mismatch: %+v", bootstrap)
 	}
 	for _, want := range []string{
-		"git clone https://github.com/yusefmosiah/go-choir.git go-choir-candidate",
+		"mkdir -p Source/platform Source/user Source/candidate Build .choir",
+		"git clone https://github.com/yusefmosiah/go-choir.git Source/platform",
+		"git clone https://github.com/yusefmosiah/go-choir.git Source/candidate",
 		"git config user.name \"Choir Worker\"",
 		"git config user.email \"worker@choir.local\"",
 		"git checkout " + base,
 		"Use set -euo pipefail for multi-step bash commands",
 		"Run gofmt, go test, node/npm, Obscura, and scripts directly from the checkout",
 		"Do not run nix develop, nix build, or nix-store inside the worker VM",
-		"Use repo_path \"go-choir-candidate\" and base_sha " + base,
+		"Use repo_path \"Source/candidate\" and base_sha " + base,
 	} {
 		if !strings.Contains(bootstrap.WorkerPrompt, want) {
 			t.Fatalf("worker prompt missing %q in %q", want, bootstrap.WorkerPrompt)
@@ -5461,7 +5463,7 @@ func TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead(t *tes
 		t.Fatalf("expected configured deployed base %s over git HEAD, got %+v", envBase, bootstrap)
 	}
 	if !strings.Contains(bootstrap.WorkerPrompt, "git checkout "+envBase) ||
-		!strings.Contains(bootstrap.WorkerPrompt, "Use repo_path \"go-choir-candidate\" and base_sha "+envBase) {
+		!strings.Contains(bootstrap.WorkerPrompt, "Use repo_path \"Source/candidate\" and base_sha "+envBase) {
 		t.Fatalf("worker prompt did not use configured base: %q", bootstrap.WorkerPrompt)
 	}
 }
@@ -5472,7 +5474,7 @@ func TestWorkerVSuperDelegateContractPreventsCheckoutRaces(t *testing.T) {
 		"Spawn the implementation co-super first",
 		"Do not spawn slot=\"verifier\" until",
 		"label that result stale",
-		"exclusive writer for go-choir-candidate",
+		"exclusive writer for Source/candidate",
 		"do not run reset, clean, edit, or commit commands",
 		"verifier must inspect only after the implementation child has reported",
 		"missing tools, failed tests, or package publication failure must end in submit_coagent_update",

@@ -130,6 +130,14 @@ type VMConfig struct {
 	// still holds: no provider credentials in the guest).
 	GatewayToken string
 
+	// ComputerKind and related identity fields are product-level metadata for
+	// the guest's source-lineage projection. They are not secrets.
+	ComputerKind string
+	OwnerID      string
+	DesktopID    string
+	WorkerID     string
+	CandidateID  string
+
 	// Epoch is the monotonically increasing boot counter for this VM.
 	// On fresh boot, the epoch increments. On resume from hibernate,
 	// the epoch stays the same. Callers can use epoch to detect whether
@@ -1198,8 +1206,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
+		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
 		if cfg.GatewayToken != "" {
-			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", cfg.GatewayToken))
+			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken)))
 		}
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
@@ -1213,8 +1222,11 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			cfg.GuestPort, cfg.VMID, cfg.Epoch,
 			guestIP, hostIP,
 		)
+		for _, arg := range guestIdentityKernelParams(cfg) {
+			bootArgs += " " + arg
+		}
 		if cfg.GatewayToken != "" {
-			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", cfg.GatewayToken)
+			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken))
 		}
 	}
 
@@ -1248,6 +1260,43 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	}
 
 	return fcConfig
+}
+
+func guestIdentityKernelParams(cfg VMConfig) []string {
+	params := make([]string, 0, 5)
+	if value := kernelParamValue(cfg.ComputerKind); value != "" {
+		params = append(params, "choir.computer_kind="+value)
+	}
+	if value := kernelParamValue(cfg.OwnerID); value != "" {
+		params = append(params, "choir.owner_id="+value)
+	}
+	if value := kernelParamValue(cfg.DesktopID); value != "" {
+		params = append(params, "choir.desktop_id="+value)
+	}
+	if value := kernelParamValue(cfg.WorkerID); value != "" {
+		params = append(params, "choir.worker_id="+value)
+	}
+	if value := kernelParamValue(cfg.CandidateID); value != "" {
+		params = append(params, "choir.candidate_id="+value)
+	}
+	return params
+}
+
+func kernelParamValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range value {
+		switch r {
+		case ' ', '\t', '\n', '\r', '\x00':
+			b.WriteByte('_')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // launchFirecracker starts a Firecracker process for the given VM.

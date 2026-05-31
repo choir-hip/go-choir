@@ -404,7 +404,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\nCo-super is a bounded worker or verifier under super/vsuper supervision. Prefer using your own tools and durable evidence over spawning more agents. Converge to publish_app_change_package, submit_coagent_update, or a precise blocker instead of running open-ended tool loops.")
 		if repoContext := workerRepoContextForRun(rec); repoContext != "" {
 			b.WriteString(repoContext)
-			b.WriteString("\nIf you are the implementation worker, run the bootstrap commands before repo work and then use repo_path \"go-choir-candidate\" with the listed base_sha for publish_app_change_package. If human proof needs external browser capture, publish an evidence_pending package after commit and focused verification rather than ending with a commit-only report. If you are the verifier, wait for implementation evidence before independent inspection; you may run commands and write scratch tests/logs/evidence, but you must not author candidate source, publish packages, promote/adopt, or grant capabilities.")
+			b.WriteString("\nIf you are the implementation worker, run the bootstrap commands before repo work and then use repo_path \"Source/candidate\" with the listed base_sha for publish_app_change_package. If human proof needs external browser capture, publish an evidence_pending package after commit and focused verification rather than ending with a commit-only report. If you are the verifier, wait for implementation evidence before independent inspection; you may run commands and write scratch tests/logs/evidence, but you must not author candidate source, publish packages, promote/adopt, or grant capabilities.")
 		}
 	}
 	if profile == AgentProfileResearcher {
@@ -480,7 +480,7 @@ func workerRepoContextForRun(rec *types.RunRecord) string {
 	}
 	var b strings.Builder
 	b.WriteString("\n\nWorker candidate repo bootstrap context:")
-	b.WriteString("\n- repo_path: go-choir-candidate")
+	b.WriteString("\n- repo_path: Source/candidate")
 	b.WriteString("\n- base_sha: ")
 	b.WriteString(baseSHA)
 	b.WriteString("\n- remote_url: ")
@@ -488,10 +488,20 @@ func workerRepoContextForRun(rec *types.RunRecord) string {
 	b.WriteString("\n- bootstrap: ")
 	b.WriteString(bootstrap)
 	b.WriteString("\nBootstrap commands before repository work:")
-	b.WriteString("\nif [ ! -d go-choir-candidate/.git ]; then git clone ")
+	b.WriteString("\nmkdir -p Source/platform Source/user Source/candidate Build .choir")
+	b.WriteString("\nif [ ! -d Source/platform/.git ]; then git clone ")
 	b.WriteString(remoteURL)
-	b.WriteString(" go-choir-candidate; fi")
-	b.WriteString("\ncd go-choir-candidate")
+	b.WriteString(" Source/platform; fi")
+	b.WriteString("\ngit -C Source/platform fetch --all --prune")
+	b.WriteString("\ngit -C Source/platform checkout ")
+	b.WriteString(baseSHA)
+	b.WriteString("\ngit -C Source/platform reset --hard ")
+	b.WriteString(baseSHA)
+	b.WriteString("\ngit -C Source/platform clean -fdx")
+	b.WriteString("\nif [ ! -d Source/candidate/.git ]; then git clone ")
+	b.WriteString(remoteURL)
+	b.WriteString(" Source/candidate; fi")
+	b.WriteString("\ncd Source/candidate")
 	b.WriteString("\ngit config user.name \"Choir Worker\"")
 	b.WriteString("\ngit config user.email \"worker@choir.local\"")
 	b.WriteString("\ngit fetch --all --prune")

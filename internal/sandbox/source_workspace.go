@@ -14,11 +14,13 @@ const sourceLineageSchemaVersion = 1
 // SourceWorkspaceOptions carries the computer/session identity projected into
 // the local source workspace that zot inspects from Super Console.
 type SourceWorkspaceOptions struct {
-	ComputerID string
-	Kind       string
-	OwnerID    string
-	DesktopID  string
-	SessionID  string
+	ComputerID  string
+	Kind        string
+	OwnerID     string
+	DesktopID   string
+	SessionID   string
+	CandidateID string
+	WorkerID    string
 }
 
 // SourceWorkspaceProjection is the filesystem-local view of the computer's
@@ -79,6 +81,7 @@ func BootstrapSourceWorkspace(filesRoot string, opts SourceWorkspaceOptions) (So
 func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOptions) SourceWorkspaceProjection {
 	computerID := firstNonEmptySourceWorkspace(opts.ComputerID, os.Getenv("SANDBOX_ID"), "sandbox-dev")
 	kind := firstNonEmptySourceWorkspace(opts.Kind, os.Getenv("CHOIR_COMPUTER_KIND"), inferComputerKind(computerID))
+	ownerID := firstNonEmptySourceWorkspace(opts.OwnerID, os.Getenv("CHOIR_OWNER_ID"))
 	desktopID := firstNonEmptySourceWorkspace(opts.DesktopID, os.Getenv("CHOIR_DESKTOP_ID"), "primary")
 	baseCommit := firstNonEmptySourceWorkspace(
 		os.Getenv("CHOIR_DEPLOYED_COMMIT"),
@@ -89,14 +92,22 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 	userRef := activeSourceRefForComputer(computerID, kind)
 	candidateRef := ""
 	if kind == "candidate" || kind == "worker" {
-		candidateID := firstNonEmptySourceWorkspace(opts.SessionID, os.Getenv("SANDBOX_ID"), computerID)
+		candidateID := firstNonEmptySourceWorkspace(
+			opts.CandidateID,
+			os.Getenv("CHOIR_CANDIDATE_ID"),
+			opts.WorkerID,
+			os.Getenv("CHOIR_WORKER_ID"),
+			opts.SessionID,
+			os.Getenv("SANDBOX_ID"),
+			computerID,
+		)
 		candidateRef = "refs/computers/" + safeSourceRefPart(computerID) + "/candidates/" + safeSourceRefPart(candidateID)
 	}
 	return SourceWorkspaceProjection{
 		SchemaVersion:           sourceLineageSchemaVersion,
 		ComputerID:              computerID,
 		ComputerKind:            kind,
-		OwnerID:                 strings.TrimSpace(opts.OwnerID),
+		OwnerID:                 ownerID,
 		DesktopID:               desktopID,
 		SuperConsoleSessionID:   strings.TrimSpace(opts.SessionID),
 		PlatformBaseCommit:      baseCommit,

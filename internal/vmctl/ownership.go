@@ -259,6 +259,11 @@ type VMManagerConfig struct {
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
 	GatewayToken string
+	ComputerKind string
+	OwnerID      string
+	DesktopID    string
+	WorkerID     string
+	CandidateID  string
 }
 
 // VMImageProfile points a VM boot at a non-default guest image. Ordinary
@@ -844,6 +849,32 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	return interactiveVMCPUCount, interactiveVMMemSizeMib
 }
 
+func computerKindForOwnership(own *VMOwnership) string {
+	if own == nil {
+		return "active"
+	}
+	if own.Kind == VMKindWorker {
+		return "worker"
+	}
+	if own.ParentVMID != "" || own.ParentDesktopID != "" || normalizeDesktopID(own.DesktopID) != PrimaryDesktopID || own.WarmnessClass == WarmnessClassCandidate {
+		return "candidate"
+	}
+	return "active"
+}
+
+func candidateIDForOwnership(own *VMOwnership) string {
+	if own == nil {
+		return ""
+	}
+	if own.Kind == VMKindWorker {
+		return strings.TrimSpace(own.WorkerID)
+	}
+	if computerKindForOwnership(own) == "candidate" {
+		return normalizeDesktopID(own.DesktopID)
+	}
+	return ""
+}
+
 func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
 	if own == nil || mgr == nil {
 		return false
@@ -979,6 +1010,11 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		MachineCPUCount:   cpu,
 		MachineMemSizeMib: mem,
 		GatewayToken:      r.issueGatewayToken(own.VMID),
+		ComputerKind:      computerKindForOwnership(own),
+		OwnerID:           own.UserID,
+		DesktopID:         own.DesktopID,
+		WorkerID:          own.WorkerID,
+		CandidateID:       candidateIDForOwnership(own),
 	})
 }
 
@@ -1335,6 +1371,9 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			MachineCPUCount:   interactiveVMCPUCount,
 			MachineMemSizeMib: interactiveVMMemSizeMib,
 			GatewayToken:      gwToken,
+			ComputerKind:      "active",
+			OwnerID:           userID,
+			DesktopID:         desktopID,
 		})
 		if err != nil {
 			log.Printf("vmctl: Firecracker boot failed for VM %s: %v", vmID, err)
@@ -1503,6 +1542,10 @@ func (r *OwnershipRegistry) ForkDesktop(userID, sourceDesktopID, targetDesktopID
 			MachineMemSizeMib: interactiveVMMemSizeMib,
 			SourceVMID:        sourceVMID,
 			GatewayToken:      r.issueGatewayToken(vmID),
+			ComputerKind:      "candidate",
+			OwnerID:           userID,
+			DesktopID:         targetDesktopID,
+			CandidateID:       targetDesktopID,
 		})
 		if err != nil {
 			log.Printf("vmctl: Firecracker fork boot failed for VM %s from %s: %v", vmID, sourceVMID, err)
@@ -1651,6 +1694,11 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 			MachineCPUCount:   cpuCount,
 			MachineMemSizeMib: memSizeMib,
 			GatewayToken:      gwToken,
+			ComputerKind:      "worker",
+			OwnerID:           req.UserID,
+			DesktopID:         req.DesktopID,
+			WorkerID:          workerID,
+			CandidateID:       workerID,
 		}
 		info, err := mgr.BootVM(bootCfg)
 		if err != nil {

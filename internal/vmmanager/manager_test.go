@@ -1108,6 +1108,11 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		MachineCPUCount:   2,
 		MachineMemSizeMib: 512,
 		Epoch:             1,
+		ComputerKind:      "worker",
+		OwnerID:           "owner@example.com",
+		DesktopID:         "primary",
+		WorkerID:          "worker-123",
+		CandidateID:       "worker-123",
 	}
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
@@ -1141,6 +1146,11 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.gateway_url=http://10.200.0.1:8084",
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
+		"choir.computer_kind=worker",
+		"choir.owner_id=owner@example.com",
+		"choir.desktop_id=primary",
+		"choir.worker_id=worker-123",
+		"choir.candidate_id=worker-123",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {
