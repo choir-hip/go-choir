@@ -610,3 +610,73 @@ the platform baseline checkout and writable candidate checkout from
 `PlatformBaseCommit`. Keep it bounded and observable: do not delete unrelated
 user edits, record checkout status in the lineage projection, and allow
 bootstrap to continue with a precise status if Git/network is unavailable.
+
+## 2026-05-31 Source-Mounted Zot Repair Evidence
+
+After the source workspace bootstrap fix landed at
+`8a1e36cbf79f5dae563b5a680315d28acf2de5b6`, a Super Console session on Node B
+started real Zot from the active computer path. The session identified itself
+as:
+
+```text
+i'm zot (0.2.6 (917da8c, 2026-05-30T17:33:08Z))
+(openai) gpt-5.5
+```
+
+The same product path materialized real checkouts:
+
+```json
+{
+  "platform_checkout_status": "ok_platform_at_base",
+  "candidate_checkout_status": "ok_candidate_at_base",
+  "super_console_session_id": "zot-1",
+  "platform_base_commit": "8a1e36cbf79f5dae563b5a680315d28acf2de5b6"
+}
+```
+
+Zot then ran in `/var/lib/go-choir/files/Source/candidate`, diagnosed a real
+lineage-quality bug, authored a patch, and wrote evidence under:
+
+```text
+/var/lib/go-choir/files/.choir/zot/sessions/zot-source-dirty-summary-20260531
+```
+
+Evidence files:
+
+```text
+diagnosis.md
+patch.diff
+commands.jsonl
+test-output.txt
+rollback.md
+classification.md
+status.txt
+```
+
+Problem documented before platform fix: `BootstrapSourceWorkspace` initializes
+`dirty_state_summary` as `not_inspected`. After checkout materialization, it
+records precise platform/candidate checkout statuses but does not derive a new
+summary from them. A lineage projection can therefore say source state is
+`not_inspected` while adjacent fields prove `clean`, `dirty_preserved`,
+`blocked`, or `failed`.
+
+Zot's classification: universal platform fix candidate, not auto-promoted. The
+candidate patch changes only `internal/sandbox/source_workspace.go` and
+`internal/sandbox/source_workspace_test.go`.
+
+Additional environment gap: Zot tried the focused test through
+`nix develop -c go test ./internal/sandbox ...` on Node B, but the test binary
+failed before executing tests:
+
+```text
+error while loading shared libraries: libicui18n.so.76: cannot open shared object file
+FAIL github.com/yusefmosiah/go-choir/internal/sandbox 0.000s
+```
+
+Belief update: the source-mounted repair loop is real enough for Zot to inspect
+the platform checkout, author a contained patch, and export machine-readable
+evidence. The remaining promotion step is to lift the vetted universal patch
+through the normal platform path, because candidate evidence is not itself a
+platform promotion. The Node B dev-shell/shared-library mismatch remains a
+separate build-workspace debt item; it should not be hidden by claiming the
+candidate test passed.
