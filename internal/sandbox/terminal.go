@@ -224,14 +224,14 @@ func (th *TerminalHandler) newSession(conn *websocket.Conn, user string) (*Termi
 
 func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, error) {
 	if len(th.command) > 0 {
-		cmd := exec.Command(th.command[0], th.command[1:]...)
+		command := th.superConsoleCommandWithGatewayDefaults()
+		cmd := exec.Command(command[0], command[1:]...)
 		rootDir := strings.TrimSpace(th.rootDir)
 		if rootDir == "" {
 			rootDir = "."
 		}
 		zotHome := filepath.Join(rootDir, ".choir", "zot")
-		cmd.Dir = rootDir
-		cmd.Env = append(os.Environ(),
+		env := append(os.Environ(),
 			"HOME="+rootDir,
 			"TERM=xterm-256color",
 			"ZOT_HOME="+zotHome,
@@ -239,6 +239,13 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			"ZOT_ROOT_DIR="+rootDir,
 			"ZOT_USER_ID="+user,
 		)
+		if !isFallbackZotSessionCommand(th.command) {
+			if token := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN")); token != "" {
+				env = append(env, "OPENAI_API_KEY="+token)
+			}
+		}
+		cmd.Dir = rootDir
+		cmd.Env = env
 		return cmd, nil
 	}
 	if strings.TrimSpace(th.shell) == "" {
@@ -247,6 +254,46 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 	cmd := exec.Command(th.shell)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 	return cmd, nil
+}
+
+func (th *TerminalHandler) superConsoleCommandWithGatewayDefaults() []string {
+	command := append([]string(nil), th.command...)
+	if isFallbackZotSessionCommand(command) {
+		return command
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("CHOIR_ZOT_BASE_URL")), "/")
+	if baseURL == "" {
+		gatewayURL := strings.TrimRight(strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_URL")), "/")
+		if gatewayURL == "" {
+			return command
+		}
+		baseURL = gatewayURL + "/provider/openai/v1"
+	}
+	providerName := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PROVIDER"))
+	if providerName == "" {
+		providerName = "openai"
+	}
+	model := strings.TrimSpace(os.Getenv("CHOIR_ZOT_MODEL"))
+	if model == "" {
+		model = "gpt-5.5"
+	}
+	reasoning := strings.TrimSpace(os.Getenv("CHOIR_ZOT_REASONING"))
+	if reasoning == "" {
+		reasoning = "medium"
+	}
+	return append(command,
+		"--provider", providerName,
+		"--model", model,
+		"--reasoning", reasoning,
+		"--base-url", baseURL,
+	)
+}
+
+func isFallbackZotSessionCommand(command []string) bool {
+	if len(command) < 2 {
+		return false
+	}
+	return command[1] == "zot-session"
 }
 
 // readPTY reads output from the PTY and sends it to the WebSocket client.

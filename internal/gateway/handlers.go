@@ -806,7 +806,6 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	writeGatewayJSON(w, http.StatusOK, resp)
 }
 
-
 // HandleSearchHealth handles GET /provider/v1/search/health.
 func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -887,6 +886,8 @@ func rateLimitBucketKey(sandboxID, scope string) string {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/provider/v1/inference", h.HandleInference)
+	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
+	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)

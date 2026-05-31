@@ -2027,6 +2027,145 @@ func TestHandleInference_StreamingFireworks(t *testing.T) {
 	}
 }
 
+func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
+	reg := NewIdentityRegistry(1 * time.Hour)
+	chatProvider := &mockProvider{
+		name: "chatgpt",
+		real: true,
+		response: &provider.LLMResponse{
+			ID:           "chatcmpl-test",
+			Text:         "hello from gateway",
+			Model:        "gpt-5.5",
+			StopReason:   "end_turn",
+			ProviderName: "chatgpt",
+			Usage:        provider.Usage{InputTokens: 11, OutputTokens: 3},
+		},
+	}
+	mp := provider.NewMultiProvider()
+	mp.Register("chatgpt", chatProvider)
+	h := NewMultiHandler(reg, mp)
+	credential, _ := reg.IssueCredential("sandbox-openai")
+
+	body := `{
+		"model":"gpt-5.5",
+		"messages":[
+			{"role":"system","content":"You are Zot inside Choir."},
+			{"role":"user","content":"Say hello"}
+		],
+		"reasoning_effort":"medium",
+		"stream":false
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleOpenAIChatCompletions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if chatProvider.lastReq == nil {
+		t.Fatal("provider was not called")
+	}
+	if chatProvider.lastReq.Model != "gpt-5.5" {
+		t.Fatalf("model = %q, want gpt-5.5", chatProvider.lastReq.Model)
+	}
+	if chatProvider.lastReq.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning = %q, want medium", chatProvider.lastReq.ReasoningEffort)
+	}
+	if chatProvider.lastReq.System != "You are Zot inside Choir." {
+		t.Fatalf("system = %q", chatProvider.lastReq.System)
+	}
+
+	var resp openAIChatCompletionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Object != "chat.completion" || resp.Model != "gpt-5.5" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if len(resp.Choices) != 1 || resp.Choices[0].Message == nil {
+		t.Fatalf("missing assistant message: %+v", resp.Choices)
+	}
+	var text string
+	if err := json.Unmarshal(resp.Choices[0].Message.Content, &text); err != nil {
+		t.Fatalf("decode message content: %v", err)
+	}
+	if text != "hello from gateway" {
+		t.Fatalf("message content = %q", text)
+	}
+}
+
+func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
+	reg := NewIdentityRegistry(1 * time.Hour)
+	chatProvider := &mockProvider{
+		name: "chatgpt",
+		real: true,
+		response: &provider.LLMResponse{
+			ID:           "chatcmpl-stream",
+			Text:         "streamed hello",
+			Model:        "gpt-5.5",
+			StopReason:   "end_turn",
+			ProviderName: "chatgpt",
+			Usage:        provider.Usage{InputTokens: 7, OutputTokens: 2},
+		},
+	}
+	mp := provider.NewMultiProvider()
+	mp.Register("chatgpt", chatProvider)
+	h := NewMultiHandler(reg, mp)
+	credential, _ := reg.IssueCredential("sandbox-openai-stream")
+
+	body := `{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"medium","stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleOpenAIChatCompletions(w, req)
+
+	if ct := w.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	bodyText := w.Body.String()
+	if !strings.Contains(bodyText, `"object":"chat.completion.chunk"`) {
+		t.Fatalf("missing OpenAI chunk object in SSE: %s", bodyText)
+	}
+	if !strings.Contains(bodyText, `"content":"streamed hello"`) {
+		t.Fatalf("missing content delta in SSE: %s", bodyText)
+	}
+	if !strings.Contains(bodyText, `"finish_reason":"stop"`) {
+		t.Fatalf("missing finish reason in SSE: %s", bodyText)
+	}
+	if !strings.Contains(bodyText, "data: [DONE]") {
+		t.Fatalf("missing DONE marker in SSE: %s", bodyText)
+	}
+}
+
+func TestHandleOpenAIModelsRequiresSandboxAuth(t *testing.T) {
+	reg := NewIdentityRegistry(1 * time.Hour)
+	h := NewHandler(reg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/provider/openai/v1/models", nil)
+	w := httptest.NewRecorder()
+	h.HandleOpenAIModels(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+
+	credential, _ := reg.IssueCredential("sandbox-openai-models")
+	req = httptest.NewRequest(http.MethodGet, "/provider/openai/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
+	w = httptest.NewRecorder()
+	h.HandleOpenAIModels(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"id":"gpt-5.5"`) {
+		t.Fatalf("models response missing gpt-5.5: %s", w.Body.String())
+	}
+}
+
 func TestHandleInference_StreamingRequiresAuth(t *testing.T) {
 	// Streaming requests still require valid auth.
 	reg := NewIdentityRegistry(1 * time.Hour)

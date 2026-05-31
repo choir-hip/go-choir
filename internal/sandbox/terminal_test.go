@@ -535,6 +535,71 @@ func TestSessionCommandUsesPersistentZotHome(t *testing.T) {
 	}
 }
 
+func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
+	rootDir := t.TempDir()
+	t.Setenv("RUNTIME_GATEWAY_URL", "http://127.0.0.1:8084")
+	t.Setenv("RUNTIME_GATEWAY_TOKEN", "sandbox-secret-token")
+
+	th := &TerminalHandler{
+		command: []string{"/opt/choir/bin/zot"},
+		rootDir: rootDir,
+	}
+
+	cmd, err := th.sessionCommand("zot-test", "user@example.com")
+	if err != nil {
+		t.Fatalf("sessionCommand returned error: %v", err)
+	}
+
+	wantArgs := []string{
+		"/opt/choir/bin/zot",
+		"--provider", "openai",
+		"--model", "gpt-5.5",
+		"--reasoning", "medium",
+		"--base-url", "http://127.0.0.1:8084/provider/openai/v1",
+	}
+	if strings.Join(cmd.Args, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("cmd.Args = %#v, want %#v", cmd.Args, wantArgs)
+	}
+	for _, arg := range cmd.Args {
+		if strings.Contains(arg, "sandbox-secret-token") {
+			t.Fatalf("gateway token leaked into argv: %#v", cmd.Args)
+		}
+	}
+
+	env := map[string]string{}
+	for _, entry := range cmd.Env {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok {
+			env[key] = value
+		}
+	}
+	if env["OPENAI_API_KEY"] != "sandbox-secret-token" {
+		t.Fatalf("OPENAI_API_KEY = %q, want gateway token", env["OPENAI_API_KEY"])
+	}
+}
+
+func TestSessionCommandLeavesFallbackZotSessionUnchanged(t *testing.T) {
+	t.Setenv("RUNTIME_GATEWAY_URL", "http://127.0.0.1:8084")
+	t.Setenv("RUNTIME_GATEWAY_TOKEN", "sandbox-secret-token")
+	th := &TerminalHandler{
+		command: []string{"/opt/choir/bin/sandbox", "zot-session"},
+		rootDir: t.TempDir(),
+	}
+
+	cmd, err := th.sessionCommand("zot-test", "user@example.com")
+	if err != nil {
+		t.Fatalf("sessionCommand returned error: %v", err)
+	}
+	if strings.Join(cmd.Args, "\x00") != strings.Join(th.command, "\x00") {
+		t.Fatalf("fallback cmd.Args = %#v, want %#v", cmd.Args, th.command)
+	}
+	for _, entry := range cmd.Env {
+		if strings.HasPrefix(entry, "OPENAI_API_KEY=") {
+			t.Fatalf("fallback should not receive OPENAI_API_KEY, got %q", entry)
+		}
+	}
+}
+
 func TestTerminalMessage_Unmarshal(t *testing.T) {
 	// Test input message.
 	inputJSON := `{"type":"input","data":"hello"}`
