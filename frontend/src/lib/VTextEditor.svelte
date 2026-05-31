@@ -88,8 +88,41 @@
       .replace(/"/g, '&quot;');
   }
 
+  function findSourceEntity(sourceEntities = [], entityID = '') {
+    const normalized = String(entityID || '').trim();
+    if (!normalized) return null;
+    return sourceEntities.find((entity) => String(entity?.entity_id || '') === normalized) || null;
+  }
+
+  function renderInlineSourceRef(label, entityID, sourceEntities = []) {
+    const entity = findSourceEntity(sourceEntities, entityID);
+    const displayLabel = label || entity?.label || 'source';
+    if (!entity) {
+      return `<span class="vtext-source-ref vtext-source-ref--missing" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">missing source</span>`;
+    }
+    const kind = sourceEntityKindLabel(entity?.kind);
+    const title = sourceEntityTitle(entity);
+    const transcript = entity?.evidence?.transcript_availability || '';
+    const evidence = entity?.evidence?.state || 'pending';
+    const research = entity?.evidence?.research_state || 'pending';
+    return `<span class="vtext-source-ref" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+      <span class="vtext-source-ref-label">${escapeHTML(displayLabel)}</span>
+      <span class="vtext-source-ref-kind">${escapeHTML(kind)}</span>
+      <span class="vtext-source-ref-popover" data-vtext-source-ref-popover role="note">
+        <strong>${escapeHTML(title)}</strong>
+        <span>${escapeHTML(kind)}</span>
+        <span>evidence ${escapeHTML(evidence)}</span>
+        <span>research ${escapeHTML(research)}</span>
+        ${transcript ? `<span>transcript ${escapeHTML(transcript)}</span>` : ''}
+      </span>
+    </span>`;
+  }
+
   function renderInlineMarkdown(value, sourceEntities = []) {
     let html = escapeHTML(value);
+    html = html.replace(/\[([^\]]+)\]\(source:([^)]+)\)/g, (_match, label, entityID) =>
+      renderInlineSourceRef(label, entityID, sourceEntities)
+    );
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
@@ -356,6 +389,11 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    if (node.matches?.('[data-vtext-source-ref]')) {
+      const label = node.getAttribute('data-source-label') || node.querySelector?.('.vtext-source-ref-label')?.textContent || 'source';
+      const entityID = node.getAttribute('data-source-entity-id') || '';
+      return entityID ? `[${label}](source:${entityID})` : label;
+    }
     if (node.closest?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
@@ -1485,6 +1523,13 @@
   }
 
   function handleEditorKeydown(event) {
+    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    if (sourceRef && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleInlineSourceRef(sourceRef);
+      return;
+    }
     const button = event.target?.closest?.('[data-vtext-open-source]');
     if (!button || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
@@ -1492,6 +1537,19 @@
     const entityID = button.getAttribute('data-source-entity-id') || '';
     const entity = revisionSourceEntities().find((item) => String(item?.entity_id || '') === entityID);
     handleSourceEntityOpen(entity);
+  }
+
+  function toggleInlineSourceRef(sourceRef) {
+    if (!sourceRef) return;
+    const expanded = sourceRef.getAttribute('data-expanded') === 'true';
+    sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
+  }
+
+  function handleEditorPointerDown(event) {
+    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    if (!sourceRef) return;
+    event.preventDefault();
+    toggleInlineSourceRef(sourceRef);
   }
 
   function handleDocumentScroll(event) {
@@ -1780,6 +1838,7 @@
         aria-label="VText document"
         spellcheck="true"
         on:focus={handleEditorFocus}
+        on:pointerdown={handleEditorPointerDown}
         on:click={handleEditorClick}
         on:keydown={handleEditorKeydown}
         on:input={handleEditorInput}
@@ -2067,6 +2126,70 @@
   .rendered-doc :global(a) {
     color: var(--choir-text-accent);
     text-underline-offset: 0.18em;
+  }
+
+  .rendered-doc :global(.vtext-source-ref) {
+    position: relative;
+    display: inline-flex;
+    gap: 0.26rem;
+    align-items: center;
+    max-width: 100%;
+    margin: 0 0.08rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    padding: 0.02rem 0.42rem;
+    color: var(--choir-text-accent);
+    background: var(--choir-state-selected);
+    font-size: 0.82em;
+    font-weight: 760;
+    line-height: 1.55;
+    vertical-align: baseline;
+    cursor: pointer;
+  }
+
+  .rendered-doc :global(.vtext-source-ref:focus-visible) {
+    outline: 2px solid var(--choir-state-active-glow);
+    outline-offset: 2px;
+  }
+
+  .rendered-doc :global(.vtext-source-ref--missing) {
+    border-color: var(--choir-status-danger);
+  }
+
+  .rendered-doc :global(.vtext-source-ref-kind) {
+    color: var(--choir-text-accent);
+    font-size: 0.68em;
+    font-weight: 820;
+    text-transform: uppercase;
+  }
+
+  .rendered-doc :global(.vtext-source-ref-popover) {
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    top: calc(100% + 0.35rem);
+    display: none;
+    width: min(18rem, calc(100vw - 3rem));
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.58rem 0.64rem;
+    color: var(--choir-text-accent);
+    background: var(--choir-surface-pane);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--choir-shadow-color) 28%, transparent);
+    font-size: 0.82rem;
+    font-weight: 620;
+    line-height: 1.35;
+  }
+
+  .rendered-doc :global(.vtext-source-ref-popover strong),
+  .rendered-doc :global(.vtext-source-ref-popover span) {
+    display: block;
+  }
+
+  .rendered-doc :global(.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover),
+  .rendered-doc :global(.vtext-source-ref:hover .vtext-source-ref-popover),
+  .rendered-doc :global(.vtext-source-ref:focus .vtext-source-ref-popover) {
+    display: block;
   }
 
   .rendered-doc :global(code) {

@@ -48,7 +48,7 @@ test('VText renders source entities as expandable sources and opens owning media
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `# Source Entity Fixture\n\nReview this source: ${sourceURL}`,
+        content: `# Source Entity Fixture\n\nReview this [source](source:src-fixture-youtube): ${sourceURL}`,
         author_kind: 'user',
         author_label: 'browser-test',
         metadata,
@@ -64,6 +64,10 @@ test('VText renders source entities as expandable sources and opens owning media
   await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered.locator('[data-vtext-source-ref]')).toBeVisible({ timeout: 10000 });
+  await expect(rendered.locator('[data-vtext-source-ref]')).toContainText('source');
+  await rendered.locator('[data-vtext-source-ref]').click();
+  await expect(rendered.locator('[data-vtext-source-ref-popover], .vtext-source-ref-popover')).toContainText('YouTube source fixture');
   await expect(rendered.locator('[data-vtext-source-inline]')).toBeVisible({ timeout: 10000 });
   await expect(rendered.locator('[data-vtext-source-inline]')).toContainText('YouTube source fixture');
   await rendered.locator('[data-vtext-source-inline] summary').click();
@@ -74,4 +78,18 @@ test('VText renders source entities as expandable sources and opens owning media
   await rendered.locator('[data-vtext-open-source]').click();
   await expect(page.locator('[data-video-app]')).toHaveCount(initialVideoWindows + 1, { timeout: 10000 });
   await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
+
+  await rendered.evaluate((el) => {
+    el.insertAdjacentHTML('beforeend', '<p>Round-trip note.</p>');
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'Round-trip note.' }));
+  });
+  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 10_000 });
+  const revisions = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`list revisions failed: ${res.status}`);
+    return res.json();
+  }, created.doc_id);
+  const latest = revisions.revisions[revisions.revisions.length - 1];
+  expect(latest.content).toContain('[source](source:src-fixture-youtube)');
+  expect(latest.content).toContain('Round-trip note.');
 });
