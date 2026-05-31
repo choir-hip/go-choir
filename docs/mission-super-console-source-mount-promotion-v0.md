@@ -455,3 +455,32 @@ bootstrap instructions to clone/edit/publish from `Source/candidate`. This still
 does not prove the full zot patch/build/restart loop, but it makes worker and
 candidate computers line up with the source-mount artifact rather than a
 parallel convention.
+
+## 2026-05-31 Deploy-Time VM Refresh Identity Gap
+
+Platform source-workspace identity propagation was lifted to `main` in commit
+`59bfd260a245a2cf57b762d691e1f6f614e29bd9`, and staging health reported that
+commit for both proxy and sandbox at `2026-05-31T11:32:31Z`. GitHub Actions run
+`26711401341` and its Node B deploy job completed successfully.
+
+However, live Node B VM config inspection after deploy still showed recent
+`/var/lib/go-choir/vm-state/*/fc-config.json` boot args containing only product
+runtime basics such as `vm_id` and `epoch`, with no
+`choir.computer_kind`, `choir.owner_id`, `choir.desktop_id`,
+`choir.worker_id`, or `choir.candidate_id` args. That means the platform code is
+deployed, but refreshed/recovered running computers are not yet product-path
+evidence for the new guest identity contract.
+
+Current root-cause belief: deploy refresh is reusing persisted `VMConfig`
+records through `RefreshVM`/`RecoverVM` paths. Those persisted records predate
+the new identity fields, so `BootVM` correctly preserves and reboots an old
+empty identity config. Fresh active/candidate/worker boots have code paths that
+populate the fields, but deploy-time refresh must also rehydrate missing
+identity from the ownership registry before asking the VM manager to rebuild
+Firecracker config.
+
+Next code checkpoint: teach the vmctl ownership refresh/recover path to merge
+the current ownership identity into any refreshed VM manager config before boot.
+The acceptance evidence should include a deployed Node B `fc-config.json` whose
+boot args contain the expected `choir.computer_kind`, owner, desktop, and
+worker/candidate identity fields after refresh, not just local tests.
