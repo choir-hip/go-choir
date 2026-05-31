@@ -754,3 +754,35 @@ platform promotion then reviewed, tested, committed, pushed, watched CI/deploy,
 and verified deployed product-path lineage. The remaining debt is not this
 source-summary fix; it is the Node B build-workspace mismatch that prevented
 Zot from running the focused Go test locally inside the user computer.
+
+## 2026-05-31 Node B Dev Shell Runtime Link Gap
+
+The next completion blocker is acceptance criteria 4 and 5 inside the user
+computer: Zot must run a focused rebuild/test/restart loop and verify through
+the product path, not merely author a patch for Codex to test elsewhere.
+
+Node B evidence from `/var/lib/go-choir/files/Source/platform`:
+
+```text
+nix develop -c sh -lc 'echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH; go env CGO_ENABLED CGO_CFLAGS CGO_LDFLAGS'
+LD_LIBRARY_PATH=
+CGO_ENABLED=1
+CGO_CFLAGS=-I/nix/store/...-icu4c-76.1-dev/include
+CGO_LDFLAGS=-L/nix/store/...-icu4c-76.1/lib -licui18n -licuuc
+```
+
+This explains Zot's earlier failure:
+
+```text
+error while loading shared libraries: libicui18n.so.76: cannot open shared object file
+```
+
+Root-cause belief: the declared Nix dev shell provides ICU headers and linker
+flags but not a runtime library search path for the transient Go test binary.
+The durable fix is to teach the repo dev shell to export the ICU runtime library
+path. Do not normalize ad hoc `CGO_*` or `LD_LIBRARY_PATH` commands in Zot
+repair prompts; the repair environment itself should be correct.
+
+Next code checkpoint: update the dev shell declaration, promote it through the
+platform path, then rerun the Zot candidate test/rebuild proof from inside the
+source-mounted user computer.
