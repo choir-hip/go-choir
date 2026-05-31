@@ -510,3 +510,70 @@ boot-contract-affecting vmctl changes with that class, and make manual forced
 deploys able to exercise it. The acceptance proof remains a post-deploy
 `fc-config.json` containing `choir.computer_kind` and the ownership identity
 fields.
+
+## 2026-05-31 VM Boot Identity Promotion Checkpoint
+
+Platform fix sequence:
+
+- `f1abd7c`: documented the deploy-time VM refresh identity gap.
+- `2ef575b3024227e1fa590f46da76f9adaec4c1b1`: rehydrated ownership identity
+  into vmctl recover/refresh config and vmmanager persisted config merge.
+- `6f944c3`: documented that sandbox hot-refresh is not sufficient for a VM
+  boot-contract change.
+- `cb5f29bc5db52986d30c6f616762836b3a29c25a`: added
+  `deploy_active_vm_refresh` so vmctl/vmmanager boot-contract changes and
+  manual forced deploys full-refresh active VMs without pretending the guest
+  image changed.
+
+Local verification before promotion:
+
+```text
+nix develop -c go test ./internal/vmctl ./internal/vmmanager ./cmd/vmctl -run 'TestOwnershipRegistry_(DelegatesRecoverToVMManager|RefreshActiveVMDelegatesToVMManager)|TestMergeVMConfigOverridesFillsDeployRefreshIdentity|TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts' -count=1
+nix develop -c go test ./cmd/vmctl ./internal/vmmanager ./internal/vmctl ./internal/sandbox ./internal/runtime ./cmd/sandbox
+printf 'internal/vmmanager/manager.go\ninternal/vmctl/ownership.go\ncmd/vmctl/main.go\n' | .github/scripts/deploy-impact-classify
+```
+
+The deploy impact classifier output included:
+
+```text
+deploy_vmctl_restart=true
+deploy_active_vm_refresh=true
+host_services=vmctl,gateway,proxy,sandbox
+```
+
+Promotion evidence:
+
+- push CI for `cb5f29bc5db52986d30c6f616762836b3a29c25a`: GitHub Actions run
+  `26711779635`, success. The staging deploy job was skipped because the push
+  changed workflow/deploy logic only.
+- forced staging deploy for the same SHA: workflow-dispatch run `26711815828`,
+  success; deploy job `78723354454`, started `2026-05-31T11:52:03Z` and
+  completed `2026-05-31T11:58:14Z`.
+- staging health reported proxy and sandbox commit
+  `cb5f29bc5db52986d30c6f616762836b3a29c25a`, deployed at
+  `2026-05-31T11:52:06Z`.
+- Node B services after deploy:
+  - `go-choir-sandbox.service`: active, entered at `2026-05-31T11:54:15Z`;
+  - `go-choir-vmctl.service`: active, entered at `2026-05-31T11:54:20Z`.
+- live Node B config proof found 31
+  `/var/lib/go-choir/vm-state/*/fc-config.json` files containing
+  `choir.computer_kind`.
+
+Sample refreshed boot args:
+
+```text
+/var/lib/go-choir/vm-state/vm-0595550332680fdf7d4cf1a59810c4c5/fc-config.json
+vm_id=vm-0595550332680fdf7d4cf1a59810c4c5
+epoch=5
+choir.computer_kind=active
+choir.owner_id=89f8895f-d429-4965-a502-78bce2fc6ae6
+choir.desktop_id=primary
+```
+
+Belief update: the platform-level promotion path for VM boot identity is now
+correct enough for active computers. A vmctl/vmmanager boot-contract change no
+longer silently lands as a sandbox hot-refresh that cannot rewrite Firecracker
+boot args. The remaining mission gap is still the full zot repair loop:
+real Zot must author a contained source patch, rebuild/restart a computer,
+verify product behavior, export evidence, and classify the patch before broader
+promotion.
