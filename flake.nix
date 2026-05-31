@@ -269,6 +269,7 @@
             "internal/store"
             "internal/types"
             "internal/vmctl"
+            "internal/zot"
           ];
           includeSkills = true;
         };
