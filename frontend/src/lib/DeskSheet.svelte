@@ -59,7 +59,7 @@
     inset: 0;
     z-index: 9998;
     border: 0;
-    background: var(--choir-surface-media);
+    background: color-mix(in srgb, var(--choir-bg) 72%, transparent);
     cursor: default;
   }
 

@@ -746,6 +746,33 @@ test('logout remains reachable when desktop bootstrap fails', async ({ page, aut
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
+test('London Salmon Desk sheet backdrop does not black out the desktop', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+
+  await page.evaluate(async () => {
+    const { applyThemeToElement, LONDON_SALMON } = await import('/src/lib/theme.ts');
+    applyThemeToElement(document.documentElement, LONDON_SALMON);
+    window.dispatchEvent(new CustomEvent('choir-theme-change', { detail: { theme: LONDON_SALMON } }));
+  });
+  await expect(page.locator('html')).toHaveAttribute('data-theme-id', 'london-salmon');
+
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+
+  const backdrop = await page.locator('[data-desk-sheet-backdrop]').evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      background: style.backgroundColor,
+      rect: el.getBoundingClientRect().toJSON(),
+    };
+  });
+  expect(backdrop.rect.width).toBeGreaterThan(0);
+  expect(backdrop.rect.height).toBeGreaterThan(0);
+  expect(backdrop.background).not.toBe('rgb(0, 0, 0)');
+  expect(backdrop.background).not.toBe('rgba(0, 0, 0, 1)');
+});
+
 test('Settings opens as safe product settings without prompt APIs', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
