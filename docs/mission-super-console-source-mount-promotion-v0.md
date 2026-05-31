@@ -680,3 +680,77 @@ through the normal platform path, because candidate evidence is not itself a
 platform promotion. The Node B dev-shell/shared-library mismatch remains a
 separate build-workspace debt item; it should not be hidden by claiming the
 candidate test passed.
+
+## 2026-05-31 Platform Promotion Of Zot-Authored Source Summary Fix
+
+The Zot-authored patch was reviewed, lifted into the platform checkout, tested
+locally, committed after the documentation checkpoint, and pushed to `main`.
+
+Promotion commits:
+
+```text
+471b6aa docs: record zot source repair evidence
+f41ee18 sandbox: summarize source checkout state
+```
+
+Local verification before push:
+
+```text
+nix develop -c go test ./internal/sandbox -run 'TestBootstrapSourceWorkspace(MaterializesPlatformAndCandidateCheckouts|PreservesDirtyCandidateCheckout)|TestSourceCheckoutDirtyStateSummary' -count=1
+ok github.com/yusefmosiah/go-choir/internal/sandbox
+
+nix develop -c go test ./internal/sandbox ./cmd/sandbox
+ok github.com/yusefmosiah/go-choir/internal/sandbox
+ok github.com/yusefmosiah/go-choir/cmd/sandbox
+```
+
+CI/deploy evidence for `f41ee189f810ecc7fb3efbedbfeb83229e742f23`:
+
+```text
+CI run: 26712362968, success
+Deploy job: 78724820417, success
+FlakeHub run: 26712362976, success
+```
+
+Staging health after deploy:
+
+```json
+{
+  "build": {
+    "commit": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+    "deployed_commit": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+    "deployed_at": "2026-05-31T12:17:57Z"
+  },
+  "upstream_build": {
+    "commit": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+    "deployed_commit": "f41ee189f810ecc7fb3efbedbfeb83229e742f23"
+  }
+}
+```
+
+Product-path Super Console proof after deploy opened a real Super Console
+session against Node B and refreshed `.choir/source-lineage.json`:
+
+```json
+{
+  "platform_base_commit": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+  "current_runtime_build_ref": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+  "current_frontend_build_ref": "f41ee189f810ecc7fb3efbedbfeb83229e742f23",
+  "dirty_state_summary": "dirty_preserved",
+  "platform_checkout_status": "ok_platform_at_base",
+  "candidate_checkout_status": "dirty_preserved",
+  "lineage_path": "/var/lib/go-choir/files/.choir/source-lineage.json"
+}
+```
+
+The `dirty_preserved` result is expected for this proof because the user
+computer's `Source/candidate` checkout still contains the Zot-authored evidence
+patch. The promoted platform checkout is at the deployed commit, and the
+lineage summary is no longer falsely `not_inspected`.
+
+Belief update: the mini mission achieved the intended promotion shape for this
+bug. Zot authored a contained candidate patch and evidence; Codex/human-facing
+platform promotion then reviewed, tested, committed, pushed, watched CI/deploy,
+and verified deployed product-path lineage. The remaining debt is not this
+source-summary fix; it is the Node B build-workspace mismatch that prevented
+Zot from running the focused Go test locally inside the user computer.
