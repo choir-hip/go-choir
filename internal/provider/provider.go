@@ -290,6 +290,10 @@ type ProviderConfig struct {
 	// If empty, Fireworks is not initialized even if FIREWORKS_API_KEY is set.
 	FireworksModels []string
 
+	// FireworksReasoningEffort seeds Fireworks reasoning effort for requests
+	// that do not carry a per-request value.
+	FireworksReasoningEffort string
+
 	// ChatGPTModels lists ChatGPT/Codex Responses model IDs. The first entry
 	// seeds the provider instance; request.Model still controls per-call
 	// selection. If empty, ChatGPT is not initialized even if Codex OAuth auth
@@ -612,15 +616,17 @@ func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropic
 type FireworksProvider struct {
 	apiKey     string // loaded at init time, never logged
 	modelID    string
+	reasoning  string
 	httpClient *http.Client
 	baseURL    string
 }
 
 // FireworksConfig holds configuration for creating a FireworksProvider.
 type FireworksConfig struct {
-	APIKey  string
-	ModelID string
-	BaseURL string // defaults to https://api.fireworks.ai/inference/v1
+	APIKey          string
+	ModelID         string
+	ReasoningEffort string
+	BaseURL         string // defaults to https://api.fireworks.ai/inference/v1
 }
 
 // NewFireworksProvider creates a Fireworks provider from the given config.
@@ -640,6 +646,7 @@ func NewFireworksProvider(cfg FireworksConfig) (*FireworksProvider, error) {
 	return &FireworksProvider{
 		apiKey:     cfg.APIKey,
 		modelID:    cfg.ModelID,
+		reasoning:  strings.TrimSpace(cfg.ReasoningEffort),
 		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		baseURL:    strings.TrimRight(baseURL, "/"),
 	}, nil
@@ -756,7 +763,7 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		Tools:           tools,
 		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          false,
-		ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
+		ReasoningEffort: effectiveReasoning(req.ReasoningEffort, p.reasoning),
 	}
 	if req.MaxTokens > 0 {
 		maxTokens := req.MaxTokens
@@ -2688,9 +2695,14 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 
 	// Try Fireworks. Register one provider; req.Model selects the model.
 	if os.Getenv("FIREWORKS_API_KEY") != "" && len(cfg.FireworksModels) > 0 {
-		if p, err := NewFireworksProviderFromEnv(cfg.FireworksModels[0]); err == nil {
+		if p, err := NewFireworksProvider(FireworksConfig{
+			APIKey:          os.Getenv("FIREWORKS_API_KEY"),
+			ModelID:         cfg.FireworksModels[0],
+			BaseURL:         os.Getenv("FIREWORKS_BASE_URL"),
+			ReasoningEffort: cfg.FireworksReasoningEffort,
+		}); err == nil {
 			mp.Register("fireworks", p)
-			log.Printf("provider: resolved fireworks (seed_model=%s)", p.modelID)
+			log.Printf("provider: resolved fireworks (seed_model=%s reasoning=%s)", p.modelID, p.reasoning)
 		}
 	}
 

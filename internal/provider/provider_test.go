@@ -2063,6 +2063,43 @@ func TestFireworksProviderCallUsesOpenAIChatCompletions(t *testing.T) {
 	}
 }
 
+func TestFireworksProviderUsesDefaultReasoningEffort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body openAIChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if body.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+			t.Errorf("model = %q, want deepseek-v4-flash", body.Model)
+		}
+		if body.ReasoningEffort != "medium" {
+			t.Errorf("reasoning_effort = %q, want medium", body.ReasoningEffort)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"id":"chatcmpl_test",
+			"model":"accounts/fireworks/models/deepseek-v4-flash",
+			"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}],
+			"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}
+		}`)
+	}))
+	defer server.Close()
+
+	p := &FireworksProvider{
+		apiKey:     "fw-test-key",
+		modelID:    "accounts/fireworks/models/deepseek-v4-flash",
+		reasoning:  "medium",
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+	}
+
+	if _, err := p.Call(context.Background(), LLMRequest{
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "ok"}}}},
+	}); err != nil {
+		t.Fatalf("fireworks call: %v", err)
+	}
+}
+
 func TestOpenAICompatibleExactToolChoiceSerialization(t *testing.T) {
 	chatBody, err := json.Marshal(openAIChatCompletionRequest{
 		Model:      "accounts/fireworks/models/deepseek-v4-pro",

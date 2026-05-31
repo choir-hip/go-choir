@@ -72,12 +72,13 @@ func loadProviderConfig() provider.ProviderConfig {
 		},
 		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
 		FireworksModels: []string{
-			"accounts/fireworks/models/deepseek-v4-pro",
 			"accounts/fireworks/models/deepseek-v4-flash",
+			"accounts/fireworks/models/deepseek-v4-pro",
 			"accounts/fireworks/models/kimi-k2p6",
 		},
-		ChatGPTModels:          []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
-		ChatGPTReasoningEffort: "low",
+		FireworksReasoningEffort: "medium",
+		ChatGPTModels:            []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
+		ChatGPTReasoningEffort:   "low",
 	}
 
 	// Allow overrides for non-default setups.
@@ -89,6 +90,9 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_FIREWORKS_MODELS"); v != "" {
 		cfg.FireworksModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_FIREWORKS_REASONING_EFFORT"); v != "" {
+		cfg.FireworksReasoningEffort = v
 	}
 	if v := os.Getenv("GATEWAY_CHATGPT_MODELS"); v != "" {
 		cfg.ChatGPTModels = strings.Split(v, ",")

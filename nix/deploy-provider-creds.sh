@@ -24,6 +24,8 @@ SETTINGS="${CHOIR_PROVIDER_SETTINGS:-${HOME}/.config/go-choir/provider-settings.
 CODEX_AUTH="${CODEX_AUTH_PATH:-${HOME}/.codex/auth.json}"
 REMOTE_ENV_FILE="/var/lib/go-choir/gateway-provider.env"
 REMOTE_CODEX_AUTH="/var/lib/go-choir/codex-auth.json"
+DEFAULT_GATEWAY_FIREWORKS_MODELS="accounts/fireworks/models/deepseek-v4-flash,accounts/fireworks/models/deepseek-v4-pro,accounts/fireworks/models/kimi-k2p6"
+DEFAULT_GATEWAY_FIREWORKS_REASONING_EFFORT="medium"
 
 # Load local deployment credentials when present. This keeps the common
 # operator path safe: running this script from the repo should deploy the
@@ -106,6 +108,11 @@ fi
 for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL FIREWORKS_API_KEY FIREWORKS_BASE_URL; do
   add_env_once "$key"
 done
+
+if [ -n "${FIREWORKS_API_KEY:-}" ]; then
+  ENVS+=("GATEWAY_FIREWORKS_MODELS=${GATEWAY_FIREWORKS_MODELS:-$DEFAULT_GATEWAY_FIREWORKS_MODELS}")
+  ENVS+=("GATEWAY_FIREWORKS_REASONING_EFFORT=${GATEWAY_FIREWORKS_REASONING_EFFORT:-$DEFAULT_GATEWAY_FIREWORKS_REASONING_EFFORT}")
+fi
 
 if [ -f "$CODEX_AUTH" ]; then
   ENVS+=("CHATGPT_AUTH_PATH=${REMOTE_CODEX_AUTH}")
