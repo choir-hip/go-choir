@@ -1115,3 +1115,34 @@ entities as evidence rather than flattening them into prose.
 `[label](source:ENTITY_ID)` plus `source_entities` metadata, then prove the
 agent-authored next version keeps the source ref attached to the relevant claim
 or emits a durable reason when it deliberately changes the citation.
+
+## Run Checkpoint & Problem Record - Appagent Source-Ref Preservation - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**problem being fixed before code changes:** inline source refs now round-trip
+through the human-editable VText surface, but the VText agent prompt path only
+describes source entities generally. It does not yet make existing
+`[label](source:ENTITY_ID)` anchors an explicit hard requirement for
+agent-authored revisions. That leaves the next VText revision vulnerable to
+dropping, flattening, or URL-rewriting inline source refs during `replace_all`
+or broad edit operations.
+
+**evidence:**
+
+- `buildAgentRevisionRequest` includes formatted `source_entities` metadata and
+  tells VText to preserve source-backed affordances.
+- `vtextHardRequirementHints` preserves marker strings, numbered headings,
+  evidence labels, command labels, and hashes, but does not currently extract
+  inline `source:` refs as hard requirements.
+- The VText role-level prompt says to preserve requested source labels, but it
+  does not name the canonical inline syntax or entity-id invariant.
+
+**remaining error field:** teach the VText prompt/hard-requirement layer that
+`[label](source:ENTITY_ID)` is the canonical inline Source Entity syntax; make
+entity ids preservation-grade constraints; and prove the prompt request carries
+that instruction before attempting live appagent revision proof.
+
+**next executable probe:** add source-ref hard requirement extraction and
+source-entity prompt language, then cover the generated VText agent revision
+request with a focused runtime unit test.
