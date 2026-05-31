@@ -216,6 +216,30 @@ func materializeSourceCheckouts(projection *SourceWorkspaceProjection) {
 	if candidateErr != nil {
 		projection.CandidateCheckoutError = candidateErr.Error()
 	}
+	projection.DirtyStateSummary = sourceCheckoutDirtyStateSummary(platformStatus, candidateStatus)
+}
+
+func sourceCheckoutDirtyStateSummary(platformStatus, candidateStatus string) string {
+	statuses := []string{strings.TrimSpace(platformStatus), strings.TrimSpace(candidateStatus)}
+	if strings.HasPrefix(statuses[0], "ok_") && strings.HasPrefix(statuses[1], "ok_") {
+		return "clean"
+	}
+	for _, status := range statuses {
+		if status == "dirty_preserved" {
+			return "dirty_preserved"
+		}
+	}
+	for _, status := range statuses {
+		if strings.HasPrefix(status, "blocked_") {
+			return "blocked"
+		}
+	}
+	for _, status := range statuses {
+		if strings.Contains(status, "failed") {
+			return "failed"
+		}
+	}
+	return "not_inspected"
 }
 
 func ensureSourceCheckout(dir, repo, baseCommit string, writable bool) (string, error) {

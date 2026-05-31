@@ -171,6 +171,9 @@ func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *te
 	if projection.CandidateCheckoutStatus != "ok_candidate_at_base" {
 		t.Fatalf("CandidateCheckoutStatus = %q error=%q", projection.CandidateCheckoutStatus, projection.CandidateCheckoutError)
 	}
+	if projection.DirtyStateSummary != "clean" {
+		t.Fatalf("DirtyStateSummary = %q, want clean", projection.DirtyStateSummary)
+	}
 	for _, checkout := range []string{projection.PlatformSourceMount, projection.CandidateSourceMount} {
 		if _, err := os.Stat(filepath.Join(checkout, "README.md")); err != nil {
 			t.Fatalf("expected materialized README in %s: %v", checkout, err)
@@ -189,8 +192,9 @@ func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *te
 		t.Fatalf("read lineage projection: %v", err)
 	}
 	if !strings.Contains(string(raw), `"platform_checkout_status": "ok_platform_at_base"`) ||
-		!strings.Contains(string(raw), `"candidate_checkout_status": "ok_candidate_at_base"`) {
-		t.Fatalf("lineage missing checkout statuses: %s", string(raw))
+		!strings.Contains(string(raw), `"candidate_checkout_status": "ok_candidate_at_base"`) ||
+		!strings.Contains(string(raw), `"dirty_state_summary": "clean"`) {
+		t.Fatalf("lineage missing checkout status summary: %s", string(raw))
 	}
 }
 
@@ -224,7 +228,34 @@ func TestBootstrapSourceWorkspacePreservesDirtyCandidateCheckout(t *testing.T) {
 	if projection.CandidateCheckoutStatus != "dirty_preserved" {
 		t.Fatalf("CandidateCheckoutStatus = %q", projection.CandidateCheckoutStatus)
 	}
+	if projection.DirtyStateSummary != "dirty_preserved" {
+		t.Fatalf("DirtyStateSummary = %q, want dirty_preserved", projection.DirtyStateSummary)
+	}
 	if _, err := os.Stat(filepath.Join(candidate, "local.txt")); err != nil {
 		t.Fatalf("dirty candidate file was not preserved: %v", err)
+	}
+}
+
+func TestSourceCheckoutDirtyStateSummary(t *testing.T) {
+	tests := []struct {
+		name      string
+		platform  string
+		candidate string
+		want      string
+	}{
+		{name: "clean", platform: "ok_platform_at_base", candidate: "ok_candidate_at_base", want: "clean"},
+		{name: "dirty platform", platform: "dirty_preserved", candidate: "ok_candidate_at_base", want: "dirty_preserved"},
+		{name: "dirty candidate", platform: "ok_platform_at_base", candidate: "dirty_preserved", want: "dirty_preserved"},
+		{name: "blocked platform", platform: "blocked_non_git_non_empty", candidate: "ok_candidate_at_base", want: "blocked"},
+		{name: "failed candidate", platform: "ok_platform_at_base", candidate: "checkout_failed", want: "failed"},
+		{name: "not inspected", platform: "not_configured", candidate: "ok_candidate_at_base", want: "not_inspected"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sourceCheckoutDirtyStateSummary(tt.platform, tt.candidate)
+			if got != tt.want {
+				t.Fatalf("sourceCheckoutDirtyStateSummary(%q, %q) = %q, want %q", tt.platform, tt.candidate, got, tt.want)
+			}
+		})
 	}
 }
