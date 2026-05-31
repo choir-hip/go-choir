@@ -394,3 +394,27 @@ This report is based on local source and git history, not a live staging
 reproduction. It should be treated as a regression map and hypothesis register.
 The immediate current failure still needs product-path evidence before a fix
 commit, consistent with the problem-documentation-first contract.
+
+## Deployed Mission Outcome, 2026-05-31
+
+Follow-up mission `docs/mission-agentic-debugging-vtext-stability-v0.md`
+reproduced the product path on staging before code changes and did not observe a
+total backend version-advancement failure: the sampled documents reached v0 plus
+two appagent `edit_vtext` revisions. The repair still proceeded because the
+source retained the regression surface this review identified.
+
+The accepted staging commit is `84c8c4f005db913cf47f5bc66e1bf55c10bfb224`.
+CI run `26706511492` passed and Node B health reported both proxy and sandbox at
+that commit. The deployed acceptance prompt created document
+`1f74f922-106f-44da-a118-2528f56d48a2`; conductor did not create an appagent
+first draft, VText wrote the first appagent revision, super returned durable
+command evidence, and VText woke to write the next revision.
+
+The repair direction was deletion-led: conductor-authored first drafts,
+worker-grounding/classifier scaffolding, and required-tool choreography were
+removed from the VText path. Trace is no longer a desktop app, but
+machine-readable trace/evidence APIs remain. Raw Terminal is replaced by a
+singleton Super Console backed by out-of-process zot. A staging proof showed
+`/api/terminal/ws` returning 410, no Trace or Terminal launcher, and zot writing
+`.choir/zot/sessions/zot-1/session.jsonl` plus `diagnosis.md` in the user
+computer filesystem.
