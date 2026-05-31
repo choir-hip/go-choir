@@ -903,3 +903,96 @@ or flattened into ordinary prose.
 for current YouTube/image media refs and a focused runtime test proving the
 appagent revise run metadata contains both legacy refs and the new
 `source_entities` shape.
+
+## Run Checkpoint & Resumption State - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**last checkpoint:** Mission 0 Source Entity nucleus landed and deployed at the
+behavior commit.
+
+**current artifact state:** VText now has a general `source_entities` metadata
+shape normalized from legacy YouTube/image `media_source_refs`. VText revise
+run metadata carries both legacy refs and source entities. Appagent-authored
+revisions preserve `source_entities` as durable metadata. The VText frontend
+renders source entities as compact expandable source affordances and source
+cards, and the source card can open the source in its owning media/app surface
+through the desktop launch path.
+
+**what shipped:**
+
+- Backend `vtextSourceEntity` nucleus with target, selectors, display,
+  evidence, and provenance fields.
+- Lazy normalization from legacy `media_source_refs` into `source_entities`.
+- Prompt context for detected source entities.
+- Durable metadata carry-forward for `source_entities`.
+- Research-state marking for both legacy media refs and source entities.
+- VText rendering from `source_entities`, with legacy fallback.
+- Inline expandable source affordances and source deck cards.
+- Owning-surface launch from VText source cards.
+- Playwright coverage for rendering, expansion, and opening the Video app from
+  a YouTube source entity.
+
+**commits:**
+
+- `a4d1e0d` docs: record vtext source entity mission checkpoint
+- `3949a4f` feat: add vtext source entity nucleus
+- `e6bf0af` docs: clean vtext source entity mission formatting
+- `e9a0996` test: avoid fetching fixture source entity content
+- `4081d1f` test: target vtext source entity article
+
+**what was proven:**
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextAgentRevisionRegistersMediaSourceRefs|TestMarkVTextMediaSourceRefsResearchState|TestFetchYouTubeTranscriptUsesConfiguredProvider|TestFetchYouTubeTranscriptUsesInnerTubeAndroidFallback' -count=1`
+  passed.
+- Frontend compiled from a temporary clean npm install with
+  `npm ci && npm run build`.
+- GitHub Actions passed for final pushed commit `4081d1f`: CI run
+  `26722450619`, FlakeHub publish run `26722450617`.
+- Staging `/health` reported proxy and sandbox deployed at behavior commit
+  `e6bf0afffbf249be0904f36559743ece338c4afc`.
+- Deployed Playwright acceptance against `https://choir.news` passed:
+  `BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-entities.spec.js --project=chromium --timeout=120000`.
+
+**unproven or partial claims:**
+
+- Source entities are not yet inserted at arbitrary prose spans; Mission 0
+  renders a compact source affordance rail plus source deck from durable
+  metadata.
+- YouTube transcript span selection is not yet implemented.
+- Podcast transcript review, web source packets, private VText-to-VText
+  transclusion, publication projection from private source entities, unified
+  source search, and sourcecycled manifest import remain future campaign
+  missions.
+- Final pushed test-only commits are newer than the deployed behavior commit;
+  staging behavior proof is tied to `e6bf0af`, which contains the product code.
+
+**belief-state changes:**
+
+- The VText editor can render and serialize around source entity affordances
+  without flattening those affordances into document prose.
+- Owning-surface opening can be implemented through existing desktop app launch
+  events rather than a new source browser.
+- The initial source entity object can absorb the current YouTube/image media
+  refs without a destructive migration.
+
+**remaining error field:** turn the source affordance rail into true
+claim/span-attached inline source refs; add transcript span selectors; resolve
+source entities through explicit APIs; broaden to podcast/web/VText targets;
+project private source entities into public-safe platform citation and
+transclusion records.
+
+**highest-impact remaining uncertainty:** whether span-attached inline refs can
+round-trip through contenteditable editing, appagent revision writing, and
+publication without brittle DOM anchoring.
+
+**next executable probe:** implement an explicit inline source-ref syntax or
+structured anchor for one source entity in VText prose, then prove edit,
+serialize, revise, reload, and history preserve the anchor and resolve it to
+the same source entity.
+
+**suggested resume goal string:**
+
+```text
+/goal Resume docs/mission-vtext-source-entities-multimedia-transclusion-v0.md from the 2026-05-31 Mission 0 checkpoint. Implement span-attached inline SourceEntity refs for one YouTube source entity, preserving the existing source_entities metadata and legacy media_source_refs fallback. Prove that an inline source ref survives edit, serialize, revise, reload, history navigation, expansion, and owning Video app open on staging without flattening source identity into prose.
+```
