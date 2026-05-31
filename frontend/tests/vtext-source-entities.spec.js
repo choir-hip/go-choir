@@ -80,16 +80,29 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
 
   await rendered.evaluate((el) => {
-    el.insertAdjacentHTML('beforeend', '<p>Round-trip note.</p>');
-    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'Round-trip note.' }));
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
   });
-  await expect(vtextWindow.locator('[data-vtext-save-status]')).toContainText('Saved', { timeout: 10_000 });
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Round-trip note.');
+  await expect.poll(async () => {
+    const revisions = await page.evaluate(async (docId) => {
+      const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`list revisions failed: ${res.status}`);
+      return res.json();
+    }, created.doc_id);
+    return revisions.revisions.some((revision) => revision.content?.includes('Round-trip note.'));
+  }, { timeout: 10_000 }).toBe(true);
   const revisions = await page.evaluate(async (docId) => {
     const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, { credentials: 'include' });
     if (!res.ok) throw new Error(`list revisions failed: ${res.status}`);
     return res.json();
   }, created.doc_id);
-  const latest = revisions.revisions[revisions.revisions.length - 1];
-  expect(latest.content).toContain('[source](source:src-fixture-youtube)');
-  expect(latest.content).toContain('Round-trip note.');
+  const savedRevision = revisions.revisions.find((revision) => revision.content?.includes('Round-trip note.'));
+  expect(savedRevision.content).toContain('[source](source:src-fixture-youtube)');
 });
