@@ -1,6 +1,6 @@
 # Implementation Scope
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-31
 
 This is the near-term build order. For the complete current architecture, read
 [docs/current-architecture.md](current-architecture.md). For the broader goal
@@ -45,16 +45,21 @@ prompt -> conductor -> vtext -> researcher/persistent super -> cosuper -> user e
 Required behavior:
 
 - The prompt bar routes through `conductor`.
-- `conductor` opens `vtext` by creating `v0` from user input and `v1` as an
-  initial document seed.
-- `vtext` does not need an extra initial answer-from-priors call before the
-  window opens.
+- `conductor` opens or creates the VText document shell and preserves the user
+  seed, but does not write appagent document text.
+- `vtext` writes `v1` through the VText edit path. This is the first canonical
+  artifact version.
 - User edits create user-authored versions.
 - Workers emit updates, not patches.
 - `vtext` decides whether worker updates become new document versions.
-- Initial revision policy can be one version per meaningful worker update, with
-  later debouncing/batching allowed.
-- Trace explains the causal path during development/debugging.
+- Initial revision policy can be one version per meaningful VText synthesis or
+  worker update, with later debouncing/batching allowed.
+- Unified logs/evidence and Super Console repair reports explain the causal path
+  during development/debugging; humans should not need to browse Trace.
+
+Via negativa for the next VText repair: remove prompt/classifier/state-machine
+scaffolding before adding more. The simple target is durable co-agent messages
+plus the VText single-writer revision loop.
 
 Machine-verifiable tests should use fake providers, fake workers, and fake time
 before relying on browser/e2e coverage.

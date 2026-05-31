@@ -14,7 +14,14 @@ Read first:
 - `docs/runtime-invariants.md`
 - `README.md`
 
-Treat those as the source of truth. Other mission docs, tests, comments, and prompt defaults may be stale. If docs conflict, prefer the API/VText review doc plus current architecture.
+Treat those as the source of truth. Other mission docs, tests, comments, and prompt defaults may be stale. If docs conflict, prefer current architecture.
+
+2026-05-31 update: the conductor-authored initial VText seed described in this
+completed checklist is superseded. Current architecture requires conductor to
+route/open only; VText must write the first canonical appagent document version
+through the same edit path used for later VText revisions. This checklist
+remains historical evidence for API hard-cutover work, not the current VText
+version contract.
 
 ## Operating Instructions
 
@@ -112,7 +119,9 @@ Treat those as the source of truth. Other mission docs, tests, comments, and pro
 ### 5. VText Product Behavior
 
 - [x] Ensure V0 is the initial user input.
-- [x] Ensure V1 is a useful first document seed/abstract of the artifact to be produced.
+- [x] Historical May 1 target: ensure V1 is a useful first document
+  seed/abstract. Superseded on 2026-05-31 by the current contract: VText writes
+  `v1`; conductor does not create appagent document text.
 - [x] Ensure V1 is not "Conductor framing", transcript text, or control-plane instructions.
 - [x] Ensure later appagent revisions are complete document versions created by VText editing prior versions.
 - [x] Ensure VText revises toward a coherent current-state document, not chat/status updates.

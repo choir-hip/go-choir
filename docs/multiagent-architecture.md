@@ -8,6 +8,10 @@
 > shape. The newer docs take precedence for the vtext version contract,
 > worker-update contract, active/background VM model, publication sequencing, and
 > Dolt boundaries.
+>
+> 2026-05-31 supersession: any lifecycle step below that says conductor creates
+> a `v1` initial VText seed is stale. The current target is conductor routes and
+> opens; VText writes the first canonical appagent version through `edit_vtext`.
 
 ---
 
@@ -27,8 +31,8 @@ User (desktop shell)
        v
   [conductor]  decides: open vtext / show toast
        |
-       | spawn_agent("vtext") with initial_content
-       | creates: document, v0, v1 abstract, initial vtext run
+       | opens document shell with user seed
+       | starts vtext writer; vtext creates first canonical version
        v
   [vtext] --spawn_agent("researcher")--> [researcher]  (leaf: search + evidence)
   (owns    --request_super_execution---> [super]
@@ -199,16 +203,15 @@ User types prompt
   -> executeWithToolLoop() with conductor tool registry
   -> Conductor LLM returns JSON decision:
        { "action": "open_app", "app": "vtext", "title": "Essay on X",
-         "seed_prompt": "write about X", "initial_content": "optional draft" }
+         "seed_prompt": "write about X" }
   -> handleRunCompletion() -> materializeConductorDecision():
        1. CreateDocument(doc_id, title, owner)
        2. CreateRevision(v0, author_type="user", content=seed_prompt)
-       3. CreateRevision(v1, source="initial_vtext_seed")
-       4. submitVTextAgentRevisionRun(doc_id, v1_id, parentRunID=conductor_loop_id)
+       3. submitVTextAgentRevisionRun(doc_id, v0_id, parentRunID=conductor_loop_id)
             -> vtext RunRecord: profile=vtext, agent_id="vtext:<doc_id>",
                channel_id=doc_id, parent_loop_id=conductor_loop_id
-       5. Enriches conductor result:
-            { ...decision, doc_id, initial_revision_id, initial_loop_id }
+       4. Enriches conductor result:
+            { ...decision, doc_id, initial_user_revision_id, initial_loop_id }
   -> Frontend receives enriched result
   -> Desktop.svelte opens VTextEditor({ docId, initialRunId })
   -> Prompt status is product-scoped:
@@ -394,7 +397,7 @@ Browser / Electron frontend  (frontend/dist/)
 
 2. **`channel_id` is the coordination handle.** For vtext families, `channel_id = doc_id`. All researcher/super workers share the same channel, so message history is document-scoped and survives across revision cycles.
 
-3. **Conductor completion materializes the document.** When conductor completes with `action: open_app`, the runtime creates the document, v0, and initial vtext child run before the frontend receives the result. The frontend opens an already-real document.
+3. **Conductor completion materializes only the route.** When conductor completes with `action: open_app`, the runtime creates the document, preserves v0 user input, and starts the initial VText child run before the frontend receives the result. VText, not conductor, writes the first canonical appagent version.
 
 4. **Tool access is code policy, not prompt warnings.** Delegation targets and tool surfaces are enforced in Go (`roleSpec()` + `canDelegateTo()` in `tool_profiles.go`). Prompts describe desired behavior; code enforces capability boundaries.
 

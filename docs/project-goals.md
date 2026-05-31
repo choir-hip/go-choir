@@ -1,7 +1,7 @@
 # Choir Project Goals
 
 **Status:** canonical current goals
-**Last updated:** 2026-05-30
+**Last updated:** 2026-05-31
 
 This file replaces the old root `PROJECT-GOALS.md`. It keeps the live direction
 from that file while removing completed checklists and stale continuation
@@ -47,8 +47,9 @@ Near target:
 - `conductor` routes to `vtext` or another appagent without frontend shortcut
   policy becoming the source of truth.
 - `vtext` is the primary cumulative semantic artifact.
-- Researchers, super, vsuper, and cosupers are visible enough in Trace that a
-  user can tell what happened.
+- Researchers, super, vsuper, and cosupers leave enough unified evidence that
+  VText reports, acceptance records, and Super Console/zot can explain what
+  happened without a human browsing Trace.
 - Candidate computers can run bounded work, export typed deltas, and produce
   promotion certificates.
 - Personal promotion can update one user's computer without a global deploy.
@@ -105,7 +106,8 @@ The MAS should become visible and trustworthy:
 - `super` handles foreground orchestration and bounded capability minting;
 - `vsuper` owns candidate computers;
 - cosupers are leased within explicit boundaries;
-- Trace shows delegation chains, tool calls, messages, and synthesis points;
+- unified logs/evidence record delegation chains, tool calls, messages, and
+  synthesis points;
 - workers return structured updates, deltas, evidence, diagnostics, or
   questions.
 

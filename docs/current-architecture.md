@@ -198,21 +198,36 @@ app.
 Not every app is an appagent. Apps can be simple desktop surfaces. An app becomes
 an appagent when it needs durable domain ownership, prompts, or dynamic agentic
 UI. Likely sequence: `vtext` first, browser next, then mail, then calendar.
-Trace can become an appagent later if there are enough trajectories to require
-agentic search and dynamic visualization, but for now it is a development/debug
-surface.
+Trace is no longer a product app direction. Trace remains evidence: structured
+events, unified logs, run bundles, acceptance records, and diagnosis artifacts.
+Humans should not be expected to browse a Trace app to debug Choir.
 
 A `vtext` version is a canonical document state:
 
-- `v0` is the initial user input.
-- `v1` is the initial document seed included in the route that creates the
-  `vtext`.
-- `v2+` are user edits and `vtext`-authored revisions.
+- `v0` is the initial user input or prompt seed.
+- `v1` is the first canonical VText-authored document version, created through
+  the VText edit path.
+- `v2+` are user edits and later VText-authored revisions.
 
-The `vtext` agent should not spend one extra LLM call producing an initial
-answer from priors before the document opens. The route already has enough
-context to create the initial seed. Opening the window should show `v0` as the
-user prompt and `v1` as the current seeded state.
+The conductor must not write the first appagent document version. It routes the
+prompt, creates or opens the VText document shell, preserves the user's seed,
+and starts VText. VText writes the first canonical artifact version. The prior
+"conductor creates an initial seed" policy is superseded because it blurred the
+single-writer boundary and created a fake version advance before VText had done
+the work.
+
+The target VText loop is deliberately small:
+
+```text
+prompt -> conductor route -> VText writes v1
+  -> VText sends durable co-agent messages when needed
+  -> workers reply with durable updates/evidence
+  -> VText wakes and writes the next version
+```
+
+The complexity should live in durable agent-to-agent communication and evidence,
+not in prompt taxonomies, conductor-authored drafts, tool-choice classifiers, or
+hidden workflow state machines.
 
 Workers do not send patches to `vtext`. That mixes concerns. Workers emit
 updates: findings, evidence, source references, artifact refs, branch/commit
@@ -224,8 +239,8 @@ For candidate coding work and human approval, the default owner-review artifact
 should be video-first when the behavior is visual or temporal. A candidate
 approval VText should embed a short demo video when available, then provide the
 summary, package/diff refs, verifier status, rollback path, risks, and links to
-Trace or run acceptance. Diffs and logs are still important, but they should not
-be the only human proof for interactive product behavior.
+evidence bundles or run acceptance. Diffs and logs are still important, but
+they should not be the only human proof for interactive product behavior.
 
 The first implementation can create a new `vtext` revision after each meaningful
 worker update. That policy should be isolated so it can later debounce, batch, or
@@ -243,17 +258,18 @@ testable without real providers, browsers, or timing luck.
 
 Required deterministic tests:
 
-- Prompt creation produces one document with `v0` user input and `v1` initial
-  document seed.
-- No vtext answer-from-priors call is needed to create `v1`.
+- Prompt creation produces one document with `v0` user input and a started VText
+  writer run.
+- VText creates `v1` through the same VText edit path used for later appagent
+  revisions; conductor cannot create appagent-authored document text.
 - User edits always create user-authored versions.
 - Worker updates are durably attached to the document trajectory.
 - A `vtext` revision records which worker updates it consumed, skipped, or left
   pending.
 - A stale worker result cannot overwrite or erase a later user-authored version.
 - User edits redirect future synthesis.
-- Trace can explain prompt -> conductor -> vtext -> worker update -> version
-  during development/debugging.
+- Unified logs/evidence can explain prompt -> conductor -> vtext -> worker
+  update -> version during development/debugging.
 
 Browser/e2e tests should verify integration, but the product contract should be
 proven by deterministic backend/API tests with fake providers, fake workers, and
@@ -334,6 +350,9 @@ configured always-on primary computers have an explicit protected/resume lane.
 - Hosts the visible desktop, apps, appagents, per-user embedded Dolt, private
   app state, local files, prompts, and user-specific runtime state.
 - May diverge from the platform baseline.
+- May expose one singleton Super Console repair app backed by out-of-process
+  `zot`; this is repair mode for the active computer, not a normal scripting
+  surface.
 - Should stay stable and responsive.
 - Should not be edited directly by `super`/`cosuper` for risky mutable work.
 
@@ -408,6 +427,14 @@ global platform deploy. It still needs source lineage, typed deltas, verifier
 evidence, foreground-tail reconciliation, route/adoption records, and rollback.
 Runtime Go and Svelte UI changes should be treated as a matched pair when app
 behavior crosses that boundary.
+
+Super Console repair is a user-computer-local inner loop, not platform
+promotion. When a user's active computer is broken, its singleton Super Console
+may use out-of-process `zot` to inspect unified logs and private source/build
+state, patch runtime/UI/app code inside that computer, rebuild/restart locally,
+verify, and write a markdown diagnosis report. That local repair may remain
+private, later inspire a platform fix, or later be turned into a typed package,
+but it is not automatically a platform merge or AppChangePackage.
 
 Platform/public promotion changes shared state: the official Choir baseline,
 public packages, publication artifacts, shared app/agent packages, or public
@@ -589,11 +616,11 @@ work can be deferred, but the eventual browser app should run browsing on the
 backend so it can bypass iframe blockers and so users can inspect previews from
 background/candidate computers, including Choir running inside a browser app.
 
-Trace should stay out of the default `vtext` writing UI. There may be a hidden
-deep link from a `vtext` version or menu into the relevant Trace trajectory, but
-the document surface should remain conservative and clean for writing, research,
-publishing, and reading. Worker-vtext internals belong in Trace by default, not
-as a prominent `vtext` panel.
+Trace should stay out of the default `vtext` writing UI and should not remain a
+human-facing product app. Relevant evidence should be available as unified logs,
+run bundles, acceptance records, and diagnosis artifacts that VText or Super
+Console can open or summarize. The document surface should remain conservative
+and clean for writing, research, publishing, and reading.
 
 ## Browser Tooling
 
