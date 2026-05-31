@@ -11,6 +11,7 @@ deploy_ordinary_guest=false
 deploy_playwright_guest=false
 deploy_host_os=false
 deploy_vmctl_restart=false
+deploy_active_vm_refresh=false
 
 declare -a changed=()
 declare -a explanations=()
@@ -54,10 +55,15 @@ mark_vmctl_restart() {
   deploy_vmctl_restart=true
 }
 
+mark_active_vm_refresh() {
+  deploy_active_vm_refresh=true
+}
+
 mark_ordinary_guest() {
   deploy_needed=true
   deploy_ordinary_guest=true
   deploy_vmctl_restart=true
+  deploy_active_vm_refresh=true
 }
 
 mark_playwright_guest() {
@@ -102,7 +108,8 @@ for path in "${changed[@]}"; do
     cmd/vmctl/*|internal/vmmanager/*)
       add_host_service "vmctl"
       mark_vmctl_restart
-      add_explanation "$path -> vmctl host service closure + vmctl restart"
+      mark_active_vm_refresh
+      add_explanation "$path -> vmctl host service closure + vmctl restart + active VM boot-contract refresh"
       ;;
     internal/vmctl/*)
       add_host_service "gateway"
@@ -110,7 +117,8 @@ for path in "${changed[@]}"; do
       add_host_service "sandbox"
       add_host_service "vmctl"
       mark_vmctl_restart
-      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + vmctl restart"
+      mark_active_vm_refresh
+      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + vmctl restart + active VM boot-contract refresh"
       ;;
     cmd/auth/*|internal/auth/*)
       add_host_service "auth"
@@ -265,6 +273,7 @@ if [[ -n "$output_file" ]]; then
     echo "deploy_playwright_guest=${deploy_playwright_guest}"
     echo "deploy_host_os=${deploy_host_os}"
     echo "deploy_vmctl_restart=${deploy_vmctl_restart}"
+    echo "deploy_active_vm_refresh=${deploy_active_vm_refresh}"
     echo "host_services=$(IFS=,; echo "${host_services[*]}")"
     echo "changed_paths<<EOF"
     printf '%s\n' "${changed[@]}"
@@ -284,6 +293,7 @@ deploy_ordinary_guest=${deploy_ordinary_guest}
 deploy_playwright_guest=${deploy_playwright_guest}
 deploy_host_os=${deploy_host_os}
 deploy_vmctl_restart=${deploy_vmctl_restart}
+deploy_active_vm_refresh=${deploy_active_vm_refresh}
 host_services=$(IFS=,; echo "${host_services[*]}")
 EOF
 
