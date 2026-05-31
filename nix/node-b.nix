@@ -551,7 +551,7 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-gateway.service" ];
     wants = [ "network-online.target" "go-choir-gateway.service" ];
-    path = with pkgs; [ bash coreutils git gnugrep gnused ];
+    path = with pkgs; [ bash coreutils git gnugrep gnused goChoirPackages.zot ];
     serviceConfig = commonServiceHardening // {
       # Obtain a gateway credential token before starting the sandbox.
       # The gateway's credential issuance endpoint is localhost-only
@@ -598,6 +598,7 @@ in
         "RUNTIME_SOURCE_LEDGER_REPO=https://github.com/yusefmosiah/choir-source-ledger.git"
         "RUNTIME_PROMOTION_WORKSPACE_ROOT=/var/lib/go-choir/promotion-workspaces"
         "PKG_CONFIG_PATH=${pkgs.icu.dev}/lib/pkgconfig"
+        "CHOIR_ZOT_PATH=${goChoirPackages.zot}/bin/zot"
         # Route LLM calls through the host-side gateway instead of
         # resolving providers directly (VAL-GATEWAY-001).
         "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"
@@ -676,6 +677,7 @@ in
     icu
     icu.dev
     goChoirPackages.maildctl
+    goChoirPackages.zot
     procps
     ripgrep
     vim

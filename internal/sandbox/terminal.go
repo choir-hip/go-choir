@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -90,11 +91,6 @@ func NewTerminalHandler() *TerminalHandler {
 // NewSuperConsoleHandler creates a singleton Super Console handler backed by an
 // out-of-process zot session. It intentionally does not expose a raw shell.
 func NewSuperConsoleHandler(rootDir string) *TerminalHandler {
-	exe, _ := os.Executable()
-	command := []string{exe, "zot-session"}
-	if override := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PATH")); override != "" {
-		command = []string{override}
-	}
 	return &TerminalHandler{
 		manager: NewTerminalManager(),
 		upgrader: websocket.Upgrader{
@@ -102,10 +98,21 @@ func NewSuperConsoleHandler(rootDir string) *TerminalHandler {
 				return true
 			},
 		},
-		command:   command,
+		command:   resolveSuperConsoleCommand(),
 		rootDir:   rootDir,
 		singleton: true,
 	}
+}
+
+func resolveSuperConsoleCommand() []string {
+	if override := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PATH")); override != "" {
+		return []string{override}
+	}
+	if path, err := exec.LookPath("zot"); err == nil && strings.TrimSpace(path) != "" {
+		return []string{path}
+	}
+	exe, _ := os.Executable()
+	return []string{exe, "zot-session"}
 }
 
 // Manager returns the terminal session manager.
@@ -222,9 +229,12 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 		if rootDir == "" {
 			rootDir = "."
 		}
+		zotHome := filepath.Join(rootDir, ".choir", "zot")
 		cmd.Dir = rootDir
 		cmd.Env = append(os.Environ(),
+			"HOME="+rootDir,
 			"TERM=xterm-256color",
+			"ZOT_HOME="+zotHome,
 			"ZOT_SESSION_ID="+sessionID,
 			"ZOT_ROOT_DIR="+rootDir,
 			"ZOT_USER_ID="+user,

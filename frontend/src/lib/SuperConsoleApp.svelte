@@ -74,15 +74,59 @@
     return value || fallback;
   }
 
-  function currentTerminalTheme() {
+  function parseHexColor(value) {
+    const normalized = value.trim();
+    const match = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!match) return null;
+    const hex = match[1].length === 3
+      ? match[1].split('').map((part) => part + part).join('')
+      : match[1];
     return {
-      background: themeColor('--choir-surface-media', 'Canvas'),
-      foreground: themeColor('--choir-text-primary'),
+      r: parseInt(hex.slice(0, 2), 16) / 255,
+      g: parseInt(hex.slice(2, 4), 16) / 255,
+      b: parseInt(hex.slice(4, 6), 16) / 255,
+    };
+  }
+
+  function linearize(channel) {
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }
+
+  function relativeLuminance(color) {
+    return 0.2126 * linearize(color.r) + 0.7152 * linearize(color.g) + 0.0722 * linearize(color.b);
+  }
+
+  function contrastRatio(foreground, background) {
+    const fg = parseHexColor(foreground);
+    const bg = parseHexColor(background);
+    if (!fg || !bg) return 21;
+    const l1 = relativeLuminance(fg);
+    const l2 = relativeLuminance(bg);
+    const light = Math.max(l1, l2);
+    const dark = Math.min(l1, l2);
+    return (light + 0.05) / (dark + 0.05);
+  }
+
+  function currentTerminalTheme() {
+    const foreground = themeColor('--choir-text-primary');
+    const mediaBackground = themeColor('--choir-surface-media', 'Canvas');
+    const pageBackground = themeColor('--choir-bg', themeColor('--choir-surface-app', 'Canvas'));
+    const background = contrastRatio(foreground, mediaBackground) >= 4.5
+      ? mediaBackground
+      : pageBackground;
+
+    if (terminalContainer) {
+      terminalContainer.style.setProperty('--super-console-bg', background);
+    }
+
+    return {
+      background,
+      foreground,
       cursor: themeColor('--choir-text-accent'),
-      cursorAccent: themeColor('--choir-surface-media', 'Canvas'),
+      cursorAccent: background,
       selectionBackground: themeColor('--choir-state-selected'),
-      selectionForeground: themeColor('--choir-text-primary'),
-      black: themeColor('--choir-surface-media', 'Canvas'),
+      selectionForeground: foreground,
+      black: background,
       red: themeColor('--choir-status-danger'),
       green: themeColor('--choir-status-success'),
       yellow: themeColor('--choir-status-warning'),
@@ -97,7 +141,7 @@
       brightBlue: themeColor('--choir-chart-1'),
       brightMagenta: themeColor('--choir-chart-4'),
       brightCyan: themeColor('--choir-chart-2'),
-      brightWhite: themeColor('--choir-text-primary'),
+      brightWhite: foreground,
     };
   }
 
@@ -296,7 +340,7 @@ files email vtext settings podcast media super-console</pre>
   .terminal-wrapper {
     width: 100%;
     height: 100%;
-    background: var(--choir-surface-app);
+    background: var(--super-console-bg, var(--choir-bg));
     overflow: hidden;
     position: relative;
   }

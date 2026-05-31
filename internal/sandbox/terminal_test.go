@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -37,11 +39,11 @@ func newTerminalTestServer() (*httptest.Server, *TerminalHandler) {
 // terminalTestConn wraps a websocket.Conn for terminal test helpers.
 // It uses a background reader goroutine to avoid read deadline issues.
 type terminalTestConn struct {
-	conn    *websocket.Conn
-	mu      sync.Mutex
-	msgs    chan TerminalMessage
-	err     error
-	closed  chan struct{}
+	conn   *websocket.Conn
+	mu     sync.Mutex
+	msgs   chan TerminalMessage
+	err    error
+	closed chan struct{}
 }
 
 // newTerminalTestConn wraps a websocket connection with a background reader.
@@ -468,6 +470,68 @@ func TestFindShell(t *testing.T) {
 	// Should be either /bin/bash or /bin/sh on most systems.
 	if shell != "/bin/bash" && shell != "/bin/sh" {
 		t.Errorf("expected /bin/bash or /bin/sh, got %q", shell)
+	}
+}
+
+func TestResolveSuperConsoleCommandPrefersOverride(t *testing.T) {
+	t.Setenv("CHOIR_ZOT_PATH", "/opt/choir/bin/zot")
+	t.Setenv("PATH", t.TempDir())
+
+	got := resolveSuperConsoleCommand()
+	if len(got) != 1 || got[0] != "/opt/choir/bin/zot" {
+		t.Fatalf("resolveSuperConsoleCommand() = %#v, want override zot path", got)
+	}
+}
+
+func TestResolveSuperConsoleCommandFindsZotOnPath(t *testing.T) {
+	t.Setenv("CHOIR_ZOT_PATH", "")
+	binDir := t.TempDir()
+	zotPath := filepath.Join(binDir, "zot")
+	if err := os.WriteFile(zotPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake zot: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+
+	got := resolveSuperConsoleCommand()
+	if len(got) != 1 || got[0] != zotPath {
+		t.Fatalf("resolveSuperConsoleCommand() = %#v, want PATH zot %q", got, zotPath)
+	}
+}
+
+func TestSessionCommandUsesPersistentZotHome(t *testing.T) {
+	rootDir := t.TempDir()
+	th := &TerminalHandler{
+		command: []string{"/bin/sh", "-c", "true"},
+		rootDir: rootDir,
+	}
+
+	cmd, err := th.sessionCommand("zot-test", "user@example.com")
+	if err != nil {
+		t.Fatalf("sessionCommand returned error: %v", err)
+	}
+	if cmd.Dir != rootDir {
+		t.Fatalf("cmd.Dir = %q, want %q", cmd.Dir, rootDir)
+	}
+
+	env := map[string]string{}
+	for _, entry := range cmd.Env {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok {
+			env[key] = value
+		}
+	}
+	if env["HOME"] != rootDir {
+		t.Errorf("HOME = %q, want %q", env["HOME"], rootDir)
+	}
+	wantZotHome := filepath.Join(rootDir, ".choir", "zot")
+	if env["ZOT_HOME"] != wantZotHome {
+		t.Errorf("ZOT_HOME = %q, want %q", env["ZOT_HOME"], wantZotHome)
+	}
+	if env["ZOT_SESSION_ID"] != "zot-test" {
+		t.Errorf("ZOT_SESSION_ID = %q", env["ZOT_SESSION_ID"])
+	}
+	if env["ZOT_USER_ID"] != "user@example.com" {
+		t.Errorf("ZOT_USER_ID = %q", env["ZOT_USER_ID"])
 	}
 }
 

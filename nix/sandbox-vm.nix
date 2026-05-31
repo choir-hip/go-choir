@@ -324,6 +324,7 @@ EOF
         iproute2
         python3
         goChoirPackages.obscura
+        goChoirPackages.zot
       ]) ++ lib.optionals includePlaywright (with pkgs; [
         playwrightTools
       ])));
@@ -372,6 +373,7 @@ EOF
       # worker-playwright image is the opt-in evidence/verifier exception.
       CHOIR_OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
+      CHOIR_ZOT_PATH = "${goChoirPackages.zot}/bin/zot";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "fireworks";
