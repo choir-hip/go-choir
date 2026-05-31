@@ -323,3 +323,30 @@ preference.
 Next repair constraint: Codex should keep acting as reproducer/verifier and run
 real zot against the source to author the smallest UI patch, then lift the
 result to the platform repo, CI, staging deploy, and deployed acceptance proof.
+
+## 2026-05-31 Source Workspace Bootstrap Gap
+
+Current code inspection shows the source-mount artifact is still mostly
+implicit:
+
+- the sandbox process receives `RUNTIME_WORKER_REPO_REMOTE`,
+  `RUNTIME_WORKER_REPO_BASE_SHA`, `RUNTIME_PROMOTION_SOURCE_REPO`,
+  `RUNTIME_SOURCE_LEDGER_REPO`, and `RUNTIME_PROMOTION_WORKSPACE_ROOT`;
+- Super Console starts zot with `HOME`, `ZOT_HOME`, `ZOT_ROOT_DIR`, and gateway
+  defaults, rooted at `SANDBOX_FILES_ROOT`;
+- no sandbox startup path creates stable `Source/platform`, `Source/user`,
+  `Source/candidate`, `Build`, or `.choir/source-lineage.json` roots in the
+  computer filesystem;
+- the product `/api/computers/*/source-lineage` record exists, but it does not
+  project local mount paths or build workspace paths to zot;
+- worker repo bootstrap instructions still tell agents to clone
+  `go-choir-candidate` under the current directory, so worker source access is
+  an instruction-level convention rather than a computer-level mounted ledger.
+
+This means Zot can be launched and can persist sessions, but it cannot yet
+discover a stable source/build workspace inside every active, candidate, and
+worker computer. The next code checkpoint should add a small sandbox-owned
+source workspace bootstrap that creates the directories and a durable local
+lineage projection before Super Console starts. That is still not sufficient for
+full personal promotion, but it is the first real substrate needed for the
+repair loop.
