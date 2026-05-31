@@ -373,3 +373,57 @@ function name frame appears, before later argument deltas arrive. For this
 client, the gateway should avoid partial streamed tool-call frames and emit a
 complete tool call chunk when tools are present. This is a compatibility shim
 for Zot's OpenAI-compatible path, not a new MAS role for Zot.
+
+## 2026-05-31 Gateway Promotion Checkpoint
+
+Platform fix promoted to `main`:
+
+- commit: `97b2f9d2efbd8af1d665d97d20b521335a9aa065`
+- title: `gateway: buffer zot streaming tool calls`
+- CI: GitHub Actions run `26711182329`, success
+- deploy: Node B staging deploy job `78721672005`, success
+- FlakeHub publish: run `26711182331`, success
+- staging health: `https://choir.news/health` reported proxy and sandbox
+  deployed commit `97b2f9d2efbd8af1d665d97d20b521335a9aa065` at
+  `2026-05-31T11:21:51Z`
+
+Local verification before promotion:
+
+```text
+nix develop -c go test ./internal/gateway -run 'TestHandleOpenAIChatCompletions_(StreamingSSE|StreamingToolCallsAreComplete|RoutesThroughGateway)' -count=1
+nix develop -c go test ./internal/gateway ./internal/sandbox ./cmd/gateway ./cmd/sandbox
+```
+
+Deployed Zot proof after promotion:
+
+```text
+ZOT_HOME=/var/lib/go-choir/files/.choir/zot zot \
+  --provider openai \
+  --model gpt-5.5 \
+  --reasoning medium \
+  --base-url http://127.0.0.1:8084/provider/openai/v1 \
+  --api-key "$RUNTIME_GATEWAY_TOKEN" \
+  --tools read \
+  --max-steps 4 \
+  --json "Use the read tool to read /var/lib/go-choir/files/.choir/source-lineage.json..."
+```
+
+Observed result: Zot emitted a `read` tool call whose arguments contained
+`{"limit":20000,"offset":0,"path":"/var/lib/go-choir/files/.choir/source-lineage.json"}`,
+successfully read the file, and answered:
+
+```text
+sandbox-m1
+/var/lib/go-choir/files/Source/platform
+```
+
+Belief update: the gateway/Zot compatibility regression is fixed at platform
+level. This proves real Zot can receive complete tool-call arguments through the
+promoted Node B gateway and read the computer-local lineage file.
+
+Remaining gap: this is not yet the full repair-loop proof. Zot has not yet
+authored a source patch, rebuilt/restarted the user computer runtime/UI,
+verified the product path, and exported a repair evidence bundle. The next
+realism axis is to let Zot perform a contained source edit in the mounted source
+workspace, while Codex acts as verifier and then classifies whether the resulting
+change is personal, reusable, or universal platform work.
