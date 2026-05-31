@@ -155,6 +155,10 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		sandboxID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
 
 	if req.Stream {
+		if len(llmReq.Tools) > 0 {
+			h.handleOpenAIStreamingToolChatCompletions(w, r, p, llmReq, sandboxID)
+			return
+		}
 		h.handleOpenAIStreamingChatCompletions(w, r, p, llmReq, sandboxID)
 		return
 	}
@@ -475,6 +479,56 @@ func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r 
 		}
 	}
 	writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(llmReq.Model, openAIChatDelta{}, finish, nil))
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	if canFlush {
+		flusher.Flush()
+	}
+}
+
+func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, sandboxID string) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, canFlush := w.(http.Flusher)
+
+	writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(llmReq.Model, openAIChatDelta{Role: "assistant"}, "", nil))
+
+	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
+	defer cancel()
+	resp, err := p.Call(ctx, llmReq)
+	if err != nil {
+		sanitized := sanitizeError(err)
+		log.Printf("gateway: openai-compatible streaming tool provider call failed for sandbox %s: %v (sanitized: %s)", sandboxID, err, sanitized)
+		writeOpenAISSE(w, canFlush, flusher, openAIErrorResponse(sanitized))
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		if canFlush {
+			flusher.Flush()
+		}
+		return
+	}
+
+	model := llmReq.Model
+	if resp != nil && strings.TrimSpace(resp.Model) != "" {
+		model = resp.Model
+	}
+	if resp != nil && strings.TrimSpace(resp.Text) != "" {
+		writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(model, openAIChatDelta{Content: resp.Text}, "", nil))
+	}
+	if resp != nil && len(resp.ToolCalls) > 0 {
+		writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(model, openAIChatDelta{
+			ToolCalls: providerToolCallsToOpenAI(resp.ToolCalls),
+		}, "", nil))
+	}
+	if resp != nil && (resp.Usage.InputTokens > 0 || resp.Usage.OutputTokens > 0) {
+		usage := openAIUsage(resp.Usage)
+		writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(model, openAIChatDelta{}, "", &usage))
+	}
+	finish := "stop"
+	if resp != nil {
+		finish = openAIFinishReason(resp.StopReason, len(resp.ToolCalls) > 0)
+	}
+	writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(model, openAIChatDelta{}, finish, nil))
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	if canFlush {
 		flusher.Flush()

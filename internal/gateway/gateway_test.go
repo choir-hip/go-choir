@@ -2142,6 +2142,108 @@ func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
 	}
 }
 
+func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T) {
+	reg := NewIdentityRegistry(1 * time.Hour)
+	chatProvider := &mockProvider{
+		name: "chatgpt",
+		real: true,
+		response: &provider.LLMResponse{
+			ID:         "chatcmpl-stream-tool",
+			Model:      "gpt-5.5",
+			StopReason: "tool_use",
+			ToolCalls: []provider.ContentToolCall{{
+				ID:        "call_read_1",
+				Name:      "read",
+				Arguments: json.RawMessage(`{"path":"/var/lib/go-choir/files/.choir/source-lineage.json"}`),
+			}},
+			Usage: provider.Usage{InputTokens: 12, OutputTokens: 8},
+		},
+	}
+	mp := provider.NewMultiProvider()
+	mp.Register("chatgpt", chatProvider)
+	h := NewMultiHandler(reg, mp)
+	credential, _ := reg.IssueCredential("sandbox-openai-stream-tools")
+
+	body := `{
+		"model":"gpt-5.5",
+		"messages":[{"role":"user","content":"read the lineage file"}],
+		"tools":[{
+			"type":"function",
+			"function":{
+				"name":"read",
+				"description":"read a file",
+				"parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}
+			}
+		}],
+		"reasoning_effort":"medium",
+		"stream":true
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleOpenAIChatCompletions(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	if chatProvider.lastReq == nil {
+		t.Fatal("provider was not called")
+	}
+	if len(chatProvider.lastReq.Tools) != 1 {
+		t.Fatalf("tools forwarded = %d, want 1", len(chatProvider.lastReq.Tools))
+	}
+
+	var sawToolCall bool
+	var sawPartialNameOnly bool
+	var sawFinish bool
+	for _, line := range strings.Split(w.Body.String(), "\n") {
+		payload, ok := strings.CutPrefix(line, "data: ")
+		if !ok || payload == "[DONE]" || strings.TrimSpace(payload) == "" {
+			continue
+		}
+		var chunk openAIChatCompletionResponse
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			t.Fatalf("decode SSE chunk %q: %v", payload, err)
+		}
+		if len(chunk.Choices) != 1 {
+			continue
+		}
+		choice := chunk.Choices[0]
+		if choice.FinishReason == "tool_calls" {
+			sawFinish = true
+		}
+		if choice.Delta == nil || len(choice.Delta.ToolCalls) == 0 {
+			continue
+		}
+		call := choice.Delta.ToolCalls[0]
+		if call.Function.Name == "read" && call.Function.Arguments == "" {
+			sawPartialNameOnly = true
+		}
+		if call.ID == "call_read_1" &&
+			call.Function.Name == "read" &&
+			call.Function.Arguments == `{"path":"/var/lib/go-choir/files/.choir/source-lineage.json"}` {
+			sawToolCall = true
+		}
+	}
+	if sawPartialNameOnly {
+		t.Fatal("stream emitted a function-name-only tool call before arguments")
+	}
+	if !sawToolCall {
+		t.Fatalf("missing complete tool call SSE chunk: %s", w.Body.String())
+	}
+	if !sawFinish {
+		t.Fatalf("missing tool_calls finish reason: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "data: [DONE]") {
+		t.Fatalf("missing DONE marker in SSE: %s", w.Body.String())
+	}
+}
+
 func TestHandleOpenAIModelsRequiresSandboxAuth(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 	h := NewHandler(reg, nil)
