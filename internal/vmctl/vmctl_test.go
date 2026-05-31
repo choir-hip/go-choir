@@ -193,10 +193,10 @@ func (m *blockingBootVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
 func (m *blockingBootVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: hostURL, Epoch: epoch, Healthy: true, State: "running"}, nil
 }
-func (m *blockingBootVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
+func (m *blockingBootVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 2, Healthy: true, State: "running"}, nil
 }
-func (m *blockingBootVMManager) RefreshVM(vmID string) (*VMInstanceInfo, error) {
+func (m *blockingBootVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 3, Healthy: true, State: "running"}, nil
 }
 func (m *blockingBootVMManager) DestroyVMState(vmID string) error      { return nil }
@@ -3287,15 +3287,17 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
 // properly delegates to the VM manager when one is configured.
 type mockVMManager struct {
-	boots      []VMManagerConfig
-	stops      []string
-	hibernates []string
-	resumes    []string
-	reattaches []string
-	recovers   []string
-	refreshes  []string
-	destroys   []string
-	tokens     map[string]string
+	boots       []VMManagerConfig
+	stops       []string
+	hibernates  []string
+	resumes     []string
+	reattaches  []string
+	recovers    []string
+	refreshes   []string
+	recoverCfgs []VMManagerConfig
+	refreshCfgs []VMManagerConfig
+	destroys    []string
+	tokens      map[string]string
 	// Configurable responses
 	bootResponse     *VMInstanceInfo
 	bootError        error
@@ -3356,8 +3358,9 @@ func (m *mockVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstan
 	return &VMInstanceInfo{HostURL: hostURL, Epoch: epoch, Healthy: true, State: "running"}, nil
 }
 
-func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
+func (m *mockVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	m.recovers = append(m.recovers, vmID)
+	m.recoverCfgs = append(m.recoverCfgs, cfg)
 	if m.recoverError != nil {
 		return nil, m.recoverError
 	}
@@ -3367,8 +3370,9 @@ func (m *mockVMManager) RecoverVM(vmID string) (*VMInstanceInfo, error) {
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9003", Epoch: 2, Healthy: true, State: "running"}, nil
 }
 
-func (m *mockVMManager) RefreshVM(vmID string) (*VMInstanceInfo, error) {
+func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	m.refreshes = append(m.refreshes, vmID)
+	m.refreshCfgs = append(m.refreshCfgs, cfg)
 	if m.refreshError != nil {
 		return nil, m.refreshError
 	}
@@ -3889,6 +3893,13 @@ func TestOwnershipRegistry_DelegatesRecoverToVMManager(t *testing.T) {
 	if len(mock.recovers) != 1 {
 		t.Fatalf("expected 1 RecoverVM call, got %d", len(mock.recovers))
 	}
+	if len(mock.recoverCfgs) != 1 {
+		t.Fatalf("expected 1 RecoverVM config, got %d", len(mock.recoverCfgs))
+	}
+	recoverCfg := mock.recoverCfgs[0]
+	if recoverCfg.ComputerKind != "active" || recoverCfg.OwnerID != "user-recover-vm" || recoverCfg.DesktopID != PrimaryDesktopID {
+		t.Fatalf("recover config identity = %+v, want active ownership identity", recoverCfg)
+	}
 
 	// Verify the epoch and sandbox URL came from the recovery response.
 	if own.Epoch != 99 {
@@ -3919,6 +3930,13 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	}
 	if len(mock.refreshes) != 1 {
 		t.Fatalf("expected 1 RefreshVM call, got %d", len(mock.refreshes))
+	}
+	if len(mock.refreshCfgs) != 1 {
+		t.Fatalf("expected 1 RefreshVM config, got %d", len(mock.refreshCfgs))
+	}
+	refreshCfg := mock.refreshCfgs[0]
+	if refreshCfg.ComputerKind != "active" || refreshCfg.OwnerID != "user-refresh-vm" || refreshCfg.DesktopID != PrimaryDesktopID {
+		t.Fatalf("refresh config identity = %+v, want active ownership identity", refreshCfg)
 	}
 	if len(mock.recovers) != 0 {
 		t.Fatalf("expected refresh to avoid crash-recovery path, got %d RecoverVM calls", len(mock.recovers))

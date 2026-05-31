@@ -64,6 +64,9 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 		SourceVMID:        "vm-source",
 		GatewayToken:      "sandbox-token",
 		Epoch:             7,
+		ComputerKind:      "active",
+		OwnerID:           "owner-old",
+		DesktopID:         "primary",
 	}
 	defaults := DefaultManagerConfig()
 	defaults.StoreDiskPath = "/current/store"
@@ -75,8 +78,39 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 	if got.SourceVMID != "" {
 		t.Fatalf("refresh config kept stale source VM copy request: %+v", got)
 	}
-	if got.VMID != old.VMID || got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort || got.MachineMemSizeMib != old.MachineMemSizeMib {
+	if got.VMID != old.VMID || got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort || got.MachineMemSizeMib != old.MachineMemSizeMib || got.ComputerKind != old.ComputerKind || got.OwnerID != old.OwnerID {
 		t.Fatalf("refresh config did not preserve VM identity and mutable state fields: %+v", got)
+	}
+}
+
+func TestMergeVMConfigOverridesFillsDeployRefreshIdentity(t *testing.T) {
+	old := VMConfig{
+		VMID:              "vm-existing",
+		PersistentDir:     "/state/vm-existing/persist",
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 4096,
+	}
+	overrides := VMConfig{
+		VMID:              "vm-existing",
+		MachineCPUCount:   4,
+		MachineMemSizeMib: 8192,
+		ComputerKind:      "worker",
+		OwnerID:           "owner-1",
+		DesktopID:         "primary",
+		WorkerID:          "worker-1",
+		CandidateID:       "worker-1",
+	}
+
+	got := mergeVMConfigOverrides(old, overrides)
+	if got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort {
+		t.Fatalf("merge changed persistent boot fields unexpectedly: %+v", got)
+	}
+	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 8192 {
+		t.Fatalf("merge did not apply machine shape overrides: %+v", got)
+	}
+	if got.ComputerKind != "worker" || got.OwnerID != "owner-1" || got.DesktopID != "primary" || got.WorkerID != "worker-1" || got.CandidateID != "worker-1" {
+		t.Fatalf("merge did not apply guest identity overrides: %+v", got)
 	}
 }
 

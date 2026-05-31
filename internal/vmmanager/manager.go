@@ -1056,6 +1056,10 @@ func (m *Manager) MarkFailed(vmID string) {
 // The epoch IS incremented on recovery because this is a fresh boot,
 // not a resume. This prevents duplicate canonical effects (VAL-CROSS-117).
 func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
+	return m.RecoverVMWithConfig(vmID, VMConfig{})
+}
+
+func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInstance, error) {
 	m.mu.Lock()
 	inst, ok := m.vms[vmID]
 	if !ok {
@@ -1072,10 +1076,12 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 	m.mu.Lock()
 	inst.Config.Epoch++
 	_ = m.saveEpoch(vmID, inst.Config.Epoch)
+	cfg := mergeVMConfigOverrides(inst.Config, overrides)
+	cfg.VMID = vmID
 	m.mu.Unlock()
 
 	// Boot with the same config but new epoch.
-	return m.BootVM(inst.Config)
+	return m.BootVM(cfg)
 }
 
 // RefreshVM force-kills and reboots a VM onto the current manager boot
@@ -1084,6 +1090,10 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 // closure instead of replaying stale boot paths captured when the VM was first
 // created.
 func (m *Manager) RefreshVM(vmID string) (*VMInstance, error) {
+	return m.RefreshVMWithConfig(vmID, VMConfig{})
+}
+
+func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInstance, error) {
 	m.mu.Lock()
 	inst, ok := m.vms[vmID]
 	if !ok {
@@ -1093,10 +1103,66 @@ func (m *Manager) RefreshVM(vmID string) (*VMInstance, error) {
 
 	m.killFirecrackerProcess(inst)
 	inst.State = StateFailed
-	cfg := refreshConfigForCurrentDeploy(inst.Config, m.cfg)
+	cfg := refreshConfigForCurrentDeploy(mergeVMConfigOverrides(inst.Config, overrides), m.cfg)
+	cfg.VMID = vmID
 	m.mu.Unlock()
 
 	return m.BootVM(cfg)
+}
+
+func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
+	if overrides.VMID != "" {
+		cfg.VMID = overrides.VMID
+	}
+	if overrides.KernelImagePath != "" {
+		cfg.KernelImagePath = overrides.KernelImagePath
+	}
+	if overrides.InitrdPath != "" {
+		cfg.InitrdPath = overrides.InitrdPath
+	}
+	if overrides.RootfsPath != "" {
+		cfg.RootfsPath = overrides.RootfsPath
+	}
+	if overrides.StoreDiskPath != "" {
+		cfg.StoreDiskPath = overrides.StoreDiskPath
+	}
+	if overrides.KernelParams != "" {
+		cfg.KernelParams = overrides.KernelParams
+	}
+	if overrides.GuestPort != 0 {
+		cfg.GuestPort = overrides.GuestPort
+	}
+	if overrides.MachineCPUCount != 0 {
+		cfg.MachineCPUCount = overrides.MachineCPUCount
+	}
+	if overrides.MachineMemSizeMib != 0 {
+		cfg.MachineMemSizeMib = overrides.MachineMemSizeMib
+	}
+	if overrides.PersistentDir != "" {
+		cfg.PersistentDir = overrides.PersistentDir
+	}
+	if overrides.SourceVMID != "" {
+		cfg.SourceVMID = overrides.SourceVMID
+	}
+	if overrides.GatewayToken != "" {
+		cfg.GatewayToken = overrides.GatewayToken
+	}
+	if overrides.ComputerKind != "" {
+		cfg.ComputerKind = overrides.ComputerKind
+	}
+	if overrides.OwnerID != "" {
+		cfg.OwnerID = overrides.OwnerID
+	}
+	if overrides.DesktopID != "" {
+		cfg.DesktopID = overrides.DesktopID
+	}
+	if overrides.WorkerID != "" {
+		cfg.WorkerID = overrides.WorkerID
+	}
+	if overrides.CandidateID != "" {
+		cfg.CandidateID = overrides.CandidateID
+	}
+	return cfg
 }
 
 func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfig {

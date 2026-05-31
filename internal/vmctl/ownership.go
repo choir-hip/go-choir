@@ -219,12 +219,13 @@ type VMManager interface {
 	// ReattachVM adopts a VM process that survived vmctl restart.
 	ReattachVM(vmID, hostURL string, epoch int64) (*VMInstanceInfo, error)
 
-	// RecoverVM force-kills and reboots a failed VM (new epoch).
-	RecoverVM(vmID string) (*VMInstanceInfo, error)
+	// RecoverVM force-kills and reboots a failed VM (new epoch), merging any
+	// current ownership-derived config into persisted VM launch config.
+	RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error)
 
 	// RefreshVM force-kills and reboots a VM onto the current deploy's
 	// default boot artifacts while preserving mutable state.
-	RefreshVM(vmID string) (*VMInstanceInfo, error)
+	RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error)
 
 	// DestroyVMState deletes stopped terminal VM state. The registry calls this
 	// only after policy checks exclude primary/published/active computers.
@@ -976,7 +977,7 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 	if mgr.GetVM(own.VMID) == nil {
 		return r.startExistingVM(own, mgr)
 	}
-	recovered, err := mgr.RecoverVM(own.VMID)
+	recovered, err := mgr.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
 	if err != nil {
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
@@ -995,7 +996,7 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	} else if existing := mgr.GetVM(own.VMID); existing != nil {
 		state := strings.ToLower(strings.TrimSpace(existing.State))
 		if state == "failed" || state == "pending" {
-			recovered, recoverErr := mgr.RecoverVM(own.VMID)
+			recovered, recoverErr := mgr.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
 			if recoverErr == nil {
 				return recovered, nil
 			}
@@ -1003,19 +1004,26 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		}
 		return nil, err
 	}
+	return mgr.BootVM(vmManagerConfigForOwnership(own, r.issueGatewayToken(own.VMID)))
+}
+
+func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManagerConfig {
+	if own == nil {
+		return VMManagerConfig{}
+	}
 	cpu, mem := machineShapeForOwnership(own)
-	return mgr.BootVM(VMManagerConfig{
+	return VMManagerConfig{
 		VMID:              own.VMID,
 		GuestPort:         8085,
 		MachineCPUCount:   cpu,
 		MachineMemSizeMib: mem,
-		GatewayToken:      r.issueGatewayToken(own.VMID),
+		GatewayToken:      gatewayToken,
 		ComputerKind:      computerKindForOwnership(own),
 		OwnerID:           own.UserID,
 		DesktopID:         own.DesktopID,
 		WorkerID:          own.WorkerID,
 		CandidateID:       candidateIDForOwnership(own),
-	})
+	}
 }
 
 // issueGatewayToken requests a gateway credential token for the given
@@ -2311,7 +2319,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 
 	// Delegate to the real VM manager if available.
 	if r.vmManager != nil {
-		info, err := r.vmManager.RecoverVM(own.VMID)
+		info, err := r.vmManager.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
 		if err != nil {
 			return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
 		}
@@ -2355,7 +2363,7 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	}
 
 	if r.vmManager != nil {
-		info, err := r.vmManager.RefreshVM(own.VMID)
+		info, err := r.vmManager.RefreshVM(own.VMID, vmManagerConfigForOwnership(own, ""))
 		if err != nil {
 			return nil, fmt.Errorf("failed to refresh VM %s: %w", own.VMID, err)
 		}

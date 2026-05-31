@@ -136,7 +136,15 @@ type vmManagerAdapter struct {
 }
 
 func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.BootVM(vmmanager.VMConfig{
+	inst, err := a.mgr.BootVM(toManagerVMConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return toVMInstanceInfo(inst), nil
+}
+
+func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
+	return vmmanager.VMConfig{
 		VMID:              cfg.VMID,
 		KernelImagePath:   cfg.KernelImagePath,
 		InitrdPath:        cfg.InitrdPath,
@@ -154,9 +162,12 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		DesktopID:         cfg.DesktopID,
 		WorkerID:          cfg.WorkerID,
 		CandidateID:       cfg.CandidateID,
-	})
-	if err != nil {
-		return nil, err
+	}
+}
+
+func toVMInstanceInfo(inst *vmmanager.VMInstance) *vmctl.VMInstanceInfo {
+	if inst == nil {
+		return nil
 	}
 	return &vmctl.VMInstanceInfo{
 		HostURL:         inst.HostURL,
@@ -166,7 +177,7 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 		StartedAt:       inst.StartedAt,
 		LastHealthCheck: inst.LastHealthCheck,
 		LastHealthyAt:   inst.LastHealthyAt,
-	}, nil
+	}
 }
 
 func workerImageProfileFromEnv(prefix string) (vmctl.VMImageProfile, bool) {
@@ -213,15 +224,7 @@ func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &vmctl.VMInstanceInfo{
-		HostURL:         inst.HostURL,
-		Epoch:           inst.Config.Epoch,
-		Healthy:         inst.Healthy,
-		State:           string(inst.State),
-		StartedAt:       inst.StartedAt,
-		LastHealthCheck: inst.LastHealthCheck,
-		LastHealthyAt:   inst.LastHealthyAt,
-	}, nil
+	return toVMInstanceInfo(inst), nil
 }
 
 func (a *vmManagerAdapter) ReattachVM(vmID, hostURL string, epoch int64) (*vmctl.VMInstanceInfo, error) {
@@ -229,47 +232,23 @@ func (a *vmManagerAdapter) ReattachVM(vmID, hostURL string, epoch int64) (*vmctl
 	if err != nil {
 		return nil, err
 	}
-	return &vmctl.VMInstanceInfo{
-		HostURL:         inst.HostURL,
-		Epoch:           inst.Config.Epoch,
-		Healthy:         inst.Healthy,
-		State:           string(inst.State),
-		StartedAt:       inst.StartedAt,
-		LastHealthCheck: inst.LastHealthCheck,
-		LastHealthyAt:   inst.LastHealthyAt,
-	}, nil
+	return toVMInstanceInfo(inst), nil
 }
 
-func (a *vmManagerAdapter) RecoverVM(vmID string) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.RecoverVM(vmID)
+func (a *vmManagerAdapter) RecoverVM(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.RecoverVMWithConfig(vmID, toManagerVMConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
-	return &vmctl.VMInstanceInfo{
-		HostURL:         inst.HostURL,
-		Epoch:           inst.Config.Epoch,
-		Healthy:         inst.Healthy,
-		State:           string(inst.State),
-		StartedAt:       inst.StartedAt,
-		LastHealthCheck: inst.LastHealthCheck,
-		LastHealthyAt:   inst.LastHealthyAt,
-	}, nil
+	return toVMInstanceInfo(inst), nil
 }
 
-func (a *vmManagerAdapter) RefreshVM(vmID string) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.RefreshVM(vmID)
+func (a *vmManagerAdapter) RefreshVM(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.RefreshVMWithConfig(vmID, toManagerVMConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
-	return &vmctl.VMInstanceInfo{
-		HostURL:         inst.HostURL,
-		Epoch:           inst.Config.Epoch,
-		Healthy:         inst.Healthy,
-		State:           string(inst.State),
-		StartedAt:       inst.StartedAt,
-		LastHealthCheck: inst.LastHealthCheck,
-		LastHealthyAt:   inst.LastHealthyAt,
-	}, nil
+	return toVMInstanceInfo(inst), nil
 }
 
 func (a *vmManagerAdapter) DestroyVMState(vmID string) error {
@@ -278,18 +257,7 @@ func (a *vmManagerAdapter) DestroyVMState(vmID string) error {
 
 func (a *vmManagerAdapter) GetVM(vmID string) *vmctl.VMInstanceInfo {
 	inst := a.mgr.GetVM(vmID)
-	if inst == nil {
-		return nil
-	}
-	return &vmctl.VMInstanceInfo{
-		HostURL:         inst.HostURL,
-		Epoch:           inst.Config.Epoch,
-		Healthy:         inst.Healthy,
-		State:           string(inst.State),
-		StartedAt:       inst.StartedAt,
-		LastHealthCheck: inst.LastHealthCheck,
-		LastHealthyAt:   inst.LastHealthyAt,
-	}
+	return toVMInstanceInfo(inst)
 }
 
 func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
