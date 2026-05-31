@@ -48,6 +48,7 @@ var (
 	vtextNumberedHeadingRE     = regexp.MustCompile(`(?m)^\s*(?:#{1,6}\s*)?(\d{1,2}\.\s+[^\n:]{2,100})\s*$`)
 	vtextSectionUpdatePrefixRE = regexp.MustCompile(`\bSECTION\s+\d+\s+UPDATE:`)
 	vtextSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
+	vtextInlineSourceRefRE     = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)`)
 )
 
 // ----- Request/Response types -----
@@ -1806,6 +1807,9 @@ func vtextHardRequirementHints(parts ...string) []string {
 		for _, match := range vtextSHA256RequirementRE.FindAllString(text, -1) {
 			add("Required hash/value: " + match)
 		}
+		for _, match := range vtextInlineSourceRefRE.FindAllString(text, -1) {
+			add("Preserve inline source ref exactly: " + truncatePromptSnippet(match, 180))
+		}
 		for _, label := range []string{"[S1]", "[S2]", "[S3]"} {
 			if strings.Contains(text, label) {
 				add("Required evidence label: " + label)
@@ -1867,6 +1871,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nDetected VText source entities:\n")
 		b.WriteString(formattedEntities)
 		b.WriteString("\nThese source entities are the durable citation/transclusion substrate for this VText. Preserve them as source-backed affordances instead of flattening them into prose. Inline use should cite or summarize bounded source spans; expansion or owning-surface opens should reveal the underlying media/content/VText target.")
+		b.WriteString("\nCanonical inline Source Entity syntax is [label](source:ENTITY_ID). Preserve existing source: entity ids exactly unless the citation is intentionally removed; do not rewrite source: refs as ordinary URLs, footnote prose, or copied transcript text. When adding citations for listed source entities, use this syntax with the listed entity_id.")
 	}
 	if current.RevisionID != "" {
 		b.WriteString("\n\nCurrent head revision: ")

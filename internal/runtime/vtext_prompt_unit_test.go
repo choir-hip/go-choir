@@ -123,6 +123,49 @@ func TestVTextPromptPreservesExplicitHardConstraints(t *testing.T) {
 	}
 }
 
+func TestVTextPromptPreservesInlineSourceRefs(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-source-ref",
+		RevisionID: "rev-source-ref",
+		Content:    "# Source Review\n\nThis claim cites [the clip](source:src-youtube-demo).",
+		AuthorKind: types.AuthorUser,
+	}
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"source_entities": []vtextSourceEntity{
+			{
+				EntityID: "src-youtube-demo",
+				Kind:     "youtube_video",
+				Label:    "Demo clip",
+				Target: vtextSourceEntityTarget{
+					CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+				},
+				Display: vtextSourceEntityDisplay{
+					OpenSurface: "video",
+				},
+				Evidence: vtextSourceEntityEvidence{
+					TranscriptAvailability: "unavailable",
+					ResearchState:          "pending",
+				},
+			},
+		},
+	}, vtextAgentRevisionRequest{
+		Intent: "revise",
+		Prompt: "Keep the citation attached while making the wording clearer.",
+	}, "", false, nil, nil)
+
+	for _, want := range []string{
+		"Detected VText source entities:",
+		"youtube_video Demo clip entity_id=src-youtube-demo",
+		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
+		"Preserve existing source: entity ids exactly",
+		"Preserve inline source ref exactly: [the clip](source:src-youtube-demo)",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("source-ref prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
 func TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-long-rubric-super",
