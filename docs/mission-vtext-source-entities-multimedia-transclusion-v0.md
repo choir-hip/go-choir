@@ -1199,3 +1199,72 @@ publication-safe source ledgers.
 **next executable probe:** staging product-path live appagent proof for inline
 source-ref preservation, starting from a VText document with a real YouTube
 source entity and `[label](source:ENTITY_ID)` in prose.
+
+## Run Checkpoint - Live Appagent Source-Ref Proof - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**what shipped:**
+
+- Added a skipped-by-default durable Playwright product proof:
+  `frontend/tests/vtext-source-ref-live-agent.spec.js`.
+- The proof creates a private VText document with a real YouTube Source Entity,
+  writes `[the source clip](source:src-live-youtube)` in the prose, submits the
+  real `/api/vtext/documents/{id}/revise` product path, and waits for an
+  appagent-authored revision preserving the inline source ref.
+- The proof is gated by `GO_CHOIR_RUN_LIVE_SOURCE_REF=1` so ordinary CI does
+  not depend on a live LLM/provider path, while the command is available for
+  explicit staging acceptance runs.
+
+**commits:**
+
+- `8336c5c` test: add live vtext source ref preservation proof
+
+**what was proven:**
+
+- Temporary live staging probe passed before promotion:
+  `BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-ref-live-agent.tmp.spec.js --project=chromium --timeout=240000`.
+- The promoted durable proof skips by default:
+  `BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-ref-live-agent.spec.js --project=chromium --timeout=240000`
+  reported `1 skipped`.
+- The promoted durable proof passed when explicitly enabled:
+  `GO_CHOIR_RUN_LIVE_SOURCE_REF=1 BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-ref-live-agent.spec.js --project=chromium --timeout=240000`
+  reported `1 passed`.
+- GitHub Actions passed for final test commit `8336c5c`: CI run
+  `26723003870`, FlakeHub publish run `26723003857`.
+- Staging `/health` remained on behavior commit
+  `320f4e35ffb414210b1da5a5079ce35edbea104b`, which contains the runtime
+  prompt behavior. Commit `8336c5c` is test-only and does not need a distinct
+  staging runtime deploy to change product behavior.
+
+**belief-state changes:**
+
+- The smallest deployed product path now covers durable metadata, source
+  artifact resolution from a real YouTube target, inline expandable citations,
+  user edit round-trip, and live VText appagent preservation of the inline
+  `source:` anchor.
+- The current inline substrate is viable enough to move the campaign toward
+  transcript selectors and publication projection instead of spending another
+  loop on basic citation survival.
+
+**unproven or partial claims:**
+
+- The live proof does not require VText to use transcript content; the fixture
+  records transcript availability as unavailable.
+- The proof preserves a whole-source anchor, not a timestamped transcript span.
+- Public publication records and public immutable citation/transclusion ledgers
+  are not implemented for Source Entities yet.
+- Podcast transcripts, web source packets, VText-to-VText transclusion,
+  unified local/public source search, and sourcecycled import remain future
+  deformations.
+
+**remaining error field:** add ContentItem-backed transcript artifacts and
+selectors, teach VText/researcher to produce bounded source representations,
+project private Source Entities into platform publication records, and prove
+expandable citations in public/published VText without flattening source
+identity.
+
+**next executable probe:** introduce transcript/span selector metadata for a
+single resolved YouTube transcript when available, render the selected excerpt
+inside the inline expansion, and keep the whole-source fallback for videos
+without transcript artifacts.
