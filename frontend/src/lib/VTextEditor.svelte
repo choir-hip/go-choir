@@ -88,7 +88,7 @@
       .replace(/"/g, '&quot;');
   }
 
-  function renderInlineMarkdown(value) {
+  function renderInlineMarkdown(value, sourceEntities = []) {
     let html = escapeHTML(value);
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -97,7 +97,7 @@
     return html;
   }
 
-  function renderMarkdown(value) {
+  function renderMarkdown(value, sourceEntities = []) {
     const normalized = String(value || '').replace(/\|\s+\|/g, '|\n|');
     const lines = normalized.split(/\r?\n/);
     const blocks = [];
@@ -108,19 +108,19 @@
 
     function flushParagraph() {
       if (paragraph.length === 0) return;
-      blocks.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+      blocks.push(`<p>${renderInlineMarkdown(paragraph.join(' '), sourceEntities)}</p>`);
       paragraph = [];
     }
 
     function flushList() {
       if (list.length === 0) return;
-      blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`);
+      blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item, sourceEntities)}</li>`).join('')}</ul>`);
       list = [];
     }
 
     function flushQuote() {
       if (quote.length === 0) return;
-      blocks.push(`<blockquote>${quote.map((item) => `<p>${renderInlineMarkdown(item)}</p>`).join('')}</blockquote>`);
+      blocks.push(`<blockquote>${quote.map((item) => `<p>${renderInlineMarkdown(item, sourceEntities)}</p>`).join('')}</blockquote>`);
       quote = [];
     }
 
@@ -144,9 +144,9 @@
       if (parsed.length >= 2 && isTableSeparator(parsed[1])) {
         const headers = parsed[0];
         const rows = parsed.slice(2);
-        blocks.push(`<div class="table-scroll"><table><thead><tr>${headers.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+        blocks.push(`<div class="table-scroll"><table><thead><tr>${headers.map((cell) => `<th>${renderInlineMarkdown(cell, sourceEntities)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell, sourceEntities)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
       } else {
-        blocks.push(`<p>${renderInlineMarkdown(table.join(' '))}</p>`);
+        blocks.push(`<p>${renderInlineMarkdown(table.join(' '), sourceEntities)}</p>`);
       }
       table = [];
     }
@@ -169,7 +169,7 @@
         flushQuote();
         flushTable();
         const level = heading[1].length;
-        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2], sourceEntities)}</h${level}>`);
         continue;
       }
 
@@ -217,45 +217,137 @@
     return Array.isArray(refs) ? refs : [];
   }
 
-  function renderMediaSourceBlocks(refs) {
-    if (!Array.isArray(refs) || refs.length === 0) return '';
-    const cards = refs
-      .map((ref) => {
-        const kind = String(ref?.kind || '').toLowerCase();
-        const title = escapeHTML(ref?.title || (kind === 'youtube' ? 'YouTube source' : 'Image source'));
-        const canonical = ref?.canonical_url || ref?.url || '';
-        const sourceURL = ref?.url || ref?.canonical_url || '';
-        const contentID = escapeHTML(ref?.content_id || '');
-        const transcript = escapeHTML(ref?.transcript_availability || '');
-        const research = escapeHTML(ref?.research_state || 'pending');
-        let media = '';
-        if (kind === 'youtube') {
-          const embed = youtubeEmbedURL(canonical || sourceURL);
-          if (embed) {
-            media = `<div class="vtext-source-video"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
-          }
-        } else if (kind === 'image') {
-          const src = sourceURL || canonical;
-          if (src) {
-            media = `<div class="vtext-source-image"><img src="${escapeHTML(src)}" alt="${title}" loading="lazy"></div>`;
-          }
-        }
-        return `<article class="vtext-source-card" data-vtext-source-card contenteditable="false">
+  function revisionSourceEntities() {
+    const entities = currentRevision?.metadata?.source_entities;
+    if (Array.isArray(entities) && entities.length > 0) return entities;
+    return revisionMediaSourceRefs().map(mediaRefToSourceEntity).filter(Boolean);
+  }
+
+  function mediaRefToSourceEntity(ref) {
+    const kind = String(ref?.kind || '').toLowerCase();
+    if (!kind) return null;
+    const entityKind = kind === 'youtube' ? 'youtube_video' : kind;
+    const canonical = ref?.canonical_url || ref?.url || '';
+    return {
+      entity_id: `${entityKind}:${canonical || ref?.content_id || ''}`,
+      kind: entityKind,
+      label: ref?.title || (kind === 'youtube' ? 'YouTube source' : 'Image source'),
+      target: {
+        target_kind: 'content_item',
+        content_id: ref?.content_id || '',
+        url: ref?.url || canonical,
+        canonical_url: canonical,
+      },
+      display: {
+        inline_mode: 'chip',
+        expanded_mode: kind === 'youtube' ? 'media_player' : 'source_card',
+        open_surface: ref?.app_hint || (kind === 'youtube' ? 'video' : kind),
+        default_collapsed: true,
+      },
+      evidence: {
+        state: ref?.content_id ? 'available' : 'pending',
+        research_state: ref?.research_state || 'pending',
+        transcript_content_id: ref?.transcript_content_id || '',
+        transcript_availability: ref?.transcript_availability || '',
+      },
+      provenance: {
+        created_by: 'importer',
+        rights_scope: 'private_user_source',
+        untrusted_source_text: true,
+      },
+    };
+  }
+
+  function sourceEntityKindLabel(kind) {
+    const normalized = String(kind || '').replace(/_/g, ' ');
+    return normalized || 'source';
+  }
+
+  function sourceEntityTitle(entity) {
+    return entity?.label || sourceEntityKindLabel(entity?.kind);
+  }
+
+  function sourceEntityTargetURL(entity) {
+    return entity?.target?.canonical_url || entity?.target?.url || '';
+  }
+
+  function sourceEntityMedia(entity) {
+    const kind = String(entity?.kind || '').toLowerCase();
+    const sourceURL = sourceEntityTargetURL(entity);
+    const title = escapeHTML(sourceEntityTitle(entity));
+    if (kind === 'youtube_video') {
+      const embed = youtubeEmbedURL(sourceURL);
+      if (embed) {
+        return `<div class="vtext-source-video"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+      }
+    }
+    if (kind === 'image' && sourceURL) {
+      return `<div class="vtext-source-image"><img src="${escapeHTML(sourceURL)}" alt="${title}" loading="lazy"></div>`;
+    }
+    return '';
+  }
+
+  function renderSourceEntityFacts(entity) {
+    const contentID = escapeHTML(entity?.target?.content_id || '');
+    const transcript = escapeHTML(entity?.evidence?.transcript_availability || '');
+    const evidence = escapeHTML(entity?.evidence?.state || 'pending');
+    const research = escapeHTML(entity?.evidence?.research_state || 'pending');
+    const surface = escapeHTML(entity?.display?.open_surface || '');
+    return `
+      ${contentID ? `<span>content ${contentID}</span>` : ''}
+      ${transcript ? `<span>transcript ${transcript}</span>` : ''}
+      <span>evidence ${evidence}</span>
+      <span>research ${research}</span>
+      ${surface ? `<span>opens ${surface}</span>` : ''}
+    `;
+  }
+
+  function renderSourceEntityInlineRail(entities) {
+    if (!Array.isArray(entities) || entities.length === 0) return '';
+    return `<section class="vtext-source-inline-rail" data-vtext-source-entity contenteditable="false" aria-label="Document sources">
+      ${entities.map((entity, index) => {
+        const entityID = escapeHTML(entity?.entity_id || `source-${index + 1}`);
+        const title = escapeHTML(sourceEntityTitle(entity));
+        const kind = escapeHTML(sourceEntityKindLabel(entity?.kind));
+        const media = sourceEntityMedia(entity);
+        return `<details class="vtext-source-inline" data-vtext-source-inline data-source-entity-id="${entityID}">
+          <summary><span>${title}</span><small>${kind}</small></summary>
+          <div class="vtext-source-inline-body">
+            ${media}
+            <div class="vtext-source-facts">${renderSourceEntityFacts(entity)}</div>
+          </div>
+        </details>`;
+      }).join('')}
+    </section>`;
+  }
+
+  function renderSourceEntityBlocks(entities) {
+    if (!Array.isArray(entities) || entities.length === 0) return '';
+    const cards = entities
+      .map((entity, index) => {
+        const entityID = escapeHTML(entity?.entity_id || `source-${index + 1}`);
+        const kind = escapeHTML(sourceEntityKindLabel(entity?.kind));
+        const title = escapeHTML(sourceEntityTitle(entity));
+        const canonical = sourceEntityTargetURL(entity);
+        const media = sourceEntityMedia(entity);
+        return `<article class="vtext-source-card" data-vtext-source-card data-vtext-source-entity data-source-entity-id="${entityID}" contenteditable="false">
           ${media}
           <div class="vtext-source-meta">
-            <div class="vtext-source-kind">${escapeHTML(kind || 'source')}</div>
+            <div class="vtext-source-kind">${kind}</div>
             <div class="vtext-source-title">${title}</div>
-            <a href="${escapeHTML(canonical || sourceURL)}" target="_blank" rel="noreferrer">${escapeHTML(canonical || sourceURL)}</a>
-            <div class="vtext-source-facts">
-              ${contentID ? `<span>content ${contentID}</span>` : ''}
-              ${transcript ? `<span>transcript ${transcript}</span>` : ''}
-              <span>research ${research}</span>
-            </div>
+            ${canonical ? `<a href="${escapeHTML(canonical)}" target="_blank" rel="noreferrer">${escapeHTML(canonical)}</a>` : ''}
+            <div class="vtext-source-facts">${renderSourceEntityFacts(entity)}</div>
+            <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${entityID}">Open source</button>
           </div>
         </article>`;
       })
       .join('');
-    return `<section class="vtext-source-deck" data-vtext-source-card contenteditable="false">${cards}</section>`;
+    return `${renderSourceEntityInlineRail(entities)}<section class="vtext-source-deck" data-vtext-source-card contenteditable="false">${cards}</section>`;
+  }
+
+  function renderDocumentHTML(value = editorValue) {
+    const entities = revisionSourceEntities();
+    return renderSourceEntityBlocks(entities) + renderMarkdown(value, entities);
   }
 
   function serializeInlineMarkdown(node) {
@@ -264,7 +356,7 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    if (node.closest?.('[data-vtext-source-card]')) return '';
+    if (node.closest?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (tag === 'br') return '\n';
@@ -286,7 +378,7 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    if (node.matches?.('[data-vtext-source-card]')) return '';
+    if (node.matches?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (/^h[1-4]$/.test(tag)) {
@@ -777,7 +869,7 @@
     if (editorValue === contentAtSave) {
       editorValue = revision.content || '';
       if (revision.content !== contentAtSave) {
-        syncEditorSurface(renderMarkdown(editorValue), { force: true });
+        syncEditorSurface(renderDocumentHTML(editorValue), { force: true });
       }
     }
   }
@@ -1037,7 +1129,7 @@
     showRecent = false;
     saveStatus = 'Local preview - sign in to save';
     publishCurrentDocumentContext(currentDoc.title);
-    tick().then(() => syncEditorSurface(renderMarkdown(editorValue), { force: true }));
+    tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
   }
 
   async function loadPublishedContext(routePath) {
@@ -1355,7 +1447,51 @@
 
   function handleEditorBlur() {
     surfaceFocused = false;
-    syncEditorSurface(renderMarkdown(editorValue));
+    syncEditorSurface(renderDocumentHTML(editorValue));
+  }
+
+  function handleSourceEntityOpen(entity) {
+    if (!entity) return;
+    const appId = entity?.display?.open_surface || (entity?.kind === 'youtube_video' ? 'video' : 'content');
+    const sourceUrl = sourceEntityTargetURL(entity);
+    const contentId = entity?.target?.content_id || '';
+    const title = sourceEntityTitle(entity);
+    dispatch('launchapp', {
+      appId,
+      appName: title || appId,
+      icon: '',
+      appContext: {
+        windowTitle: title,
+        title,
+        sourceUrl,
+        contentId,
+        content_id: contentId,
+        mediaType: entity?.kind === 'youtube_video' ? 'video/youtube' : '',
+        appHint: appId,
+        sourceEntityId: entity?.entity_id || '',
+        allowMultiple: true,
+      },
+    });
+  }
+
+  function handleEditorClick(event) {
+    const button = event.target?.closest?.('[data-vtext-open-source]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const entityID = button.getAttribute('data-source-entity-id') || '';
+    const entity = revisionSourceEntities().find((item) => String(item?.entity_id || '') === entityID);
+    handleSourceEntityOpen(entity);
+  }
+
+  function handleEditorKeydown(event) {
+    const button = event.target?.closest?.('[data-vtext-open-source]');
+    if (!button || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const entityID = button.getAttribute('data-source-entity-id') || '';
+    const entity = revisionSourceEntities().find((item) => String(item?.entity_id || '') === entityID);
+    handleSourceEntityOpen(entity);
   }
 
   function handleDocumentScroll(event) {
@@ -1393,7 +1529,7 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
-  $: renderedMarkdown = renderMediaSourceBlocks(revisionMediaSourceRefs()) + renderMarkdown(editorValue);
+  $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
   onMount(() => {
@@ -1638,11 +1774,14 @@
         data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
         bind:this={editorSurface}
         contenteditable={!isEditorReadOnly}
+        tabindex="0"
         role="textbox"
         aria-multiline="true"
         aria-label="VText document"
         spellcheck="true"
         on:focus={handleEditorFocus}
+        on:click={handleEditorClick}
+        on:keydown={handleEditorKeydown}
         on:input={handleEditorInput}
         on:blur={handleEditorBlur}
         on:scroll={handleDocumentScroll}
@@ -1954,6 +2093,61 @@
     margin: 0 0 1.1rem;
   }
 
+  .rendered-doc :global(.vtext-source-inline-rail) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0 0.9rem;
+  }
+
+  .rendered-doc :global(.vtext-source-inline) {
+    min-width: min(100%, 14rem);
+    max-width: 100%;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    background: var(--choir-state-selected);
+  }
+
+  .rendered-doc :global(.vtext-source-inline summary) {
+    display: flex;
+    gap: 0.48rem;
+    align-items: center;
+    min-height: 2.2rem;
+    padding: 0.42rem 0.58rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--choir-text-accent);
+    font-size: 0.82rem;
+    font-weight: 760;
+  }
+
+  .rendered-doc :global(.vtext-source-inline summary::-webkit-details-marker) {
+    display: none;
+  }
+
+  .rendered-doc :global(.vtext-source-inline summary::after) {
+    content: "+";
+    margin-left: auto;
+    font-weight: 820;
+  }
+
+  .rendered-doc :global(.vtext-source-inline[open] summary::after) {
+    content: "-";
+  }
+
+  .rendered-doc :global(.vtext-source-inline small) {
+    color: var(--choir-text-accent);
+    font-size: 0.68rem;
+    font-weight: 720;
+    text-transform: uppercase;
+  }
+
+  .rendered-doc :global(.vtext-source-inline-body) {
+    display: grid;
+    gap: 0.52rem;
+    padding: 0 0.58rem 0.58rem;
+  }
+
   .rendered-doc :global(.vtext-source-card) {
     display: grid;
     grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
@@ -2030,7 +2224,28 @@
     font-size: 0.72rem;
   }
 
+  .rendered-doc :global(.vtext-source-open) {
+    margin-top: 0.62rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    padding: 0.34rem 0.62rem;
+    color: var(--choir-text-accent);
+    background: var(--choir-state-hover);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 760;
+    cursor: pointer;
+  }
+
+  .rendered-doc :global(.vtext-source-open:hover) {
+    background: var(--choir-state-selected);
+  }
+
   @media (max-width: 720px) {
+    .rendered-doc :global(.vtext-source-inline-rail) {
+      display: grid;
+    }
+
     .rendered-doc :global(.vtext-source-card) {
       grid-template-columns: 1fr;
     }

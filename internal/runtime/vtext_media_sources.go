@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"path"
 	"regexp"
@@ -23,6 +25,60 @@ type vtextMediaSourceRef struct {
 	VideoID                string `json:"video_id,omitempty"`
 	TranscriptAvailability string `json:"transcript_availability,omitempty"`
 	ResearchState          string `json:"research_state,omitempty"`
+}
+
+type vtextSourceEntity struct {
+	EntityID   string                      `json:"entity_id"`
+	Kind       string                      `json:"kind"`
+	Label      string                      `json:"label,omitempty"`
+	Target     vtextSourceEntityTarget     `json:"target"`
+	Selectors  []vtextSourceEntitySelector `json:"selectors,omitempty"`
+	Display    vtextSourceEntityDisplay    `json:"display"`
+	Evidence   vtextSourceEntityEvidence   `json:"evidence"`
+	Provenance vtextSourceEntityProvenance `json:"provenance"`
+}
+
+type vtextSourceEntityTarget struct {
+	TargetKind           string `json:"target_kind"`
+	ContentID            string `json:"content_id,omitempty"`
+	FilePath             string `json:"file_path,omitempty"`
+	DocID                string `json:"doc_id,omitempty"`
+	RevisionID           string `json:"revision_id,omitempty"`
+	PublicationID        string `json:"publication_id,omitempty"`
+	PublicationVersionID string `json:"publication_version_id,omitempty"`
+	PublicRecordID       string `json:"public_record_id,omitempty"`
+	URL                  string `json:"url,omitempty"`
+	CanonicalURL         string `json:"canonical_url,omitempty"`
+}
+
+type vtextSourceEntitySelector struct {
+	SelectorKind string  `json:"selector_kind"`
+	StartSeconds float64 `json:"start_seconds,omitempty"`
+	EndSeconds   float64 `json:"end_seconds,omitempty"`
+	TextQuote    string  `json:"text_quote,omitempty"`
+	ContentHash  string  `json:"content_hash,omitempty"`
+}
+
+type vtextSourceEntityDisplay struct {
+	InlineMode       string `json:"inline_mode"`
+	ExpandedMode     string `json:"expanded_mode"`
+	OpenSurface      string `json:"open_surface,omitempty"`
+	DefaultCollapsed bool   `json:"default_collapsed"`
+}
+
+type vtextSourceEntityEvidence struct {
+	State                  string `json:"state"`
+	ResearchState          string `json:"research_state,omitempty"`
+	TranscriptContentID    string `json:"transcript_content_id,omitempty"`
+	TranscriptAvailability string `json:"transcript_availability,omitempty"`
+	SourceRepresentationID string `json:"source_representation_id,omitempty"`
+	Uncertainty            string `json:"uncertainty,omitempty"`
+}
+
+type vtextSourceEntityProvenance struct {
+	CreatedBy           string `json:"created_by"`
+	RightsScope         string `json:"rights_scope,omitempty"`
+	UntrustedSourceText bool   `json:"untrusted_source_text,omitempty"`
 }
 
 var vtextHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
@@ -174,6 +230,248 @@ func decodeVTextMediaSourceRefs(value any) []vtextMediaSourceRef {
 	return refs
 }
 
+func normalizeVTextSourceEntities(metadata map[string]any, refs []vtextMediaSourceRef) ([]vtextSourceEntity, bool) {
+	if metadata == nil {
+		return nil, false
+	}
+	entities := decodeVTextSourceEntities(metadata["source_entities"])
+	seen := make(map[string]int, len(entities))
+	for i, entity := range entities {
+		if key := sourceEntityKey(entity); key != "" {
+			seen[key] = i
+		}
+	}
+	changed := false
+	for _, ref := range refs {
+		entity := mediaSourceRefToSourceEntity(ref)
+		if entity.EntityID == "" {
+			continue
+		}
+		key := sourceEntityKey(entity)
+		if key == "" {
+			continue
+		}
+		if existingIndex, ok := seen[key]; ok {
+			merged := mergeVTextSourceEntity(entities[existingIndex], entity)
+			if sourceEntityJSONKey(entities[existingIndex]) != sourceEntityJSONKey(merged) {
+				entities[existingIndex] = merged
+				changed = true
+			}
+			continue
+		}
+		entities = append(entities, entity)
+		seen[key] = len(entities) - 1
+		changed = true
+	}
+	return entities, changed
+}
+
+func decodeVTextSourceEntities(value any) []vtextSourceEntity {
+	if value == nil {
+		return nil
+	}
+	var entities []vtextSourceEntity
+	switch typed := value.(type) {
+	case []vtextSourceEntity:
+		return typed
+	case []any:
+		data, _ := json.Marshal(typed)
+		_ = json.Unmarshal(data, &entities)
+	case json.RawMessage:
+		_ = json.Unmarshal(typed, &entities)
+	default:
+		data, _ := json.Marshal(typed)
+		_ = json.Unmarshal(data, &entities)
+	}
+	return entities
+}
+
+func mediaSourceRefToSourceEntity(ref vtextMediaSourceRef) vtextSourceEntity {
+	kind := sourceEntityKindForMediaRef(ref)
+	if kind == "" {
+		return vtextSourceEntity{}
+	}
+	canonicalURL := firstNonEmpty(ref.CanonicalURL, ref.URL)
+	entity := vtextSourceEntity{
+		EntityID: stableSourceEntityID(kind, firstNonEmpty(canonicalURL, ref.ContentID)),
+		Kind:     kind,
+		Label:    firstNonEmpty(ref.Title, sourceEntityDefaultLabel(kind)),
+		Target: vtextSourceEntityTarget{
+			TargetKind:   "content_item",
+			ContentID:    ref.ContentID,
+			URL:          ref.URL,
+			CanonicalURL: canonicalURL,
+		},
+		Selectors: []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "chip",
+			ExpandedMode:     sourceEntityExpandedMode(kind),
+			OpenSurface:      sourceEntityOpenSurface(kind, ref),
+			DefaultCollapsed: true,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:                  sourceEntityEvidenceState(ref),
+			ResearchState:          firstNonEmpty(ref.ResearchState, "pending"),
+			TranscriptContentID:    ref.TranscriptContentID,
+			TranscriptAvailability: ref.TranscriptAvailability,
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "importer",
+			RightsScope:         "private_user_source",
+			UntrustedSourceText: true,
+		},
+	}
+	return entity
+}
+
+func mergeVTextSourceEntity(existing, incoming vtextSourceEntity) vtextSourceEntity {
+	if existing.EntityID == "" {
+		existing.EntityID = incoming.EntityID
+	}
+	if existing.Kind == "" {
+		existing.Kind = incoming.Kind
+	}
+	if existing.Label == "" {
+		existing.Label = incoming.Label
+	}
+	if existing.Target.TargetKind == "" {
+		existing.Target.TargetKind = incoming.Target.TargetKind
+	}
+	if existing.Target.ContentID == "" {
+		existing.Target.ContentID = incoming.Target.ContentID
+	}
+	if existing.Target.URL == "" {
+		existing.Target.URL = incoming.Target.URL
+	}
+	if existing.Target.CanonicalURL == "" {
+		existing.Target.CanonicalURL = incoming.Target.CanonicalURL
+	}
+	if len(existing.Selectors) == 0 {
+		existing.Selectors = incoming.Selectors
+	}
+	if existing.Display.InlineMode == "" {
+		existing.Display.InlineMode = incoming.Display.InlineMode
+	}
+	if existing.Display.ExpandedMode == "" {
+		existing.Display.ExpandedMode = incoming.Display.ExpandedMode
+	}
+	if existing.Display.OpenSurface == "" {
+		existing.Display.OpenSurface = incoming.Display.OpenSurface
+	}
+	if !existing.Display.DefaultCollapsed {
+		existing.Display.DefaultCollapsed = incoming.Display.DefaultCollapsed
+	}
+	if existing.Evidence.State == "" || existing.Evidence.State == "pending" {
+		existing.Evidence.State = incoming.Evidence.State
+	}
+	if existing.Evidence.ResearchState == "" {
+		existing.Evidence.ResearchState = incoming.Evidence.ResearchState
+	}
+	if existing.Evidence.TranscriptContentID == "" {
+		existing.Evidence.TranscriptContentID = incoming.Evidence.TranscriptContentID
+	}
+	if existing.Evidence.TranscriptAvailability == "" {
+		existing.Evidence.TranscriptAvailability = incoming.Evidence.TranscriptAvailability
+	}
+	if existing.Provenance.CreatedBy == "" {
+		existing.Provenance.CreatedBy = incoming.Provenance.CreatedBy
+	}
+	if existing.Provenance.RightsScope == "" {
+		existing.Provenance.RightsScope = incoming.Provenance.RightsScope
+	}
+	if !existing.Provenance.UntrustedSourceText {
+		existing.Provenance.UntrustedSourceText = incoming.Provenance.UntrustedSourceText
+	}
+	return existing
+}
+
+func sourceEntityKindForMediaRef(ref vtextMediaSourceRef) string {
+	switch strings.ToLower(strings.TrimSpace(ref.Kind)) {
+	case "youtube":
+		return "youtube_video"
+	case "image":
+		return "image"
+	default:
+		return ""
+	}
+}
+
+func sourceEntityDefaultLabel(kind string) string {
+	switch kind {
+	case "youtube_video":
+		return "YouTube source"
+	case "image":
+		return "Image source"
+	default:
+		return "Source"
+	}
+}
+
+func sourceEntityExpandedMode(kind string) string {
+	switch kind {
+	case "youtube_video":
+		return "media_player"
+	case "image":
+		return "source_card"
+	default:
+		return "source_card"
+	}
+}
+
+func sourceEntityOpenSurface(kind string, ref vtextMediaSourceRef) string {
+	if ref.AppHint != "" {
+		return ref.AppHint
+	}
+	switch kind {
+	case "youtube_video":
+		return "video"
+	case "image":
+		return "image"
+	default:
+		return "content"
+	}
+}
+
+func sourceEntityEvidenceState(ref vtextMediaSourceRef) string {
+	if ref.ContentID == "" {
+		return "pending"
+	}
+	if strings.EqualFold(ref.TranscriptAvailability, "error") {
+		return "error"
+	}
+	return "available"
+}
+
+func stableSourceEntityID(kind, identity string) string {
+	identity = strings.TrimSpace(identity)
+	if kind == "" || identity == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(kind + "|" + identity))
+	return fmt.Sprintf("src_%x", sum[:8])
+}
+
+func sourceEntityKey(entity vtextSourceEntity) string {
+	if entity.Kind == "" {
+		return ""
+	}
+	if entity.Target.CanonicalURL != "" {
+		return entity.Kind + "|" + entity.Target.CanonicalURL
+	}
+	if entity.Target.ContentID != "" {
+		return entity.Kind + "|" + entity.Target.ContentID
+	}
+	if entity.EntityID != "" {
+		return entity.Kind + "|" + entity.EntityID
+	}
+	return ""
+}
+
+func sourceEntityJSONKey(entity vtextSourceEntity) string {
+	data, _ := json.Marshal(entity)
+	return string(data)
+}
+
 func markVTextMediaSourceRefsResearchState(metadata map[string]any, state string) {
 	if metadata == nil {
 		return
@@ -196,6 +494,17 @@ func markVTextMediaSourceRefsResearchState(metadata map[string]any, state string
 	if changed {
 		metadata["media_source_refs"] = refs
 		metadata["media_source_research_required"] = false
+	}
+	entities := decodeVTextSourceEntities(metadata["source_entities"])
+	changedEntities := false
+	for i := range entities {
+		if entities[i].Evidence.ResearchState != state {
+			entities[i].Evidence.ResearchState = state
+			changedEntities = true
+		}
+	}
+	if changedEntities {
+		metadata["source_entities"] = entities
 	}
 }
 
@@ -247,6 +556,51 @@ func formatVTextMediaSourceRefsForPrompt(refs []vtextMediaSourceRef) string {
 		if ref.ResearchState != "" {
 			b.WriteString(" research_state=")
 			b.WriteString(ref.ResearchState)
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func formatVTextSourceEntitiesForPrompt(entities []vtextSourceEntity) string {
+	if len(entities) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, entity := range entities {
+		b.WriteString("- ")
+		b.WriteString(firstNonEmpty(entity.Kind, "source"))
+		if entity.Label != "" {
+			b.WriteString(" ")
+			b.WriteString(entity.Label)
+		}
+		if entity.EntityID != "" {
+			b.WriteString(" entity_id=")
+			b.WriteString(entity.EntityID)
+		}
+		if entity.Target.ContentID != "" {
+			b.WriteString(" content_id=")
+			b.WriteString(entity.Target.ContentID)
+		}
+		if entity.Target.CanonicalURL != "" {
+			b.WriteString(" canonical_url=")
+			b.WriteString(entity.Target.CanonicalURL)
+		}
+		if entity.Display.OpenSurface != "" {
+			b.WriteString(" open_surface=")
+			b.WriteString(entity.Display.OpenSurface)
+		}
+		if entity.Evidence.TranscriptContentID != "" || entity.Evidence.TranscriptAvailability != "" {
+			b.WriteString(" transcript=")
+			if entity.Evidence.TranscriptContentID != "" {
+				b.WriteString(entity.Evidence.TranscriptContentID)
+				b.WriteString("/")
+			}
+			b.WriteString(firstNonEmpty(entity.Evidence.TranscriptAvailability, "unknown"))
+		}
+		if entity.Evidence.ResearchState != "" {
+			b.WriteString(" research_state=")
+			b.WriteString(entity.Evidence.ResearchState)
 		}
 		b.WriteString("\n")
 	}

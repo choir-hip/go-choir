@@ -1697,6 +1697,15 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 			metadata["media_source_refs"] = mediaSourceRefs
 			metadata["media_source_research_required"] = addedMediaSourceRefs
 		}
+		sourceEntities, changedSourceEntities := normalizeVTextSourceEntities(metadata, mediaSourceRefs)
+		if len(sourceEntities) > 0 {
+			metadata["source_entities"] = sourceEntities
+			if changedSourceEntities {
+				if _, ok := metadata["media_source_research_required"]; !ok {
+					metadata["media_source_research_required"] = addedMediaSourceRefs
+				}
+			}
+		}
 	}
 
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, userRevisionDiffs)
@@ -1852,6 +1861,12 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		if metadataBoolValue(metadata, "media_source_research_required") {
 			b.WriteString("\nNew media sources were registered by this revise event. After storing the first useful visible revision with edit_vtext, spawn a researcher for source representations before making source claims.")
 		}
+	}
+	sourceEntities := decodeVTextSourceEntities(metadata["source_entities"])
+	if formattedEntities := formatVTextSourceEntitiesForPrompt(sourceEntities); formattedEntities != "" {
+		b.WriteString("\n\nDetected VText source entities:\n")
+		b.WriteString(formattedEntities)
+		b.WriteString("\nThese source entities are the durable citation/transclusion substrate for this VText. Preserve them as source-backed affordances instead of flattening them into prose. Inline use should cite or summarize bounded source spans; expansion or owning-surface opens should reveal the underlying media/content/VText target.")
 	}
 	if current.RevisionID != "" {
 		b.WriteString("\n\nCurrent head revision: ")

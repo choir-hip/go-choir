@@ -4300,10 +4300,15 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	if len(refs) != 2 {
 		t.Fatalf("media_source_refs len = %d, want 2: %#v", len(refs), refs)
 	}
+	sourceEntities := decodeVTextSourceEntities(run.Metadata["source_entities"])
+	if len(sourceEntities) != 2 {
+		t.Fatalf("source_entities len = %d, want 2: %#v", len(sourceEntities), sourceEntities)
+	}
 	if !metadataBoolValue(run.Metadata, "media_source_research_required") {
 		t.Fatalf("media_source_research_required not set: %#v", run.Metadata)
 	}
 	if !strings.Contains(run.Prompt, "Detected durable media source refs") ||
+		!strings.Contains(run.Prompt, "Detected VText source entities") ||
 		!strings.Contains(run.Prompt, "researcher-maintained source representations") ||
 		!strings.Contains(buildVTextMediaSourceResearchObjective(refs, ""), "first call read_content_item") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
@@ -4317,6 +4322,20 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	}
 	if byKind["image"].MediaType != "image/png" || byKind["image"].ContentID == "" {
 		t.Fatalf("image ref = %#v", byKind["image"])
+	}
+	entitiesByKind := map[string]vtextSourceEntity{}
+	for _, entity := range sourceEntities {
+		entitiesByKind[entity.Kind] = entity
+	}
+	if entitiesByKind["youtube_video"].Target.ContentID == "" ||
+		entitiesByKind["youtube_video"].Display.OpenSurface != "video" ||
+		entitiesByKind["youtube_video"].Evidence.TranscriptAvailability != "unavailable" {
+		t.Fatalf("youtube source entity = %#v", entitiesByKind["youtube_video"])
+	}
+	if entitiesByKind["image"].Target.ContentID == "" ||
+		entitiesByKind["image"].Display.OpenSurface != "image" ||
+		entitiesByKind["image"].Evidence.State != "available" {
+		t.Fatalf("image source entity = %#v", entitiesByKind["image"])
 	}
 	dedupedRefs, added := rt.registerVTextMediaSourceRefs(context.Background(), "user-1", content, map[string]any{
 		"media_source_refs": refs,
@@ -4340,6 +4359,10 @@ func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
 			{Kind: "youtube", CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", ResearchState: "pending"},
 			{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
 		},
+		"source_entities": []vtextSourceEntity{
+			{Kind: "youtube_video", EntityID: "src-one", Evidence: vtextSourceEntityEvidence{ResearchState: "pending"}},
+			{Kind: "image", EntityID: "src-two", Evidence: vtextSourceEntityEvidence{ResearchState: "pending"}},
+		},
 	}
 	markVTextMediaSourceRefsResearchState(metadata, "represented")
 	refs := decodeVTextMediaSourceRefs(metadata["media_source_refs"])
@@ -4353,6 +4376,15 @@ func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
 	}
 	if metadataBoolValue(metadata, "media_source_research_required") {
 		t.Fatalf("media_source_research_required should be false after representation: %#v", metadata)
+	}
+	sourceEntities := decodeVTextSourceEntities(metadata["source_entities"])
+	if len(sourceEntities) != 2 {
+		t.Fatalf("source entities len = %d, want 2", len(sourceEntities))
+	}
+	for _, entity := range sourceEntities {
+		if entity.Evidence.ResearchState != "represented" {
+			t.Fatalf("source entity research state = %q, want represented in %#v", entity.Evidence.ResearchState, sourceEntities)
+		}
 	}
 }
 

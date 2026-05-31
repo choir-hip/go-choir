@@ -1934,6 +1934,7 @@ var durableMetadataKeys = []string{
 	"conductor_loop_id",
 	"media_source_refs",
 	"media_source_research_required",
+	"source_entities",
 	runMetadataOwnerEmail,
 }
 

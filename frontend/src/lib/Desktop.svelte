@@ -1628,6 +1628,7 @@
                 on:opentextfile={handleOpenTextFile}
                 on:openmediafile={handleOpenMediaFile}
                 on:openvtext={handleOpenVTextFromContent}
+                on:launchapp={handleLaunchApp}
                 on:opentrace={handleOpenTraceFromContent}
                 on:clearsavedwindows={handleClearDesktopWindows}
                 on:keepwindowonly={handleKeepWindowOnly}
