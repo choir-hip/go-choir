@@ -427,3 +427,31 @@ verified the product path, and exported a repair evidence bundle. The next
 realism axis is to let Zot perform a contained source edit in the mounted source
 workspace, while Codex acts as verifier and then classifies whether the resulting
 change is personal, reusable, or universal platform work.
+
+## 2026-05-31 Computer Kind And Worker Workspace Gap
+
+The current source workspace bootstrap creates stable directories from the
+sandbox process, and Super Console exports their paths to zot. That closes the
+first discovery gap but not the full "every active/candidate/worker computer"
+invariant.
+
+Current inspection shows two remaining mismatches:
+
+- Firecracker VM boot passes `vm_id`, gateway URL/token, vmctl URL, maild URL,
+  and network settings through kernel cmdline, but it does not pass the product
+  computer kind, owner id, desktop id, or worker id. A guest therefore has to
+  infer kind from a random VM id, which is wrong for forked candidate desktops
+  and worker VMs.
+- Worker delegation prompts still instruct agents to create or use
+  `go-choir-candidate` under the current directory and publish with
+  `repo_path "go-choir-candidate"`. That preserves the old ad hoc checkout
+  convention instead of making `Source/platform`, `Source/user`,
+  `Source/candidate`, `Build`, and `.choir/source-lineage.json` the repair
+  substrate.
+
+Next code checkpoint: propagate computer kind/owner/desktop/worker identity
+into guest env, teach source-lineage bootstrap to use it, and update worker repo
+bootstrap instructions to clone/edit/publish from `Source/candidate`. This still
+does not prove the full zot patch/build/restart loop, but it makes worker and
+candidate computers line up with the source-mount artifact rather than a
+parallel convention.
