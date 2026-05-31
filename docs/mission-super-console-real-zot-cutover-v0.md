@@ -99,3 +99,36 @@ gateway contract.
 This checkpoint documents the credential/protocol gap only. It does not add the
 OpenAI-compatible gateway route, launch Zot with gateway defaults, or prove a
 deployed Super Console prompt can complete through Choir's gateway.
+
+## ChatGPT Instruction Requirement
+
+Date: 2026-05-31
+
+After deploying the OpenAI-compatible gateway route, a Node B loopback probe
+proved `/provider/openai/v1/models` was live and authenticated, but a minimal
+chat completion without a system message failed with the same sanitized upstream
+error on both the new compatibility route and the existing
+`/provider/v1/inference` route:
+
+```text
+chatgpt: status 400 Bad Request (sanitized)
+```
+
+A direct redacted probe to the ChatGPT Responses backend with the same payload
+shape revealed the unsanitized cause:
+
+```text
+{"detail":"Instructions are required"}
+```
+
+This is not a Zot protocol mismatch. It is a stricter upstream contract for the
+ChatGPT/Codex Responses backend: the gateway's ChatGPT provider must not emit an
+empty `instructions` field for minimal sandbox-authenticated requests. Zot is
+expected to send its own system prompt, but the gateway should still make the
+plain OpenAI-compatible surface resilient and diagnosable.
+
+### Remaining Error Field
+
+The next fix should keep provider credentials host-side, avoid weakening error
+sanitization, and add a focused provider/gateway regression proving an empty
+system prompt is filled with a harmless default before the ChatGPT backend call.
