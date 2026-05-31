@@ -996,3 +996,46 @@ the same source entity.
 ```text
 /goal Resume docs/mission-vtext-source-entities-multimedia-transclusion-v0.md from the 2026-05-31 Mission 0 checkpoint. Implement span-attached inline SourceEntity refs for one YouTube source entity, preserving the existing source_entities metadata and legacy media_source_refs fallback. Prove that an inline source ref survives edit, serialize, revise, reload, history navigation, expansion, and owning Video app open on staging without flattening source identity into prose.
 ```
+
+## Run Checkpoint & Problem Record - Inline Source Refs - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**last checkpoint:** Source Entity nucleus is deployed and proven for
+metadata-backed source affordance rail/deck rendering.
+
+**current artifact state:** VText source entities are durable revision metadata
+and can render as expandable source affordances plus owning-surface open
+actions. They are not yet attached to exact claims or source references in the
+document prose.
+
+**problem being fixed before code changes:** current rendering proves source
+identity can survive as document-level metadata, but the authoring surface still
+cannot express "this phrase/claim cites this source entity" inside the prose.
+Without a span-attached inline ref, source entities risk remaining a source
+deck bolted onto the document rather than becoming first-class inline citation
+and transclusion entities.
+
+**evidence:**
+
+- `frontend/src/lib/VTextEditor.svelte` renders source entities from
+  revision metadata as a rail and deck before the Markdown body.
+- The serializer skips `[data-vtext-source-entity]` nodes so those affordances
+  do not flatten into prose.
+- There is no source-aware Markdown/link syntax that renders a source entity at
+  a chosen text location and serializes back to the same source reference.
+
+**remaining error field:** implement the smallest syntax and render path for
+one inline source ref, preferably Markdown-compatible, that resolves to a
+`source_entities` entry, renders as a compact expandable/clickable source
+entity, preserves the authored label and entity id, and serializes back to the
+same source-ref syntax.
+
+**highest-impact remaining uncertainty:** whether contenteditable can preserve
+source-backed inline refs without turning them into plain text, deleting them,
+or confusing ordinary links.
+
+**next executable probe:** support `[label](source:ENTITY_ID)` in VText
+Markdown rendering/serialization, render it as an inline source entity chip
+with compact expandable details, and prove edit/reload/open behavior in the
+existing source entity Playwright spec.
