@@ -786,3 +786,102 @@ repair prompts; the repair environment itself should be correct.
 Next code checkpoint: update the dev shell declaration, promote it through the
 platform path, then rerun the Zot candidate test/rebuild proof from inside the
 source-mounted user computer.
+
+## 2026-05-31 Platform Promotion Of Dev-Shell Runtime-Link Fix
+
+The Node B dev-shell runtime-link gap was fixed in the platform dev shell,
+tested locally, committed after the documentation checkpoint, pushed to `main`,
+and verified on staging/Node B.
+
+Promotion commits:
+
+```text
+a972e75 docs: record node b dev shell link gap
+8e5d9aa nix: expose icu runtime libs in dev shell
+```
+
+Local verification before push:
+
+```text
+nix develop -c sh -lc 'test -n "$LD_LIBRARY_PATH" && printf "LD_LIBRARY_PATH=%s\n" "$LD_LIBRARY_PATH" && go env CGO_ENABLED CGO_CFLAGS CGO_LDFLAGS'
+LD_LIBRARY_PATH=/nix/store/...-icu4c-76.1/lib
+CGO_ENABLED=1
+CGO_CFLAGS=-I/nix/store/...-icu4c-76.1-dev/include
+CGO_LDFLAGS=-L/nix/store/...-icu4c-76.1/lib -licui18n -licuuc
+
+nix develop -c go test ./internal/sandbox -run 'TestBootstrapSourceWorkspace(MaterializesPlatformAndCandidateCheckouts|PreservesDirtyCandidateCheckout)|TestSourceCheckoutDirtyStateSummary' -count=1
+ok github.com/yusefmosiah/go-choir/internal/sandbox
+```
+
+CI/deploy evidence for `8e5d9aaa629537cd39680c53d2fcdba8caaa93c5`:
+
+```text
+CI run: 26712476770, success
+FlakeHub run: 26712476768, success
+Staging health: ok
+Staging deployed_at: 2026-05-31T12:23:22Z
+```
+
+Staging health after deploy:
+
+```json
+{
+  "status": "ok",
+  "commit": "8e5d9aaa629537cd39680c53d2fcdba8caaa93c5",
+  "upstream": "8e5d9aaa629537cd39680c53d2fcdba8caaa93c5",
+  "deployed_at": "2026-05-31T12:23:22Z"
+}
+```
+
+Node B dev-shell verification after deploy:
+
+```text
+cd /var/lib/go-choir/files/Source/platform
+nix develop -c sh -lc 'printf "LD_LIBRARY_PATH=%s\n" "$LD_LIBRARY_PATH"; go env CGO_ENABLED CGO_CFLAGS CGO_LDFLAGS; go test ./internal/sandbox -run "TestBootstrapSourceWorkspace(MaterializesPlatformAndCandidateCheckouts|PreservesDirtyCandidateCheckout)|TestSourceCheckoutDirtyStateSummary" -count=1'
+LD_LIBRARY_PATH=/nix/store/...-icu4c-76.1/lib
+CGO_ENABLED=1
+CGO_CFLAGS=-I/nix/store/...-icu4c-76.1-dev/include
+CGO_LDFLAGS=-L/nix/store/...-icu4c-76.1/lib -licui18n -licuuc
+ok github.com/yusefmosiah/go-choir/internal/sandbox 0.105s
+```
+
+Product-path Super Console source-lineage proof after deploy:
+
+```json
+{
+  "platform_base_commit": "8e5d9aaa629537cd39680c53d2fcdba8caaa93c5",
+  "current_runtime_build_ref": "8e5d9aaa629537cd39680c53d2fcdba8caaa93c5",
+  "dirty_state_summary": "dirty_preserved",
+  "platform_checkout_status": "ok_platform_at_base",
+  "candidate_checkout_status": "dirty_preserved"
+}
+```
+
+Zot repair-loop evidence was written under:
+
+```text
+/var/lib/go-choir/files/.choir/zot/sessions/zot-devshell-rebuild-restart-20260531
+```
+
+Zot completed the real user-computer loop with a fresh gateway token after the
+service restart:
+
+```text
+nix-env.txt: LD_LIBRARY_PATH=/nix/store/...-icu4c-76.1/lib
+test-output.txt: ok github.com/yusefmosiah/go-choir/internal/sandbox 0.004s
+build-output.txt: empty successful output for go build ./cmd/sandbox
+restart-output.txt: go-choir-sandbox.service active after restart
+health.json: platform/source-lineage/runtime/frontend refs at 8e5d9aaa...
+diagnosis.md, rollback.md, classification.md: written by Zot
+```
+
+Classification: this was a universal platform fix, not a personal-only patch.
+The platform checkout, deployed runtime build, source lineage, CI, FlakeHub, and
+staging health all converged on `8e5d9aaa629537cd39680c53d2fcdba8caaa93c5`.
+
+Residual risk: the first Zot process lost gateway auth after it restarted the
+sandbox service, so it needed a second Zot invocation with a fresh token to
+finish `health.json`, `diagnosis.md`, `rollback.md`, and `classification.md`.
+That does not invalidate the promoted dev-shell fix, but it is a separate
+repair-loop continuity problem: Zot/Super Console should eventually survive or
+resume cleanly across a runtime restart it initiates.
