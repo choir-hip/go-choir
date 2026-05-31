@@ -258,6 +258,11 @@ zot session id, local proof, and eventual promotion path.
 - The theme bug is likely caused by authenticated desktop first paint using
   `DEFAULT_THEME` before `/api/preferences/theme` hydrates the saved owner
   preference.
+- A second theme/sheet bug is now confirmed on staging: tapping the Tetramark
+  opens `DeskSheet`, whose full-viewport backdrop uses
+  `--choir-surface-media`. The theme variable currently resolves to `#000000`,
+  so the entire screen above the sheet turns black instead of preserving a
+  themed desktop/sheet context.
 - Super Console currently proves zot session persistence and command execution,
   but not full source-mounted local repair.
 - Existing source-lineage and AppChangePackage/adoption concepts are close
@@ -280,3 +285,41 @@ Use a staging or local user computer with London Salmon saved:
 7. Export the patch/evidence bundle.
 8. Classify as universal platform fix and lift it to the platform repo only
    after the one-computer proof exists.
+
+## 2026-05-31 Tetramark Backdrop Regression Checkpoint
+
+User report: when tapping the Tetramark, the screen above the sheet goes black.
+It should not do that.
+
+Codex reproduced the issue against deployed `https://choir.news` with a mobile
+390x844 viewport by loading the desktop, tapping `[data-desk-menu-button]`, and
+inspecting `[data-desk-sheet-backdrop]`.
+
+Observed evidence:
+
+```json
+{
+  "deployedTheme": "futuristic-noir",
+  "backdropBackground": "rgb(0, 0, 0)",
+  "backdropZIndex": "9998",
+  "backdropRect": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+  },
+  "surfaceMedia": "#000000"
+}
+```
+
+Root-cause belief before patch: `frontend/src/lib/DeskSheet.svelte` renders a
+fixed full-viewport backdrop with `background: var(--choir-surface-media)`.
+`frontend/src/lib/theme.ts` currently hardcodes `--choir-surface-media` to
+`#000000` for all themes, so a menu/sheet backdrop inherits the media-player
+black surface instead of a sheet/backdrop token appropriate for the current
+desktop theme. This is universal platform UI behavior, not a personal computer
+preference.
+
+Next repair constraint: Codex should keep acting as reproducer/verifier and run
+real zot against the source to author the smallest UI patch, then lift the
+result to the platform repo, CI, staging deploy, and deployed acceptance proof.
