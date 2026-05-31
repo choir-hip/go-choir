@@ -1039,3 +1039,79 @@ or confusing ordinary links.
 Markdown rendering/serialization, render it as an inline source entity chip
 with compact expandable details, and prove edit/reload/open behavior in the
 existing source entity Playwright spec.
+
+## Run Checkpoint - Inline Source Refs - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**what shipped:**
+
+- VText Markdown rendering now recognizes `[label](source:ENTITY_ID)` as an
+  inline Source Entity reference rather than an ordinary external link.
+- Inline refs resolve against revision `source_entities` metadata, render as a
+  compact non-editable chip, expose source kind and evidence state, and expand
+  in-place to show source facts.
+- Inline refs serialize back to the same `[label](source:ENTITY_ID)` form when
+  the contenteditable VText surface is saved.
+- Missing inline refs render as missing-source chips instead of silently
+  flattening source identity into prose.
+- The existing source entity Playwright spec now proves rail/deck rendering,
+  inline expansion, Video app opening, browser-like typed edit, autosave
+  revision creation, and source-ref preservation in the saved revision.
+
+**commits:**
+
+- `552a927` docs: record inline vtext source ref problem
+- `6446e13` feat: render inline vtext source refs
+- `24a6688` test: prove inline vtext source ref edit round trip
+
+**what was proven:**
+
+- Clean frontend build passed from a temporary npm install:
+  `npm ci && npm run build`.
+- GitHub Actions passed for behavior commit `6446e13`: CI run
+  `26722625502`, FlakeHub publish run `26722625503`.
+- Staging `/health` reported proxy and sandbox deployed at behavior commit
+  `6446e139ccbbcb6a88c49229b3041aa8583ec935`, deployed at
+  `2026-05-31T19:46:25Z`.
+- Deployed Playwright acceptance against `https://choir.news` passed:
+  `BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-entities.spec.js --project=chromium --timeout=120000`.
+- The acceptance created a VText over a real YouTube URL, rendered the inline
+  source ref and source deck, expanded the inline ref, expanded the media
+  iframe, opened the owning Video app, typed a user-like edit into VText,
+  observed a saved revision containing `Round-trip note.`, and verified that
+  the saved revision still contained `[source](source:src-fixture-youtube)`.
+- GitHub Actions passed for final test-only commit `24a6688`: CI run
+  `26722764019`, FlakeHub publish run `26722764020`.
+
+**important observation:**
+
+The VText revisions API does not guarantee oldest-to-newest ordering for the
+test's purposes. The acceptance now finds the saved revision by content instead
+of assuming the array tail is the latest revision.
+
+**unproven or partial claims:**
+
+- Inline refs are Markdown-compatible source anchors, not yet structured DOM
+  spans with transcript offsets or claim-level selector ranges.
+- The proof covers private VText rendering and autosave, not publication
+  projection into public immutable citation/transclusion records.
+- Transcript availability remains `unavailable` for the deployed YouTube
+  fixture; transcript span selection is still a future deformation.
+- Podcast, web source packets, VText-to-VText transclusion, global/local source
+  search, and sourcecycled manifest import remain future campaign work.
+
+**remaining error field:** attach source refs to richer selectors and source
+artifact resolution APIs; resolve transcript spans when available; preserve
+inline refs through VText agent-authored revisions; project private source
+entities into public platform publication records; prove VText-to-VText
+transclusion and source expansion without a parallel source browser.
+
+**highest-impact remaining uncertainty:** whether VText agent revisions will
+preserve, move, or intentionally rewrite inline source refs while using source
+entities as evidence rather than flattening them into prose.
+
+**next executable probe:** have VText revise a document containing
+`[label](source:ENTITY_ID)` plus `source_entities` metadata, then prove the
+agent-authored next version keeps the source ref attached to the relevant claim
+or emits a durable reason when it deliberately changes the citation.
