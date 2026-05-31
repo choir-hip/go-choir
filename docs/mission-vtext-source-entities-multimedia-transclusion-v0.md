@@ -1,8 +1,8 @@
 # Mission Campaign: VText Source Entities, Multimedia Review, And Transclusion v0
 
-**Status:** draft  
-**Date:** 2026-05-31  
-**Method:** MissionGradient with Cognitive Transform Portfolio  
+**Status:** draft
+**Date:** 2026-05-31
+**Method:** MissionGradient with Cognitive Transform Portfolio
 **Related docs:**
 [mission-youtube-review-studio-v0.md](mission-youtube-review-studio-v0.md),
 [podcast-radio-brief-proof-2026-05-13.md](podcast-radio-brief-proof-2026-05-13.md),
@@ -136,26 +136,26 @@ Missing pieces:
 
 ### 1. Audience-Level Translation
 
-**Audience:** user/author.  
+**Audience:** user/author.
 **Core idea:** VText should let you write while keeping sources alive inside
-the writing.  
+the writing.
 **Words to avoid in product UI:** schema, provenance graph, metadata,
-selector, transclusion protocol.  
+selector, transclusion protocol.
 **Usable explanation:** Paste a video, podcast, article, image, or another
 VText into your document. Choir turns it into a source you can cite inline.
 Tap the citation to expand the exact clip, transcript passage, page excerpt, or
-source VText span without losing your place.  
+source VText span without losing your place.
 **Action change:** Build the first slice as an authoring/review workflow, not
 as a backend citation database milestone.
 
 ### 2. Depth Extraction / Esoteric Upgrade
 
-**Banal version:** add citations and media embeds to VText.  
+**Banal version:** add citations and media embeds to VText.
 **Deep version:** preserve source identity through model use, revision history,
-inline reading, expansion, publication, proposal, and future retrieval.  
-**Load-bearing variable:** source identity survival across transformations.  
+inline reading, expansion, publication, proposal, and future retrieval.
+**Load-bearing variable:** source identity survival across transformations.
 **Common failure mode:** pasting transcript excerpts into Markdown and calling
-that citation.  
+that citation.
 **Action change:** Treat transcript/media/web/VText references as typed source
 entities backed by durable artifacts, not as formatted text.
 
