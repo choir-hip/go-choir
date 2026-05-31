@@ -1146,3 +1146,56 @@ that instruction before attempting live appagent revision proof.
 **next executable probe:** add source-ref hard requirement extraction and
 source-entity prompt language, then cover the generated VText agent revision
 request with a focused runtime unit test.
+
+## Run Checkpoint - Appagent Source-Ref Preservation Prompt - 2026-05-31
+
+**status:** checkpoint_incomplete
+
+**what shipped:**
+
+- `vtextHardRequirementHints` now extracts inline Source Entity refs such as
+  `[the clip](source:src-youtube-demo)` and records them as exact preservation
+  requirements for VText agent revisions.
+- The VText agent revision request now names the canonical inline syntax:
+  `[label](source:ENTITY_ID)`.
+- The prompt explicitly tells VText to preserve existing `source:` entity ids
+  exactly unless the citation is intentionally removed, and not to rewrite
+  source refs as ordinary URLs, footnote prose, or copied transcript text.
+- Focused runtime unit coverage verifies that a source-ref-bearing revision
+  produces both source entity context and hard source-ref preservation
+  instructions in the VText agent request.
+
+**commits:**
+
+- `cd8b49c` docs: record vtext source ref preservation risk
+- `320f4e3` feat: preserve inline vtext source refs in agent prompts
+
+**what was proven:**
+
+- Focused runtime test passed:
+  `nix develop -c sh -lc 'gofmt -w internal/runtime/vtext.go internal/runtime/vtext_prompt_unit_test.go && go test ./internal/runtime -run "TestVTextPromptPreservesInlineSourceRefs|TestVTextPromptPreservesExplicitHardConstraints" -count=1'`.
+- GitHub Actions passed for behavior commit `320f4e3`: CI run
+  `26722871061`, FlakeHub publish run `26722871058`.
+- Staging `/health` reported proxy and sandbox deployed at
+  `320f4e35ffb414210b1da5a5079ce35edbea104b`.
+- Deployed Playwright acceptance against `https://choir.news` passed again:
+  `BASE_URL=https://choir.news ... npx playwright test tests/vtext-source-entities.spec.js --project=chromium --timeout=120000`.
+
+**unproven or partial claims:**
+
+- This checkpoint proves prompt/request construction and deployed non-regression,
+  not a live LLM-produced VText appagent revision that preserves the source ref.
+- The next live proof should use the product revise path and inspect the
+  appagent-authored revision content and metadata.
+- Source refs are still whole-entity anchors; transcript offsets and selector
+  ranges remain future work.
+
+**remaining error field:** run a live VText appagent revision over a source-ref
+document on staging; verify that the appagent revision either preserves the
+inline `source:` anchor or records an explicit, reviewable reason for changing
+it; then move from whole-entity refs toward transcript span selectors and
+publication-safe source ledgers.
+
+**next executable probe:** staging product-path live appagent proof for inline
+source-ref preservation, starting from a VText document with a real YouTube
+source entity and `[label](source:ENTITY_ID)` in prose.
