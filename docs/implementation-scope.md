@@ -64,6 +64,27 @@ plus the VText single-writer revision loop.
 Machine-verifiable tests should use fake providers, fake workers, and fake time
 before relying on browser/e2e coverage.
 
+## Next Mini Mission: Source-Mounted Super Console Repair
+
+The VText/Super Console hard cutover proved that zot can run out-of-process
+inside a user computer and persist repair artifacts. The next gap is source
+access: every active, candidate, and worker computer should mount the source
+workspace needed for zot to root-cause, patch, rebuild, restart, verify, and
+export evidence from inside that computer.
+
+This is scoped in
+[mission-super-console-source-mount-promotion-v0.md](mission-super-console-source-mount-promotion-v0.md).
+
+The mission also defines the promotion split after a local zot repair:
+
+- personal fix -> candidate/active computer promotion with rollback;
+- reusable fix -> Change/AppChangePackage Try/Install path;
+- universal platform bug -> lift the patch to the platform repo, then CI,
+  staging deploy, deployed acceptance, and active computer refresh.
+
+Do not collapse Super Console into a general scripting driver and do not
+auto-promote a local zot patch globally.
+
 ## Second Priority: Ingestion And Real Readers
 
 After the vtext loop is reliable, deepen ingestion skills and real reader/media

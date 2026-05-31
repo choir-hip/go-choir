@@ -1,0 +1,282 @@
+# MissionGradient: Super Console Source Mount And Promotion v0
+
+**Status:** draft
+**Date:** 2026-05-31
+**Related docs:** [computer-ontology.md](computer-ontology.md),
+[mission-agentic-debugging-vtext-stability-v0.md](mission-agentic-debugging-vtext-stability-v0.md),
+[mission-apps-and-changes-store-sweep-v0.md](mission-apps-and-changes-store-sweep-v0.md)
+
+## One-Line Goal String
+
+```text
+/goal Run docs/mission-super-console-source-mount-promotion-v0.md as a Codex-operated MissionGradient mini mission: make every user, candidate, and worker computer mount the source/build workspace needed for zot/Super Console repair; prove zot can root-cause, patch, rebuild, restart, verify, and export evidence for one local bug fix inside a computer; then define the product path that classifies the local patch as personal, reusable Change/AppChangePackage, or universal platform fix. Preserve computer lineage, VText-as-artifact-surface, Super Console singleton repair mode, typed promotion, rollback evidence, and no automatic platform promotion from a local zot patch.
+```
+
+## Mission Frame
+
+The VText/Super Console mission proved that zot can run out-of-process inside a
+user computer and persist repair-session artifacts. It also exposed the next
+gap: the computer does not yet reliably have the source workspace mounted where
+zot can edit, rebuild, restart, and verify the running computer.
+
+That breaks the intended repair loop:
+
+```text
+bug appears in one user computer
+  -> owner opens Super Console
+  -> zot inspects logs/source/runtime state
+  -> zot patches the implicated source
+  -> zot rebuilds/restarts this computer
+  -> zot verifies locally
+  -> zot writes diagnosis, patch, test output, rollback notes
+  -> human/system classifies the patch for personal or broader promotion
+```
+
+The next mini mission makes source/build state a first-class mounted ledger
+inside every computer, then proves the loop on one concrete bug. The current
+theme-hydration bug is a good first payload: an authenticated computer with
+London Salmon saved should not first paint Future Noir and only load the saved
+theme after user input.
+
+## Real Artifact
+
+The artifact is:
+
+```text
+source-mounted computer
+  -> source lineage record
+  -> writable user/private source workspace
+  -> readable platform baseline source snapshot
+  -> local build/restart commands available to zot
+  -> Super Console repair session
+  -> diagnosis.md
+  -> patch.diff
+  -> test/build output
+  -> rollback notes
+  -> classification record: personal | Change/AppChangePackage | universal platform fix
+  -> promotion/export path with verifier evidence
+```
+
+The artifact is not:
+
+- a raw terminal replacing the product;
+- many coding-agent consoles inside one computer;
+- automatic merge from a user computer into `origin/main`;
+- opaque VM snapshot promotion;
+- a source checkout with no lineage, no rollback, and no verifier evidence;
+- GitHub Actions as the inner repair loop.
+
+## Invariants
+
+- Every active, candidate, and worker computer should have an intentional source
+  mount, not an accidental host path.
+- Source/build state is a separate ledger from Dolt/app state, blob state,
+  runtime caches, and route identity.
+- Super Console remains singleton repair mode inside a computer.
+- zot runs out-of-process from the runtime MAS and must not become a MAS peer,
+  appagent, scheduler worker, or VText writer.
+- VText remains the artifact-level surface. zot reports are ordinary markdown,
+  text, patch, and log artifacts that VText can open.
+- Local zot repair may mutate only that computer or its candidate fork until a
+  typed promotion/export path is explicitly chosen.
+- Universal fixes require platform review, CI, staging deploy, deployed
+  acceptance, rollback refs, and compatibility with divergent computers.
+- Personal fixes require a computer-level promotion certificate and rollback
+  target, not a global deploy.
+- Reusable inspiration must become a typed Change/AppChangePackage or source
+  package, not a copied opaque disk.
+
+## Source Mount Model
+
+Every computer should expose stable source roots with distinct semantics:
+
+```text
+/Source/platform
+  read-mostly snapshot of the platform baseline this computer is running
+
+/Source/user
+  writable private source/build workspace for this user's computer
+
+/Source/candidate
+  writable fork when the current computer is a candidate/review computer
+
+/Build
+  local build artifacts, caches, and restartable runtime/UI outputs
+
+/.choir/source-lineage.json
+  local projection of the durable source lineage record
+```
+
+Names may change during implementation, but the semantic split should not.
+Source roots must be discoverable by zot without asking the user for a path.
+
+Required lineage fields:
+
+```text
+computer_id
+computer_kind: active | candidate | worker
+owner_id
+desktop_id
+platform_base_commit
+platform_source_mount
+user_source_ref
+user_source_mount
+candidate_source_ref
+candidate_source_mount
+current_runtime_build_ref
+current_frontend_build_ref
+dirty_state_summary
+last_verified_at
+rollback_ref
+```
+
+This should connect to existing source-lineage/product APIs such as
+`/api/computers/*/source-lineage`, but the user-facing object is still the
+computer, not the API record.
+
+## Repair Loop
+
+The local loop should be fast enough to replace "open terminal, poke around,
+push to CI, wait" for user-computer-level bugs:
+
+```text
+1. Open Super Console.
+2. zot records session start and source-lineage snapshot.
+3. zot reproduces or observes the bug through product-path commands/browser proof.
+4. zot inspects unified logs, source, runtime state, and current build identity.
+5. zot writes one causal diagnosis.
+6. zot patches the smallest implicated source in the mounted workspace.
+7. zot rebuilds the affected layer.
+8. zot restarts or hot-swaps the affected runtime/UI inside this computer.
+9. zot verifies through product path.
+10. zot writes diagnosis.md, patch.diff, commands.jsonl, test-output.txt,
+    rollback.md, and classification.md.
+```
+
+The theme-hydration proof should look like:
+
+```text
+saved owner theme = london-salmon
+hard reload / fresh boot
+first authenticated desktop paint already has data-theme-id="london-salmon"
+no Future Noir flash before user pointer/key/focus input
+theme remains London Salmon after input, reload, and session renewal
+```
+
+## Patch Classification
+
+After local proof, classify the patch before promotion:
+
+| Class | Meaning | Promotion Path |
+| --- | --- | --- |
+| Personal fix | Bespoke to one user's computer or preference/state | Candidate -> active computer promotion with rollback TTL |
+| Reusable Change | Useful for other computers but not platform default | AppChangePackage/Change with Try -> verify -> install/rollback |
+| Universal platform fix | Bug in the official platform/runtime/UI baseline | Lift patch to platform repo -> CI -> staging deploy -> deployed acceptance -> active computer refresh |
+| Diagnosis only | No safe patch yet or root cause is external | Keep report, evidence, and next probe; do not promote |
+
+Local zot evidence can justify a universal fix, but it does not itself merge or
+deploy one. Codex or a platform-authorized agent lifts the patch into the
+platform repo, preserving attribution to the zot evidence bundle.
+
+## Dense Feedback
+
+Minimum evidence for this mission:
+
+- source-lineage record before repair;
+- Super Console singleton session id;
+- zot `session.jsonl`;
+- mounted source roots visible to zot;
+- bug reproduction artifact;
+- patch diff generated inside the computer;
+- build/restart command output;
+- product-path verification artifact;
+- rollback instructions or ref;
+- classification record;
+- if universal, platform commit, CI run, staging health identity, and deployed
+  acceptance proof.
+
+## Forbidden Shortcuts
+
+- Do not solve the sample bug only from Codex without exercising Super Console
+  and zot evidence.
+- Do not mount only the platform repo on the host and call that "inside the
+  computer."
+- Do not hide source lineage in environment variables with no durable record.
+- Do not use visual Trace as the debugging UI.
+- Do not let Super Console become the normal driver of the computer.
+- Do not auto-promote local zot patches to all users.
+- Do not claim a universal fix without a platform deploy and deployed proof.
+- Do not claim personal promotion without route rollback evidence.
+
+## Rollback Policy
+
+For local computer repair:
+
+- keep the pre-repair source ref;
+- keep the pre-repair runtime/frontend build ref;
+- keep a `rollback.md` with exact revert/restart commands;
+- if a route switch occurs, keep the previous active computer route target for a
+  TTL;
+- if verification fails, leave the candidate/local patch unpromoted and attach
+  diagnosis.
+
+For universal platform fixes:
+
+- use normal git revert/forward-fix refs;
+- monitor CI/deploy;
+- verify staging build identity;
+- refresh active computers only after deployed health is confirmed;
+- record residual risks and compatibility with divergent source workspaces.
+
+## Acceptance Criteria
+
+1. Every new active/candidate/worker computer has source roots available at
+   stable paths and reflected in source-lineage state.
+2. Super Console can show zot the source-lineage snapshot.
+3. zot can read and edit the mounted source for the computer it is repairing.
+4. zot can run a focused rebuild and restart/hot-swap for at least one layer.
+5. zot can verify the repaired behavior through product path.
+6. zot emits `diagnosis.md`, `patch.diff`, `commands.jsonl`,
+   `test-output.txt`, `rollback.md`, and `classification.md`.
+7. The sample theme-hydration bug is fixed first in one computer through this
+   loop, not only by direct Codex edits.
+8. If classified universal, the patch is lifted to the platform repo and lands
+   through CI, staging deploy, staging health identity, and deployed acceptance.
+9. Docs explain the difference between personal source divergence, reusable
+   Change/AppChangePackage, and universal platform fix.
+10. No unrelated foreground user state is lost.
+
+## Learning Side-Channel
+
+Record the run state in this doc, and put per-repair artifacts in the user
+computer filesystem under a durable zot session directory. If the sample theme
+bug is used, add a short appendix to this doc with the exact source-lineage,
+zot session id, local proof, and eventual promotion path.
+
+## Initial Belief State
+
+- The theme bug is likely caused by authenticated desktop first paint using
+  `DEFAULT_THEME` before `/api/preferences/theme` hydrates the saved owner
+  preference.
+- Super Console currently proves zot session persistence and command execution,
+  but not full source-mounted local repair.
+- Existing source-lineage and AppChangePackage/adoption concepts are close
+  enough to reuse, but the default "every computer has source mounted" invariant
+  is not yet implemented.
+- The inner loop should be user-computer local; the outer loop for universal
+  platform fixes still requires CI/deploy/staging acceptance.
+
+## First Executable Probe
+
+Use a staging or local user computer with London Salmon saved:
+
+1. Open Super Console.
+2. Have zot record source-lineage and mounted source roots.
+3. Reproduce the Future Noir -> London Salmon switch requiring user input.
+4. Patch the mounted source so saved theme applies before first authenticated
+   desktop paint.
+5. Rebuild/restart locally.
+6. Verify no theme flash before input.
+7. Export the patch/evidence bundle.
+8. Classify as universal platform fix and lift it to the platform repo only
+   after the one-computer proof exists.
