@@ -520,6 +520,48 @@ func TestChatGPTProviderCallSuccess(t *testing.T) {
 	}
 }
 
+func TestChatGPTProviderDefaultsInstructionsWhenSystemEmpty(t *testing.T) {
+	authPath := writeTestCodexAuth(t, "test-access", "test-refresh", time.Now().UTC())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		var body openAIRequest
+		if err := json.Unmarshal(data, &body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if body.Instructions != defaultChatGPTInstructions {
+			t.Fatalf("instructions = %q, want default", body.Instructions)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_default_instructions\",\"model\":\"gpt-5.5\"}}\n\n")
+		fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+		fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_default_instructions\",\"model\":\"gpt-5.5\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n")
+	}))
+	defer server.Close()
+
+	p, err := NewChatGPTProvider(ChatGPTConfig{
+		ModelID:  "gpt-5.5",
+		BaseURL:  server.URL,
+		AuthPath: authPath,
+	})
+	if err != nil {
+		t.Fatalf("create chatgpt provider: %v", err)
+	}
+	p.httpClient = server.Client()
+
+	resp, err := p.Call(context.Background(), LLMRequest{
+		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("chatgpt call: %v", err)
+	}
+	if resp.Text != "ok" {
+		t.Fatalf("text = %q, want ok", resp.Text)
+	}
+}
+
 func TestChatGPTProviderRetriesUnauthorizedAfterForceRefresh(t *testing.T) {
 	authPath := writeTestCodexAuth(t, "old-access", "refresh-123", time.Now().UTC())
 	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

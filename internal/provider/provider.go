@@ -789,6 +789,7 @@ type ChatGPTConfig struct {
 }
 
 const defaultChatGPTResponsesURL = "https://chatgpt.com/backend-api/codex/responses"
+const defaultChatGPTInstructions = "You are a helpful assistant."
 
 // NewChatGPTProvider creates a ChatGPT provider using Codex OAuth auth.
 func NewChatGPTProvider(cfg ChatGPTConfig) (*ChatGPTProvider, error) {
@@ -922,14 +923,18 @@ func (p *ChatGPTProvider) doStreamRequest(ctx context.Context, body openAIReques
 }
 
 func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openAIRequest {
+	instructions := strings.TrimSpace(req.System)
+	if instructions == "" {
+		instructions = defaultChatGPTInstructions
+	}
 	payload := openAIRequest{
-		Model:           modelID,
-		Instructions:    req.System,
-		Input:           convertOpenAIInput(req.Messages),
-		Tools:           convertOpenAITools(req.Tools),
-		ToolChoice:      openAIResponsesToolChoice(req.ToolChoice),
-		Store:           false,
-		Stream:          req.Stream,
+		Model:        modelID,
+		Instructions: instructions,
+		Input:        convertOpenAIInput(req.Messages),
+		Tools:        convertOpenAITools(req.Tools),
+		ToolChoice:   openAIResponsesToolChoice(req.ToolChoice),
+		Store:        false,
+		Stream:       req.Stream,
 	}
 	if effort := effectiveReasoning(req.ReasoningEffort, p.reasoning); effort != "" && effort != "none" && effort != "off" {
 		payload.Reasoning = &openAIReasoning{Effort: effort}
