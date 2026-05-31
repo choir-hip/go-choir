@@ -60,3 +60,42 @@ copied to Node B at `/tmp/go-choir-zot-build` and built there:
 This checkpoint documents the problem and build feasibility. It does not prove
 staging behavior. The fix must still be committed separately, pushed, deployed,
 and verified on `https://choir.news` through the product path.
+
+## Gateway Credential Gap
+
+Date: 2026-05-31
+
+After the real Zot cutover deployed, Super Console no longer ran the placeholder
+diagnosis loop. It started upstream `zot 0.2.6`, but then displayed Zot's login
+flow. That proves the binary is real while also proving the product path is still
+wrong: a user computer's repair console must not ask the user to log in to a
+third-party provider or manage separate API keys.
+
+Zot supports OpenAI-compatible custom endpoints through `--base-url`, but
+Choir's current gateway surface is `POST /provider/v1/inference`, a custom
+request/response shape. The gateway already owns host-side provider credentials
+and issues `RUNTIME_GATEWAY_TOKEN` to the sandbox. Super Console should use that
+existing computer credential, default Zot to `gpt-5.5` with medium reasoning,
+and keep provider secrets out of Zot state, the browser, and argv.
+
+The likely durable fix is an OpenAI Chat Completions-compatible gateway route
+for sandbox-authenticated callers, plus Super Console launch defaults that point
+real Zot at that route. Patching Zot itself would make the user-computer repair
+path depend on a forked third-party agent harness rather than on Choir's
+gateway contract.
+
+### Evidence
+
+- Staging Super Console showed upstream Zot's version banner and login choices
+  instead of the placeholder diagnosis loop.
+- Zot documentation describes local/OpenAI-compatible endpoints via
+  `--base-url`.
+- OpenAI Chat Completions streaming uses data-only SSE chunks with
+  `choices[].delta`, while Choir's existing gateway streaming emits internal
+  `provider.StreamChunk` values.
+
+### Remaining Error Field
+
+This checkpoint documents the credential/protocol gap only. It does not add the
+OpenAI-compatible gateway route, launch Zot with gateway defaults, or prove a
+deployed Super Console prompt can complete through Choir's gateway.
