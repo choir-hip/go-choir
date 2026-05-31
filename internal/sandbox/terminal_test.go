@@ -508,9 +508,9 @@ func TestFormatSessionID(t *testing.T) {
 		n    uint64
 		want string
 	}{
-		{1, "term-1"},
-		{10, "term-10"},
-		{100, "term-100"},
+		{1, "zot-1"},
+		{10, "zot-10"},
+		{100, "zot-100"},
 	}
 	for _, tt := range tests {
 		got := formatSessionID(tt.n)
