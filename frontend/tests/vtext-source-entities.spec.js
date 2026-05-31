@@ -20,7 +20,6 @@ test('VText renders source entities as expandable sources and opens owning media
           label: 'YouTube source fixture',
           target: {
             target_kind: 'content_item',
-            content_id: 'content-fixture-youtube',
             url: sourceURL,
             canonical_url: sourceURL,
           },
