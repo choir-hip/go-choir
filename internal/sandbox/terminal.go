@@ -230,6 +230,13 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 		if rootDir == "" {
 			rootDir = "."
 		}
+		sourceProjection, err := BootstrapSourceWorkspace(rootDir, SourceWorkspaceOptions{
+			OwnerID:   user,
+			SessionID: sessionID,
+		})
+		if err != nil {
+			return nil, err
+		}
 		zotHome := filepath.Join(rootDir, ".choir", "zot")
 		env := append(os.Environ(),
 			"HOME="+rootDir,
@@ -238,6 +245,12 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			"ZOT_SESSION_ID="+sessionID,
 			"ZOT_ROOT_DIR="+rootDir,
 			"ZOT_USER_ID="+user,
+			"CHOIR_SOURCE_LINEAGE_PATH="+sourceProjection.LineagePath,
+			"CHOIR_SOURCE_ROOT="+filepath.Join(rootDir, "Source"),
+			"CHOIR_PLATFORM_SOURCE_MOUNT="+sourceProjection.PlatformSourceMount,
+			"CHOIR_USER_SOURCE_MOUNT="+sourceProjection.UserSourceMount,
+			"CHOIR_CANDIDATE_SOURCE_MOUNT="+sourceProjection.CandidateSourceMount,
+			"CHOIR_BUILD_MOUNT="+sourceProjection.BuildMount,
 		)
 		if !isFallbackZotSessionCommand(th.command) {
 			if token := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN")); token != "" {

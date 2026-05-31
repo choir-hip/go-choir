@@ -533,6 +533,25 @@ func TestSessionCommandUsesPersistentZotHome(t *testing.T) {
 	if env["ZOT_USER_ID"] != "user@example.com" {
 		t.Errorf("ZOT_USER_ID = %q", env["ZOT_USER_ID"])
 	}
+	if env["CHOIR_SOURCE_LINEAGE_PATH"] != filepath.Join(rootDir, ".choir", "source-lineage.json") {
+		t.Errorf("CHOIR_SOURCE_LINEAGE_PATH = %q", env["CHOIR_SOURCE_LINEAGE_PATH"])
+	}
+	if env["CHOIR_SOURCE_ROOT"] != filepath.Join(rootDir, "Source") {
+		t.Errorf("CHOIR_SOURCE_ROOT = %q", env["CHOIR_SOURCE_ROOT"])
+	}
+	if env["CHOIR_BUILD_MOUNT"] != filepath.Join(rootDir, "Build") {
+		t.Errorf("CHOIR_BUILD_MOUNT = %q", env["CHOIR_BUILD_MOUNT"])
+	}
+	rawLineage, err := os.ReadFile(filepath.Join(rootDir, ".choir", "source-lineage.json"))
+	if err != nil {
+		t.Fatalf("read source-lineage.json: %v", err)
+	}
+	if !strings.Contains(string(rawLineage), `"owner_id": "user@example.com"`) {
+		t.Fatalf("source-lineage.json missing session owner: %s", string(rawLineage))
+	}
+	if !strings.Contains(string(rawLineage), `"super_console_session_id": "zot-test"`) {
+		t.Fatalf("source-lineage.json missing session id: %s", string(rawLineage))
+	}
 }
 
 func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {

@@ -35,6 +35,11 @@ func main() {
 	sandbox.RegisterRoutes(s, h)
 
 	filesRoot := sandbox.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
+	if _, err := sandbox.BootstrapSourceWorkspace(filesRoot, sandbox.SourceWorkspaceOptions{
+		ComputerID: cfg.SandboxID,
+	}); err != nil {
+		log.Fatalf("sandbox: bootstrap source workspace: %v", err)
+	}
 
 	// Initialize the singleton Super Console PTY handler. The PTY process is
 	// zot, not an interactive shell.
