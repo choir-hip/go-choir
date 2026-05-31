@@ -350,3 +350,26 @@ source workspace bootstrap that creates the directories and a durable local
 lineage projection before Super Console starts. That is still not sufficient for
 full personal promotion, but it is the first real substrate needed for the
 repair loop.
+
+## 2026-05-31 Zot Tool-Call Streaming Compatibility Gap
+
+After gateway-backed Zot was installed, Codex tried to have real Zot patch the
+Tetramark regression. The gateway/model path authenticated and produced model
+turns, but every attempted tool call reached Zot with empty arguments:
+
+```text
+{"name":"bash","args":{}}
+{"name":"read","args":{}}
+```
+
+Zot then failed with errors such as `command is required` and `path is
+required`. That means Super Console can launch Zot, but Zot cannot yet perform
+the repair loop's read/edit/command work through the gateway.
+
+Root-cause hypothesis from code inspection: Zot uses OpenAI-compatible streaming
+chat completions. The Choir gateway streams tool-call name frames and argument
+delta frames separately. Zot appears to execute a tool call as soon as the
+function name frame appears, before later argument deltas arrive. For this
+client, the gateway should avoid partial streamed tool-call frames and emit a
+complete tool call chunk when tools are present. This is a compatibility shim
+for Zot's OpenAI-compatible path, not a new MAS role for Zot.
