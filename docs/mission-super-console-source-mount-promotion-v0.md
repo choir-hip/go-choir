@@ -577,3 +577,36 @@ boot args. The remaining mission gap is still the full zot repair loop:
 real Zot must author a contained source patch, rebuild/restart a computer,
 verify product behavior, export evidence, and classify the patch before broader
 promotion.
+
+## 2026-05-31 Empty Source Checkout Gap
+
+After VM boot identity was promoted, Node B lineage for the active computer
+correctly pointed Zot at:
+
+```text
+/var/lib/go-choir/files/Source/platform
+/var/lib/go-choir/files/Source/user
+/var/lib/go-choir/files/Source/candidate
+/var/lib/go-choir/files/Build
+```
+
+But live inspection showed those directories were empty. The lineage file and
+stable mount names exist, but Zot still cannot inspect or patch platform source
+from inside the computer without falling back to an ad hoc clone command. That
+does not satisfy the mission artifact: "source-mounted computer" means the
+repair agent finds an actual source checkout and build workspace, not just a
+path convention.
+
+Current root-cause belief: `BootstrapSourceWorkspace` only creates the stable
+directories and `.choir/source-lineage.json`. Worker prompts contain clone/reset
+instructions for `Source/platform` and `Source/candidate`, but the computer
+bootstrap path itself does not materialize those checkouts. Active Super Console
+therefore has weaker source access than workers, which is backwards for the
+intended repair mode.
+
+Next code checkpoint: make source workspace bootstrap idempotently materialize
+the platform baseline checkout and writable candidate checkout from
+`RUNTIME_PROMOTION_SOURCE_REPO`/`RUNTIME_WORKER_REPO_REMOTE` at
+`PlatformBaseCommit`. Keep it bounded and observable: do not delete unrelated
+user edits, record checkout status in the lineage projection, and allow
+bootstrap to continue with a precise status if Git/network is unavailable.
