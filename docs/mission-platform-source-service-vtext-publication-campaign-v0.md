@@ -828,6 +828,37 @@ sandbox Nix package closure, then rebuild/deploy and prove the managed
 runtime/daemon proof, and do not claim deployed source-service ingestion until
 Node B service status and ledger rows are verified.
 
+First fix attempt:
+
+```text
+ef0e41acf182aabcfc29c8638b37b918092a6004
+fix: include source contracts in sandbox package
+```
+
+Result:
+
+```text
+CI run: 26970217879
+All Go test/build jobs: success
+Deploy to Staging job: 79583451838
+Host NixOS closure build failed while building sandbox-0.1.0
+internal/sources/telegram.go:11:2: cannot find module providing package
+golang.org/x/net/html: import lookup disabled by -mod=vendor
+```
+
+Updated problem classification: the first fix proved the missing
+`internal/sources` directory was not the right boundary. Pulling
+`internal/sources` into the sandbox package drags ingestion adapters, including
+Telegram HTML parsing, into the runtime package closure. The runtime
+researcher tool does not need adapters or source ID constructors at deploy
+time; it only needs to read the Source Service ledger table contract.
+
+Updated fix direction: remove the runtime's production dependency on
+`internal/sources`, use a local projection struct for `items` table rows, and
+remove `internal/sources` from the sandbox Nix package closure. Tests may still
+seed ledgers using `internal/sources`, but deployed runtime code should depend
+on SQLite row shape rather than ingestion adapter packages.
+
 **CI and deploy evidence:**
 
 ```text
