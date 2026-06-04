@@ -470,7 +470,11 @@ making Source Service a VText or publication writer.
 - Publication ledger exists but drops revision metadata and lacks export/access policy.
 - Markdown/text file opening creates VText aliases, but the product invariant needs proof and likely tightening.
 
-**what shipped:** local P0 source-service code checkpoint only; not pushed or deployed yet.
+**what shipped:** P0 source-service code checkpoint committed and pushed:
+
+```text
+4682b092be3ada59e1034c4cdd879f162814f989 feat: add source service ledger nucleus
+```
 
 **what was proven:**
 
@@ -488,12 +492,34 @@ ok   github.com/yusefmosiah/go-choir/internal/sources
 
 This proves the sourcecycled command builds, RSS/source identity tests pass, and storage tests prove fetch/item persistence, dedup across restart, source search, cycle records, and official-source caveat metadata persistence.
 
+**CI and deploy evidence:**
+
+```text
+GitHub Actions CI run: 26968010028
+Go Test (non-runtime): success
+Go Test (integration-tagged smoke): success
+Go Test (internal/runtime shards 0-3): success
+Go Vet + Build: success
+Build Frontend: success
+Deploy to Staging (Node B): success
+```
+
+Staging health:
+
+```text
+curl -sS https://choir.news/health | jq .build,.upstream_build
+proxy deployed_commit:   4682b092be3ada59e1034c4cdd879f162814f989
+sandbox deployed_commit: 4682b092be3ada59e1034c4cdd879f162814f989
+deployed_at: 2026-06-04T17:24:18Z
+```
+
 **unproven or partial claims:**
 
 - exact staging behavior of source entities after current dirty VText draft WIP;
 - staging deployment status of any sourcecycled WIP;
 - source-service retrieval through researcher tools;
 - live ingestion against the default registry;
+- an externally addressable deployed source-service API or daemon proof;
 - publication projection/export/access policy.
 
 **belief-state changes:**
