@@ -404,3 +404,45 @@ residual risks:
   accepted merge revisions, but full multi-draft-line persistence is still a
   future increment.
 ```
+
+## Problem Checkpoint: Compare/Merge Was Deterministic Stub Logic
+
+Updated: 2026-06-04T23:10:35Z
+
+User review found that the first shipped compare/merge implementation hard-coded
+domain-specific suggestions such as `Restore glossary structure` and produced
+merge content with deterministic section replacement. That is not acceptable for
+VText-native intelligent merge. The product must call the configured model
+provider quickly for semantic compare and merge preview, show a working state
+while that call is in flight, and persist model/latency/token evidence so the
+operation can be audited.
+
+The same review found rendered metadata at the bottom of the merged draft:
+
+```text
+<!-- VText merge preview provenance
+Merged preview from v44 (...) into v49 (...).
+- Restore glossary structure: ...
+-->
+```
+
+This violates the VText perception and artifact contract. Merge provenance must
+be durable structured metadata/evidence, not visible prose or markdown/comment
+content inside the document body.
+
+Belief state:
+
+- Compare/merge routing, preview, accept, and revision persistence exist.
+- The semantic analysis and content merge source is wrong because deterministic
+  code, not the configured language model, drives the user-visible intelligence.
+- Provenance storage exists, but the preview content builder leaks provenance
+  into rendered VText content.
+
+Next correction:
+
+- Replace deterministic suggestion generation and preview construction with a
+  bounded provider-backed semantic merge call through the runtime model policy.
+- Retain deterministic validation/parsing only as response hygiene.
+- Ensure preview and accepted content strip hidden provenance comments while
+  preserving provenance in metadata/evidence.
+- Add tests that fail on glossary-stub labels and visible provenance leakage.
