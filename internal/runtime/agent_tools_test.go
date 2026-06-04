@@ -69,12 +69,12 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "redirect_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
 		if _, ok := coSuper.Lookup(name); !ok {
 			t.Fatalf("co-super missing tool %q", name)
 		}
@@ -91,7 +91,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := coSuper.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("co-super should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"bash", "read_file", "web_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "cast_agent", "cast_agent_update", "wait_agent", "save_evidence", "submit_coagent_update", "publish_app_change_package"} {
 		if _, ok := vSuper.Lookup(name); !ok {
 			t.Fatalf("vsuper missing tool %q", name)
 		}
@@ -119,6 +119,9 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := conductor.Lookup("web_search"); ok {
 		t.Fatalf("conductor should not have web_search")
 	}
+	if _, ok := conductor.Lookup("source_search"); ok {
+		t.Fatalf("conductor should not have source_search")
+	}
 
 	if _, ok := researcher.Lookup("bash"); ok {
 		t.Fatalf("researcher should not have bash")
@@ -138,7 +141,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	if _, ok := researcher.Lookup("delegate_worker_vm"); ok {
 		t.Fatalf("researcher should not have delegate_worker_vm")
 	}
-	for _, name := range []string{"read_file", "web_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
+	for _, name := range []string{"read_file", "web_search", "source_search", "cast_agent", "wait_agent", "cancel_agent", "save_evidence", "submit_coagent_update"} {
 		if _, ok := researcher.Lookup(name); !ok {
 			t.Fatalf("researcher missing tool %q", name)
 		}
@@ -156,6 +159,9 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	if _, ok := vtext.Lookup("web_search"); ok {
 		t.Fatalf("vtext should not have web_search")
+	}
+	if _, ok := vtext.Lookup("source_search"); ok {
+		t.Fatalf("vtext should not have source_search")
 	}
 	if _, ok := vtext.Lookup("submit_coagent_update"); ok {
 		t.Fatalf("vtext should not have submit_coagent_update")

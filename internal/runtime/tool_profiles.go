@@ -546,7 +546,7 @@ func WithToolProfileRegistry(profile string, registry *ToolRegistry) RuntimeOpti
 	}
 }
 
-func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchClient webSearchClient, httpClient *http.Client) (*ToolRegistry, error) {
+func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client) (*ToolRegistry, error) {
 	registry := MustNewToolRegistry()
 	if spec.AllowWritableFiles {
 		if err := RegisterFileTools(registry, cwd); err != nil {
@@ -563,7 +563,7 @@ func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchCl
 		}
 	}
 	if spec.AllowResearchTools {
-		if err := RegisterResearchTools(registry, searchClient, httpClient, rt); err != nil {
+		if err := RegisterResearchTools(registry, searchClient, sourceClient, httpClient, rt); err != nil {
 			return nil, err
 		}
 	}
@@ -595,9 +595,10 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	}
 
 	searchClient := newGatewaySearchClientFromEnv()
+	sourceClient := newSourceSearchClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	superRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileSuper), cwd, searchClient, httpClient)
+	superRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -610,7 +611,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}
-	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, httpClient)
+	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -620,7 +621,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(coSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
-	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVSuper), cwd, searchClient, httpClient)
+	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -630,25 +631,25 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(vSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
-	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, httpClient)
+	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
 		return err
 	}
-	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileConductor), cwd, searchClient, httpClient)
+	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileConductor), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	vtextRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVText), cwd, searchClient, httpClient)
+	vtextRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVText), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterVTextTools(vtextRegistry, rt); err != nil {
 		return err
 	}
-	emailRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileEmail), cwd, searchClient, httpClient)
+	emailRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileEmail), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}

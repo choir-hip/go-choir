@@ -2,14 +2,18 @@ package runtime
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	_ "modernc.org/sqlite"
 )
 
 type webSearchClient interface {
@@ -28,9 +32,149 @@ type webSearchResponse struct {
 	ProviderHealth map[string]any   `json:"provider_health,omitempty"`
 }
 
-func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, httpClient *http.Client, rt *Runtime) error {
+type sourceSearchClient interface {
+	SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error)
+}
+
+type sourceSearchResponse struct {
+	Query    string           `json:"query"`
+	Provider string           `json:"provider"`
+	Results  []map[string]any `json:"results"`
+	SourceDB string           `json:"source_db,omitempty"`
+	Metadata map[string]any   `json:"metadata,omitempty"`
+}
+
+type sqliteSourceSearchClient struct {
+	dbPath string
+}
+
+func newSourceSearchClientFromEnv() sourceSearchClient {
+	dbPath := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_DB_PATH"))
+	if dbPath == "" {
+		dbPath = strings.TrimSpace(os.Getenv("SOURCECYCLED_DB_PATH"))
+	}
+	if dbPath == "" {
+		return nil
+	}
+	return &sqliteSourceSearchClient{dbPath: dbPath}
+}
+
+func (c *sqliteSourceSearchClient) SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error) {
+	if c == nil || strings.TrimSpace(c.dbPath) == "" {
+		return nil, fmt.Errorf("source search client not configured")
+	}
+	if _, err := os.Stat(c.dbPath); err != nil {
+		return nil, fmt.Errorf("source service db not available at %s: %w", c.dbPath, err)
+	}
+	db, err := sql.Open("sqlite", c.dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open source service db: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+	items, err := searchSourceServiceItems(ctx, db, query, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("source search: %w", err)
+	}
+	results := make([]map[string]any, 0, len(items))
+	for idx, item := range items {
+		results = append(results, sourceSearchItemResult(idx+1, item))
+	}
+	return &sourceSearchResponse{
+		Query:    strings.TrimSpace(query),
+		Provider: "source_service_sqlite",
+		Results:  results,
+		SourceDB: c.dbPath,
+		Metadata: map[string]any{
+			"target_kind": "source_service_item",
+		},
+	}, nil
+}
+
+func searchSourceServiceItems(ctx context.Context, db *sql.DB, query string, limit int) ([]sources.Item, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	query = strings.TrimSpace(strings.ToLower(query))
+	sqlQuery := `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
+		canonical_url, published, fetched_at, verticals, language, region, content_hash,
+		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
+		FROM items`
+	args := []any{}
+	if query != "" {
+		sqlQuery += ` WHERE lower(title) LIKE ? OR lower(body) LIKE ? OR lower(source_id) LIKE ?`
+		needle := "%" + query + "%"
+		args = append(args, needle, needle, needle)
+	}
+	sqlQuery += ` ORDER BY published DESC, fetched_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []sources.Item
+	for rows.Next() {
+		var item sources.Item
+		var published, fetchedAt, verticals string
+		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
+			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
+			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
+			&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+			return nil, err
+		}
+		item.Published = parseSourceSearchStoredTime(published)
+		item.FetchedAt = parseSourceSearchStoredTime(fetchedAt)
+		_ = json.Unmarshal([]byte(verticals), &item.Verticals)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func parseSourceSearchStoredTime(value string) time.Time {
+	if value == "" {
+		return time.Time{}
+	}
+	parsed, _ := time.Parse(time.RFC3339Nano, value)
+	return parsed
+}
+
+func sourceSearchItemResult(rank int, item sources.Item) map[string]any {
+	return map[string]any{
+		"rank":             rank,
+		"target_kind":      "source_service_item",
+		"item_id":          item.ID,
+		"source_id":        item.SourceID,
+		"source_type":      item.SourceType,
+		"fetch_id":         item.FetchID,
+		"original_id":      item.OriginalID,
+		"title":            item.Title,
+		"body":             item.Body,
+		"url":              item.URL,
+		"canonical_url":    item.CanonicalURL,
+		"published_at":     formatSourceSearchTime(item.Published),
+		"fetched_at":       formatSourceSearchTime(item.FetchedAt),
+		"verticals":        item.Verticals,
+		"language":         item.Language,
+		"region":           item.Region,
+		"content_hash":     item.ContentHash,
+		"evidence_level":   item.EvidenceLevel,
+		"vintage_policy":   item.VintagePolicy,
+		"lookahead_status": item.LookaheadStatus,
+		"release_date":     item.ReleaseDate,
+	}
+}
+
+func formatSourceSearchTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newWebSearchTool(searchClient, rt),
+		newSourceSearchTool(sourceClient, rt),
 		newFetchURLTool(httpClient, rt),
 		newImportURLContentTool(rt),
 		newReadContentItemTool(rt),
@@ -40,6 +184,46 @@ func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient,
 		}
 	}
 	return nil
+}
+
+func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) Tool {
+	type args struct {
+		Query      string `json:"query"`
+		MaxResults int    `json:"max_results,omitempty"`
+	}
+	return Tool{
+		Name:        "source_search",
+		Description: "Search the configured Choir Source Service ledger for durable source items. Researcher-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for VText.",
+		Parameters: jsonSchemaObject(map[string]any{
+			"query":       map[string]any{"type": "string"},
+			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
+		}, []string{"query"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode source_search args: %w", err)
+			}
+			if sourceClient == nil {
+				return "", fmt.Errorf("source search client not configured")
+			}
+			if strings.TrimSpace(in.Query) == "" {
+				return "", fmt.Errorf("query must not be empty")
+			}
+			resp, err := sourceClient.SearchSources(ctx, strings.TrimSpace(in.Query), in.MaxResults)
+			if err != nil {
+				return "", err
+			}
+			full := map[string]any{
+				"query":     resp.Query,
+				"provider":  resp.Provider,
+				"source_db": resp.SourceDB,
+				"metadata":  resp.Metadata,
+				"results":   resp.Results,
+			}
+			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
+			return toolProjectionResultJSON(model, full, metadata)
+		},
+	}
 }
 
 func newImportURLContentTool(rt *Runtime) Tool {
@@ -260,7 +444,7 @@ func shouldRequireResearchFindingsAfterTool(ctx context.Context, rt *Runtime) bo
 		return false
 	}
 	latestSubmit := latestSuccessfulResearchToolSeq(events, "submit_coagent_update")
-	latestResearch := latestSuccessfulResearchToolSeq(events, "web_search", "fetch_url", "import_url_content", "read_content_item")
+	latestResearch := latestSuccessfulResearchToolSeq(events, "web_search", "source_search", "fetch_url", "import_url_content", "read_content_item")
 	if latestSubmit == 0 {
 		return latestResearch == 0
 	}
@@ -438,6 +622,68 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 	}
 	metadata := map[string]any{
 		"type":                 "web_search",
+		"full_result_count":    len(resp.Results),
+		"visible_result_count": len(visibleResults),
+		"full_output_bytes":    len(researchMustJSON(full)),
+		"model_output_bytes":   len(researchMustJSON(model)),
+	}
+	return model, metadata
+}
+
+func compactSourceSearchProjection(full map[string]any, resp *sourceSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+	const maxVisibleResults = 8
+	const maxBodyChars = 1000
+	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
+	for idx, result := range resp.Results {
+		if idx >= maxVisibleResults {
+			break
+		}
+		visible := map[string]any{
+			"rank":             result["rank"],
+			"target_kind":      "source_service_item",
+			"item_id":          stringValue(result["item_id"]),
+			"source_id":        stringValue(result["source_id"]),
+			"source_type":      stringValue(result["source_type"]),
+			"fetch_id":         stringValue(result["fetch_id"]),
+			"title":            stringValue(result["title"]),
+			"url":              stringValue(result["url"]),
+			"canonical_url":    stringValue(result["canonical_url"]),
+			"published_at":     stringValue(result["published_at"]),
+			"fetched_at":       stringValue(result["fetched_at"]),
+			"body_excerpt":     truncateString(stringValue(result["body"]), maxBodyChars),
+			"content_hash":     stringValue(result["content_hash"]),
+			"evidence_level":   stringValue(result["evidence_level"]),
+			"vintage_policy":   stringValue(result["vintage_policy"]),
+			"lookahead_status": stringValue(result["lookahead_status"]),
+			"release_date":     stringValue(result["release_date"]),
+		}
+		if verticals, ok := result["verticals"]; ok {
+			visible["verticals"] = verticals
+		}
+		if language := stringValue(result["language"]); language != "" {
+			visible["language"] = language
+		}
+		if region := stringValue(result["region"]); region != "" {
+			visible["region"] = region
+		}
+		visibleResults = append(visibleResults, visible)
+	}
+	model := map[string]any{
+		"query":                resp.Query,
+		"provider":             resp.Provider,
+		"result_count":         len(resp.Results),
+		"visible_result_count": len(visibleResults),
+		"omitted_result_count": researchMaxInt(0, len(resp.Results)-len(visibleResults)),
+		"results":              visibleResults,
+		"full_evidence":        "stored in Trace tool.result full_output/full_output_sha256",
+		"projection_policy":    "top bounded source-service item cards with compact excerpts",
+		"source_identity":      "each result carries target_kind=source_service_item, item_id, source_id, fetch_id, and content_hash",
+	}
+	if requireFindingsCheckpoint {
+		model["next_instruction"] = "Submit concise first findings from this source_search result before any additional search-only turn. Include source IDs, item IDs, hashes, caveats, open gaps, and whether a web_search is still needed."
+	}
+	metadata := map[string]any{
+		"type":                 "source_search",
 		"full_result_count":    len(resp.Results),
 		"visible_result_count": len(visibleResults),
 		"full_output_bytes":    len(researchMustJSON(full)),

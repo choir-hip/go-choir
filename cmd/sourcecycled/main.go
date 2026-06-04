@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,7 +32,7 @@ func main() {
 	}
 	log.Printf("Loaded %d sources from registry", len(registry.Sources))
 
-	store, err := cycle.NewStorage("var/sourcecycled.db")
+	store, err := cycle.NewStorage(sourceServiceDBPath())
 	if err != nil {
 		log.Fatalf("Failed to initialize source service storage: %v", err)
 	}
@@ -70,6 +71,16 @@ func main() {
 			runCycle(ctx, &registry, store)
 		}
 	}
+}
+
+func sourceServiceDBPath() string {
+	if dbPath := os.Getenv("SOURCE_SERVICE_DB_PATH"); strings.TrimSpace(dbPath) != "" {
+		return strings.TrimSpace(dbPath)
+	}
+	if dbPath := os.Getenv("SOURCECYCLED_DB_PATH"); strings.TrimSpace(dbPath) != "" {
+		return strings.TrimSpace(dbPath)
+	}
+	return "var/sourcecycled.db"
 }
 
 var engine *cycle.Engine

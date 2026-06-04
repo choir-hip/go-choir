@@ -594,7 +594,9 @@ If only part of this lands, report `checkpoint_incomplete`, not complete.
 
 **status:** checkpoint_incomplete
 
-**last checkpoint:** P0 Source Service nucleus implemented locally after the mission was reframed from standalone sourcecycled to platform Source Service.
+**last checkpoint:** P0 Researcher Source Retrieval Bridge implemented locally
+over the Source Service SQLite ledger after the P0 Source Service nucleus was
+landed and reviewed.
 
 **P0 storage-boundary decision:** Source Service v0 should keep its own
 service-local durable SQLite ledger under `sourcecycled` while exposing stable
@@ -614,7 +616,12 @@ making Source Service a VText or publication writer.
 - Sourcecycled WIP is buildable and has a service-local SQLite ledger for source registry policy metadata, fetch records, source items, cycles, cycle events, and issue citation-map placeholders.
 - RSS uses a bounded standard-library RSS/Atom parser, removing the missing `gofeed` dependency from the P0 path.
 - Default source config includes public news/global sources and one official macro-policy source lane, with unsupported Polymarket removed until an adapter exists.
-- Search/research tools exist but are source-service blind.
+- Researcher tool profiles now include `source_search` over a configured
+  Source Service SQLite ledger path. VText still has no direct source/web
+  retrieval tools.
+- Sourcecycled and runtime source search share `SOURCE_SERVICE_DB_PATH` /
+  `SOURCECYCLED_DB_PATH`, with the daemon retaining `var/sourcecycled.db` as a
+  fallback.
 - VText source entities exist for YouTube/image but not platform source items or official data.
 - Publication ledger exists but drops revision metadata and lacks export/access policy.
 - Markdown/text file opening creates VText aliases, but the product invariant needs proof and likely tightening.
@@ -641,6 +648,54 @@ ok   github.com/yusefmosiah/go-choir/internal/sources
 
 This proves the sourcecycled command builds, RSS/source identity tests pass, and storage tests prove fetch/item persistence, dedup across restart, source search, cycle records, and official-source caveat metadata persistence.
 
+Additional local P0 retrieval proof for the current checkpoint:
+
+```text
+nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearch|TestShouldRequireResearchFindingsAfterResearchToolBatches|TestResearcherFailureSynthesizesCheckpointAfterSearch'
+```
+
+Result:
+
+```text
+ok   github.com/yusefmosiah/go-choir/internal/runtime  6.031s
+```
+
+This proves a researcher-only `source_search` tool can read a seeded Source
+Service item table and return `target_kind=source_service_item`, item/source/fetch
+IDs, content hashes, official-source caveats, result projection metadata, and
+checkpoint guidance while remaining unavailable to VText. It also proves source
+research participates in the same first-findings checkpoint cadence and runtime
+fallback update path as `web_search`.
+
+```text
+nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sources
+```
+
+Result:
+
+```text
+?    github.com/yusefmosiah/go-choir/cmd/sourcecycled [no test files]
+ok   github.com/yusefmosiah/go-choir/internal/cycle    1.115s
+ok   github.com/yusefmosiah/go-choir/internal/sources  (cached)
+```
+
+This reproves the sourcecycled command still builds after aligning its DB path
+configuration with the runtime retrieval bridge.
+
+Broader runtime verification:
+
+```text
+nix develop -c go test ./internal/runtime
+nix develop -c go test -tags comprehensive ./internal/runtime -run TestInstallDefaultAgentToolsProfiles
+```
+
+Result:
+
+```text
+ok   github.com/yusefmosiah/go-choir/internal/runtime  18.811s
+ok   github.com/yusefmosiah/go-choir/internal/runtime  2.179s
+```
+
 **CI and deploy evidence:**
 
 ```text
@@ -666,7 +721,7 @@ deployed_at: 2026-06-04T17:24:18Z
 
 - exact staging behavior of source entities after current dirty VText draft WIP;
 - staging deployment status of any sourcecycled WIP;
-- source-service retrieval through researcher tools;
+- deployed source-service retrieval through researcher tools;
 - live ingestion against the default registry;
 - an externally addressable deployed source-service API or daemon proof;
 - publication projection/export/access policy.
@@ -676,28 +731,31 @@ deployed_at: 2026-06-04T17:24:18Z
 - standalone sourcecycled is no longer the right framing;
 - Source Service should be a platform service with clean contracts;
 - publication export depends on metadata-preserving publication first;
-- source retrieval must become a researcher tool/path, not VText authority;
+- source retrieval has a local researcher tool bridge, not VText authority;
+- runtime should query the Source Service ledger contract directly rather than
+  importing the ingestion/cycle package, because `internal/cycle` currently
+  reaches provider/runtime through synthesis and creates an import cycle;
 - service-local SQLite is acceptable for P0 high-churn source/fetch/cycle records, with later projection into runtime ContentItems and platform publication/citation ledgers.
 
 **remaining error field:**
 
-- expose source-service retrieval to researchers;
+- deploy and configure source-service retrieval for researchers on staging;
 - reconcile VText draft-versioning WIP with source-entity tests;
 - design publication metadata/export policy schema;
 - define first official macro source lane from Marco patterns.
 
-**highest-impact remaining uncertainty:** how soon Source Service retrieval
-should federate with platform Dolt/publication search versus first proving a
-service-local source ledger and researcher tool path.
+**highest-impact remaining uncertainty:** how to configure and prove the
+deployed Source Service ingestion/retrieval path on staging without collapsing
+Source Service into a VText writer, parallel news app, or DOM/export shortcut.
 
 **next executable probe:**
 
 ```text
-Document and prove the VText draft/versioning boundary with source refs, then
-add the first researcher-facing source retrieval tool/path over the source
-service ledger. The combined proof should show that source-service evidence can
-reach VText through researcher updates without giving VText direct retrieval
-authority or advancing canonical versions on ordinary typing.
+Push and deploy the local researcher `source_search` bridge, configure a real
+staging Source Service ledger path, then prove one real ingested source item can
+be found by a researcher and handed to VText as durable coagent evidence without
+giving VText direct retrieval authority. In parallel, document and prove the
+VText draft/versioning boundary with source refs before publication/export work.
 ```
 
 **suggested resume goal string:**

@@ -56,6 +56,7 @@ func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec 
 func latestSuccessfulResearchToolResultOutput(eventsForRun []types.EventRecord) (types.EventRecord, string, map[string]any, bool) {
 	wanted := map[string]bool{
 		"web_search":         true,
+		"source_search":      true,
 		"fetch_url":          true,
 		"import_url_content": true,
 	}
@@ -133,6 +134,21 @@ func researcherFallbackFinding(toolName string, output map[string]any) string {
 		}
 		parts = append(parts, "but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.")
 		return strings.Join(parts, " ")
+	case "source_search":
+		query := stringMapValue(output, "query")
+		resultCount := intMapValue(output, "result_count")
+		if resultCount == 0 {
+			resultCount = len(anySliceMapValue(output, "results"))
+		}
+		parts := []string{"A source_search result returned"}
+		if query != "" {
+			parts = append(parts, "for query "+strconvQuote(query))
+		}
+		if resultCount > 0 {
+			parts = append(parts, fmt.Sprintf("with %d visible source-service item(s)", resultCount))
+		}
+		parts = append(parts, "but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.")
+		return strings.Join(parts, " ")
 	case "fetch_url":
 		url := stringMapValue(output, "url")
 		status := intMapValue(output, "status_code")
@@ -164,6 +180,12 @@ func researcherFallbackRefs(output map[string]any) []string {
 		}
 		if url := stringMapValue(item, "url"); url != "" {
 			refs = append(refs, url)
+		}
+		if itemID := stringMapValue(item, "item_id"); itemID != "" {
+			refs = append(refs, "source_service_item:"+itemID)
+		}
+		if sourceID := stringMapValue(item, "source_id"); sourceID != "" {
+			refs = append(refs, "source:"+sourceID)
 		}
 		if len(refs) >= 5 {
 			break

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -654,6 +656,194 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
 		t.Fatalf("another post-checkpoint research batch should require another findings update")
 	}
+	appendToolResult("ev-source-search", "source_search")
+	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+		t.Fatalf("source_search before the next findings update should not stack repeated required-tool reminders")
+	}
+}
+
+func TestResearcherSourceSearchReadsSourceServiceLedger(t *testing.T) {
+	ctx := context.Background()
+	dbPath, item := seedTestSourceServiceLedger(t)
+	t.Setenv("SOURCE_SERVICE_DB_PATH", dbPath)
+	t.Setenv("SOURCECYCLED_DB_PATH", "")
+
+	rt, _ := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	if _, ok := researcherRegistry.Lookup("source_search"); !ok {
+		t.Fatalf("researcher missing source_search")
+	}
+	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
+	if _, ok := vtextRegistry.Lookup("source_search"); ok {
+		t.Fatalf("vtext should not have source_search")
+	}
+
+	rec := &types.RunRecord{
+		RunID:        "researcher-source-search-run",
+		OwnerID:      "owner-source-search",
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+	}
+	raw, err := researcherRegistry.Execute(WithToolExecutionContext(ctx, rec), "source_search", json.RawMessage(`{
+		"query": "rates",
+		"max_results": 5
+	}`))
+	if err != nil {
+		t.Fatalf("source_search: %v", err)
+	}
+	var envelope struct {
+		ModelOutput struct {
+			Query           string `json:"query"`
+			Provider        string `json:"provider"`
+			ResultCount     int    `json:"result_count"`
+			NextInstruction string `json:"next_instruction"`
+			SourceIdentity  string `json:"source_identity"`
+			Results         []struct {
+				TargetKind      string   `json:"target_kind"`
+				ItemID          string   `json:"item_id"`
+				SourceID        string   `json:"source_id"`
+				FetchID         string   `json:"fetch_id"`
+				Title           string   `json:"title"`
+				URL             string   `json:"url"`
+				ContentHash     string   `json:"content_hash"`
+				EvidenceLevel   string   `json:"evidence_level"`
+				VintagePolicy   string   `json:"vintage_policy"`
+				LookaheadStatus string   `json:"lookahead_status"`
+				Verticals       []string `json:"verticals"`
+			} `json:"results"`
+		} `json:"model_output"`
+		DurableOutput struct {
+			Results []map[string]any `json:"results"`
+		} `json:"durable_output"`
+		Projection struct {
+			Type string `json:"type"`
+		} `json:"projection"`
+	}
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		t.Fatalf("decode source_search projection: %v\nraw=%s", err, raw)
+	}
+	if envelope.ModelOutput.Query != "rates" || envelope.ModelOutput.Provider != "source_service_sqlite" {
+		t.Fatalf("source_search model header = %+v", envelope.ModelOutput)
+	}
+	if envelope.ModelOutput.ResultCount != 1 || len(envelope.ModelOutput.Results) != 1 {
+		t.Fatalf("source_search result count/model = %+v", envelope.ModelOutput)
+	}
+	got := envelope.ModelOutput.Results[0]
+	if got.TargetKind != "source_service_item" || got.ItemID != item.ID || got.SourceID != item.SourceID || got.FetchID != item.FetchID {
+		t.Fatalf("source identity = %+v, want item/source/fetch", got)
+	}
+	if got.ContentHash != item.ContentHash || got.EvidenceLevel != "official_release" || got.VintagePolicy != "release_snapshot" || got.LookaheadStatus != "no_lookahead" {
+		t.Fatalf("source caveats/hash = %+v, want official caveats", got)
+	}
+	if got.Title != item.Title || got.URL != item.URL || len(got.Verticals) != 1 || got.Verticals[0] != "macro_policy" {
+		t.Fatalf("source result projection = %+v", got)
+	}
+	if envelope.ModelOutput.NextInstruction == "" || !strings.Contains(envelope.ModelOutput.SourceIdentity, "source_service_item") {
+		t.Fatalf("missing checkpoint/source identity guidance: %+v", envelope.ModelOutput)
+	}
+	if len(envelope.DurableOutput.Results) != 1 || envelope.Projection.Type != "source_search" {
+		t.Fatalf("durable/projection output = %+v/%+v", envelope.DurableOutput, envelope.Projection)
+	}
+}
+
+func TestResearcherSourceSearchWithoutConfiguredLedgerIsUnavailable(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_DB_PATH", "")
+	t.Setenv("SOURCECYCLED_DB_PATH", "")
+	rt, _ := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	_, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), &types.RunRecord{
+		RunID:        "researcher-source-search-unconfigured",
+		OwnerID:      "owner-source-search",
+		AgentProfile: AgentProfileResearcher,
+	}), "source_search", json.RawMessage(`{"query":"rates"}`))
+	if err == nil || !strings.Contains(err.Error(), "source search client not configured") {
+		t.Fatalf("source_search err = %v, want source search client not configured", err)
+	}
+}
+
+func seedTestSourceServiceLedger(t *testing.T) (string, sources.Item) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "sourcecycled.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open source service storage: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE items (
+		id TEXT PRIMARY KEY,
+		source_id TEXT NOT NULL,
+		source_type TEXT NOT NULL DEFAULT '',
+		fetch_id TEXT NOT NULL DEFAULT '',
+		original_id TEXT NOT NULL DEFAULT '',
+		title TEXT NOT NULL DEFAULT '',
+		body TEXT NOT NULL DEFAULT '',
+		url TEXT NOT NULL DEFAULT '',
+		canonical_url TEXT NOT NULL DEFAULT '',
+		published TEXT NOT NULL DEFAULT '',
+		fetched_at TEXT NOT NULL DEFAULT '',
+		verticals TEXT NOT NULL DEFAULT '[]',
+		language TEXT NOT NULL DEFAULT '',
+		region TEXT NOT NULL DEFAULT '',
+		content_hash TEXT NOT NULL DEFAULT '',
+		raw_json TEXT NOT NULL DEFAULT '',
+		evidence_level TEXT NOT NULL DEFAULT '',
+		vintage_policy TEXT NOT NULL DEFAULT '',
+		lookahead_status TEXT NOT NULL DEFAULT '',
+		release_date TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create source item table: %v", err)
+	}
+	source := sources.Source{
+		ID:        "official:test",
+		Type:      sources.SourceTypeRSS,
+		Name:      "Official Test",
+		URL:       "https://example.test/feed.xml",
+		Verticals: []string{"macro_policy"},
+	}
+	item := sources.Item{
+		ID:              sources.StableItemID(source, "release-1", "https://example.test/release-1", "Rate decision", "Rates held steady."),
+		SourceID:        source.ID,
+		SourceType:      source.Type,
+		OriginalID:      "release-1",
+		Title:           "Rate decision",
+		Body:            "Rates held steady.",
+		URL:             "https://example.test/release-1",
+		CanonicalURL:    "https://example.test/release-1",
+		Published:       time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC),
+		FetchedAt:       time.Date(2026, 6, 4, 12, 1, 0, 0, time.UTC),
+		Verticals:       []string{"macro_policy"},
+		Language:        "en",
+		Region:          "us",
+		ContentHash:     sources.ContentHash("Rate decision", "Rates held steady."),
+		EvidenceLevel:   "official_release",
+		VintagePolicy:   "release_snapshot",
+		LookaheadStatus: "no_lookahead",
+		ReleaseDate:     "2026-06-04",
+	}
+	fetch := sources.NewFetchRecord(source, source.URL, time.Date(2026, 6, 4, 12, 1, 0, 0, time.UTC))
+	item.FetchID = fetch.FetchID
+	verticals, _ := json.Marshal(item.Verticals)
+	if _, err := db.Exec(`INSERT INTO items (
+		id, source_id, source_type, fetch_id, original_id, title, body, url,
+		canonical_url, published, fetched_at, verticals, language, region,
+		content_hash, raw_json, evidence_level, vintage_policy, lookahead_status,
+		release_date, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		item.ID, item.SourceID, string(item.SourceType), item.FetchID, item.OriginalID,
+		item.Title, item.Body, item.URL, item.CanonicalURL, item.Published.UTC().Format(time.RFC3339Nano),
+		item.FetchedAt.UTC().Format(time.RFC3339Nano), string(verticals), item.Language, item.Region,
+		item.ContentHash, item.RawJSON, item.EvidenceLevel, item.VintagePolicy, item.LookaheadStatus,
+		item.ReleaseDate, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("save source item: %v", err)
+	}
+	return dbPath, item
 }
 
 func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
