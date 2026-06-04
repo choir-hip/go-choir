@@ -101,7 +101,7 @@ revision metadata while adding durable compare/merge records if needed for
 queryability. Staging proof must use real product paths and computer-use/browser
 QA, not local-only API calls.
 
-### Staging Acceptance Blocker: Merge Preview Accept Did Not Prove Head Advance
+### Staging Acceptance Probe Correction: Merge Accept Succeeded, Revision Count Is Misleading
 
 After commit `ca25041dd16ec84c9fc4a3dd9b87e147fa84cae3` deployed to staging,
 a deployed Playwright probe against `https://choir.news` created a real long
@@ -123,18 +123,22 @@ created publication `pub-5433a120-d776-4127-ab04-b5cf03a13c87` and route:
 /pub/vtext/staging-long-compare-merge-proof-1780613758834-pub5433a120d
 ```
 
-However, after the probe clicked `Accept`, polling
-`/api/vtext/documents/{doc_id}` for a new current revision did not observe the
-expected accepted merge revision within 60 seconds. Screenshot evidence was
-written to:
+The first proof script incorrectly treated `revision_count` from
+`GET /api/vtext/documents/{doc_id}` as authoritative. Staging returned
+`revision_count: 0` even while `current_revision_id` pointed at a newly accepted
+merge revision and `GET /api/vtext/documents/{doc_id}/revisions` returned all
+three revisions. A tighter repro captured `/accept-merge` status `201` and the
+accepted revision body with `source: vtext_concept_merge` and `Primary draft`
+metadata.
+
+The accepted-merge flow itself is not blocked by this evidence. The remaining
+debuggability follow-up is that `vtextDocumentResponse.revision_count` may be
+stale or unset on the document endpoint. Screenshot evidence from the initial
+probe was written to:
 
 ```text
 /tmp/vtext-merge-staging-proof-1780613749937.png
 ```
 
-The current uncertainty is whether this was a test sequencing issue after
-leaving the historical publication result panel visible while entering merge
-preview, a frontend state issue where `publishResult` and `mergePreview`
-coexist and confuse the accept flow, an API failure from `/accept-merge` that
-was not captured by the first probe, or a backend revision/head update problem.
-This blocker must be resolved before claiming the mission complete.
+This should be tracked as a secondary API consistency bug, not a blocker for
+semantic merge acceptance.
