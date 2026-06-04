@@ -497,6 +497,111 @@ real source ingestion
 
 If only some links are proven, report `checkpoint_incomplete` with the exact next dependency and evidence needed.
 
+## Run Checkpoint & Resumption State
+
+**status:** `checkpoint_incomplete`
+
+**last checkpoint:** 2026-06-04, deployed through commit
+`5dc150efc28128eab6dc42aa9dc5b00486164cab`.
+
+**current artifact state:** Source Service is deployed as the platform service
+boundary for sourcecycled ingestion/search/item resolution. Runtime
+`source_search` calls the Source Service API from inside user-computer
+researcher agents. VText derives revision-scoped `source_entities` from
+researcher source-service refs, including explicit `source_service_item:<id>`
+refs and raw `srcitem_...` IDs. Publication/export preserves
+source-service source entities as expandable transclusions and canonical
+Markdown export in the tested public route path.
+
+**what shipped:**
+
+- `b60d3f0bc4050fc13c6d6ebddd88c65d6749b506`: VM tap host-service route
+  includes Source Service port `8787`.
+- `3f0cae9440862992985c82bcd7c2b388989cc498`: Source Service search tokenizes
+  natural researcher queries and ranks by matched terms plus recency.
+- `5dc150efc28128eab6dc42aa9dc5b00486164cab`: VText derives source entities
+  from raw Source Service item IDs in researcher updates; deployed proof spec
+  verifies any searched item preserved into VText metadata.
+
+**what was proven:**
+
+```text
+GitHub CI:
+  gh run view 26981027955 --json status,conclusion,headSha,url,jobs
+  result: success for 5dc150efc28128eab6dc42aa9dc5b00486164cab
+
+FlakeHub:
+  gh run view 26981027952 --json status,conclusion,headSha,url,jobs
+  result: success for 5dc150efc28128eab6dc42aa9dc5b00486164cab
+
+Staging identity:
+  curl -fsS https://choir.news/health
+  result: proxy and sandbox deployed_commit 5dc150efc28128eab6dc42aa9dc5b00486164cab
+
+Source Service health/search:
+  ssh node-b 'systemctl is-active go-choir-sourcecycled && curl -fsS "http://127.0.0.1:8787/internal/source-service/search?q=economy%20inflation%20GDP%20employment%202026&max_results=3"'
+  result: active service and live source_service_item results
+
+Publication/export proof:
+  BASE_URL=https://choir.news PLAYWRIGHT_BASE_URL=https://choir.news \
+  SOURCE_SERVICE_ITEM_ID=srcitem_4ea1c42adb9a1ccb6aa4222e \
+  SOURCE_SERVICE_SOURCE_ID=gdelt:15min \
+  SOURCE_SERVICE_FETCH_ID=fetch_40743f1f87dc23c9dee94a04 \
+  npm --prefix frontend run e2e -- vtext-source-service-publication.spec.js
+  result: 1 passed
+
+Live researcher -> VText metadata proof:
+  GO_CHOIR_RUN_DEPLOYED_SOURCE_SERVICE_RESEARCH=1 \
+  BASE_URL=https://choir.news PLAYWRIGHT_BASE_URL=https://choir.news \
+  CHOIR_AUTH_STATE=/tmp/choir-source-service-research-5dc150e.storage.json \
+  CHOIR_AUTH_META=/tmp/choir-source-service-research-5dc150e.meta.json \
+  npm --prefix frontend run e2e -- vtext-deployed-source-service-research.spec.js
+  result: 1 passed
+```
+
+**unproven or partial claims:**
+
+- Official macro/economic source lane is not yet a first-class ingested source
+  family with release/vintage/lookahead metadata proven on staging.
+- Access-policy variants beyond the tested public/default export route remain
+  partial.
+- PDF/DOCX/EPUB export, richer RBAC, comments, and private corpus connector
+  policy remain future surface.
+- Local filesystem/public Choir Dolt search federation remains outside this
+  checkpoint.
+
+**belief-state changes:**
+
+- The user-computer runtime can reach Source Service through the host-service
+  route; the earlier timeout is fixed.
+- Source Service search must support natural researcher query language at the
+  service boundary; exact whole-query substring matching was not product-usable.
+- Researcher updates cannot be trusted to always use canonical ref syntax;
+  VText needs bounded source-item ID extraction because VText is the canonical
+  source-entity writer.
+
+**remaining error field:** transform Source Service from live GDELT/news
+ingestion plus generic search into the richer platform source substrate:
+official sources, cleaned structured items, manifests, selector-rich
+resolution, and policy-aware publication/export variants.
+
+**highest-impact remaining uncertainty:** the official macro/economic source
+adapter shape and release/vintage metadata contract, because it determines
+whether source entities can represent structured data releases rather than only
+news/source-service item cards.
+
+**next executable probe:** add one official macro/economic adapter and prove on
+staging that an official-source item can be ingested, searched, resolved,
+preserved into VText `source_entities`, published, and exported with release
+date, vintage/lookahead policy, content hash, and citation/transclusion
+metadata.
+
+**suggested resume goal string:**
+
+```text
+/goal Continue docs/mission-platform-source-service-vtext-publication-campaign-v1.md from the 2026-06-04 checkpoint. Implement the official macro/economic source lane as a first-class Source Service adapter with release/vintage/lookahead metadata, prove staging ingestion/search/item resolution, and carry one official_data_release or official-source source_service_item through researcher source_search, VText source_entities, publication transclusion metadata, and canonical export.
+```
+
 ## Rollback
 
 - Source registry entries can be disabled without deleting history.
