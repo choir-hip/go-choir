@@ -48,6 +48,9 @@ Use these buckets when reading or editing docs:
 - `docs/frontend-app-building-api.md` - current frontend app registry, preview,
   theme, and shell contract.
 - `docs/runtime-invariants.md` - implementation invariants and authority boundaries.
+- `docs/source-external-data-publication.md` - canonical contract for external
+  data ingestion, source cleaning, VText source metadata, transclusion,
+  publication policy, and export.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
 - `docs/mission-campaign-compiler-selfdev-v0.md` - current next
@@ -61,6 +64,9 @@ Use these buckets when reading or editing docs:
 
 ## Current Mission Family
 
+- `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` -
+  active Source Service / VText source metadata / publication campaign. Its
+  requirements contract is `docs/source-external-data-publication.md`.
 - `docs/mission-campaign-compiler-selfdev-v0.md` is the primary current
   self-development mission surface.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.

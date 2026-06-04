@@ -101,6 +101,10 @@ proposals, and proxy read APIs fetch sanitized publication bundles from
 internal-only `platformd` endpoints. Platform services still never gain write
 access to the live private document.
 
+For the current contract covering external source ingestion, source cleaning,
+VText source metadata, transclusion, publication policy, and export, read
+[source-external-data-publication.md](source-external-data-publication.md).
+
 ## Priority Order
 
 1. Make the public desktop and auth-on-mutation access model work: signed-out
