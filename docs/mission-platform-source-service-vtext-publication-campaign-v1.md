@@ -8,7 +8,7 @@
 ## Goal String
 
 ```text
-/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v1.md as a Codex-operated MissionGradient campaign using docs/source-external-data-publication.md as the authoritative requirements contract. Build Choir's platform Source Service and source-aware publication path from the ideal topology backward: Source Service owns registry, adapters, source policy, ingestion, ledgers, source health, manifests, search, item resolution, and future official/public/private source lanes; runtime researcher tools consume Source Service only through internal service APIs; researchers produce durable source findings; VText writes canonical source entities, document revisions, and VText-agent-set display policy metadata; publication preserves source metadata into citation, transclusion, access-policy, and export artifacts. Execute as one clean trajectory: replace the direct SQLite/sandbox retrieval path with a Source Service API boundary, deploy sourcecycled as a managed service with health/search/item-resolution, prove live ingestion and researcher source_search on staging, extend VText source entities over source-service and official-source items, make every citation marker a transclusion point, make quoted excerpts eligible for default embedded transclusion when context calls for it, preserve metadata through publication, then add canonical copy/download and route/export policy. Do not claim success without staging evidence across ingestion, service API retrieval, researcher findings, VText metadata, publication metadata, citation-to-transclusion expansion, default embedded quoted excerpts, access/export behavior, and user-visible copy/download.
+/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v1.md as a Codex-operated MissionGradient campaign using docs/source-external-data-publication.md as the authoritative requirements contract. Build Choir's platform Source Service and source-aware publication path from the ideal topology backward: Source Service owns registry, adapters, source policy, ingestion, ledgers, source health, manifests, search, item resolution, and future official/public/private source lanes; runtime researcher tools consume Source Service only through internal service APIs; researchers produce durable source findings; VText writes canonical source entities, document revisions, and VText-agent-set display policy metadata; publication preserves source metadata into citation, transclusion, access-policy, and export artifacts. Execute as one clean trajectory: replace the direct SQLite/sandbox retrieval path with a Source Service API boundary, deploy sourcecycled as a managed service with health/search/item-resolution, prove live ingestion and researcher source_search on staging, extend VText source entities over source-service and official-source items, make every citation marker a transclusion point, make quoted excerpts default to embedded transclusion when the excerpt is part of the reading surface, ensure embedded/expanded transclusions can open their owning app/window, preserve metadata through publication, then add canonical copy/download and route/export policy. Do not claim success without staging evidence across ingestion, service API retrieval, researcher findings, VText metadata, publication metadata, citation-to-transclusion expansion, default embedded quoted excerpts, owning-surface open actions, access/export behavior, and user-visible copy/download.
 ```
 
 ## Ideal State
@@ -225,6 +225,28 @@ transclusion controls, and default embedded source details. This is not yet
 the acceptance proof required by the goal: staging still needs deployed live
 Source Service ingestion, deployed researcher `source_search`, deployed VText
 publication rendering, deployed copy/download, and route/export policy proof.
+
+## Execution Checkpoint: Sourcecycled Nix Vendor Hash Deploy Failure
+
+**Problem observed:** after pushing commit
+`5020f539e0489d515654d0cfcd5134ffa3fafa3c`, GitHub Actions CI run
+`26976110949` passed Go/frontend gates but failed the Node B staging deploy.
+The host NixOS closure build failed while building
+`sourcecycled-0.1.0-go-modules.drv` because the fixed-output vendor hash was
+stale.
+
+**Evidence recorded before fix:**
+
+```text
+specified: sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=
+got:       sha256-2uExDYKXWdF4NyIMX6NVVXcuXRoTm+/S/CxuwPExXiI=
+```
+
+**Fix direction:** update only the `sourcecycled` package `vendorHash` in
+`flake.nix` to the hash emitted by the failed staging build, then rerun the
+landing loop. Proxy and sandbox public health already reported commit
+`5020f539e0489d515654d0cfcd5134ffa3fafa3c`, but the full host closure and
+`sourcecycled` service deployment remain unproven until the rerun succeeds.
 
 ## Authoritative Requirements
 

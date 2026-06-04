@@ -237,8 +237,9 @@ Selector kinds include:
 - data vintage.
 
 Display policy tells VText how the citation/transclusion should appear by
-default. It must be easy for the VText agent to set from context. The baseline
-display modes are:
+default. It is canonical revision metadata, not a renderer guess. It must be
+easy for the VText agent to set from context while drafting or revising. The
+baseline display modes are:
 
 - `collapsed_citation`: show only a compact citation marker until activated.
 - `embedded_excerpt`: show the transcluded quote/excerpt inline by default,
@@ -249,10 +250,13 @@ display modes are:
   first rendered.
 
 Quoted excerpts should normally use `embedded_excerpt` when the quoted text is
-part of the argument rather than merely supporting evidence. Long supporting
-sources, background citations, and dense metadata should normally default to
-`collapsed_citation`. The VText agent should choose the display mode based on
-the local writing context, while preserving a user-editable metadata path.
+part of the argument rather than merely supporting evidence. In that case the
+citation marker and transclusion are both present: the quote is embedded inline
+by default, and the citation control can still collapse, expand, or open the
+owning source surface. Long supporting sources, background citations, and dense
+metadata should normally default to `collapsed_citation`. The VText agent should
+choose the display mode based on the local writing context, while preserving a
+user-editable metadata path.
 
 Visible inline text should expose compact citation markers, usually rendered as
 superscripts or similarly lightweight inline controls. Tapping or clicking the
@@ -271,7 +275,9 @@ recoverable repair path.
 Every citation is a transclusion point. The compact citation marker states that
 a source supports, contradicts, or contextualizes a claim; activating it expands
 source material or source metadata inside the host VText. A transclusion is the
-expanded embedded source material and its metadata.
+expanded embedded source material and its metadata. Some citations begin already
+expanded or embedded because their display policy says the source material is
+part of the reading surface, especially quoted excerpts.
 
 Transclusion records need:
 
