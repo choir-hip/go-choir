@@ -1072,7 +1072,23 @@ func normalizeModelSemanticMergeResult(result vtextModelSemanticMergeResult, sou
 		return result, fmt.Errorf("model response missing summary")
 	}
 	if len(result.Suggestions) == 0 {
-		return result, fmt.Errorf("model response missing suggestions")
+		for i, finding := range result.Summary {
+			finding = strings.TrimSpace(finding)
+			if finding == "" {
+				continue
+			}
+			result.Suggestions = append(result.Suggestions, vtextMergeSuggestion{
+				ID:          "model_finding_" + strconv.Itoa(i+1),
+				Label:       snippet(finding, 72),
+				Description: finding,
+				Status:      "Needs review",
+				Source:      sourceRev.RevisionID,
+				Preview:     finding,
+			})
+		}
+		if len(result.Suggestions) == 0 {
+			return result, fmt.Errorf("model response missing suggestions")
+		}
 	}
 	for i := range result.Suggestions {
 		result.Suggestions[i].ID = strings.TrimSpace(result.Suggestions[i].ID)

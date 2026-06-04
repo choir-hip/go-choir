@@ -161,6 +161,24 @@ func TestVTextSemanticMergeUsesProviderBackedJSON(t *testing.T) {
 	}
 }
 
+func TestVTextSemanticMergePromotesModelSummaryToSuggestion(t *testing.T) {
+	result, err := normalizeModelSemanticMergeResult(vtextModelSemanticMergeResult{
+		Summary: []string{"Earlier draft has a sharper ownership argument."},
+	}, types.Revision{RevisionID: "rev-source"}, types.Revision{RevisionID: "rev-target"}, false)
+	if err != nil {
+		t.Fatalf("normalize summary-only model result: %v", err)
+	}
+	if len(result.Suggestions) != 1 {
+		t.Fatalf("suggestions = %d, want 1", len(result.Suggestions))
+	}
+	if result.Suggestions[0].ID != "model_finding_1" || result.Suggestions[0].Description != result.Summary[0] {
+		t.Fatalf("summary-derived suggestion mismatch: %+v", result.Suggestions[0])
+	}
+	if strings.Contains(strings.ToLower(result.Suggestions[0].Label), "glossary") {
+		t.Fatalf("summary fallback reintroduced domain stub: %+v", result.Suggestions[0])
+	}
+}
+
 func TestApplyVTextModelMergeEditsStripsVisibleProvenance(t *testing.T) {
 	target := "# Proposal\n\nCurrent paragraph.\n\n<!-- VText merge preview provenance\n- leaked metadata\n-->\n"
 	content, applied, err := applyVTextModelMergeEdits(target, []vtextModelMergeEdit{{
