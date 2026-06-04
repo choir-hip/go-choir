@@ -271,6 +271,37 @@ Carry those entities through run/revision metadata, expose their item IDs in
 the VText prompt, render them as collapsed citation/transclusion points by
 default, and preserve the existing media-source entity path.
 
+## Execution Checkpoint: Sandbox Source Service Route Timeout
+
+**Problem observed:** staging live proof after deploying commit
+`0a0c2aeb70493cab8c56204bf1a5b067df58b12f` showed that host-local Source
+Service is healthy, but the runtime researcher path inside the user computer
+cannot reach the configured Source Service URL. A deployed prompt-bar VText run
+started a researcher and attempted `source_search`, but the tool result failed
+with:
+
+```text
+tool_error: call source service search:
+Get "http://10.201.44.1:8787/internal/source-service/search?max_results=5&q=GDP+inflation+2026":
+context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+```
+
+**Evidence recorded before fix:** Node B reports `go-choir-sourcecycled`
+active, and host-local requests to
+`http://127.0.0.1:8787/internal/source-service/health`,
+`/search?q=economy`, and
+`/items/srcitem_4ea1c42adb9a1ccb6aa4222e` succeed. The failing product-path
+browser proof is
+`GO_CHOIR_RUN_DEPLOYED_SOURCE_SERVICE_RESEARCH=1 BASE_URL=https://choir.news
+PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+vtext-deployed-source-service-research.spec.js`.
+
+**Fix direction:** make the Source Service API reachable from the sandbox/user
+computer runtime at the configured `SOURCE_SERVICE_BASE_URL` without giving
+runtime direct storage access. The fix should preserve the API boundary:
+runtime still calls Source Service over HTTP, sourcecycled still owns storage,
+and no runtime/sandbox direct SQLite path is reintroduced.
+
 ## Authoritative Requirements
 
 Use [source-external-data-publication.md](source-external-data-publication.md)
