@@ -100,3 +100,41 @@ acceptable implementation may encode draft-line and merge provenance in
 revision metadata while adding durable compare/merge records if needed for
 queryability. Staging proof must use real product paths and computer-use/browser
 QA, not local-only API calls.
+
+### Staging Acceptance Blocker: Merge Preview Accept Did Not Prove Head Advance
+
+After commit `ca25041dd16ec84c9fc4a3dd9b87e147fa84cae3` deployed to staging,
+a deployed Playwright probe against `https://choir.news` created a real long
+VText with:
+
+- source historical revision `ac899cc6-4ba7-4cec-852d-049d9e202643`
+  (`11081` chars);
+- target latest revision `5003313a-9145-4086-b902-c1e6eeccf435`
+  (`10441` chars);
+- document `f0da790e-c37d-4c64-825c-479d4319b0f7`.
+
+The probe confirmed staging health/build identity at `ca25041d`, successfully
+published the historical version via the product route, and reached the visible
+merge preview UI with `Primary draft`, `v2 preview`, `Accept`, `Discard`,
+compare findings, and provenance suggestions visible. The historical publish
+created publication `pub-5433a120-d776-4127-ab04-b5cf03a13c87` and route:
+
+```text
+/pub/vtext/staging-long-compare-merge-proof-1780613758834-pub5433a120d
+```
+
+However, after the probe clicked `Accept`, polling
+`/api/vtext/documents/{doc_id}` for a new current revision did not observe the
+expected accepted merge revision within 60 seconds. Screenshot evidence was
+written to:
+
+```text
+/tmp/vtext-merge-staging-proof-1780613749937.png
+```
+
+The current uncertainty is whether this was a test sequencing issue after
+leaving the historical publication result panel visible while entering merge
+preview, a frontend state issue where `publishResult` and `mergePreview`
+coexist and confuse the accept flow, an API failure from `/accept-merge` that
+was not captured by the first probe, or a backend revision/head update problem.
+This blocker must be resolved before claiming the mission complete.
