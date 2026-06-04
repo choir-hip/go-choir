@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -242,6 +243,50 @@ func TestCreateAndGetRun(t *testing.T) {
 	}
 	if got.Metadata["model"] != "claude-3" {
 		t.Errorf("metadata model: got %v, want claude-3", got.Metadata["model"])
+	}
+}
+
+func TestRunPersistenceNormalizesInvalidUTF8(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	invalid := string([]byte{'o', 'k', ' ', 0xe2, 0x86})
+	rec := types.RunRecord{
+		RunID:     "task-invalid-unicode",
+		OwnerID:   "user-alice",
+		SandboxID: "sandbox-dev",
+		State:     types.RunPending,
+		Prompt:    invalid,
+		Result:    invalid,
+		Error:     invalid,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run with invalid utf8: %v", err)
+	}
+	got, err := s.GetRun(ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if !utf8.ValidString(got.Prompt) || got.Prompt == invalid {
+		t.Fatalf("prompt not normalized: %q", got.Prompt)
+	}
+
+	rec.State = types.RunCompleted
+	rec.Prompt = invalid + " update"
+	rec.Result = invalid + " result"
+	rec.Error = invalid + " error"
+	rec.UpdatedAt = now.Add(time.Second)
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("update run with invalid utf8: %v", err)
+	}
+	got, err = s.GetRun(ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("get updated run: %v", err)
+	}
+	if !utf8.ValidString(got.Prompt) || !utf8.ValidString(got.Result) || !utf8.ValidString(got.Error) {
+		t.Fatalf("updated text not normalized: prompt=%q result=%q error=%q", got.Prompt, got.Result, got.Error)
 	}
 }
 

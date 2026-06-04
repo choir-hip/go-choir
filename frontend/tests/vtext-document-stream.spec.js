@@ -161,7 +161,7 @@ test('vtext auto-follows latest head when the editor is clean', async ({ page, a
   await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
 });
 
-test('vtext rebases dirty autosave over a moved head instead of losing the draft', async ({ page, authenticator }) => {
+test('vtext autosaves dirty text without advancing versions when the head moves', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const fileName = `dirty-rebase-${Date.now()}.txt`;
   const initialContent = 'Seed content from file open';
@@ -177,8 +177,9 @@ test('vtext rebases dirty autosave over a moved head instead of losing the draft
   await createExternalRevision(page, opened.doc_id, opened.current_revision_id, externalContent);
 
   await expect(editor).toContainText(dirtyContent);
+  await page.waitForTimeout(1400);
 
-  const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
+  const revisions = await listRevisions(page, opened.doc_id);
   const currentDoc = await page.evaluate(async (docId) => {
     const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
       method: 'GET',
@@ -189,13 +190,66 @@ test('vtext rebases dirty autosave over a moved head instead of losing the draft
     }
     return res.json();
   }, opened.doc_id);
+  expect(revisions.revisions).toHaveLength(2);
   const latestRevision = revisions.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
-  expect(latestRevision?.content || '').toContain(dirtyContent);
   expect(latestRevision?.content || '').toContain(externalContent);
-  expect(latestRevision?.metadata?.rebased_from_revision_id).toBe(opened.current_revision_id);
+  expect(latestRevision?.content || '').not.toContain(dirtyContent);
   await expect(editor).toContainText(dirtyContent, { timeout: 10000 });
-  await expect(editor).toContainText(externalContent, { timeout: 10000 });
-  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(0);
+  await expect(page.locator('[data-vtext-new-version]')).toHaveCount(1);
+});
+
+test('vtext compares historical version and accepts merge preview as next revision', async ({ page, authenticator }) => {
+  await registerAndLoadDesktop(page, authenticator, uniqueEmail());
+  const fileName = `semantic-merge-${Date.now()}.md`;
+  const initialContent = [
+    '# Legal Cloud Proposal',
+    '',
+    'Earlier executive framing has the clearest problem statement.',
+    '',
+    '## Glossary',
+    '',
+    '- Matter workspace: a durable client work surface.',
+  ].join('\n');
+  const latestContent = [
+    '# Legal Cloud Proposal',
+    '',
+    'Latest draft adds newer support and a source marker [1].',
+    '',
+    '## Conclusion',
+    '',
+    'The newest conclusion should remain in the primary draft.',
+  ].join('\n');
+
+  await seedTextFile(page, fileName, initialContent);
+  const opened = await openFileInVText(page, fileName);
+  await createExternalRevision(page, opened.doc_id, opened.current_revision_id, latestContent);
+
+  const editor = page.locator('[data-vtext-app] [data-vtext-editor-area]').last();
+  await expect(editor).toContainText('Latest draft adds newer support', { timeout: 10000 });
+
+  await page.locator('[data-vtext-app] [data-vtext-prev]').last().click();
+  await expect(editor).toContainText('Earlier executive framing', { timeout: 10000 });
+  await page.locator('[data-vtext-app] [data-vtext-compare]').last().click();
+  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText('Glossary structure', { timeout: 10000 });
+  await page.locator('[data-vtext-app] [data-vtext-merge-preview]').last().click();
+  await expect(editor).toContainText('Matter workspace', { timeout: 10000 });
+  await expect(editor).toContainText('newest conclusion should remain', { timeout: 10000 });
+  await page.locator('[data-vtext-app] [data-vtext-accept-merge]').last().click();
+
+  const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
+  const currentDoc = await page.evaluate(async (docId) => {
+    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`failed to load current doc: ${res.status}`);
+    }
+    return res.json();
+  }, opened.doc_id);
+  const accepted = revisions.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
+  expect(accepted.metadata?.source).toBe('vtext_concept_merge');
+  expect(accepted.metadata?.draft_line?.name).toBe('Primary draft');
 });
 
 test('reopening the same file path resolves to the same canonical vtext doc', async ({ page, authenticator }) => {

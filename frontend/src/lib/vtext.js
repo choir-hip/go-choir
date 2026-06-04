@@ -218,6 +218,80 @@ export async function getDiff(fromRevisionId, toRevisionId) {
   return res.json();
 }
 
+export async function semanticCompareVText(docId, { sourceRevisionId, targetRevisionId = '' } = {}) {
+  const params = new URLSearchParams({
+    source: sourceRevisionId || '',
+    target: targetRevisionId || '',
+  });
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/compare?${params.toString()}`), {
+    method: 'GET',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Compare VText versions failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function previewVTextMerge(docId, payload = {}) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/merge-preview`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Preview VText merge failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function acceptVTextMerge(docId, payload = {}) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/accept-merge`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Accept VText merge failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function restoreVTextRevision(docId, { revisionId, mode = 'restore_as_latest' } = {}) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/restore`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      revision_id: revisionId,
+      mode,
+    }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Restore VText revision failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function getVTextDiagnosis(docId, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit || 50) });
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/diagnosis?${params.toString()}`), {
+    method: 'GET',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Get VText diagnosis failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export async function getBlame(revisionId) {
   const res = await fetchWithRenewal(vtextPath(`/revisions/${encodeURIComponent(revisionId)}/blame`), {
     method: 'GET',

@@ -41,6 +41,7 @@ type editVTextArgs struct {
 	Operation      string          `json:"operation"`
 	Content        string          `json:"content,omitempty"`
 	Edits          []vtextTextEdit `json:"edits,omitempty"`
+	Rationale      string          `json:"rationale,omitempty"`
 }
 
 type materializedVTextEdit struct {
@@ -48,17 +49,22 @@ type materializedVTextEdit struct {
 	Operation      string
 	BaseRevisionID string
 	EditCount      int
+	Rationale      string
+	BaseChars      int
+	ResultChars    int
+	DeltaChars     int
 }
 
 func newEditVTextTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "edit_vtext",
-		Description: "Apply an explicit edit to the current vtext document and store the next complete canonical version.",
+		Description: "Apply a structured edit to the current VText document and store the next complete canonical version. Use apply_edits for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include rationale, especially for long documents.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
 			"operation":        map[string]any{"type": "string", "enum": []string{"replace_all", "apply_edits"}},
 			"content":          map[string]any{"type": "string"},
+			"rationale":        map[string]any{"type": "string"},
 			"edits": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -367,7 +373,7 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	if err != nil {
 		return types.Revision{}, err
 	}
-	revMeta := addVTextEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized)
+	revMeta := addVTextEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized, rec)
 	now := time.Now().UTC()
 	rev := types.Revision{
 		RevisionID:       uuid.NewString(),
@@ -429,6 +435,9 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 	var editCount int
 	switch operation {
 	case "replace_all":
+		if len(current.Content) >= 12000 && strings.TrimSpace(edit.Rationale) == "" {
+			return materializedVTextEdit{}, fmt.Errorf("replace_all on long VText documents requires rationale; use apply_edits for ordinary section or line changes")
+		}
 		content = edit.Content
 		editCount = 1
 	case "apply_edits":
@@ -457,6 +466,10 @@ func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (mater
 		Operation:      operation,
 		BaseRevisionID: baseRevisionID,
 		EditCount:      editCount,
+		Rationale:      strings.TrimSpace(edit.Rationale),
+		BaseChars:      len(current.Content),
+		ResultChars:    len(content),
+		DeltaChars:     len(content) - len(current.Content),
 	}, nil
 }
 
@@ -526,13 +539,30 @@ func applyVTextTextEdit(content string, edit vtextTextEdit) (string, error) {
 	}
 }
 
-func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdit) json.RawMessage {
+func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdit, rec *types.RunRecord) json.RawMessage {
 	meta := decodeRevisionMetadata(raw)
+	if meta == nil {
+		meta = map[string]any{}
+	}
 	meta["source"] = "edit_vtext"
 	meta["vtext_edit_kind"] = "vtext_edit"
 	meta["vtext_edit_operation"] = edit.Operation
 	meta["vtext_edit_base_revision_id"] = edit.BaseRevisionID
 	meta["vtext_edit_count"] = edit.EditCount
+	meta["vtext_edit_base_chars"] = edit.BaseChars
+	meta["vtext_edit_result_chars"] = edit.ResultChars
+	meta["vtext_edit_delta_chars"] = edit.DeltaChars
+	if edit.Rationale != "" {
+		meta["vtext_edit_rationale"] = edit.Rationale
+	}
+	if rec != nil {
+		meta["vtext_run_prompt_chars"] = len(rec.Prompt)
+		if rec.CreatedAt.IsZero() || rec.UpdatedAt.IsZero() {
+			meta["vtext_run_latency_ms"] = 0
+		} else {
+			meta["vtext_run_latency_ms"] = rec.UpdatedAt.Sub(rec.CreatedAt).Milliseconds()
+		}
+	}
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return raw

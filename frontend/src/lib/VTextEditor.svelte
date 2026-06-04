@@ -10,6 +10,7 @@
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
+    acceptVTextMerge,
     cancelAgentRevision,
     createDocument,
     createRevision,
@@ -20,8 +21,10 @@
     listDocuments,
     listRevisions,
     openDocumentStream,
+    previewVTextMerge,
     publishVText,
     resolvePublication,
+    semanticCompareVText,
     submitAgentRevision,
     submitPublicationProposal,
   } from './vtext.js';
@@ -74,6 +77,11 @@
   let publishedActionPending = false;
   let publishResult = null;
   let cancelPending = false;
+  let compareResult = null;
+  let comparePending = false;
+  let mergePending = false;
+  let mergePreview = null;
+  let selectedMergeSuggestionIds = [];
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
@@ -592,6 +600,64 @@
     return currentUser?.email || 'unknown';
   }
 
+  function draftStorageKey(docId = currentDoc?.doc_id) {
+    if (!docId) return '';
+    const owner = currentUser?.id || currentUser?.email || 'guest';
+    return `choir:vtext:draft:${owner}:${docId}`;
+  }
+
+  function persistLocalDraft(content, parentRevisionId = currentRevision?.revision_id || '') {
+    const key = draftStorageKey();
+    if (!key || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        doc_id: currentDoc?.doc_id || '',
+        parent_revision_id: parentRevisionId,
+        content,
+        updated_at: new Date().toISOString(),
+      }));
+    } catch (_err) {
+      // Browser storage is a best-effort autosave cache; canonical revisions
+      // are still created only through the explicit save/revise action.
+    }
+  }
+
+  function clearLocalDraft(docId = currentDoc?.doc_id) {
+    const key = draftStorageKey(docId);
+    if (!key || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(key);
+    } catch (_err) {
+      // Ignore storage cleanup failures; the next identical draft is harmless.
+    }
+  }
+
+  function loadLocalDraft(docId = currentDoc?.doc_id) {
+    const key = draftStorageKey(docId);
+    if (!key || typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function restoreLocalDraftIfNewer() {
+    const draft = loadLocalDraft();
+    if (!draft || typeof draft.content !== 'string') return false;
+    const savedContent = currentRevision?.content || '';
+    if (draft.content === savedContent) {
+      clearLocalDraft();
+      return false;
+    }
+    editorValue = draft.content;
+    lastAutosavedContent = draft.content;
+    saveStatus = 'Autosaved draft restored';
+    tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
+    return true;
+  }
+
   function getContextKey(ctx) {
     const key = {
       allowMultiple: !!ctx?.allowMultiple,
@@ -754,6 +820,43 @@
     return `${text.slice(0, 10)}…${text.slice(-6)}`;
   }
 
+  function resetCompareMergeState({ keepEditor = true } = {}) {
+    compareResult = null;
+    mergePreview = null;
+    selectedMergeSuggestionIds = [];
+    if (!keepEditor && currentRevision) {
+      editorValue = currentRevision.content || '';
+      lastAutosavedContent = editorValue;
+      tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
+    }
+  }
+
+  function targetRevisionForCompare() {
+    if (!currentDoc?.current_revision_id) return null;
+    const target = revisions.find((rev) => rev.revision_id === currentDoc.current_revision_id) || revisions[revisions.length - 1];
+    return target || null;
+  }
+
+  function compareTargetVersionLabel() {
+    const target = targetRevisionForCompare();
+    if (!target) return 'latest';
+    const index = revisions.findIndex((rev) => rev.revision_id === target.revision_id);
+    return index >= 0 ? `v${index}` : 'latest';
+  }
+
+  function suggestionSelected(id) {
+    return selectedMergeSuggestionIds.includes(id);
+  }
+
+  function toggleMergeSuggestion(id) {
+    if (!id) return;
+    if (suggestionSelected(id)) {
+      selectedMergeSuggestionIds = selectedMergeSuggestionIds.filter((item) => item !== id);
+    } else {
+      selectedMergeSuggestionIds = [...selectedMergeSuggestionIds, id];
+    }
+  }
+
   function buildPublishedTransclusionRef(bundle = publishedBundle) {
     if (!bundle?.publication?.id || !bundle?.version?.id) return null;
     const firstSpan = bundle.retrieval?.spans?.[0] || null;
@@ -873,6 +976,7 @@
 
   async function loadRevisionAt(index) {
     if (index < 0 || index >= revisions.length) return;
+    resetCompareMergeState();
     const summary = revisions[index];
     const revision = await getRevision(summary.revision_id);
     currentRevision = revision;
@@ -953,6 +1057,7 @@
       allowRebase: true,
     });
 
+    clearLocalDraft();
     await reloadDocument(revision.revision_id);
     return revision;
   }
@@ -971,29 +1076,6 @@
     return true;
   }
 
-  async function recordSavedRevision(revision, contentAtSave) {
-    currentDoc = await getDocument(currentDoc.doc_id);
-    latestHeadRevisionId = revision.revision_id;
-
-    const nextRevision = {
-      ...revision,
-      created_at: revision.created_at || new Date().toISOString(),
-    };
-    const existing = revisions.filter((item) => item.revision_id !== revision.revision_id);
-    revisions = sortRevisionsChronologically([...existing, nextRevision]);
-    activeRevisionIndex = revisions.findIndex((item) => item.revision_id === revision.revision_id);
-    currentRevision = revision;
-    lastAutosavedContent = contentAtSave;
-    clearNewVersionIndicator();
-
-    if (editorValue === contentAtSave) {
-      editorValue = revision.content || '';
-      if (revision.content !== contentAtSave) {
-        syncEditorSurface(renderDocumentHTML(editorValue), { force: true });
-      }
-    }
-  }
-
   async function autosaveUserDraft() {
     autosaveTimer = null;
     if (!shouldAutosave()) return;
@@ -1008,18 +1090,8 @@
 
     try {
       await writeThroughToFile(contentAtSave);
-      const revision = await createRevision(currentDoc.doc_id, {
-        content: contentAtSave,
-        authorKind: 'user',
-        authorLabel: getAuthorLabel(),
-        metadata: {
-          ...buildRevisionMetadata(),
-          autosaved: true,
-        },
-        parentRevisionId: currentRevision?.revision_id || '',
-        allowRebase: true,
-      });
-      await recordSavedRevision(revision, contentAtSave);
+      persistLocalDraft(contentAtSave, currentRevision?.revision_id || '');
+      lastAutosavedContent = contentAtSave;
       saveStatus = 'Saved';
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -1140,6 +1212,7 @@
     toolbarHidden = false;
     lastDocumentScrollTop = 0;
     toolbarHideSettleUntil = 0;
+    resetCompareMergeState();
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
@@ -1212,6 +1285,9 @@
 
       if (currentDoc?.doc_id) {
         await ensureFileManifest();
+        if (!agentPending && !isPublishedReadOnly) {
+          restoreLocalDraftIfNewer();
+        }
         publishCurrentDocumentContext(normalizeTitle(appContext));
         connectDocumentStream(currentDoc.doc_id);
       }
@@ -1467,6 +1543,111 @@
     }
   }
 
+  async function handleCompareToDraft() {
+    if (!currentDoc || !currentRevision || loading || comparePending || submitting || agentPending) return;
+    const target = targetRevisionForCompare();
+    if (!target?.revision_id || target.revision_id === currentRevision.revision_id) {
+      saveStatus = 'Choose a historical version to compare';
+      return;
+    }
+    comparePending = true;
+    error = '';
+    mergePreview = null;
+    try {
+      compareResult = await semanticCompareVText(currentDoc.doc_id, {
+        sourceRevisionId: currentRevision.revision_id,
+        targetRevisionId: target.revision_id,
+      });
+      selectedMergeSuggestionIds = (compareResult.suggestions || []).slice(0, 3).map((suggestion) => suggestion.id);
+      saveStatus = `Comparing ${versionLabel} to ${compareTargetVersionLabel()}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to compare versions';
+      saveStatus = 'Compare failed';
+    } finally {
+      comparePending = false;
+    }
+  }
+
+  async function handlePreviewMerge() {
+    if (!currentDoc || !currentRevision || !compareResult || mergePending) return;
+    const target = targetRevisionForCompare();
+    if (!target?.revision_id) return;
+    mergePending = true;
+    error = '';
+    try {
+      mergePreview = await previewVTextMerge(currentDoc.doc_id, {
+        source_revision_id: compareResult.source_revision_id || currentRevision.revision_id,
+        target_revision_id: target.revision_id,
+        suggestion_ids: selectedMergeSuggestionIds,
+        source_version_label: versionLabel,
+        target_version_label: compareTargetVersionLabel(),
+      });
+      editorValue = mergePreview.content || editorValue;
+      lastAutosavedContent = editorValue;
+      await tick();
+      syncEditorSurface(renderDocumentHTML(editorValue), { force: true });
+      saveStatus = `${nextVersionLabel} preview`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to preview merge';
+      saveStatus = 'Merge preview failed';
+    } finally {
+      mergePending = false;
+    }
+  }
+
+  async function handleAcceptMerge() {
+    if (!currentDoc || !mergePreview || mergePending) return;
+    mergePending = true;
+    error = '';
+    try {
+      const revision = await acceptVTextMerge(currentDoc.doc_id, {
+        preview_id: mergePreview.preview_id,
+        content: editorValue,
+        source_revision_id: mergePreview.source_revision_id,
+        target_revision_id: mergePreview.target_revision_id,
+        suggestion_ids: (mergePreview.suggestions || []).map((suggestion) => suggestion.id),
+        metadata: {
+          draft_line: mergePreview.draft_line || { id: 'primary', name: 'Primary draft' },
+          merge_provenance: mergePreview.provenance || {},
+        },
+      });
+      resetCompareMergeState();
+      await reloadDocument(revision.revision_id);
+      saveStatus = `Accepted ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to accept merge';
+      saveStatus = 'Accept failed';
+    } finally {
+      mergePending = false;
+    }
+  }
+
+  async function handleDiscardMerge() {
+    const targetId = mergePreview?.target_revision_id || currentDoc?.current_revision_id || currentRevision?.revision_id || '';
+    resetCompareMergeState();
+    if (targetId) {
+      const targetIndex = revisions.findIndex((rev) => rev.revision_id === targetId);
+      if (targetIndex >= 0) {
+        await loadRevisionAt(targetIndex);
+      } else if (currentDoc) {
+        await reloadDocument(targetId);
+      }
+    }
+    saveStatus = 'Merge preview discarded';
+  }
+
   async function handleCopyPublishedURL() {
     const publicURL = publicURLForPublishResult();
     if (!publicURL) return;
@@ -1703,11 +1884,12 @@
   $: isViewingHistorical = revisions.length > 0 && activeRevisionIndex !== revisions.length - 1;
   $: isDirty = !!currentDoc && !isViewingHistorical && editorValue !== (currentRevision?.content || '');
   $: versionLabel = activeRevisionIndex >= 0 ? `v${activeRevisionIndex}` : 'v0';
+  $: nextVersionLabel = `v${Math.max(0, revisions.length)}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
-  $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
+  $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -1795,10 +1977,15 @@
         >
           &gt;
         </button>
+        <span class="draft-line" data-vtext-draft-line>Primary draft</span>
       </div>
 
       <div class="doc-state" data-vtext-state>
-        {#if isPublishedMode && !publishedDerivativeActive}
+        {#if mergePreview}
+          {nextVersionLabel} preview
+        {:else if compareResult}
+          Comparing to {compareTargetVersionLabel()}
+        {:else if isPublishedMode && !publishedDerivativeActive}
           {currentUser ? 'Published reader' : 'Guest reader'}
         {:else if isPublishedMode && publishedDerivativeActive}
           Private proposal draft
@@ -1871,11 +2058,48 @@
               {publishedActionPending ? 'Submitting…' : 'Propose'}
             </button>
           {:else}
+            {#if mergePreview}
+              <button
+                class="prompt-btn"
+                data-vtext-accept-merge
+                on:click={handleAcceptMerge}
+                disabled={mergePending || publishedActionPending || !currentDoc}
+              >
+                {mergePending ? 'Accepting…' : 'Accept'}
+              </button>
+              <button
+                class="secondary-action danger"
+                data-vtext-discard-merge
+                on:click={handleDiscardMerge}
+                disabled={mergePending || publishedActionPending}
+              >
+                Discard
+              </button>
+            {:else}
+              <button
+                class="secondary-action"
+                data-vtext-compare
+                on:click={handleCompareToDraft}
+                disabled={loading || submitting || agentPending || comparePending || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
+              >
+                {comparePending ? 'Comparing…' : 'Compare'}
+              </button>
+              {#if compareResult}
+                <button
+                  class="secondary-action"
+                  data-vtext-merge-preview
+                  on:click={handlePreviewMerge}
+                  disabled={mergePending || selectedMergeSuggestionIds.length === 0}
+                >
+                  {mergePending ? 'Merging…' : 'Merge into draft'}
+                </button>
+              {/if}
+            {/if}
             <button
               class="secondary-action"
               data-vtext-publish
               on:click={handlePublishCurrent}
-              disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending || !currentDoc}
+              disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc}
             >
               {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
             </button>
@@ -1901,6 +2125,50 @@
     {/if}
 
     <div class="document-body" data-vtext-document-body>
+      {#if compareResult || mergePreview}
+        <section class="compare-panel" data-vtext-compare-panel>
+          <div class="compare-heading">
+            <div>
+              <p class="eyebrow">{mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
+              <h3>{mergePreview ? `Merged into ${nextVersionLabel}` : `Compare ${versionLabel} → ${compareTargetVersionLabel()}`}</h3>
+            </div>
+            {#if mergePreview}
+              <span class="compare-chip">from {versionLabel}</span>
+            {/if}
+          </div>
+          {#if compareResult?.summary?.length}
+            <div class="compare-summary">
+              {#each compareResult.summary as finding}
+                <span>{finding}</span>
+              {/each}
+            </div>
+          {/if}
+          {#if compareResult?.suggestions?.length && !mergePreview}
+            <div class="merge-suggestions">
+              {#each compareResult.suggestions as suggestion}
+                <label class="merge-suggestion" data-vtext-merge-suggestion>
+                  <input
+                    type="checkbox"
+                    checked={suggestionSelected(suggestion.id)}
+                    on:change={() => toggleMergeSuggestion(suggestion.id)}
+                  />
+                  <span>
+                    <strong>{suggestion.label}</strong>
+                    <small>{suggestion.status} · {suggestion.description}</small>
+                  </span>
+                </label>
+              {/each}
+            </div>
+          {:else if mergePreview?.suggestions?.length}
+            <div class="provenance-strip">
+              {#each mergePreview.suggestions as suggestion}
+                <span>{suggestion.label}</span>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      {/if}
+
       {#if publishResult}
         <section
           class="publication-panel publication-result"
@@ -2105,6 +2373,92 @@
     flex-direction: column;
   }
 
+  .compare-panel {
+    flex: 0 0 auto;
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.8rem 0.95rem;
+    border-bottom: 1px solid var(--choir-border-strong);
+    background: var(--choir-surface-raised);
+    color: var(--choir-text-primary);
+  }
+
+  .compare-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    min-width: 0;
+  }
+
+  .compare-heading h3 {
+    margin: 0.12rem 0 0;
+    color: var(--choir-text-primary);
+    font-size: 0.92rem;
+    line-height: 1.2;
+  }
+
+  .compare-chip {
+    flex: 0 0 auto;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    padding: 0.34rem 0.55rem;
+    color: var(--choir-text-accent);
+    font-size: 0.68rem;
+    font-weight: 720;
+  }
+
+  .compare-summary,
+  .provenance-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem 0.8rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
+  .merge-suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.48rem;
+  }
+
+  .merge-suggestion {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.48rem;
+    min-width: 0;
+    padding: 0.56rem 0.62rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 0.5rem;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-primary);
+    cursor: pointer;
+  }
+
+  .merge-suggestion input {
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+  }
+
+  .merge-suggestion span {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .merge-suggestion strong {
+    font-size: 0.76rem;
+    line-height: 1.2;
+  }
+
+  .merge-suggestion small {
+    color: var(--choir-text-secondary);
+    font-size: 0.66rem;
+    line-height: 1.25;
+  }
+
   .work-banner {
     flex: 0 0 auto;
     display: flex;
@@ -2171,6 +2525,24 @@
     font-size: 0.76rem;
     font-weight: 650;
     backdrop-filter: blur(8px);
+  }
+
+  .draft-line {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 9rem;
+    height: 1.95rem;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid var(--choir-border-strong);
+    background: var(--choir-surface-raised);
+    color: var(--choir-text-primary);
+    font-size: 0.74rem;
+    font-weight: 680;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .nav-btn,
@@ -2817,6 +3189,13 @@
       font-size: 0.7rem;
     }
 
+    .draft-line {
+      max-width: 6.8rem;
+      height: 1.78rem;
+      padding: 0 0.52rem;
+      font-size: 0.68rem;
+    }
+
     .nav-btn {
       width: 1.78rem;
       height: 1.78rem;
@@ -2831,6 +3210,17 @@
     .secondary-action {
       padding: 0.5rem 0.64rem;
       font-size: 0.72rem;
+    }
+
+    .compare-panel {
+      padding: 0.68rem 0.72rem;
+      gap: 0.6rem;
+    }
+
+    .compare-summary,
+    .provenance-strip,
+    .merge-suggestions {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .publication-panel {

@@ -30,6 +30,7 @@ import (
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -172,6 +173,79 @@ type vtextHistoryResponse struct {
 // vtextDiffResponse is the JSON response for GET /api/vtext/diff.
 type vtextDiffResponse struct {
 	types.DiffResult
+}
+
+type vtextSemanticCompareResponse struct {
+	CompareID        string                 `json:"compare_id"`
+	SourceRevisionID string                 `json:"source_revision_id"`
+	TargetRevisionID string                 `json:"target_revision_id"`
+	DraftLine        vtextDraftLineSummary  `json:"draft_line"`
+	Summary          []string               `json:"summary"`
+	Suggestions      []vtextMergeSuggestion `json:"suggestions"`
+	Diff             types.DiffResult       `json:"diff"`
+	EvidenceID       string                 `json:"evidence_id,omitempty"`
+}
+
+type vtextDraftLineSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type vtextMergeSuggestion struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	Source      string `json:"source"`
+	Preview     string `json:"preview,omitempty"`
+}
+
+type vtextMergePreviewRequest struct {
+	SourceRevisionID   string   `json:"source_revision_id"`
+	TargetRevisionID   string   `json:"target_revision_id"`
+	SuggestionIDs      []string `json:"suggestion_ids"`
+	SourceVersionLabel string   `json:"source_version_label,omitempty"`
+	TargetVersionLabel string   `json:"target_version_label,omitempty"`
+}
+
+type vtextMergePreviewResponse struct {
+	PreviewID        string                 `json:"preview_id"`
+	DocID            string                 `json:"doc_id"`
+	SourceRevisionID string                 `json:"source_revision_id"`
+	TargetRevisionID string                 `json:"target_revision_id"`
+	DraftLine        vtextDraftLineSummary  `json:"draft_line"`
+	Content          string                 `json:"content"`
+	Provenance       map[string]any         `json:"provenance"`
+	Suggestions      []vtextMergeSuggestion `json:"suggestions"`
+	EvidenceID       string                 `json:"evidence_id,omitempty"`
+}
+
+type vtextAcceptMergeRequest struct {
+	PreviewID        string         `json:"preview_id"`
+	Content          string         `json:"content"`
+	SourceRevisionID string         `json:"source_revision_id"`
+	TargetRevisionID string         `json:"target_revision_id"`
+	SuggestionIDs    []string       `json:"suggestion_ids"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+}
+
+type vtextRestoreRevisionRequest struct {
+	RevisionID string `json:"revision_id"`
+	Mode       string `json:"mode,omitempty"`
+}
+
+type vtextDiagnosisResponse struct {
+	OwnerID      string                  `json:"owner_id"`
+	DocID        string                  `json:"doc_id,omitempty"`
+	StorePath    string                  `json:"store_path"`
+	VTextPath    string                  `json:"vtext_path"`
+	Document     *vtextDocumentResponse  `json:"document,omitempty"`
+	Revisions    []vtextRevisionResponse `json:"revisions"`
+	Runs         []types.RunRecord       `json:"runs"`
+	Events       []types.EventRecord     `json:"events"`
+	Messages     []types.ChannelMessage  `json:"messages"`
+	Evidence     []types.EvidenceRecord  `json:"evidence"`
+	ErrorMatches []string                `json:"error_matches,omitempty"`
 }
 
 // vtextBlameResponse is the JSON response for
@@ -864,6 +938,313 @@ func mergeVTextRevisionMetadata(raw json.RawMessage, additions map[string]any) j
 	return encoded
 }
 
+func defaultDraftLine() vtextDraftLineSummary {
+	return vtextDraftLineSummary{ID: "primary", Name: "Primary draft"}
+}
+
+func shortHash(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 10 {
+		return value
+	}
+	return value[:10]
+}
+
+func mustMarshalString(value any) string {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Sprintf(`{"marshal_error":%q}`, err.Error())
+	}
+	return string(data)
+}
+
+func buildSemanticCompareResponse(sourceRev, targetRev types.Revision, diff types.DiffResult) vtextSemanticCompareResponse {
+	sourceCitationCount := countVTextCitationMarkers(sourceRev.Content) + countRawJSONItems(sourceRev.Citations)
+	targetCitationCount := countVTextCitationMarkers(targetRev.Content) + countRawJSONItems(targetRev.Citations)
+	sourceGlossary := extractVTextHeadingSection(sourceRev.Content, "glossary")
+	targetGlossary := extractVTextHeadingSection(targetRev.Content, "glossary")
+	sourceIntro := extractVTextIntro(sourceRev.Content)
+	targetIntro := extractVTextIntro(targetRev.Content)
+	sourceConclusion := extractVTextHeadingSection(sourceRev.Content, "conclusion")
+	targetConclusion := extractVTextHeadingSection(targetRev.Content, "conclusion")
+
+	summary := []string{
+		fmt.Sprintf("Line delta: +%d / -%d.", diff.AddedLines, diff.RemovedLines),
+	}
+	if sourceGlossary != "" && len(sourceGlossary) > len(targetGlossary) {
+		summary = append(summary, "Glossary structure is stronger in the source version.")
+	}
+	if targetCitationCount > sourceCitationCount {
+		summary = append(summary, "Latest citations and source markers are richer in the target version.")
+	} else if sourceCitationCount > targetCitationCount {
+		summary = append(summary, "Source version carries more citation and source markers.")
+	}
+	if len(sourceIntro) > 0 && len(targetIntro) > 0 && sourceIntro != targetIntro {
+		summary = append(summary, "Opening framing differs and may be worth selectively merging.")
+	}
+	if targetConclusion != "" && targetConclusion != sourceConclusion {
+		summary = append(summary, "Target conclusion differs and should be preserved or reviewed explicitly.")
+	}
+	if len(summary) == 1 {
+		summary = append(summary, "No obvious semantic regression was detected by the deterministic compare pass.")
+	}
+
+	suggestions := []vtextMergeSuggestion{}
+	if sourceGlossary != "" && len(sourceGlossary) >= len(targetGlossary) {
+		suggestions = append(suggestions, vtextMergeSuggestion{
+			ID:          "restore_glossary",
+			Label:       "Restore glossary structure",
+			Description: "Bring the stronger glossary or definition section from the source version into the Primary draft.",
+			Status:      "Clean merge",
+			Source:      sourceRev.RevisionID,
+			Preview:     snippet(sourceGlossary, 180),
+		})
+	}
+	if targetCitationCount >= sourceCitationCount && targetCitationCount > 0 {
+		suggestions = append(suggestions, vtextMergeSuggestion{
+			ID:          "keep_latest_citations",
+			Label:       "Keep latest source citations",
+			Description: "Preserve the target version's richer citation and source-marker set while merging selected prose.",
+			Status:      "Clean merge",
+			Source:      targetRev.RevisionID,
+			Preview:     fmt.Sprintf("%d target citation/source markers", targetCitationCount),
+		})
+	}
+	if strings.TrimSpace(sourceIntro) != "" && sourceIntro != targetIntro {
+		suggestions = append(suggestions, vtextMergeSuggestion{
+			ID:          "use_source_intro",
+			Label:       "Use source opening framing",
+			Description: "Replace the target opening frame with the source version's clearer introductory structure.",
+			Status:      "Needs review",
+			Source:      sourceRev.RevisionID,
+			Preview:     snippet(sourceIntro, 220),
+		})
+	}
+	if targetConclusion != "" {
+		suggestions = append(suggestions, vtextMergeSuggestion{
+			ID:          "preserve_latest_conclusion",
+			Label:       "Preserve latest conclusion",
+			Description: "Keep the target version's conclusion while selectively restoring earlier structure.",
+			Status:      "Clean merge",
+			Source:      targetRev.RevisionID,
+			Preview:     snippet(targetConclusion, 180),
+		})
+	}
+	if len(suggestions) == 0 {
+		suggestions = append(suggestions, vtextMergeSuggestion{
+			ID:          "review_structural_delta",
+			Label:       "Review structural delta",
+			Description: "Create a preview that preserves the target draft and records the compare provenance for manual review.",
+			Status:      "Needs review",
+			Source:      sourceRev.RevisionID,
+		})
+	}
+
+	return vtextSemanticCompareResponse{
+		CompareID:        uuid.NewString(),
+		SourceRevisionID: sourceRev.RevisionID,
+		TargetRevisionID: targetRev.RevisionID,
+		DraftLine:        defaultDraftLine(),
+		Summary:          summary,
+		Suggestions:      suggestions,
+		Diff:             diff,
+	}
+}
+
+func selectMergeSuggestions(suggestions []vtextMergeSuggestion, ids []string) []vtextMergeSuggestion {
+	wanted := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			wanted[id] = true
+		}
+	}
+	if len(wanted) == 0 {
+		if len(suggestions) <= 3 {
+			return suggestions
+		}
+		return append([]vtextMergeSuggestion(nil), suggestions[:3]...)
+	}
+	var selected []vtextMergeSuggestion
+	for _, suggestion := range suggestions {
+		if wanted[suggestion.ID] {
+			selected = append(selected, suggestion)
+		}
+	}
+	return selected
+}
+
+func suggestionIDs(suggestions []vtextMergeSuggestion) []string {
+	ids := make([]string, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		ids = append(ids, suggestion.ID)
+	}
+	return ids
+}
+
+func buildMergePreviewContent(sourceRev, targetRev types.Revision, selected []vtextMergeSuggestion, sourceLabel, targetLabel string) string {
+	sourceLabel = strings.TrimSpace(firstNonEmpty(sourceLabel, "source"))
+	targetLabel = strings.TrimSpace(firstNonEmpty(targetLabel, "target"))
+	content := targetRev.Content
+	provenance := []string{
+		fmt.Sprintf("Merged preview from %s (%s) into %s (%s).", sourceLabel, shortHash(sourceRev.RevisionID), targetLabel, shortHash(targetRev.RevisionID)),
+	}
+	selectedIDs := map[string]bool{}
+	for _, suggestion := range selected {
+		selectedIDs[suggestion.ID] = true
+		provenance = append(provenance, "- "+suggestion.Label+": "+suggestion.Source)
+	}
+	if selectedIDs["use_source_intro"] {
+		content = replaceVTextIntro(content, extractVTextIntro(sourceRev.Content))
+	}
+	if selectedIDs["restore_glossary"] {
+		content = replaceOrAppendVTextHeadingSection(content, "glossary", extractVTextHeadingSection(sourceRev.Content, "glossary"))
+	}
+	comment := "\n\n<!-- VText merge preview provenance\n" + strings.Join(provenance, "\n") + "\n-->"
+	return strings.TrimSpace(content) + comment + "\n"
+}
+
+func extractVTextIntro(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	start := 0
+	if strings.HasPrefix(strings.TrimSpace(lines[0]), "#") {
+		start = 1
+	}
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	end := len(lines)
+	for i := start; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "## ") {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines[start:end], "\n"))
+}
+
+func replaceVTextIntro(content, intro string) string {
+	intro = strings.TrimSpace(intro)
+	if intro == "" {
+		return content
+	}
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) == 0 {
+		return intro
+	}
+	start := 0
+	if strings.HasPrefix(strings.TrimSpace(lines[0]), "#") {
+		start = 1
+	}
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	end := len(lines)
+	for i := start; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "## ") {
+			end = i
+			break
+		}
+	}
+	out := append([]string{}, lines[:start]...)
+	if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
+		out = append(out, "")
+	}
+	out = append(out, strings.Split(intro, "\n")...)
+	if end < len(lines) {
+		out = append(out, "")
+		out = append(out, lines[end:]...)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+}
+
+func extractVTextHeadingSection(content, headingNeedle string) string {
+	headingNeedle = strings.ToLower(strings.TrimSpace(headingNeedle))
+	if headingNeedle == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	start := -1
+	level := ""
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		markerEnd := strings.Index(trimmed, " ")
+		if markerEnd <= 0 {
+			continue
+		}
+		title := strings.ToLower(strings.TrimSpace(trimmed[markerEnd+1:]))
+		if strings.Contains(title, headingNeedle) {
+			start = i
+			level = trimmed[:markerEnd]
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, level+" ") {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines[start:end], "\n"))
+}
+
+func replaceOrAppendVTextHeadingSection(content, headingNeedle, section string) string {
+	section = strings.TrimSpace(section)
+	if section == "" {
+		return content
+	}
+	existing := extractVTextHeadingSection(content, headingNeedle)
+	if existing == "" {
+		return strings.TrimSpace(content) + "\n\n" + section + "\n"
+	}
+	return strings.Replace(content, existing, section, 1)
+}
+
+func countVTextCitationMarkers(content string) int {
+	return strings.Count(content, "](source:") + len(regexp.MustCompile(`\[[0-9]{1,3}\]`).FindAllString(content, -1))
+}
+
+func countRawJSONItems(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var arr []any
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		return len(arr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err == nil && len(obj) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func snippet(value string, limit int) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return value[:limit]
+	}
+	return value[:limit-3] + "..."
+}
+
 func revisionResponseFromRecord(rev types.Revision) vtextRevisionResponse {
 	return vtextRevisionResponse{
 		RevisionID:       rev.RevisionID,
@@ -1173,6 +1554,325 @@ func (h *APIHandler) HandleVTextDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusOK, vtextDiffResponse{DiffResult: diff})
+}
+
+func (h *APIHandler) HandleVTextSemanticCompare(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document id is required"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	sourceID := strings.TrimSpace(r.URL.Query().Get("source"))
+	targetID := strings.TrimSpace(r.URL.Query().Get("target"))
+	if targetID == "" {
+		targetID = doc.CurrentRevisionID
+	}
+	if sourceID == "" || targetID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source and target revisions are required"})
+		return
+	}
+	sourceRev, err := h.rt.Store().GetRevision(r.Context(), sourceID, ownerID)
+	if err != nil || sourceRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source revision not found"})
+		return
+	}
+	targetRev, err := h.rt.Store().GetRevision(r.Context(), targetID, ownerID)
+	if err != nil || targetRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
+		return
+	}
+	diff, err := h.rt.Store().GetDiff(r.Context(), sourceID, targetID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: fmt.Sprintf("failed to compute diff: %v", err)})
+		return
+	}
+	resp := buildSemanticCompareResponse(sourceRev, targetRev, diff)
+	evidenceID := uuid.New().String()
+	if evidenceErr := h.rt.Store().CreateEvidence(r.Context(), types.EvidenceRecord{
+		EvidenceID: evidenceID,
+		OwnerID:    ownerID,
+		AgentID:    "vtext:compare",
+		Kind:       "vtext.semantic_compare",
+		SourceURI:  "vtext://" + docID,
+		Title:      "Semantic compare " + shortHash(sourceID) + " -> " + shortHash(targetID),
+		Content:    mustMarshalString(resp),
+		Metadata:   json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"source_revision_id":%q,"target_revision_id":%q}`, docID, sourceID, targetID)),
+		CreatedAt:  time.Now().UTC(),
+	}); evidenceErr != nil {
+		log.Printf("vtext api: persist compare evidence: %v", evidenceErr)
+	} else {
+		resp.EvidenceID = evidenceID
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func (h *APIHandler) HandleVTextMergePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document id is required"})
+		return
+	}
+	var req vtextMergePreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	sourceRev, err := h.rt.Store().GetRevision(r.Context(), strings.TrimSpace(req.SourceRevisionID), ownerID)
+	if err != nil || sourceRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source revision not found"})
+		return
+	}
+	targetRev, err := h.rt.Store().GetRevision(r.Context(), strings.TrimSpace(req.TargetRevisionID), ownerID)
+	if err != nil || targetRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
+		return
+	}
+	diff, _ := h.rt.Store().GetDiff(r.Context(), sourceRev.RevisionID, targetRev.RevisionID, ownerID)
+	compare := buildSemanticCompareResponse(sourceRev, targetRev, diff)
+	selected := selectMergeSuggestions(compare.Suggestions, req.SuggestionIDs)
+	content := buildMergePreviewContent(sourceRev, targetRev, selected, req.SourceVersionLabel, req.TargetVersionLabel)
+	previewID := uuid.New().String()
+	resp := vtextMergePreviewResponse{
+		PreviewID:        previewID,
+		DocID:            docID,
+		SourceRevisionID: sourceRev.RevisionID,
+		TargetRevisionID: targetRev.RevisionID,
+		DraftLine:        defaultDraftLine(),
+		Content:          content,
+		Suggestions:      selected,
+		Provenance: map[string]any{
+			"kind":               "vtext_concept_merge_preview",
+			"preview_id":         previewID,
+			"source_revision_id": sourceRev.RevisionID,
+			"target_revision_id": targetRev.RevisionID,
+			"source_label":       strings.TrimSpace(req.SourceVersionLabel),
+			"target_label":       strings.TrimSpace(req.TargetVersionLabel),
+			"suggestion_ids":     suggestionIDs(selected),
+			"draft_line":         defaultDraftLine(),
+		},
+	}
+	evidenceID := uuid.New().String()
+	if evidenceErr := h.rt.Store().CreateEvidence(r.Context(), types.EvidenceRecord{
+		EvidenceID: evidenceID,
+		OwnerID:    ownerID,
+		AgentID:    "vtext:merge",
+		Kind:       "vtext.merge_preview",
+		SourceURI:  "vtext://" + docID,
+		Title:      "Merge preview " + shortHash(previewID),
+		Content:    mustMarshalString(resp),
+		Metadata:   json.RawMessage(fmt.Sprintf(`{"doc_id":%q,"preview_id":%q,"source_revision_id":%q,"target_revision_id":%q}`, docID, previewID, sourceRev.RevisionID, targetRev.RevisionID)),
+		CreatedAt:  time.Now().UTC(),
+	}); evidenceErr != nil {
+		log.Printf("vtext api: persist merge preview evidence: %v", evidenceErr)
+	} else {
+		resp.EvidenceID = evidenceID
+		resp.Provenance["evidence_id"] = evidenceID
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func (h *APIHandler) HandleVTextAcceptMerge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document id is required"})
+		return
+	}
+	var req vtextAcceptMergeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "merge content is required"})
+		return
+	}
+	targetRev, err := h.rt.Store().GetRevision(r.Context(), strings.TrimSpace(req.TargetRevisionID), ownerID)
+	if err != nil || targetRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
+		return
+	}
+	metadata := map[string]any{}
+	for k, v := range req.Metadata {
+		metadata[k] = v
+	}
+	metadata["source"] = "vtext_concept_merge"
+	metadata["merge_preview_id"] = strings.TrimSpace(req.PreviewID)
+	metadata["merge_source_revision_id"] = strings.TrimSpace(req.SourceRevisionID)
+	metadata["merge_target_revision_id"] = targetRev.RevisionID
+	metadata["merge_suggestion_ids"] = req.SuggestionIDs
+	metadata["draft_line"] = defaultDraftLine()
+	encoded, _ := json.Marshal(metadata)
+	rev := types.Revision{
+		RevisionID:       uuid.New().String(),
+		DocID:            docID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      ownerID,
+		Content:          req.Content,
+		Citations:        targetRev.Citations,
+		Metadata:         encoded,
+		ParentRevisionID: targetRev.RevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		log.Printf("vtext api: accept merge revision: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to accept merge; document head may have changed"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+}
+
+func (h *APIHandler) HandleVTextRestoreRevision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	var req vtextRestoreRevisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	sourceRev, err := h.rt.Store().GetRevision(r.Context(), strings.TrimSpace(req.RevisionID), ownerID)
+	if err != nil || sourceRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
+	}
+	metadata := mergeVTextRevisionMetadata(sourceRev.Metadata, map[string]any{
+		"source":                     "restore_historical_revision",
+		"restored_from_revision_id":  sourceRev.RevisionID,
+		"restore_target_revision_id": doc.CurrentRevisionID,
+		"restore_mode":               strings.TrimSpace(req.Mode),
+		"draft_line":                 defaultDraftLine(),
+	})
+	rev := types.Revision{
+		RevisionID:       uuid.New().String(),
+		DocID:            docID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      ownerID,
+		Content:          sourceRev.Content,
+		Citations:        sourceRev.Citations,
+		Metadata:         metadata,
+		ParentRevisionID: doc.CurrentRevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		log.Printf("vtext api: restore revision: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to restore revision; document head may have changed"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+}
+
+func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+	resp := vtextDiagnosisResponse{
+		OwnerID:   ownerID,
+		DocID:     docID,
+		StorePath: h.rt.Store().Path(),
+		VTextPath: h.rt.Store().VTextPath(),
+	}
+	if docID != "" {
+		if doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID); err == nil {
+			docResp := vtextDocumentResponse{
+				DocID:             doc.DocID,
+				OwnerID:           doc.OwnerID,
+				Title:             doc.Title,
+				CurrentRevisionID: doc.CurrentRevisionID,
+				CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+				UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+			}
+			resp.Document = &docResp
+			if revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, limit); err == nil {
+				for _, rev := range revs {
+					resp.Revisions = append(resp.Revisions, revisionResponseFromRecord(rev))
+				}
+			}
+			if messages, err := h.rt.Store().ListChannelMessages(r.Context(), ownerID, docID, 0, limit); err == nil {
+				resp.Messages = messages
+			}
+		}
+	}
+	if runs, err := h.rt.Store().ListRunsByOwner(r.Context(), ownerID, limit); err == nil {
+		resp.Runs = runs
+		for _, run := range runs {
+			if strings.Contains(run.Error, "Incorrect string value") || strings.Contains(run.Result, "Incorrect string value") {
+				resp.ErrorMatches = append(resp.ErrorMatches, run.RunID+": Incorrect string value")
+			}
+		}
+	}
+	if events, err := h.rt.Store().ListEventsByOwner(r.Context(), ownerID, limit); err == nil {
+		resp.Events = events
+		for _, ev := range events {
+			if strings.Contains(string(ev.Payload), "Incorrect string value") {
+				resp.ErrorMatches = append(resp.ErrorMatches, ev.EventID+": Incorrect string value")
+			}
+		}
+	}
+	if evidence, err := h.rt.Store().ListEvidenceByAgent(r.Context(), ownerID, "", limit); err == nil {
+		resp.Evidence = evidence
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
 }
 
 // HandleVTextBlame handles GET /api/vtext/revisions/{id}/blame.

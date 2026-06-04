@@ -1622,6 +1622,11 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 //	GET    /api/vtext/documents/{id}/revisions → list revisions
 //	GET    /api/vtext/documents/{id}/stream    → document-scoped stream
 //	POST   /api/vtext/documents/{id}/revise   → submit a document revise request
+//	GET    /api/vtext/documents/{id}/compare  → semantic compare
+//	POST   /api/vtext/documents/{id}/merge-preview → preview concept merge
+//	POST   /api/vtext/documents/{id}/accept-merge → accept merge preview
+//	POST   /api/vtext/documents/{id}/restore  → restore historical revision as latest
+//	GET    /api/vtext/documents/{id}/diagnosis → owner-scoped diagnosis bundle
 //	GET    /api/vtext/documents/{id}/history   → revision history
 //	GET    /api/vtext/revisions/{id}          → get revision (snapshot)
 //	GET    /api/vtext/revisions/{id}/blame     → blame revision
@@ -1679,6 +1684,26 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(rest, "/cancel") {
 			// /api/vtext/documents/{id}/cancel
 			h.HandleVTextCancelAgentRevision(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/compare") {
+			h.HandleVTextSemanticCompare(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/merge-preview") {
+			h.HandleVTextMergePreview(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/accept-merge") {
+			h.HandleVTextAcceptMerge(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/restore") {
+			h.HandleVTextRestoreRevision(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/diagnosis") {
+			h.HandleVTextDiagnosis(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/agent-revision") {

@@ -361,7 +361,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileVText {
 		b.WriteString("\n\nVText is a durable document owner, not a one-shot answerer.")
 		b.WriteString("\nCanonical document versions are created only when you call edit_vtext. Your final text is run output only and is never stored as document content.")
-		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id and either a precise edit list or a complete replacement document.")
+		b.WriteString("\nWhen the document should change, call edit_vtext with the exact current base_revision_id. Use apply_edits by default for ordinary line, paragraph, section, citation, or metadata changes. Use replace_all only for explicit whole-document rewrites and include a clear rationale.")
 		b.WriteString("\nAfter edit_vtext succeeds, do not call edit_vtext again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. VText owns the first useful document revision.")
@@ -371,7 +371,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nWhen a VText run is woken by researcher or super findings, prefer making those findings visible with edit_vtext as the next document revision before spawning more workers. If the findings are partial, blocked, or inconclusive, write an honest partial/blocker checkpoint; do not leave the visible document at the pre-findings state while opening additional research.")
 		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
 		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")
-		b.WriteString("\nPreserve explicit user hard constraints across every revision: marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hash values, and any exact wording the user said to preserve. Before a replace_all edit, audit that the complete replacement still satisfies those constraints.")
+		b.WriteString("\nPreserve explicit user hard constraints across every revision: marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hash values, and any exact wording the user said to preserve. Before the exceptional replace_all path, audit that the complete replacement still satisfies those constraints.")
 		b.WriteString("\nWhen research is needed, choose researcher parallelism from the task shape and current resource pressure.")
 		b.WriteString("\nFor broad current-events briefs, prefer one broad researcher checkpoint before widening; use parallel researchers when branches are distinct and the first checkpoint shows widening is useful.")
 		b.WriteString("\nLet findings checkpoints, novelty, provider health, and rate-limit signals determine whether to widen, narrow, or continue.")

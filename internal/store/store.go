@@ -38,6 +38,10 @@ var ErrNotFound = errors.New("record not found")
 // against an older parent while the document head has already moved on.
 var ErrStaleDocumentHead = errors.New("stale document head")
 
+func sanitizeStoreText(value string) string {
+	return strings.ToValidUTF8(value, "\uFFFD")
+}
+
 // Store wraps the embedded Dolt connection and provides persistence for run
 // records, agent records, channel messages, event records, and VText state.
 type doltConnector interface {
@@ -752,6 +756,9 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal run metadata: %w", err)
 	}
+	prompt := sanitizeStoreText(rec.Prompt)
+	result := sanitizeStoreText(rec.Result)
+	runErr := sanitizeStoreText(rec.Error)
 
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO runs (loop_id, agent_id, channel_id, parent_loop_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
@@ -765,9 +772,9 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 		rec.OwnerID,
 		rec.SandboxID,
 		rec.State,
-		rec.Prompt,
-		rec.Result,
-		rec.Error,
+		prompt,
+		result,
+		runErr,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		formatTimePtr(rec.FinishedAt),
@@ -796,6 +803,9 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal run metadata: %w", err)
 	}
+	prompt := sanitizeStoreText(rec.Prompt)
+	runResult := sanitizeStoreText(rec.Result)
+	runErr := sanitizeStoreText(rec.Error)
 
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE runs
@@ -822,9 +832,9 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 		rec.OwnerID,
 		rec.SandboxID,
 		rec.State,
-		rec.Prompt,
-		rec.Result,
-		rec.Error,
+		prompt,
+		runResult,
+		runErr,
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		formatTimePtr(rec.FinishedAt),
 		string(metadata),
