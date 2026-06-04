@@ -109,6 +109,49 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestSearchItemsTokenizesNaturalQueriesAndRanksMatches(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	items := []sources.Item{
+		{
+			ID:        "srcitem_economy_inflation",
+			SourceID:  "gdelt:15min",
+			Title:     "GDELT Event: macro update",
+			Body:      "Themes: EPU_ECONOMY; inflation; employment report.",
+			Published: now,
+			FetchedAt: now,
+		},
+		{
+			ID:        "srcitem_economy_only",
+			SourceID:  "gdelt:15min",
+			Title:     "GDELT Event: economy",
+			Body:      "Themes: EPU_ECONOMY_HISTORIC.",
+			Published: now.Add(time.Hour),
+			FetchedAt: now.Add(time.Hour),
+		},
+	}
+	if err := store.SaveItems(items); err != nil {
+		t.Fatalf("save items: %v", err)
+	}
+
+	results, err := store.SearchItems(ctx, "economy inflation GDP employment 2026", 10)
+	if err != nil {
+		t.Fatalf("search items: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("search results = %d, want 2: %+v", len(results), results)
+	}
+	if results[0].ID != "srcitem_economy_inflation" {
+		t.Fatalf("top result = %s, want multi-term match first: %+v", results[0].ID, results)
+	}
+}
+
 func TestStorageRecordsCycleEvents(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))

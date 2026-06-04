@@ -378,18 +378,38 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	query = strings.TrimSpace(strings.ToLower(query))
-	sqlQuery := `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
+	terms := sourceSearchTerms(query)
+	selectFields := `id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
-		FROM items`
+		raw_json, evidence_level, vintage_policy, lookahead_status, release_date`
+	sqlQuery := `SELECT ` + selectFields
 	args := []any{}
-	if query != "" {
-		sqlQuery += ` WHERE lower(title) LIKE ? OR lower(body) LIKE ? OR lower(source_id) LIKE ?`
-		needle := "%" + query + "%"
-		args = append(args, needle, needle, needle)
+	if len(terms) > 0 {
+		scoreParts := make([]string, 0, len(terms))
+		whereParts := make([]string, 0, len(terms))
+		scoreArgs := make([]any, 0, len(terms)*3)
+		whereArgs := make([]any, 0, len(terms)*3)
+		for _, term := range terms {
+			needle := "%" + term + "%"
+			clause := `lower(title) LIKE ? OR lower(body) LIKE ? OR lower(source_id) LIKE ?`
+			scoreParts = append(scoreParts, `CASE WHEN `+clause+` THEN 1 ELSE 0 END`)
+			whereParts = append(whereParts, `(`+clause+`)`)
+			scoreArgs = append(scoreArgs, needle, needle, needle)
+			whereArgs = append(whereArgs, needle, needle, needle)
+		}
+		sqlQuery += `, (` + strings.Join(scoreParts, " + ") + `) AS search_score`
+		sqlQuery += ` FROM items`
+		sqlQuery += ` WHERE ` + strings.Join(whereParts, ` OR `)
+		args = append(args, scoreArgs...)
+		args = append(args, whereArgs...)
+	} else {
+		sqlQuery += ` FROM items`
 	}
-	sqlQuery += ` ORDER BY published DESC, fetched_at DESC LIMIT ?`
+	if len(terms) > 0 {
+		sqlQuery += ` ORDER BY search_score DESC, published DESC, fetched_at DESC LIMIT ?`
+	} else {
+		sqlQuery += ` ORDER BY published DESC, fetched_at DESC LIMIT ?`
+	}
 	args = append(args, limit)
 	rows, err := s.DB.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -400,11 +420,21 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	for rows.Next() {
 		var item sources.Item
 		var published, fetchedAt, verticals string
-		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
-			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-			&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
-			return nil, err
+		if len(terms) > 0 {
+			var score int
+			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
+				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
+				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
+				&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate, &score); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
+				&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
+				&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
+				&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+				return nil, err
+			}
 		}
 		item.Published = parseStoredTime(published)
 		item.FetchedAt = parseStoredTime(fetchedAt)
@@ -412,6 +442,26 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func sourceSearchTerms(query string) []string {
+	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	})
+	seen := map[string]bool{}
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if len(field) < 3 || seen[field] {
+			continue
+		}
+		seen[field] = true
+		out = append(out, field)
+		if len(out) >= 12 {
+			break
+		}
+	}
+	return out
 }
 
 func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, error) {

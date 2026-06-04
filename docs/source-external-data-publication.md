@@ -238,8 +238,10 @@ Selector kinds include:
 
 Display policy tells VText how the citation/transclusion should appear by
 default. It is canonical revision metadata, not a renderer guess. It must be
-easy for the VText agent to set from context while drafting or revising. The
-baseline display modes are:
+easy for the VText agent to set from context while drafting or revising. When
+VText adds or revises a citation, it should set this field directly from the
+writing context instead of leaving the renderer to infer intent. The baseline
+display modes are:
 
 - `collapsed_citation`: show only a compact citation marker until activated.
 - `embedded_excerpt`: show the transcluded quote/excerpt inline by default,
@@ -254,6 +256,9 @@ collapsed. VText should set the display policy from writing context:
 
 - quoted excerpts that are part of the reading surface normally default to
   `embedded_excerpt`;
+- source entities with a quote/excerpt selector and no stronger contrary
+  context should default to `embedded_excerpt`, because the cited text is
+  already part of the document's argument;
 - cited media, tables, documents, or source cards that the reader should see
   before taking action may default to `embedded_preview` or `expanded`;
 - background support, dense metadata, long source packets, and ordinary

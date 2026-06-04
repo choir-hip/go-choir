@@ -8,7 +8,7 @@
 ## Goal String
 
 ```text
-/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v1.md as a Codex-operated MissionGradient campaign. Treat docs/source-external-data-publication.md as the authoritative requirements contract and keep the mission conformant to it: Source Service owns source registry, adapters, source policy, ingestion, fetch/item ledgers, source health, manifests, search, item resolution, and future official/public/private source lanes; runtime researcher tools consume Source Service only through internal service APIs; researchers produce durable source findings with refs/selectors/hashes/caveats; VText is the canonical writer of document revisions and revision-scoped source_entities; VText sets display policy metadata from writing context; every visible citation marker is a transclusion point; quoted excerpts that are part of the reading surface default to embedded transclusion; background/support citations default collapsed unless context says otherwise; embedded or expanded transclusions can open their owning app/window/source surface; publication preserves source metadata into immutable citation, transclusion, access-policy, export-policy, manifest, and rollback artifacts; copy/download/export read canonical artifacts, not rendered DOM. Execute as one clean trajectory from the ideal topology backward: replace direct SQLite/sandbox source retrieval with the Source Service API boundary, deploy sourcecycled as a managed service, prove live ingestion and researcher source_search on staging, extend VText source entities over source-service and official-source items, preserve metadata through publication, then add canonical copy/download and route/export policy. Do not claim success without staging evidence across ingestion, service API retrieval, researcher findings, VText metadata, publication metadata, citation-to-transclusion expansion, default embedded quoted excerpts, owning-surface open actions, access/export behavior, and user-visible copy/download.
+/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v1.md as a Codex-operated MissionGradient campaign. The requirements contract is docs/source-external-data-publication.md; keep every implementation choice, verifier, and completion claim conformant to that contract. Source Service owns source registry, adapters, source policy, ingestion, fetch/item ledgers, source health, manifests, search, item resolution, cleaning/normalization, and future official/public/private source lanes; runtime researcher tools consume Source Service only through internal service APIs; researchers produce durable source findings with refs/selectors/hashes/caveats; VText is the canonical writer of document revisions and revision-scoped source_entities; VText sets display policy metadata from writing context; every visible citation marker is a transclusion point; quoted excerpts and source entities with quote/excerpt selectors default to embedded transclusion unless VText deliberately sets a stronger contrary display policy; background/support citations default collapsed unless context says otherwise; embedded or expanded transclusions can open their owning app/window/source surface; publication preserves source metadata into immutable citation, transclusion, access-policy, export-policy, manifest, and rollback artifacts; copy/download/export read canonical artifacts, not rendered DOM. Execute as one clean trajectory from the ideal topology backward: replace direct SQLite/sandbox source retrieval with the Source Service API boundary, deploy sourcecycled as a managed service, prove live ingestion and researcher source_search on staging, extend VText source entities over source-service and official-source items, preserve metadata through publication, then add canonical copy/download and route/export policy. Do not claim success without staging evidence across ingestion, service API retrieval, researcher findings, VText metadata, publication metadata, citation-to-transclusion expansion, default embedded quoted excerpts, owning-surface open actions, access/export behavior, and user-visible copy/download.
 ```
 
 ## Ideal State
@@ -301,6 +301,36 @@ computer runtime at the configured `SOURCE_SERVICE_BASE_URL` without giving
 runtime direct storage access. The fix should preserve the API boundary:
 runtime still calls Source Service over HTTP, sourcecycled still owns storage,
 and no runtime/sandbox direct SQLite path is reintroduced.
+
+## Execution Checkpoint: Source Service Search Literal-Query Gap
+
+**Problem observed:** after deploying the sandbox/user-computer Source Service
+route fix at commit `b60d3f0bc4050fc13c6d6ebddd88c65d6749b506`, staging
+proved that deployed researcher agents can call `source_search` from inside
+the user-computer runtime, but realistic multi-term researcher queries returned
+zero results. The same deployed Source Service ledger had live economy-related
+GDELT items when queried directly with a simple term such as `economy`.
+
+**Evidence recorded before fix:** the deployed Playwright proof
+`GO_CHOIR_RUN_DEPLOYED_SOURCE_SERVICE_RESEARCH=1 BASE_URL=https://choir.news
+PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_AUTH_STATE=/tmp/choir-source-service-research.storage.json
+CHOIR_AUTH_META=/tmp/choir-source-service-research.meta.json npm --prefix
+frontend run e2e -- vtext-deployed-source-service-research.spec.js` failed on
+trajectory `66d1d907-9975-4d4a-adcc-05b3e7e795d0`. Trace showed researcher
+`source_search` calls succeeded through `source_service_api`, but queries such
+as `economy inflation GDP employment 2026`, `current economy conditions trends
+indicators 2026`, and `US economy outlook growth recession 2026` returned
+`result_count: 0`. Node B host-local
+`/internal/source-service/search?q=economy&max_results=3` returned live
+`source_service_item` results from the same service. `internal/cycle/storage.go`
+`SearchItems` currently matches the entire lowercased query as one substring
+against title/body/source_id, so natural multi-term queries are too brittle.
+
+**Fix direction:** keep Source Service as the API/storage owner, but make its
+search boundary useful for researcher language. Tokenize queries into bounded
+terms, match any meaningful term across title/body/source_id, and rank results
+by matched-term count plus recency. Preserve the current simple-term behavior
+and avoid adding runtime-side query workarounds or direct storage reads.
 
 ## Authoritative Requirements
 
