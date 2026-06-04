@@ -1699,6 +1699,11 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 			metadata["media_source_research_required"] = addedMediaSourceRefs
 		}
 		sourceEntities, changedSourceEntities := normalizeVTextSourceEntities(metadata, mediaSourceRefs)
+		if workerSourceEntities := sourceServiceEntitiesFromWorkerMessages(recentWorkerMessages); len(workerSourceEntities) > 0 {
+			var changedWorkerSourceEntities bool
+			sourceEntities, changedWorkerSourceEntities = mergeVTextSourceEntities(sourceEntities, workerSourceEntities)
+			changedSourceEntities = changedSourceEntities || changedWorkerSourceEntities
+		}
 		if len(sourceEntities) > 0 {
 			metadata["source_entities"] = sourceEntities
 			if changedSourceEntities {

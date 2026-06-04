@@ -40,6 +40,9 @@ type vtextSourceEntity struct {
 
 type vtextSourceEntityTarget struct {
 	TargetKind           string `json:"target_kind"`
+	ItemID               string `json:"item_id,omitempty"`
+	SourceID             string `json:"source_id,omitempty"`
+	FetchID              string `json:"fetch_id,omitempty"`
 	ContentID            string `json:"content_id,omitempty"`
 	FilePath             string `json:"file_path,omitempty"`
 	DocID                string `json:"doc_id,omitempty"`
@@ -82,6 +85,7 @@ type vtextSourceEntityProvenance struct {
 }
 
 var vtextHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
+var vtextSourceServiceItemRefRE = regexp.MustCompile(`\bsource_service_item:([A-Za-z0-9_-]+)\b`)
 
 func (rt *Runtime) registerVTextMediaSourceRefs(ctx context.Context, ownerID, content string, metadata map[string]any) ([]vtextMediaSourceRef, bool) {
 	refs := decodeVTextMediaSourceRefs(metadata["media_source_refs"])
@@ -235,6 +239,21 @@ func normalizeVTextSourceEntities(metadata map[string]any, refs []vtextMediaSour
 		return nil, false
 	}
 	entities := decodeVTextSourceEntities(metadata["source_entities"])
+	return mergeVTextSourceEntities(entities, sourceEntitiesFromMediaRefs(refs))
+}
+
+func sourceEntitiesFromMediaRefs(refs []vtextMediaSourceRef) []vtextSourceEntity {
+	entities := make([]vtextSourceEntity, 0, len(refs))
+	for _, ref := range refs {
+		entity := mediaSourceRefToSourceEntity(ref)
+		if entity.EntityID != "" {
+			entities = append(entities, entity)
+		}
+	}
+	return entities
+}
+
+func mergeVTextSourceEntities(entities []vtextSourceEntity, incoming []vtextSourceEntity) ([]vtextSourceEntity, bool) {
 	seen := make(map[string]int, len(entities))
 	for i, entity := range entities {
 		if key := sourceEntityKey(entity); key != "" {
@@ -242,8 +261,7 @@ func normalizeVTextSourceEntities(metadata map[string]any, refs []vtextMediaSour
 		}
 	}
 	changed := false
-	for _, ref := range refs {
-		entity := mediaSourceRefToSourceEntity(ref)
+	for _, entity := range incoming {
 		if entity.EntityID == "" {
 			continue
 		}
@@ -264,6 +282,71 @@ func normalizeVTextSourceEntities(metadata map[string]any, refs []vtextMediaSour
 		changed = true
 	}
 	return entities, changed
+}
+
+func sourceServiceEntitiesFromWorkerMessages(messages []ChannelMessage) []vtextSourceEntity {
+	entities := []vtextSourceEntity{}
+	seen := map[string]bool{}
+	for _, message := range messages {
+		if !strings.EqualFold(strings.TrimSpace(message.Role), AgentProfileResearcher) {
+			continue
+		}
+		for _, match := range vtextSourceServiceItemRefRE.FindAllStringSubmatch(message.Content, -1) {
+			if len(match) < 2 {
+				continue
+			}
+			itemID := strings.TrimSpace(match[1])
+			if itemID == "" || seen[itemID] {
+				continue
+			}
+			seen[itemID] = true
+			entities = append(entities, sourceServiceItemRefToSourceEntity(itemID, message.Content))
+		}
+	}
+	return entities
+}
+
+func sourceServiceItemRefToSourceEntity(itemID, contextText string) vtextSourceEntity {
+	return vtextSourceEntity{
+		EntityID: stableSourceEntityID("source_service_item", itemID),
+		Kind:     "source_service_item",
+		Label:    sourceServiceItemLabel(itemID, contextText),
+		Target: vtextSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     itemID,
+		},
+		Selectors: []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "collapsed_citation",
+			ExpandedMode:     "source_card",
+			OpenSurface:      "source",
+			DefaultCollapsed: true,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "researcher",
+			RightsScope:         "source_service_projection",
+			UntrustedSourceText: true,
+		},
+	}
+}
+
+func sourceServiceItemLabel(itemID, contextText string) string {
+	for _, line := range strings.Split(contextText, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+		if !strings.Contains(line, "source_service_item:"+itemID) {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "Refs:"))
+		line = strings.TrimSpace(strings.TrimPrefix(line, "Evidence:"))
+		if line != "" && len(line) <= 120 {
+			return line
+		}
+	}
+	return "Source Service item " + itemID
 }
 
 func decodeVTextSourceEntities(value any) []vtextSourceEntity {
@@ -336,6 +419,15 @@ func mergeVTextSourceEntity(existing, incoming vtextSourceEntity) vtextSourceEnt
 	}
 	if existing.Target.TargetKind == "" {
 		existing.Target.TargetKind = incoming.Target.TargetKind
+	}
+	if existing.Target.ItemID == "" {
+		existing.Target.ItemID = incoming.Target.ItemID
+	}
+	if existing.Target.SourceID == "" {
+		existing.Target.SourceID = incoming.Target.SourceID
+	}
+	if existing.Target.FetchID == "" {
+		existing.Target.FetchID = incoming.Target.FetchID
 	}
 	if existing.Target.ContentID == "" {
 		existing.Target.ContentID = incoming.Target.ContentID
@@ -457,6 +549,9 @@ func sourceEntityKey(entity vtextSourceEntity) string {
 	}
 	if entity.Target.CanonicalURL != "" {
 		return entity.Kind + "|" + entity.Target.CanonicalURL
+	}
+	if entity.Target.ItemID != "" {
+		return entity.Kind + "|" + entity.Target.ItemID
 	}
 	if entity.Target.ContentID != "" {
 		return entity.Kind + "|" + entity.Target.ContentID
@@ -581,6 +676,18 @@ func formatVTextSourceEntitiesForPrompt(entities []vtextSourceEntity) string {
 		if entity.Target.ContentID != "" {
 			b.WriteString(" content_id=")
 			b.WriteString(entity.Target.ContentID)
+		}
+		if entity.Target.ItemID != "" {
+			b.WriteString(" item_id=")
+			b.WriteString(entity.Target.ItemID)
+		}
+		if entity.Target.SourceID != "" {
+			b.WriteString(" source_id=")
+			b.WriteString(entity.Target.SourceID)
+		}
+		if entity.Target.FetchID != "" {
+			b.WriteString(" fetch_id=")
+			b.WriteString(entity.Target.FetchID)
 		}
 		if entity.Target.CanonicalURL != "" {
 			b.WriteString(" canonical_url=")

@@ -166,6 +166,63 @@ func TestVTextPromptPreservesInlineSourceRefs(t *testing.T) {
 	}
 }
 
+func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-source-service",
+		RevisionID: "rev-source-service-v1",
+		Content:    "# Source Service Brief\n\nResearch checkpoint pending.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	recent := []ChannelMessage{{
+		Role: AgentProfileResearcher,
+		From: "researcher:source",
+		Content: strings.Join([]string{
+			"Coagent update ready.",
+			"Role: researcher.",
+			"Kind: findings.",
+			"Summary: Source Service returned current evidence.",
+			"",
+			"Findings:",
+			"- The source-service result identified a current economy item.",
+			"",
+			"Refs:",
+			"- source_service_item:srcitem_current_economy",
+			"- source:gdelt:15min",
+		}, "\n"),
+	}}
+	sourceEntities, changed := mergeVTextSourceEntities(nil, sourceServiceEntitiesFromWorkerMessages(recent))
+	if !changed || len(sourceEntities) != 1 {
+		t.Fatalf("source entities changed=%v len=%d: %#v", changed, len(sourceEntities), sourceEntities)
+	}
+	if sourceEntities[0].Target.TargetKind != "source_service_item" ||
+		sourceEntities[0].Target.ItemID != "srcitem_current_economy" ||
+		sourceEntities[0].Display.InlineMode != "collapsed_citation" ||
+		sourceEntities[0].Display.OpenSurface != "source" ||
+		sourceEntities[0].Evidence.ResearchState != "represented" {
+		t.Fatalf("derived source entity = %#v", sourceEntities[0])
+	}
+
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"source_entities": sourceEntities,
+		"seed_prompt":     "Write a source-service grounded brief.",
+	}, vtextAgentRevisionRequest{
+		Intent: "integrate_worker_findings",
+		Prompt: "Write a source-service grounded brief.",
+	}, "", true, recent, nil)
+
+	for _, want := range []string{
+		"Detected VText source entities:",
+		"source_service_item",
+		"item_id=srcitem_current_economy",
+		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
+		"Make those findings visible with edit_vtext",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("source-service prompt missing %q:\n%s", want, request)
+		}
+	}
+}
+
 func TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-long-rubric-super",
