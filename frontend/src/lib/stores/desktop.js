@@ -184,6 +184,19 @@ function getNewWindowGeometry(openCount, appId = '') {
   });
 }
 
+function applyLaunchWindowGeometry(baseGeometry, appContext = {}, appId = '') {
+  const preferred = appContext?.windowGeometry || null;
+  if (!preferred || typeof preferred !== 'object') return baseGeometry;
+
+  return constrainWindowGeometry({
+    x: preferred.x ?? baseGeometry.x,
+    y: preferred.y ?? baseGeometry.y,
+    width: preferred.width ?? baseGeometry.width,
+    height: preferred.height ?? baseGeometry.height,
+    appId,
+  });
+}
+
 function normalizeWindowGeometry(windowState) {
   const geometry = constrainWindowGeometry({ ...windowState, appId: windowState.appId });
   const restoredGeometry = windowState.restoredGeometry
@@ -301,7 +314,8 @@ export function openApp(appId, appName, icon, appContext = {}) {
 
     const windowId = generateWindowId();
     const openCount = $windows.filter((w) => w.mode !== 'closed').length;
-    const geometry = getNewWindowGeometry(openCount, appId);
+    const geometry = applyLaunchWindowGeometry(getNewWindowGeometry(openCount, appId), appContext, appId);
+    const preferredMode = appContext.windowMode === 'maximized' ? 'maximized' : 'normal';
     const newWindow = {
       windowId,
       appId,
@@ -311,7 +325,7 @@ export function openApp(appId, appName, icon, appContext = {}) {
       y: geometry.y,
       width: geometry.width,
       height: geometry.height,
-      mode: 'normal',
+      mode: preferredMode,
       zIndex: getNextZIndex(),
       restoredGeometry: null,
       appContext: { ...appContext },

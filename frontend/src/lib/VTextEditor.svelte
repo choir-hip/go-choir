@@ -808,6 +808,17 @@
     return !!opened;
   }
 
+  async function copyPublicURL(publicURL) {
+    if (!publicURL) return false;
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+    try {
+      await navigator.clipboard.writeText(publicURL);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
   function truncateText(value, max = 360) {
     const text = String(value || '').trim();
     if (text.length <= max) return text;
@@ -1529,8 +1540,8 @@
       publishResult = await publishVText(currentDoc.doc_id, {
         revisionId: revision.revision_id,
       });
-      const opened = openPublishedURL(publishResult);
-      saveStatus = opened ? `Published ${versionLabel}; opened public link` : `Published ${versionLabel}`;
+      const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
+      saveStatus = copied ? `Published ${versionLabel}; link copied` : `Published ${versionLabel}; copy link below`;
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -1651,12 +1662,7 @@
   async function handleCopyPublishedURL() {
     const publicURL = publicURLForPublishResult();
     if (!publicURL) return;
-    try {
-      await navigator.clipboard.writeText(publicURL);
-      saveStatus = 'Public link copied';
-    } catch (_err) {
-      saveStatus = 'Could not copy public link';
-    }
+    saveStatus = await copyPublicURL(publicURL) ? 'Public link copied' : 'Could not copy public link';
   }
 
   function currentPublicationRoute() {
@@ -2205,11 +2211,11 @@
             </a>
           </div>
           <div class="publication-actions">
-            <button type="button" class="secondary-action" data-vtext-open-public on:click={handleOpenPublishedURL}>
-              Open
+            <button type="button" class="primary-action" data-vtext-copy-public on:click={handleCopyPublishedURL}>
+              Copy link
             </button>
-            <button type="button" class="secondary-action" data-vtext-copy-public on:click={handleCopyPublishedURL}>
-              Copy
+            <button type="button" class="secondary-action" data-vtext-open-public on:click={handleOpenPublishedURL}>
+              Open link
             </button>
             <button type="button" class="secondary-action" data-vtext-copy-full-text on:click={handleCopyPublishedText}>
               Copy text
@@ -3027,6 +3033,12 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
+  }
+
+  .publication-actions .primary-action {
+    background: var(--choir-accent);
+    border-color: var(--choir-accent);
+    color: var(--choir-text-on-accent);
   }
 
   .recent-panel {

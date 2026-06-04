@@ -216,21 +216,46 @@
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    seedPublicPreviewWindows();
+    if (publicRoutePath) {
+      setWindows([], '');
+    } else {
+      seedPublicPreviewWindows();
+    }
     setIconPositions(getDefaultIconPositions());
   }
 
+  function largePublicVTextGeometry() {
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const compact = viewportWidth < 768;
+    if (compact) {
+      return {
+        x: 8,
+        y: 8,
+        width: Math.max(320, viewportWidth - 16),
+        height: Math.max(520, viewportHeight - 88),
+      };
+    }
+    return {
+      x: Math.max(32, Math.round(viewportWidth * 0.06)),
+      y: 34,
+      width: Math.max(820, Math.round(viewportWidth * 0.84)),
+      height: Math.max(620, Math.round(viewportHeight * 0.86)),
+    };
+  }
+
   function seedPublicPreviewWindows() {
+    const geometry = largePublicVTextGeometry();
     const previewWindows = [
       {
         windowId: 'public-preview-vtext',
         appId: 'vtext',
         title: 'Choir Preview',
         icon: getAppIcon('vtext'),
-        x: 152,
-        y: 42,
-        width: 640,
-        height: 520,
+        x: geometry.x,
+        y: geometry.y,
+        width: geometry.width,
+        height: geometry.height,
         mode: 'normal',
         zIndex: 1,
         restoredGeometry: null,
@@ -1036,6 +1061,10 @@
 
   function openPublishedVText(routePath, guest = false) {
     const normalizedRoutePath = normalizePublicRoutePath(routePath);
+    if (guest) {
+      const preview = windowsSnapshot().find((win) => win.windowId === 'public-preview-vtext');
+      if (preview) closeWindow(preview.windowId);
+    }
     const matchingWindows = windowsSnapshot().filter((win) =>
       win.appId === 'vtext' &&
       win.mode !== 'closed' &&
@@ -1065,6 +1094,7 @@
       publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
       allowMultiple: true,
+      windowGeometry: largePublicVTextGeometry(),
     });
   }
 

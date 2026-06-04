@@ -167,18 +167,18 @@ export const previewTraceSnapshot = {
 
 export const previewVTextDocument = {
   doc_id: 'preview-vtext',
-  title: 'A note before sign-in',
+  title: 'What Choir Is',
   content: [
-    '# A note before sign-in',
+    '# What Choir Is',
     '',
-    'This is a local writing surface. You can read, scroll, revise the draft shape, and inspect version motion before connecting private computer state.',
+    'Choir is a private, VText-centered computer for durable knowledge work. Documents are versioned artifacts, not chat transcripts, so drafts can be revised, compared, cited, published, and recovered.',
     '',
-    'Saving, publishing, importing, sending, activating, provider spend, and account data still require sign-in at the moment of action.',
+    'The signed-out desktop is a preview of the reading and writing surface. Sign in to connect your durable computer, save revisions, import sources, run agents, publish work, and keep the evidence attached to the artifact.',
   ].join('\n'),
   revisions: [
-    { revision_id: 'v1', label: 'v1', title: 'Start', summary: 'A local draft opens in preview mode.' },
-    { revision_id: 'v2', label: 'v2', title: 'Revise', summary: 'A second version shows how revision history behaves.' },
-    { revision_id: 'v3', label: 'v3', title: 'Ready', summary: 'Durable save and publish remain locked until sign-in.' },
+    { revision_id: 'v1', label: 'v1', title: 'Artifact', summary: 'VText is the durable surface for writing and revision.' },
+    { revision_id: 'v2', label: 'v2', title: 'Sources', summary: 'Sources and evidence stay connected to the work.' },
+    { revision_id: 'v3', label: 'v3', title: 'Publish', summary: 'Publishing and private computer actions unlock after sign-in.' },
   ],
 };
 
