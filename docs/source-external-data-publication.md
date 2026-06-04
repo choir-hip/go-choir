@@ -249,14 +249,23 @@ baseline display modes are:
 - `expanded`: open the transclusion in expanded inline form when the VText is
   first rendered.
 
-Quoted excerpts should normally use `embedded_excerpt` when the quoted text is
-part of the argument rather than merely supporting evidence. In that case the
-citation marker and transclusion are both present: the quote is embedded inline
-by default, and the citation control can still collapse, expand, or open the
-owning source surface. Long supporting sources, background citations, and dense
-metadata should normally default to `collapsed_citation`. The VText agent should
-choose the display mode based on the local writing context, while preserving a
-user-editable metadata path.
+Every citation is a transclusion point, but not every transclusion starts
+collapsed. VText should set the display policy from writing context:
+
+- quoted excerpts that are part of the reading surface normally default to
+  `embedded_excerpt`;
+- cited media, tables, documents, or source cards that the reader should see
+  before taking action may default to `embedded_preview` or `expanded`;
+- background support, dense metadata, long source packets, and ordinary
+  corroborating citations normally default to `collapsed_citation`.
+
+For quoted excerpts, the citation marker and transclusion are both present: the
+quote is embedded inline by default, and the citation control can still
+collapse, expand, or open the owning source surface. The VText agent should be
+able to set this display mode directly while drafting or revising, without
+requiring the user to hand-edit metadata. The user-facing editor may expose a
+repair/edit path for display policy, but publication and export must read the
+canonical metadata rather than infer display from rendered DOM.
 
 Visible inline text should expose compact citation markers, usually rendered as
 superscripts or similarly lightweight inline controls. Tapping or clicking the
