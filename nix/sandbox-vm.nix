@@ -262,6 +262,9 @@ EOF
           choir.maild_url=*)
             echo "RUNTIME_MAILD_URL=''${param#choir.maild_url=}" >> "$ENV_FILE"
             ;;
+          choir.source_service_url=*)
+            echo "SOURCE_SERVICE_BASE_URL=''${param#choir.source_service_url=}" >> "$ENV_FILE"
+            ;;
           choir.computer_kind=*)
             echo "CHOIR_COMPUTER_KIND=''${param#choir.computer_kind=}" >> "$ENV_FILE"
             ;;

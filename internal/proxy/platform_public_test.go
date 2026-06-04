@@ -19,18 +19,34 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	var gotInternal string
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotInternal = r.Header.Get("X-Internal-Caller")
-		if r.URL.Path != "/internal/platform/publications/resolve" {
+		switch r.URL.Path {
+		case "/internal/platform/publications/resolve":
+			if r.URL.Query().Get("route") != "/pub/vtext/test" {
+				t.Fatalf("platform route query: %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(platform.PublicationBundle{
+				Route:       platform.PublicationRoute{Path: "/pub/vtext/test", State: "active"},
+				Publication: platform.PublicationSummary{ID: "pub-1", Title: "Public"},
+				Version:     platform.PublicationVersionSummary{ID: "pubver-1", ContentHash: "hash", SourceRevisionHash: "source-hash"},
+				Artifact:    platform.PublicationArtifact{Content: "public content"},
+			})
+		case "/internal/platform/publications/export":
+			if r.URL.Query().Get("route") != "/pub/vtext/test" || r.URL.Query().Get("format") != "md" {
+				t.Fatalf("platform export query: %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(platform.PublicationExport{
+				RoutePath:            "/pub/vtext/test",
+				PublicationID:        "pub-1",
+				PublicationVersionID: "pubver-1",
+				Format:               "md",
+				MediaType:            "text/markdown; charset=utf-8",
+				Filename:             "test.md",
+				Content:              "public content",
+				ContentHash:          "hash",
+			})
+		default:
 			t.Fatalf("platformd path: got %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("route") != "/pub/vtext/test" {
-			t.Fatalf("platform route query: %s", r.URL.RawQuery)
-		}
-		_ = json.NewEncoder(w).Encode(platform.PublicationBundle{
-			Route:       platform.PublicationRoute{Path: "/pub/vtext/test", State: "active"},
-			Publication: platform.PublicationSummary{ID: "pub-1", Title: "Public"},
-			Version:     platform.PublicationVersionSummary{ID: "pubver-1", ContentHash: "hash", SourceRevisionHash: "source-hash"},
-			Artifact:    platform.PublicationArtifact{Content: "public content"},
-		})
 	}))
 	defer platformd.Close()
 
@@ -52,6 +68,19 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	}
 	if gotInternal != "true" {
 		t.Fatalf("missing internal caller header")
+	}
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/vtext/test&format=md", nil)
+	exportW := httptest.NewRecorder()
+	h.HandleAPI(exportW, exportReq)
+	if exportW.Code != http.StatusOK {
+		t.Fatalf("export status: got %d body %s", exportW.Code, exportW.Body.String())
+	}
+	var exportResp platform.PublicationExport
+	if err := json.NewDecoder(exportW.Body).Decode(&exportResp); err != nil {
+		t.Fatalf("decode export response: %v", err)
+	}
+	if exportResp.Content != "public content" || exportResp.Format != "md" {
+		t.Fatalf("export response = %#v", exportResp)
 	}
 }
 

@@ -14,6 +14,7 @@
     createDocument,
     createRevision,
     ensureDocumentManifest,
+    exportPublication,
     getDocument,
     getRevision,
     listDocuments,
@@ -91,7 +92,35 @@
   function findSourceEntity(sourceEntities = [], entityID = '') {
     const normalized = String(entityID || '').trim();
     if (!normalized) return null;
-    return sourceEntities.find((entity) => String(entity?.entity_id || '') === normalized) || null;
+    return sourceEntities.find((entity) => sourceEntityID(entity) === normalized) || null;
+  }
+
+  function sourceEntityID(entity) {
+    return String(entity?.entity_id || entity?.source_entity_id || '').trim();
+  }
+
+  function sourceEntityDisplayPolicy(entity) {
+    const raw = String(entity?.display_policy || entity?.display?.display_policy || entity?.display?.inline_mode || '').trim();
+    if (raw === 'embedded_excerpt' || raw === 'embedded_preview' || raw === 'expanded' || raw === 'collapsed_citation') return raw;
+    if (entity?.transclusion?.snapshot_text) return 'embedded_excerpt';
+    return 'collapsed_citation';
+  }
+
+  function sourceEntityTransclusion(entity) {
+    return entity?.transclusion || null;
+  }
+
+  function sourceEntitySnapshotText(entity) {
+    return sourceEntityTransclusion(entity)?.snapshot_text || selectorTextQuote(entity) || '';
+  }
+
+  function selectorTextQuote(entity) {
+    const selectors = Array.isArray(entity?.selectors) ? entity.selectors : [];
+    for (const selector of selectors) {
+      const text = String(selector?.text_quote || '').trim();
+      if (text) return text;
+    }
+    return '';
   }
 
   function renderInlineSourceRef(label, entityID, sourceEntities = []) {
@@ -102,18 +131,14 @@
     }
     const kind = sourceEntityKindLabel(entity?.kind);
     const title = sourceEntityTitle(entity);
-    const transcript = entity?.evidence?.transcript_availability || '';
-    const evidence = entity?.evidence?.state || 'pending';
-    const research = entity?.evidence?.research_state || 'pending';
-    return `<span class="vtext-source-ref" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
-      <span class="vtext-source-ref-label">${escapeHTML(displayLabel)}</span>
-      <span class="vtext-source-ref-kind">${escapeHTML(kind)}</span>
+    const marker = sourceEntities.indexOf(entity) + 1 || '';
+    return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+      <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
       <span class="vtext-source-ref-popover" data-vtext-source-ref-popover role="note">
         <strong>${escapeHTML(title)}</strong>
         <span>${escapeHTML(kind)}</span>
-        <span>evidence ${escapeHTML(evidence)}</span>
-        <span>research ${escapeHTML(research)}</span>
-        ${transcript ? `<span>transcript ${escapeHTML(transcript)}</span>` : ''}
+        ${renderSourceTransclusionBody(entity, { compact: true })}
+        <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
       </span>
     </span>`;
   }
@@ -251,9 +276,49 @@
   }
 
   function revisionSourceEntities() {
+    const publishedEntities = publicationBundleSourceEntities();
+    if (publishedEntities.length > 0) return publishedEntities;
     const entities = currentRevision?.metadata?.source_entities;
     if (Array.isArray(entities) && entities.length > 0) return entities;
     return revisionMediaSourceRefs().map(mediaRefToSourceEntity).filter(Boolean);
+  }
+
+  function publicationBundleSourceEntities() {
+    const records = Array.isArray(publishedBundle?.source_entities) ? publishedBundle.source_entities : [];
+    if (records.length === 0) return [];
+    return records.map(publicationSourceEntityToLocal).filter(Boolean);
+  }
+
+  function publicationSourceEntityToLocal(record) {
+    if (!record) return null;
+    const raw = record.entity && typeof record.entity === 'object' ? record.entity : {};
+    const entity = {
+      ...raw,
+      entity_id: raw.entity_id || record.source_entity_id || record.id || '',
+      kind: raw.kind || record.kind || '',
+      target: {
+        ...(raw.target || {}),
+        target_kind: raw.target?.target_kind || record.target_kind || '',
+      },
+      display: {
+        ...(raw.display || {}),
+        inline_mode: raw.display?.inline_mode || record.display_policy || 'collapsed_citation',
+        open_surface: raw.display?.open_surface || record.open_surface || '',
+      },
+      transclusion: matchingPublicationTransclusion(raw.entity_id || record.source_entity_id || ''),
+      publication_route_path: publishedBundle?.route?.path || publishedRoutePath || appContext?.publishedRoutePath || '',
+    };
+    if (!entity.target.item_id && record.target_kind === 'source_service_item') entity.target.item_id = record.target_id || '';
+    if (!entity.target.content_id && record.target_kind === 'content_item') entity.target.content_id = record.target_id || '';
+    if (!entity.target.publication_version_id && record.target_kind === 'published_vtext_span') entity.target.publication_version_id = record.target_id || publishedBundle?.version?.id || '';
+    return sourceEntityID(entity) ? entity : null;
+  }
+
+  function matchingPublicationTransclusion(entityID) {
+    const normalized = String(entityID || '').trim();
+    if (!normalized) return null;
+    const transclusions = Array.isArray(publishedBundle?.transclusions) ? publishedBundle.transclusions : [];
+    return transclusions.find((item) => String(item?.source_entity_id || '') === normalized) || null;
   }
 
   function mediaRefToSourceEntity(ref) {
@@ -301,7 +366,22 @@
   }
 
   function sourceEntityTargetURL(entity) {
-    return entity?.target?.canonical_url || entity?.target?.url || '';
+    return entity?.target?.canonical_url || entity?.target?.url || entity?.canonical_url || entity?.url || '';
+  }
+
+  function sourceEntityTargetKind(entity) {
+    return String(entity?.target?.target_kind || entity?.target_kind || '').trim();
+  }
+
+  function sourceEntityOpenAppID(entity) {
+    const targetKind = sourceEntityTargetKind(entity);
+    const requested = String(entity?.display?.open_surface || '').trim();
+    if (targetKind === 'published_vtext_span' || targetKind === 'publication_version' || entity?.publication_route_path) return 'vtext';
+    if (requested === 'source' && sourceEntityTargetURL(entity)) return 'browser';
+    if (requested) return requested;
+    if (entity?.kind === 'youtube_video') return 'video';
+    if (sourceEntityTargetURL(entity)) return 'browser';
+    return 'content';
   }
 
   function sourceEntityMedia(entity) {
@@ -322,12 +402,14 @@
 
   function renderSourceEntityFacts(entity) {
     const contentID = escapeHTML(entity?.target?.content_id || '');
+    const itemID = escapeHTML(entity?.target?.item_id || '');
     const transcript = escapeHTML(entity?.evidence?.transcript_availability || '');
     const evidence = escapeHTML(entity?.evidence?.state || 'pending');
     const research = escapeHTML(entity?.evidence?.research_state || 'pending');
     const surface = escapeHTML(entity?.display?.open_surface || '');
     return `
       ${contentID ? `<span>content ${contentID}</span>` : ''}
+      ${itemID ? `<span>item ${itemID}</span>` : ''}
       ${transcript ? `<span>transcript ${transcript}</span>` : ''}
       <span>evidence ${evidence}</span>
       <span>research ${research}</span>
@@ -335,19 +417,38 @@
     `;
   }
 
+  function renderSourceTransclusionBody(entity, { compact = false } = {}) {
+    const snapshot = sourceEntitySnapshotText(entity);
+    const facts = renderSourceEntityFacts(entity);
+    if (compact) {
+      return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>
+        ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</span>` : ''}
+        <span class="vtext-source-facts">${facts}</span>
+      </span>`;
+    }
+    const media = sourceEntityMedia(entity);
+    return `<div class="vtext-transclusion-body" data-vtext-transclusion-body>
+      ${snapshot ? `<blockquote class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</blockquote>` : ''}
+      ${media}
+      <div class="vtext-source-facts">${facts}</div>
+    </div>`;
+  }
+
   function renderSourceEntityInlineRail(entities) {
     if (!Array.isArray(entities) || entities.length === 0) return '';
     return `<section class="vtext-source-inline-rail" data-vtext-source-entity contenteditable="false" aria-label="Document sources">
       ${entities.map((entity, index) => {
-        const entityID = escapeHTML(entity?.entity_id || `source-${index + 1}`);
+        const entityID = escapeHTML(sourceEntityID(entity) || `source-${index + 1}`);
         const title = escapeHTML(sourceEntityTitle(entity));
         const kind = escapeHTML(sourceEntityKindLabel(entity?.kind));
-        const media = sourceEntityMedia(entity);
-        return `<details class="vtext-source-inline" data-vtext-source-inline data-source-entity-id="${entityID}">
-          <summary><span>${title}</span><small>${kind}</small></summary>
+        const displayPolicy = sourceEntityDisplayPolicy(entity);
+        const open = displayPolicy === 'embedded_excerpt' || displayPolicy === 'embedded_preview' || displayPolicy === 'expanded';
+        const marker = index + 1;
+        return `<details class="vtext-source-inline" data-vtext-source-inline data-vtext-transclusion data-vtext-display-policy="${escapeHTML(displayPolicy)}" data-source-entity-id="${entityID}"${open ? ' open' : ''}>
+          <summary><sup>${marker}</sup><span>${title}</span><small>${kind}</small></summary>
           <div class="vtext-source-inline-body">
-            ${media}
-            <div class="vtext-source-facts">${renderSourceEntityFacts(entity)}</div>
+            ${renderSourceTransclusionBody(entity)}
+            <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${entityID}">Open source</button>
           </div>
         </details>`;
       }).join('')}
@@ -356,26 +457,7 @@
 
   function renderSourceEntityBlocks(entities) {
     if (!Array.isArray(entities) || entities.length === 0) return '';
-    const cards = entities
-      .map((entity, index) => {
-        const entityID = escapeHTML(entity?.entity_id || `source-${index + 1}`);
-        const kind = escapeHTML(sourceEntityKindLabel(entity?.kind));
-        const title = escapeHTML(sourceEntityTitle(entity));
-        const canonical = sourceEntityTargetURL(entity);
-        const media = sourceEntityMedia(entity);
-        return `<article class="vtext-source-card" data-vtext-source-card data-vtext-source-entity data-source-entity-id="${entityID}" contenteditable="false">
-          ${media}
-          <div class="vtext-source-meta">
-            <div class="vtext-source-kind">${kind}</div>
-            <div class="vtext-source-title">${title}</div>
-            ${canonical ? `<a href="${escapeHTML(canonical)}" target="_blank" rel="noreferrer">${escapeHTML(canonical)}</a>` : ''}
-            <div class="vtext-source-facts">${renderSourceEntityFacts(entity)}</div>
-            <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${entityID}">Open source</button>
-          </div>
-        </article>`;
-      })
-      .join('');
-    return `${renderSourceEntityInlineRail(entities)}<section class="vtext-source-deck" data-vtext-source-card contenteditable="false">${cards}</section>`;
+    return renderSourceEntityInlineRail(entities);
   }
 
   function renderDocumentHTML(value = editorValue) {
@@ -1396,6 +1478,42 @@
     }
   }
 
+  function currentPublicationRoute() {
+    return publishResult?.route_path || publishedBundle?.route?.path || publishedRoutePath || appContext?.publishedRoutePath || '';
+  }
+
+  async function handleCopyPublishedText() {
+    const route = currentPublicationRoute();
+    if (!route) return;
+    try {
+      const exported = await exportPublication(route, 'txt');
+      await navigator.clipboard.writeText(exported.content || '');
+      saveStatus = 'Published text copied';
+    } catch (err) {
+      saveStatus = err.message || 'Could not copy published text';
+    }
+  }
+
+  async function handleDownloadPublished(format = 'md') {
+    const route = currentPublicationRoute();
+    if (!route) return;
+    try {
+      const exported = await exportPublication(route, format);
+      const blob = new Blob([exported.content || ''], { type: exported.media_type || 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exported.filename || `published-vtext.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      saveStatus = `Downloaded ${exported.format || format}`;
+    } catch (err) {
+      saveStatus = err.message || 'Download failed';
+    }
+  }
+
   function handleOpenPublishedURL() {
     if (!openPublishedURL()) {
       saveStatus = 'Could not open public link';
@@ -1490,7 +1608,7 @@
 
   function handleSourceEntityOpen(entity) {
     if (!entity) return;
-    const appId = entity?.display?.open_surface || (entity?.kind === 'youtube_video' ? 'video' : 'content');
+    const appId = sourceEntityOpenAppID(entity);
     const sourceUrl = sourceEntityTargetURL(entity);
     const contentId = entity?.target?.content_id || '';
     const title = sourceEntityTitle(entity);
@@ -1506,7 +1624,10 @@
         content_id: contentId,
         mediaType: entity?.kind === 'youtube_video' ? 'video/youtube' : '',
         appHint: appId,
-        sourceEntityId: entity?.entity_id || '',
+        sourceEntityId: sourceEntityID(entity),
+        sourceServiceItemId: entity?.target?.item_id || '',
+        publishedRoutePath: entity?.publication_route_path || '',
+        publishedGuest: !!entity?.publication_route_path,
         allowMultiple: true,
       },
     });
@@ -1518,7 +1639,7 @@
     event.preventDefault();
     event.stopPropagation();
     const entityID = button.getAttribute('data-source-entity-id') || '';
-    const entity = revisionSourceEntities().find((item) => String(item?.entity_id || '') === entityID);
+    const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
     handleSourceEntityOpen(entity);
   }
 
@@ -1535,7 +1656,7 @@
     event.preventDefault();
     event.stopPropagation();
     const entityID = button.getAttribute('data-source-entity-id') || '';
-    const entity = revisionSourceEntities().find((item) => String(item?.entity_id || '') === entityID);
+    const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
     handleSourceEntityOpen(entity);
   }
 
@@ -1697,6 +1818,22 @@
       <div class="doc-actions">
         {#if isPublishedMode && !publishedDerivativeActive}
           <button
+            class="secondary-action"
+            data-vtext-copy-full-text
+            on:click={handleCopyPublishedText}
+            disabled={loading || publishedActionPending}
+          >
+            Copy text
+          </button>
+          <button
+            class="secondary-action"
+            data-vtext-download-md
+            on:click={() => handleDownloadPublished('md')}
+            disabled={loading || publishedActionPending}
+          >
+            Download
+          </button>
+          <button
             class="prompt-btn"
             data-vtext-edit-published
             on:click={handleCreatePublishedDerivative}
@@ -1791,6 +1928,12 @@
             </button>
             <button type="button" class="secondary-action" data-vtext-copy-public on:click={handleCopyPublishedURL}>
               Copy
+            </button>
+            <button type="button" class="secondary-action" data-vtext-copy-full-text on:click={handleCopyPublishedText}>
+              Copy text
+            </button>
+            <button type="button" class="secondary-action" data-vtext-download-md on:click={() => handleDownloadPublished('md')}>
+              Download
             </button>
           </div>
           <div class="publication-facts">
@@ -2131,19 +2274,20 @@
   .rendered-doc :global(.vtext-source-ref) {
     position: relative;
     display: inline-flex;
-    gap: 0.26rem;
     align-items: center;
-    max-width: 100%;
-    margin: 0 0.08rem;
+    justify-content: center;
+    min-width: 1.1rem;
+    min-height: 1.1rem;
+    margin: 0 0.04rem;
     border: 1px solid var(--choir-border-strong);
-    border-radius: 999px;
-    padding: 0.02rem 0.42rem;
+    border-radius: 50%;
+    padding: 0;
     color: var(--choir-text-accent);
     background: var(--choir-state-selected);
-    font-size: 0.82em;
-    font-weight: 760;
-    line-height: 1.55;
-    vertical-align: baseline;
+    font-size: 0.62em;
+    font-weight: 820;
+    line-height: 1;
+    vertical-align: super;
     cursor: pointer;
   }
 
@@ -2156,20 +2300,13 @@
     border-color: var(--choir-status-danger);
   }
 
-  .rendered-doc :global(.vtext-source-ref-kind) {
-    color: var(--choir-text-accent);
-    font-size: 0.68em;
-    font-weight: 820;
-    text-transform: uppercase;
-  }
-
   .rendered-doc :global(.vtext-source-ref-popover) {
     position: absolute;
     z-index: 30;
     left: 0;
     top: calc(100% + 0.35rem);
     display: none;
-    width: min(18rem, calc(100vw - 3rem));
+    width: min(22rem, calc(100vw - 3rem));
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
     padding: 0.58rem 0.64rem;
@@ -2179,6 +2316,7 @@
     font-size: 0.82rem;
     font-weight: 620;
     line-height: 1.35;
+    text-transform: none;
   }
 
   .rendered-doc :global(.vtext-source-ref-popover strong),
@@ -2210,21 +2348,14 @@
     margin-bottom: 0;
   }
 
-  .rendered-doc :global(.vtext-source-deck) {
-    display: grid;
-    gap: 0.85rem;
-    margin: 0 0 1.1rem;
-  }
-
   .rendered-doc :global(.vtext-source-inline-rail) {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
     gap: 0.5rem;
     margin: 0 0 0.9rem;
   }
 
   .rendered-doc :global(.vtext-source-inline) {
-    min-width: min(100%, 14rem);
+    min-width: min(100%, 16rem);
     max-width: 100%;
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
@@ -2232,7 +2363,8 @@
   }
 
   .rendered-doc :global(.vtext-source-inline summary) {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 0.48rem;
     align-items: center;
     min-height: 2.2rem;
@@ -2269,6 +2401,29 @@
     display: grid;
     gap: 0.52rem;
     padding: 0 0.58rem 0.58rem;
+  }
+
+  .rendered-doc :global(.vtext-source-inline summary sup) {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.18rem;
+    min-height: 1.18rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 50%;
+    font-size: 0.68rem;
+    line-height: 1;
+  }
+
+  .rendered-doc :global(.vtext-transclusion-body) {
+    display: grid;
+    gap: 0.52rem;
+  }
+
+  .rendered-doc :global(.vtext-transclusion-quote) {
+    margin: 0;
+    border-left: 3px solid var(--choir-border-strong);
+    padding: 0.42rem 0.58rem;
+    background: var(--choir-state-hover);
   }
 
   .rendered-doc :global(.vtext-source-card) {

@@ -414,6 +414,29 @@ func (s *Storage) SearchItems(ctx context.Context, query string, limit int) ([]s
 	return out, rows.Err()
 }
 
+func (s *Storage) GetItem(ctx context.Context, itemID string) (sources.Item, error) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return sources.Item{}, fmt.Errorf("item id is required")
+	}
+	row := s.DB.QueryRowContext(ctx, `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
+		canonical_url, published, fetched_at, verticals, language, region, content_hash,
+		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
+		FROM items WHERE id = ?`, itemID)
+	var item sources.Item
+	var published, fetchedAt, verticals string
+	if err := row.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
+		&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
+		&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
+		&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
+		return sources.Item{}, err
+	}
+	item.Published = parseStoredTime(published)
+	item.FetchedAt = parseStoredTime(fetchedAt)
+	_ = json.Unmarshal([]byte(verticals), &item.Verticals)
+	return item, nil
+}
+
 func mustJSON(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {

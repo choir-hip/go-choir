@@ -2,18 +2,17 @@ package runtime
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/sources"
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	_ "modernc.org/sqlite"
 )
 
 type webSearchClient interface {
@@ -40,109 +39,93 @@ type sourceSearchResponse struct {
 	Query    string           `json:"query"`
 	Provider string           `json:"provider"`
 	Results  []map[string]any `json:"results"`
-	SourceDB string           `json:"source_db,omitempty"`
+	BaseURL  string           `json:"base_url,omitempty"`
 	Metadata map[string]any   `json:"metadata,omitempty"`
 }
 
-type sqliteSourceSearchClient struct {
-	dbPath string
+type httpSourceSearchClient struct {
+	baseURL    string
+	httpClient *http.Client
 }
 
 func newSourceSearchClientFromEnv() sourceSearchClient {
-	dbPath := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_DB_PATH"))
-	if dbPath == "" {
-		dbPath = strings.TrimSpace(os.Getenv("SOURCECYCLED_DB_PATH"))
-	}
-	if dbPath == "" {
+	baseURL := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_BASE_URL", "SOURCE_SERVICE_URL", "SOURCECYCLED_API_URL"))
+	if baseURL == "" {
 		return nil
 	}
-	return &sqliteSourceSearchClient{dbPath: dbPath}
+	baseURL = strings.TrimRight(baseURL, "/")
+	if _, err := url.ParseRequestURI(baseURL); err != nil {
+		return nil
+	}
+	return &httpSourceSearchClient{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: 15 * time.Second},
+	}
 }
 
-func (c *sqliteSourceSearchClient) SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error) {
-	if c == nil || strings.TrimSpace(c.dbPath) == "" {
+func getenvFirst(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error) {
+	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("source search client not configured")
 	}
-	if _, err := os.Stat(c.dbPath); err != nil {
-		return nil, fmt.Errorf("source service db not available at %s: %w", c.dbPath, err)
-	}
-	db, err := sql.Open("sqlite", c.dbPath)
+	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/search")
 	if err != nil {
-		return nil, fmt.Errorf("open source service db: %w", err)
+		return nil, fmt.Errorf("parse source service search URL: %w", err)
 	}
-	defer func() { _ = db.Close() }()
-	items, err := searchSourceServiceItems(ctx, db, query, maxResults)
+	params := endpoint.Query()
+	params.Set("q", strings.TrimSpace(query))
+	if maxResults > 0 {
+		params.Set("max_results", fmt.Sprintf("%d", maxResults))
+	}
+	endpoint.RawQuery = params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("source search: %w", err)
+		return nil, fmt.Errorf("create source service search request: %w", err)
 	}
-	results := make([]map[string]any, 0, len(items))
-	for idx, item := range items {
-		results = append(results, sourceSearchItemResult(idx+1, item))
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call source service search: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("source service search returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var apiResp sourceapi.SearchResponse
+	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
+	if err != nil {
+		return nil, fmt.Errorf("decode source service search response: %w", err)
+	}
+	results := make([]map[string]any, 0, len(apiResp.Results))
+	for _, item := range apiResp.Results {
+		results = append(results, sourceAPIItemMap(item))
+	}
+	metadata := map[string]any{}
+	if apiResp.Metadata.TargetKind != "" {
+		metadata["target_kind"] = apiResp.Metadata.TargetKind
 	}
 	return &sourceSearchResponse{
-		Query:    strings.TrimSpace(query),
-		Provider: "source_service_sqlite",
+		Query:    apiResp.Query,
+		Provider: firstNonEmptyString(apiResp.Provider, sourceapi.ProviderName),
 		Results:  results,
-		SourceDB: c.dbPath,
-		Metadata: map[string]any{
-			"target_kind": "source_service_item",
-		},
+		BaseURL:  c.baseURL,
+		Metadata: metadata,
 	}, nil
 }
 
-func searchSourceServiceItems(ctx context.Context, db *sql.DB, query string, limit int) ([]sources.Item, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	query = strings.TrimSpace(strings.ToLower(query))
-	sqlQuery := `SELECT id, source_id, source_type, fetch_id, original_id, title, body, url,
-		canonical_url, published, fetched_at, verticals, language, region, content_hash,
-		raw_json, evidence_level, vintage_policy, lookahead_status, release_date
-		FROM items`
-	args := []any{}
-	if query != "" {
-		sqlQuery += ` WHERE lower(title) LIKE ? OR lower(body) LIKE ? OR lower(source_id) LIKE ?`
-		needle := "%" + query + "%"
-		args = append(args, needle, needle, needle)
-	}
-	sqlQuery += ` ORDER BY published DESC, fetched_at DESC LIMIT ?`
-	args = append(args, limit)
-	rows, err := db.QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []sources.Item
-	for rows.Next() {
-		var item sources.Item
-		var published, fetchedAt, verticals string
-		if err := rows.Scan(&item.ID, &item.SourceID, &item.SourceType, &item.FetchID, &item.OriginalID,
-			&item.Title, &item.Body, &item.URL, &item.CanonicalURL, &published, &fetchedAt,
-			&verticals, &item.Language, &item.Region, &item.ContentHash, &item.RawJSON,
-			&item.EvidenceLevel, &item.VintagePolicy, &item.LookaheadStatus, &item.ReleaseDate); err != nil {
-			return nil, err
-		}
-		item.Published = parseSourceSearchStoredTime(published)
-		item.FetchedAt = parseSourceSearchStoredTime(fetchedAt)
-		_ = json.Unmarshal([]byte(verticals), &item.Verticals)
-		out = append(out, item)
-	}
-	return out, rows.Err()
-}
-
-func parseSourceSearchStoredTime(value string) time.Time {
-	if value == "" {
-		return time.Time{}
-	}
-	parsed, _ := time.Parse(time.RFC3339Nano, value)
-	return parsed
-}
-
-func sourceSearchItemResult(rank int, item sources.Item) map[string]any {
+func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
 	return map[string]any{
-		"rank":             rank,
-		"target_kind":      "source_service_item",
-		"item_id":          item.ID,
+		"rank":             item.Rank,
+		"target_kind":      firstNonEmptyString(item.TargetKind, sourceapi.TargetKind),
+		"item_id":          item.ItemID,
 		"source_id":        item.SourceID,
 		"source_type":      item.SourceType,
 		"fetch_id":         item.FetchID,
@@ -151,8 +134,8 @@ func sourceSearchItemResult(rank int, item sources.Item) map[string]any {
 		"body":             item.Body,
 		"url":              item.URL,
 		"canonical_url":    item.CanonicalURL,
-		"published_at":     formatSourceSearchTime(item.Published),
-		"fetched_at":       formatSourceSearchTime(item.FetchedAt),
+		"published_at":     item.PublishedAt,
+		"fetched_at":       item.FetchedAt,
 		"verticals":        item.Verticals,
 		"language":         item.Language,
 		"region":           item.Region,
@@ -162,13 +145,6 @@ func sourceSearchItemResult(rank int, item sources.Item) map[string]any {
 		"lookahead_status": item.LookaheadStatus,
 		"release_date":     item.ReleaseDate,
 	}
-}
-
-func formatSourceSearchTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339)
 }
 
 func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
@@ -214,11 +190,11 @@ func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) Tool {
 				return "", err
 			}
 			full := map[string]any{
-				"query":     resp.Query,
-				"provider":  resp.Provider,
-				"source_db": resp.SourceDB,
-				"metadata":  resp.Metadata,
-				"results":   resp.Results,
+				"query":              resp.Query,
+				"provider":           resp.Provider,
+				"source_service_url": resp.BaseURL,
+				"metadata":           resp.Metadata,
+				"results":            resp.Results,
 			}
 			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)

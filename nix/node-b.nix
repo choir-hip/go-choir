@@ -358,6 +358,7 @@ in
       ReadWritePaths = [ sourceServiceDir ];
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
       Environment = [
+        "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
         "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
       ];
@@ -571,8 +572,8 @@ in
   systemd.services.go-choir-sandbox = {
     description = "go-choir Sandbox Runtime (gateway-routed)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-gateway.service" ];
-    wants = [ "network-online.target" "go-choir-gateway.service" ];
+    after = [ "network-online.target" "go-choir-gateway.service" "go-choir-sourcecycled.service" ];
+    wants = [ "network-online.target" "go-choir-gateway.service" "go-choir-sourcecycled.service" ];
     path = with pkgs; [ bash coreutils git gnugrep gnused goChoirPackages.zot ];
     serviceConfig = commonServiceHardening // {
       # Obtain a gateway credential token before starting the sandbox.
@@ -613,7 +614,7 @@ in
         "SANDBOX_PORT=8085"
         "SANDBOX_ID=sandbox-m1"
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
-        "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
+        "SOURCE_SERVICE_BASE_URL=http://127.0.0.1:8787"
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"

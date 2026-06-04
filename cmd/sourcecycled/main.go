@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
@@ -53,9 +56,18 @@ func main() {
 		cancel()
 	}()
 
+	server := startSourceServiceAPI(ctx, store)
+
 	// 3. Main Ingestion Loop (15-minute cycle)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Source Service API shutdown failed: %v", err)
+		}
+	}()
 
 	// Run the first cycle immediately
 	log.Println("Initiating first cycle...")
@@ -83,6 +95,16 @@ func sourceServiceDBPath() string {
 	return "var/sourcecycled.db"
 }
 
+func sourceServiceAddr() string {
+	if addr := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_ADDR")); addr != "" {
+		return addr
+	}
+	if addr := strings.TrimSpace(os.Getenv("SOURCECYCLED_ADDR")); addr != "" {
+		return addr
+	}
+	return "127.0.0.1:8787"
+}
+
 func sourceServiceConfigPath() string {
 	if configPath := os.Getenv("SOURCE_SERVICE_CONFIG_PATH"); strings.TrimSpace(configPath) != "" {
 		return strings.TrimSpace(configPath)
@@ -91,6 +113,155 @@ func sourceServiceConfigPath() string {
 		return strings.TrimSpace(configPath)
 	}
 	return filepath.Join("configs", "sources.json")
+}
+
+func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
+	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
+	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
+	server := &http.Server{
+		Addr:              sourceServiceAddr(),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		log.Printf("Source Service API listening on %s", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Source Service API stopped with error: %v", err)
+			return
+		}
+		log.Println("Source Service API stopped.")
+	}()
+	return server
+}
+
+func handleSourceServiceHealth(store *cycle.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		itemCount, itemErr := store.CountItems(r.Context())
+		fetchCount, fetchErr := store.CountFetches(r.Context())
+		status := "ok"
+		if itemErr != nil || fetchErr != nil {
+			status = "degraded"
+		}
+		writeSourceServiceJSON(w, http.StatusOK, sourceapi.HealthResponse{
+			Status:     status,
+			ItemCount:  itemCount,
+			FetchCount: fetchCount,
+			CheckedAt:  time.Now().UTC(),
+		})
+	}
+}
+
+func handleSourceServiceSearch(store *cycle.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		limit := parsePositiveInt(r.URL.Query().Get("max_results"), 20)
+		items, err := store.SearchItems(r.Context(), query, limit)
+		if err != nil {
+			http.Error(w, "search source items: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		results := make([]sourceapi.ItemResult, 0, len(items))
+		for idx, item := range items {
+			results = append(results, sourceAPIItemResult(idx+1, item))
+		}
+		writeSourceServiceJSON(w, http.StatusOK, sourceapi.SearchResponse{
+			Query:    query,
+			Provider: sourceapi.ProviderName,
+			Results:  results,
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+		})
+	}
+}
+
+func handleSourceServiceItem(store *cycle.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		itemID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/internal/source-service/items/"), "/")
+		if itemID == "" {
+			http.Error(w, "item id is required", http.StatusBadRequest)
+			return
+		}
+		item, err := store.GetItem(r.Context(), itemID)
+		if err != nil {
+			http.Error(w, "resolve source item: "+err.Error(), http.StatusNotFound)
+			return
+		}
+		writeSourceServiceJSON(w, http.StatusOK, sourceapi.ResolveItemResponse{
+			Provider: sourceapi.ProviderName,
+			Item:     sourceAPIItemResult(1, item),
+		})
+	}
+}
+
+func sourceAPIItemResult(rank int, item sources.Item) sourceapi.ItemResult {
+	return sourceapi.ItemResult{
+		Rank:            rank,
+		TargetKind:      sourceapi.TargetKind,
+		ItemID:          item.ID,
+		SourceID:        item.SourceID,
+		SourceType:      string(item.SourceType),
+		FetchID:         item.FetchID,
+		OriginalID:      item.OriginalID,
+		Title:           item.Title,
+		Body:            item.Body,
+		URL:             item.URL,
+		CanonicalURL:    item.CanonicalURL,
+		PublishedAt:     formatSourceTime(item.Published),
+		FetchedAt:       formatSourceTime(item.FetchedAt),
+		Verticals:       item.Verticals,
+		Language:        item.Language,
+		Region:          item.Region,
+		ContentHash:     item.ContentHash,
+		EvidenceLevel:   item.EvidenceLevel,
+		VintagePolicy:   item.VintagePolicy,
+		LookaheadStatus: item.LookaheadStatus,
+		ReleaseDate:     item.ReleaseDate,
+	}
+}
+
+func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		log.Printf("write source service response: %v", err)
+	}
+}
+
+func parsePositiveInt(raw string, fallback int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	if parsed > 100 {
+		return 100
+	}
+	return parsed
+}
+
+func formatSourceTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 var engine *cycle.Engine

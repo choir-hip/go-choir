@@ -88,6 +88,42 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 	h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(status), time.Since(started))
 }
 
+func (h *Handler) HandlePlatformPublicationExport(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	routePath := strings.TrimSpace(r.URL.Query().Get("route"))
+	if routePath == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "route is required"})
+		return
+	}
+	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/export")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
+		return
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
+		return
+	}
+	q := u.Query()
+	q.Set("route", routePath)
+	q.Set("format", r.URL.Query().Get("format"))
+	u.RawQuery = q.Encode()
+	var out platform.PublicationExport
+	status, err := h.getPlatformJSON(r, u.String(), &out)
+	if err != nil {
+		log.Printf("proxy: platform publication export: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to export publication"})
+		return
+	}
+	writeJSON(w, status, out)
+	h.lifecycle.record("platform_publication.export", lifecycleHTTPStatus(status), time.Since(started))
+}
+
 func (h *Handler) HandlePlatformRetrievalSearch(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if r.Method != http.MethodGet {

@@ -19,6 +19,7 @@
  *   POST   /api/vtext/documents/{id}/revise        — request a VText revision
  *   POST   /api/platform/vtext/publications        — publish selected VText revision
  *   GET    /api/platform/publications/resolve      — resolve public publication bundle
+ *   GET    /api/platform/publications/export       — export canonical publication artifact
  *   GET    /api/platform/retrieval/search          — search public published spans
  *   POST   /api/platform/publications/{id}/proposals — submit reader derivative proposal
  */
@@ -304,6 +305,20 @@ export async function resolvePublication(routePath) {
 
   if (!res.ok) {
     await decodeError(res, `Resolve publication failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function exportPublication(routePath, format = 'txt') {
+  const params = new URLSearchParams({ route: routePath, format });
+  const res = await fetch(platformPath(`/publications/export?${params.toString()}`), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Export publication failed (${res.status})`);
   }
 
   return res.json();

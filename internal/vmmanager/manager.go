@@ -1270,6 +1270,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.gateway_url=http://%s:8084", hostIP),
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
+			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)

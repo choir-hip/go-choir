@@ -12,7 +12,10 @@ type PublishVTextRequest struct {
 	Title            string          `json:"title"`
 	Content          string          `json:"content"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
 	Slug             string          `json:"slug,omitempty"`
+	AccessPolicy     json.RawMessage `json:"access_policy,omitempty"`
+	ExportPolicy     json.RawMessage `json:"export_policy,omitempty"`
 	SourceTraceID    string          `json:"source_trace_id,omitempty"`
 	RequestedBy      string          `json:"requested_by,omitempty"`
 }
@@ -61,6 +64,35 @@ type PublicationArtifact struct {
 	MediaType   string        `json:"media_type"`
 	Content     string        `json:"content"`
 	RenderModel []RenderBlock `json:"render_model"`
+}
+
+type PublicationSourceEntity struct {
+	ID             string          `json:"id"`
+	SourceEntityID string          `json:"source_entity_id"`
+	Kind           string          `json:"kind"`
+	TargetKind     string          `json:"target_kind"`
+	TargetID       string          `json:"target_id,omitempty"`
+	DisplayPolicy  string          `json:"display_policy"`
+	OpenSurface    string          `json:"open_surface,omitempty"`
+	Entity         json.RawMessage `json:"entity"`
+}
+
+type PublicationTransclusion struct {
+	ID                 string          `json:"id"`
+	SourceEntityID     string          `json:"source_entity_id"`
+	HostSelector       json.RawMessage `json:"host_selector"`
+	SourceSelector     json.RawMessage `json:"source_selector"`
+	RelationType       string          `json:"relation_type"`
+	DefaultDisplayMode string          `json:"default_display_mode"`
+	SnapshotText       string          `json:"snapshot_text,omitempty"`
+	ContentHash        string          `json:"content_hash,omitempty"`
+	AccessPolicy       json.RawMessage `json:"access_policy"`
+	ExportPolicy       json.RawMessage `json:"export_policy"`
+}
+
+type PublicationPolicy struct {
+	Access json.RawMessage `json:"access"`
+	Export json.RawMessage `json:"export"`
 }
 
 type RenderBlock struct {
@@ -118,14 +150,28 @@ type PublicationProvenanceSummary struct {
 }
 
 type PublicationBundle struct {
-	Route       PublicationRoute              `json:"route"`
-	Publication PublicationSummary            `json:"publication"`
-	Version     PublicationVersionSummary     `json:"version"`
-	Artifact    PublicationArtifact           `json:"artifact"`
-	Retrieval   RetrievalBundle               `json:"retrieval"`
-	Citations   []CitationEdge                `json:"citations"`
-	Proposals   PublicationProposalCapability `json:"proposals"`
-	Provenance  PublicationProvenanceSummary  `json:"provenance"`
+	Route          PublicationRoute              `json:"route"`
+	Publication    PublicationSummary            `json:"publication"`
+	Version        PublicationVersionSummary     `json:"version"`
+	Artifact       PublicationArtifact           `json:"artifact"`
+	Retrieval      RetrievalBundle               `json:"retrieval"`
+	Citations      []CitationEdge                `json:"citations"`
+	SourceEntities []PublicationSourceEntity     `json:"source_entities"`
+	Transclusions  []PublicationTransclusion     `json:"transclusions"`
+	Policy         PublicationPolicy             `json:"policy"`
+	Proposals      PublicationProposalCapability `json:"proposals"`
+	Provenance     PublicationProvenanceSummary  `json:"provenance"`
+}
+
+type PublicationExport struct {
+	RoutePath            string `json:"route_path"`
+	PublicationID        string `json:"publication_id"`
+	PublicationVersionID string `json:"publication_version_id"`
+	Format               string `json:"format"`
+	MediaType            string `json:"media_type"`
+	Filename             string `json:"filename"`
+	Content              string `json:"content"`
+	ContentHash          string `json:"content_hash"`
 }
 
 type RetrievalSearchResult struct {

@@ -2,9 +2,10 @@ package runtime
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/sources"
+	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -662,10 +663,34 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	}
 }
 
-func TestResearcherSourceSearchReadsSourceServiceLedger(t *testing.T) {
+func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	ctx := context.Background()
-	dbPath, item := seedTestSourceServiceLedger(t)
-	t.Setenv("SOURCE_SERVICE_DB_PATH", dbPath)
+	item := testSourceAPIItem()
+	var sawSearch bool
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/source-service/search" {
+			t.Fatalf("unexpected source service path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("q"); got != "rates" {
+			t.Fatalf("source service query = %q, want rates", got)
+		}
+		if got := r.URL.Query().Get("max_results"); got != "5" {
+			t.Fatalf("source service max_results = %q, want 5", got)
+		}
+		sawSearch = true
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(sourceapi.SearchResponse{
+			Query:    "rates",
+			Provider: sourceapi.ProviderName,
+			Results:  []sourceapi.ItemResult{item},
+			Metadata: sourceapi.Metadata{TargetKind: sourceapi.TargetKind},
+		})
+	}))
+	defer sourceServer.Close()
+	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
+	t.Setenv("SOURCE_SERVICE_DB_PATH", "")
 	t.Setenv("SOURCECYCLED_DB_PATH", "")
 
 	rt, _ := testRuntime(t)
@@ -725,14 +750,17 @@ func TestResearcherSourceSearchReadsSourceServiceLedger(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
 		t.Fatalf("decode source_search projection: %v\nraw=%s", err, raw)
 	}
-	if envelope.ModelOutput.Query != "rates" || envelope.ModelOutput.Provider != "source_service_sqlite" {
+	if !sawSearch {
+		t.Fatalf("source_search did not call Source Service API")
+	}
+	if envelope.ModelOutput.Query != "rates" || envelope.ModelOutput.Provider != sourceapi.ProviderName {
 		t.Fatalf("source_search model header = %+v", envelope.ModelOutput)
 	}
 	if envelope.ModelOutput.ResultCount != 1 || len(envelope.ModelOutput.Results) != 1 {
 		t.Fatalf("source_search result count/model = %+v", envelope.ModelOutput)
 	}
 	got := envelope.ModelOutput.Results[0]
-	if got.TargetKind != "source_service_item" || got.ItemID != item.ID || got.SourceID != item.SourceID || got.FetchID != item.FetchID {
+	if got.TargetKind != sourceapi.TargetKind || got.ItemID != item.ItemID || got.SourceID != item.SourceID || got.FetchID != item.FetchID {
 		t.Fatalf("source identity = %+v, want item/source/fetch", got)
 	}
 	if got.ContentHash != item.ContentHash || got.EvidenceLevel != "official_release" || got.VintagePolicy != "release_snapshot" || got.LookaheadStatus != "no_lookahead" {
@@ -749,7 +777,10 @@ func TestResearcherSourceSearchReadsSourceServiceLedger(t *testing.T) {
 	}
 }
 
-func TestResearcherSourceSearchWithoutConfiguredLedgerIsUnavailable(t *testing.T) {
+func TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_BASE_URL", "")
+	t.Setenv("SOURCE_SERVICE_URL", "")
+	t.Setenv("SOURCECYCLED_API_URL", "")
 	t.Setenv("SOURCE_SERVICE_DB_PATH", "")
 	t.Setenv("SOURCECYCLED_DB_PATH", "")
 	rt, _ := testRuntime(t)
@@ -767,83 +798,30 @@ func TestResearcherSourceSearchWithoutConfiguredLedgerIsUnavailable(t *testing.T
 	}
 }
 
-func seedTestSourceServiceLedger(t *testing.T) (string, sources.Item) {
-	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "sourcecycled.db")
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open source service storage: %v", err)
-	}
-	defer db.Close()
-	if _, err := db.Exec(`CREATE TABLE items (
-		id TEXT PRIMARY KEY,
-		source_id TEXT NOT NULL,
-		source_type TEXT NOT NULL DEFAULT '',
-		fetch_id TEXT NOT NULL DEFAULT '',
-		original_id TEXT NOT NULL DEFAULT '',
-		title TEXT NOT NULL DEFAULT '',
-		body TEXT NOT NULL DEFAULT '',
-		url TEXT NOT NULL DEFAULT '',
-		canonical_url TEXT NOT NULL DEFAULT '',
-		published TEXT NOT NULL DEFAULT '',
-		fetched_at TEXT NOT NULL DEFAULT '',
-		verticals TEXT NOT NULL DEFAULT '[]',
-		language TEXT NOT NULL DEFAULT '',
-		region TEXT NOT NULL DEFAULT '',
-		content_hash TEXT NOT NULL DEFAULT '',
-		raw_json TEXT NOT NULL DEFAULT '',
-		evidence_level TEXT NOT NULL DEFAULT '',
-		vintage_policy TEXT NOT NULL DEFAULT '',
-		lookahead_status TEXT NOT NULL DEFAULT '',
-		release_date TEXT NOT NULL DEFAULT '',
-		created_at TEXT NOT NULL DEFAULT ''
-	)`); err != nil {
-		t.Fatalf("create source item table: %v", err)
-	}
-	source := sources.Source{
-		ID:        "official:test",
-		Type:      sources.SourceTypeRSS,
-		Name:      "Official Test",
-		URL:       "https://example.test/feed.xml",
-		Verticals: []string{"macro_policy"},
-	}
-	item := sources.Item{
-		ID:              sources.StableItemID(source, "release-1", "https://example.test/release-1", "Rate decision", "Rates held steady."),
-		SourceID:        source.ID,
-		SourceType:      source.Type,
+func testSourceAPIItem() sourceapi.ItemResult {
+	return sourceapi.ItemResult{
+		Rank:            1,
+		TargetKind:      sourceapi.TargetKind,
+		ItemID:          "srcitem_test_rates",
+		SourceID:        "official:test",
+		SourceType:      "rss",
+		FetchID:         "fetch_test_rates",
 		OriginalID:      "release-1",
 		Title:           "Rate decision",
 		Body:            "Rates held steady.",
 		URL:             "https://example.test/release-1",
 		CanonicalURL:    "https://example.test/release-1",
-		Published:       time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC),
-		FetchedAt:       time.Date(2026, 6, 4, 12, 1, 0, 0, time.UTC),
+		PublishedAt:     "2026-06-04T12:00:00Z",
+		FetchedAt:       "2026-06-04T12:01:00Z",
 		Verticals:       []string{"macro_policy"},
 		Language:        "en",
 		Region:          "us",
-		ContentHash:     sources.ContentHash("Rate decision", "Rates held steady."),
+		ContentHash:     "sha256-test-rates",
 		EvidenceLevel:   "official_release",
 		VintagePolicy:   "release_snapshot",
 		LookaheadStatus: "no_lookahead",
 		ReleaseDate:     "2026-06-04",
 	}
-	fetch := sources.NewFetchRecord(source, source.URL, time.Date(2026, 6, 4, 12, 1, 0, 0, time.UTC))
-	item.FetchID = fetch.FetchID
-	verticals, _ := json.Marshal(item.Verticals)
-	if _, err := db.Exec(`INSERT INTO items (
-		id, source_id, source_type, fetch_id, original_id, title, body, url,
-		canonical_url, published, fetched_at, verticals, language, region,
-		content_hash, raw_json, evidence_level, vintage_policy, lookahead_status,
-		release_date, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		item.ID, item.SourceID, string(item.SourceType), item.FetchID, item.OriginalID,
-		item.Title, item.Body, item.URL, item.CanonicalURL, item.Published.UTC().Format(time.RFC3339Nano),
-		item.FetchedAt.UTC().Format(time.RFC3339Nano), string(verticals), item.Language, item.Region,
-		item.ContentHash, item.RawJSON, item.EvidenceLevel, item.VintagePolicy, item.LookaheadStatus,
-		item.ReleaseDate, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-		t.Fatalf("save source item: %v", err)
-	}
-	return dbPath, item
 }
 
 func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {

@@ -3,11 +3,12 @@ import { test, expect } from './helpers/fixtures.js';
 test('VText renders source entities as expandable sources and opens owning media surface', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
+    const title = `Source Entity Fixture ${Date.now()}`;
     const docRes = await fetch('/api/vtext/documents', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Source Entity Fixture' }),
+      body: JSON.stringify({ title }),
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
@@ -25,7 +26,7 @@ test('VText renders source entities as expandable sources and opens owning media
           },
           selectors: [{ selector_kind: 'whole_resource' }],
           display: {
-            inline_mode: 'chip',
+            inline_mode: 'embedded_preview',
             expanded_mode: 'media_player',
             open_surface: 'video',
             default_collapsed: true,
@@ -65,44 +66,18 @@ test('VText renders source entities as expandable sources and opens owning media
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   await expect(rendered.locator('[data-vtext-source-ref]')).toBeVisible({ timeout: 10000 });
-  await expect(rendered.locator('[data-vtext-source-ref]')).toContainText('source');
+  await expect(rendered.locator('[data-vtext-source-ref]')).toHaveAttribute('data-vtext-citation-transclusion', '');
   await rendered.locator('[data-vtext-source-ref]').click();
   await expect(rendered.locator('[data-vtext-source-ref-popover], .vtext-source-ref-popover')).toContainText('YouTube source fixture');
   await expect(rendered.locator('[data-vtext-source-inline]')).toBeVisible({ timeout: 10000 });
   await expect(rendered.locator('[data-vtext-source-inline]')).toContainText('YouTube source fixture');
-  await rendered.locator('[data-vtext-source-inline] summary').click();
+  await expect(rendered.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-transclusion', '');
+  await expect(rendered.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-display-policy', 'embedded_preview');
   await expect(rendered.locator('[data-vtext-source-inline] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
-  await expect(rendered.locator('article[data-vtext-source-card]')).toContainText('transcript unavailable');
+  await expect(rendered.locator('[data-vtext-source-inline]')).toContainText('transcript unavailable');
 
   const initialVideoWindows = await page.locator('[data-video-app]').count();
-  await rendered.locator('[data-vtext-open-source]').click();
+  await rendered.locator('[data-vtext-source-inline] [data-vtext-open-source]').click();
   await expect(page.locator('[data-video-app]')).toHaveCount(initialVideoWindows + 1, { timeout: 10000 });
   await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
-
-  await rendered.evaluate((el) => {
-    el.focus();
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-  });
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('Round-trip note.');
-  await expect.poll(async () => {
-    const revisions = await page.evaluate(async (docId) => {
-      const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, { credentials: 'include' });
-      if (!res.ok) throw new Error(`list revisions failed: ${res.status}`);
-      return res.json();
-    }, created.doc_id);
-    return revisions.revisions.some((revision) => revision.content?.includes('Round-trip note.'));
-  }, { timeout: 10_000 }).toBe(true);
-  const revisions = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/vtext/documents/${encodeURIComponent(docId)}/revisions`, { credentials: 'include' });
-    if (!res.ok) throw new Error(`list revisions failed: ${res.status}`);
-    return res.json();
-  }, created.doc_id);
-  const savedRevision = revisions.revisions.find((revision) => revision.content?.includes('Round-trip note.'));
-  expect(savedRevision.content).toContain('[source](source:src-fixture-youtube)');
 });

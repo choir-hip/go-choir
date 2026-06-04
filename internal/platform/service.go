@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -90,6 +91,13 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 	if !json.Valid(req.Citations) {
 		return nil, fmt.Errorf("citations must be valid JSON")
 	}
+	if req.Metadata == nil {
+		req.Metadata = json.RawMessage("{}")
+	}
+	sourceMetadata, err := buildPublicationSourceMetadata(req)
+	if err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	publicationID := id("pub")
@@ -113,7 +121,7 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 
 	contentHash := sha256Hex([]byte(req.Content))
 	projectionHash := contentHash
-	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.Citations)))
+	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.Citations) + "\n" + string(req.Metadata)))
 	routePath := publicVTextPrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(publicationID)
 	storageRef := filepath.Join("sha256", contentHash+".txt")
 	if err := s.writeBlob(storageRef, []byte(req.Content)); err != nil {
@@ -133,6 +141,11 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 		"publication_id":         publicationID,
 		"publication_version_id": versionID,
 		"route_path":             routePath,
+		"source_metadata_hash":   sourceMetadata.MetadataHash,
+		"source_entities":        sourceMetadata.SourceEntities,
+		"transclusions":          sourceMetadata.Transclusions,
+		"access_policy":          json.RawMessage(sourceMetadata.AccessPolicy),
+		"export_policy":          json.RawMessage(sourceMetadata.ExportPolicy),
 	}
 	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
@@ -175,6 +188,7 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 		{"INSERT INTO retrieval_spans (span_id, source_id, source_version_id, selector_kind, selector_json, text_hash, chunk_hash, token_count, metadata_json, created_at) VALUES (?, ?, ?, 'text_position', ?, ?, ?, ?, ?, ?)", []any{spanID, sourceID, versionID, wholeSelector, contentHash, contentHash, len(strings.Fields(req.Content)), `{"scope":"whole_document"}`, now}},
 		{"INSERT INTO retrieval_manifests (retrieval_manifest_id, output_kind, output_id, query_or_objective_hash, index_manifest_id, selected_refs_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?, ?)", []any{retrievalManifestID, versionID, sha256Hex([]byte("publish:" + versionID)), manifestID, retrievalSelectedRefs, now}},
 		{"INSERT INTO citation_edges (citation_id, from_kind, from_id, from_selector_json, to_kind, to_id, to_selector_json, relation_type, state, proposed_by, accepted_by, evidence_ref, confidence, created_at, updated_at) VALUES (?, 'publication_version', ?, ?, 'private_vtext_revision', ?, ?, 'is_version_of', 'accepted', ?, ?, ?, 1, ?, ?)", []any{sourceCitationID, versionID, wholeSelector, req.SourceRevisionID, wholeSelector, req.RequestedBy, req.RequestedBy, "source_revision_hash:" + sourceRevisionHash, now, now}},
+		{"INSERT INTO publication_policies (policy_id, publication_version_id, access_policy_json, export_policy_json, created_at) VALUES (?, ?, ?, ?, ?)", []any{id("policy"), versionID, string(sourceMetadata.AccessPolicy), string(sourceMetadata.ExportPolicy), now}},
 		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'private_vtext_revision', ?, ?, ?, ?)", []any{privateEntityID, sourceRevisionHash, "choir-private:vtext/" + req.SourceDocID + "/revisions/" + req.SourceRevisionID, `{"visibility":"private","projection":"hash_only"}`, now}},
 		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?)", []any{publicEntityID, contentHash, publicURI, string(manifestJSON), now}},
 		{"INSERT INTO provenance_agents (agent_ref_id, agent_kind, subject_id, metadata_json, created_at) VALUES (?, 'user', ?, ?, ?)", []any{agentID, req.RequestedBy, `{"authority":"owner_publish_v0"}`, now}},
@@ -184,6 +198,19 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 		{"INSERT INTO rollback_refs (rollback_id, target_kind, target_id, rollback_kind, ref, created_at) VALUES (?, 'public_route', ?, 'disable_route', ?, ?)", []any{rollbackID, routeID, "UPDATE public_routes SET state='disabled' WHERE route_id='" + routeID + "'", now}},
 	}); err != nil {
 		return nil, err
+	}
+
+	for i, sourceEntity := range sourceMetadata.SourceEntities {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO publication_source_entities (entity_record_id, publication_version_id, source_entity_id, kind, target_kind, target_id, display_policy, open_surface, entity_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id("pubsrc"), versionID, sourceEntity.SourceEntityID, sourceEntity.Kind, sourceEntity.TargetKind, sourceEntity.TargetID, sourceEntity.DisplayPolicy, sourceEntity.OpenSurface, string(sourceEntity.EntityJSON), now); err != nil {
+			return nil, fmt.Errorf("platform publish: insert source entity %d: %w", i, err)
+		}
+	}
+	for i, transclusion := range sourceMetadata.Transclusions {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO publication_transclusions (transclusion_id, publication_version_id, source_entity_id, host_selector_json, source_selector_json, relation_type, default_display_mode, snapshot_text, content_hash, access_policy_json, export_policy_json, entity_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id("trans"), versionID, transclusion.SourceEntityID, string(transclusion.HostSelector), string(transclusion.SourceSelector), transclusion.RelationType, transclusion.DefaultDisplayMode, transclusion.SnapshotText, transclusion.ContentHash, string(sourceMetadata.AccessPolicy), string(sourceMetadata.ExportPolicy), string(transclusion.EntityJSON), now); err != nil {
+			return nil, fmt.Errorf("platform publish: insert transclusion %d: %w", i, err)
+		}
 	}
 
 	for _, citation := range externalCitations {
@@ -287,6 +314,18 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 	if err != nil {
 		return nil, err
 	}
+	sourceEntities, err := s.publicationSourceEntities(ctx, rec.PublicationVersionID)
+	if err != nil {
+		return nil, err
+	}
+	transclusions, err := s.publicationTransclusions(ctx, rec.PublicationVersionID)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := s.publicationPolicy(ctx, rec.PublicationVersionID)
+	if err != nil {
+		return nil, err
+	}
 	provenance, err := s.provenanceSummary(ctx, rec.PublicationVersionID)
 	if err != nil {
 		return nil, err
@@ -316,12 +355,41 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 			SourceID: sourceID,
 			Spans:    spans,
 		},
-		Citations: citations,
+		Citations:      citations,
+		SourceEntities: sourceEntities,
+		Transclusions:  transclusions,
+		Policy:         policy,
 		Proposals: PublicationProposalCapability{
 			CanSubmit:           true,
 			SourcePublicationID: rec.PublicationID,
 		},
 		Provenance: provenance,
+	}, nil
+}
+
+func (s *Service) ExportPublicationByRoute(ctx context.Context, routePath, format string) (*PublicationExport, error) {
+	bundle, err := s.GetPublicationBundleByRoute(ctx, routePath)
+	if err != nil {
+		return nil, err
+	}
+	format = normalizeExportFormat(format)
+	if format == "" {
+		return nil, fmt.Errorf("unsupported export format")
+	}
+	if !publicationExportAllowed(bundle.Policy.Export, format) {
+		return nil, fmt.Errorf("export format %s is not allowed by publication policy", format)
+	}
+	content := formatPublicationExportContent(bundle, format)
+	mediaType := exportMediaType(format)
+	return &PublicationExport{
+		RoutePath:            bundle.Route.Path,
+		PublicationID:        bundle.Publication.ID,
+		PublicationVersionID: bundle.Version.ID,
+		Format:               format,
+		MediaType:            mediaType,
+		Filename:             publicationExportFilename(bundle.Publication.Slug, bundle.Publication.Title, format),
+		Content:              content,
+		ContentHash:          sha256Hex([]byte(content)),
 	}, nil
 }
 
@@ -641,6 +709,76 @@ func normalizeProposalDeliveryState(state string) string {
 	}
 }
 
+func normalizeExportFormat(format string) string {
+	switch strings.TrimPrefix(strings.TrimSpace(strings.ToLower(format)), ".") {
+	case "", "txt", "text":
+		return "txt"
+	case "md", "markdown":
+		return "md"
+	case "html":
+		return "html"
+	default:
+		return ""
+	}
+}
+
+func publicationExportAllowed(raw json.RawMessage, format string) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var policy map[string]any
+	if err := json.Unmarshal(raw, &policy); err != nil {
+		return false
+	}
+	if value, ok := policy["download_allowed"].(bool); ok && !value {
+		return false
+	}
+	formats, ok := policy["formats"].([]any)
+	if !ok || len(formats) == 0 {
+		return true
+	}
+	for _, value := range formats {
+		if strings.EqualFold(strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(value)), "."), format) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatPublicationExportContent(bundle *PublicationBundle, format string) string {
+	if bundle == nil {
+		return ""
+	}
+	content := bundle.Artifact.Content
+	switch format {
+	case "html":
+		title := html.EscapeString(firstNonEmpty(bundle.Publication.Title, "Published VText"))
+		body := strings.ReplaceAll(html.EscapeString(content), "\n", "<br>\n")
+		return "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>" + title + "</title></head><body><article><h1>" + title + "</h1><p>" + body + "</p></article></body></html>\n"
+	default:
+		return content
+	}
+}
+
+func exportMediaType(format string) string {
+	switch format {
+	case "html":
+		return "text/html; charset=utf-8"
+	case "md":
+		return "text/markdown; charset=utf-8"
+	default:
+		return textMediaType
+	}
+}
+
+func publicationExportFilename(slug, title, format string) string {
+	base := slugify(firstNonEmpty(slug, title, "published-vtext"))
+	if base == "" {
+		base = "published-vtext"
+	}
+	return base + "." + format
+}
+
 func (s *Service) retrievalSpans(ctx context.Context, versionID, content string) ([]RetrievalSpan, string, error) {
 	rows, err := s.store.db.QueryContext(ctx, `
 SELECT rs.source_id, rsp.span_id, rsp.source_version_id, rsp.selector_kind,
@@ -708,6 +846,84 @@ ORDER BY created_at ASC`, versionID)
 		return nil, fmt.Errorf("platform bundle: iterate citation edges: %w", err)
 	}
 	return edges, nil
+}
+
+func (s *Service) publicationSourceEntities(ctx context.Context, versionID string) ([]PublicationSourceEntity, error) {
+	rows, err := s.store.db.QueryContext(ctx, `
+SELECT entity_record_id, source_entity_id, kind, target_kind, target_id,
+       display_policy, open_surface, entity_json
+FROM publication_source_entities
+WHERE publication_version_id = ?
+ORDER BY created_at ASC`, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("platform bundle: query source entities: %w", err)
+	}
+	defer rows.Close()
+	entities := []PublicationSourceEntity{}
+	for rows.Next() {
+		var entity PublicationSourceEntity
+		var raw string
+		if err := rows.Scan(&entity.ID, &entity.SourceEntityID, &entity.Kind, &entity.TargetKind, &entity.TargetID, &entity.DisplayPolicy, &entity.OpenSurface, &raw); err != nil {
+			return nil, fmt.Errorf("platform bundle: scan source entity: %w", err)
+		}
+		entity.Entity = json.RawMessage(firstNonEmpty(raw, "{}"))
+		entities = append(entities, entity)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("platform bundle: iterate source entities: %w", err)
+	}
+	return entities, nil
+}
+
+func (s *Service) publicationTransclusions(ctx context.Context, versionID string) ([]PublicationTransclusion, error) {
+	rows, err := s.store.db.QueryContext(ctx, `
+SELECT transclusion_id, source_entity_id, host_selector_json, source_selector_json,
+       relation_type, default_display_mode, snapshot_text, content_hash,
+       access_policy_json, export_policy_json
+FROM publication_transclusions
+WHERE publication_version_id = ?
+ORDER BY created_at ASC`, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("platform bundle: query transclusions: %w", err)
+	}
+	defer rows.Close()
+	transclusions := []PublicationTransclusion{}
+	for rows.Next() {
+		var transclusion PublicationTransclusion
+		var hostSelector, sourceSelector, accessPolicy, exportPolicy string
+		if err := rows.Scan(&transclusion.ID, &transclusion.SourceEntityID, &hostSelector, &sourceSelector, &transclusion.RelationType, &transclusion.DefaultDisplayMode, &transclusion.SnapshotText, &transclusion.ContentHash, &accessPolicy, &exportPolicy); err != nil {
+			return nil, fmt.Errorf("platform bundle: scan transclusion: %w", err)
+		}
+		transclusion.HostSelector = json.RawMessage(firstNonEmpty(hostSelector, "{}"))
+		transclusion.SourceSelector = json.RawMessage(firstNonEmpty(sourceSelector, "{}"))
+		transclusion.AccessPolicy = json.RawMessage(firstNonEmpty(accessPolicy, "{}"))
+		transclusion.ExportPolicy = json.RawMessage(firstNonEmpty(exportPolicy, "{}"))
+		transclusions = append(transclusions, transclusion)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("platform bundle: iterate transclusions: %w", err)
+	}
+	return transclusions, nil
+}
+
+func (s *Service) publicationPolicy(ctx context.Context, versionID string) (PublicationPolicy, error) {
+	var accessPolicy, exportPolicy string
+	err := s.store.db.QueryRowContext(ctx, `
+SELECT access_policy_json, export_policy_json
+FROM publication_policies
+WHERE publication_version_id = ?
+ORDER BY created_at DESC
+LIMIT 1`, versionID).Scan(&accessPolicy, &exportPolicy)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return PublicationPolicy{Access: defaultPublicationAccessPolicy(), Export: defaultPublicationExportPolicy()}, nil
+		}
+		return PublicationPolicy{}, fmt.Errorf("platform bundle: query publication policy: %w", err)
+	}
+	return PublicationPolicy{
+		Access: json.RawMessage(firstNonEmpty(accessPolicy, "{}")),
+		Export: json.RawMessage(firstNonEmpty(exportPolicy, "{}")),
+	}, nil
 }
 
 func (s *Service) provenanceSummary(ctx context.Context, versionID string) (PublicationProvenanceSummary, error) {

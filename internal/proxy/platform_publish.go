@@ -33,6 +33,7 @@ type sandboxVTextRevision struct {
 	OwnerID    string          `json:"owner_id"`
 	Content    string          `json:"content"`
 	Citations  json.RawMessage `json:"citations,omitempty"`
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
 }
 
 func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +125,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		Title:            doc.Title,
 		Content:          rev.Content,
 		Citations:        rev.Citations,
+		Metadata:         rev.Metadata,
 		Slug:             req.Slug,
 		RequestedBy:      authResult.UserID,
 	}

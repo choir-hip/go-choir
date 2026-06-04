@@ -217,6 +217,43 @@ CREATE TABLE IF NOT EXISTS citation_edges (
 	updated_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS publication_source_entities (
+	entity_record_id VARCHAR(255) PRIMARY KEY,
+	publication_version_id VARCHAR(255) NOT NULL,
+	source_entity_id VARCHAR(255) NOT NULL,
+	kind VARCHAR(128) NOT NULL DEFAULT '',
+	target_kind VARCHAR(128) NOT NULL DEFAULT '',
+	target_id LONGTEXT NOT NULL DEFAULT '',
+	display_policy VARCHAR(128) NOT NULL DEFAULT '',
+	open_surface VARCHAR(128) NOT NULL DEFAULT '',
+	entity_json LONGTEXT NOT NULL DEFAULT '{}',
+	created_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS publication_transclusions (
+	transclusion_id VARCHAR(255) PRIMARY KEY,
+	publication_version_id VARCHAR(255) NOT NULL,
+	source_entity_id VARCHAR(255) NOT NULL,
+	host_selector_json LONGTEXT NOT NULL DEFAULT '{}',
+	source_selector_json LONGTEXT NOT NULL DEFAULT '{}',
+	relation_type VARCHAR(128) NOT NULL DEFAULT '',
+	default_display_mode VARCHAR(128) NOT NULL DEFAULT '',
+	snapshot_text LONGTEXT NOT NULL DEFAULT '',
+	content_hash VARCHAR(128) NOT NULL DEFAULT '',
+	access_policy_json LONGTEXT NOT NULL DEFAULT '{}',
+	export_policy_json LONGTEXT NOT NULL DEFAULT '{}',
+	entity_json LONGTEXT NOT NULL DEFAULT '{}',
+	created_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS publication_policies (
+	policy_id VARCHAR(255) PRIMARY KEY,
+	publication_version_id VARCHAR(255) NOT NULL,
+	access_policy_json LONGTEXT NOT NULL DEFAULT '{}',
+	export_policy_json LONGTEXT NOT NULL DEFAULT '{}',
+	created_at DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS publication_version_proposals (
 	proposal_id VARCHAR(255) PRIMARY KEY,
 	publication_id VARCHAR(255) NOT NULL,

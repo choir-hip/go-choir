@@ -142,10 +142,10 @@ for path in "${changed[@]}"; do
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
       ;;
-    cmd/sourcecycled/*|internal/cycle/*|internal/sources/*|configs/sources.json)
+    cmd/sourcecycled/*|internal/cycle/*|internal/sourceapi/*|internal/sources/*|configs/sources.json)
       add_host_service "sourcecycled"
       add_host_service "sandbox"
-      add_explanation "$path -> source service ingestion + sandbox source_search runtime package"
+      add_explanation "$path -> source service API/ingestion + sandbox source_search runtime package"
       ;;
     internal/gateway/*|internal/provider/*)
       add_host_service "gateway"

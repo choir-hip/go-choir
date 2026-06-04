@@ -103,6 +103,34 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, bundle)
 }
 
+func (h *Handler) HandleInternalExportPublication(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	routePath := strings.TrimSpace(r.URL.Query().Get("route"))
+	if routePath == "" {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "route is required"})
+		return
+	}
+	format := strings.TrimSpace(r.URL.Query().Get("format"))
+	out, err := h.service.ExportPublicationByRoute(r.Context(), routePath, format)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("platformd: export publication %s: %v", routePath, err)
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -177,6 +205,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/platform/publications/vtext", h.HandleInternalPublishVText)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
+	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)

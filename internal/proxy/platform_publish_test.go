@@ -61,6 +61,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 				OwnerID:    "user-1",
 				Content:    "public projection content",
 				Citations:  json.RawMessage(`[{"url":"https://example.com"}]`),
+				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-1","kind":"source_service_item","target":{"target_kind":"source_service_item","item_id":"srcitem-1"},"display":{"inline_mode":"collapsed_citation"}}]}`),
 			})
 		default:
 			t.Fatalf("sandbox path: got %s", r.URL.Path)
@@ -96,6 +97,9 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 	if gotPlatformReq.Content != "public projection content" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
+	}
+	if !strings.Contains(string(gotPlatformReq.Metadata), "srcitem-1") {
+		t.Fatalf("platform metadata not forwarded: %s", string(gotPlatformReq.Metadata))
 	}
 	var resp platform.PublishVTextResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {

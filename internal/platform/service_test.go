@@ -53,6 +53,43 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 	return s, root
 }
 
+func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion(t *testing.T) {
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-quoted-excerpt",
+			"kind":      "source_service_item",
+			"label":     "Quoted source",
+			"target": map[string]any{
+				"target_kind": "source_service_item",
+				"item_id":     "source-item-quoted",
+			},
+			"selectors": []map[string]any{{
+				"selector_kind": "text_quote",
+				"text_quote":    "The quoted passage is part of the argument.",
+				"content_hash":  "hash-quoted-passage",
+			}},
+		}},
+	})
+
+	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	if err != nil {
+		t.Fatalf("buildPublicationSourceMetadata: %v", err)
+	}
+	if len(got.SourceEntities) != 1 || got.SourceEntities[0].DisplayPolicy != "embedded_excerpt" {
+		t.Fatalf("source entity display policy = %#v", got.SourceEntities)
+	}
+	if len(got.Transclusions) != 1 {
+		t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
+	}
+	transclusion := got.Transclusions[0]
+	if transclusion.DefaultDisplayMode != "embedded_excerpt" {
+		t.Fatalf("default display mode = %q, want embedded_excerpt", transclusion.DefaultDisplayMode)
+	}
+	if transclusion.SnapshotText != "The quoted passage is part of the argument." || transclusion.ContentHash != "hash-quoted-passage" {
+		t.Fatalf("transclusion snapshot/hash = %#v", transclusion)
+	}
+}
+
 func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")
@@ -63,6 +100,40 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		"title":    "Example source",
 		"selector": map[string]any{"kind": "url"},
 	}})
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-entity-fed-rates",
+			"kind":      "official_data_release",
+			"label":     "Federal Reserve rate statement",
+			"target": map[string]any{
+				"target_kind": "source_service_item",
+				"item_id":     "srcitem_fed_rates",
+				"source_id":   "official-fed",
+				"fetch_id":    "fetch-fed-rates",
+			},
+			"selectors": []map[string]any{{
+				"selector_kind": "text_quote",
+				"text_quote":    "The committee held rates steady.",
+				"content_hash":  "hash-fed-rates",
+			}},
+			"display": map[string]any{
+				"inline_mode":  "embedded_excerpt",
+				"open_surface": "source",
+			},
+			"evidence": map[string]any{
+				"state": "available",
+			},
+			"provenance": map[string]any{
+				"created_by":            "vtext",
+				"untrusted_source_text": true,
+			},
+		}},
+		"export_policy": map[string]any{
+			"copy_allowed":     true,
+			"download_allowed": true,
+			"formats":          []string{"txt", "md", "html"},
+		},
+	})
 
 	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
 		OwnerID:          "user-1",
@@ -71,6 +142,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		Title:            "Mission Note",
 		Content:          "A public note.\n\nThis is the published projection.",
 		Citations:        citations,
+		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
 	if err != nil {
@@ -108,6 +180,39 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if len(bundle.Artifact.RenderModel) == 0 || bundle.Artifact.RenderModel[0].SpanID == "" {
 		t.Fatalf("bundle render model missing retrieval span refs: %#v", bundle.Artifact.RenderModel)
+	}
+	if len(bundle.SourceEntities) != 1 {
+		t.Fatalf("bundle source entities = %d, want 1: %#v", len(bundle.SourceEntities), bundle.SourceEntities)
+	}
+	sourceEntity := bundle.SourceEntities[0]
+	if sourceEntity.SourceEntityID != "src-entity-fed-rates" || sourceEntity.TargetKind != "source_service_item" || sourceEntity.TargetID != "srcitem_fed_rates" {
+		t.Fatalf("bundle source entity identity = %#v", sourceEntity)
+	}
+	if sourceEntity.DisplayPolicy != "embedded_excerpt" || sourceEntity.OpenSurface != "source" {
+		t.Fatalf("bundle source entity display = %#v", sourceEntity)
+	}
+	if len(bundle.Transclusions) != 1 {
+		t.Fatalf("bundle transclusions = %d, want 1: %#v", len(bundle.Transclusions), bundle.Transclusions)
+	}
+	transclusion := bundle.Transclusions[0]
+	if transclusion.SourceEntityID != "src-entity-fed-rates" || transclusion.DefaultDisplayMode != "embedded_excerpt" {
+		t.Fatalf("bundle transclusion identity/display = %#v", transclusion)
+	}
+	if transclusion.SnapshotText != "The committee held rates steady." || transclusion.ContentHash != "hash-fed-rates" {
+		t.Fatalf("bundle transclusion snapshot/hash = %#v", transclusion)
+	}
+	if !strings.Contains(string(bundle.Policy.Export), `"download_allowed":true`) {
+		t.Fatalf("bundle export policy = %s", string(bundle.Policy.Export))
+	}
+	exported, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "html")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute: %v", err)
+	}
+	if exported.Format != "html" || exported.MediaType != "text/html; charset=utf-8" || !strings.HasSuffix(exported.Filename, ".html") {
+		t.Fatalf("export metadata = %#v", exported)
+	}
+	if !strings.Contains(exported.Content, "This is the published projection.") || exported.ContentHash == "" {
+		t.Fatalf("export content/hash = %#v", exported)
 	}
 	search, err := svc.SearchPublished(context.Background(), "projection")
 	if err != nil {
@@ -177,6 +282,9 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 		"publication_versions":          1,
 		"retrieval_sources":             1,
 		"retrieval_spans":               1,
+		"publication_source_entities":   1,
+		"publication_transclusions":     1,
+		"publication_policies":          1,
 		"consent_records":               1,
 		"review_records":                1,
 		"rollback_refs":                 1,
