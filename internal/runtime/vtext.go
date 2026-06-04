@@ -50,6 +50,7 @@ var (
 	vtextSectionUpdatePrefixRE = regexp.MustCompile(`\bSECTION\s+\d+\s+UPDATE:`)
 	vtextSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 	vtextInlineSourceRefRE     = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)`)
+	vtextMergePreviewCommentRE = regexp.MustCompile(`(?is)\n*\s*<!--\s*VText merge preview provenance\b.*?-->\s*`)
 )
 
 // ----- Request/Response types -----
@@ -183,6 +184,7 @@ type vtextSemanticCompareResponse struct {
 	Summary          []string               `json:"summary"`
 	Suggestions      []vtextMergeSuggestion `json:"suggestions"`
 	Diff             types.DiffResult       `json:"diff"`
+	ModelEvidence    map[string]any         `json:"model_evidence,omitempty"`
 	EvidenceID       string                 `json:"evidence_id,omitempty"`
 }
 
@@ -217,7 +219,22 @@ type vtextMergePreviewResponse struct {
 	Content          string                 `json:"content"`
 	Provenance       map[string]any         `json:"provenance"`
 	Suggestions      []vtextMergeSuggestion `json:"suggestions"`
+	ModelEvidence    map[string]any         `json:"model_evidence,omitempty"`
 	EvidenceID       string                 `json:"evidence_id,omitempty"`
+}
+
+type vtextModelMergeEdit struct {
+	SuggestionID string `json:"suggestion_id,omitempty"`
+	Operation    string `json:"operation"`
+	OldText      string `json:"old_text,omitempty"`
+	NewText      string `json:"new_text,omitempty"`
+	Rationale    string `json:"rationale,omitempty"`
+}
+
+type vtextModelSemanticMergeResult struct {
+	Summary     []string               `json:"summary"`
+	Suggestions []vtextMergeSuggestion `json:"suggestions"`
+	Edits       []vtextModelMergeEdit  `json:"edits,omitempty"`
 }
 
 type vtextAcceptMergeRequest struct {
@@ -958,99 +975,6 @@ func mustMarshalString(value any) string {
 	return string(data)
 }
 
-func buildSemanticCompareResponse(sourceRev, targetRev types.Revision, diff types.DiffResult) vtextSemanticCompareResponse {
-	sourceCitationCount := countVTextCitationMarkers(sourceRev.Content) + countRawJSONItems(sourceRev.Citations)
-	targetCitationCount := countVTextCitationMarkers(targetRev.Content) + countRawJSONItems(targetRev.Citations)
-	sourceGlossary := extractVTextHeadingSection(sourceRev.Content, "glossary")
-	targetGlossary := extractVTextHeadingSection(targetRev.Content, "glossary")
-	sourceIntro := extractVTextIntro(sourceRev.Content)
-	targetIntro := extractVTextIntro(targetRev.Content)
-	sourceConclusion := extractVTextHeadingSection(sourceRev.Content, "conclusion")
-	targetConclusion := extractVTextHeadingSection(targetRev.Content, "conclusion")
-
-	summary := []string{
-		fmt.Sprintf("Line delta: +%d / -%d.", diff.AddedLines, diff.RemovedLines),
-	}
-	if sourceGlossary != "" && len(sourceGlossary) > len(targetGlossary) {
-		summary = append(summary, "Glossary structure is stronger in the source version.")
-	}
-	if targetCitationCount > sourceCitationCount {
-		summary = append(summary, "Latest citations and source markers are richer in the target version.")
-	} else if sourceCitationCount > targetCitationCount {
-		summary = append(summary, "Source version carries more citation and source markers.")
-	}
-	if len(sourceIntro) > 0 && len(targetIntro) > 0 && sourceIntro != targetIntro {
-		summary = append(summary, "Opening framing differs and may be worth selectively merging.")
-	}
-	if targetConclusion != "" && targetConclusion != sourceConclusion {
-		summary = append(summary, "Target conclusion differs and should be preserved or reviewed explicitly.")
-	}
-	if len(summary) == 1 {
-		summary = append(summary, "No obvious semantic regression was detected by the deterministic compare pass.")
-	}
-
-	suggestions := []vtextMergeSuggestion{}
-	if sourceGlossary != "" && len(sourceGlossary) >= len(targetGlossary) {
-		suggestions = append(suggestions, vtextMergeSuggestion{
-			ID:          "restore_glossary",
-			Label:       "Restore glossary structure",
-			Description: "Bring the stronger glossary or definition section from the source version into the Primary draft.",
-			Status:      "Clean merge",
-			Source:      sourceRev.RevisionID,
-			Preview:     snippet(sourceGlossary, 180),
-		})
-	}
-	if targetCitationCount >= sourceCitationCount && targetCitationCount > 0 {
-		suggestions = append(suggestions, vtextMergeSuggestion{
-			ID:          "keep_latest_citations",
-			Label:       "Keep latest source citations",
-			Description: "Preserve the target version's richer citation and source-marker set while merging selected prose.",
-			Status:      "Clean merge",
-			Source:      targetRev.RevisionID,
-			Preview:     fmt.Sprintf("%d target citation/source markers", targetCitationCount),
-		})
-	}
-	if strings.TrimSpace(sourceIntro) != "" && sourceIntro != targetIntro {
-		suggestions = append(suggestions, vtextMergeSuggestion{
-			ID:          "use_source_intro",
-			Label:       "Use source opening framing",
-			Description: "Replace the target opening frame with the source version's clearer introductory structure.",
-			Status:      "Needs review",
-			Source:      sourceRev.RevisionID,
-			Preview:     snippet(sourceIntro, 220),
-		})
-	}
-	if targetConclusion != "" {
-		suggestions = append(suggestions, vtextMergeSuggestion{
-			ID:          "preserve_latest_conclusion",
-			Label:       "Preserve latest conclusion",
-			Description: "Keep the target version's conclusion while selectively restoring earlier structure.",
-			Status:      "Clean merge",
-			Source:      targetRev.RevisionID,
-			Preview:     snippet(targetConclusion, 180),
-		})
-	}
-	if len(suggestions) == 0 {
-		suggestions = append(suggestions, vtextMergeSuggestion{
-			ID:          "review_structural_delta",
-			Label:       "Review structural delta",
-			Description: "Create a preview that preserves the target draft and records the compare provenance for manual review.",
-			Status:      "Needs review",
-			Source:      sourceRev.RevisionID,
-		})
-	}
-
-	return vtextSemanticCompareResponse{
-		CompareID:        uuid.NewString(),
-		SourceRevisionID: sourceRev.RevisionID,
-		TargetRevisionID: targetRev.RevisionID,
-		DraftLine:        defaultDraftLine(),
-		Summary:          summary,
-		Suggestions:      suggestions,
-		Diff:             diff,
-	}
-}
-
 func selectMergeSuggestions(suggestions []vtextMergeSuggestion, ids []string) []vtextMergeSuggestion {
 	wanted := map[string]bool{}
 	for _, id := range ids {
@@ -1082,137 +1006,245 @@ func suggestionIDs(suggestions []vtextMergeSuggestion) []string {
 	return ids
 }
 
-func buildMergePreviewContent(sourceRev, targetRev types.Revision, selected []vtextMergeSuggestion, sourceLabel, targetLabel string) string {
-	sourceLabel = strings.TrimSpace(firstNonEmpty(sourceLabel, "source"))
-	targetLabel = strings.TrimSpace(firstNonEmpty(targetLabel, "target"))
-	content := targetRev.Content
-	provenance := []string{
-		fmt.Sprintf("Merged preview from %s (%s) into %s (%s).", sourceLabel, shortHash(sourceRev.RevisionID), targetLabel, shortHash(targetRev.RevisionID)),
-	}
-	selectedIDs := map[string]bool{}
-	for _, suggestion := range selected {
-		selectedIDs[suggestion.ID] = true
-		provenance = append(provenance, "- "+suggestion.Label+": "+suggestion.Source)
-	}
-	if selectedIDs["use_source_intro"] {
-		content = replaceVTextIntro(content, extractVTextIntro(sourceRev.Content))
-	}
-	if selectedIDs["restore_glossary"] {
-		content = replaceOrAppendVTextHeadingSection(content, "glossary", extractVTextHeadingSection(sourceRev.Content, "glossary"))
-	}
-	comment := "\n\n<!-- VText merge preview provenance\n" + strings.Join(provenance, "\n") + "\n-->"
-	return strings.TrimSpace(content) + comment + "\n"
+func sanitizeVTextMergeContent(content string) string {
+	cleaned := vtextMergePreviewCommentRE.ReplaceAllString(content, "\n\n")
+	return strings.TrimSpace(cleaned) + "\n"
 }
 
-func extractVTextIntro(content string) string {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return ""
-	}
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 {
-		return ""
-	}
-	start := 0
-	if strings.HasPrefix(strings.TrimSpace(lines[0]), "#") {
-		start = 1
-	}
-	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
-		start++
-	}
-	end := len(lines)
-	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "## ") {
-			end = i
-			break
+func applyVTextModelMergeEdits(targetContent string, edits []vtextModelMergeEdit) (string, []map[string]any, error) {
+	content := sanitizeVTextMergeContent(targetContent)
+	applied := make([]map[string]any, 0, len(edits))
+	for i, edit := range edits {
+		operation := strings.TrimSpace(strings.ToLower(edit.Operation))
+		switch operation {
+		case "replace_exact":
+			oldText := edit.OldText
+			newText := edit.NewText
+			if strings.TrimSpace(oldText) == "" {
+				return "", applied, fmt.Errorf("merge edit %d replace_exact missing old_text", i)
+			}
+			if !strings.Contains(content, oldText) {
+				return "", applied, fmt.Errorf("merge edit %d old_text not found in target", i)
+			}
+			content = strings.Replace(content, oldText, newText, 1)
+		case "append":
+			newText := strings.TrimSpace(edit.NewText)
+			if newText == "" {
+				return "", applied, fmt.Errorf("merge edit %d append missing new_text", i)
+			}
+			content = strings.TrimSpace(content) + "\n\n" + newText + "\n"
+		case "noop", "no_op":
+			// Keep explicit no-op edits as provenance without changing content.
+		default:
+			return "", applied, fmt.Errorf("merge edit %d has unsupported operation %q", i, edit.Operation)
 		}
+		applied = append(applied, map[string]any{
+			"suggestion_id": edit.SuggestionID,
+			"operation":     operation,
+			"rationale":     edit.Rationale,
+		})
 	}
-	return strings.TrimSpace(strings.Join(lines[start:end], "\n"))
+	return sanitizeVTextMergeContent(content), applied, nil
 }
 
-func replaceVTextIntro(content, intro string) string {
-	intro = strings.TrimSpace(intro)
-	if intro == "" {
-		return content
+func extractJSONObject(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", fmt.Errorf("empty model response")
 	}
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-	if len(lines) == 0 {
-		return intro
-	}
-	start := 0
-	if strings.HasPrefix(strings.TrimSpace(lines[0]), "#") {
-		start = 1
-	}
-	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
-		start++
-	}
-	end := len(lines)
-	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "## ") {
-			end = i
-			break
+	if strings.HasPrefix(text, "```") {
+		lines := strings.Split(text, "\n")
+		if len(lines) >= 3 {
+			lines = lines[1 : len(lines)-1]
+			text = strings.TrimSpace(strings.Join(lines, "\n"))
 		}
 	}
-	out := append([]string{}, lines[:start]...)
-	if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
-		out = append(out, "")
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start < 0 || end <= start {
+		return "", fmt.Errorf("model response did not contain a JSON object")
 	}
-	out = append(out, strings.Split(intro, "\n")...)
-	if end < len(lines) {
-		out = append(out, "")
-		out = append(out, lines[end:]...)
-	}
-	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+	return text[start : end+1], nil
 }
 
-func extractVTextHeadingSection(content, headingNeedle string) string {
-	headingNeedle = strings.ToLower(strings.TrimSpace(headingNeedle))
-	if headingNeedle == "" {
-		return ""
+func normalizeModelSemanticMergeResult(result vtextModelSemanticMergeResult, sourceRev, targetRev types.Revision, requireEdits bool) (vtextModelSemanticMergeResult, error) {
+	if len(result.Summary) == 0 {
+		return result, fmt.Errorf("model response missing summary")
 	}
-	lines := strings.Split(content, "\n")
-	start := -1
-	level := ""
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		markerEnd := strings.Index(trimmed, " ")
-		if markerEnd <= 0 {
-			continue
-		}
-		title := strings.ToLower(strings.TrimSpace(trimmed[markerEnd+1:]))
-		if strings.Contains(title, headingNeedle) {
-			start = i
-			level = trimmed[:markerEnd]
-			break
-		}
+	if len(result.Suggestions) == 0 {
+		return result, fmt.Errorf("model response missing suggestions")
 	}
-	if start < 0 {
-		return ""
-	}
-	end := len(lines)
-	for i := start + 1; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, level+" ") {
-			end = i
-			break
+	for i := range result.Suggestions {
+		result.Suggestions[i].ID = strings.TrimSpace(result.Suggestions[i].ID)
+		result.Suggestions[i].Label = strings.TrimSpace(result.Suggestions[i].Label)
+		result.Suggestions[i].Description = strings.TrimSpace(result.Suggestions[i].Description)
+		result.Suggestions[i].Status = strings.TrimSpace(result.Suggestions[i].Status)
+		result.Suggestions[i].Source = strings.TrimSpace(result.Suggestions[i].Source)
+		result.Suggestions[i].Preview = strings.TrimSpace(result.Suggestions[i].Preview)
+		if result.Suggestions[i].ID == "" {
+			result.Suggestions[i].ID = "merge_suggestion_" + strconv.Itoa(i+1)
+		}
+		if result.Suggestions[i].Label == "" {
+			return result, fmt.Errorf("model suggestion %d missing label", i)
+		}
+		if result.Suggestions[i].Description == "" {
+			return result, fmt.Errorf("model suggestion %d missing description", i)
+		}
+		if result.Suggestions[i].Status == "" {
+			result.Suggestions[i].Status = "Needs review"
+		}
+		if result.Suggestions[i].Source == "" {
+			result.Suggestions[i].Source = sourceRev.RevisionID
+		}
+		if result.Suggestions[i].Source != sourceRev.RevisionID && result.Suggestions[i].Source != targetRev.RevisionID {
+			result.Suggestions[i].Source = sourceRev.RevisionID
 		}
 	}
-	return strings.TrimSpace(strings.Join(lines[start:end], "\n"))
+	if requireEdits && len(result.Edits) == 0 {
+		return result, fmt.Errorf("model response missing merge edits")
+	}
+	return result, nil
 }
 
-func replaceOrAppendVTextHeadingSection(content, headingNeedle, section string) string {
-	section = strings.TrimSpace(section)
-	if section == "" {
-		return content
+func (rt *Runtime) callVTextSemanticMergeModel(ctx context.Context, ownerID string, sourceRev, targetRev types.Revision, diff types.DiffResult, mode string, suggestionIDs []string, sourceLabel, targetLabel string) (vtextModelSemanticMergeResult, map[string]any, error) {
+	if rt == nil || rt.provider == nil {
+		return vtextModelSemanticMergeResult{}, nil, fmt.Errorf("runtime provider unavailable")
 	}
-	existing := extractVTextHeadingSection(content, headingNeedle)
-	if existing == "" {
-		return strings.TrimSpace(content) + "\n\n" + section + "\n"
+	policy, err := rt.loadModelPolicy(ctx, ownerID)
+	policySource := "policy"
+	if err != nil {
+		policySource = "policy_error:" + err.Error()
 	}
-	return strings.Replace(content, existing, section, 1)
+	selection := policy.Resolve(AgentProfileVText)
+	if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
+		return vtextModelSemanticMergeResult{}, nil, fmt.Errorf("vtext model policy did not resolve provider/model")
+	}
+	maxTokens := selection.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 4096
+	}
+	prompt := buildVTextSemanticMergePrompt(sourceRev, targetRev, diff, mode, suggestionIDs, sourceLabel, targetLabel)
+	message, _ := json.Marshal(map[string]any{
+		"role":    "user",
+		"content": []map[string]string{{"type": "text", "text": prompt}},
+	})
+	start := time.Now()
+	resp, err := callToolLoopProviderWithRetries(ctx, asToolLoopProvider(rt.provider), ToolLoopRequest{
+		Provider:        selection.Provider,
+		Model:           selection.Model,
+		ReasoningEffort: selection.ReasoningEffort,
+		System:          "You are Choir's VText semantic merge engine. Return only valid JSON matching the requested schema. Do not write markdown prose.",
+		Messages:        []json.RawMessage{message},
+		ToolChoice:      "none",
+		MaxTokens:       maxTokens,
+	}, nil)
+	latency := time.Since(start)
+	evidence := map[string]any{
+		"provider":                  selection.Provider,
+		"model":                     selection.Model,
+		"reasoning_effort":          selection.ReasoningEffort,
+		"policy_source":             firstNonEmpty(selection.Source, policySource),
+		"mode":                      mode,
+		"prompt_chars":              len(prompt),
+		"source_revision_id":        sourceRev.RevisionID,
+		"target_revision_id":        targetRev.RevisionID,
+		"source_chars":              len(sourceRev.Content),
+		"target_chars":              len(targetRev.Content),
+		"latency_ms":                latency.Milliseconds(),
+		"max_tokens":                maxTokens,
+		"selected_suggestion_ids":   suggestionIDs,
+		"model_response_id":         "",
+		"model_stop_reason":         "",
+		"model_input_tokens":        0,
+		"model_output_tokens":       0,
+		"reasoning_content_present": false,
+	}
+	if err != nil {
+		evidence["error"] = err.Error()
+		return vtextModelSemanticMergeResult{}, evidence, err
+	}
+	evidence["model_response_id"] = resp.ID
+	evidence["model_stop_reason"] = resp.StopReason
+	evidence["model_input_tokens"] = resp.Usage.InputTokens
+	evidence["model_output_tokens"] = resp.Usage.OutputTokens
+	evidence["response_model"] = resp.Model
+	evidence["reasoning_content_present"] = strings.TrimSpace(resp.ReasoningContent) != ""
+
+	jsonText, err := extractJSONObject(resp.Text)
+	if err != nil {
+		evidence["response_excerpt"] = snippet(resp.Text, 1000)
+		return vtextModelSemanticMergeResult{}, evidence, err
+	}
+	var result vtextModelSemanticMergeResult
+	if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
+		evidence["response_excerpt"] = snippet(resp.Text, 1000)
+		return vtextModelSemanticMergeResult{}, evidence, fmt.Errorf("decode model semantic merge JSON: %w", err)
+	}
+	result, err = normalizeModelSemanticMergeResult(result, sourceRev, targetRev, mode == "preview")
+	if err != nil {
+		evidence["response_excerpt"] = snippet(resp.Text, 1000)
+		return vtextModelSemanticMergeResult{}, evidence, err
+	}
+	return result, evidence, nil
+}
+
+func buildVTextSemanticMergePrompt(sourceRev, targetRev types.Revision, diff types.DiffResult, mode string, suggestionIDs []string, sourceLabel, targetLabel string) string {
+	schema := `{
+  "summary": ["short semantic finding"],
+  "suggestions": [{
+    "id": "stable_snake_case_id",
+    "label": "short user-facing merge action",
+    "description": "what concept should move or be preserved",
+    "status": "Clean merge | Needs review | Conflicts with latest",
+    "source": "source or target revision id",
+    "preview": "brief evidence excerpt"
+  }],
+  "edits": [{
+    "suggestion_id": "matching suggestion id",
+    "operation": "replace_exact | append | noop",
+    "old_text": "exact substring from target for replace_exact",
+    "new_text": "replacement or appended text",
+    "rationale": "why this edit is semantically correct"
+  }]
+}`
+	var b strings.Builder
+	b.WriteString("Compare two versions of one VText document and")
+	if mode == "preview" {
+		b.WriteString(" produce a minimal structured edit preview that applies selected concepts into the target Primary draft.")
+	} else {
+		b.WriteString(" produce semantic findings and merge suggestions.")
+	}
+	b.WriteString("\n\nRules:\n")
+	b.WriteString("- Return only JSON with this schema:\n")
+	b.WriteString(schema)
+	b.WriteString("\n- Do not include markdown fences, hidden comments, HTML comments, or visible provenance text.\n")
+	b.WriteString("- Suggestions must be content-specific, not template/stub labels.\n")
+	b.WriteString("- For preview mode, edits must be minimal. Prefer replace_exact over whole-document rewrite. old_text must be an exact substring of the target content.\n")
+	b.WriteString("- Preserve target content unless a selected source concept clearly improves it.\n")
+	b.WriteString("- Keep citations, source markers, and metadata references from the target unless the selected source concept requires an exact replacement.\n\n")
+	b.WriteString("Mode: ")
+	b.WriteString(mode)
+	b.WriteString("\nSource label: ")
+	b.WriteString(firstNonEmpty(sourceLabel, "source"))
+	b.WriteString("\nSource revision id: ")
+	b.WriteString(sourceRev.RevisionID)
+	b.WriteString("\nTarget label: ")
+	b.WriteString(firstNonEmpty(targetLabel, "target"))
+	b.WriteString("\nTarget revision id: ")
+	b.WriteString(targetRev.RevisionID)
+	b.WriteString("\nLine diff: +")
+	b.WriteString(strconv.Itoa(diff.AddedLines))
+	b.WriteString(" / -")
+	b.WriteString(strconv.Itoa(diff.RemovedLines))
+	if len(suggestionIDs) > 0 {
+		b.WriteString("\nSelected suggestion ids for preview: ")
+		b.WriteString(strings.Join(suggestionIDs, ", "))
+	}
+	b.WriteString("\n\nSOURCE CONTENT:\n")
+	b.WriteString(sourceRev.Content)
+	b.WriteString("\n\nTARGET CONTENT:\n")
+	b.WriteString(targetRev.Content)
+	return b.String()
 }
 
 func countVTextCitationMarkers(content string) int {
@@ -1600,7 +1632,22 @@ func (h *APIHandler) HandleVTextSemanticCompare(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: fmt.Sprintf("failed to compute diff: %v", err)})
 		return
 	}
-	resp := buildSemanticCompareResponse(sourceRev, targetRev, diff)
+	modelResult, modelEvidence, err := h.rt.callVTextSemanticMergeModel(r.Context(), ownerID, sourceRev, targetRev, diff, "compare", nil, r.URL.Query().Get("source_label"), r.URL.Query().Get("target_label"))
+	if err != nil {
+		log.Printf("vtext api: model semantic compare: %v", err)
+		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: "model-backed semantic compare failed"})
+		return
+	}
+	resp := vtextSemanticCompareResponse{
+		CompareID:        uuid.NewString(),
+		SourceRevisionID: sourceRev.RevisionID,
+		TargetRevisionID: targetRev.RevisionID,
+		DraftLine:        defaultDraftLine(),
+		Summary:          modelResult.Summary,
+		Suggestions:      modelResult.Suggestions,
+		Diff:             diff,
+		ModelEvidence:    modelEvidence,
+	}
 	evidenceID := uuid.New().String()
 	if evidenceErr := h.rt.Store().CreateEvidence(r.Context(), types.EvidenceRecord{
 		EvidenceID: evidenceID,
@@ -1651,9 +1698,24 @@ func (h *APIHandler) HandleVTextMergePreview(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	diff, _ := h.rt.Store().GetDiff(r.Context(), sourceRev.RevisionID, targetRev.RevisionID, ownerID)
-	compare := buildSemanticCompareResponse(sourceRev, targetRev, diff)
-	selected := selectMergeSuggestions(compare.Suggestions, req.SuggestionIDs)
-	content := buildMergePreviewContent(sourceRev, targetRev, selected, req.SourceVersionLabel, req.TargetVersionLabel)
+	modelResult, modelEvidence, err := h.rt.callVTextSemanticMergeModel(r.Context(), ownerID, sourceRev, targetRev, diff, "preview", req.SuggestionIDs, req.SourceVersionLabel, req.TargetVersionLabel)
+	if err != nil {
+		log.Printf("vtext api: model merge preview: %v", err)
+		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: "model-backed merge preview failed"})
+		return
+	}
+	selected := selectMergeSuggestions(modelResult.Suggestions, req.SuggestionIDs)
+	if len(selected) == 0 {
+		selected = modelResult.Suggestions
+	}
+	content, appliedEdits, err := applyVTextModelMergeEdits(targetRev.Content, modelResult.Edits)
+	if err != nil {
+		log.Printf("vtext api: apply model merge edits: %v", err)
+		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: "model-backed merge preview returned edits that could not be applied"})
+		return
+	}
+	modelEvidence["applied_edits"] = appliedEdits
+	modelEvidence["applied_edit_count"] = len(appliedEdits)
 	previewID := uuid.New().String()
 	resp := vtextMergePreviewResponse{
 		PreviewID:        previewID,
@@ -1663,6 +1725,7 @@ func (h *APIHandler) HandleVTextMergePreview(w http.ResponseWriter, r *http.Requ
 		DraftLine:        defaultDraftLine(),
 		Content:          content,
 		Suggestions:      selected,
+		ModelEvidence:    modelEvidence,
 		Provenance: map[string]any{
 			"kind":               "vtext_concept_merge_preview",
 			"preview_id":         previewID,
@@ -1740,7 +1803,7 @@ func (h *APIHandler) HandleVTextAcceptMerge(w http.ResponseWriter, r *http.Reque
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
-		Content:          req.Content,
+		Content:          sanitizeVTextMergeContent(req.Content),
 		Citations:        targetRev.Citations,
 		Metadata:         encoded,
 		ParentRevisionID: targetRev.RevisionID,

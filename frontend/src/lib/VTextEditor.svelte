@@ -2125,17 +2125,31 @@
     {/if}
 
     <div class="document-body" data-vtext-document-body>
-      {#if compareResult || mergePreview}
+      {#if compareResult || mergePreview || comparePending || mergePending}
         <section class="compare-panel" data-vtext-compare-panel>
           <div class="compare-heading">
             <div>
               <p class="eyebrow">{mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
-              <h3>{mergePreview ? `Merged into ${nextVersionLabel}` : `Compare ${versionLabel} → ${compareTargetVersionLabel()}`}</h3>
+              <h3>
+                {#if mergePending}
+                  Model merge in progress
+                {:else if comparePending}
+                  Model compare in progress
+                {:else}
+                  {mergePreview ? `Merged into ${nextVersionLabel}` : `Compare ${versionLabel} → ${compareTargetVersionLabel()}`}
+                {/if}
+              </h3>
             </div>
             {#if mergePreview}
               <span class="compare-chip">from {versionLabel}</span>
             {/if}
           </div>
+          {#if comparePending || mergePending}
+            <div class="compare-working" role="status" aria-live="polite">
+              <span class="work-pulse" aria-hidden="true"></span>
+              <span>{mergePending ? 'Building a reviewable merge preview with the configured VText model.' : 'Comparing versions with the configured VText model.'}</span>
+            </div>
+          {/if}
           {#if compareResult?.summary?.length}
             <div class="compare-summary">
               {#each compareResult.summary as finding}
@@ -2406,6 +2420,16 @@
     color: var(--choir-text-accent);
     font-size: 0.68rem;
     font-weight: 720;
+  }
+
+  .compare-working {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    color: var(--choir-text-secondary);
+    font-size: 0.74rem;
+    line-height: 1.35;
   }
 
   .compare-summary,

@@ -230,10 +230,12 @@ test('vtext compares historical version and accepts merge preview as next revisi
   await page.locator('[data-vtext-app] [data-vtext-prev]').last().click();
   await expect(editor).toContainText('Earlier executive framing', { timeout: 10000 });
   await page.locator('[data-vtext-app] [data-vtext-compare]').last().click();
-  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText('Glossary structure', { timeout: 10000 });
+  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText(/Compare|Model compare|changed/i, { timeout: 30000 });
+  await expect(page.locator('[data-vtext-app] [data-vtext-merge-suggestion]').first()).toBeVisible({ timeout: 30000 });
   await page.locator('[data-vtext-app] [data-vtext-merge-preview]').last().click();
-  await expect(editor).toContainText('Matter workspace', { timeout: 10000 });
+  await expect(page.locator('[data-vtext-app] [data-vtext-compare-panel]').last()).toContainText(/Merge preview|Model merge|Merged into/i, { timeout: 30000 });
   await expect(editor).toContainText('newest conclusion should remain', { timeout: 10000 });
+  await expect(editor).not.toContainText('VText merge preview provenance');
   await page.locator('[data-vtext-app] [data-vtext-accept-merge]').last().click();
 
   const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
@@ -250,6 +252,7 @@ test('vtext compares historical version and accepts merge preview as next revisi
   const accepted = revisions.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
   expect(accepted.metadata?.source).toBe('vtext_concept_merge');
   expect(accepted.metadata?.draft_line?.name).toBe('Primary draft');
+  expect(accepted.content).not.toContain('VText merge preview provenance');
 });
 
 test('reopening the same file path resolves to the same canonical vtext doc', async ({ page, authenticator }) => {

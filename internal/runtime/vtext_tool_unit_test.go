@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -8,6 +9,31 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+type semanticMergeTestProvider struct {
+	response string
+	req      ToolLoopRequest
+	calls    int
+}
+
+func (p *semanticMergeTestProvider) ProviderName() string { return "semantic-merge-test" }
+
+func (p *semanticMergeTestProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	task.Result = p.response
+	return nil
+}
+
+func (p *semanticMergeTestProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.calls++
+	p.req = req
+	return &ToolLoopResponse{
+		ID:         "model-response-1",
+		StopReason: "end_turn",
+		Text:       p.response,
+		Usage:      TokenUsage{InputTokens: 321, OutputTokens: 123},
+		Model:      "semantic-test-model",
+	}, nil
+}
 
 func TestCleanVTextToolContentRemovesWrapperTags(t *testing.T) {
 	input := " <payload>\nStaging smoke after RSS title extraction works.\n</payload> "
@@ -92,5 +118,68 @@ func TestVTextEditRevisionMetadataRecordsOperationEvidence(t *testing.T) {
 	}
 	if int(meta["vtext_edit_delta_chars"].(float64)) != 24 {
 		t.Fatalf("delta metadata missing: %+v", meta)
+	}
+}
+
+func TestVTextSemanticMergeUsesProviderBackedJSON(t *testing.T) {
+	provider := &semanticMergeTestProvider{response: `{
+		"summary": ["Older version has a stronger client-control framing."],
+		"suggestions": [{
+			"id": "client_control_frame",
+			"label": "Restore client-control framing",
+			"description": "Bring the sharper control argument into the Primary draft while keeping current evidence.",
+			"status": "Clean merge",
+			"source": "rev-source",
+			"preview": "client control"
+		}]
+	}`}
+	rt := New(Config{}, nil, nil, provider)
+	source := types.Revision{RevisionID: "rev-source", Content: "# Proposal\n\nClients control the system."}
+	target := types.Revision{RevisionID: "rev-target", Content: "# Proposal\n\nThe system has current evidence."}
+
+	result, evidence, err := rt.callVTextSemanticMergeModel(context.Background(), "owner-1", source, target, types.DiffResult{AddedLines: 1, RemovedLines: 1}, "compare", nil, "v4", "v5")
+	if err != nil {
+		t.Fatalf("model semantic compare: %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.calls)
+	}
+	if provider.req.ToolChoice != "none" {
+		t.Fatalf("tool choice = %q, want none", provider.req.ToolChoice)
+	}
+	if provider.req.Model == "" || provider.req.Provider == "" {
+		t.Fatalf("provider/model not resolved in request: %+v", provider.req)
+	}
+	if got := result.Suggestions[0].Label; got != "Restore client-control framing" {
+		t.Fatalf("suggestion label = %q", got)
+	}
+	if strings.Contains(strings.ToLower(result.Suggestions[0].ID+" "+result.Suggestions[0].Label), "restore_glossary") {
+		t.Fatalf("semantic merge returned old hard-coded suggestion: %+v", result.Suggestions[0])
+	}
+	if evidence["model_input_tokens"] != 321 || evidence["model_output_tokens"] != 123 {
+		t.Fatalf("token evidence missing: %+v", evidence)
+	}
+}
+
+func TestApplyVTextModelMergeEditsStripsVisibleProvenance(t *testing.T) {
+	target := "# Proposal\n\nCurrent paragraph.\n\n<!-- VText merge preview provenance\n- leaked metadata\n-->\n"
+	content, applied, err := applyVTextModelMergeEdits(target, []vtextModelMergeEdit{{
+		SuggestionID: "client_control_frame",
+		Operation:    "replace_exact",
+		OldText:      "Current paragraph.",
+		NewText:      "Current paragraph with restored client-control framing.",
+		Rationale:    "Selected source concept improves framing.",
+	}})
+	if err != nil {
+		t.Fatalf("apply edits: %v", err)
+	}
+	if strings.Contains(content, "VText merge preview provenance") || strings.Contains(content, "<!--") {
+		t.Fatalf("visible provenance leaked into content: %q", content)
+	}
+	if !strings.Contains(content, "restored client-control framing") {
+		t.Fatalf("model edit not applied: %q", content)
+	}
+	if len(applied) != 1 || applied[0]["operation"] != "replace_exact" {
+		t.Fatalf("applied edit evidence mismatch: %+v", applied)
 	}
 }
