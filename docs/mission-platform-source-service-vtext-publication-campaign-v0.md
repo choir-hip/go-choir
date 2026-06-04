@@ -443,9 +443,9 @@ If only part of this lands, report `checkpoint_incomplete`, not complete.
 
 ## Run Checkpoint And Resumption State
 
-**status:** draft
+**status:** checkpoint_incomplete
 
-**last checkpoint:** mission reframed from standalone sourcecycled to platform Source Service after review of current sourcecycled WIP, search/research tools, VText source entities, publication metadata, and access/export gaps.
+**last checkpoint:** P0 Source Service nucleus implemented locally after the mission was reframed from standalone sourcecycled to platform Source Service.
 
 **P0 storage-boundary decision:** Source Service v0 should keep its own
 service-local durable SQLite ledger under `sourcecycled` while exposing stable
@@ -462,33 +462,51 @@ making Source Service a VText or publication writer.
 
 **current artifact state:**
 
-- Sourcecycled WIP exists but is not buildable/product-ready.
+- Sourcecycled WIP is buildable and has a service-local SQLite ledger for source registry policy metadata, fetch records, source items, cycles, cycle events, and issue citation-map placeholders.
+- RSS uses a bounded standard-library RSS/Atom parser, removing the missing `gofeed` dependency from the P0 path.
+- Default source config includes public news/global sources and one official macro-policy source lane, with unsupported Polymarket removed until an adapter exists.
 - Search/research tools exist but are source-service blind.
 - VText source entities exist for YouTube/image but not platform source items or official data.
 - Publication ledger exists but drops revision metadata and lacks export/access policy.
 - Markdown/text file opening creates VText aliases, but the product invariant needs proof and likely tightening.
 
-**what shipped:** nothing from this draft.
+**what shipped:** local P0 source-service code checkpoint only; not pushed or deployed yet.
 
-**what was proven:** read-only repo review only.
+**what was proven:**
+
+```text
+nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sources
+```
+
+Result:
+
+```text
+?    github.com/yusefmosiah/go-choir/cmd/sourcecycled [no test files]
+ok   github.com/yusefmosiah/go-choir/internal/cycle
+ok   github.com/yusefmosiah/go-choir/internal/sources
+```
+
+This proves the sourcecycled command builds, RSS/source identity tests pass, and storage tests prove fetch/item persistence, dedup across restart, source search, cycle records, and official-source caveat metadata persistence.
 
 **unproven or partial claims:**
 
 - exact staging behavior of source entities after current dirty VText draft WIP;
 - staging deployment status of any sourcecycled WIP;
-- best table boundary for source service records between runtime, platformd, and a dedicated service.
+- source-service retrieval through researcher tools;
+- live ingestion against the default registry;
+- publication projection/export/access policy.
 
 **belief-state changes:**
 
 - standalone sourcecycled is no longer the right framing;
 - Source Service should be a platform service with clean contracts;
 - publication export depends on metadata-preserving publication first;
-- source retrieval must become a researcher tool/path, not VText authority.
+- source retrieval must become a researcher tool/path, not VText authority;
+- service-local SQLite is acceptable for P0 high-churn source/fetch/cycle records, with later projection into runtime ContentItems and platform publication/citation ledgers.
 
 **remaining error field:**
 
-- choose package/service boundary;
-- fix sourcecycled build and schema;
+- expose source-service retrieval to researchers;
 - reconcile VText draft-versioning WIP with source-entity tests;
 - design publication metadata/export policy schema;
 - define first official macro source lane from Marco patterns.
@@ -500,9 +518,9 @@ service-local source ledger and researcher tool path.
 **next executable probe:**
 
 ```text
-Make the sourcecycled WIP buildable with durable fetch/item/cycle schema tests
-before adding new source types, then add the first researcher-facing source
-retrieval tool.
+Add the first researcher-facing source retrieval tool/path over the source
+service ledger, then prove a VText/researcher path can cite a source-service
+item without giving VText direct retrieval authority.
 ```
 
 **suggested resume goal string:**
