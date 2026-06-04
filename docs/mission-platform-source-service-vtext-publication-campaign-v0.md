@@ -804,6 +804,30 @@ Repository`), and direct local SSH to `root@147.135.70.196` failed with
 `/var/lib/go-choir/source-service/sourcecycled.db` remain unverified despite
 public health serving the pushed commit.
 
+Follow-up GitHub app log access recovered the root cause for the failed deploy
+job:
+
+```text
+GitHub Actions Deploy to Staging job: 79581867317
+Host NixOS closure build failed while building sandbox-0.1.0
+internal/runtime/tools_research.go:14:2: cannot find module providing package
+github.com/yusefmosiah/go-choir/internal/sources: import lookup disabled by
+-mod=vendor
+```
+
+Problem classification: tactical package source-closure regression. The
+researcher `source_search` bridge intentionally imports `internal/sources` for
+source type constants and metadata helpers, but the Nix `sandbox` package
+derivation still filtered its source tree to a smaller internal package set.
+Local Go tests passed because they run from the full checkout; the deployed
+Nix package build failed because `goServiceSrc` excluded `internal/sources`.
+
+Required fix direction: add the Source Service source contract package to the
+sandbox Nix package closure, then rebuild/deploy and prove the managed
+`sourcecycled` service separately. Do not reinterpret the failure as a
+runtime/daemon proof, and do not claim deployed source-service ingestion until
+Node B service status and ledger rows are verified.
+
 **CI and deploy evidence:**
 
 ```text
