@@ -187,11 +187,12 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 			"",
 			"Refs:",
 			"- source_service_item:srcitem_current_economy",
+			"- Source Service Item ID: srcitem_labor_market_signal",
 			"- source:gdelt:15min",
 		}, "\n"),
 	}}
 	sourceEntities, changed := mergeVTextSourceEntities(nil, sourceServiceEntitiesFromWorkerMessages(recent))
-	if !changed || len(sourceEntities) != 1 {
+	if !changed || len(sourceEntities) != 2 {
 		t.Fatalf("source entities changed=%v len=%d: %#v", changed, len(sourceEntities), sourceEntities)
 	}
 	if sourceEntities[0].Target.TargetKind != "source_service_item" ||
@@ -200,6 +201,10 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 		sourceEntities[0].Display.OpenSurface != "source" ||
 		sourceEntities[0].Evidence.ResearchState != "represented" {
 		t.Fatalf("derived source entity = %#v", sourceEntities[0])
+	}
+	if sourceEntities[1].Target.TargetKind != "source_service_item" ||
+		sourceEntities[1].Target.ItemID != "srcitem_labor_market_signal" {
+		t.Fatalf("derived raw item source entity = %#v", sourceEntities[1])
 	}
 
 	request := buildAgentRevisionRequest(current, nil, map[string]any{

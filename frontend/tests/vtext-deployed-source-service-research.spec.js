@@ -88,20 +88,29 @@ async function traceToolResults(page, trajectoryId, toolName) {
 async function waitForSuccessfulSourceSearch(page, trajectoryId, timeout = 180_000) {
   const deadline = Date.now() + timeout;
   let lastError = '';
+  const hitsByItemId = new Map();
+  let latestSnapshot = null;
   while (Date.now() < deadline) {
     const { snapshot, results } = await traceToolResults(page, trajectoryId, 'source_search');
+    latestSnapshot = snapshot;
     for (const result of results) {
       if (result.payload.is_error) {
         lastError = result.output.raw_output || result.payload.output || 'source_search failed';
         continue;
       }
       const hits = Array.isArray(result.output.results) ? result.output.results : [];
-      const hit = hits.find((item) => item.target_kind === 'source_service_item' && item.item_id);
-      if (hit) return { snapshot, result, hit };
+      for (const hit of hits) {
+        if (hit.target_kind === 'source_service_item' && hit.item_id) {
+          hitsByItemId.set(hit.item_id, hit);
+        }
+      }
+      if (hitsByItemId.size > 0) {
+        return { snapshot, result, hitsByItemId };
+      }
     }
     await page.waitForTimeout(2500);
   }
-  throw new Error(`trajectory ${trajectoryId} never produced source_search source_service_item result; lastError=${lastError}`);
+  throw new Error(`trajectory ${trajectoryId} never produced source_search source_service_item result; lastError=${lastError}; moments=${latestSnapshot?.moments?.length || 0}`);
 }
 
 async function loadVTextState(page, docId) {
@@ -114,24 +123,25 @@ async function loadVTextState(page, docId) {
   return { doc, revisions, head };
 }
 
-async function waitForSourceEntityRevision(page, docId, itemId, timeout = 180_000) {
+async function waitForSourceEntityRevision(page, docId, candidateItemIds, timeout = 180_000) {
+  const candidates = new Set(candidateItemIds);
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const state = await loadVTextState(page, docId);
     const sourceEntities = state.head?.metadata?.source_entities || [];
-    const hasEntity = sourceEntities.some((entity) =>
+    const matchedEntity = sourceEntities.find((entity) =>
       entity?.target?.target_kind === 'source_service_item' &&
-      entity?.target?.item_id === itemId
+      candidates.has(entity?.target?.item_id)
     );
     const consumedResearcher = (state.head?.metadata?.worker_updates_consumed || [])
       .some((entry) => entry.role === 'researcher');
-    if (hasEntity && consumedResearcher && state.head?.author_kind === 'appagent') {
-      return { ...state, sourceEntities };
+    if (matchedEntity && consumedResearcher && state.head?.author_kind === 'appagent') {
+      return { ...state, sourceEntities, matchedEntity };
     }
     await page.waitForTimeout(2500);
   }
   const state = await loadVTextState(page, docId);
-  throw new Error(`document ${docId} never produced source_service_item metadata for ${itemId}; head=${JSON.stringify(state.head)}`);
+  throw new Error(`document ${docId} never produced source_service_item metadata for any searched item ${JSON.stringify([...candidates])}; head=${JSON.stringify(state.head)}`);
 }
 
 test('deployed researcher source_search becomes VText source entities', async ({ desktopSession }) => {
@@ -158,19 +168,21 @@ test('deployed researcher source_search becomes VText source entities', async ({
   expect(decision.app).toBe('vtext');
   expect(decision.doc_id).toBeTruthy();
 
-  const { snapshot, hit } = await waitForSuccessfulSourceSearch(page, body.submission_id);
+  const { snapshot, hitsByItemId } = await waitForSuccessfulSourceSearch(page, body.submission_id);
   expect((snapshot.agents || []).some((agent) => agent.role === 'researcher' || agent.profile === 'researcher')).toBe(true);
-  expect(hit.source_id).toBeTruthy();
-  expect(hit.fetch_id).toBeTruthy();
+  const firstHit = [...hitsByItemId.values()][0];
+  expect(firstHit).toBeTruthy();
+  expect(firstHit.source_id).toBeTruthy();
+  expect(firstHit.fetch_id).toBeTruthy();
 
-  const finalState = await waitForSourceEntityRevision(page, decision.doc_id, hit.item_id);
+  const finalState = await waitForSourceEntityRevision(page, decision.doc_id, hitsByItemId.keys());
   expect(finalState.head.content).toContain(marker);
-  expect(finalState.head.content).toContain(`source:${finalState.sourceEntities[0].entity_id}`);
-  expect(finalState.sourceEntities[0]).toMatchObject({
+  expect(finalState.head.content).toContain(`source:${finalState.matchedEntity.entity_id}`);
+  expect(finalState.matchedEntity).toMatchObject({
     kind: 'source_service_item',
     target: {
       target_kind: 'source_service_item',
-      item_id: hit.item_id,
+      item_id: finalState.matchedEntity.target.item_id,
     },
     display: {
       inline_mode: 'collapsed_citation',

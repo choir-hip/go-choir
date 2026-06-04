@@ -332,6 +332,37 @@ terms, match any meaningful term across title/body/source_id, and rank results
 by matched-term count plus recency. Preserve the current simple-term behavior
 and avoid adding runtime-side query workarounds or direct storage reads.
 
+## Execution Checkpoint: Raw Source Item IDs Do Not Become VText Entities
+
+**Problem observed:** after deploying the tokenized Source Service search fix
+at commit `3f0cae9440862992985c82bcd7c2b388989cc498`, staging proved that
+researcher `source_search` can return live `source_service_item` results for
+natural economy queries. A later VText revision consumed researcher updates
+and wrote visible prose containing raw `srcitem_...` IDs, but revision
+metadata did not include `source_entities` for those searched items unless the
+researcher used the exact `source_service_item:<id>` ref syntax.
+
+**Evidence recorded before fix:** the deployed Playwright proof
+`GO_CHOIR_RUN_DEPLOYED_SOURCE_SERVICE_RESEARCH=1 BASE_URL=https://choir.news
+PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_AUTH_STATE=/tmp/choir-source-service-research-3f0cae9b.storage.json
+CHOIR_AUTH_META=/tmp/choir-source-service-research-3f0cae9b.meta.json npm
+--prefix frontend run e2e -- vtext-deployed-source-service-research.spec.js`
+failed for document `7cfeb906-72fe-467f-950d-0e7c3bb2d868`. Trace observed
+source-search hits including `srcitem_629d466f2545616313215faa` and
+`srcitem_e7825ea47035dce2151164a0`; VText consumed a researcher update and
+included raw item IDs in the visible document, but the head revision metadata
+lacked `source_entities`. `internal/runtime/vtext_media_sources.go`
+`sourceServiceEntitiesFromWorkerMessages` only parses
+`source_service_item:<id>` and therefore misses raw item IDs that came from
+the same durable Source Service result set.
+
+**Fix direction:** keep VText as the canonical source-entity writer, but make
+its researcher-update extractor accept both explicit
+`source_service_item:<id>` refs and raw bounded `srcitem_...` IDs from
+eligible researcher messages. Preserve stable entity IDs, display policy, and
+the prompt contract that VText should render citations using
+`[label](source:ENTITY_ID)`.
+
 ## Authoritative Requirements
 
 Use [source-external-data-publication.md](source-external-data-publication.md)

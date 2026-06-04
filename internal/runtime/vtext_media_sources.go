@@ -86,6 +86,7 @@ type vtextSourceEntityProvenance struct {
 
 var vtextHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 var vtextSourceServiceItemRefRE = regexp.MustCompile(`\bsource_service_item:([A-Za-z0-9_-]+)\b`)
+var vtextRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
 func (rt *Runtime) registerVTextMediaSourceRefs(ctx context.Context, ownerID, content string, metadata map[string]any) ([]vtextMediaSourceRef, bool) {
 	refs := decodeVTextMediaSourceRefs(metadata["media_source_refs"])
@@ -291,11 +292,7 @@ func sourceServiceEntitiesFromWorkerMessages(messages []ChannelMessage) []vtextS
 		if !strings.EqualFold(strings.TrimSpace(message.Role), AgentProfileResearcher) {
 			continue
 		}
-		for _, match := range vtextSourceServiceItemRefRE.FindAllStringSubmatch(message.Content, -1) {
-			if len(match) < 2 {
-				continue
-			}
-			itemID := strings.TrimSpace(match[1])
+		for _, itemID := range sourceServiceItemIDsFromText(message.Content) {
 			if itemID == "" || seen[itemID] {
 				continue
 			}
@@ -304,6 +301,31 @@ func sourceServiceEntitiesFromWorkerMessages(messages []ChannelMessage) []vtextS
 		}
 	}
 	return entities
+}
+
+func sourceServiceItemIDsFromText(text string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, match := range vtextSourceServiceItemRefRE.FindAllStringSubmatch(text, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		itemID := strings.TrimSpace(match[1])
+		if itemID == "" || seen[itemID] {
+			continue
+		}
+		seen[itemID] = true
+		out = append(out, itemID)
+	}
+	for _, itemID := range vtextRawSourceServiceItemIDRE.FindAllString(text, -1) {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" || seen[itemID] {
+			continue
+		}
+		seen[itemID] = true
+		out = append(out, itemID)
+	}
+	return out
 }
 
 func sourceServiceItemRefToSourceEntity(itemID, contextText string) vtextSourceEntity {
@@ -337,7 +359,7 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) vtextSourceE
 func sourceServiceItemLabel(itemID, contextText string) string {
 	for _, line := range strings.Split(contextText, "\n") {
 		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
-		if !strings.Contains(line, "source_service_item:"+itemID) {
+		if !strings.Contains(line, "source_service_item:"+itemID) && !strings.Contains(line, itemID) {
 			continue
 		}
 		line = strings.TrimSpace(strings.TrimPrefix(line, "Refs:"))
