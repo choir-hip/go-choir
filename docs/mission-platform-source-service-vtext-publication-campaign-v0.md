@@ -1,10 +1,70 @@
 # MissionGradient Campaign: Platform Source Service, VText Source Entities, And Publication v0
 
-**Status:** draft for owner review  
+**Status:** reviewed draft for owner review  
 **Date:** 2026-06-04  
 **Method:** Cognitive Transform Portfolio + MissionGradient  
 **Supersedes:** [mission-standalone-sourcecycled-data-platform-v0.md](mission-standalone-sourcecycled-data-platform-v0.md) as the active framing  
 **Primary synthesis input:** [news-econ-publishing-synthesis-2026-06-04.md](news-econ-publishing-synthesis-2026-06-04.md)
+
+## Review-First Correction
+
+This mission is a review-first revision. The synthesis doc was created before
+the Source Service nucleus landed, so it is still valuable as a strategic
+snapshot but stale as a code-state report in several places. In particular, it
+records a missing `gofeed` dependency, unsupported Polymarket default config,
+manual Node B deploy gating, and a sourcecycled build blocker. Current `main`
+has already changed those facts:
+
+- `sourcecycled` now builds against a bounded standard-library RSS/Atom parser.
+- `configs/sources.json` no longer includes unsupported Polymarket as a default
+  source.
+- staging deploy on push to `main` has been restored.
+- the Source Service ledger nucleus has shipped to staging at
+  `4682b092be3ada59e1034c4cdd879f162814f989`.
+
+Therefore this mission should not optimize for "make the old WIP build." The
+next real uncertainty is whether the new source ledger can become a product
+path: researcher retrieval, VText source identity, metadata-preserving
+publication, and canonical copy/download.
+
+## Review Inputs Actually Checked
+
+The mission framing was corrected after reviewing:
+
+- [news-econ-publishing-synthesis-2026-06-04.md](news-econ-publishing-synthesis-2026-06-04.md)
+- `cmd/sourcecycled/main.go`
+- `configs/sources.json`
+- `internal/sources/types.go`
+- `internal/cycle/storage.go`
+- `internal/cycle/storage_test.go`
+- `internal/runtime/tools_research.go`
+- `internal/runtime/prompt_defaults/researcher.md`
+- `internal/platform/types.go`
+- `internal/proxy/platform_publish.go`
+- dirty VText draft/versioning WIP in `frontend/src/lib/VTextEditor.svelte`
+  and `frontend/tests/vtext-document-stream.spec.js`
+- recent commits through `1d070e7 docs: checkpoint source service ledger deploy`
+
+Reviewed current facts:
+
+- Source Service v0 has durable service-local SQLite tables for sources,
+  fetches, items, cycles, cycle events, and issue citation-map placeholders.
+- `SearchItems` exists in `internal/cycle/storage.go`, but no runtime
+  researcher tool uses it yet.
+- Researcher tools are currently `web_search`, `fetch_url`,
+  `import_url_content`, and `read_content_item`.
+- VText does not receive web search tools and should not receive source search
+  tools directly.
+- Publication publish requests carry content and citations but not
+  `source_entities`, `media_source_refs`, transclusions, source-service refs,
+  route policy, or export policy.
+- VText source entities exist for the YouTube/image path, but not yet for
+  source-service items, official data releases, local files, publication spans,
+  or private corpus records.
+- The dirty VText draft WIP changes autosave semantics so typed drafts persist
+  locally without advancing canonical versions; that is strategically aligned
+  with "explicit VText writes versions," but it still needs product-path proof
+  with source refs.
 
 ## One-Line Goal String
 
@@ -37,15 +97,29 @@ This campaign follows a review of the current repo state and the synthesis doc c
 
 ### Sourcecycled Current State
 
-The staged `sourcecycled` WIP is useful but still toy-shaped:
+The current `sourcecycled` implementation is no longer just an unbuildable WIP,
+but it is still a nucleus rather than the product path:
 
-- `cmd/sourcecycled/main.go` is a blocking daemon that loads `configs/sources.json`, polls every 15 minutes, clusters by vertical, runs LLM synthesis, and writes SQLite.
-- `internal/sources` has RSS, GDELT, and Telegram adapters plus a Polymarket source type, but `configs/sources.json` includes Polymarket without an adapter.
-- RSS imports `github.com/mmcdole/gofeed`, but the dependency is absent from `go.mod`.
-- Deduplication is in-memory only, so restart loses duplicate knowledge.
-- There is no durable fetch ledger, cycle table, cycle-event stream, source policy table, source health, raw snapshot store, citation map, or exact source manifest.
-- Synthesis prompts the model to cite source labels, but persisted issues only store all item IDs globally; there is no proof that rendered citations map to exact item IDs.
-- The current synthesizer imports Choir `internal/provider`, which conflicts with the old standalone mission and clarifies that the real boundary is now a Choir platform service boundary.
+- `cmd/sourcecycled/main.go` is a blocking daemon that loads
+  `configs/sources.json`, polls every 15 minutes, clusters by vertical, runs
+  optional LLM synthesis, and writes a service-local SQLite ledger.
+- `internal/sources` has RSS, GDELT, and Telegram adapters. Polymarket remains
+  a source type in code, but it is not in the default registry until an adapter
+  exists.
+- RSS no longer imports `github.com/mmcdole/gofeed`; it uses a bounded
+  standard-library RSS/Atom parser.
+- Storage now has durable tables for source registry policy metadata, fetches,
+  items, cycles, cycle events, and issues with a citation-map placeholder.
+- `SearchItems` exists and tests cover source item search, persistence, dedup
+  across restart, fetch counts, and official-source caveat metadata.
+- The daemon still uses hardcoded local paths, has no product-facing CLI/API or
+  runtime integration, and has no deployed live ingestion proof.
+- Synthesis can save an issue and `SaveIssueManifest` can persist a citation
+  map, but there is not yet a verified parser/contract proving generated
+  citation labels map to exact item IDs and selectors.
+- The synthesizer imports Choir `internal/provider`, confirming that the right
+  boundary is a Choir platform Source Service with inspectable contracts, not a
+  standalone newspaper island.
 
 ### Existing Search And Research State
 
@@ -56,13 +130,21 @@ Choir already has a multi-provider web search plane through the gateway and rese
 - Researcher prompts correctly require early `submit_coagent_update` checkpoints.
 - VText does not have web search tools and should not get them; researchers own source investigation.
 
-The missing capability is a unified source retrieval path. When a researcher searches the web, the same turn should be able to search:
+The missing capability is a unified source retrieval path. When a researcher
+searches the web, the same turn should be able to search:
 
 - platform Source Service items;
 - owner-scoped ContentItems and local file artifacts where authorized;
 - public Choir/Dolt publication records;
 - official macro/economic source artifacts;
 - live web search providers.
+
+The first implementation should probably be a researcher-only `source_search`
+tool over the Source Service ledger because that is the smallest real bridge
+from the landed nucleus to VText work. A later `research_search` can federate
+Source Service, ContentItems, platform publications, local filesystem search,
+and web search after each individual source plane has proved its provenance
+contract.
 
 ### VText Source Entity State
 
@@ -89,6 +171,10 @@ Current publication drops important private revision metadata:
 - `platform.PublishVTextRequest` does not accept `source_entities`, `media_source_refs`, transclusions, content item refs, route policy, export policy, or hidden artifact metadata.
 - Public copy/download/export does not exist yet.
 - Therefore export must not be implemented from DOM scraping; it must read immutable revision or publication artifacts plus metadata.
+
+This means copy/download is not the next isolated UI polish task. It is a
+publication artifact task: preserve metadata first, then expose bytes from the
+canonical private revision or platform publication version.
 
 ### Access Control State
 
@@ -125,11 +211,38 @@ Those are useful surfaces, but none is the real artifact. The real uncertainty i
 
 ### Selected Transforms
 
-1. **Depth Extraction** - The banal version is "add rich sources." The deep version is source identity survival through transformations. The load-bearing variable is whether every factual/exported/transcluded claim can resolve to durable source artifacts, selectors, hashes, and access policy.
-2. **Boundary Correction** - `sourcecycled` should not be optimized as a standalone product island. It is a Choir platform Source Service with clean contracts. CLI/API/WebSocket remain valuable, but the trust and deployment boundary is the platform service.
-3. **Via Negativa** - Remove citation theater, DOM export, parallel source browsers, live-only news summaries, VText-as-retriever shortcuts, and publication routes that ignore metadata or access policy.
-4. **Homotopy** - The first slice can be small, but it must have the same topology as the full system: registry -> fetch -> item -> retrieval -> source entity -> publication metadata -> export. A hardcoded newspaper issue that later needs a rewrite is a fake island.
-5. **OODA / Inner Loop** - Researchers should search source service, local/user artifacts, public Choir records, and web search together. Every useful search result should shorten the loop from source discovery to grounded VText revision.
+1. **Depth Extraction** - The banal version is "add rich sources." The deep
+   version is source identity survival through transformations. The
+   load-bearing variable is whether every factual, exported, or transcluded
+   claim can resolve to durable source artifacts, selectors, hashes, caveats,
+   and access policy. This changes the route by putting fetch/item/retrieval
+   contracts ahead of issue writing and export UI.
+2. **Review-State Inversion** - The synthesis doc correctly identified old WIP
+   blockers, but current `main` already landed the buildable ledger nucleus.
+   The live uncertainty is no longer "can sourcecycled build?" but "can
+   source-service evidence move through researchers, VText, publication, and
+   export without losing identity?" This changes the next probe from build
+   repair to researcher retrieval.
+3. **Boundary Correction** - `sourcecycled` should not be optimized as a
+   standalone product island. It is a Choir platform Source Service with clean
+   contracts. CLI/API/WebSocket remain valuable, but the trust and deployment
+   boundary is the platform service. This changes scope by rejecting a separate
+   newspaper app and a separate publishing system.
+4. **Via Negativa** - Remove citation theater, DOM export, parallel source
+   browsers, live-only news summaries, VText-as-retriever shortcuts, and
+   publication routes that ignore metadata or access policy. This changes the
+   implementation order: metadata-preserving publication must precede serious
+   export.
+5. **Homotopy** - The first slice can be small, but it must have the same
+   topology as the full system: registry -> fetch -> item -> retrieval ->
+   source entity -> publication metadata -> export. A hardcoded newspaper issue
+   that later needs a rewrite is a fake island.
+6. **OODA / Inner Loop** - Researchers should search source service,
+   local/user artifacts, public Choir records, and web search together. Every
+   useful search result should shorten the loop from source discovery to
+   grounded VText revision. This changes the tool plan by favoring a
+   researcher-only `source_search` bridge now and a federated `research_search`
+   after the individual source planes prove out.
 
 ### Route-Changing Insights
 
@@ -138,10 +251,18 @@ Those are useful surfaces, but none is the real artifact. The real uncertainty i
 - Publication export depends on metadata-preserving publication. Copy/download before metadata projection would create a weak artifact path.
 - Security/RBAC should be modeled now as route/export policy metadata, even if only public/private/unlisted is implemented in the first cut.
 - The Markdown-to-VText side bug belongs in P0 because it affects the canonical artifact boundary for every imported source or client draft.
+- The dirty VText draft WIP is not just a bug fix; it is the product-level
+  inversion that typed drafts are local/noncanonical until explicit VText
+  revision. It must be proved with source refs before broad publishing work.
 
 ### Changed Plan
 
-**Implementation:** reshape sourcecycled into `Source Service` interfaces and tables; add a `source_search` or unified `research_search` tool that searches source service plus web; extend VText source entities for source-service targets; preserve source metadata through publish; add canonical copy/download endpoints.
+**Implementation:** continue from the shipped Source Service ledger nucleus;
+add a researcher-only `source_search` over the source ledger before federating
+into unified `research_search`; reconcile VText draft/versioning semantics with
+source-ref preservation; extend VText source entities for source-service
+targets; preserve source metadata through publish; add canonical copy/download
+endpoints only after metadata survives publication.
 
 **Verifier/evidence:** black-box deployed proof over real ingestion, researcher retrieval, VText revision metadata, publication bundle metadata, and export bytes. Local tests shape behavior, but staging is the acceptance environment.
 
@@ -262,18 +383,27 @@ Increase realism along these axes without changing topology:
 
 ## Prioritized Campaign
 
-### P0: Source Service Nucleus
+### P0: Review Checkpoint And Source Service Baseline
 
-Replace toy daemon semantics with durable service contracts:
+Do not start from stale synthesis blockers. Start from the current baseline:
 
-- source registry with type, tier, jurisdiction/region, language, vertical, poll interval, auth policy, robots/TOS class, body retention, rate policy, and source-good-standing fields;
-- fetch ledger with request URL, canonical URL, status, headers subset, content hash, raw snapshot ref, started/ended timestamps, error class, and retry/backoff state;
-- stable source item IDs from source ID plus canonical original ID/content hash fallback;
-- persistent dedup across restart;
-- cycle records and cycle events;
-- source health summary;
-- issue/source manifest type that maps every cited label to exact item IDs and selectors;
-- buildable tests for RSS/GDELT/official macro fixture ingestion.
+- source registry policy metadata exists;
+- durable source/fetch/item/cycle/cycle-event tables exist;
+- stable source item IDs and content hashes exist;
+- source item search exists in storage;
+- RSS/GDELT/Telegram adapters exist;
+- default registry includes public/global and official Fed press source lanes;
+- the buildable ledger nucleus has shipped to staging.
+
+The remaining P0 Source Service gaps are:
+
+- no runtime/researcher retrieval tool;
+- no live deployed source ingestion proof;
+- no source health/backoff summary;
+- no exact generated citation-label-to-item selector verifier;
+- no Source Service API/WebSocket surface;
+- no projection into ContentItems, VText source entities, or platform
+  publication records.
 
 ### P0: Markdown-To-VText Canonicalization Bug
 
@@ -285,14 +415,33 @@ Prove and fix the product boundary:
 - original file write-through is explicit export/sync behavior, not the canonical edit store;
 - publication uses VText revision metadata, not the raw source file.
 
-### P1: Researcher Source Retrieval
+This is also where the dirty draft WIP must be judged. The desired invariant is:
 
-Add a researcher-facing retrieval path that searches source service and web together:
+```text
+typing creates/restores a local draft without advancing canonical versions;
+explicit VText save/revise creates exactly one canonical user revision;
+source refs and source_entities survive that explicit revision.
+```
 
-- `source_search` or `research_search` returns source-service hits, public publication hits, authorized local/user content hits, and web-search hits with provider/source provenance;
-- existing `web_search` remains available, but broad research prompts should prefer the unified retrieval path when configured;
-- source results can be opened through `read_source_item` or projected into ContentItems;
-- researcher checkpoints include source IDs, item IDs, selectors, hashes, caveats, and unresolved gaps.
+Do not land source-heavy publication work on top of ambiguous draft/versioning
+semantics.
+
+### P0: Researcher Source Retrieval Bridge
+
+Add the first researcher-facing retrieval path over the Source Service ledger:
+
+- `source_search` returns source-service hits with source IDs, item IDs,
+  fetch IDs, URLs, titles, excerpts, hashes, caveats, published/fetched
+  timestamps, and target kind `source_service_item`;
+- VText still does not receive direct source/web retrieval tools;
+- researcher prompts require source findings checkpoints after source-service
+  evidence just as they do after web/import evidence;
+- the first proof can search only the service-local SQLite ledger, but the tool
+  response shape must deform into later Source Service API/publication/local
+  search federation;
+- existing `web_search` remains available. A later `research_search` can join
+  source-service hits, public publication hits, authorized local/user content
+  hits, and web-search hits after the individual planes are proven.
 
 ### P1: Official Sources And Macro/Economic Lane
 
@@ -313,7 +462,7 @@ Generalize `source_entities` without exposing metadata noise to the user:
 - visible inline chip/disclosure and source deck remain simple;
 - source entities can open the right owning surface or a focused source window.
 
-### P2: Publication Metadata Projection
+### P1: Publication Metadata Projection
 
 Extend publication payloads and platform records:
 
@@ -323,7 +472,7 @@ Extend publication payloads and platform records:
 - public bundle resolution returns enough metadata for expandable citations and export, subject to route policy;
 - retrieval spans become finer than whole-document where needed.
 
-### P2: Copy And Download From Canonical Artifacts
+### P1: Copy And Download From Canonical Artifacts
 
 Expose client-visible publishing primitives:
 
@@ -333,7 +482,7 @@ Expose client-visible publishing primitives:
 - UI actions call export endpoints instead of scraping rendered DOM;
 - PDF and DOCX follow after the canonical render/export model is stable.
 
-### P3: Publication Access, Role, And Export Policy
+### P2: Publication Access, Role, And Export Policy
 
 Design and begin implementing route policy:
 
@@ -544,15 +693,17 @@ service-local source ledger and researcher tool path.
 **next executable probe:**
 
 ```text
-Add the first researcher-facing source retrieval tool/path over the source
-service ledger, then prove a VText/researcher path can cite a source-service
-item without giving VText direct retrieval authority.
+Document and prove the VText draft/versioning boundary with source refs, then
+add the first researcher-facing source retrieval tool/path over the source
+service ledger. The combined proof should show that source-service evidence can
+reach VText through researcher updates without giving VText direct retrieval
+authority or advancing canonical versions on ordinary typing.
 ```
 
 **suggested resume goal string:**
 
 ```text
-/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v0.md as a Codex-operated MissionGradient campaign. Start with P0 Source Service Nucleus and Markdown-To-VText Canonicalization. Preserve all hard invariants, update the mission checkpoint after each evidence-bearing change, and do not claim completion without staging proof across ingestion, retrieval, VText source entities, publication metadata, and export.
+/goal Run docs/mission-platform-source-service-vtext-publication-campaign-v0.md as a Codex-operated MissionGradient campaign. Start from the reviewed Source Service baseline, then execute P0 Markdown-To-VText Canonicalization and P0 Researcher Source Retrieval Bridge. Preserve all hard invariants, update the mission checkpoint after each evidence-bearing change, and do not claim completion without staging proof across ingestion, retrieval, VText source entities, publication metadata, and export.
 ```
 
 **evidence artifact refs:**
