@@ -2032,20 +2032,18 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 		"-j", "DNAT", "--to-destination", fmt.Sprintf("%s:%d", guestIP, guestPort),
 		"-m", "comment", "--comment", comment).Run()
 
-	// Set up DNAT: guest→host traffic for internal host control ports.
-	// The guest sends packets to hostIP:8083/8084, while vmctl/gateway listen
-	// on 127.0.0.1. These PREROUTING rules rewrite the destination so the guest
-	// can reach only the intended host-local services through its tap subnet.
-	_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
-		"-p", "tcp", "--dport", "8083",
-		"-d", hostIP,
-		"-j", "DNAT", "--to-destination", "127.0.0.1:8083",
-		"-m", "comment", "--comment", comment).Run()
-	_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
-		"-p", "tcp", "--dport", "8084",
-		"-d", hostIP,
-		"-j", "DNAT", "--to-destination", "127.0.0.1:8084",
-		"-m", "comment", "--comment", comment).Run()
+	// Set up DNAT: guest→host traffic for internal host service ports.
+	// The guest sends packets to hostIP:<port>, while host services normally
+	// listen on 127.0.0.1. These PREROUTING rules rewrite the destination so
+	// the guest can reach only the intended host-local services through its tap
+	// subnet.
+	for _, port := range tapReachableHostServicePorts() {
+		_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
+			"-p", "tcp", "--dport", port,
+			"-d", hostIP,
+			"-j", "DNAT", "--to-destination", "127.0.0.1:"+port,
+			"-m", "comment", "--comment", comment).Run()
+	}
 
 	return nil
 }
@@ -2083,6 +2081,7 @@ func tapReachableHostServicePorts() []string {
 		"8083", // vmctl
 		"8084", // gateway
 		"8087", // maild draft persistence
+		"8787", // source service retrieval
 	}
 }
 
