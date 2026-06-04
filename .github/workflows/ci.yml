@@ -224,9 +224,7 @@ jobs:
     name: Deploy to Staging (Node B)
     runs-on: ubuntu-latest
     needs: [check, build-frontend, deploy-impact]
-    # CI must not mutate Node B on ordinary pushes. Run this job only from an
-    # explicit manual workflow_dispatch after the test/build gates pass.
-    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true' && needs.check.result == 'success' && (needs.deploy-impact.outputs.deploy_frontend != 'true' || needs.build-frontend.result == 'success')
+    if: always() && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true' && needs.check.result == 'success' && (needs.deploy-impact.outputs.deploy_frontend != 'true' || needs.build-frontend.result == 'success')
     timeout-minutes: 60
     permissions:
       contents: read
