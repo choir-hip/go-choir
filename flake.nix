@@ -307,6 +307,7 @@
             "internal/runtime"
             "internal/sandbox"
             "internal/server"
+            "internal/sources"
             "internal/store"
             "internal/types"
             "internal/vmctl"
