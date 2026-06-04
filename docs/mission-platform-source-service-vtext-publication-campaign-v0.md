@@ -696,6 +696,40 @@ ok   github.com/yusefmosiah/go-choir/internal/runtime  18.811s
 ok   github.com/yusefmosiah/go-choir/internal/runtime  2.179s
 ```
 
+Pushed behavior checkpoint:
+
+```text
+08be24b994a78cfa51e5a39cf282262a8dc6ccb0 feat: add researcher source service search
+```
+
+CI run for that SHA:
+
+```text
+GitHub Actions CI run: 26969263344
+Go Test (non-runtime): success
+Go Test (integration-tagged smoke): success
+Go Test (internal/runtime shards 0-3): success
+Go Vet + Build: success
+Build Frontend: skipped
+Go Vet + Test + Build: success
+Deploy to Staging (Node B): failure
+```
+
+Deploy evidence is mixed. The deploy job step concluded failure, and the
+available GitHub API token could not download the private job log
+(`403 Must have admin rights to Repository`). However staging health reports
+the new commit for both proxy and sandbox:
+
+```text
+curl -sS https://choir.news/health | jq '.build,.upstream_build'
+proxy deployed_commit:   08be24b994a78cfa51e5a39cf282262a8dc6ccb0
+sandbox deployed_commit: 08be24b994a78cfa51e5a39cf282262a8dc6ccb0
+deployed_at: 2026-06-04T17:48:00Z
+```
+
+This supports "code identity deployed" but does not support a clean landing
+loop or deployed product-path source retrieval proof.
+
 **CI and deploy evidence:**
 
 ```text
@@ -723,6 +757,8 @@ deployed_at: 2026-06-04T17:24:18Z
 - staging deployment status of any sourcecycled WIP;
 - deployed source-service retrieval through researcher tools;
 - live ingestion against the default registry;
+- root cause of the failed GitHub Actions deploy step after staging began
+  serving the new commit;
 - an externally addressable deployed source-service API or daemon proof;
 - publication projection/export/access policy.
 
