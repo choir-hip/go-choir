@@ -446,3 +446,49 @@ Next correction:
 - Ensure preview and accepted content strip hidden provenance comments while
   preserving provenance in metadata/evidence.
 - Add tests that fail on glossary-stub labels and visible provenance leakage.
+
+### Correction Evidence: Provider-Backed Compare/Merge
+
+Updated: 2026-06-04T23:29:00Z
+
+Follow-up commits:
+
+- `3f34dc4` `fix: make vtext merge model backed`
+- `c914e70` `fix: tolerate model summary compare output`
+
+Local verification:
+
+- `nix develop -c go test ./internal/runtime` passed.
+- `npm --prefix frontend run build` passed.
+- Focused regression tests prove the compare path calls a provider-backed JSON
+  model response, records token/model evidence, strips visible merge provenance,
+  and promotes model summary-only output into reviewable suggestions without
+  reintroducing domain-specific stubs.
+
+CI/deploy:
+
+- CI run `26985649379` passed for
+  `c914e70765a086c21ea6139a3a17a5809c1f91e0`.
+- FlakeHub publish run `26985649364` passed for the same SHA.
+- Staging deploy job `79634678595` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `c914e70765a086c21ea6139a3a17a5809c1f91e0`, deployed at
+  `2026-06-04T23:26:34Z`.
+
+Staging proof:
+
+- Proof artifact:
+  `/tmp/vtext-model-merge-staging-proof-1780615728523.json`
+- Document: `8bf6c229-4287-4582-9e0a-d27fb6c09559`
+- Source revision: `298c3462-ae41-4d79-b0d3-df3962c02986`
+- Target revision: `a42fdb92-a957-413d-a6cd-81eb576c5c58`
+- Compare evidence: `30723792-99b2-4a91-9ab0-b37833ed30fb`
+- Preview evidence: `1c1ed7c2-8034-42de-b504-50d0724df974`
+- Accepted revision: `4bc8c2ab-6d6f-4201-9439-d3d51a774b8e`
+- Provider/model evidence: `fireworks` /
+  `accounts/fireworks/models/deepseek-v4-flash`.
+- The model identified `merge_client_ownership_concept` from the historical
+  version and produced an applied edit that added the source Working Terms to
+  the target draft.
+- Accepted content did not contain `VText merge preview provenance` or hidden
+  HTML comment leakage; provenance remained in structured metadata/evidence.
