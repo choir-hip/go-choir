@@ -20,7 +20,7 @@ func main() {
 	log.Println("Starting Choir Global Wire sourcecycled daemon (V0)")
 
 	// 1. Load Configuration
-	configPath := filepath.Join("configs", "sources.json")
+	configPath := sourceServiceConfigPath()
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatalf("Failed to read config file: %v", err)
@@ -81,6 +81,16 @@ func sourceServiceDBPath() string {
 		return strings.TrimSpace(dbPath)
 	}
 	return "var/sourcecycled.db"
+}
+
+func sourceServiceConfigPath() string {
+	if configPath := os.Getenv("SOURCE_SERVICE_CONFIG_PATH"); strings.TrimSpace(configPath) != "" {
+		return strings.TrimSpace(configPath)
+	}
+	if configPath := os.Getenv("SOURCECYCLED_CONFIG_PATH"); strings.TrimSpace(configPath) != "" {
+		return strings.TrimSpace(configPath)
+	}
+	return filepath.Join("configs", "sources.json")
 }
 
 var engine *cycle.Engine

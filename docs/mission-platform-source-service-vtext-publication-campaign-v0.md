@@ -594,9 +594,9 @@ If only part of this lands, report `checkpoint_incomplete`, not complete.
 
 **status:** checkpoint_incomplete
 
-**last checkpoint:** P0 Researcher Source Retrieval Bridge implemented locally
-over the Source Service SQLite ledger after the P0 Source Service nucleus was
-landed and reviewed.
+**last checkpoint:** P0 Researcher Source Retrieval Bridge plus managed
+`sourcecycled` host-service wiring implemented locally after the P0 Source
+Service nucleus was landed and reviewed.
 
 **P0 storage-boundary decision:** Source Service v0 should keep its own
 service-local durable SQLite ledger under `sourcecycled` while exposing stable
@@ -622,6 +622,9 @@ making Source Service a VText or publication writer.
 - Sourcecycled and runtime source search share `SOURCE_SERVICE_DB_PATH` /
   `SOURCECYCLED_DB_PATH`, with the daemon retaining `var/sourcecycled.db` as a
   fallback.
+- Sourcecycled now also accepts `SOURCE_SERVICE_CONFIG_PATH` /
+  `SOURCECYCLED_CONFIG_PATH`, has a Nix package, and has a Node B systemd unit
+  targeting `/var/lib/go-choir/source-service/sourcecycled.db`.
 - VText source entities exist for YouTube/image but not platform source items or official data.
 - Publication ledger exists but drops revision metadata and lacks export/access policy.
 - Markdown/text file opening creates VText aliases, but the product invariant needs proof and likely tightening.
@@ -730,6 +733,41 @@ deployed_at: 2026-06-04T17:48:00Z
 This supports "code identity deployed" but does not support a clean landing
 loop or deployed product-path source retrieval proof.
 
+Managed Source Service daemon local proof:
+
+```text
+nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sources
+nix develop -c go build ./cmd/sourcecycled
+nix eval .#packages.x86_64-linux.sourcecycled.pname --raw
+nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sourcecycled.description --raw
+printf '%s\n' cmd/sourcecycled/main.go internal/cycle/storage.go internal/sources/rss.go configs/sources.json | .github/scripts/deploy-impact-classify /tmp/sourcecycled-impact.out
+```
+
+Result:
+
+```text
+?    github.com/yusefmosiah/go-choir/cmd/sourcecycled [no test files]
+ok   github.com/yusefmosiah/go-choir/internal/cycle    1.147s
+ok   github.com/yusefmosiah/go-choir/internal/sources  (cached)
+go build ./cmd/sourcecycled: success
+nix package pname: sourcecycled
+nixos service description: go-choir Source Service Ingestion Daemon
+deploy impact host_services: sourcecycled,sandbox
+```
+
+`nix build .#packages.x86_64-linux.sourcecycled --no-link` could not complete
+locally because this Mac is `aarch64-darwin` and the available remote builder
+advertised `aarch64-linux`, while the deployed package is `x86_64-linux`:
+
+```text
+Failed to find a machine for remote build
+Required system: x86_64-linux
+Current system: aarch64-darwin
+available machines: aarch64-linux
+```
+
+The actual x86_64-linux package/build proof must come from CI or Node B.
+
 **CI and deploy evidence:**
 
 ```text
@@ -757,6 +795,8 @@ deployed_at: 2026-06-04T17:24:18Z
 - staging deployment status of any sourcecycled WIP;
 - deployed source-service retrieval through researcher tools;
 - live ingestion against the default registry;
+- deployed `go-choir-sourcecycled.service` active state and first-cycle ledger
+  item/fetch counts;
 - root cause of the failed GitHub Actions deploy step after staging began
   serving the new commit;
 - an externally addressable deployed source-service API or daemon proof;
@@ -775,7 +815,10 @@ deployed_at: 2026-06-04T17:24:18Z
 
 **remaining error field:**
 
-- deploy and configure source-service retrieval for researchers on staging;
+- push and deploy the managed sourcecycled host service, then verify the
+  service is active and writing fetch/item rows to its configured ledger;
+- configure researcher source retrieval for the actual user-computer product
+  path, not just the host-process sandbox DB path;
 - reconcile VText draft-versioning WIP with source-entity tests;
 - design publication metadata/export policy schema;
 - define first official macro source lane from Marco patterns.
@@ -787,11 +830,14 @@ Source Service into a VText writer, parallel news app, or DOM/export shortcut.
 **next executable probe:**
 
 ```text
-Push and deploy the local researcher `source_search` bridge, configure a real
-staging Source Service ledger path, then prove one real ingested source item can
-be found by a researcher and handed to VText as durable coagent evidence without
-giving VText direct retrieval authority. In parallel, document and prove the
-VText draft/versioning boundary with source refs before publication/export work.
+Push and deploy the managed `sourcecycled` service wiring, then verify Node B
+has an active `go-choir-sourcecycled.service`, a nonempty
+`/var/lib/go-choir/source-service/sourcecycled.db`, and a sandbox/runtime path
+that can search it. If active user computers run guest sandboxes without host DB
+access, reparameterize the retrieval bridge toward an internal Source Service
+API instead of treating host DB access as product-path proof. In parallel,
+document and prove the VText draft/versioning boundary with source refs before
+publication/export work.
 ```
 
 **suggested resume goal string:**

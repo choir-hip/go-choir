@@ -45,9 +45,11 @@ mark_host_service() {
 add_host_service() {
   local service="$1"
   mark_host_service
-  for existing in "${host_services[@]}"; do
-    [[ "$existing" == "$service" ]] && return
-  done
+  if ((${#host_services[@]} > 0)); then
+    for existing in "${host_services[@]}"; do
+      [[ "$existing" == "$service" ]] && return
+    done
+  fi
   host_services+=("$service")
 }
 
@@ -139,6 +141,11 @@ for path in "${changed[@]}"; do
     cmd/gateway/*)
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
+      ;;
+    cmd/sourcecycled/*|internal/cycle/*|internal/sources/*|configs/sources.json)
+      add_host_service "sourcecycled"
+      add_host_service "sandbox"
+      add_explanation "$path -> source service ingestion + sandbox source_search runtime package"
       ;;
     internal/gateway/*|internal/provider/*)
       add_host_service "gateway"

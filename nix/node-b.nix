@@ -22,6 +22,7 @@ let
   authSigningDir = "/var/lib/go-choir/auth-signing";
   frontendCurrent = "/var/www/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
+  sourceServiceDir = "/var/lib/go-choir/source-service";
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
@@ -191,7 +192,8 @@ in
   };
 
   # ── Systemd services ──────────────────────────────────────────────────
-  # 5 host services: auth, proxy, vmctl, gateway, sandbox
+  # Host services: auth, proxy, vmctl, gateway, sandbox, maild, platformd,
+  # and sourcecycled.
   # Sandbox workloads for authenticated traffic are expected to run inside
   # Firecracker microVMs managed by vmctl. Node B disables vmctl's
   # host-process fallback so deployed routing fails closed instead of silently
@@ -338,6 +340,26 @@ in
         "PLATFORMD_PORT=8086"
         "PLATFORMD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "PLATFORMD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+      ];
+    };
+  };
+
+  systemd.services.go-choir-sourcecycled = {
+    description = "go-choir Source Service Ingestion Daemon";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ bash coreutils ];
+    serviceConfig = commonServiceHardening // {
+      ExecStart = "${serviceExec "sourcecycled" goChoirPackages.sourcecycled}";
+      Restart = "on-failure";
+      RestartSec = 10;
+      StateDirectory = "go-choir/source-service";
+      ReadWritePaths = [ sourceServiceDir ];
+      EnvironmentFile = "-/var/lib/go-choir/deploy.env";
+      Environment = [
+        "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
+        "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
       ];
     };
   };
@@ -591,6 +613,7 @@ in
         "SANDBOX_PORT=8085"
         "SANDBOX_ID=sandbox-m1"
         "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
+        "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
         "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
         "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
         "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"

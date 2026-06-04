@@ -276,6 +276,25 @@
             "internal/server"
           ];
         };
+        sourcecycled = mkGoService {
+          pname = "sourcecycled";
+          subPackage = "cmd/sourcecycled";
+          vendorHash = "sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=";
+          internalDirs = [
+            "internal/buildinfo"
+            "internal/cycle"
+            "internal/events"
+            "internal/modelcatalog"
+            "internal/provider"
+            "internal/runtime"
+            "internal/sandbox"
+            "internal/server"
+            "internal/sources"
+            "internal/store"
+            "internal/types"
+            "internal/vmctl"
+          ];
+        };
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";

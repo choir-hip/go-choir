@@ -355,7 +355,7 @@ jobs:
             fast_build_host_service() {
               local service="$1"
               case "$service" in
-                auth|gateway|maild|platformd|proxy|sandbox|vmctl)
+                auth|gateway|maild|platformd|proxy|sandbox|sourcecycled|vmctl)
                   ;;
                 *)
                   echo "    Fast host service build unsupported for ${service}; using Nix package build"
@@ -591,7 +591,7 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sandbox vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sandbox sourcecycled vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -604,6 +604,7 @@ jobs:
                 go-choir-auth \
                 go-choir-maild \
                 go-choir-platformd \
+                go-choir-sourcecycled \
                 go-choir-sandbox \
                 go-choir-gateway \
                 go-choir-proxy
