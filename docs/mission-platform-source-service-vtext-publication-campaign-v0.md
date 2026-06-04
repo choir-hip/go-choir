@@ -768,6 +768,42 @@ available machines: aarch64-linux
 
 The actual x86_64-linux package/build proof must come from CI or Node B.
 
+Pushed managed-daemon checkpoint:
+
+```text
+0030fba4366c5bc0d05bae079c26bb5fede12602 feat: deploy source service daemon
+```
+
+CI run for that SHA:
+
+```text
+GitHub Actions CI run: 26969750776
+Go Test (non-runtime): success
+Go Test (integration-tagged smoke): success
+Go Test (internal/runtime shards 0-3): success
+Go Vet + Build: success
+Build Frontend: success
+Go Vet + Test + Build: success
+Deploy to Staging (Node B): failure
+```
+
+Staging health reports the new commit:
+
+```text
+curl -sS https://choir.news/health | jq '.build,.upstream_build'
+proxy deployed_commit:   0030fba4366c5bc0d05bae079c26bb5fede12602
+sandbox deployed_commit: 0030fba4366c5bc0d05bae079c26bb5fede12602
+deployed_at: 2026-06-04T17:57:25Z
+```
+
+The deploy job failed during the `Deploy to staging` step. GitHub job logs are
+not downloadable with the available API token (`403 Must have admin rights to
+Repository`), and direct local SSH to `root@147.135.70.196` failed with
+`Permission denied (publickey)`. Therefore the active state of
+`go-choir-sourcecycled.service` and the existence/non-emptiness of
+`/var/lib/go-choir/source-service/sourcecycled.db` remain unverified despite
+public health serving the pushed commit.
+
 **CI and deploy evidence:**
 
 ```text
@@ -799,6 +835,8 @@ deployed_at: 2026-06-04T17:24:18Z
   item/fetch counts;
 - root cause of the failed GitHub Actions deploy step after staging began
   serving the new commit;
+- whether the managed `go-choir-sourcecycled.service` exists and is active on
+  Node B after the failed deploy step;
 - an externally addressable deployed source-service API or daemon proof;
 - publication projection/export/access policy.
 
