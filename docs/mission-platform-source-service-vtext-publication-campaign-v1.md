@@ -248,6 +248,29 @@ landing loop. Proxy and sandbox public health already reported commit
 `5020f539e0489d515654d0cfcd5134ffa3fafa3c`, but the full host closure and
 `sourcecycled` service deployment remain unproven until the rerun succeeds.
 
+## Execution Checkpoint: Researcher Source Refs Do Not Become VText Entities
+
+**Problem observed:** the deployed Source Service API boundary can return
+`source_service_item` results and the researcher tool can expose those IDs, but
+the VText metadata path only normalized source entities that were already in
+revision metadata or derived from media source refs. Addressed researcher
+updates containing durable `source_service_item:<id>` refs could wake VText and
+inform prose, but they did not automatically become revision-scoped
+`source_entities`. That leaves the chain from researcher source findings to
+VText citation/transclusion metadata incomplete.
+
+**Evidence recorded before fix:** `internal/runtime/vtext.go` normalized
+`media_source_refs` into `source_entities`, then passed existing
+`source_entities` into the VText prompt. `internal/runtime/vtext_media_sources.go`
+had no source-service item target fields and no parser/normalizer for
+researcher worker messages containing `source_service_item:` refs.
+
+**Fix direction:** derive bounded `source_service_item` source entities from
+eligible addressed researcher worker messages before starting the VText run.
+Carry those entities through run/revision metadata, expose their item IDs in
+the VText prompt, render them as collapsed citation/transclusion points by
+default, and preserve the existing media-source entity path.
+
 ## Authoritative Requirements
 
 Use [source-external-data-publication.md](source-external-data-publication.md)
