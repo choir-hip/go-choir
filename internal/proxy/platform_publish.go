@@ -193,13 +193,13 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 		if !ok || !sourceEntityAllowsPublishedSnapshot(entity) || mapValue(entity["reader_snapshot"]) != nil {
 			continue
 		}
-		item, state, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
+		item, status, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			if state != "" {
-				entity["reader_snapshot_status"] = map[string]any{"state": state}
+			if status != nil {
+				entity["reader_snapshot_status"] = status
 				changed = true
 			}
 			continue
@@ -247,30 +247,71 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 	return out, nil
 }
 
-func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, string, bool, error) {
+func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, map[string]any, bool, error) {
 	if contentID := sourceEntityContentID(entity); contentID != "" {
 		var item sandboxContentItem
 		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
-			return sandboxContentItem{}, "", false, fmt.Errorf("load content item %s: %w", contentID, err)
+			return sandboxContentItem{}, nil, false, fmt.Errorf("load content item %s: %w", contentID, err)
 		}
 		if item.OwnerID != userID || item.ContentID != contentID {
-			return sandboxContentItem{}, "", false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
+			return sandboxContentItem{}, nil, false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
 		}
-		return item, "", true, nil
+		return item, nil, true, nil
 	}
 	sourceURL := sourceEntityTargetURL(entity)
 	if sourceURL == "" {
-		return sandboxContentItem{}, "source_target_missing", false, nil
+		return sandboxContentItem{}, sourceSnapshotStatus("source_target_missing", "source_target_missing", nil), false, nil
 	}
 	item, err := h.importSandboxURLContent(r, sandboxURL, userID, sourceURL, sourceEntityImportQuery(entity))
 	if err != nil {
 		log.Printf("proxy: platform publish source URL snapshot import failed for %s: %v", sourceURL, err)
-		return sandboxContentItem{}, "import_failed", false, nil
+		return sandboxContentItem{}, sourceSnapshotStatus("import_failed", "source_import_failed", classifySourceImportError(err)), false, nil
 	}
 	if item.OwnerID != userID {
-		return sandboxContentItem{}, "", false, fmt.Errorf("imported source URL item does not belong to authenticated user")
+		return sandboxContentItem{}, nil, false, fmt.Errorf("imported source URL item does not belong to authenticated user")
 	}
-	return item, "", true, nil
+	return item, nil, true, nil
+}
+
+func sourceSnapshotStatus(state, reason string, attrs map[string]any) map[string]any {
+	status := map[string]any{"state": state}
+	if strings.TrimSpace(reason) != "" {
+		status["reason"] = strings.TrimSpace(reason)
+	}
+	for key, value := range attrs {
+		if strings.TrimSpace(key) == "" || value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		status[key] = value
+	}
+	return status
+}
+
+func classifySourceImportError(err error) map[string]any {
+	message := ""
+	if err != nil {
+		message = strings.ToLower(err.Error())
+	}
+	out := map[string]any{"error_class": "import_error"}
+	for _, status := range []int{400, 401, 403, 404, 408, 429, 500, 502, 503, 504} {
+		if strings.Contains(message, fmt.Sprintf("%d", status)) {
+			out["http_status"] = status
+			out["error_class"] = fmt.Sprintf("http_%d", status)
+			return out
+		}
+	}
+	switch {
+	case strings.Contains(message, "timeout"), strings.Contains(message, "deadline exceeded"):
+		out["error_class"] = "timeout"
+	case strings.Contains(message, "no such host"), strings.Contains(message, "dns"):
+		out["error_class"] = "dns_error"
+	case strings.Contains(message, "low-content"):
+		out["error_class"] = "low_content"
+	}
+	return out
 }
 
 func sourceEntityAllowsPublishedSnapshot(entity map[string]any) bool {

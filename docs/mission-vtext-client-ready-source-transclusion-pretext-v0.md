@@ -3512,3 +3512,33 @@ next executable probe:
   open that cleaned source artifact from the publication. If canonical URLs
   block server import, the system should either use an allowed alternate source
   found by research/import, or surface a repairable source-acquisition state.
+
+## 2026-06-05 Repair: Source Import Failure Diagnostics
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `internal/proxy/platform_publish.go` now records non-sensitive diagnostics
+  on failed source snapshot materialization:
+  - `state=import_failed`;
+  - `reason=source_import_failed`;
+  - `error_class` such as `http_403`, `http_404`, `timeout`, `dns_error`, or
+    `import_error`;
+  - `http_status` when a status code can be inferred from the sandbox import
+    error.
+- The diagnostics remain source metadata. They do not render as article prose
+  and they do not synthesize a reader snapshot.
+
+local verification:
+
+- Updated proxy coverage verifies that an HTTP 403 import failure publishes the
+  bounded selector, omits fake `reader_snapshot` content, and records
+  `reader_snapshot_status` with `import_failed`, `source_import_failed`,
+  `http_403`, and `http_status`.
+
+remaining proof:
+
+- Run focused proxy tests, commit/push/deploy, republish the owner v83 route,
+  and confirm the three failing owner sources expose error classes. This should
+  make the next source-acquisition repair evidence-driven instead of inferred.

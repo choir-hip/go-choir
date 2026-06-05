@@ -315,6 +315,9 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 	if !strings.Contains(metadata, "reader_snapshot_status") || !strings.Contains(metadata, "import_failed") {
 		t.Fatalf("platform metadata missing import failure state: %s", metadata)
 	}
+	if !strings.Contains(metadata, "source_import_failed") || !strings.Contains(metadata, "http_403") || !strings.Contains(metadata, "http_status") {
+		t.Fatalf("platform metadata missing import failure diagnostics: %s", metadata)
+	}
 	if strings.Contains(metadata, "reader_snapshot\":") {
 		t.Fatalf("failed import must not synthesize reader snapshot: %s", metadata)
 	}
