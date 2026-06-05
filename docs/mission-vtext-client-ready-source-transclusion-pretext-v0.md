@@ -3442,3 +3442,73 @@ remaining proof:
   metadata while retaining the bounded citation excerpt. A later source
   acquisition pass should attach an imported/allowed reader artifact or use an
   official accessible source variant.
+
+## 2026-06-05 Deployment Evidence: Source Materialization State
+
+status: deployed_owner_proof_partial
+
+deployment evidence:
+
+- Behavior commit:
+  `6dc2d412b78268523732424b33b00ba2c9e2e583`
+  (`fix: record source snapshot materialization state`).
+- GitHub Actions CI run `27039822975` succeeded, including Go tests, runtime
+  shards, integration smoke, vet/build, aggregate status, and Node B deploy.
+- FlakeHub run `27039823026` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=6dc2d412b78268523732424b33b00ba2c9e2e583`,
+  `deployed_at=2026-06-05T21:01:04Z`, and status/upstream/vmctl `ok`.
+
+owner publication proof:
+
+- Authenticated Computer Use/Comet was active against staging.
+- The owner v83 document was republished from Comet after the deploy.
+- Fresh route:
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubf0211e220`.
+- Public resolve API returned:
+  - `publication_id=pub-f0211e22-08c3-44a1-a536-388b3347b8e0`;
+  - `publication_version_id=pubver-0d191c32-7555-4037-830f-e5e88b1a847e`;
+  - 7 `source_entities`;
+  - 7 `transclusions`.
+- Source materialization states:
+  - `src_gdpr_article_32`: `reader_snapshot_ready`, 7,993 chars;
+  - `src_nixos_rollback`: `reader_snapshot_ready`, 11,642 chars;
+  - `src_hetzner_datacenters`: `reader_snapshot_ready`, 12,179 chars;
+  - `src_qdrant_search`: `reader_snapshot_ready`, 48 chars;
+  - `src_ovh_private_cloud`: `import_failed`;
+  - `src_aba_rule_16`: `import_failed`;
+  - `src_aba_formal_op_512`: `import_failed`.
+- Markdown export returned
+  `choir-private-legal-cloud-proposal-vtext-pubf0211e220.md`, hash
+  `4e6f3f9888c7ed41fe2b386620445985290285001bd0d3c16dfb02ad600f81bc`,
+  length `38398`, no `missing source`, `| Term | Definition |` present, and
+  no `TermDefinition`.
+
+belief-state change:
+
+- The state-recording repair works on the deployed owner path. Source failures
+  are now explicit in publication metadata instead of being indistinguishable
+  from ordinary bounded excerpts.
+- The import-refresh/query repair did not make the OVH or ABA sources resolve
+  into reader snapshots on staging. The owner proof therefore remains partial:
+  source metadata, transclusions, publication, export, and four reader
+  snapshots are proven; full source artifacts for all seven are not.
+- The remaining owner problem is now narrower and better instrumented:
+  publication can report `import_failed`, but the public resolve payload does
+  not yet include a reason/error class. That makes API evidence honest but
+  still too thin for root-cause debugging of blocked public sources.
+
+next executable probe:
+
+- Preserve the current state metadata and add non-sensitive failure diagnostics
+  to `reader_snapshot_status`, such as `reason`, `http_status`,
+  `retrieval_strategy`, and/or an error class from the URL import ladder.
+- Then repair the acquisition ladder for the failing source classes:
+  - ABA direct pages/PDFs that return HTTP 403 to direct import;
+  - OVH/Zendesk-style support pages that work from local direct fetch but fail
+    from staging import.
+- The target is still not a legal-cloud exception. A user should be able to
+  attach/import a permitted source artifact, publish it with the VText, and
+  open that cleaned source artifact from the publication. If canonical URLs
+  block server import, the system should either use an allowed alternate source
+  found by research/import, or surface a repairable source-acquisition state.
