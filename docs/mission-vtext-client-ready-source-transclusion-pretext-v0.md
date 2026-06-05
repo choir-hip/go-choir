@@ -2286,3 +2286,45 @@ residual risks / next realism axes:
 - The remaining publication contract should publish source artifacts and
   readable snapshots to all readers authorized to access the published VText, so
   opening a source does not depend on private owner-only state.
+
+## 2026-06-05 Local Problem: Source Reader Fallback And Web Lens Capability Split
+
+status: problem_recorded_before_reader_fallback_code_commit
+
+new evidence:
+
+- Local source-flow E2E showed URL-backed source windows can open through
+  Browser/Web Lens even when the backend browser is unavailable. In that state,
+  BrowserApp had the source entity's text quote available in app context, but
+  still rendered the live iframe preview branch. The ABA fixture iframe loaded
+  a remote 404 page instead of the source quote, despite the VText source
+  entity containing the readable excerpt.
+- This is the same shape as the deployed Comet proof where live PDF iframe
+  rendering was blocked. Source windows need an immediate reader-mode fallback
+  from source entity snapshots/transclusion text, independent of whether the
+  backend Obscura/Web Lens capability is present.
+- A separate local probe of
+  `tests/web-surface-rationalization.spec.js -g "Web Lens imports Obscura
+  semantic snapshot into VText without iframe rendering"` did not reach the
+  mocked backend capability path; BrowserApp reported `frontend_iframe` rather
+  than the mocked `obscura_cli_fetch` substrate. This appears to be a local
+  authenticated-capability/test-surface gap, not proof that the reader fallback
+  is wrong, because the source-window fixture exercised the real source app
+  path and the basic BrowserApp iframe smokes still passed.
+
+root cause:
+
+- BrowserApp conflated "showing a snapshot" with "backend Web Lens is
+  available." Source entity snapshots are already publication/source metadata
+  and should render as reader snapshots without waiting for Obscura.
+- The backend snapshot renderer also used a raw `<pre>` block, which is
+  functional for debugging but not the desired reader-mode/magazine source UX.
+
+required correction:
+
+- Treat source entity snapshot/transclusion text as a first-class BrowserApp
+  reader snapshot.
+- Render snapshots as escaped Markdown-ish reader prose instead of raw
+  monospace preformatted text.
+- Preserve the live page preview as an explicit alternate view and leave backend
+  Web Lens snapshot controls intact when available.
