@@ -812,16 +812,19 @@ limitations recorded:
   citation pass over every source-worthy claim in the proposal.
 - Some URL-backed sources may refuse embedded preview. A Qdrant source window
   opened, but the embedded Browser preview reported
-  `qdrant.tech refused to connect`; the UI exposed an `Open readable Web Lens
-  snapshot` action, but that fallback was not yet proved for this mission.
+  `qdrant.tech refused to connect`. Clicking the fallback switched the source
+  window into `Web Lens snapshot ready: obscura` mode, but repeated Comet polls
+  left it stuck on `Loading Web Lens snapshot...`; no readable Qdrant source
+  text appeared.
 - The current source-card layout is still the existing CSS flow. It behaves
   better than the top deck, but the Pretext-backed wrapping requirement remains
   an implementation axis.
 
 remaining error field:
 
-- Prove or repair the Web Lens/snapshot fallback for sources that refuse iframe
-  embedding.
+- Root-cause and repair the URL-source readable fallback for sources that
+  refuse iframe embedding. The repair should be generic over URL-backed source
+  entities and should not add source- or document-specific cases.
 - Continue researched source coverage until the client proposal has enough
   high-value citations to send confidently, without turning the document into a
   source-card catalog.
