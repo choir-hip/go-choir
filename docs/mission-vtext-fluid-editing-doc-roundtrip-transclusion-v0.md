@@ -1052,6 +1052,38 @@ what was proven:
 - Deployed browser-authenticated citation/source transclusion QA passed on the
   same deployed build:
   `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js tests/vtext-source-service-publication.spec.js --workers=1 --reporter=line`.
+- `5d1b2cee` documented the next source migration gap: the Markdown lineage
+  importer could record unresolved source gaps, but could not yet accept known
+  source entities or citation-marker resolutions during product-path migration.
+- `5745c6f3` extends `POST /api/vtext/markdown-lineage/import` so migration
+  payloads can include revision/global `source_entities` and
+  `citation_resolutions`. The importer now validates that resolved markers
+  point at known source entities, preserves raw Markdown snapshots as original
+  ContentItems, writes renderer-compatible `source:` refs into the VText
+  working projection, records resolution manifests, and leaves only unresolved
+  markers as repairable source gaps. Local focused runtime proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextImportMarkdownLineage(ResolvesCitationMarkers|RejectsUnknownCitationEntity|CreatesRevisionHistory|RejectsExistingAlias)' -count=1`.
+- Staging QA on `5745c6f3` caught a projection bug: the importer rewrote
+  marker `[1]` as `[[1]](source:ENTITY_ID)`, but the VText renderer only
+  recognizes canonical `[label](source:ENTITY_ID)` labels without `]`.
+  `c13801c0` documented the render gap before the follow-up fix.
+- `9c83e725` normalizes migrated bracketed markers into canonical source-link
+  labels such as `[1](source:ENTITY_ID)` while preserving the original
+  bracketed marker in the migration manifest. GitHub CI run `27000934623`
+  passed for `9c83e725d0a2e470854a9da81f8944650a46a378`; runtime shards,
+  vet/build, integration smoke, non-runtime tests, and Node B staging deploy
+  were green. FlakeHub publish run `27000934617` passed for the same commit.
+- Staging health proved proxy and sandbox deployed commit
+  `9c83e725d0a2e470854a9da81f8944650a46a378`, deployed at
+  `2026-06-05T07:11:07Z`.
+- Deployed browser-authenticated source-aware Markdown lineage proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js --workers=1 --reporter=line`.
+  This proves the product API can migrate a legal-cloud-style Markdown
+  lineage with a known source entity, convert resolved marker `[1]` into a
+  rendered clickable VText source reference, expand the citation in-flow at the
+  marker, show the source label and excerpt, expose the open-source control,
+  preserve unresolved marker `[2]` as a repairable source gap, and preserve the
+  original raw Markdown snapshot separately.
 
 unproven or partial claims:
 
@@ -1073,9 +1105,12 @@ unproven or partial claims:
   there unless a new version is published with an updated policy.
 - `.md` file-open normalization now records import and migration manifests, and
   the deployed Markdown lineage API can migrate ordered snapshots into durable
-  VText revisions. The actual owner-authenticated bulk migration of existing
-  legal-cloud-class documents has not yet been run, and source entities still
-  need to be repaired or attached after lineage import.
+  VText revisions. It can also attach known source entities and citation
+  resolutions during migration. The actual owner-authenticated bulk migration
+  of existing legal-cloud-class documents has not yet been run because the
+  actual source snapshots were not available in this Codex session; source
+  extraction/repair for citations whose evidence is not supplied remains
+  incomplete.
 - DOCX/PDF import now preserves original ContentItems, reads original bytes,
   records real byte hashes, creates VText projections, and has staged browser
   proof for DOCX and PDF import -> revise -> publish -> DOCX/PDF export.
@@ -1097,10 +1132,12 @@ are sufficient for fast high-quality structured edits on the legal-cloud
 proposal, or whether a stronger block/section selector operation is needed to
 avoid whole-document edits while keeping semantic quality.
 
-next executable probe: use authenticated computer-use on staging to migrate the
-legal-cloud proposal lineage through the new product path, repair/attach source
-entities for its citations, revise the migrated VText through the product path,
-capture prompt size/latency and delta evidence, and verify the appendix table
-survives focus/edit/save/revise.
+next executable probe: use authenticated computer-use on staging with access to
+the owner's actual legal-cloud proposal snapshots to migrate the lineage
+through the deployed product path, attach known source entities where evidence
+exists, repair unresolved citation gaps through researcher/source tooling,
+revise the migrated VText through the product path, capture prompt size/latency
+and delta evidence, and verify the appendix table survives
+focus/edit/save/revise.
 
 suggested resume goal string: use the Goal String in this document.
