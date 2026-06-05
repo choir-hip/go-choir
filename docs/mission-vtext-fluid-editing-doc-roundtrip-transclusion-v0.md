@@ -929,6 +929,14 @@ what was proven:
   - DOCX proof: uploading a DOCX fixture, clicking the explicit `VText` import
     affordance, and opening the VText window showed paragraph text and table
     terms projected from the original DOCX bytes.
+- Staging browser fallback QA also passed for DOCX import -> revise -> publish
+  -> export:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/file-browser.spec.js -g "DOCX import can revise" --workers=1 --reporter=line`.
+  The test uploads a DOCX through Files, imports it to VText through the visible
+  `VText` affordance, creates a normal user revision, publishes that revision
+  through `/api/platform/vtext/publications`, exports DOCX and PDF through
+  `/api/platform/publications/export`, verifies the DOCX is an OOXML package,
+  and verifies the PDF bytes include the revised export line.
 
 unproven or partial claims:
 
@@ -951,9 +959,10 @@ unproven or partial claims:
   bulk migration of existing versioned Markdown documents, including the
   legal-cloud proposal class, is not complete.
 - DOCX/PDF import now preserves original ContentItems, reads original bytes,
-  records real byte hashes, and creates VText projections. Style-profile
-  preservation, asset manifests, full-fidelity PDF text extraction/OCR, and
-  import -> revise -> export roundtrip proof are not complete.
+  records real byte hashes, creates VText projections, and has staged browser
+  proof for DOCX import -> revise -> publish -> DOCX/PDF export. Style-profile
+  preservation, asset manifests, full-fidelity PDF text extraction/OCR, and PDF
+  import -> revise -> export proof are not complete.
 - Source entity behavior is still a frontend interaction proof for existing
   inline source markup; citation repair, source entity creation, publication
   projection, and open-owning-source proof over real legal-cloud citations
@@ -967,11 +976,10 @@ are sufficient for fast high-quality structured edits on the legal-cloud
 proposal, or whether a stronger block/section selector operation is needed to
 avoid whole-document edits while keeping semantic quality.
 
-next executable probe: use authenticated computer-use on staging to publish and
-download a real owner VText as DOCX/PDF from the UI, then revise the
+next executable probe: use authenticated computer-use on staging to revise the
 legal-cloud proposal through the product path, capture prompt size/latency and
 delta evidence, verify the appendix table survives focus/edit/save/revise,
-prove import -> revise -> export for DOCX/PDF through the owner UI, and
-implement bulk Markdown lineage migration.
+prove PDF import -> revise -> export through the owner UI, and implement bulk
+Markdown lineage migration.
 
 suggested resume goal string: use the Goal String in this document.

@@ -34,6 +34,27 @@ async function openMediaControls(viewer, selector) {
   return controls;
 }
 
+async function fetchJSON(page, path, options = {}) {
+  return page.evaluate(async ({ requestPath, requestOptions }) => {
+    const res = await fetch(requestPath, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(requestOptions.headers || {}) },
+      ...requestOptions,
+    });
+    const text = await res.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (_err) {
+      body = text;
+    }
+    if (!res.ok) {
+      throw new Error(`${requestOptions.method || 'GET'} ${requestPath} failed ${res.status}: ${text}`);
+    }
+    return body;
+  }, { requestPath: path, requestOptions: options });
+}
+
 // Helper: seed test directories via API (authed)
 async function seedTestFiles(page) {
   const results = await page.evaluate(async () => {
@@ -426,6 +447,82 @@ test('DOCX files import to VText from original bytes with table projection', asy
   await expect(editor).toContainText('This sentence must be projected from DOCX bytes');
   await expect(editor).toContainText('Work product');
   await expect(editor).toContainText('Durable professional output');
+});
+
+test('DOCX import can revise, publish, and export DOCX and PDF derivatives', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const fileName = `vtext-roundtrip-proof-${stamp}.docx`;
+  await putBinaryFile(page, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', await buildDocxBytes({
+    paragraphs: ['VText DOCX roundtrip proof', 'The imported projection should become a revisable VText.'],
+    table: [
+      ['Capability', 'Proof'],
+      ['Revision', 'Applied after import'],
+    ],
+  }));
+
+  await openFilesApp(page);
+  const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
+  await expect(fileItem).toBeVisible({ timeout: 5000 });
+
+  const openResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/vtext/files/open'
+  );
+  await fileItem.locator('[data-import-vtext-btn]').click();
+  const opened = await (await openResponse).json();
+
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText DOCX roundtrip proof', { timeout: 10_000 });
+
+  const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const revisedContent = [
+    'VText DOCX roundtrip proof',
+    '',
+    'The imported projection should become a revisable VText.',
+    '',
+    '| Capability | Proof |',
+    '| --- | --- |',
+    '| Revision | Applied after import |',
+    '| Export | DOCX and PDF derivatives generated after publish |',
+  ].join('\n');
+  const revision = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: revisedContent,
+      author_kind: 'user',
+      author_label: 'browser-test',
+      parent_revision_id: doc.current_revision_id,
+      metadata: {
+        proof: 'docx_import_revise_publish_export',
+        source_path: fileName,
+      },
+    }),
+  });
+  expect(revision.revision_id).toBeTruthy();
+
+  const published = await fetchJSON(page, '/api/platform/vtext/publications', {
+    method: 'POST',
+    body: JSON.stringify({
+      doc_id: opened.doc_id,
+      revision_id: revision.revision_id,
+      slug: `docx-roundtrip-proof-${stamp}`,
+    }),
+  });
+  expect(published.route_path).toMatch(/^\/pub\/vtext\//);
+
+  const docxExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=docx`);
+  expect(docxExport.format).toBe('docx');
+  expect(docxExport.media_type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  const docxBytes = Buffer.from(docxExport.content_base64, 'base64');
+  expect(docxBytes.subarray(0, 2).toString()).toBe('PK');
+
+  const pdfExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=pdf`);
+  expect(pdfExport.format).toBe('pdf');
+  expect(pdfExport.media_type).toBe('application/pdf');
+  const pdfText = Buffer.from(pdfExport.content_base64, 'base64').toString('latin1');
+  expect(pdfText).toContain('%PDF-1.4');
+  expect(pdfText).toContain('DOCX and PDF derivatives generated after publish');
 });
 
 // ---------------------------------------------------------------
