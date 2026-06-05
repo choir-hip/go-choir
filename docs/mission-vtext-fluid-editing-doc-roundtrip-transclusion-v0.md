@@ -2616,3 +2616,53 @@ belief-state update:
   needed after passkey access is restored, while preserving the invariant that
   original imported files remain source artifacts/aliases and Markdown remains
   an export format.
+
+2026-06-05 imported Markdown v0-to-v1 product proof checkpoint:
+
+status: checkpoint_incomplete
+
+landed proof artifact:
+
+- Documentation-first checkpoint `dedf460b` recorded the imported Markdown
+  v0-to-v1 product proof gap before the browser regression changed.
+- Test commit `a2c7c62f55c9ad28c7346954a1ccbdd8d7b24c22` is on
+  `origin/main`. It adds a staging-capable browser/API regression that opens a
+  disposable `.md` source through `/api/vtext/files/open`, verifies the seeded
+  v0 document title is canonical `.vtext`, creates a v1 VText revision through
+  `/api/vtext/documents/{doc_id}/revisions`, verifies the v1 metadata carries
+  a `.vtext` `canonical_vtext_source_path`, reopens the original `.md` alias
+  and verifies it resolves to the same document rather than forking, ensures a
+  `.vtext` manifest path, exports Markdown from the canonical VText, and opens
+  the document from the VText recent list as a `.vtext` at v1.
+- The test is fixture-based and uses disposable authenticated product state.
+  It does not mutate the private owner proposal and does not add
+  document-specific behavior.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- Deployed staging proof passed against deployed behavior commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "Imported Markdown advances"
+  --project=chromium`.
+- GitHub Actions CI run `27022749951` completed successfully for
+  `a2c7c62f55c9ad28c7346954a1ccbdd8d7b24c22`, including the normal Go gates.
+  Frontend build and staging deploy were skipped because this commit changed
+  only browser regression coverage.
+- FlakeHub run `27022749965` completed successfully for the same head.
+- Staging `/health` still reports proxy and sandbox deployed commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`, deployed at
+  `2026-06-05T14:26:47Z`; this is expected because `a2c7c62f` did not change
+  deployed artifacts.
+
+remaining error field:
+
+- Still unproven on the actual owner document: canonical title migration from
+  `choir_private_legal_cloud_proposal.md` to `.vtext` on the next owner VText
+  write, bounded appendix-table edit survival, source-gap repair through the
+  deployed `Sources` panel on the owner head, citation marker expansion into
+  transclusions on that owner head, source-window opening from that owner head,
+  and owner-head focused prompt-size / `apply_edits` metadata in the visible
+  edit-evidence strip.
