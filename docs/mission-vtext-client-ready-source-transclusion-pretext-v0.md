@@ -2943,3 +2943,32 @@ next executable probe:
 - Then continue the source UI axis as a real Pretext layout task: model source
   transclusions as article-flow obstacles and route paragraph lines around
   expanded source notes rather than stacking sources above the article.
+
+## 2026-06-05 Problem: Pretext Source Flow Exists But Proof Is Too Weak
+
+status: problem_recorded_before_code_fix
+
+new evidence:
+
+- `frontend/src/lib/vtext-source-flow.ts` already uses Pretext
+  `layoutNextLineRange` and `layoutNextRichInlineLineRange` to reconstruct
+  article lines around an expanded source note.
+- The current E2E coverage proves a flow mounts and that one later line
+  containing `Second paragraph` appears below part of the note, but it does
+  not assert a strong journal layout contract: the source note as side
+  apparatus, multiple routed article lines beside it, preserved nested source
+  atoms, minimal metadata chrome, and a non-card note treatment.
+- The owner screenshots and clarification identify the target: source content
+  should support the article in-place without bunching source cards at the top
+  or wasting article space. Passing a loose "some wrapped line exists" test is
+  not enough evidence for that target.
+
+required correction:
+
+- Keep the existing Pretext source-flow path and improve it rather than adding
+  a second renderer.
+- Strengthen the flow verifier so it checks side-note geometry and multiple
+  routed lines beside the note, not just a mounted flow container.
+- Continue reducing visible metadata chrome in the expanded note so the source
+  reads as journal apparatus: title, bounded excerpt/snapshot, and small text
+  actions rather than card/pill stacks.
