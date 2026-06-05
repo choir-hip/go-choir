@@ -2248,3 +2248,64 @@ belief-state update:
   derive unresolved markers from explicit reactive inputs. The fix should be
   generic Svelte state plumbing, not a source-gap special case and not a
   document-specific repair.
+
+2026-06-05 deployed source-panel candidate refresh checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `c8dd4976` recorded the stale source-panel
+  candidate problem before code changed.
+- Code commit `1fbcb3e14a5b533fbb70877f7cf98a83b0810862` is on
+  `origin/main`. It makes the VText `Sources` panel derive source entities,
+  source gaps, repair candidates, and diagnosis summaries from explicit Svelte
+  reactive inputs (`currentRevision`, `editorValue`, `publishedBundle`, and
+  `sourceDiagnosis`) instead of helper calls with hidden dependencies.
+- The change is generic frontend state plumbing. It does not add
+  document-specific source repairs, does not invent citations, does not render
+  hidden metadata as prose, and keeps repair application on the existing
+  `POST /api/vtext/documents/{id}/source-repairs` product path.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- Before the fix, deployed staging fixture proof failed with the `Sources`
+  panel open, repair JSON prefilled for marker `[2]`, but no visible
+  `[data-vtext-source-gaps]` marker list.
+- GitHub Actions CI run `27020266462` completed successfully for
+  `1fbcb3e14a5b533fbb70877f7cf98a83b0810862`, including frontend build, Go
+  vet/build, non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`.
+- FlakeHub run `27020266487` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `1fbcb3e14a5b533fbb70877f7cf98a83b0810862`, deployed at
+  `2026-06-05T14:19:41Z`.
+- After deploy, the exact staging regression passed:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium`. This proves a disposable
+  authenticated product VText can show the unresolved marker in the `Sources`
+  panel, apply bounded source repair through the panel, render the repaired
+  citation as a transclusion, and open the generic source viewer.
+
+deployed owner-account proof limitation:
+
+- Computer Use remains available. Comet still opens the private VText deep
+  link for owner doc `f93cea62-f833-4dae-b414-8e44783d8cbe` to the correct
+  passkey overlay: `Open choir_private_legal_cloud_proposal.md from your
+  private computer.`
+- The passkey ceremony for `yusefnathanson@me.com` remains cancelled/not
+  completed in this session. Therefore the source-panel repair path is proven
+  on deployed staging with a disposable authenticated product document, but it
+  is still not proven on the actual owner proposal.
+
+remaining error field:
+
+- Still unproven on the actual owner document: source-gap repair through the
+  deployed `Sources` panel, citation marker expansion into transclusions,
+  source-window opening from the owner head, bounded appendix-table edit
+  survival, focused prompt-size/`apply_edits` metadata, and title migration of
+  `choir_private_legal_cloud_proposal.md` to canonical `.vtext` on the next
+  owner VText write.
