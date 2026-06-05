@@ -289,21 +289,21 @@
     return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
   }
 
-  function revisionMediaSourceRefs() {
-    const refs = currentRevision?.metadata?.media_source_refs;
+  function revisionMediaSourceRefs(revision = currentRevision) {
+    const refs = revision?.metadata?.media_source_refs;
     return Array.isArray(refs) ? refs : [];
   }
 
-  function revisionSourceEntities() {
-    const publishedEntities = publicationBundleSourceEntities();
+  function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
+    const publishedEntities = publicationBundleSourceEntities(bundle);
     if (publishedEntities.length > 0) return publishedEntities;
-    const entities = currentRevision?.metadata?.source_entities;
+    const entities = revision?.metadata?.source_entities;
     if (Array.isArray(entities) && entities.length > 0) return entities;
-    return revisionMediaSourceRefs().map(mediaRefToSourceEntity).filter(Boolean);
+    return revisionMediaSourceRefs(revision).map(mediaRefToSourceEntity).filter(Boolean);
   }
 
-  function revisionSourceGaps() {
-    const gaps = currentRevision?.metadata?.source_gaps;
+  function revisionSourceGaps(revision = currentRevision) {
+    const gaps = revision?.metadata?.source_gaps;
     return Array.isArray(gaps) ? gaps : [];
   }
 
@@ -320,17 +320,17 @@
     return [...markers];
   }
 
-  function sourceRepairCandidates() {
-    const fromGaps = revisionSourceGaps()
+  function sourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps()) {
+    const fromGaps = gaps
       .map((gap) => String(gap?.marker || '').trim())
       .filter(Boolean);
-    return [...new Set([...fromGaps, ...unresolvedCitationMarkers()])];
+    return [...new Set([...fromGaps, ...unresolvedCitationMarkers(content)])];
   }
 
-  function sourceDiagnosisSummary() {
-    if (!sourceDiagnosis) return null;
-    const revisions = Array.isArray(sourceDiagnosis.revisions) ? sourceDiagnosis.revisions : [];
-    const runs = Array.isArray(sourceDiagnosis.runs) ? sourceDiagnosis.runs : [];
+  function sourceDiagnosisSummary(diagnosis = sourceDiagnosis) {
+    if (!diagnosis) return null;
+    const revisions = Array.isArray(diagnosis.revisions) ? diagnosis.revisions : [];
+    const runs = Array.isArray(diagnosis.runs) ? diagnosis.runs : [];
     const latest = revisions[0] || null;
     return {
       revisionCount: revisions.length,
@@ -338,7 +338,7 @@
       latestRevisionId: latest?.revision_id || '',
       latestVersion: latest ? versionLabelForRevision(latest, revisions.length - 1) : '',
       latestAuthor: latest ? `${latest.author_kind || ''}:${latest.author_label || ''}` : '',
-      errorCount: Array.isArray(sourceDiagnosis.error_matches) ? sourceDiagnosis.error_matches.length : 0,
+      errorCount: Array.isArray(diagnosis.error_matches) ? diagnosis.error_matches.length : 0,
     };
   }
 
@@ -360,8 +360,8 @@
     sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
   }
 
-  function publicationBundleSourceEntities() {
-    const records = Array.isArray(publishedBundle?.source_entities) ? publishedBundle.source_entities : [];
+  function publicationBundleSourceEntities(bundle = publishedBundle) {
+    const records = Array.isArray(bundle?.source_entities) ? bundle.source_entities : [];
     if (records.length === 0) return [];
     return records.map(publicationSourceEntityToLocal).filter(Boolean);
   }
@@ -2147,10 +2147,10 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
-  $: sourceGaps = revisionSourceGaps();
-  $: sourceEntities = revisionSourceEntities();
-  $: sourceCandidates = sourceRepairCandidates();
-  $: sourceSummary = sourceDiagnosisSummary();
+  $: sourceGaps = revisionSourceGaps(currentRevision);
+  $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
+  $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
+  $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
