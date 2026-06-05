@@ -2794,12 +2794,19 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 			}
 		}
 	}
+	if docID != "" {
+		if channelRuns, err := h.rt.Store().ListRunsByChannel(r.Context(), ownerID, docID, limit); err == nil {
+			resp.Runs = append(resp.Runs, channelRuns...)
+		} else {
+			log.Printf("vtext api: list channel diagnosis runs for %s: %v", docID, err)
+		}
+	}
 	if runs, err := h.rt.Store().ListRunsByOwner(r.Context(), ownerID, limit); err == nil {
-		resp.Runs = runs
-		for _, run := range runs {
-			if strings.Contains(run.Error, "Incorrect string value") || strings.Contains(run.Result, "Incorrect string value") {
-				resp.ErrorMatches = append(resp.ErrorMatches, run.RunID+": Incorrect string value")
-			}
+		resp.Runs = appendUniqueRunRecords(resp.Runs, runs...)
+	}
+	for _, run := range resp.Runs {
+		if strings.Contains(run.Error, "Incorrect string value") || strings.Contains(run.Result, "Incorrect string value") {
+			resp.ErrorMatches = append(resp.ErrorMatches, run.RunID+": Incorrect string value")
 		}
 	}
 	if events, err := h.rt.Store().ListEventsByOwner(r.Context(), ownerID, limit); err == nil {
@@ -2814,6 +2821,23 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 		resp.Evidence = evidence
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func appendUniqueRunRecords(existing []types.RunRecord, more ...types.RunRecord) []types.RunRecord {
+	seen := make(map[string]bool, len(existing)+len(more))
+	for _, run := range existing {
+		if strings.TrimSpace(run.RunID) != "" {
+			seen[run.RunID] = true
+		}
+	}
+	for _, run := range more {
+		if strings.TrimSpace(run.RunID) == "" || seen[run.RunID] {
+			continue
+		}
+		seen[run.RunID] = true
+		existing = append(existing, run)
+	}
+	return existing
 }
 
 // HandleVTextBlame handles GET /api/vtext/revisions/{id}/blame.

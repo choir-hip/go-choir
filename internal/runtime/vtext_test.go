@@ -4725,6 +4725,48 @@ func TestVTextAgentRevisionAcceptsReviseEventWithoutPrompt(t *testing.T) {
 	}
 }
 
+func TestVTextDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
+	h, _, rt := vtextAPISetupWithRuntime(t)
+	docID, _ := createDocWithUserRevision(t, h)
+
+	docRun, err := rt.StartRunWithMetadata(context.Background(), "diagnose this document", "user-1", map[string]any{
+		runMetadataAgentProfile: AgentProfileVText,
+		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentID:      "vtext:" + docID,
+		runMetadataChannelID:    docID,
+		"doc_id":                docID,
+	})
+	if err != nil {
+		t.Fatalf("start doc run: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := rt.StartRunWithMetadata(context.Background(), fmt.Sprintf("newer unrelated run %d", i), "user-1", map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataChannelID:    fmt.Sprintf("unrelated-%d", i),
+		}); err != nil {
+			t.Fatalf("start unrelated run %d: %v", i, err)
+		}
+	}
+
+	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=3", nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnosis status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp vtextDiagnosisResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode diagnosis: %v", err)
+	}
+	for _, run := range resp.Runs {
+		if run.RunID == docRun.RunID {
+			return
+		}
+	}
+	t.Fatalf("diagnosis omitted document run %s; runs=%+v", docRun.RunID, resp.Runs)
+}
+
 func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	t.Setenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH", "1")
 	h, s, rt := vtextAPISetupWithRuntime(t)
