@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"golang.org/x/net/html"
 )
 
 type browserCapabilitiesResponse struct {
@@ -77,8 +79,10 @@ type browserSnapshotResult struct {
 const maxBrowserSnapshotLinks = 100
 const maxBrowserScreenshotBase64 = 2 * 1024 * 1024
 const maxBrowserControlText = 500
+const browserMinReadableSnapshotChars = 400
 const browserTextSnapshotTimeout = 30 * time.Second
 const browserOptionalSnapshotTimeout = 5 * time.Second
+const browserDeclaredAlternateTimeout = 15 * time.Second
 
 func (h *APIHandler) HandleBrowserCapabilities(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -634,10 +638,24 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	if text == "" {
 		title, readable := extractReadableHTML([]byte(html))
 		text = browserHTMLFallbackText(title, readable)
+		if browserReadableSnapshotLowContent(text) {
+			alternateText, alternateURL, alternateErr := fetchBrowserDeclaredMarkdownAlternate(ctx, targetURL, html)
+			if alternateErr == nil {
+				text = alternateText
+				result.Warnings = append(result.Warnings, "backend browser text snapshot was empty; used declared markdown alternate "+alternateURL)
+			} else if text != "" {
+				result.Warnings = append(result.Warnings, alternateErr.Error())
+			}
+		}
 		if text == "" {
 			return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty and html fallback was unreadable")
 		}
-		result.Warnings = append(result.Warnings, "backend browser text snapshot was empty; used html readable fallback")
+		if browserReadableSnapshotLowContent(text) {
+			return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty and html fallback was low-content")
+		}
+		if !browserSnapshotWarningsContain(result.Warnings, "declared markdown alternate") {
+			result.Warnings = append(result.Warnings, "backend browser text snapshot was empty; used html readable fallback")
+		}
 	}
 	linksRaw, err := runObscuraFetchDump(ctx, resolved, targetURL, "links", browserOptionalSnapshotTimeout)
 	if err != nil {
@@ -677,6 +695,103 @@ func browserHTMLFallbackText(title, readable string) string {
 		return readable
 	}
 	return title + "\n\n" + readable
+}
+
+func browserReadableSnapshotLowContent(text string) bool {
+	return len(strings.TrimSpace(text)) < browserMinReadableSnapshotChars
+}
+
+func browserSnapshotWarningsContain(warnings []string, needle string) bool {
+	for _, warning := range warnings {
+		if strings.Contains(warning, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func fetchBrowserDeclaredMarkdownAlternate(ctx context.Context, targetURL, htmlSource string) (string, string, error) {
+	alternateURL, err := browserDeclaredMarkdownAlternateURL(targetURL, htmlSource)
+	if err != nil {
+		return "", "", err
+	}
+	client := &http.Client{Timeout: browserDeclaredAlternateTimeout}
+	content, err := fetchAndExtractURL(ctx, client, alternateURL, "browser_declared_alternate_fetch", "browser_declared_alternate_html_extract", "browser_declared_alternate_text_extract")
+	if err != nil {
+		return "", alternateURL, fmt.Errorf("backend browser declared markdown alternate fetch failed: %w", err)
+	}
+	text := strings.TrimSpace(content.Text)
+	if browserReadableSnapshotLowContent(text) {
+		return "", alternateURL, fmt.Errorf("backend browser declared markdown alternate was low-content")
+	}
+	return text, alternateURL, nil
+}
+
+func browserDeclaredMarkdownAlternateURL(targetURL, htmlSource string) (string, error) {
+	doc, err := html.Parse(strings.NewReader(htmlSource))
+	if err != nil {
+		return "", fmt.Errorf("backend browser html fallback parse failed: %w", err)
+	}
+	canonical := ""
+	alternate := ""
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node == nil || alternate != "" && canonical != "" {
+			return
+		}
+		if node.Type == html.ElementNode && strings.EqualFold(node.Data, "link") {
+			attrs := browserHTMLAttrs(node)
+			rel := strings.ToLower(attrs["rel"])
+			if browserRelIncludes(rel, "canonical") && canonical == "" {
+				canonical = strings.TrimSpace(attrs["href"])
+			}
+			if browserRelIncludes(rel, "alternate") && browserMediaTypeIsMarkdown(attrs["type"]) && alternate == "" {
+				alternate = strings.TrimSpace(attrs["href"])
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	if alternate == "" {
+		return "", fmt.Errorf("backend browser html fallback had no declared markdown alternate")
+	}
+	baseRaw := strings.TrimSpace(canonical)
+	if baseRaw == "" {
+		baseRaw = strings.TrimSpace(targetURL)
+	}
+	base, err := url.Parse(baseRaw)
+	if err != nil {
+		return "", fmt.Errorf("backend browser declared markdown alternate base invalid: %w", err)
+	}
+	ref, err := url.Parse(alternate)
+	if err != nil {
+		return "", fmt.Errorf("backend browser declared markdown alternate invalid: %w", err)
+	}
+	return base.ResolveReference(ref).String(), nil
+}
+
+func browserHTMLAttrs(node *html.Node) map[string]string {
+	attrs := make(map[string]string, len(node.Attr))
+	for _, attr := range node.Attr {
+		attrs[strings.ToLower(strings.TrimSpace(attr.Key))] = strings.TrimSpace(attr.Val)
+	}
+	return attrs
+}
+
+func browserRelIncludes(rel, token string) bool {
+	for _, part := range strings.Fields(strings.ToLower(rel)) {
+		if part == token {
+			return true
+		}
+	}
+	return false
+}
+
+func browserMediaTypeIsMarkdown(mediaType string) bool {
+	mediaType = strings.ToLower(strings.TrimSpace(strings.Split(mediaType, ";")[0]))
+	return mediaType == "text/markdown" || mediaType == "text/x-markdown"
 }
 
 type obscuraCDPVersionEndpoint struct {

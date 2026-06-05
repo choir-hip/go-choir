@@ -1741,7 +1741,7 @@ if [ "$mode" = "text" ]; then
   exit 0
 fi
 if [ "$mode" = "html" ]; then
-  printf '<!doctype html><title>Readable HTML Fallback</title><main><h1>Readable HTML Fallback</h1><p>Source text recovered from html.</p><script>ignored()</script></main>'
+  printf '<!doctype html><title>Readable HTML Fallback</title><main><h1>Readable HTML Fallback</h1><p>Source text recovered from html. This fallback has enough article body text to prove that the HTML-derived source surface is useful without relying on a declared alternate. It includes a second sentence about citations, source windows, and durable inspection so the extraction quality check does not accept a skeletal page title alone.</p><p>The source reader should preserve this prose as the readable browser snapshot while still keeping the raw HTML artifact for debugging.</p><script>ignored()</script></main>'
   exit 0
 fi
 if [ "$mode" = "links" ]; then
@@ -1784,6 +1784,93 @@ fi
 	}
 	if len(navigated.SnapshotWarnings) != 1 || !strings.Contains(navigated.SnapshotWarnings[0], "used html readable fallback") {
 		t.Fatalf("snapshot_warnings = %+v, want html fallback warning", navigated.SnapshotWarnings)
+	}
+
+	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
+	if err != nil {
+		t.Fatalf("list browser trace events: %v", err)
+	}
+	if len(events) != 2 || events[1].Kind != types.EventBrowserNavigationCompleted {
+		t.Fatalf("browser trace events = %+v, want completed navigation", events)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("decode browser completion payload: %v", err)
+	}
+	if int(payload["snapshot_warning_count"].(float64)) != 1 {
+		t.Fatalf("snapshot warning payload = %+v, want count 1", payload)
+	}
+}
+
+func TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateWhenHTMLFallbackLowContent(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	markdown := strings.Repeat("Similarity search article text recovered from the declared Markdown alternate. ", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/docs/index.md" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		_, _ = fmt.Fprintf(w, "# Search\n# Similarity search\n\n%s\n", markdown)
+	}))
+	t.Cleanup(server.Close)
+
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	htmlShell := fmt.Sprintf(`<!doctype html><html><head><title>%s/docs/</title><link rel="canonical" href="%s/docs/"><link rel="alternate" type="text/markdown" href="index.md"></head><body></body></html>`, server.URL, server.URL)
+	if err := os.WriteFile(bin, []byte(fmt.Sprintf(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "text" ]; then
+  exit 0
+fi
+if [ "$mode" = "html" ]; then
+  printf %%s %q
+  exit 0
+fi
+if [ "$mode" = "links" ]; then
+  exit 0
+fi
+`, htmlShell)), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	if navigateW.Code != http.StatusOK {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionReady {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionReady, navigated)
+	}
+	if !strings.Contains(navigated.TextSnapshot, "Similarity search article text recovered") {
+		t.Fatalf("text_snapshot missing markdown alternate text: %q", navigated.TextSnapshot)
+	}
+	if !strings.Contains(navigated.HTMLSnapshot, `rel="alternate"`) {
+		t.Fatalf("html_snapshot missing original html shell: %q", navigated.HTMLSnapshot)
+	}
+	if len(navigated.SnapshotWarnings) != 1 || !strings.Contains(navigated.SnapshotWarnings[0], "used declared markdown alternate") {
+		t.Fatalf("snapshot_warnings = %+v, want declared markdown alternate warning", navigated.SnapshotWarnings)
 	}
 
 	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
