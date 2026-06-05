@@ -1661,6 +1661,69 @@ belief-state update:
   classifiers, or workflow scaffolding. It should preserve VText as canonical
   and keep hidden metadata out of prose.
 
+2026-06-05 deployed source-repair diagnostics UI checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `58e4653d` recorded the owner-visible source
+  repair and diagnosis blocker before code changed.
+- Code commit `838aebaf9f78f44d7aff0d31320acdd9e8a0909e` is on
+  `origin/main`. It exposes the existing generic VText diagnosis/source-gap
+  repair path in the VText editor: a `Sources` panel lists unresolved citation
+  markers, source entities, diagnosis summary data, and an editable JSON repair
+  payload. Applying the panel calls
+  `POST /api/vtext/documents/{id}/source-repairs`. It does not hardcode the
+  owner document, does not add a classifier/workflow scaffold, and keeps repair
+  UI metadata outside the editable document prose.
+- Local verification before push passed:
+  `npm --prefix frontend run build`;
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextSourceGapRepairCreatesRevision|TestVTextSourceGapRepairPreservesUnrepairedGaps|TestVTextSourceGapRepairRejectsUnknownEntity|TestVTextDiagnosisIncludesDocumentRuns|TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable|TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead' -count=1`;
+  and `git diff --check`.
+
+landing evidence:
+
+- GitHub Actions CI run `27017631552` completed successfully for
+  `838aebaf9f78f44d7aff0d31320acdd9e8a0909e`, including frontend build, Go
+  vet/build, non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`.
+- FlakeHub run `27017631591` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `838aebaf9f78f44d7aff0d31320acdd9e8a0909e`, deployed at
+  `2026-06-05T13:28:44Z`.
+
+deployed owner-account proof limitation:
+
+- Computer Use is available, and Comet is authenticated on staging, but the
+  visible foreground remains the public route
+  `/pub/vtext/choir-private-legal-cloud-proposal-md-pub28536a488`, showing
+  `choir_private_legal_cloud_proposal.md` at `v49`, state `Published v49`.
+- The visible page still contains the earlier accidental QA scratch instruction
+  in the public root, followed by `Revision cancelled. You can revise again
+  from the current version.` The app switcher contains a
+  `choir_private_legal_cloud_proposal.md` entry, but the session still has not
+  produced a foreground window verifiably showing the private owner `v81
+  Latest` surface after the source-repair UI deployment.
+- Therefore this checkpoint proves the shipped generic diagnosis/source-repair
+  affordance at build/deploy level, but it does not yet prove citation repair,
+  citation expansion into transclusions, source-window opening, bounded
+  appendix-table edit survival, or focused prompt/apply-edits metadata on the
+  actual owner head.
+
+remaining error field:
+
+- Restore a root-safe authenticated path to the private owner VText surface for
+  doc `f93cea62-f833-4dae-b414-8e44783d8cbe`; do not mutate the public v49
+  published root for acceptance.
+- Once the private head is visible, verify the deployed `Sources` panel on the
+  actual owner document, apply bounded source-gap repair only through generic
+  source entities, and prove citation markers expand into transclusion points
+  that open source windows.
+- Complete the bounded table-edit acceptance on the private owner head and
+  capture focused prompt-size plus `apply_edits` metadata through product
+  diagnosis/export surfaces.
+
 suggested resume goal string:
 
 ```text
