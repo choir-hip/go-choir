@@ -1183,3 +1183,56 @@ remaining error field:
   `https://qdrant.tech/documentation/search/` must include readable Qdrant
   Markdown text and a snapshot warning indicating the declared Markdown
   alternate was used.
+
+## 2026-06-05 Authenticated Comet Proof: Declared Alternate Not Used
+
+status: product_path_regression_documented_before_fix
+
+new evidence:
+
+- At `2026-06-05T18:00:57Z`, Computer Use action control for Comet recovered
+  enough to perform authenticated staging UI actions in the owner account
+  session.
+- Comet was on the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+  The authenticated page rendered the full proposal title
+  `Proposal for [Redacted]: A Private Legal Cloud` and inline source buttons
+  such as `Source: ABA Formal Opinion 512: Generative Artificial Intelligence
+  Tools` and `Source: ABA Model Rule 1.6: Confidentiality of Information`.
+  This proves the owner-publication route is no longer the short
+  source-demo draft and is no longer rendering `missing source` placeholder
+  prose at the top of the document.
+- The desktop recovery overlay was cleared by selecting `Keep top window only`,
+  restoring Web Lens as the single saved window. Web Lens was then navigated
+  to `https://qdrant.tech/documentation/search/` through its visible URL field.
+- The embedded page preview failed with a Chromium error page:
+  `qdrant.tech refused to connect`, which is expected for a frame-blocked
+  preview and should be recoverable by the readable snapshot path.
+- Clicking `Open readable Web Lens snapshot` produced the staging warning
+  `backend browser text snapshot was empty and html fallback was low-content`
+  and remained at `Loading Web Lens snapshot...`; it did not show readable
+  Qdrant text and did not show the expected warning
+  `used declared markdown alternate .../index.md`.
+
+root-cause belief:
+
+- The earlier code repair is deployed according to `/health`, but the
+  authenticated owner UI path is still exercising a code path whose error
+  surface is the pre-declared-alternate behavior.
+- The likely owners to investigate are the API route/waiting path used by Web
+  Lens snapshot, the browser session result polling/status normalization layer,
+  or a separate runtime binary/process from the one covered by the health
+  deploy identity. The failure should not be papered over in the VText source
+  renderer; the owner is the browser snapshot acquisition path.
+
+remaining error field:
+
+- Root-cause why the deployed authenticated Web Lens snapshot path does not
+  invoke or surface the declared Markdown alternate recovery for Qdrant.
+- Preserve the article-first owner proposal state while fixing this path:
+  source chips must remain inline, source cards must remain expandable, and
+  the published VText must continue carrying source metadata/snapshots for
+  authorized readers.
+- After the fix, repeat the same Comet/Web Lens proof on staging and require
+  readable Qdrant text plus an explicit declared-alternate warning before
+  advancing to the next source/transclusion realism axis.
