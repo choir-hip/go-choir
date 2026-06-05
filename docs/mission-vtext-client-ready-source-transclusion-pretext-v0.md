@@ -5280,3 +5280,65 @@ residual risks:
   review; it does not claim the diagnosis endpoint is optimal.
 - The staged owner proof still needs to confirm the same typed source-review
   behavior on the deployed owner account after push/deploy.
+
+## 2026-06-05 Deployed Proof: Typed Source Review
+
+status: deployed_behavior_verified
+
+landed commits:
+
+- `9d7530ca` (`docs: record vtext source diagnosis blocker`)
+- `fb688447` (`docs: record source review stream pressure`)
+- `ed1835ff4a3b5dafd448b68d2596b35303903f84` (`fix: add typed vtext
+  source review`)
+
+CI and deploy:
+
+- GitHub Actions CI run `27045898828` completed successfully.
+- CI green jobs included integration-tagged smoke, non-runtime Go tests, Go
+  vet/build, all four internal/runtime shards, frontend build, aggregate gate,
+  and `Deploy to Staging (Node B)`.
+- FlakeHub run `27045898824` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `ed1835ff4a3b5dafd448b68d2596b35303903f84`, deployed at
+  `2026-06-05T23:43:32Z`.
+
+Computer Use / Comet proof:
+
+- Computer Use was available and used against Comet.
+- Comet was on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The deployed published legal-cloud VText showed Pretext/journal source flow
+  with source marker expansion and source reader windows for:
+  - `ABA Model Rule 1.6: Confidentiality of Information`;
+  - `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`.
+- Clicking `Edit my version` in Comet created/opened
+  `My version of choir_private_legal_cloud_proposal.vtext`, preserving the
+  proposal prose, Markdown table glossary, and source markers as VText UI
+  source references in the owner/private editable surface.
+
+deployed source-review backup proof:
+
+- The exact typed source-review panel needs an unresolved-marker fixture. The
+  current legal-cloud proposal has represented source markers, so the Comet
+  owner document did not expose the source-review repair form.
+- Product-path staging backup used the deployed browser/API flow with
+  authenticated Playwright storage:
+  `BASE_URL=https://choir.news CHOIR_AUTH_STATE=frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=frontend/playwright/.auth/choir-news.storage.meta.json pnpm
+  --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000`.
+- Result: `1 passed (14.2s)`. This proves deployed `ed1835ff` renders the typed
+  owner source-review panel for an unresolved citation marker, sends a real
+  canonical `/source-repairs` request, reloads the repaired VText revision,
+  opens the Pretext journal note, and opens the repaired source window.
+
+residual risks:
+
+- The deployed source-review fixture ran under Playwright staging auth, not the
+  `yusefnathanson@me.com` Comet session, because the legal-cloud owner document
+  no longer has unresolved source markers to repair. Comet was still used for
+  the deployed owner/private legal-cloud source-marker and source-window proof.
+- The hard mission review report, PDF export to iCloud, and simplification pass
+  remain open mission work after this deployed checkpoint.
