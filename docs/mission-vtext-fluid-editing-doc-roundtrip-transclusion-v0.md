@@ -2211,3 +2211,40 @@ suggested resume goal string:
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com using the Comet browser, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Continue from deployed commit e5d3b4e698c01fcced13b1c2dd15077792d37ab8, which canonicalizes newly imported/opened VText projection titles and legacy aliased document titles to `.vtext` on VText revision write while preserving original source aliases and Markdown export. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
+
+2026-06-05 source-panel stale candidate checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use remains available, but Comet is still at the passkey overlay for
+  private owner document `f93cea62-f833-4dae-b414-8e44783d8cbe`; the owner
+  passkey ceremony is not complete in this session.
+- As browser/API backup, the deployed staging fixture test
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium` was run against `https://choir.news`
+  with a disposable Playwright-authenticated product session.
+- The test failed before repair application. The VText `Sources` panel opened
+  and the repair JSON textarea was prefilled with marker `[2]`, but the
+  visible source-gap list selector `[data-vtext-source-gaps]` was absent and
+  the panel heading said `0 source entities`.
+- Product API inspection of the same fixture document showed the backend
+  revision is correct: its content contains the unresolved marker `[2]` and
+  `metadata.source_gaps` contains
+  `{kind: "unresolved_markdown_citation_marker", marker: "[2]",
+  policy: "repairable_gap_no_invented_citations"}`.
+- Code inspection points to a frontend reactivity bug, not missing source
+  metadata. `VTextEditor.svelte` computes `sourceCandidates` through a Svelte
+  reactive assignment that calls helper functions with hidden dependencies on
+  `currentRevision` and `editorValue`. The on-demand repair payload sees the
+  current marker, but the visible candidate list can remain stale after a
+  document/revision load.
+
+belief-state update:
+
+- The remaining source-repair realism axis needs the visible `Sources` panel to
+  derive unresolved markers from explicit reactive inputs. The fix should be
+  generic Svelte state plumbing, not a source-gap special case and not a
+  document-specific repair.
