@@ -1089,3 +1089,46 @@ remaining error field:
   line-routing requirement remains unproven and should be implemented as a
   focused article-flow component after the source graph exists on the real
   proposal.
+
+## 2026-06-05 QA Tooling Limitation: Computer Use Action Channel
+
+status: limitation_recorded_before_backup_proof
+
+new evidence:
+
+- After deploying commit `25ac30d83f561b5afc6a2df171656bdfa5b5475a`,
+  GitHub Actions CI run `27030761566` passed, FlakeHub run `27030761577`
+  passed, the Node B deploy job passed, and `https://choir.news/health`
+  reported proxy and sandbox commit/deployed_commit
+  `25ac30d83f561b5afc6a2df171656bdfa5b5475a`, deployed at
+  `2026-06-05T17:47:17Z`.
+- Computer Use remained discoverable and could inspect Comet
+  (`/Applications/Comet.app`, bundle `ai.perplexity.comet`), proving the
+  authenticated owner publication was open on staging.
+- However, immediately after fresh `get_app_state` calls, Computer Use action
+  calls (`click` and `press_key`) returned
+  `Computer Use is not active for 'Comet'. You first must call get_app_state`.
+  The same failure occurred using the bundle identifier
+  `ai.perplexity.comet`.
+- The inspected Comet state still showed the stale pre-`25ac30d8` Web Lens
+  snapshot warning (`backend browser text snapshot was empty; used html
+  readable fallback`), so it cannot be counted as deployed proof for the
+  declared-Markdown-alternate repair.
+
+root-cause belief:
+
+- This is a QA harness/tool-session problem, not evidence that the deployed
+  product path failed. Computer Use state inspection works; the action channel
+  is rejecting operations as inactive even after the required state read.
+- The mission acceptance should therefore record a Computer Use action-channel
+  limitation and use browser/API backup for the next proof, while still keeping
+  Comet state inspection as evidence of the authenticated owner publication
+  context.
+
+remaining error field:
+
+- Use a product-path browser/API backup to verify that the deployed Web Lens
+  navigate path now follows the declared Markdown alternate and returns readable
+  Qdrant source text.
+- Re-run the authenticated Comet action proof when the Computer Use action
+  channel is available again.
