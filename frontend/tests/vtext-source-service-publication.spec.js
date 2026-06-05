@@ -129,5 +129,15 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(publishedReader.locator('[data-vtext-source-inline]')).toHaveAttribute('open', '');
   await expect(publishedReader.locator('[data-vtext-source-inline]')).toContainText(sourceLabel);
   await expect(publishedReader.locator('[data-vtext-source-inline]')).not.toContainText(itemID);
-  await expect(publishedReader.locator('[data-vtext-source-inline] [data-vtext-open-source]')).toBeVisible();
+  const openSource = publishedReader.locator('[data-vtext-source-inline] [data-vtext-open-source]');
+  await expect(openSource).toBeVisible();
+
+  const initialSourceWindows = await page.locator('[data-content-viewer]').count();
+  await openSource.click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toContainText(sourceLabel);
+  await expect(sourceWindow).toContainText(excerpt);
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText('src-service-economy');
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(itemID);
 });
