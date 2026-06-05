@@ -1857,6 +1857,59 @@ belief-state update:
 
 suggested resume goal string:
 
+2026-06-05 deployed generic source-window checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `36b1a349` recorded the generic source-window
+  blocker before code changed.
+- Code commit `ef3c3dbaba4018dff4d769d4e5b1f90098144f6e` is on
+  `origin/main`. It registers the existing `ContentViewer` as a hidden
+  `content` / Source app and updates VText source opening so generic
+  `open_surface: "source"` and content/source-service targets open that source
+  viewer when they do not resolve to browser, media, or VText publication
+  surfaces.
+- VText now passes the source entity into the opened source window. The
+  content viewer renders bounded snapshot/selector text, entity id,
+  source-service item id, content item id, and evidence state when available.
+  This keeps source metadata out of VText prose while making the citation's
+  owning source substrate visible.
+- A Playwright regression extends the markdown-lineage source test to click a
+  non-media citation's `Open source` button and assert that a real
+  `data-content-viewer` window opens with the source label, excerpt, and source
+  entity metadata.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- The focused Playwright regression was not run locally because the expected
+  `localhost:4173` authenticated service stack was not running.
+- GitHub Actions CI run `27018544095` completed successfully for
+  `ef3c3dbaba4018dff4d769d4e5b1f90098144f6e`, including frontend build, Go
+  vet/build, non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`.
+- FlakeHub run `27018543926` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `ef3c3dbaba4018dff4d769d4e5b1f90098144f6e`, deployed at
+  `2026-06-05T13:46:42Z`.
+
+remaining error field:
+
+- This generic source-window path is deployed and test-covered at product UI
+  level, but it has not yet been exercised on the actual owner proposal because
+  owner-head access still requires completing the passkey user-presence
+  ceremony.
+- Still unproven on the owner document: source-gap repair through the deployed
+  `Sources` panel, citation marker expansion into source-backed transclusions,
+  source-window opening from the owner head, bounded appendix-table edit
+  survival, and focused prompt-size/`apply_edits` metadata for ordinary
+  revisions.
+
+suggested resume goal string:
+
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
