@@ -146,6 +146,30 @@ projection must preserve the original bracketed marker in metadata while
 rewriting the VText working projection into renderer-compatible source syntax
 such as `[1](source:ENTITY_ID)`.
 
+### Markdown Lineage Import Still Requires Raw Snapshot Text Payloads
+
+After the source-aware lineage fix, `POST /api/vtext/markdown-lineage/import`
+can migrate ordered Markdown snapshots when the caller supplies each version's
+full `content` string in the request body. That proves the VText migration
+shape, but it is still not the right product path for existing documents already
+inside a user computer.
+
+The runtime already has owner-scoped `ContentItem` records and browser-public
+APIs to create, list, and read them. Existing Markdown versions, uploaded files,
+or preserved file-version artifacts can live there as the user's source
+substrate. A migration path that forces an external caller to extract every
+snapshot, concatenate it into a large JSON payload, and send it back through the
+API is a script-shaped workaround. It bypasses the source artifact boundary and
+makes it harder to prove that migrated VText revisions came from the user's
+durable stored source artifacts.
+
+The lineage import product path should accept stored `content_item_id` inputs
+for each version. For those versions, the importer should read the source text
+from the authenticated owner's existing ContentItem, preserve that item as the
+original artifact reference, record the content ID/hash/path in the migration
+manifest, and avoid creating a duplicate source snapshot unless raw text was
+the only supplied input.
+
 ### Binary Original Preservation Is Still Projection-Only
 
 After checkpoint `0a5a31de`, the backend creates separate original
