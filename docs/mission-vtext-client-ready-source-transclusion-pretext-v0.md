@@ -3665,3 +3665,66 @@ required shape:
 - Do not make the operation legal-cloud-specific. It should work for any VText
   source entity whose source artifact is supplied later through an allowed
   import/upload/research path.
+
+## 2026-06-05 Repair: Metadata-Only Source Artifact Attachment
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `internal/runtime/vtext.go` now exposes
+  `POST /api/vtext/documents/{id}/source-attachments` for binding an existing
+  owner `ContentItem` to an existing VText source entity.
+- The endpoint creates a normal VText revision with unchanged article content
+  and citations. It updates only source metadata: target kind/content id,
+  URL/canonical URL preservation, selector/content hash, evidence state,
+  provenance defaults, and a `source_attachment_manifest`.
+- The endpoint rejects attachment requests that point at an unknown source
+  entity, a missing/non-owner content item, or a content item with no readable
+  `text_content`.
+- This is intentionally not a legal-cloud or glossary special case. It is the
+  generic canonical-revision seam needed after research/import creates a
+  permitted readable source artifact for a source whose canonical URL blocks
+  server-side import.
+
+local verification:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextSourceArtifactAttachment'` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(SourceGapRepair|SourceArtifactAttachment)'` passed.
+- `git diff --check` passed.
+
+evidence detail:
+
+- `TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision` proves that
+  attaching a readable content item preserves the base revision content
+  exactly, including the Markdown appendix table, while converting the source
+  entity target to `content_item`.
+- `TestVTextSourceArtifactAttachmentRejectsEmptyContentItem` proves the repair
+  path will not claim a source artifact exists when the attached content item
+  has no readable text.
+
+belief update:
+
+- The system now has a clean structural path for the remaining owner source
+  gap: source acquisition can create or select a readable artifact, and VText
+  can attach it as canonical metadata without marker churn or whole-document
+  rewrites.
+- This does not complete the source UI axis. Pretext remains about
+  magazine/journal wrapping: compact citation atoms inline, expanded source
+  apparatus routed through article flow, and opened source windows using
+  cleaned reader Markdown when iframe/web embedding fails.
+
+remaining proof:
+
+- Commit, push, monitor CI and Node B deploy, verify staging identity, then
+  exercise the endpoint against the owner legal-cloud document or an owner
+  staging disposable document using authenticated product paths.
+- For the owner document specifically, create or import permitted readable
+  source artifacts for the three HTTP 403 sources, attach them to the existing
+  source entities, republish, and prove the public/authorized publication opens
+  source windows with real cleaned source content.
+- Continue the Pretext UI pass separately: the source apparatus must support
+  article wrapping and reduced chrome, not merely successful metadata
+  attachment.

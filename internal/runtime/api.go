@@ -1627,6 +1627,7 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 //	POST   /api/vtext/documents/{id}/merge-preview → preview concept merge
 //	POST   /api/vtext/documents/{id}/accept-merge → accept merge preview
 //	POST   /api/vtext/documents/{id}/source-repairs → repair unresolved source gaps
+//	POST   /api/vtext/documents/{id}/source-attachments → attach source artifacts to existing source entities
 //	POST   /api/vtext/documents/{id}/restore  → restore historical revision as latest
 //	GET    /api/vtext/documents/{id}/diagnosis → owner-scoped diagnosis bundle
 //	GET    /api/vtext/documents/{id}/export    → export current VText revision
@@ -1707,6 +1708,10 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.HasSuffix(rest, "/source-repairs") {
 			h.HandleVTextSourceGapRepair(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/source-attachments") {
+			h.HandleVTextSourceArtifactAttachment(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/restore") {

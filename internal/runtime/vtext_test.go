@@ -3996,6 +3996,191 @@ func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 	}
 }
 
+func TestVTextSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	entity := vtextSourceEntity{
+		EntityID: "src-public-rule",
+		Kind:     "legal_source",
+		Label:    "Public Rule",
+		Target: vtextSourceEntityTarget{
+			TargetKind:   "url",
+			URL:          "https://example.com/rule",
+			CanonicalURL: "https://example.com/rule",
+		},
+		Selectors: []vtextSourceEntitySelector{{
+			SelectorKind: "text_quote",
+			TextQuote:    "bounded excerpt",
+		}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "embedded_excerpt",
+			ExpandedMode:     "source_card",
+			OpenSurface:      "source",
+			DefaultCollapsed: true,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "test",
+			RightsScope:         "public_url_snapshot",
+			UntrustedSourceText: true,
+		},
+	}
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath:     "proposals/source-attachment.md",
+		Title:          "source-attachment.md",
+		SourceEntities: []vtextSourceEntity{entity},
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: "A cited sentence [1](source:src-public-rule).\n\n| Term | Definition |\n| --- | --- |\n| Work product | Durable output |",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	baseRev, err := s.GetRevision(ctx, imported.CurrentRevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("base revision: %v", err)
+	}
+	now := time.Now().UTC()
+	item := types.ContentItem{
+		ContentID:    "content-public-rule",
+		OwnerID:      "user-1",
+		SourceType:   "text",
+		MediaType:    "text/markdown",
+		AppHint:      "vtext",
+		Title:        "Readable Public Rule",
+		SourceURL:    "https://example.com/rule",
+		CanonicalURL: "https://example.com/rule",
+		TextContent:  "Readable public source artifact for the cited rule.",
+		ContentHash:  contentHash("Readable public source artifact for the cited rule."),
+		Provenance:   json.RawMessage(`{"rights_scope":"public_source","untrusted_source_text":true}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.CreateContentItem(ctx, item); err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+
+	attachReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
+		BaseRevisionID: imported.CurrentRevisionID,
+		Attachments: []vtextSourceArtifactAttachment{{
+			EntityID:  "src-public-rule",
+			ContentID: "content-public-rule",
+		}},
+	})
+	attachW := httptest.NewRecorder()
+	h.HandleVTextRouter(attachW, attachReq)
+	if attachW.Code != http.StatusCreated {
+		t.Fatalf("attach source artifact: status = %d, want %d; body: %s", attachW.Code, http.StatusCreated, attachW.Body.String())
+	}
+	var attached vtextRevisionResponse
+	if err := json.NewDecoder(attachW.Body).Decode(&attached); err != nil {
+		t.Fatalf("decode attached revision: %v", err)
+	}
+	if attached.Content != baseRev.Content {
+		t.Fatalf("attachment changed content:\n got %q\nwant %q", attached.Content, baseRev.Content)
+	}
+	if attached.ParentRevisionID != imported.CurrentRevisionID || attached.VersionNumber != 1 {
+		t.Fatalf("attached revision = %#v", attached)
+	}
+	meta := decodeRevisionMetadata(attached.Metadata)
+	if meta["source"] != "vtext_source_artifact_attachment" || meta["base_revision_id"] != imported.CurrentRevisionID {
+		t.Fatalf("attachment metadata = %#v", meta)
+	}
+	if meta["source_attachment_count"] != float64(1) {
+		t.Fatalf("source_attachment_count = %#v", meta["source_attachment_count"])
+	}
+	entities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(entities) != 1 {
+		t.Fatalf("source_entities = %#v", meta["source_entities"])
+	}
+	got := entities[0]
+	if got.EntityID != "src-public-rule" || got.Target.ContentID != "content-public-rule" || got.Target.TargetKind != "content_item" {
+		t.Fatalf("attached entity target = %#v", got.Target)
+	}
+	if got.Target.CanonicalURL != "https://example.com/rule" || got.Evidence.State != "available" || got.Provenance.RightsScope != "public_url_snapshot" {
+		t.Fatalf("attached entity metadata = %#v", got)
+	}
+	if !strings.Contains(attached.Content, "| Term | Definition |") {
+		t.Fatalf("table content not preserved: %q", attached.Content)
+	}
+}
+
+func TestVTextSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	entity := vtextSourceEntity{
+		EntityID: "src-empty",
+		Kind:     "legal_source",
+		Label:    "Empty Source",
+		Target:   vtextSourceEntityTarget{TargetKind: "url", URL: "https://example.com/empty", CanonicalURL: "https://example.com/empty"},
+		Display:  vtextSourceEntityDisplay{InlineMode: "collapsed_citation", ExpandedMode: "source_card", OpenSurface: "source", DefaultCollapsed: true},
+		Evidence: vtextSourceEntityEvidence{State: "available", ResearchState: "represented"},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "test",
+			RightsScope:         "public_url_snapshot",
+			UntrustedSourceText: true,
+		},
+	}
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath:     "proposals/source-attachment-empty.md",
+		Title:          "source-attachment-empty.md",
+		SourceEntities: []vtextSourceEntity{entity},
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: "A cited sentence [1](source:src-empty).",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := s.CreateContentItem(ctx, types.ContentItem{
+		ContentID:   "content-empty",
+		OwnerID:     "user-1",
+		SourceType:  "text",
+		MediaType:   "text/markdown",
+		AppHint:     "vtext",
+		Title:       "Empty Source",
+		TextContent: "",
+		ContentHash: contentHash(""),
+		Provenance:  json.RawMessage(`{"rights_scope":"public_source"}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+	attachReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-attachments", vtextSourceArtifactAttachmentRequest{
+		Attachments: []vtextSourceArtifactAttachment{{
+			EntityID:  "src-empty",
+			ContentID: "content-empty",
+		}},
+	})
+	attachW := httptest.NewRecorder()
+	h.HandleVTextRouter(attachW, attachReq)
+	if attachW.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", attachW.Code, http.StatusBadRequest, attachW.Body.String())
+	}
+	if !strings.Contains(attachW.Body.String(), "has no readable text_content") {
+		t.Fatalf("body = %s", attachW.Body.String())
+	}
+}
+
 func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
