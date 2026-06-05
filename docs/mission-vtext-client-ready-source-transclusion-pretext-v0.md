@@ -4083,3 +4083,66 @@ remaining risks:
 - Web Lens iframe preview remains secondary and brittle for blocked sources;
   the durable source-reading path should be cleaned Markdown reader snapshots
   plus provenance and open-original links.
+
+## 2026-06-05 Problem Checkpoint: Remaining Source Coverage Is Not Client-Ready
+
+status: problem_recorded_before_data_or_code_fix
+
+current publication evidence:
+
+- Route inspected:
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub0d1de6579`.
+- The publication currently exposes `7` represented source entities.
+- Source artifact/readability state from the deployed publication:
+  - `src_aba_formal_op_512` is fully proven as an attached content item with a
+    readable 993-character Markdown artifact.
+  - `src_hetzner_datacenters`, `src_gdpr_article_32`, and
+    `src_nixos_rollback` have `reader_snapshot_ready` states with multi-kilobyte
+    reader snapshots.
+  - `src_ovh_private_cloud` has `reader_state=import_failed`.
+  - `src_aba_rule_16` has `reader_state=import_failed`.
+  - `src_qdrant_search` reports `reader_snapshot_ready`, but only
+    `reader_chars=48`, which is too thin to be a useful source artifact for a
+    client proposal.
+- This means the source graph now proves the mechanism, but not full
+  client-ready source coverage. A published proposal shown to the client would
+  still contain represented citations whose source windows are absent, failed,
+  or too thin.
+
+why this matters:
+
+- The contract in `docs/source-external-data-publication.md` says a complete
+  implementation proves external source acquisition, cleaned source artifacts,
+  source item resolution, VText source entities, citation/transclusion
+  expansion, owning-window opening, publication metadata, and canonical export.
+- The current state satisfies that path for ABA Formal Opinion 512, but not for
+  every source the legal-cloud proposal currently represents.
+- The user clarified that sources should improve the article, not distract from
+  it. That implies every represented source should either have a useful cleaned
+  artifact or be intentionally omitted/left uncited because the claim does not
+  need a source. A "represented" source with failed or useless reader content is
+  not good enough.
+
+required correction:
+
+- For each remaining represented source, make an explicit decision:
+  - attach/import a useful cleaned Markdown source artifact;
+  - replace the source with a better official/primary source;
+  - remove the citation if the claim does not need support; or
+  - record a caveat when the source is intentionally citation-only.
+- Start with the failed/thin sources because they are the weakest proof:
+  `src_ovh_private_cloud`, `src_aba_rule_16`, and `src_qdrant_search`.
+- Preserve the magazine/journal article flow. Do not solve this by adding a
+  source deck at the top or a metadata-heavy card stack. The inline source
+  apparatus stays bounded; opened source windows carry the fuller reader
+  artifact.
+- Preserve canonical VText and source metadata. Do not mutate exported Markdown
+  as if it were the canonical artifact.
+
+next executable probe:
+
+- Research or retrieve useful cleaned public source text for the failed/thin
+  sources, attach the artifacts through the owner source-artifact path, publish
+  the new revision, and prove on staging that source windows open the attached
+  artifacts while Markdown export still preserves source markers and the
+  glossary table.
