@@ -3855,3 +3855,141 @@ remaining proof:
   source window uses the attached reader snapshot.
 - Repeat or generalize for all three failing owner sources only after the first
   owner proof confirms the UI and endpoint operate correctly on staging.
+
+## 2026-06-05 Deployed Owner Proof: Source Artifact Attachment UI
+
+status: deployed_partial_acceptance_with_new_problem
+
+deployment evidence:
+
+- Behavior commit `df1599c9052b6c996aa8ee20fe5ad674068849a5`
+  (`fix: add vtext source artifact ui`) was pushed to `main`.
+- GitHub Actions CI run `27041077236` succeeded, including runtime shards,
+  non-runtime tests, frontend build, integration smoke, vet/build, aggregate,
+  and Node B staging deploy.
+- FlakeHub run `27041077230` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=df1599c9052b6c996aa8ee20fe5ad674068849a5`,
+  `deployed_at=2026-06-05T21:30:26Z`, with status/upstream/vmctl `ok`.
+
+authenticated Comet owner proof:
+
+- Computer Use is available and Comet remained authenticated on staging.
+- The owner document opened as
+  `choir_private_legal_cloud_proposal.vtext` at v83 with `7 represented
+  sources`.
+- The deployed owner source panel exposed the new `SOURCE ARTIFACT` workflow.
+  The controls were usable after maximizing the window; in the smaller restored
+  window the lower controls were partly clipped, which remains a product UI
+  debt.
+- I attached a readable source artifact to
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` using the
+  product UI. The source artifact URL was
+  `https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf`.
+- The pasted readable source text was a 993-character reader-mode Markdown
+  summary of ABA Formal Opinion 512, including the July 29, 2024 date and the
+  professional duties the opinion discusses.
+- Comet reported `VText created a new revision`; the owner document advanced
+  from v83 to v84.
+- Publishing v84 produced
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub0d1de6579`.
+
+public/API publication proof:
+
+- `GET /api/platform/publications/resolve?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub0d1de6579`
+  returned publication id `pub-0d1de657-9c5c-4fa8-ba95-5b046109ad0e` and title
+  `choir_private_legal_cloud_proposal.vtext`.
+- The resolved publication contains `7` source entities and `7`
+  transclusions.
+- The ABA Formal Opinion 512 source entity is now targeted at content item
+  `ed981507-cade-4d12-b825-ae5a5aa149ee`, with
+  `reader_snapshot_status.state=reader_snapshot_ready`,
+  `snapshot_kind=cleaned_reader_markdown`, and `text_char_count=993`.
+- Markdown export for the same route was 38,449 bytes. It preserved compact
+  source markers such as
+  `[ABA Formal Opinion 512](source:src_aba_formal_op_512)`, preserved the
+  glossary Markdown table beginning with `| Term | Definition |`, and contained
+  neither `TermDefinition` nor `missing source`.
+
+Pretext/user-clarification evidence:
+
+- Clicking the first inline source marker in the deployed public reader expanded
+  a right-side journal note while the article text continued beside it. This is
+  the correct direction for Pretext in this mission: Pretext matters because it
+  routes long-form article text around source apparatus in a magazine or
+  academic-journal layout. It is not a styling justification for more pills,
+  cards, or rounded rectangles.
+- The deployed note is still visually utilitarian and uses the bounded citation
+  excerpt, but it is no longer a top-of-article source deck or a purely stacked
+  card. Future UI work should strengthen this article/source-flow boundary and
+  remove leftover card chrome only when the same proof remains green.
+
+## 2026-06-05 Problem Checkpoint: Source Window Ignores Attached Reader Artifact
+
+status: problem_recorded_before_code_fix
+
+problem:
+
+- The publication metadata now carries the attached ABA reader artifact, but
+  the visible source-window path still renders only the short citation excerpt.
+- In Comet on the v84 public route, clicking the ABA Formal Opinion 512 source
+  marker expanded a journal note with the short excerpt:
+  `Lawyers using generative artificial intelligence tools must consider duties
+  including competence, confidentiality, communication, supervision, candor,
+  and reasonable fees.`
+- Clicking `Open source` opened the Web Lens/source reader window, but that
+  window also displayed the same short excerpt rather than the 993-character
+  attached reader artifact. It did not show the pasted reader-mode text
+  containing `Formal Opinion 512 on July 29, 2024` or the `Reader-mode note`.
+- Therefore the mission has proven that source artifacts can be attached,
+  versioned, published, exported, and exposed in publication metadata, but has
+  not yet proven that the owner-facing/public source-window projection consumes
+  those artifacts for this owner document.
+
+root-cause evidence:
+
+- `frontend/src/lib/vtext-source-renderer.ts` has the intended helper:
+  `sourceEntitySnapshotText(entity)` prefers
+  `sourceEntityReaderSnapshotText(entity)` before the shorter excerpt.
+- `BrowserApp.svelte` initializes source-reader mode from
+  `sourceEntitySnapshotText(sourceEntity)`, so the source window should display
+  the full reader snapshot when that helper sees it.
+- The publication resolve payload wraps the durable source record under
+  `source_entities[].entity`, while keeping transclusion data at the wrapper
+  level. The ABA wrapper has `transclusion.snapshot_text`, and the nested
+  `entity.reader_snapshot.text_content` has the 993-character artifact.
+- The source helper currently reads `entity.reader_snapshot` and
+  `entity.published_source` directly, but not `entity.entity.reader_snapshot`.
+  It therefore sees the wrapper-level transclusion excerpt first and never
+  reaches the nested reader artifact for publication source entities.
+- This is a generic publication projection/normalization problem, not an
+  ABA-specific or legal-cloud-specific problem.
+
+required correction:
+
+- Normalize publication source entities at the source-flow boundary so helpers
+  can read nested `entity` fields without losing wrapper-level publication and
+  transclusion data.
+- Source windows should prefer the reader artifact text for the opened source,
+  while inline/journal notes may remain bounded excerpts unless explicitly
+  expanded.
+- The correction must preserve the Pretext article-flow proof: source notes
+  should continue to route article text beside evidence, and export must remain
+  canonical VText/Markdown rather than serializing presentation DOM.
+- Add a focused regression that uses the publication wrapper shape: wrapper
+  `transclusion.snapshot_text` plus nested `entity.reader_snapshot.text_content`.
+  The test should fail if the source window receives only the short excerpt.
+
+residual risks:
+
+- Only the ABA source artifact has been attached through the owner UI. The
+  remaining legal-cloud sources still need either readable source artifacts or a
+  deliberate "no artifact required" decision.
+- Source artifact controls are still utilitarian and clipped in smaller owner
+  windows.
+- Web Lens iframe/source handling remains brittle for blocked sites; the durable
+  path should be cleaned Markdown reader snapshots, with iframe preview as an
+  optional surface rather than the authoritative source-reading path.
+- The Pretext journal-flow slice is directionally correct, but the desired
+  magazine/academic journal UX still needs a hard design and simplification
+  pass after the source-window projection uses the real artifacts.
