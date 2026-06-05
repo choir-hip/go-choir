@@ -1582,3 +1582,47 @@ Inspect the current VText renderer and source repair API for the smallest
 component boundary that preserves the owner proof while making Pretext optional
 and testable. Do not add more source UX code until the boundary and deletion
 criteria are explicit in the diff.
+
+## 2026-06-05 Source Rendering Boundary Extraction
+
+status: local_build_passed_pending_ci_deploy_owner_proof
+
+change shape:
+
+- Extracted the pure source/transclusion rendering helpers from
+  `frontend/src/lib/VTextEditor.svelte` into
+  `frontend/src/lib/vtext-source-renderer.ts`.
+- The extracted boundary owns source entity identity, publication-bundle source
+  conversion, media-source fallback entities, target/open-surface selection,
+  inline Markdown source refs, compact transclusion bodies, and the existing
+  source-ref HTML/data attributes.
+- `VTextEditor.svelte` still owns editor state, Markdown block parsing,
+  autosave serialization, source-panel workflow, and app launch dispatch. This
+  keeps the deployed behavior stable while giving source flow a smaller owner
+  for future Pretext chip/card work.
+
+why this is aligned with the mission:
+
+- It removes source-rendering responsibility from the monolithic VText editor
+  without changing canonical VText content, source metadata, publication export,
+  or open-source behavior.
+- It preserves the critical serialization contract:
+  `[data-vtext-source-ref]` roundtrips to `[label](source:ENTITY_ID)`.
+- It creates the boundary needed for the next Pretext step without hiding manual
+  line-routing inside the general document renderer.
+
+local verification:
+
+- `pnpm --dir frontend build` passed after the extraction.
+- Static search confirmed the removed renderer helpers are no longer defined in
+  `VTextEditor.svelte`; they live in `vtext-source-renderer.ts`.
+
+remaining error field:
+
+- Push, wait for CI/Node B deploy, then repeat the authenticated Comet owner
+  proof on staging: `choir_private_legal_cloud_proposal.vtext` v83+ opens,
+  inline source markers expand, `Open source` launches the source window, no top
+  source deck appears, no visible `missing source` prose appears, and source
+  panel copy remains source-review oriented.
+- This extraction does not yet implement Pretext card wrapping. It is a
+  prerequisite cleanup/boundary step before that richer layout work.
