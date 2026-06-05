@@ -2212,3 +2212,77 @@ next proof:
   and verify both outcomes together: the following paragraph still wraps beside
   the source note, and the `ABA Model Rule 1.6` confidentiality citation remains
   a visible interactive marker rather than plain prose.
+
+## 2026-06-05 Deployed Proof: Rich-Inline Source Flow Preserves Nested Citations
+
+status: deployed_acceptance_proof_recorded
+
+deployment evidence:
+
+- Commit `c64fa4269b843fa12fc22d0f2b9c288dede60d3d` (`fix: preserve citations
+  in vtext source flow`) was pushed to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27035626946` completed
+  successfully.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27035626941` completed
+  successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `c64fa4269b843fa12fc22d0f2b9c288dede60d3d`, deployed at
+  `2026-06-05T19:28:54Z`.
+
+authenticated Comet proof:
+
+- Computer Use was available and used with Comet against the owner publication
+  route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- After hard reload, the published VText loaded as
+  `choir_private_legal_cloud_proposal.vtext` v83 with the proposal body in the
+  first viewport, no top source deck, no `missing source` prose, and real source
+  buttons for both ABA Formal Opinion 512 and ABA Model Rule 1.6.
+- Expanding the ABA Formal Opinion 512 marker rendered the source note in a
+  right-side journal column while the article text continued beside it. This is
+  the intended Pretext use: flowing the reading text around a source artifact in
+  a magazine/journal-like presentation, not stacking cards above or between
+  paragraphs.
+- In that composed source-flow region, the confidentiality citation remained a
+  visible interactive source marker (`Source: ABA Model Rule 1.6:
+  Confidentiality of Information`) instead of flattening into prose.
+- Clicking the nested confidentiality marker expanded its own source
+  transclusion affordance inside the active source-flow presentation. The
+  expanded card showed the ABA Model Rule 1.6 excerpt and `Open source` action,
+  while the original ABA Formal Opinion 512 note and surrounding article flow
+  remained visible.
+- The source-window path still opened the ABA Formal Opinion 512 source window.
+  Comet continued to block the live ABA PDF iframe with `This page has been
+  blocked by Comet`, so the reader-mode/snapshot fallback remains a real next
+  axis rather than a solved claim.
+
+current belief:
+
+- The v83 legal-cloud owner publication is now a `.vtext` publication, not an
+  `.md` publication pretending to be VText. The published route shows the full
+  proposal content, inline citations, source expansion, and source window
+  affordance on staging.
+- The source-flow rendering path now preserves the invariant that citations are
+  transclusion points even when visible paragraphs are represented by
+  noncanonical Pretext-composed presentation DOM.
+- Canonical document structure remains in the hidden VText paragraph nodes, and
+  the presentation-only source-flow DOM remains noncanonical.
+
+residual risks / next realism axes:
+
+- Source acquisition and reader fallback are still incomplete. Comet can block
+  the live PDF/web iframe, so Obscura/Web Lens should provide cleaned Markdown
+  snapshots rendered as a reader-mode fallback when live embedding fails.
+- The source UI still needs a hard design pass toward a quieter academic/journal
+  treatment. The functional wrapping is present, but the visual vocabulary still
+  carries some card/pill density that should be reduced without losing source
+  affordances.
+- The mission-wide review report and simplification pass have not yet been
+  completed. They should review the whole mission and current system state, then
+  remove old/dead/weak/shortcut-style code paths while preserving the proven
+  VText/source/transclusion behavior.
+- The remaining publication contract should publish source artifacts and
+  readable snapshots to all readers authorized to access the published VText, so
+  opening a source does not depend on private owner-only state.
