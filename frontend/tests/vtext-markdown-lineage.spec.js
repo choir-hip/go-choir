@@ -473,6 +473,16 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(sourceWindow).toContainText(sourceLabel);
   await expect(sourceWindow).toContainText(excerpt);
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
+  await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
+
+  await expect(sourcePanel.locator('[data-vtext-source-entities]')).toContainText(sourceLabel);
+  await sourcePanel.locator('[data-vtext-source-entity-chip]').filter({ hasText: sourceLabel }).click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
+  const panelSourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(panelSourceWindow).toContainText(sourceLabel);
+  await expect(panelSourceWindow).toContainText(excerpt);
+  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
 });
 
 test('VText Sources panel shows structured edit evidence without raw prompts', async ({ desktopSession }) => {
