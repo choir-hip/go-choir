@@ -1761,6 +1761,73 @@ belief-state update:
 
 suggested resume goal string:
 
+2026-06-05 deployed private VText deep-link checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `fda76b14` recorded the private VText
+  deep-link blocker before code changed.
+- Code commit `830178f157e156b76b613ec5b5b2e1cefbdada3a` is on
+  `origin/main`. It adds a generic authenticated URL intent:
+  `/?app=vtext&doc=<doc_id>&title=<optional-title>`. A signed-in session opens
+  the requested private VText document with `createInitialVersion: false`; a
+  signed-out session shows the existing passkey overlay and preserves the same
+  private-document intent for replay after login. Bare `?app=vtext` is treated
+  as stale and consumed, matching the existing stale-email URL behavior.
+- The change is not document-specific and does not bypass auth or expose
+  private documents through a public route.
+- A Playwright regression was added to create a private VText document through
+  product APIs, open it through the new URL intent, assert the exact
+  `data-vtext-doc-id`, and confirm the URL intent is consumed.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- The focused Playwright test was not run locally because the expected
+  `localhost:4173` service stack was not running. The available
+  `start-services.sh` path injects host-specific Dolt/ICU CGO flags, which the
+  repo contract says not to normalize as durable proof.
+- GitHub Actions CI run `27018087336` completed successfully for
+  `830178f157e156b76b613ec5b5b2e1cefbdada3a`, including frontend build, Go
+  vet/build, non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`.
+- FlakeHub run `27018087354` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `830178f157e156b76b613ec5b5b2e1cefbdada3a`, deployed at
+  `2026-06-05T13:37:40Z`.
+
+deployed Comet proof:
+
+- Computer Use remained available for Comet.
+- Opening
+  `https://choir.news/?app=vtext&doc=f93cea62-f833-4dae-b414-8e44783d8cbe&title=choir_private_legal_cloud_proposal.md`
+  on staging produced the expected private-action passkey overlay:
+  `Open choir_private_legal_cloud_proposal.md from your private computer.`
+- Switching the overlay to `Use passkey`, filling `yusefnathanson@me.com`, and
+  invoking `Use Passkey` produced the macOS system passkey sheet:
+  `Sign in to "choir.news" with your passkey for "yusefnathanson@me.com"?`
+  This proves the deployed URL intent reached the correct owner-auth ceremony
+  for the target private document.
+- The passkey ceremony was not completed in this Codex session. Computer Use
+  could observe the sheet but did not advance it with the available click-like
+  drag action, and bypassing user-presence would violate the product auth
+  boundary.
+
+remaining error field:
+
+- Owner-account proof is now blocked at passkey user presence rather than by
+  ambiguous public/private VText routing. Once the owner completes or refreshes
+  the passkey session, the same URL can open the private document directly.
+- Still unproven: bounded appendix-table edit on the private owner head,
+  owner-document source-gap repair, citation expansion into transclusion
+  affordances, source-window opening, and focused prompt-size/`apply_edits`
+  metadata for ordinary revisions.
+
+suggested resume goal string:
+
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
