@@ -2943,3 +2943,58 @@ remaining error field:
   `legal_cloud_proposal_source_backed.vtext`, open at least one source window,
   publish the proposal, and prove authorized published readers can see and open
   the published sources.
+
+2026-06-05 canonical owner `.vtext` source-entity proof failure:
+
+status: checkpoint_incomplete
+
+follow-up owner-path evidence:
+
+- Reloading the authenticated Comet tab cleared the stale live `Revising...`
+  UI state. The new owner VText reopened as `v2`, `Latest`, with `Revise`,
+  `Sources`, and `Publish v2` enabled. This classifies the prior lock as stale
+  live UI state after write completion, not a persistent backend revision lock.
+- Opening the `Sources` panel on the new
+  `legal_cloud_proposal_source_backed.vtext` derivative showed `0 source
+  entities`.
+- The same panel showed only edit evidence for `v2`:
+  `context=current_head_plus_user_edit_diff`, `operation=replace_all`,
+  `prompt chars=10779`, `edits=1`, `delta chars=17627`, `latency ms=10`.
+- The Repair JSON for `v2` contains `"source_entities": []` and
+  `"citation_resolutions": []`.
+
+new problem documented before product-code fix:
+
+- The owner-path writer produced visible prose claiming "10 source
+  transclusions" and a table of claim/status/source rows, but did not create
+  canonical VText source entities or citation resolutions.
+- The resulting document therefore acts like a sourced VText in rendered prose
+  while remaining unsourced in canonical metadata. This violates the invariant
+  that citations are transclusion points and that VText source/citation
+  structure must survive render/edit/save/revise as data, not as text.
+- Because canonical metadata has zero source entities, opening source windows
+  and publishing source access cannot be proven from this owner document yet.
+  Publication would only publish the prose table, not a source graph.
+
+belief-state update:
+
+- The appendix-table corruption axis is now positively improved on the new
+  owner `.vtext`: Appendix A renders as an accessibility table with term and
+  definition columns.
+- The citation/source axis is still broken at the structure boundary. Research
+  evidence exists somewhere in run/evidence state, but `edit_vtext`/VText save
+  did not translate it into canonical source entities/transclusions.
+- The `replace_all` metadata on this large creation revision is expected for a
+  first full document write, but it also proves this pass was not a bounded
+  apply-edits style citation repair.
+
+remaining error field:
+
+- Root-cause the path from researcher evidence and writer output to canonical
+  VText source entities. The fix must create or preserve structured citation
+  transclusion points generically, not by parsing prose source tables or
+  hardcoding this legal-cloud document.
+- After repair, rerun owner-path proof on the new `.vtext` derivative or a fresh
+  successor: Sources panel must show real source entities; embedded citation
+  markers must expand into source transclusions; `Open source` must open a
+  source window; publishing must include source access for authorized viewers.
