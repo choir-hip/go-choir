@@ -561,6 +561,9 @@ func addVTextEditRevisionMetadata(raw json.RawMessage, edit materializedVTextEdi
 	}
 	if rec != nil {
 		meta["vtext_run_prompt_chars"] = len(rec.Prompt)
+		if contextMode := metadataStringValue(rec.Metadata, "vtext_context_mode"); contextMode != "" {
+			meta["vtext_context_mode"] = contextMode
+		}
 		if rec.CreatedAt.IsZero() || rec.UpdatedAt.IsZero() {
 			meta["vtext_run_latency_ms"] = 0
 		} else {

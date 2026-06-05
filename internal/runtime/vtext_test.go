@@ -3399,6 +3399,24 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if revs[0].Content != "Initial file content" {
 		t.Fatalf("initial aliased revision content = %q, want initial file content", revs[0].Content)
 	}
+	meta := decodeRevisionMetadata(revs[0].Metadata)
+	if meta["created_from"] != "file_open" || meta["source_path"] != "notes/ai-news.md" {
+		t.Fatalf("file-open metadata = %#v", meta)
+	}
+	importManifest, ok := meta["import_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing import_manifest: %#v", meta)
+	}
+	if importManifest["projection_kind"] != "vtext" || importManifest["source_kind"] != "md" || importManifest["original_content_hash"] == "" {
+		t.Fatalf("import manifest = %#v", importManifest)
+	}
+	migrationManifest, ok := meta["migration_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing migration_manifest: %#v", meta)
+	}
+	if migrationManifest["migration_adapter"] != "markdown_to_vtext_projection" || migrationManifest["source_gap_policy"] != "repairable_gap_no_invented_citations" {
+		t.Fatalf("migration manifest = %#v", migrationManifest)
+	}
 }
 
 func TestVTextEnsureManifestCreatesAliasAndFile(t *testing.T) {

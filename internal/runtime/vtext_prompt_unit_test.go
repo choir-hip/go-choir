@@ -54,6 +54,50 @@ func TestVTextPromptForFactualFirstRevisionForbidsUngroundedContent(t *testing.T
 	}
 }
 
+func TestVTextPromptUsesDiffFirstContextForDirectUserEdits(t *testing.T) {
+	current := types.Revision{
+		DocID:            "doc-direct-edit",
+		RevisionID:       "rev-user-draft",
+		ParentRevisionID: "rev-appagent-base",
+		Content:          "# Brief\n\nMake this section sharper.\n\nOld paragraph rewritten as final prose.",
+		AuthorKind:       types.AuthorUser,
+	}
+	previous := &types.Revision{
+		DocID:      "doc-direct-edit",
+		RevisionID: "rev-appagent-base",
+		Content:    "# Brief\n\nOld paragraph.",
+		AuthorKind: types.AuthorAppAgent,
+	}
+	request := buildAgentRevisionRequest(current, previous, nil, vtextAgentRevisionRequest{
+		Intent: "revise",
+	}, "replace Old paragraph with sharper final prose", false, nil, []string{
+		"rev-1 old user diff that should not be preloaded",
+		"rev-2 another old user diff that should not be preloaded",
+	})
+
+	for _, want := range []string{
+		"User edit diff from previous canonical revision to current user-authored draft:",
+		"Interpret the user edit diff as the instruction-bearing control surface",
+		"Consume instruction-like text when it is not intended as final prose",
+		"remove the stale target text instead of appending a competing alternative",
+		"Do not require //edit markers",
+		"Default context is intentionally small: current head plus the exact user edit diff",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("diff-first prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		"User-authored revision diffs (oldest to newest):",
+		"rev-1 old user diff that should not be preloaded",
+		"rev-2 another old user diff that should not be preloaded",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("diff-first prompt preloaded forbidden history %q:\n%s", forbidden, request)
+		}
+	}
+}
+
 func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-baseball",

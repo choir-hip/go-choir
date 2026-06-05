@@ -510,6 +510,9 @@
     if (node.matches?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
+    if (node.matches?.('.table-scroll') && node.querySelector?.('table')) {
+      return serializeBlockMarkdown(node.querySelector('table'));
+    }
     if (/^h[1-4]$/.test(tag)) {
       return `${'#'.repeat(Number(tag.slice(1)))} ${serializeInlineMarkdown(node).trim()}`;
     }
@@ -531,9 +534,13 @@
         .join('\n');
     }
     if (tag === 'table') {
-      const rows = Array.from(node.querySelectorAll('tr')).map((row) =>
-        `| ${Array.from(row.children).map((cell) => serializeInlineMarkdown(cell).trim()).join(' | ')} |`
-      );
+      const rows = Array.from(node.querySelectorAll('tr')).map((row) => {
+        const cells = Array.from(row.children).filter((cell) => {
+          const cellTag = cell.tagName?.toLowerCase();
+          return cellTag === 'th' || cellTag === 'td';
+        });
+        return `| ${cells.map((cell) => serializeInlineMarkdown(cell).trim().replace(/\|/g, '\\|')).join(' | ')} |`;
+      });
       if (rows.length > 1) {
         const width = Array.from(node.querySelectorAll('tr:first-child > *')).length || 1;
         rows.splice(1, 0, `| ${Array.from({ length: width }).map(() => '---').join(' | ')} |`);
@@ -1030,6 +1037,7 @@
   async function writeThroughToFile(content) {
     if (!appContext.sourcePath) return;
     if (isVTextShortcutPath(appContext.sourcePath)) return;
+    if (currentDoc?.doc_id) return;
     const filePath = buildFilePath(appContext.sourcePath);
     const fileRes = await fetchWithRenewal(filePath, {
       method: 'PUT',
@@ -1863,12 +1871,24 @@
 
   function handleEditorClick(event) {
     const button = event.target?.closest?.('[data-vtext-open-source]');
-    if (!button) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const entityID = button.getAttribute('data-source-entity-id') || '';
-    const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
-    handleSourceEntityOpen(entity);
+    if (button) {
+      event.preventDefault();
+      event.stopPropagation();
+      const entityID = button.getAttribute('data-source-entity-id') || '';
+      const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
+      handleSourceEntityOpen(entity);
+      return;
+    }
+    const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
+    if (!sourceRef) return;
+    const entityID = sourceRef.getAttribute('data-source-entity-id') || '';
+    if (!entityID) return;
+    const inline = Array.from(editorSurface?.querySelectorAll?.('[data-vtext-source-inline]') || [])
+      .find((item) => item.getAttribute('data-source-entity-id') === entityID);
+    if (inline && inline.tagName?.toLowerCase() === 'details') {
+      inline.open = true;
+      inline.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 
   function handleEditorKeydown(event) {
@@ -2059,14 +2079,14 @@
           >
             Copy text
           </button>
-          <button
-            class="secondary-action"
-            data-vtext-download-md
-            on:click={() => handleDownloadPublished('md')}
-            disabled={loading || publishedActionPending}
-          >
-            Download
-          </button>
+          <details class="download-menu" data-vtext-download-menu>
+            <summary>Download</summary>
+            <button type="button" data-vtext-download-md on:click={() => handleDownloadPublished('md')} disabled={loading || publishedActionPending}>Markdown</button>
+            <button type="button" data-vtext-download-txt on:click={() => handleDownloadPublished('txt')} disabled={loading || publishedActionPending}>Text</button>
+            <button type="button" data-vtext-download-html on:click={() => handleDownloadPublished('html')} disabled={loading || publishedActionPending}>HTML</button>
+            <button type="button" data-vtext-download-docx on:click={() => handleDownloadPublished('docx')} disabled={loading || publishedActionPending}>DOCX</button>
+            <button type="button" data-vtext-download-pdf on:click={() => handleDownloadPublished('pdf')} disabled={loading || publishedActionPending}>PDF</button>
+          </details>
           <button
             class="prompt-btn"
             data-vtext-edit-published
@@ -2270,9 +2290,14 @@
             <button type="button" class="secondary-action" data-vtext-copy-full-text on:click={handleCopyPublishedText}>
               Copy text
             </button>
-            <button type="button" class="secondary-action" data-vtext-download-md on:click={() => handleDownloadPublished('md')}>
-              Download
-            </button>
+            <details class="download-menu" data-vtext-download-menu>
+              <summary>Download</summary>
+              <button type="button" data-vtext-download-md on:click={() => handleDownloadPublished('md')}>Markdown</button>
+              <button type="button" data-vtext-download-txt on:click={() => handleDownloadPublished('txt')}>Text</button>
+              <button type="button" data-vtext-download-html on:click={() => handleDownloadPublished('html')}>HTML</button>
+              <button type="button" data-vtext-download-docx on:click={() => handleDownloadPublished('docx')}>DOCX</button>
+              <button type="button" data-vtext-download-pdf on:click={() => handleDownloadPublished('pdf')}>PDF</button>
+            </details>
           </div>
         </section>
       {/if}
@@ -2643,6 +2668,8 @@
   .nav-btn,
   .prompt-btn,
   .secondary-action,
+  .download-menu > summary,
+  .download-menu button,
   .update-pill,
   .primary-action {
     border: 1px solid var(--choir-border-strong);
@@ -2679,6 +2706,78 @@
   .secondary-action.danger {
     border-color: var(--choir-status-danger);
     color: var(--choir-status-danger);
+  }
+
+  .download-menu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .download-menu > summary {
+    list-style: none;
+    border-radius: 999px;
+    padding: 0.62rem 0.84rem;
+    font-size: 0.78rem;
+    font-weight: 720;
+    color: var(--choir-text-accent);
+  }
+
+  .download-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .download-menu[open] > summary {
+    background: var(--choir-accent-soft);
+    border-color: var(--choir-accent);
+  }
+
+  .download-menu[open] {
+    z-index: 4;
+  }
+
+  .download-menu[open]::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+  }
+
+  .download-menu button {
+    display: block;
+    width: 100%;
+    border-radius: 0;
+    border-width: 0;
+    border-bottom: 1px solid var(--choir-border);
+    background: transparent;
+    color: var(--choir-text-primary);
+    padding: 0.58rem 0.7rem;
+    text-align: left;
+    font-size: 0.76rem;
+    font-weight: 680;
+  }
+
+  .download-menu button:last-child {
+    border-bottom: 0;
+  }
+
+  .download-menu[open] button {
+    min-width: 8rem;
+  }
+
+  .download-menu[open] > button,
+  .download-menu[open] > :global(button) {
+    display: block;
+  }
+
+  .download-menu[open] {
+    flex-direction: column;
+    align-items: stretch;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 0.65rem;
+    background: var(--choir-surface-elevated);
+    box-shadow: var(--choir-shadow-lg);
+    overflow: hidden;
   }
 
   .rendered-doc {

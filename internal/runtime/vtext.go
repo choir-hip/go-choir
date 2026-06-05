@@ -21,6 +21,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -362,6 +364,46 @@ func marshalVTextShortcutFile(doc types.Document, sourcePath string) ([]byte, er
 	}, "", "  ")
 }
 
+func buildFileOpenVTextMetadata(sourcePath, content string) json.RawMessage {
+	sourcePath = strings.TrimSpace(sourcePath)
+	sum := sha256.Sum256([]byte(content))
+	ext := strings.TrimPrefix(strings.ToLower(pathpkg.Ext(sourcePath)), ".")
+	if ext == "" {
+		ext = "text"
+	}
+	metadata := map[string]any{
+		"source_path":  sourcePath,
+		"created_from": "file_open",
+		"import_manifest": map[string]any{
+			"source_path":            sourcePath,
+			"source_kind":            ext,
+			"original_content_hash":  "sha256:" + hex.EncodeToString(sum[:]),
+			"projection_kind":        "vtext",
+			"import_adapter":         "vtext_file_open_projection",
+			"import_adapter_version": 1,
+			"lossiness_score":        0,
+			"warnings":               []string{},
+		},
+	}
+	if ext == "md" || ext == "markdown" {
+		metadata["migration_manifest"] = map[string]any{
+			"source_path":           sourcePath,
+			"source_kind":           "markdown",
+			"original_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
+			"projection_kind":       "vtext",
+			"migration_adapter":     "markdown_to_vtext_projection",
+			"migration_version":     1,
+			"version_lineage":       []map[string]any{},
+			"source_gap_policy":     "repairable_gap_no_invented_citations",
+		}
+	}
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return json.RawMessage(`{"created_from":"file_open"}`)
+	}
+	return data
+}
+
 func writeSSEData(w http.ResponseWriter, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -494,10 +536,8 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: ownerID,
 		Content:     req.InitialContent,
-		Metadata: json.RawMessage(fmt.Sprintf(`{"source_path":%q,"created_from":"file_open"}`,
-			sourcePath,
-		)),
-		CreatedAt: now,
+		Metadata:    buildFileOpenVTextMetadata(sourcePath, req.InitialContent),
+		CreatedAt:   now,
 	}
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
 		log.Printf("vtext api: create aliased initial revision: %v", err)
@@ -2467,19 +2507,24 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		}
 	}
 
-	hasGroundedHistory, historyErr := rt.channelHasGroundedHistory(ctx, ownerID, doc.DocID, time.Time{})
-	if historyErr != nil {
-		log.Printf("vtext api: check grounded history: %v", historyErr)
-		hasGroundedHistory = false
+	workerWake := scheduledMessageSeq > 0 || strings.HasPrefix(strings.TrimSpace(req.Intent), "integrate_")
+	hasGroundedHistory := false
+	if workerWake {
+		historyState, historyErr := rt.channelHasGroundedHistory(ctx, ownerID, doc.DocID, time.Time{})
+		if historyErr != nil {
+			log.Printf("vtext api: check grounded history: %v", historyErr)
+		} else {
+			hasGroundedHistory = historyState
+		}
 	}
 
-	recentWorkerMessages, workerErr := rt.recentWorkerMessages(ctx, ownerID, doc.DocID, 12)
-	if workerErr != nil {
-		log.Printf("vtext api: recent worker messages: %v", workerErr)
-	}
-	userRevisionDiffs, userDiffErr := rt.userRevisionDiffSummaries(ctx, ownerID, doc.DocID, 200)
-	if userDiffErr != nil {
-		log.Printf("vtext api: user revision diffs: %v", userDiffErr)
+	var recentWorkerMessages []ChannelMessage
+	if workerWake {
+		var workerErr error
+		recentWorkerMessages, workerErr = rt.recentWorkerMessages(ctx, ownerID, doc.DocID, 12)
+		if workerErr != nil {
+			log.Printf("vtext api: recent worker messages: %v", workerErr)
+		}
 	}
 	if currentRevisionLoaded {
 		mediaSourceRefs, addedMediaSourceRefs := rt.registerVTextMediaSourceRefs(ctx, ownerID, currentRevision.Content, metadata)
@@ -2503,7 +2548,7 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		}
 	}
 
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, userRevisionDiffs)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, nil)
 
 	// Create the runtime run with vtext agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -2518,6 +2563,8 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		"current_revision_id": doc.CurrentRevisionID,
 		"request_intent":      strings.TrimSpace(req.Intent),
 		"original_prompt":     strings.TrimSpace(req.Prompt),
+		"vtext_context_mode":  "current_head_plus_user_edit_diff",
+		"vtext_prompt_chars":  len(agentPrompt),
 	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
@@ -2621,7 +2668,7 @@ func vtextHardRequirementHints(parts ...string) []string {
 
 // buildAgentRevisionRequest constructs the backend-owned vtext revision
 // request sent as the user turn for the vtext appagent.
-func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, userRevisionDiffs []string) string {
+func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req vtextAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, _ []string) string {
 	var b strings.Builder
 	b.WriteString("A revise event was triggered for the current vtext document.")
 
@@ -2682,7 +2729,11 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString(".")
 	}
 	if diffSummary != "" {
-		b.WriteString("\n\nLatest revision diff/context:\n")
+		if current.AuthorKind == types.AuthorUser {
+			b.WriteString("\n\nUser edit diff from previous canonical revision to current user-authored draft:\n")
+		} else {
+			b.WriteString("\n\nLatest revision diff/context:\n")
+		}
 		b.WriteString(diffSummary)
 	}
 	if len(recentWorkerMessages) > 0 {
@@ -2726,15 +2777,6 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\nVText may ask for clarification or continuation; VText must not directly control worker/vsuper/co-super runs.")
 		}
 	}
-	if len(userRevisionDiffs) > 0 {
-		b.WriteString("\nUser-authored revision diffs (oldest to newest):\n")
-		for _, summary := range userRevisionDiffs {
-			b.WriteString("- ")
-			b.WriteString(summary)
-			b.WriteString("\n")
-		}
-	}
-
 	b.WriteString("\n\nCurrent canonical document content:\n---\n")
 	if current.Content != "" {
 		b.WriteString(current.Content)
@@ -2761,6 +2803,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	}
 	if current.AuthorKind == types.AuthorUser {
 		b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
+		b.WriteString("\nInterpret the user edit diff as the instruction-bearing control surface. The user may have mixed final prose, scratch instruction, replacement text, deletions, and annotations directly inside the document.")
+		b.WriteString("\nConsume instruction-like text when it is not intended as final prose. If the edit is meant to replace existing text, remove the stale target text instead of appending a competing alternative.")
+		b.WriteString("\nDo not require //edit markers, XML tags, HTML comments, or other meta syntax. Do not classify the prompt into a workflow before acting; use retrieval tools only if this diff needs more context.")
 		b.WriteString("\nBecause VText owns the document, write the first useful owner-readable revision with edit_vtext before opening longer worker work.")
 		b.WriteString("\nFor greetings or simple non-factual prompts, answer directly and do not open workers.")
 		b.WriteString("\nFor factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims, followed by a researcher spawn in the same run.")
@@ -2797,6 +2842,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\nNever describe coordination as already done unless the tool action really happened. Phrases such as \"researcher dispatched\", \"follow-up researcher requested\", \"will include once targeted research returns\", or \"super has been asked\" are only allowed after the corresponding spawn_agent or request_super_execution tool call succeeded, or when a recent worker message proves that worker is active. If you only edit_vtext, phrase remaining work as \"next needed\" or \"still unresolved\" instead of as a completed delegation.")
 	b.WriteString("\nFor email: VText may write the canonical email artifact, but Email appagent owns drafts, approval, and send decisions. After writing a supplied-content email artifact, call request_email_draft with the document id, revision id, recipients, subject, and body. A request_email_draft result creates a reviewable draft only; it never authorizes outbound send.")
 	b.WriteString("\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.")
+	b.WriteString("\nDefault context is intentionally small: current head plus the exact user edit diff. Prior versions, source entities, import manifests, publication records, and worker evidence should be retrieved only when needed rather than assumed to be preloaded.")
 	b.WriteString("\nIntermediate appagent revisions are compactable context, not the source of truth.")
 	b.WriteString("\nPreserve explicit hard requirements from the original user request and current document across every revision. These include exact marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hashes, and text the user said to preserve.")
 	b.WriteString("\nBefore a replace_all edit, audit the complete replacement against those hard requirements. Do not replace a requested numbered/sectioned document with a different report outline unless the user explicitly changed the structure.")
@@ -2811,7 +2857,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString("\",\"operation\":\"apply_edits\",\"edits\":[{\"op\":\"replace\",\"find\":\"exact previous text\",\"replace\":\"new text\"}]}")
 	b.WriteString("\nA replace edit must match exactly once. If the same find text appears multiple times and every occurrence should change, set \"replace_all\":true on that edit.")
 	b.WriteString("\nUse {\"op\":\"append\",\"text\":\"section text\"} to append new material when appropriate.")
-	b.WriteString("\nIf a full replacement is clearer, call edit_vtext with {\"doc_id\":\"")
+	b.WriteString("\nUse replace_all only for explicit whole-document transformations such as full style rewrite, summary, expansion from outline, or full reorganization. Include a rationale that explains why structured edits are insufficient.")
+	b.WriteString("\nIf a full replacement is truly required, call edit_vtext with {\"doc_id\":\"")
 	b.WriteString(current.DocID)
 	b.WriteString("\",\"base_revision_id\":\"")
 	b.WriteString(current.RevisionID)
