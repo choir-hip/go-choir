@@ -5082,3 +5082,55 @@ contract implication:
 - This is progress on the magazine/academic journal UX axis, but not the final
   source UX. The remaining work is source acquisition/cleanup, owner-grade
   source review, and further editor/runtime simplification.
+
+## 2026-06-05 Problem: Source Gap Repair Is Still JSON-First In The Owner Panel
+
+status: documented_before_code
+
+problem:
+
+- The VText source panel shows unresolved citation markers and already has a
+  canonical backend repair endpoint, but the owner-visible repair path still
+  expects a raw JSON payload in `[data-vtext-source-repair-payload]`.
+- `frontend/tests/vtext-markdown-lineage.spec.js` proves this by filling a
+  complete repair payload JSON object directly into the panel before clicking
+  `Apply marker repair`.
+- That is an operator/debug workflow, not the owner-grade source review path
+  requested for the legal-cloud proposal. A user should be reviewing a claim
+  marker and entering or selecting a source, not authoring API metadata.
+
+evidence:
+
+- `VTextEditor.svelte` renders the normal panel with source markers and source
+  entities, then exposes `<summary>Advanced marker repair</summary>` and a
+  visible label `Repair JSON`.
+- The JSON payload asks the UI user to understand `source_entities`,
+  `citation_resolutions`, `selectors`, `display`, `target`, `evidence`, and
+  `provenance`.
+- The backend source-repair endpoint already preserves canonical VText revision
+  semantics. The missing layer is an owner-facing adapter from claim/source
+  review controls to that existing endpoint.
+
+root-cause hypothesis:
+
+- The source-repair path was first built to bootstrap and diagnose Markdown
+  lineage gaps. It correctly created canonical source repair revisions, but
+  the frontend exposed the raw endpoint shape because that was sufficient for
+  tests and operator recovery.
+
+intended generic repair:
+
+- Add a typed source-review row/form for unresolved markers: marker, source
+  title, optional URL, confirming excerpt, and an `Apply source review` action.
+- Build the existing source-repair payload inside `VTextEditor.svelte` from
+  those fields and call the same canonical endpoint.
+- Keep raw JSON available only under a clearly diagnostic disclosure, not as
+  the primary owner path.
+
+forbidden shortcuts:
+
+- Do not add legal-cloud-specific source ids, labels, or source mappings.
+- Do not change the source-repair backend contract or canonical revision
+  semantics unless a separate backend problem is documented first.
+- Do not remove tests for raw repair entirely; retain a diagnostic fallback so
+  operators can still recover unusual source graph cases.
