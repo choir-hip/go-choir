@@ -190,6 +190,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-features-window', contentClass: 'features-content' },
   },
   {
+    id: 'content',
+    name: 'Source',
+    icon: '📎',
+    description: 'Source substrate viewer',
+    component: () => import('../ContentViewer.svelte'),
+    launcher: { desk: false, desktopIcon: false, mobileSwitcher: false, order: 135 },
+    window: { singleton: false, heavy: false, desktop: { width: 820, height: 620, minWidth: 560, minHeight: 420 }, compact: compactDefault },
+    auth: { preview: 'public-readonly', requiresAuthFor: [] },
+    theme: { surface: 'standard', shellDataAttr: 'data-content-window', contentClass: 'content-viewer-content' },
+  },
+  {
     id: 'super-console',
     name: 'Super Console',
     icon: '⌘',

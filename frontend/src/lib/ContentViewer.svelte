@@ -11,11 +11,17 @@
   let loading = false;
   let error = '';
 
+  $: sourceEntity = appContext?.sourceEntity || null;
+  $: sourceEntityTarget = sourceEntity?.target || {};
+  $: sourceEntitySelectors = Array.isArray(sourceEntity?.selectors) ? sourceEntity.selectors : [];
+  $: sourceEntitySnapshot = sourceEntity?.transclusion?.snapshot_text ||
+    sourceEntitySelectors.map((selector) => selector?.text_quote || '').find(Boolean) ||
+    '';
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: filePath = item?.file_path || appContext?.filePath || '';
   $: mediaType = item?.media_type || appContext?.mediaType || '';
   $: appHint = item?.app_hint || appContext?.appHint || appContext?.appId || 'files';
-  $: title = item?.title || appContext?.windowTitle || appContext?.title || appHint;
+  $: title = item?.title || sourceEntity?.label || appContext?.windowTitle || appContext?.title || appHint;
   $: displayUrl = filePath ? apiFileURL(filePath) : sourceUrl;
   $: embedUrl = mediaType === 'video/youtube' || /youtube\.com|youtu\.be/.test(sourceUrl)
     ? youtubeEmbedURL(sourceUrl)
@@ -113,12 +119,30 @@
           {#if item?.content_hash}<p><strong>SHA-256:</strong> {item.content_hash}</p>{/if}
           {#if item?.text_content}
             <pre>{item.text_content.slice(0, 4000)}</pre>
+          {:else if sourceEntitySnapshot}
+            <pre>{sourceEntitySnapshot.slice(0, 4000)}</pre>
           {:else}
             <p>This content is registered in the shared substrate. A dedicated reader/player can render it in Section 7.</p>
           {/if}
         </div>
       {/if}
     </div>
+
+    {#if sourceEntity}
+      <details class="provenance" data-source-entity open>
+        <summary>Source entity</summary>
+        <p><strong>Entity:</strong> {appContext?.sourceEntityId || sourceEntity?.entity_id || sourceEntity?.source_entity_id || 'source'}</p>
+        {#if appContext?.sourceServiceItemId || sourceEntityTarget?.item_id}
+          <p><strong>Source item:</strong> {appContext?.sourceServiceItemId || sourceEntityTarget.item_id}</p>
+        {/if}
+        {#if sourceEntityTarget?.content_id}
+          <p><strong>Content item:</strong> {sourceEntityTarget.content_id}</p>
+        {/if}
+        {#if sourceEntity?.evidence}
+          <p><strong>Evidence:</strong> {sourceEntity.evidence.state || 'available'} / {sourceEntity.evidence.research_state || 'unclassified'}</p>
+        {/if}
+      </details>
+    {/if}
 
     {#if item?.provenance}
       <details class="provenance" data-content-provenance>

@@ -120,6 +120,13 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
   await expect(citation.locator('[data-vtext-open-source]')).toBeVisible();
+  const initialSourceWindows = await page.locator('[data-content-viewer]').count();
+  await citation.locator('[data-vtext-open-source]').click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toContainText(sourceLabel);
+  await expect(sourceWindow).toContainText(excerpt);
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
   await expect(rendered).toContainText('One claim still needs source repair [2].');
 });
 

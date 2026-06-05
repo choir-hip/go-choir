@@ -455,8 +455,10 @@
     const requested = String(entity?.display?.open_surface || '').trim();
     if (targetKind === 'published_vtext_span' || targetKind === 'publication_version' || entity?.publication_route_path) return 'vtext';
     if (requested === 'source' && sourceEntityTargetURL(entity)) return 'browser';
+    if (requested === 'source' || requested === 'content') return 'content';
     if (requested) return requested;
     if (entity?.kind === 'youtube_video') return 'video';
+    if (targetKind === 'content_item' || targetKind === 'source_service_item') return 'content';
     if (sourceEntityTargetURL(entity)) return 'browser';
     return 'content';
   }
@@ -2053,6 +2055,7 @@
         content_id: contentId,
         mediaType: entity?.kind === 'youtube_video' ? 'video/youtube' : '',
         appHint: appId,
+        sourceEntity: entity,
         sourceEntityId: sourceEntityID(entity),
         sourceServiceItemId: entity?.target?.item_id || '',
         publishedRoutePath: entity?.publication_route_path || '',
