@@ -2658,3 +2658,51 @@ residual risks:
 - Publication-source policy needs broader review for private, licensed, and
   client-confidential sources before the legal-cloud document uses non-public
   research artifacts.
+
+## 2026-06-05 Local Source UX Simplification: Remove Weak Metadata Chrome
+
+status: local_behavior_change_verified
+
+problem already recorded:
+
+- The owner clarification and cognitive-transform checkpoint above identified
+  the active source UI failure: expanded source affordances can still feel like
+  stacked app cards/pills instead of evidence integrated into the article flow.
+
+implementation:
+
+- `frontend/src/lib/vtext-source-renderer.ts` no longer emits invented
+  `source available` facts when a source entity has no real inline facts such
+  as transcript availability or selector support labels.
+- Inline source popovers no longer render the generic source kind as visible
+  prose. The source title, supporting excerpt/transclusion, and open-source
+  affordance remain visible.
+- This is not a source-specific or legal-cloud-specific rule. It removes weak
+  metadata defaults from the article projection while preserving canonical
+  source entity data for source windows, diagnostics, and publication payloads.
+
+verification:
+
+- `pnpm --dir frontend build` passed.
+- Initial `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` failed
+  before product behavior because `localhost:4173` was not running. This is the
+  expected harness contract: Playwright config does not start its own web
+  server.
+- After starting `CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  ./start-services.sh`, `pnpm --dir frontend e2e
+  tests/vtext-source-entities.spec.js` passed all 4 tests.
+- The source-flow E2E now asserts the Pretext/journal flow remains visible,
+  keeps the ABA source title, and does not render `source available` or
+  `public source` in the expanded source-flow note.
+- The same E2E still covers nested citation preservation, source-window reader
+  fallback, table roundtrip, and bounded table cell edit.
+
+current belief:
+
+- This is a small but aligned simplification: it keeps the deployed source
+  graph and Pretext flow intact while deleting weak article chrome from compact
+  source evidence.
+- The next visual step should go beyond metadata removal: measure the owner
+  legal-cloud route in Comet after deployment and continue moving the source
+  note toward a journal marginalia/column treatment with less rounded-rectangle
+  vocabulary.

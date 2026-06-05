@@ -190,7 +190,6 @@ export function renderSourceEntityFacts(entity: any): string {
   const facts = [];
   if (transcript) facts.push(`transcript ${transcript}`);
   for (const support of supports) facts.push(`supports ${support}`);
-  if (facts.length === 0) facts.push('source available');
   return `
     ${facts.map((fact) => `<span>${escapeHTML(fact)}</span>`).join('')}
   `;
@@ -203,14 +202,14 @@ export function renderSourceTransclusionBody(entity: any, { compact = false } = 
     return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>
       ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</span>` : ''}
       ${sourceEntityMedia(entity, { inline: true })}
-      <span class="vtext-source-facts">${facts}</span>
+      ${facts.trim() ? `<span class="vtext-source-facts">${facts}</span>` : ''}
     </span>`;
   }
   const media = sourceEntityMedia(entity);
   return `<div class="vtext-transclusion-body" data-vtext-transclusion-body>
     ${snapshot ? `<blockquote class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</blockquote>` : ''}
     ${media}
-    <div class="vtext-source-facts">${facts}</div>
+    ${facts.trim() ? `<div class="vtext-source-facts">${facts}</div>` : ''}
   </div>`;
 }
 
@@ -220,14 +219,12 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   if (!entity) {
     return `<span class="vtext-source-ref vtext-source-ref--missing" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
   }
-  const kind = sourceEntityKindLabel(entity?.kind);
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
   return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
     <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
     <span class="vtext-source-ref-popover" data-vtext-source-ref-popover data-vtext-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
-      <span>${escapeHTML(kind)}</span>
       ${renderSourceTransclusionBody(entity, { compact: true })}
       <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
     </span>

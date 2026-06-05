@@ -178,6 +178,8 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   const flow = rendered.locator('[data-vtext-source-flow]');
   await expect(flow).toBeVisible({ timeout: 5000 });
   await expect(flow).toContainText('ABA Formal Opinion 512 fixture');
+  await expect(flow).not.toContainText('source available');
+  await expect(flow).not.toContainText('public source');
   await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
   expect(await rendered.locator('p[data-vtext-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
   expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
