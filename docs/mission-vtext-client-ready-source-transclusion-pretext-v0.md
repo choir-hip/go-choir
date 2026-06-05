@@ -4626,3 +4626,72 @@ residual risks:
   v1, with Markdown export remaining a projection.
 - The requested whole-mission/current-system review report, iCloud PDF copy,
   and simplification/dead-code pass remain pending.
+
+## 2026-06-05 Inspection: Canonical Import And Markdown Export Axis
+
+status: existing_behavior_verified_no_new_code
+
+inspection result:
+
+- The current codebase already contains the generic canonicalization path the
+  mission requires for imported text/document artifacts:
+  - `HandleVTextOpenFile` derives a canonical `.vtext` title from `.md`, `.txt`,
+    DOCX, PDF, and other opened source paths while preserving the original
+    source artifact/alias.
+  - `handleVTextCreateRevision` calls
+    `canonicalizeAliasedVTextDocumentTitle` and
+    `ensureCanonicalVTextProjectionPath` before storing a user-authored
+    revision, so an aliased imported artifact converges to a `.vtext` shortcut
+    and records `canonical_vtext_source_path`.
+  - `edit_vtext` calls the same canonicalization and projection path before
+    storing an appagent-authored revision.
+  - `HandleVTextExportDocument` and publication export keep Markdown as an
+    export/projection format rather than the canonical document identity.
+- The implementation is generic over source path and title extension. I found
+  no legal-cloud-specific or glossary-specific branch in this path.
+
+local verification:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(APICreateRevisionCanonicalizesAliasedImportedDocumentTitle|OpenFileResolvesCanonicalAlias|ImportMarkdownLineageCreatesRevisionHistory|ImportMarkdownLineageResolvesCitationMarkers|ImportMarkdownLineageUsesExistingContentItems|ImportMarkdownLineageRejectsMissingContentItem|ImportMarkdownLineageRejectsUnknownCitationEntity|ImportMarkdownLineageRejectsExistingAlias|OpenFilePreservesDocxAndPDFOriginalArtifacts|OpenFileImportsDocxAndPDFBytesFromFilesRoot|EnsureManifestCreatesAliasAndFile|EnsureManifestReusesExistingAlias|CreateRevisionRejectsStaleHead|CreateRevisionRebasesAllowedStaleUserDraft|AppagentEditCanonicalizesAliasedMarkdownTitle)$'`
+  passed.
+- `nix develop -c go test ./internal/store -run 'Test.*VText|TestVText'`
+  passed.
+- A first attempt without `-tags comprehensive` reported no runtime tests to
+  run because the relevant API tests live behind the `comprehensive` build tag.
+  A plain host `go test` outside the dev shell failed on the known Dolt ICU
+  dependency, matching the repo contract; it was not used as verification.
+
+staging/publication evidence:
+
+- The deployed legal-cloud publication route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` resolved
+  with `7` source entities and `7` transclusions under public access policy.
+- Public export with `format=md` returned
+  `choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md`,
+  `text/markdown; charset=utf-8`, 38,398 content bytes, source markers such as
+  `source:src_aba_rule_16`, and no `missing source` prose.
+- The export response recorded `private_material_omitted: true`, preserving the
+  publication/export boundary.
+
+contract implication:
+
+- For new or revised imported artifacts, current source code satisfies the
+  user's clarification: `.md`, `.txt`, and document-like imports become VText
+  canonical artifacts on the edit/revision path, while Markdown remains an
+  export format.
+- The real owner legal-cloud artifact currently publishes as the `.vtext`
+  proposal path and exports clean Markdown with source markers. This supports
+  proceeding to the mission-wide review and simplification pass rather than
+  adding another migration patch.
+
+residual risks:
+
+- I did not mutate the private owner document again for this checkpoint; the
+  staging evidence is publication/export proof plus existing deployed owner
+  `.vtext` proof from earlier sections.
+- The product still needs a cleaner owner-facing file/alias UI that explains
+  "source artifact" versus "canonical VText" without relying on diagnostics.
+- The review report should audit whether any legacy frontend label or file list
+  can still make a canonical `.vtext` document appear to the owner as a mutable
+  Markdown source.
