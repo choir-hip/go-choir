@@ -618,6 +618,54 @@ limitation recorded:
   VText API from the Comet page was safer than dirtying the client proposal or
   triggering an ordinary revise run solely to update title metadata.
 
+## 2026-06-05 Problem Checkpoint: Published Sources Are Excerpt-Only
+
+status: checkpoint_incomplete
+
+new problem documented before product-code fix:
+
+- The current publication source path can make an authorized/public reader
+  expand a citation and open a readable source window, but the published source
+  payload is still excerpt-level. `internal/runtime/content.go` imports URLs as
+  owner-scoped `ContentItem`s with cleaned `text_content`, retrieval rungs,
+  warnings, canonical URL, media type, and content hash. That is the richer
+  reader-mode source artifact the client experience needs.
+- `internal/platform/source_metadata.go`, however, normalizes
+  `source_entities` into publication records by copying the entity JSON and
+  deriving `publication_transclusions.snapshot_text` only from the first
+  selector's `text_quote` or an entity-level `snapshot_text`. It does not
+  publish a cleaned source artifact projection, source-reader markdown, or a
+  policy-bounded public source snapshot from the referenced `ContentItem`.
+- The frontend fallback added in the prior checkpoint therefore works because
+  `BrowserApp.svelte` can render `sourceEntity.transclusion.snapshot_text` or a
+  selector quote. It is a safe fallback, but it is not enough for the requested
+  magazine/academic source UX: opening a source should show the cleaned article
+  or source artifact when policy permits, with the inline source card remaining
+  a contextual excerpt.
+- This also explains why the iframe Web Lens path feels brittle. The durable
+  first view should be a cleaned Markdown/reader snapshot from the source
+  artifact, with live iframe/web preview as an optional secondary affordance.
+
+Pretext implication:
+
+- The source-card layout problem is not solved by adding more card chrome. The
+  active reader path should route article lines around the expanded source note
+  using Pretext line-range APIs, and the note should be visually minimal:
+  title, relevant excerpt, source state, and open-source action. Full source
+  reading belongs in the opened source window using cleaned reader content, not
+  in a bulky inline card.
+
+remaining error field:
+
+- Add a generic publication source artifact projection so public/authorized
+  publication readers can inspect permitted cleaned source content without
+  relying on private owner `ContentItem` access or fragile iframe rendering.
+- Preserve the invariant that private source text is not leaked: only publish
+  source snapshots/artifacts when the source entity provenance/access policy
+  permits publication, and record policy/hash metadata alongside the snapshot.
+- Verify that the inline Pretext source flow remains the article-reading
+  surface while the opened source window renders cleaned reader content.
+
 remaining error field:
 
 - The mission is still incomplete. The proof has not yet shown focus/edit/save
