@@ -1236,3 +1236,42 @@ remaining error field:
 - After the fix, repeat the same Comet/Web Lens proof on staging and require
   readable Qdrant text plus an explicit declared-alternate warning before
   advancing to the next source/transclusion realism axis.
+
+## 2026-06-05 Local Root Cause: Canonical Redirect Shell
+
+status: local_fix_ready_for_deploy
+
+root cause:
+
+- Local Obscura reproduction showed that
+  `obscura fetch https://qdrant.tech/documentation/search/ --dump html`
+  returns a low-content HTML shell with a canonical link and meta refresh to
+  `https://qdrant.tech/documentation/search/search/`, but no
+  `rel="alternate"` Markdown link.
+- Running Obscura directly on the canonical target returns the full Qdrant page
+  and exposes the declared Markdown alternate
+  `https://qdrant.tech/documentation/search/search/index.md`.
+- The failing backend path only searched the original low-content shell for a
+  declared Markdown alternate. It did not follow page-declared canonical/meta
+  refresh targets before deciding the HTML fallback was low-content.
+
+fix shape:
+
+- Teach the backend browser snapshot recovery path to parse declared page refs
+  from low-content HTML, follow a canonical or meta-refresh target, parse that
+  target's HTML for a Markdown alternate, and then use the same
+  `fetchAndExtractURL` path to extract readable source text.
+- This is a structural browser acquisition fix, not a Qdrant/legal-cloud
+  hardcode and not a VText renderer workaround.
+
+local verification:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestBrowserSessionNavigateUses(HTMLFallbackWhenTextSnapshotEmpty|DeclaredMarkdownAlternateWhenHTMLFallbackLowContent|DeclaredMarkdownAlternateFromCanonicalShell)|TestBrowserSessionNavigateFailsWhenTextSnapshotFails' -count=1 -v`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestBrowser(Session|Capabilities)' -count=1`
+  passed.
+
+remaining error field:
+
+- Commit, push, wait for CI and Node B deploy, confirm staging commit identity,
+  then rerun the authenticated Comet/Web Lens Qdrant proof.

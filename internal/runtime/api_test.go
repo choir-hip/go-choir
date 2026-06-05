@@ -1889,6 +1889,90 @@ fi
 	}
 }
 
+func TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateFromCanonicalShell(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	markdown := strings.Repeat("Similarity search article text recovered from the canonical page Markdown alternate. ", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/docs/":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprintf(w, `<!doctype html><html><head><title>Search - Qdrant</title><link rel="alternate" type="text/markdown" href="%s/docs/index.md"></head><body><main><h1>Search</h1></main></body></html>`, serverURLFromRequest(r))
+		case "/docs/index.md":
+			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+			_, _ = fmt.Fprintf(w, "# Search\n# Similarity search\n\n%s\n", markdown)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	htmlShell := fmt.Sprintf(`<!doctype html><html><head><title>%s/source</title><link rel="canonical" href="%s/docs/"><meta http-equiv="refresh" content="0; url=%s/docs/"></head><body></body></html>`, server.URL, server.URL, server.URL)
+	if err := os.WriteFile(bin, []byte(fmt.Sprintf(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "text" ]; then
+  exit 0
+fi
+if [ "$mode" = "html" ]; then
+  printf %%s %q
+  exit 0
+fi
+if [ "$mode" = "links" ]; then
+  exit 0
+fi
+`, htmlShell)), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	if navigateW.Code != http.StatusOK {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionReady {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionReady, navigated)
+	}
+	if !strings.Contains(navigated.TextSnapshot, "canonical page Markdown alternate") {
+		t.Fatalf("text_snapshot missing canonical markdown alternate text: %q", navigated.TextSnapshot)
+	}
+	if !strings.Contains(navigated.HTMLSnapshot, `http-equiv="refresh"`) {
+		t.Fatalf("html_snapshot missing original redirect shell: %q", navigated.HTMLSnapshot)
+	}
+	if len(navigated.SnapshotWarnings) != 1 || !strings.Contains(navigated.SnapshotWarnings[0], "used declared markdown alternate") {
+		t.Fatalf("snapshot_warnings = %+v, want declared markdown alternate warning", navigated.SnapshotWarnings)
+	}
+}
+
+func serverURLFromRequest(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
 func TestBrowserSessionNavigateFailsWhenTextSnapshotFails(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()

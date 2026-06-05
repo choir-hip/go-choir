@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -712,10 +713,21 @@ func browserSnapshotWarningsContain(warnings []string, needle string) bool {
 
 func fetchBrowserDeclaredMarkdownAlternate(ctx context.Context, targetURL, htmlSource string) (string, string, error) {
 	alternateURL, err := browserDeclaredMarkdownAlternateURL(targetURL, htmlSource)
-	if err != nil {
-		return "", "", err
-	}
 	client := &http.Client{Timeout: browserDeclaredAlternateTimeout}
+	if err != nil {
+		followURL, followErr := browserDeclaredFollowURL(targetURL, htmlSource)
+		if followErr != nil {
+			return "", "", err
+		}
+		followHTML, fetchErr := fetchBrowserRawHTML(ctx, client, followURL)
+		if fetchErr != nil {
+			return "", followURL, fmt.Errorf("backend browser declared alternate follow fetch failed: %w", fetchErr)
+		}
+		alternateURL, err = browserDeclaredMarkdownAlternateURL(followURL, followHTML)
+		if err != nil {
+			return "", followURL, err
+		}
+	}
 	content, err := fetchAndExtractURL(ctx, client, alternateURL, "browser_declared_alternate_fetch", "browser_declared_alternate_html_extract", "browser_declared_alternate_text_extract")
 	if err != nil {
 		return "", alternateURL, fmt.Errorf("backend browser declared markdown alternate fetch failed: %w", err)
@@ -727,26 +739,73 @@ func fetchBrowserDeclaredMarkdownAlternate(ctx context.Context, targetURL, htmlS
 	return text, alternateURL, nil
 }
 
+type browserDeclaredHTMLRefs struct {
+	Canonical string
+	Alternate string
+	Refresh   string
+}
+
 func browserDeclaredMarkdownAlternateURL(targetURL, htmlSource string) (string, error) {
+	refs, err := browserDeclaredRefs(htmlSource)
+	if err != nil {
+		return "", err
+	}
+	if refs.Alternate == "" {
+		return "", fmt.Errorf("backend browser html fallback had no declared markdown alternate")
+	}
+	baseRaw := strings.TrimSpace(refs.Canonical)
+	if baseRaw == "" {
+		baseRaw = strings.TrimSpace(targetURL)
+	}
+	return browserResolveHTMLRef(baseRaw, refs.Alternate, "backend browser declared markdown alternate")
+}
+
+func browserDeclaredFollowURL(targetURL, htmlSource string) (string, error) {
+	refs, err := browserDeclaredRefs(htmlSource)
+	if err != nil {
+		return "", err
+	}
+	for _, candidate := range []string{refs.Refresh, refs.Canonical} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		resolved, err := browserResolveHTMLRef(targetURL, candidate, "backend browser declared follow url")
+		if err != nil {
+			return "", err
+		}
+		if !browserURLsEquivalent(targetURL, resolved) {
+			return resolved, nil
+		}
+	}
+	return "", fmt.Errorf("backend browser html fallback had no declared follow url")
+}
+
+func browserDeclaredRefs(htmlSource string) (browserDeclaredHTMLRefs, error) {
 	doc, err := html.Parse(strings.NewReader(htmlSource))
 	if err != nil {
-		return "", fmt.Errorf("backend browser html fallback parse failed: %w", err)
+		return browserDeclaredHTMLRefs{}, fmt.Errorf("backend browser html fallback parse failed: %w", err)
 	}
-	canonical := ""
-	alternate := ""
+	refs := browserDeclaredHTMLRefs{}
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
-		if node == nil || alternate != "" && canonical != "" {
+		if node == nil || refs.Alternate != "" && refs.Canonical != "" && refs.Refresh != "" {
 			return
 		}
 		if node.Type == html.ElementNode && strings.EqualFold(node.Data, "link") {
 			attrs := browserHTMLAttrs(node)
 			rel := strings.ToLower(attrs["rel"])
-			if browserRelIncludes(rel, "canonical") && canonical == "" {
-				canonical = strings.TrimSpace(attrs["href"])
+			if browserRelIncludes(rel, "canonical") && refs.Canonical == "" {
+				refs.Canonical = strings.TrimSpace(attrs["href"])
 			}
-			if browserRelIncludes(rel, "alternate") && browserMediaTypeIsMarkdown(attrs["type"]) && alternate == "" {
-				alternate = strings.TrimSpace(attrs["href"])
+			if browserRelIncludes(rel, "alternate") && browserMediaTypeIsMarkdown(attrs["type"]) && refs.Alternate == "" {
+				refs.Alternate = strings.TrimSpace(attrs["href"])
+			}
+		}
+		if node.Type == html.ElementNode && strings.EqualFold(node.Data, "meta") {
+			attrs := browserHTMLAttrs(node)
+			if strings.EqualFold(attrs["http-equiv"], "refresh") && refs.Refresh == "" {
+				refs.Refresh = browserMetaRefreshURL(attrs["content"])
 			}
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
@@ -754,22 +813,61 @@ func browserDeclaredMarkdownAlternateURL(targetURL, htmlSource string) (string, 
 		}
 	}
 	walk(doc)
-	if alternate == "" {
-		return "", fmt.Errorf("backend browser html fallback had no declared markdown alternate")
+	return refs, nil
+}
+
+func fetchBrowserRawHTML(ctx context.Context, client *http.Client, targetURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return "", err
 	}
-	baseRaw := strings.TrimSpace(canonical)
-	if baseRaw == "" {
-		baseRaw = strings.TrimSpace(targetURL)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir.news)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
 	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("read declared follow response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return "", fmt.Errorf("declared follow url returned status %s", resp.Status)
+	}
+	return strings.TrimSpace(string(raw)), nil
+}
+
+func browserResolveHTMLRef(baseRaw, refRaw, label string) (string, error) {
 	base, err := url.Parse(baseRaw)
 	if err != nil {
-		return "", fmt.Errorf("backend browser declared markdown alternate base invalid: %w", err)
+		return "", fmt.Errorf("%s base invalid: %w", label, err)
 	}
-	ref, err := url.Parse(alternate)
+	ref, err := url.Parse(strings.TrimSpace(refRaw))
 	if err != nil {
-		return "", fmt.Errorf("backend browser declared markdown alternate invalid: %w", err)
+		return "", fmt.Errorf("%s invalid: %w", label, err)
 	}
 	return base.ResolveReference(ref).String(), nil
+}
+
+func browserMetaRefreshURL(content string) string {
+	for _, part := range strings.Split(content, ";") {
+		part = strings.TrimSpace(part)
+		if len(part) < 4 || !strings.EqualFold(part[:4], "url=") {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(part[4:]), `"'`)
+	}
+	return ""
+}
+
+func browserURLsEquivalent(left, right string) bool {
+	leftURL, leftErr := url.Parse(strings.TrimSpace(left))
+	rightURL, rightErr := url.Parse(strings.TrimSpace(right))
+	if leftErr != nil || rightErr != nil {
+		return strings.TrimSpace(left) == strings.TrimSpace(right)
+	}
+	return leftURL.String() == rightURL.String()
 }
 
 func browserHTMLAttrs(node *html.Node) map[string]string {
