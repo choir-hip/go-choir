@@ -4563,3 +4563,66 @@ residual risks:
   cleaned content-item source artifacts, not arbitrary iframe rendering.
 - The full magazine/journal design pass still needs visual tuning across the
   Pretext source note and opened source window together.
+
+## 2026-06-05 Deployed Proof: Source Window Reader-Mode Markdown
+
+status: deployed_owner_route_proven_with_residual_design_work
+
+deployment evidence:
+
+- Code commit `24cb3cd1fb98ce720bb64befe64fef28bbc56ec7`
+  (`fix: render source windows as reader markdown`) was pushed to
+  `origin/main`.
+- GitHub Actions run `27043645513` completed successfully, including the deploy
+  job.
+- FlakeHub run `27043645514` completed successfully for the same head SHA.
+- Node B deployed the frontend bundle for the commit and reported public asset
+  `index-DWD_xJhN.js`.
+- `https://choir.news/health` reported proxy and sandbox build identity at
+  `24cb3cd1fb98ce720bb64befe64fef28bbc56ec7`, with deployed timestamp
+  `2026-06-05T22:36:03Z`.
+
+Comet staging proof:
+
+- Computer Use was available and used against Comet on the authenticated
+  staging route
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The route opened the actual legal-cloud published VText titled
+  `Proposal for [Redacted]: A Private Legal Cloud`, not a short source-demo
+  document.
+- The first paragraphs showed inline source markers, including
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` and
+  `ABA Model Rule 1.6: Confidentiality of Information`, in the article body.
+- A source window for `ABA Model Rule 1.6: Confidentiality of Information`
+  opened as a separate Choir source/content window.
+- The source window rendered the cleaned source artifact as reader content:
+  a heading, prose summary, reader-mode note, and source attribution appeared
+  as normal article text rather than raw Markdown in a `<pre>` block.
+- Diagnostic fields were demoted behind collapsed disclosures:
+  `Source evidence`, `Source entity`, and `Provenance`. Media type, hash, and
+  source metadata were not the first visible reading surface.
+
+contract implication:
+
+- The opened citation now resolves to a source artifact reader surface instead
+  of relying on the Web Lens iframe as the primary readable source path.
+- The Pretext source note remains the article-side magazine/journal wrapping
+  mechanism. The opened source window now carries fuller source substance in a
+  quieter reader-mode projection.
+- The change is generic to content-item/source windows and shared Markdown
+  rendering. It does not special-case the legal-cloud document, ABA sources, or
+  glossary/table content.
+
+residual risks:
+
+- The source-reader window is content-first but still needs final visual
+  polish: less app chrome, better typography, and tighter relationship to the
+  in-article Pretext note.
+- The proof covers cleaned content-item source artifacts on the legal-cloud
+  route. Arbitrary URL/iframe fallback still needs Obscura cleanup into
+  Markdown reader snapshots and should treat iframe preview as optional.
+- The canonical import migration axis remains open: imported `.md`, `.txt`, and
+  related text formats should become canonical `.vtext` when moving from v0 to
+  v1, with Markdown export remaining a projection.
+- The requested whole-mission/current-system review report, iCloud PDF copy,
+  and simplification/dead-code pass remain pending.
