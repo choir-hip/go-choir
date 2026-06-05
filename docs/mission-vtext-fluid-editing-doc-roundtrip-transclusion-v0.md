@@ -1084,6 +1084,38 @@ what was proven:
   marker, show the source label and excerpt, expose the open-source control,
   preserve unresolved marker `[2]` as a repairable source gap, and preserve the
   original raw Markdown snapshot separately.
+- `e8701336` documented the next product-path gap: the source-aware lineage
+  importer still required every Markdown snapshot's raw text in the request
+  body, even when the versions already existed as owner-scoped ContentItems
+  inside the user computer.
+- `232c3ef4` extends `POST /api/vtext/markdown-lineage/import` so a migrated
+  version may reference an existing `content_item_id`. The importer now reads
+  that stored owner artifact, validates it has text, uses it as the original
+  source record instead of duplicating it, records `source_content_item_id`,
+  `original_content_id`, `original_content_path`, and
+  `original_content_source: content_item` in the migration manifest, and still
+  supports raw `content` snapshots for external imports. Local focused runtime
+  proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextImportMarkdownLineage(UsesExistingContentItems|RejectsMissingContentItem|ResolvesCitationMarkers|RejectsUnknownCitationEntity|CreatesRevisionHistory|RejectsExistingAlias)' -count=1`.
+- GitHub CI run `27001378141` passed for
+  `232c3ef4cc2ccbe6a4df5d1ee1457102144c4cc9`; runtime shards, vet/build,
+  integration smoke, non-runtime tests, and Node B staging deploy were green.
+  FlakeHub publish run `27001378162` passed for the same commit.
+- Staging health proved proxy and sandbox deployed commit
+  `232c3ef4cc2ccbe6a4df5d1ee1457102144c4cc9`, deployed at
+  `2026-06-05T07:22:04Z`.
+- Deployed browser-authenticated source-aware lineage proof was expanded and
+  passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js --workers=1 --reporter=line`.
+  The expanded proof creates stored Markdown ContentItems through the public
+  `/api/content/items` product API, migrates a two-version legal-cloud-style
+  lineage by `content_item_id`, verifies original content IDs and migration
+  manifest refs point at those stored artifacts, verifies the latest migrated
+  version renders a preserved Markdown table, restores the historical migrated
+  version as a new canonical VText revision, and verifies the restored
+  historical citation expands in-flow with the supplied source label/excerpt.
+- `10ce194f` corrected the browser proof fixture to use public `file`
+  ContentItems instead of the runtime-internal `file_version` source type.
 
 unproven or partial claims:
 
@@ -1105,12 +1137,13 @@ unproven or partial claims:
   there unless a new version is published with an updated policy.
 - `.md` file-open normalization now records import and migration manifests, and
   the deployed Markdown lineage API can migrate ordered snapshots into durable
-  VText revisions. It can also attach known source entities and citation
-  resolutions during migration. The actual owner-authenticated bulk migration
-  of existing legal-cloud-class documents has not yet been run because the
-  actual source snapshots were not available in this Codex session; source
-  extraction/repair for citations whose evidence is not supplied remains
-  incomplete.
+  VText revisions. It can attach known source entities and citation
+  resolutions during migration, and it can migrate from existing owner-scoped
+  ContentItems instead of requiring raw snapshot text payloads. The actual
+  owner-authenticated bulk migration of existing legal-cloud-class documents
+  has not yet been run because the actual source snapshots were not available
+  in this Codex session; source extraction/repair for citations whose evidence
+  is not supplied remains incomplete.
 - DOCX/PDF import now preserves original ContentItems, reads original bytes,
   records real byte hashes, creates VText projections, and has staged browser
   proof for DOCX and PDF import -> revise -> publish -> DOCX/PDF export.
