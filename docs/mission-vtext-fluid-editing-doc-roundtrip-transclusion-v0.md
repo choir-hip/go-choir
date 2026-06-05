@@ -3051,3 +3051,85 @@ remaining error field:
   Sources shows nonzero entities, inline `source:` anchors expand, source
   windows open, and publishing exposes source snapshots/transclusions to
   authorized published readers.
+
+2026-06-05 deployed content-item source publication proof checkpoint:
+
+status: checkpoint_incomplete
+
+deployment identity:
+
+- Behavior commit `61a6498f192cb0eba9140024489f7e4f1d799927` is on
+  `origin/main`.
+- GitHub Actions CI run `27025679123` completed successfully for that SHA.
+- FlakeHub run `27025679120` completed successfully for that SHA.
+- Staging `/health` reports proxy and sandbox deployed commit
+  `61a6498f192cb0eba9140024489f7e4f1d799927`, deployed at
+  `2026-06-05T16:03:58Z`.
+
+authenticated owner/UI evidence:
+
+- Computer Use is available and Comet is authenticated on staging with the owner
+  account. The usable bundle id is `ai.perplexity.comet`.
+- A fresh owner prompt intended to repair
+  `legal_cloud_proposal_source_backed.vtext` routed through the global command
+  prompt and created a separate VText document titled
+  `On this open legal_cloud_proposal_source_backed.vtext document, repair the
+  existing prose-only...`. This is therefore fallback path proof, not proof that
+  the original owner derivative was repaired in place.
+- The fallback VText reached `v2`, `Latest`, after reload cleared the same stale
+  live `Revising...` UI lock class seen earlier.
+- The rendered fallback VText contains three real `CONTENT ITEM` source
+  entities in the document source rail:
+  `83addb16-cc45-476e-a4ac-920e0c073ff5`,
+  `b6483edf-a12f-48b2-a937-ada9ac7c8f95`, and
+  `9d80a459-8915-421a-b1cd-3727a553b6bd`.
+- Inline citation markers render as source buttons. Clicking the ABA source
+  expands a content-item source card with bounded claim text, `source
+  available`, and `Open source`.
+- Clicking `Open source` opens a separate source/content window showing the
+  imported browser content, reference URL, SHA-256 hash, source entity
+  `src_910da23b47e84b29`, content item
+  `83addb16-cc45-476e-a4ac-920e0c073ff5`, and evidence state
+  `available / represented`.
+
+publication evidence:
+
+- The fallback VText published successfully as:
+  `https://choir.news/pub/vtext/on-this-open-legal-cloud-proposal-source-backed-vtext-document-repair-the-existing-prose-only-pub51a33d8a5`.
+- Public-route Playwright probe against that URL found publication version
+  `pubver-5905bdf8-d02f-4d1f-84d5-bd24d8c9fe6d`.
+- The published reader had six real
+  `[data-vtext-source-ref][data-vtext-citation-transclusion]` refs. The extra
+  first "missing source" marker was a literal placeholder from the user prompt
+  example (`source:ENTITY_ID`), not a real citation.
+- Clicking the first real published source ref exposed `Open source`; clicking
+  it opened one `[data-content-viewer]` source window.
+- The published source window contained the title
+  `ABA Tech Survey Finds Growing Adoption of AI in Legal Practice, with
+  Efficiency Gains as Primary Driver | LawSites`, the original reference URL,
+  bounded claim text, source entity `src_910da23b47e84b29`, content item
+  `83addb16-cc45-476e-a4ac-920e0c073ff5`, and evidence
+  `available / represented`.
+
+belief-state update:
+
+- The deployed generic content-item bridge works for fresh researcher outputs
+  that import URLs as durable `ContentItem`s and mention `content_id:<id>`.
+- Published VText now has owner-adjacent deployed proof for content-item source
+  graph publication: source entities survive publication, render as embedded
+  transclusion points, and open source/content windows for published readers.
+- The proof is not yet accepted for the original owner derivative because the
+  command prompt created a sibling fallback VText instead of revising the
+  existing `legal_cloud_proposal_source_backed.vtext` window in place.
+
+remaining error field:
+
+- Still unproven on the exact owner derivative: in-place source repair or a
+  controlled successor revision of `legal_cloud_proposal_source_backed.vtext`
+  that keeps the full proposal, preserves Appendix A as a table, creates
+  nonzero canonical `source_entities`, renders inline source transclusions, and
+  publishes with source windows available to readers.
+- The UI still allows prompt text examples such as `[label](source:ENTITY_ID)`
+  to become visible "missing source" artifacts if the user includes them
+  literally. This is not a source-entity bridge failure, but it is product-text
+  friction for future source-repair prompts.
