@@ -3234,3 +3234,151 @@ remaining proof:
   reports the deployed SHA, republish or create a new owner-route version, and
   confirm the owner legal-cloud publication resolves URL source entities with
   fuller `reader_snapshot` text.
+
+## 2026-06-05 Deployment Evidence: Public URL Source Snapshot Enrichment
+
+status: deployed_partial_owner_proof
+
+deployment evidence:
+
+- Behavior commit:
+  `f4faab7ac2d63a4ad91335f9ab1613d9760ce0d0`
+  (`fix: publish public url source snapshots`).
+- GitHub Actions run `27039288982` succeeded, including Go tests, runtime
+  shards, integration smoke, vet/build, aggregate status, and Node B deploy.
+- FlakeHub run `27039288984` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=f4faab7ac2d63a4ad91335f9ab1613d9760ce0d0`,
+  `deployed_at=2026-06-05T20:49:03Z`, and status/upstream/vmctl `ok`.
+
+owner publication proof:
+
+- Authenticated Computer Use/Comet was available and active against staging.
+- The owner document window showed
+  `choir_private_legal_cloud_proposal.vtext`, v83, `Published v83`, 7
+  represented sources, and ordinary edit evidence still present:
+  `context=focused_user_edit_diff`, `operation=apply_edits`,
+  `prompt chars=12886`, `edits=2`, `delta chars=-216`,
+  `latency ms=19`.
+- The owner v83 publication was republished after the deployed fix and resolved
+  at
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubbac4bca3e`.
+- Public resolve API returned:
+  - `publication_id=pub-bac4bca3-ef1b-4558-940c-0286ba437026`;
+  - `publication_version_id=pubver-dde1becf-a26b-4b2f-a1d8-239f809f17df`;
+  - 7 `source_entities`;
+  - 7 `transclusions`;
+  - reader snapshot flags:
+    `[true, false, false, true, true, true, false]`.
+- The source entities with publication-carried reader snapshots were:
+  - `src_gdpr_article_32`, 7,993 chars;
+  - `src_hetzner_datacenters`, 12,179 chars;
+  - `src_qdrant_search`, 48 chars;
+  - `src_nixos_rollback`, 11,642 chars.
+- The three source entities without full reader snapshots were:
+  - `src_ovh_private_cloud`;
+  - `src_aba_formal_op_512`;
+  - `src_aba_rule_16`.
+- All seven bounded transclusion excerpts were still present, so citation
+  expansion did not regress when the full reader snapshot was unavailable.
+- Markdown export for the owner route returned
+  `choir-private-legal-cloud-proposal-vtext-pubbac4bca3e.md`, hash
+  `4e6f3f9888c7ed41fe2b386620445985290285001bd0d3c16dfb02ad600f81bc`,
+  length `38398`, no `missing source`, `| Term | Definition |` present, and
+  no `TermDefinition`.
+
+belief-state change:
+
+- The generic publication enrichment path works for some public URL sources and
+  preserves source/transclusion/export invariants.
+- The deployed owner proof is still partial. It does not yet prove that every
+  publication-safe URL source opens as a fuller cleaned reader artifact.
+- The missing cases are not a source-graph or citation-expansion failure. The
+  source metadata has `rights_scope=public_url_snapshot`, the bounded
+  transclusion excerpts survive, and the source windows open. The failure is in
+  source acquisition/cleanup/materialization for some URLs and media types,
+  including at least one PDF source.
+
+## 2026-06-05 Problem Checkpoint: Source Reader Materialization Is Still Partial
+
+status: documented_before_fix
+
+problem:
+
+- Publishing a legal proposal with source-backed VText must give authorized
+  readers inspectable source artifacts where policy permits. The current owner
+  publication only partially satisfies that contract: 4 of 7 public URL sources
+  gained `reader_snapshot` text, while 3 retained only the bounded citation
+  excerpt.
+- This is especially visible for the first ABA citation. Expanding the marker
+  gives a source note and opening the source window shows `Source reader
+  snapshot`, but the content is still only the bounded excerpt:
+  `Lawyers using generative artificial intelligence tools must consider duties
+  including competence, confidentiality, communication, supervision, candor,
+  and reasonable fees.`
+- The source-window fallback is therefore truthful but too weak for the owner
+  requirement. The source is not being inspected as a cleaned source artifact;
+  it is being re-shown as the same citation excerpt.
+
+evidence:
+
+- Owner route:
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pubbac4bca3e`.
+- Resolve API reader snapshot flags:
+  `[true, false, false, true, true, true, false]`.
+- Missing reader snapshots:
+  - `src_ovh_private_cloud`:
+    `https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings`;
+  - `src_aba_formal_op_512`:
+    `https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf`;
+  - `src_aba_rule_16`:
+    `https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/`.
+- Read-only code inspection shows the deployed publication repair delegates URL
+  materialization to sandbox `/api/content/import-url` and deliberately
+  degrades by omitting `reader_snapshot` when the import fails or yields no
+  text. That preserves publication availability, but it also hides the
+  difference between "bounded excerpt only" and "full reader artifact
+  available" unless the metadata is inspected.
+- `internal/runtime/content.go` URL import currently handles direct HTTP,
+  lightweight HTML readability, plaintext, YouTube transcript imports, and
+  SearXNG alternate discovery. It does not yet guarantee PDF text extraction,
+  robust reader-mode Markdown cleanup, or source-window quality for pages that
+  block/directly degrade simple fetches.
+
+root-cause hypothesis:
+
+- The structural owner is the source acquisition/reader artifact layer, not the
+  VText renderer. VText correctly stores source entities and transclusion
+  selectors; publication correctly carries those entities; the source window
+  can display `reader_snapshot` when it exists.
+- The remaining gap is that some URL targets cannot be converted into durable
+  cleaned Markdown/text content through the current direct import ladder. PDF
+  URLs and blocked/cookie-heavy/vendor pages need a reader-mode extraction
+  path with explicit failure state, not silent collapse to the bounded
+  citation excerpt.
+
+Pretext/journal implication:
+
+- The point of Pretext in this mission is wrapping and magazine/journal
+  composition, not another rounded source-card skin.
+- Collapsed citations should be compact source atoms inside prose. Expanded
+  source apparatus should be a minimal marginal/inline note whose occupied
+  region changes the line widths of nearby article text, so columns of text can
+  continue beside it.
+- Source-reader content should be content-first: cleaned Markdown/text rendered
+  like a reader-mode source, with metadata available as secondary diagnostics.
+  The UI should not stack nested cards, pills, and repair controls around the
+  source as the primary reading experience.
+
+next executable probe:
+
+- Make source import/materialization report per-source states such as
+  `reader_snapshot_ready`, `bounded_excerpt_only`, and `import_failed`, and
+  preserve those states in publication metadata without rendering them as
+  article prose.
+- Add PDF/text extraction and improved reader-mode cleanup to the existing
+  import ladder, then republish the owner v83 route and prove the ABA Formal
+  Opinion 512 source window opens a fuller cleaned source artifact.
+- Continue the Pretext axis at the article/source-flow boundary: use Pretext to
+  route article lines around expanded apparatus, while keeping the source
+  content itself minimal and reader-like.
