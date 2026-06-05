@@ -740,33 +740,89 @@ call a partial implementation complete.
 
 ## Run Checkpoint And Resumption State
 
-status: draft
+status: checkpoint_incomplete
 
-last checkpoint: mission expanded before execution to include fluid editing,
-document normalization, import/export roundtrip, and citation transclusion UX.
+last checkpoint: June 5, 2026. The first implementation checkpoint landed
+after a separate problem-documentation commit.
 
 current artifact state: problem evidence exists for slow VText revision,
 Markdown table corruption, durable version numbers, publication/export UX, and
-source-entity architecture; implementation for this expanded mission has not
-yet begun under this mission doc.
+source-entity architecture. This checkpoint repaired the most immediate
+diff-first editing and table roundtrip failures, but it does not complete the
+document roundtrip or source-entity mission.
 
-what shipped: nothing from this mission yet.
+what shipped:
 
-what was proven: prior investigation proved a table serializer failure mode and
-large-context revision path on yusef's long legal-cloud proposal; prior docs
-define source entities, transclusion display policy, and DOCX/PDF import/export
-research.
+- `fa58040d` documented the expanded mission and current problem field before
+  code changes.
+- `19f41da9` changed VText appagent revision prompts to use current head plus
+  user edit diff as the default context, records `vtext_context_mode` and
+  prompt size metadata, removes routine preload of old user revision diffs and
+  worker messages, and keeps worker/grounding context for worker wake or
+  integration turns.
+- `19f41da9` repaired rendered Markdown table serialization for the
+  `.table-scroll > table` DOM shape and added a focused frontend regression
+  proving focus/edit/autosave preserves Markdown pipe tables instead of
+  flattening cells.
+- `19f41da9` prevents opened `.md` files from continuing to write through to
+  the original Markdown path once a canonical VText doc exists, and records
+  import/migration metadata for Markdown file-open projections.
+- `19f41da9` makes citation-marker clicks expand their matching inline
+  transclusion without toggling an already-open citation closed.
+- `19f41da9` adds publish-surface download choices for Markdown, Text, HTML,
+  DOCX, and PDF, while leaving unsupported backend formats as explicit
+  failures rather than fake exports.
 
-unproven or partial claims: fluid diff-first revision, document normalization,
-DOCX/PDF roundtrip, and citation expansion/open-source behavior still require
-staging product proof.
+what was proven:
 
-highest-impact remaining uncertainty: whether current VText edit tools are
-sufficient for fast high-quality structured edits, or whether a stronger block
-selector operation must be added first.
+- Local runtime tests passed for diff-first prompt construction, `.md` file-open
+  import/migration metadata, and existing initial VText tool choice behavior.
+- Local frontend build passed.
+- Local focused Playwright E2E passed for source entity expansion and rendered
+  Markdown table autosave roundtrip.
+- GitHub CI and FlakeHub publish both passed for `19f41da9`.
+- Staging health proved proxy and sandbox deployed commit
+  `19f41da9d649395bb010480a45a7c278ff890fa4` at
+  `2026-06-05T05:00:52Z`.
+- Staging public VText reader opened
+  `/pub/vtext/staging-long-compare-merge-proof-1780614390072-pub32bd3c150` and
+  rendered the prior long published VText.
+- Staging public export API returned Markdown, Text, and HTML exports for that
+  public route.
 
-next executable probe: reproduce the table corruption and slow direct-edit
-revision on staging with computer use, document the problem checkpoint, then
-repair the serializer and diff-first revision context in separate code commits.
+unproven or partial claims:
+
+- Computer-use QA was requested as the default, but this Codex session did not
+  expose Mac computer-use control. The deployed browser proof used
+  `agent-browser` as the backup path.
+- The deployed staging proof did not authenticate into
+  `yusefnathanson@me.com` and did not run a live long-document revise on the
+  legal-cloud proposal after deployment.
+- DOCX and PDF buttons are visible in the publish download menu, but backend
+  DOCX/PDF export adapters are not implemented; staging `format=docx` returned
+  a server export failure.
+- `.md` file-open normalization now records import and migration manifests, but
+  bulk migration of existing versioned Markdown documents, including the
+  legal-cloud proposal class, is not complete.
+- DOCX/PDF import, original-file ContentItems, style-profile preservation,
+  revise/export roundtrip, and inspected document metadata are not complete.
+- Source entity behavior is still a frontend interaction proof for existing
+  inline source markup; citation repair, source entity creation, publication
+  projection, and open-owning-source proof over real legal-cloud citations
+  remain incomplete.
+- Latency improvement is architecturally enabled by smaller prompt context and
+  recorded prompt size, but a deployed before/after timing proof on a real long
+  VText revision is still required.
+
+highest-impact remaining uncertainty: whether the existing VText edit tools
+are sufficient for fast high-quality structured edits on the legal-cloud
+proposal, or whether a stronger block/section selector operation is needed to
+avoid whole-document edits while keeping semantic quality.
+
+next executable probe: use authenticated computer-use on staging to revise the
+legal-cloud proposal through the product path, capture prompt size/latency and
+delta evidence, verify the appendix table survives focus/edit/save/revise, then
+implement the missing DOCX/PDF import/export adapters and bulk Markdown lineage
+migration.
 
 suggested resume goal string: use the Goal String in this document.
