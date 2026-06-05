@@ -170,6 +170,23 @@ original artifact reference, record the content ID/hash/path in the migration
 manifest, and avoid creating a duplicate source snapshot unless raw text was
 the only supplied input.
 
+### Migrated Source Gaps Have No Canonical Repair Path
+
+The Markdown lineage importer correctly treats missing source evidence as a
+repairable `source_gaps` record instead of inventing citations. That is only
+half of the product path. After migration, researcher/source tooling or the
+owner may discover the source evidence for a previously unresolved marker such
+as `[2]`. Today the runtime has no browser-public VText API that accepts that
+new evidence, attaches revision-scoped `source_entities`, rewrites the marker
+into canonical `source:` citation syntax, removes the repaired marker from
+`source_gaps`, and creates a new VText revision preserving lineage.
+
+Without a repair endpoint, gap closure becomes a manual metadata edit, a
+custom re-import, or a whole-document rewrite. All three violate the mission
+shape: source repair should be a small structured document/source metadata
+operation over the canonical VText, not a fresh import or prompt-driven
+regeneration.
+
 ### Binary Original Preservation Is Still Projection-Only
 
 After checkpoint `0a5a31de`, the backend creates separate original
