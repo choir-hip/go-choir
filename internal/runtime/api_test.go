@@ -1645,6 +1645,136 @@ func TestBrowserSessionRejectsDirectWorldBinding(t *testing.T) {
 	}
 }
 
+func TestBrowserSessionNavigateKeepsTextWhenOptionalSnapshotDumpsFail(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "text" ]; then
+  printf 'Readable Source Page\n\nPrimary source text from fake Obscura\n'
+  exit 0
+fi
+printf 'fake optional %s dump failed\n' "$mode" >&2
+exit 2
+`), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	if navigateW.Code != http.StatusOK {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionReady {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionReady, navigated)
+	}
+	if !strings.Contains(navigated.TextSnapshot, "Primary source text from fake Obscura") {
+		t.Fatalf("text_snapshot missing primary text: %q", navigated.TextSnapshot)
+	}
+	if navigated.HTMLSnapshot != "" {
+		t.Fatalf("html_snapshot = %q, want empty optional artifact", navigated.HTMLSnapshot)
+	}
+	if len(navigated.Links) != 0 {
+		t.Fatalf("links = %+v, want none after optional dump failure", navigated.Links)
+	}
+	if len(navigated.SnapshotWarnings) != 2 {
+		t.Fatalf("snapshot_warnings = %+v, want links/html warnings", navigated.SnapshotWarnings)
+	}
+	joinedWarnings := strings.Join(navigated.SnapshotWarnings, "\n")
+	if !strings.Contains(joinedWarnings, "links") || !strings.Contains(joinedWarnings, "html") {
+		t.Fatalf("snapshot_warnings = %+v, want links/html dump warnings", navigated.SnapshotWarnings)
+	}
+
+	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
+	if err != nil {
+		t.Fatalf("list browser trace events: %v", err)
+	}
+	if len(events) != 2 || events[1].Kind != types.EventBrowserNavigationCompleted {
+		t.Fatalf("browser trace events = %+v, want completed navigation", events)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("decode browser completion payload: %v", err)
+	}
+	if int(payload["snapshot_warning_count"].(float64)) != 2 {
+		t.Fatalf("snapshot warning payload = %+v, want count 2", payload)
+	}
+}
+
+func TestBrowserSessionNavigateFailsWhenTextSnapshotFails(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "text" ]; then
+  printf 'fake text dump failed\n' >&2
+  exit 2
+fi
+printf 'optional artifact should not matter\n'
+`), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	if navigateW.Code != http.StatusBadGateway {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusBadGateway, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionError {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionError, navigated)
+	}
+	if !strings.Contains(navigated.Error, "text fetch failed") {
+		t.Fatalf("error = %q, want text fetch failure", navigated.Error)
+	}
+	if navigated.TextSnapshot != "" {
+		t.Fatalf("text_snapshot = %q, want empty on text failure", navigated.TextSnapshot)
+	}
+}
+
 func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
 	_, handler := testAPISetup(t)
 

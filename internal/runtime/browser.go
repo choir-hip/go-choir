@@ -69,6 +69,7 @@ type browserSnapshotResult struct {
 	HTML             string
 	Links            []types.BrowserLink
 	ScreenshotPNG    string
+	Warnings         []string
 	ExecutionScope   string
 	BackendSessionID string
 }
@@ -76,6 +77,8 @@ type browserSnapshotResult struct {
 const maxBrowserSnapshotLinks = 100
 const maxBrowserScreenshotBase64 = 2 * 1024 * 1024
 const maxBrowserControlText = 500
+const browserTextSnapshotTimeout = 30 * time.Second
+const browserOptionalSnapshotTimeout = 5 * time.Second
 
 func (h *APIHandler) HandleBrowserCapabilities(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -285,6 +288,7 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 	rec.HTMLSnapshot = snapshot.HTML
 	rec.Links = snapshot.Links
 	rec.ScreenshotPNG = snapshot.ScreenshotPNG
+	rec.SnapshotWarnings = snapshot.Warnings
 	rec.ExecutionScope = snapshot.ExecutionScope
 	rec.BackendSessionID = snapshot.BackendSessionID
 	rec.Error = ""
@@ -295,15 +299,17 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		return
 	}
 	h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationCompleted, "snapshot", map[string]any{
-		"url":                   targetURL,
-		"title":                 rec.Title,
-		"text_snapshot_bytes":   len(rec.TextSnapshot),
-		"html_snapshot_bytes":   len(rec.HTMLSnapshot),
-		"text_snapshot_excerpt": browserSnapshotExcerpt(rec.TextSnapshot),
-		"links_count":           len(rec.Links),
-		"screenshot_png_bytes":  browserScreenshotBytes(rec.ScreenshotPNG),
-		"execution_scope":       rec.ExecutionScope,
-		"backend_session_id":    rec.BackendSessionID,
+		"url":                    targetURL,
+		"title":                  rec.Title,
+		"text_snapshot_bytes":    len(rec.TextSnapshot),
+		"html_snapshot_bytes":    len(rec.HTMLSnapshot),
+		"text_snapshot_excerpt":  browserSnapshotExcerpt(rec.TextSnapshot),
+		"links_count":            len(rec.Links),
+		"screenshot_png_bytes":   browserScreenshotBytes(rec.ScreenshotPNG),
+		"snapshot_warning_count": len(rec.SnapshotWarnings),
+		"snapshot_warnings":      rec.SnapshotWarnings,
+		"execution_scope":        rec.ExecutionScope,
+		"backend_session_id":     rec.BackendSessionID,
 	})
 	writeAPIJSON(w, http.StatusOK, rec)
 }
@@ -608,27 +614,30 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 		return browserSnapshotResult{}, fmt.Errorf("backend browser unavailable: %w", err)
 	}
 	result := browserSnapshotResult{ExecutionScope: "host_process"}
-	text, err := runObscuraFetchDump(ctx, resolved, targetURL, "text")
+	text, err := runObscuraFetchDump(ctx, resolved, targetURL, "text", browserTextSnapshotTimeout)
 	if err != nil {
 		return browserSnapshotResult{}, err
 	}
-	linksRaw, err := runObscuraFetchDump(ctx, resolved, targetURL, "links")
-	if err != nil {
-		return browserSnapshotResult{}, err
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty")
 	}
-	html, err := runObscuraFetchDump(ctx, resolved, targetURL, "html")
+	linksRaw, err := runObscuraFetchDump(ctx, resolved, targetURL, "links", browserOptionalSnapshotTimeout)
 	if err != nil {
-		return browserSnapshotResult{}, err
+		result.Warnings = append(result.Warnings, err.Error())
+	}
+	html, err := runObscuraFetchDump(ctx, resolved, targetURL, "html", browserOptionalSnapshotTimeout)
+	if err != nil {
+		result.Warnings = append(result.Warnings, err.Error())
 	}
 	screenshotPNG := ""
 	backendSessionID := ""
 	if rt.cfg.ObscuraCDPScreenshots {
 		screenshotPNG, backendSessionID, err = rt.captureBrowserCDPScreenshot(ctx, browserSessionID, resolved, targetURL)
 		if err != nil {
-			return browserSnapshotResult{}, err
+			result.Warnings = append(result.Warnings, err.Error())
 		}
 	}
-	text = strings.TrimSpace(text)
 	if len(text) > maxStoredExtractedText {
 		text = text[:maxStoredExtractedText]
 	}
@@ -638,7 +647,9 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	}
 	result.Text = text
 	result.HTML = html
-	result.Links = parseBrowserLinks(linksRaw)
+	if strings.TrimSpace(linksRaw) != "" {
+		result.Links = parseBrowserLinks(linksRaw)
+	}
 	result.ScreenshotPNG = screenshotPNG
 	result.BackendSessionID = backendSessionID
 	return result, nil
@@ -1176,8 +1187,11 @@ func stopObscuraCDPProcess(cmd *exec.Cmd, cancel context.CancelFunc) {
 	}
 }
 
-func runObscuraFetchDump(ctx context.Context, resolved, targetURL, dump string) (string, error) {
-	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func runObscuraFetchDump(ctx context.Context, resolved, targetURL, dump string, timeout time.Duration) (string, error) {
+	if timeout <= 0 {
+		timeout = browserTextSnapshotTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, resolved, "fetch", targetURL, "--dump", dump, "--timeout", "15", "--quiet")
 	var stderr bytes.Buffer

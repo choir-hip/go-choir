@@ -44,6 +44,7 @@
   let backendHTML = '';
   let backendLinks = [];
   let backendScreenshotPNG = '';
+  let backendWarnings = [];
   let showingSnapshot = false;
   let controlSelector = '';
   let controlValue = '';
@@ -107,6 +108,7 @@
     backendHTML = '';
     backendLinks = [];
     backendScreenshotPNG = '';
+    backendWarnings = [];
   }
 
   function handleGo() {
@@ -259,6 +261,7 @@
       backendHTML = body.html_snapshot || '';
       backendLinks = Array.isArray(body.links) ? body.links : [];
       backendScreenshotPNG = body.screenshot_png_base64 || '';
+      backendWarnings = Array.isArray(body.snapshot_warnings) ? body.snapshot_warnings.filter(Boolean) : [];
       controlStatus = '';
       error = '';
       loading = false;
@@ -384,7 +387,7 @@
   // Monitor for iframe load timeout (sites that block may not fire error event)
   let loadTimeout = null;
 
-  $: if (loading && currentUrl) {
+  $: if (loading && currentUrl && !showingSnapshot) {
     if (loadTimeout) clearTimeout(loadTimeout);
     loadTimeout = setTimeout(() => {
       // If still loading after 15 seconds, show a message
@@ -497,8 +500,14 @@
       {#if browserCapabilities?.available}
         {#if backendSession?.state === 'closed'}
           Web Lens snapshot closed: {browserCapabilities.provider}
-        {:else if showingSnapshot}
+        {:else if showingSnapshot && loading}
+          Web Lens snapshot loading: {browserCapabilities.provider}
+        {:else if showingSnapshot && backendSnapshot && backendWarnings.length}
+          Web Lens snapshot partial: {browserCapabilities.provider}
+        {:else if showingSnapshot && backendSnapshot}
           Web Lens snapshot ready: {browserCapabilities.provider}
+        {:else if showingSnapshot}
+          Web Lens snapshot waiting: {browserCapabilities.provider}
         {:else}
           Page preview mode
         {/if}
@@ -619,7 +628,7 @@
           <div class="backend-snapshot-layout">
             <div class="backend-main">
               <div class="snapshot-actions">
-                <span>Semantic snapshot</span>
+                <span>{backendWarnings.length ? 'Semantic snapshot with warnings' : 'Semantic snapshot'}</span>
                 <button
                   class="import-btn"
                   data-browser-import-vtext
@@ -629,6 +638,13 @@
                   Open in VText
                 </button>
               </div>
+              {#if backendWarnings.length}
+                <div class="snapshot-warnings" data-browser-snapshot-warnings>
+                  {#each backendWarnings as warning}
+                    <span>{warning}</span>
+                  {/each}
+                </div>
+              {/if}
               {#if backendScreenshotPNG}
                 <figure
                   class="backend-screenshot"
@@ -975,6 +991,19 @@
     color: var(--choir-text-accent);
     font-size: 0.78rem;
     font-weight: 700;
+  }
+
+  .snapshot-warnings {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 10px;
+    border: 1px solid var(--choir-status-warning);
+    border-radius: 4px;
+    padding: 8px;
+    background: color-mix(in srgb, var(--choir-status-warning) 12%, transparent);
+    color: var(--choir-status-warning);
+    font-size: 0.74rem;
+    line-height: 1.35;
   }
 
   .import-btn {

@@ -39,6 +39,7 @@ type BrowserSessionRecord struct {
 	HTMLSnapshot     string        `json:"html_snapshot,omitempty"`
 	Links            []BrowserLink `json:"links,omitempty"`
 	ScreenshotPNG    string        `json:"screenshot_png_base64,omitempty"`
+	SnapshotWarnings []string      `json:"snapshot_warnings,omitempty"`
 	Error            string        `json:"error,omitempty"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
