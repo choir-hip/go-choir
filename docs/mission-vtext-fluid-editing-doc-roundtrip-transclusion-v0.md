@@ -1195,11 +1195,10 @@ unproven or partial claims:
   publication source-service transclusions, hidden raw source IDs, and
   open-owning-source behavior. Citation repair/source-entity creation over the
   actual legal-cloud proposal lineage remains incomplete.
-- Latency improvement now has deployed positive evidence on a live
-  legal-cloud-class long VText: the appagent revision used `apply_edits`,
-  carried `vtext_context_mode: current_head_plus_user_edit_diff`, and recorded
-  prompt size under 40k chars. A before/after timing proof on the owner's
-  existing long proposal is still required.
+- Latency improvement now has deployed positive evidence on the owner's actual
+  legal-cloud proposal. The repaired path uses `focused_user_edit_diff`,
+  `apply_edits`, and a 9,291-character VText prompt on a 37k-character
+  document. Broader semantic multi-region edits still need proof.
 
 highest-impact remaining uncertainty: whether the existing VText edit tools
 are sufficient for fast high-quality structured edits on the legal-cloud
@@ -1295,4 +1294,94 @@ appendix-table preservation through focus/edit/save/revise, unresolved citation
 gap repair through source tooling, and citation expansion/open-source behavior
 on the migrated owner document.
 
-suggested resume goal string: use the Goal String in this document.
+2026-06-05 handoff checkpoint for next Codex session:
+
+status: checkpoint_incomplete
+
+current artifact state:
+
+- `main` is at docs checkpoint `f05b4c92`; deployed staging sandbox remains the
+  behavior commit `6feda8f275967513c5785228228256e52e87d4f9`.
+- CI run `27014358456`, FlakeHub run `27014358497`, and Node B staging deploy
+  all passed for `6feda8f275967513c5785228228256e52e87d4f9`.
+- The only known dirty path in the local worktree at handoff is unrelated
+  untracked documentation:
+  `docs/overnight-vtext-super-console-zot-mega-report-2026-05-31.md`.
+
+code state reviewed:
+
+- `internal/runtime/vtext.go` now chooses `focused_user_edit_diff` for long
+  user-authored drafts with a previous revision, via
+  `vtextAgentRevisionContextMode`, `vtextUseFocusedUserEditContext`, and
+  `summarizeFocusedUserEditContext`.
+- `buildAgentRevisionRequest` no longer unconditionally includes the complete
+  current document for that long direct-edit path. It includes changed regions
+  and nearby current-head context, then tells VText to use `apply_edits` and
+  retrieve broader context only when needed.
+- `internal/runtime/vtext_prompt_unit_test.go` includes
+  `TestVTextPromptFocusesLongDirectUserEdits`, which verifies the focused
+  prompt includes the edited region but not distant untouched body text.
+- `internal/runtime/vtext_test.go` now expects exact `function:edit_vtext`
+  tool choice instead of broad `"required"` for the initial VText write.
+
+cognitive transforms applied for continuation:
+
+- State-machine inversion: treat the document delta as the control surface.
+  The next session should not introduce classifiers or workflow branches for
+  “table edit” versus “citation edit.” It should preserve structure by making
+  the current VText representation and edit tools capable of expressing the
+  needed deltas.
+- Via negativa: remove or bypass corruption paths rather than adding recovery
+  patches. The appendix problem is probably not solved by another glossary
+  special case; it needs the path that flattens Markdown/HTML/table structure
+  identified and eliminated or constrained.
+- Fidelity-as-invariant: tables, citations, transclusions, hidden metadata, and
+  source markers are document structure, not decoration. The verifier should
+  assert structure survives render/edit/save/revise/export, not merely that
+  text content remains present.
+- OODA/depth extraction: the load-bearing variable is feedback speed with
+  trustworthy evidence. The next probe should compare real owner revisions,
+  identify the first transition that flattened the table, and then make the
+  smallest structural repair that prevents the class of recurrence.
+
+new evidence gathered for the appendix-table regression:
+
+- Owner document:
+  `choir_private_legal_cloud_proposal.md`,
+  doc id `f93cea62-f833-4dae-b414-8e44783d8cbe`.
+- The appendix table has toggled between valid Markdown table structure and a
+  flattened `TermDefinition**...` artifact.
+- Revision scan from v44 onward:
+  v44-v59 had zero Markdown table rows and contained the flattened
+  `TermDefinition**` artifact.
+  v60 restored 50 Markdown table rows with `replace_all`.
+  v66-v67 were concept-merge user revisions with 50 table rows.
+  v69 regressed to zero table rows and flattened `TermDefinition**`.
+  v70 was a user-authored `codex_appendix_table_repair` with 50 table rows.
+  v72-v74 appagent `apply_edits` revisions preserved 50 table rows, but with
+  large 70k-75k prompts.
+  v75-v78 regressed to one Markdown table row while retaining
+  `TermDefinition**`; v78 is otherwise the focused-prompt proof revision.
+- This means the prompt-size repair is real but does not by itself repair table
+  fidelity. The table corruption likely arises from a render/save/roundtrip or
+  user-authored draft path, not only appagent prompt size.
+
+remaining error field:
+
+- Need root cause for the exact transition that flattened the appendix table
+  after v74.
+- Need structural fix so contenteditable/rendered-Markdown roundtrip cannot
+  collapse Markdown tables into concatenated inline text.
+- Need proof that focused long-edit prompts preserve table structure when the
+  table is not the edited region and when it is the edited region.
+- Need citation/transclusion repair on the actual owner document, not only
+  fixture proof.
+- Need computer-use QA if the tool becomes available in the next session. In
+  this session `tool_search` still returned no computer-use/desktop-control
+  tool after the user re-enabled it, so API/browser backup was used.
+
+suggested resume goal string:
+
+```text
+/goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
+```
