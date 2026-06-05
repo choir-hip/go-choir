@@ -3546,6 +3546,127 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	}
 }
 
+func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	entity := vtextSourceEntity{
+		EntityID: "src-aba-rule-16",
+		Kind:     "source_service_item",
+		Label:    "ABA Model Rule 1.6",
+		Target: vtextSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     "srcitem_aba_rule_16",
+		},
+		Selectors: []vtextSourceEntitySelector{{
+			SelectorKind: "text_quote",
+			TextQuote:    "A lawyer shall not reveal information relating to the representation of a client.",
+		}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "embedded_excerpt",
+			ExpandedMode:     "source_card",
+			OpenSurface:      "source",
+			DefaultCollapsed: false,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "migration",
+			RightsScope:         "source_service_projection",
+			UntrustedSourceText: true,
+		},
+	}
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath:     "proposals/legal-cloud-sourced.md",
+		Title:          "legal-cloud-sourced.md",
+		SourceEntities: []vtextSourceEntity{entity},
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v44",
+			Content: "# Proposal\n\nConfidentiality matters [1]. Unresolved claim [2].\n",
+			CitationResolutions: []vtextCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: entity.EntityID,
+			}},
+		}},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), resp.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 1 {
+		t.Fatalf("len(revisions) = %d, want 1", len(revs))
+	}
+	if !strings.Contains(revs[0].Content, "[[1]](source:src-aba-rule-16)") {
+		t.Fatalf("resolved citation was not rewritten as source link: %q", revs[0].Content)
+	}
+	if !strings.Contains(revs[0].Content, "Unresolved claim [2]") {
+		t.Fatalf("unresolved citation marker should remain visible: %q", revs[0].Content)
+	}
+	meta := decodeRevisionMetadata(revs[0].Metadata)
+	sourceEntities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(sourceEntities) != 1 || sourceEntities[0].EntityID != entity.EntityID {
+		t.Fatalf("source_entities = %#v", meta["source_entities"])
+	}
+	manifest := meta["migration_manifest"].(map[string]any)
+	resolutions, ok := manifest["citation_resolutions"].([]any)
+	if !ok || len(resolutions) != 1 {
+		t.Fatalf("citation_resolutions = %#v", manifest["citation_resolutions"])
+	}
+	gaps, ok := meta["source_gaps"].([]any)
+	if !ok || len(gaps) != 1 {
+		t.Fatalf("source_gaps = %#v", meta["source_gaps"])
+	}
+	gap := gaps[0].(map[string]any)
+	if gap["marker"] != "[2]" {
+		t.Fatalf("source gap = %#v", gap)
+	}
+
+	items, err := s.ListContentItems(context.Background(), "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListContentItems: %v", err)
+	}
+	for _, item := range items {
+		if item.FilePath == "proposals/legal-cloud-sourced.md#v44" {
+			if !strings.Contains(item.TextContent, "Confidentiality matters [1]") {
+				t.Fatalf("original snapshot should preserve raw markdown markers: %q", item.TextContent)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing original source snapshot item: %#v", items)
+}
+
+func TestVTextImportMarkdownLineageRejectsUnknownCitationEntity(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/bad-sourced.md",
+		Title:      "bad-sourced.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: "Claim [1].",
+			CitationResolutions: []vtextCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: "missing-source",
+			}},
+		}},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
 func TestVTextImportMarkdownLineageRejectsExistingAlias(t *testing.T) {
 	h, _, _ := vtextAPISetupWithRuntime(t)
 	body := vtextMarkdownLineageImportRequest{

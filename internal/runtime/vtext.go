@@ -87,17 +87,26 @@ type vtextOpenFileResponse struct {
 }
 
 type vtextMarkdownLineageImportRequest struct {
-	SourcePath string                        `json:"source_path"`
-	Title      string                        `json:"title"`
-	Versions   []vtextMarkdownLineageVersion `json:"versions"`
+	SourcePath          string                          `json:"source_path"`
+	Title               string                          `json:"title"`
+	SourceEntities      []vtextSourceEntity             `json:"source_entities,omitempty"`
+	CitationResolutions []vtextCitationMarkerResolution `json:"citation_resolutions,omitempty"`
+	Versions            []vtextMarkdownLineageVersion   `json:"versions"`
 }
 
 type vtextMarkdownLineageVersion struct {
-	Label            string          `json:"label,omitempty"`
-	SourceRevisionID string          `json:"source_revision_id,omitempty"`
-	Content          string          `json:"content"`
-	CreatedAt        string          `json:"created_at,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	Label               string                          `json:"label,omitempty"`
+	SourceRevisionID    string                          `json:"source_revision_id,omitempty"`
+	Content             string                          `json:"content"`
+	CreatedAt           string                          `json:"created_at,omitempty"`
+	Metadata            json.RawMessage                 `json:"metadata,omitempty"`
+	SourceEntities      []vtextSourceEntity             `json:"source_entities,omitempty"`
+	CitationResolutions []vtextCitationMarkerResolution `json:"citation_resolutions,omitempty"`
+}
+
+type vtextCitationMarkerResolution struct {
+	Marker   string `json:"marker"`
+	EntityID string `json:"entity_id"`
 }
 
 type vtextMarkdownLineageImportResponse struct {
@@ -501,7 +510,7 @@ func buildFileOpenVTextMetadata(projection vtextFileImportProjection, original *
 	return data
 }
 
-func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdownLineageVersion, contentID, contentHashValue string, index, count int, lineage []map[string]any) (json.RawMessage, error) {
+func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdownLineageVersion, contentID, contentHashValue string, index, count int, lineage []map[string]any, sourceEntities []vtextSourceEntity, resolutions []vtextCitationMarkerResolution) (json.RawMessage, error) {
 	sourceMeta := map[string]any{}
 	if len(bytes.TrimSpace(version.Metadata)) > 0 {
 		if err := json.Unmarshal(version.Metadata, &sourceMeta); err != nil {
@@ -528,12 +537,16 @@ func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdo
 			"source_gap_policy":        "repairable_gap_no_invented_citations",
 			"source_gap_detector":      "markdown_lineage_numeric_citation_scan_v1",
 			"citation_resolution_rule": "do_not_invent_sources",
+			"citation_resolutions":     markdownLineageResolutionManifest(resolutions),
 		},
 	}
 	if len(sourceMeta) > 0 {
 		metadata["source_metadata"] = sourceMeta
 	}
-	if gaps := detectMarkdownLineageSourceGaps(version.Content); len(gaps) > 0 {
+	if len(sourceEntities) > 0 {
+		metadata["source_entities"] = sourceEntities
+	}
+	if gaps := detectMarkdownLineageSourceGaps(version.Content, resolutions); len(gaps) > 0 {
 		metadata["source_gaps"] = gaps
 	}
 	raw, _ := json.Marshal(metadata)
@@ -542,16 +555,17 @@ func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdo
 
 var vtextMarkdownLineageCitationRefRE = regexp.MustCompile(`\[(?:\d{1,3}|\^[A-Za-z0-9_-]{1,40})\]`)
 
-func detectMarkdownLineageSourceGaps(content string) []map[string]any {
+func detectMarkdownLineageSourceGaps(content string, resolutions []vtextCitationMarkerResolution) []map[string]any {
 	matches := vtextMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
 	if len(matches) == 0 {
 		return nil
 	}
+	resolved := markdownLineageResolutionMap(resolutions)
 	gaps := make([]map[string]any, 0, len(matches))
 	seen := map[string]bool{}
 	for _, match := range matches {
 		marker := content[match[0]:match[1]]
-		if seen[marker] {
+		if seen[marker] || resolved[marker] != "" {
 			continue
 		}
 		seen[marker] = true
@@ -562,6 +576,105 @@ func detectMarkdownLineageSourceGaps(content string) []map[string]any {
 		})
 	}
 	return gaps
+}
+
+func markdownLineageProjectionContent(content string, resolutions []vtextCitationMarkerResolution) string {
+	resolved := markdownLineageResolutionMap(resolutions)
+	if len(resolved) == 0 {
+		return content
+	}
+	return vtextMarkdownLineageCitationRefRE.ReplaceAllStringFunc(content, func(marker string) string {
+		entityID := resolved[marker]
+		if entityID == "" {
+			return marker
+		}
+		return fmt.Sprintf("[%s](source:%s)", marker, entityID)
+	})
+}
+
+func markdownLineageResolutionMap(resolutions []vtextCitationMarkerResolution) map[string]string {
+	out := map[string]string{}
+	for _, resolution := range resolutions {
+		marker := strings.TrimSpace(resolution.Marker)
+		entityID := strings.TrimSpace(resolution.EntityID)
+		if marker == "" || entityID == "" {
+			continue
+		}
+		out[marker] = entityID
+	}
+	return out
+}
+
+func markdownLineageResolutionManifest(resolutions []vtextCitationMarkerResolution) []map[string]string {
+	if len(resolutions) == 0 {
+		return nil
+	}
+	out := make([]map[string]string, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		marker := strings.TrimSpace(resolution.Marker)
+		entityID := strings.TrimSpace(resolution.EntityID)
+		if marker == "" || entityID == "" {
+			continue
+		}
+		out = append(out, map[string]string{
+			"marker":    marker,
+			"entity_id": entityID,
+		})
+	}
+	return out
+}
+
+func markdownLineageSourceEntities(global, local []vtextSourceEntity) []vtextSourceEntity {
+	entities, _ := mergeVTextSourceEntities(append([]vtextSourceEntity{}, global...), local)
+	return entities
+}
+
+func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResolution) []vtextCitationMarkerResolution {
+	seen := map[string]int{}
+	out := make([]vtextCitationMarkerResolution, 0, len(global)+len(local))
+	add := func(resolution vtextCitationMarkerResolution) {
+		resolution.Marker = strings.TrimSpace(resolution.Marker)
+		resolution.EntityID = strings.TrimSpace(resolution.EntityID)
+		if resolution.Marker == "" || resolution.EntityID == "" {
+			return
+		}
+		if idx, ok := seen[resolution.Marker]; ok {
+			out[idx] = resolution
+			return
+		}
+		seen[resolution.Marker] = len(out)
+		out = append(out, resolution)
+	}
+	for _, resolution := range global {
+		add(resolution)
+	}
+	for _, resolution := range local {
+		add(resolution)
+	}
+	return out
+}
+
+func validateMarkdownLineageCitationResolutions(entities []vtextSourceEntity, resolutions []vtextCitationMarkerResolution) error {
+	entityIDs := map[string]bool{}
+	for _, entity := range entities {
+		if strings.TrimSpace(entity.EntityID) != "" {
+			entityIDs[strings.TrimSpace(entity.EntityID)] = true
+		}
+	}
+	for _, resolution := range resolutions {
+		marker := strings.TrimSpace(resolution.Marker)
+		entityID := strings.TrimSpace(resolution.EntityID)
+		if marker == "" || entityID == "" {
+			return fmt.Errorf("citation resolutions require marker and entity_id")
+		}
+		if !vtextMarkdownLineageCitationRefRE.MatchString(marker) || vtextMarkdownLineageCitationRefRE.FindString(marker) != marker {
+			return fmt.Errorf("citation resolution marker %q is not a supported markdown citation marker", marker)
+		}
+		if !entityIDs[entityID] {
+			return fmt.Errorf("citation resolution marker %s references unknown source entity %s", marker, entityID)
+		}
+	}
+	return nil
 }
 
 func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version vtextMarkdownLineageVersion, now time.Time) types.ContentItem {
@@ -1180,6 +1293,12 @@ func (h *APIHandler) HandleVTextImportMarkdownLineage(w http.ResponseWriter, r *
 				return
 			}
 		}
+		sourceEntities := markdownLineageSourceEntities(req.SourceEntities, version.SourceEntities)
+		resolutions := markdownLineageCitationResolutions(req.CitationResolutions, version.CitationResolutions)
+		if err := validateMarkdownLineageCitationResolutions(sourceEntities, resolutions); err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d]: %v", i, err)})
+			return
+		}
 	}
 
 	now := time.Now().UTC()
@@ -1211,18 +1330,21 @@ func (h *APIHandler) HandleVTextImportMarkdownLineage(w http.ResponseWriter, r *
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to preserve markdown source snapshot"})
 			return
 		}
-		metadata, err := buildMarkdownLineageRevisionMetadata(sourcePath, version, item.ContentID, item.ContentHash, i, len(req.Versions), lineage)
+		sourceEntities := markdownLineageSourceEntities(req.SourceEntities, version.SourceEntities)
+		resolutions := markdownLineageCitationResolutions(req.CitationResolutions, version.CitationResolutions)
+		metadata, err := buildMarkdownLineageRevisionMetadata(sourcePath, version, item.ContentID, item.ContentHash, i, len(req.Versions), lineage, sourceEntities, resolutions)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d].metadata must be a JSON object", i)})
 			return
 		}
+		projectionContent := markdownLineageProjectionContent(version.Content, resolutions)
 		rev := types.Revision{
 			RevisionID:       uuid.New().String(),
 			DocID:            doc.DocID,
 			OwnerID:          ownerID,
 			AuthorKind:       types.AuthorUser,
 			AuthorLabel:      ownerID,
-			Content:          version.Content,
+			Content:          projectionContent,
 			Metadata:         metadata,
 			ParentRevisionID: parentID,
 			CreatedAt:        versionNow,
