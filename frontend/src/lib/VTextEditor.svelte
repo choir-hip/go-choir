@@ -1541,7 +1541,12 @@
         revisionId: revision.revision_id,
       });
       const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
-      saveStatus = copied ? `Published ${versionLabel}; link copied` : `Published ${versionLabel}; copy link below`;
+      const opened = openPublishedURL(publishResult);
+      if (opened) {
+        saveStatus = copied ? `Published ${versionLabel}; opened public link and copied URL` : `Published ${versionLabel}; opened public link`;
+      } else {
+        saveStatus = copied ? `Published ${versionLabel}; link copied` : `Published ${versionLabel}; copy link below`;
+      }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -2223,10 +2228,6 @@
             <button type="button" class="secondary-action" data-vtext-download-md on:click={() => handleDownloadPublished('md')}>
               Download
             </button>
-          </div>
-          <div class="publication-facts">
-            <span>{shortHash(publishResult.content_hash || '')}</span>
-            <span>{shortHash(publishResult.publication_version_id || '')}</span>
           </div>
         </section>
       {/if}
@@ -3013,12 +3014,15 @@
   }
 
   .public-link {
-    display: block;
+    display: inline-block;
+    max-width: min(34rem, 100%);
     color: var(--choir-text-accent);
-    font-size: clamp(0.95rem, 2vw, 1.25rem);
-    font-weight: 800;
-    line-height: 1.25;
+    font-size: 0.84rem;
+    font-weight: 720;
+    line-height: 1.35;
+    overflow: hidden;
     overflow-wrap: anywhere;
+    text-overflow: ellipsis;
     text-decoration: none;
   }
 
