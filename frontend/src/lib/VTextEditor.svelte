@@ -770,6 +770,30 @@
     return ordered;
   }
 
+  function revisionVersionNumber(revision, fallbackIndex = -1) {
+    const value = Number(revision?.version_number);
+    if (Number.isFinite(value) && value >= 0) return value;
+    return Math.max(0, Number(fallbackIndex) || 0);
+  }
+
+  function versionLabelForRevision(revision, fallbackIndex = -1) {
+    return `v${revisionVersionNumber(revision, fallbackIndex)}`;
+  }
+
+  function documentCurrentVersionNumber(doc = currentDoc) {
+    const fromDoc = Number(doc?.current_version_number);
+    if (Number.isFinite(fromDoc) && fromDoc >= 0) return fromDoc;
+    const maxKnown = revisions.reduce((max, rev, index) => Math.max(max, revisionVersionNumber(rev, index)), -1);
+    if (maxKnown >= 0) return maxKnown;
+    const revisionCount = Number(doc?.revision_count);
+    if (Number.isFinite(revisionCount) && revisionCount > 0) return revisionCount - 1;
+    return 0;
+  }
+
+  function nextVersionNumber() {
+    return documentCurrentVersionNumber() + 1;
+  }
+
   function buildRevisionMetadata() {
     const metadata = {
       source_path: appContext.sourcePath || '',
@@ -855,7 +879,7 @@
     const target = targetRevisionForCompare();
     if (!target) return 'latest';
     const index = revisions.findIndex((rev) => rev.revision_id === target.revision_id);
-    return index >= 0 ? `v${index}` : 'latest';
+    return index >= 0 ? versionLabelForRevision(target, index) : 'latest';
   }
 
   function suggestionSelected(id) {
@@ -1773,7 +1797,7 @@
     error = '';
     saveStatus = '';
     await loadRevisionAt(activeRevisionIndex - 1);
-    saveStatus = `Viewing v${activeRevisionIndex}`;
+    saveStatus = `Viewing ${versionLabel}`;
   }
 
   async function handleNextVersion() {
@@ -1784,7 +1808,7 @@
     if (activeRevisionIndex === revisions.length - 1) {
       saveStatus = 'Viewing latest version';
     } else {
-      saveStatus = `Viewing v${activeRevisionIndex}`;
+      saveStatus = `Viewing ${versionLabel}`;
     }
   }
 
@@ -1906,8 +1930,8 @@
 
   $: isViewingHistorical = revisions.length > 0 && activeRevisionIndex !== revisions.length - 1;
   $: isDirty = !!currentDoc && !isViewingHistorical && editorValue !== (currentRevision?.content || '');
-  $: versionLabel = activeRevisionIndex >= 0 ? `v${activeRevisionIndex}` : 'v0';
-  $: nextVersionLabel = `v${Math.max(0, revisions.length)}`;
+  $: versionLabel = currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
+  $: nextVersionLabel = `v${nextVersionNumber()}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: navDisabled = loading || submitting;
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
@@ -1965,7 +1989,7 @@
             <button class="recent-card" data-vtext-recent-document on:click={() => handleOpenRecent(doc)}>
               <span class="recent-title">{doc.title || 'Untitled VText'}</span>
               <span class="recent-meta">
-                v{Math.max(0, (doc.revision_count || 1) - 1)}
+                v{documentCurrentVersionNumber(doc)}
                 {#if doc.last_editor}
                   · {doc.last_editor}
                 {/if}
@@ -1983,8 +2007,8 @@
         <button
           class="nav-btn"
           data-vtext-prev
-          aria-label={activeRevisionIndex > 0 ? `Older version (v${activeRevisionIndex - 1})` : 'At oldest version'}
-          title={activeRevisionIndex > 0 ? `Go to v${activeRevisionIndex - 1}` : 'At oldest version'}
+          aria-label={activeRevisionIndex > 0 ? `Older version (${versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1)})` : 'At oldest version'}
+          title={activeRevisionIndex > 0 ? `Go to ${versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1)}` : 'At oldest version'}
           on:click={handlePrevVersion}
           disabled={navDisabled || activeRevisionIndex <= 0}
         >
@@ -1993,8 +2017,8 @@
         <button
           class="nav-btn"
           data-vtext-next
-          aria-label={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Newer version (v${activeRevisionIndex + 1})` : 'At latest version'}
-          title={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Go to v${activeRevisionIndex + 1}` : 'At latest version'}
+          aria-label={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Newer version (${versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1)})` : 'At latest version'}
+          title={activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? `Go to ${versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1)}` : 'At latest version'}
           on:click={handleNextVersion}
           disabled={navDisabled || activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
         >

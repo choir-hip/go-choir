@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -241,6 +242,9 @@ func TestVTextCreateRevision(t *testing.T) {
 	if got.AuthorLabel != "alice" {
 		t.Errorf("AuthorLabel = %q, want %q", got.AuthorLabel, "alice")
 	}
+	if got.VersionNumber != 0 {
+		t.Errorf("VersionNumber = %d, want 0", got.VersionNumber)
+	}
 }
 
 func TestVTextCreateRevisionRejectsStaleHead(t *testing.T) {
@@ -448,10 +452,132 @@ func TestVTextListRevisionsByDoc(t *testing.T) {
 	if revs[0].RevisionID != "rev-3" {
 		t.Errorf("first rev = %q, want %q", revs[0].RevisionID, "rev-3")
 	}
+	for i, rev := range revs {
+		wantVersion := 2 - i
+		if rev.VersionNumber != wantVersion {
+			t.Errorf("revs[%d].VersionNumber = %d, want %d", i, rev.VersionNumber, wantVersion)
+		}
+	}
 
 	// Check attribution: user, appagent, user.
 	if revs[2].AuthorKind != types.AuthorUser || revs[1].AuthorKind != types.AuthorAppAgent || revs[0].AuthorKind != types.AuthorUser {
 		t.Errorf("author kinds = %v, %v, %v; want user, appagent, user", revs[2].AuthorKind, revs[1].AuthorKind, revs[0].AuthorKind)
+	}
+}
+
+func TestVTextRevisionVersionNumbersAdvancePastFifty(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{
+		DocID:   "doc-version-many",
+		OwnerID: "user-1",
+		Title:   "Many versions",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	parentID := ""
+	for i := 0; i < 55; i++ {
+		revID := fmt.Sprintf("rev-many-%02d", i)
+		rev := types.Revision{
+			RevisionID:       revID,
+			DocID:            doc.DocID,
+			OwnerID:          doc.OwnerID,
+			AuthorKind:       types.AuthorUser,
+			AuthorLabel:      "alice",
+			Content:          fmt.Sprintf("Content v%d", i),
+			ParentRevisionID: parentID,
+			CreatedAt:        time.Now().UTC().Add(time.Duration(i) * time.Second),
+		}
+		if err := s.CreateRevision(ctx, rev); err != nil {
+			t.Fatalf("CreateRevision %d: %v", i, err)
+		}
+		parentID = revID
+	}
+
+	count, err := s.CountRevisionsByDoc(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("CountRevisionsByDoc: %v", err)
+	}
+	if count != 55 {
+		t.Fatalf("CountRevisionsByDoc = %d, want 55", count)
+	}
+	currentVersion, err := s.CurrentVersionNumberByDoc(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("CurrentVersionNumberByDoc: %v", err)
+	}
+	if currentVersion != 54 {
+		t.Fatalf("CurrentVersionNumberByDoc = %d, want 54", currentVersion)
+	}
+
+	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10000)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 55 {
+		t.Fatalf("len(revs) = %d, want 55", len(revs))
+	}
+	if revs[0].VersionNumber != 54 || revs[0].RevisionID != "rev-many-54" {
+		t.Fatalf("latest rev = %s v%d, want rev-many-54 v54", revs[0].RevisionID, revs[0].VersionNumber)
+	}
+	if revs[54].VersionNumber != 0 || revs[54].RevisionID != "rev-many-00" {
+		t.Fatalf("oldest rev = %s v%d, want rev-many-00 v0", revs[54].RevisionID, revs[54].VersionNumber)
+	}
+}
+
+func TestVTextBackfillsLegacyRevisionVersionNumbers(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{
+		DocID:   "doc-legacy",
+		OwnerID: "user-1",
+		Title:   "Legacy versions",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	parentID := ""
+	for i := 0; i < 4; i++ {
+		revID := fmt.Sprintf("rev-legacy-%d", i)
+		rev := types.Revision{
+			RevisionID:       revID,
+			DocID:            doc.DocID,
+			OwnerID:          doc.OwnerID,
+			AuthorKind:       types.AuthorUser,
+			AuthorLabel:      "alice",
+			Content:          fmt.Sprintf("Content v%d", i),
+			ParentRevisionID: parentID,
+			CreatedAt:        time.Date(2026, 6, 5, 12, i, 0, 0, time.UTC),
+		}
+		if err := s.CreateRevision(ctx, rev); err != nil {
+			t.Fatalf("CreateRevision %d: %v", i, err)
+		}
+		parentID = revID
+	}
+
+	if _, err := s.vtextHandle().ExecContext(ctx, `UPDATE vtext_revisions SET version_number = 0 WHERE doc_id = ? AND owner_id = ?`, doc.DocID, doc.OwnerID); err != nil {
+		t.Fatalf("zero legacy version numbers: %v", err)
+	}
+	if err := s.EnsureVTextSchema(); err != nil {
+		t.Fatalf("EnsureVTextSchema: %v", err)
+	}
+
+	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 4 {
+		t.Fatalf("len(revs) = %d, want 4", len(revs))
+	}
+	for i, rev := range revs {
+		wantVersion := 3 - i
+		if rev.VersionNumber != wantVersion {
+			t.Fatalf("revs[%d].VersionNumber = %d, want %d", i, rev.VersionNumber, wantVersion)
+		}
 	}
 }
 

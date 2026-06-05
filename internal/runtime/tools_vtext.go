@@ -391,6 +391,10 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
 		return types.Revision{}, fmt.Errorf("create vtext revision: %w", err)
 	}
+	storedRev, err := rt.store.GetRevision(ctx, rev.RevisionID, rec.OwnerID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("load created vtext revision: %w", err)
+	}
 	if err := rt.store.CompleteAgentMutation(ctx, rec.RunID, rev.RevisionID); err != nil {
 		if err != store.ErrMutationAlreadyCompleted {
 			return types.Revision{}, fmt.Errorf("complete vtext mutation: %w", err)
@@ -407,15 +411,15 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 		}
 	}
 
-	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, rev)
+	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, storedRev)
 	completedPayload, _ := json.Marshal(map[string]string{
 		"doc_id":      docID,
-		"revision_id": rev.RevisionID,
+		"revision_id": storedRev.RevisionID,
 		"loop_id":     rec.RunID,
 	})
 	rt.emitVTextAgentEvent(ctx, rec, types.EventVTextAgentRevisionCompleted,
 		events.CauseToolExecution, completedPayload)
-	return rev, nil
+	return storedRev, nil
 }
 
 func materializeVTextToolEdit(edit editVTextArgs, current types.Revision) (materializedVTextEdit, error) {

@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS vtext_revisions (
 	owner_id            VARCHAR(255) NOT NULL,
 	author_kind         VARCHAR(64) NOT NULL,
 	author_label        VARCHAR(255) NOT NULL DEFAULT '',
+	version_number      BIGINT NOT NULL DEFAULT 0,
 	content             LONGTEXT NOT NULL,
 	citations_json      LONGTEXT NOT NULL,
 	metadata_json       LONGTEXT NOT NULL,
@@ -270,6 +271,15 @@ func (s *Store) bootstrapVText() error {
 	if err := s.ensureVTextColumn("vtext_agent_mutations", "scheduled_message_seq", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureVTextColumn("vtext_revisions", "version_number", "BIGINT NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if _, err := s.vtextHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_vtext_revs_doc_version ON vtext_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
+		return fmt.Errorf("create vtext revision version index: %w", err)
+	}
+	if err := s.backfillVTextRevisionVersionNumbers(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -291,6 +301,27 @@ WHERE table_schema = DATABASE()
 	}
 	if _, err := s.vtextHandle().Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl)); err != nil {
 		return fmt.Errorf("alter %s add %s: %w", table, name, err)
+	}
+	return nil
+}
+
+func (s *Store) backfillVTextRevisionVersionNumbers() error {
+	_, err := s.vtextHandle().Exec(`
+UPDATE vtext_revisions AS rev
+JOIN (
+	SELECT
+		revision_id,
+		ROW_NUMBER() OVER (
+			PARTITION BY doc_id, owner_id
+			ORDER BY created_at ASC, revision_id ASC
+		) - 1 AS computed_version_number
+	FROM vtext_revisions
+) AS numbered ON numbered.revision_id = rev.revision_id
+SET rev.version_number = numbered.computed_version_number
+WHERE rev.version_number = 0
+  AND numbered.computed_version_number <> 0`)
+	if err != nil {
+		return fmt.Errorf("backfill vtext revision version numbers: %w", err)
 	}
 	return nil
 }
@@ -551,14 +582,32 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 		return fmt.Errorf("%w: document %s current head %s does not match parent %s", ErrStaleDocumentHead, rev.DocID, currentHead, expectedHead)
 	}
 
+	var versionNumber int
+	if strings.TrimSpace(currentHead) == "" {
+		versionNumber = 0
+	} else {
+		row = tx.QueryRowContext(ctx,
+			`SELECT COALESCE(MAX(version_number), -1) + 1
+			   FROM vtext_revisions
+			  WHERE doc_id = ? AND owner_id = ?`,
+			rev.DocID,
+			rev.OwnerID,
+		)
+		if err := row.Scan(&versionNumber); err != nil {
+			return fmt.Errorf("query next vtext revision version number: %w", err)
+		}
+	}
+	rev.VersionNumber = versionNumber
+
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO vtext_revisions (revision_id, doc_id, owner_id, author_kind, author_label, content, citations_json, metadata_json, parent_revision_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO vtext_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rev.RevisionID,
 		rev.DocID,
 		rev.OwnerID,
 		string(rev.AuthorKind),
 		rev.AuthorLabel,
+		rev.VersionNumber,
 		rev.Content,
 		citations,
 		metadata,
@@ -602,7 +651,7 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {
 	row := s.vtextHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
 		   FROM vtext_revisions
 		  WHERE revision_id = ? AND owner_id = ?`,
 		revisionID, ownerID,
@@ -615,7 +664,7 @@ func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (ty
 // is already known to belong to the same owner.
 func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (types.Revision, error) {
 	row := s.vtextHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
 		   FROM vtext_revisions
 		  WHERE revision_id = ?`,
 		revisionID,
@@ -624,17 +673,17 @@ func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (typ
 }
 
 // ListRevisionsByDoc returns revisions for the given document, scoped to
-// the given owner, ordered by created_at descending (newest first),
+// the given owner, ordered by durable version number descending (newest first),
 // limited to the given count.
 func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, limit int) ([]types.Revision, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	rows, err := s.vtextHandle().QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
 		   FROM vtext_revisions
 		  WHERE doc_id = ? AND owner_id = ?
-		  ORDER BY created_at DESC
+		  ORDER BY version_number DESC, created_at DESC
 		  LIMIT ?`,
 		docID, ownerID, limit,
 	)
@@ -655,6 +704,34 @@ func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, l
 		return nil, fmt.Errorf("iterate vtext revisions: %w", err)
 	}
 	return revs, nil
+}
+
+func (s *Store) CountRevisionsByDoc(ctx context.Context, docID, ownerID string) (int, error) {
+	var count int
+	if err := s.vtextHandle().QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		   FROM vtext_revisions
+		  WHERE doc_id = ? AND owner_id = ?`,
+		docID,
+		ownerID,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count vtext revisions: %w", err)
+	}
+	return count, nil
+}
+
+func (s *Store) CurrentVersionNumberByDoc(ctx context.Context, docID, ownerID string) (int, error) {
+	var versionNumber int
+	if err := s.vtextHandle().QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(version_number), -1)
+		   FROM vtext_revisions
+		  WHERE doc_id = ? AND owner_id = ?`,
+		docID,
+		ownerID,
+	).Scan(&versionNumber); err != nil {
+		return -1, fmt.Errorf("query current vtext revision version number: %w", err)
+	}
+	return versionNumber, nil
 }
 
 // ----- History -----
@@ -1173,6 +1250,7 @@ func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 		&rev.OwnerID,
 		&authorKind,
 		&rev.AuthorLabel,
+		&rev.VersionNumber,
 		&rev.Content,
 		&citationsJSON,
 		&metadataJSON,

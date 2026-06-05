@@ -166,8 +166,13 @@ export async function createRevision(docId, { content, authorKind, authorLabel, 
   return res.json();
 }
 
-export async function listRevisions(docId) {
-  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/revisions`), {
+export async function listRevisions(docId, { limit = 10000 } = {}) {
+  const params = new URLSearchParams();
+  if (limit) {
+    params.set('limit', String(limit));
+  }
+  const query = params.toString();
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/revisions${query ? `?${query}` : ''}`), {
     method: 'GET',
   });
 

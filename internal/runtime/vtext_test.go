@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -558,6 +559,84 @@ func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
 	}
 	if revResp.AuthorLabel != "user-1" {
 		t.Errorf("AuthorLabel = %q, want %q", revResp.AuthorLabel, "user-1")
+	}
+	if revResp.VersionNumber != 0 {
+		t.Errorf("VersionNumber = %d, want 0", revResp.VersionNumber)
+	}
+}
+
+func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T) {
+	h, _ := vtextAPISetup(t)
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+		map[string]string{"title": "Many Versions"})
+	w := httptest.NewRecorder()
+	h.HandleVTextCreateDocument(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create document status = %d, body: %s", w.Code, w.Body.String())
+	}
+	var docResp vtextCreateDocResponse
+	if err := json.NewDecoder(w.Body).Decode(&docResp); err != nil {
+		t.Fatalf("decode document response: %v", err)
+	}
+
+	parentID := ""
+	var latest vtextRevisionResponse
+	for i := 0; i < 55; i++ {
+		revReq := vtextCreateRevisionRequest{
+			Content:          fmt.Sprintf("Document body v%d", i),
+			ParentRevisionID: parentID,
+		}
+		req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+		w = httptest.NewRecorder()
+		h.HandleVTextRevisions(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create revision %d status = %d, body: %s", i, w.Code, w.Body.String())
+		}
+		if err := json.NewDecoder(w.Body).Decode(&latest); err != nil {
+			t.Fatalf("decode revision %d response: %v", i, err)
+		}
+		if latest.VersionNumber != i {
+			t.Fatalf("revision %d VersionNumber = %d, want %d", i, latest.VersionNumber, i)
+		}
+		parentID = latest.RevisionID
+	}
+
+	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docResp.DocID+"/revisions?limit=10000", nil)
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list revisions status = %d, body: %s", w.Code, w.Body.String())
+	}
+	var listResp vtextListRevisionsResponse
+	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listResp.Revisions) != 55 {
+		t.Fatalf("len(revisions) = %d, want 55", len(listResp.Revisions))
+	}
+	if listResp.Revisions[0].VersionNumber != 54 {
+		t.Fatalf("latest VersionNumber = %d, want 54", listResp.Revisions[0].VersionNumber)
+	}
+	if listResp.Revisions[54].VersionNumber != 0 {
+		t.Fatalf("oldest VersionNumber = %d, want 0", listResp.Revisions[54].VersionNumber)
+	}
+
+	req = vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docResp.DocID, nil)
+	w = httptest.NewRecorder()
+	h.HandleVTextDocument(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get document status = %d, body: %s", w.Code, w.Body.String())
+	}
+	var getDocResp vtextDocumentResponse
+	if err := json.NewDecoder(w.Body).Decode(&getDocResp); err != nil {
+		t.Fatalf("decode get document response: %v", err)
+	}
+	if getDocResp.RevisionCount != 55 {
+		t.Fatalf("RevisionCount = %d, want 55", getDocResp.RevisionCount)
+	}
+	if getDocResp.CurrentVersionNumber != 54 {
+		t.Fatalf("CurrentVersionNumber = %d, want 54", getDocResp.CurrentVersionNumber)
 	}
 }
 

@@ -98,6 +98,7 @@ type vtextDocumentResponse struct {
 	OwnerID              string `json:"owner_id"`
 	Title                string `json:"title"`
 	CurrentRevisionID    string `json:"current_revision_id,omitempty"`
+	CurrentVersionNumber int    `json:"current_version_number"`
 	CreatedAt            string `json:"created_at"`
 	UpdatedAt            string `json:"updated_at"`
 	RevisionCount        int    `json:"revision_count"`
@@ -151,6 +152,7 @@ type vtextRevisionResponse struct {
 	OwnerID          string           `json:"owner_id"`
 	AuthorKind       types.AuthorKind `json:"author_kind"`
 	AuthorLabel      string           `json:"author_label"`
+	VersionNumber    int              `json:"version_number"`
 	Content          string           `json:"content"`
 	Citations        json.RawMessage  `json:"citations,omitempty"`
 	Metadata         json.RawMessage  `json:"metadata,omitempty"`
@@ -639,33 +641,7 @@ func (h *APIHandler) HandleVTextListDocuments(w http.ResponseWriter, r *http.Req
 
 	resp := vtextListDocsResponse{Documents: make([]vtextDocumentResponse, 0, len(docs))}
 	for _, doc := range docs {
-		docResp := vtextDocumentResponse{
-			DocID:             doc.DocID,
-			OwnerID:           doc.OwnerID,
-			Title:             doc.Title,
-			CurrentRevisionID: doc.CurrentRevisionID,
-			CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		}
-		revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), doc.DocID, ownerID, 200)
-		if err != nil {
-			log.Printf("vtext api: list document revisions for recent metadata: %v", err)
-		} else {
-			docResp.RevisionCount = len(revs)
-			if len(revs) > 0 {
-				latest := revs[0]
-				if doc.CurrentRevisionID != "" {
-					for _, rev := range revs {
-						if rev.RevisionID == doc.CurrentRevisionID {
-							latest = rev
-							break
-						}
-					}
-				}
-				docResp.LastEditor = latest.AuthorLabel
-				docResp.LastAuthorKind = string(latest.AuthorKind)
-			}
-		}
+		docResp := h.vtextDocumentResponse(r.Context(), doc)
 		resp.Documents = append(resp.Documents, docResp)
 	}
 
@@ -709,21 +685,12 @@ func (h *APIHandler) handleVTextGetDocument(w http.ResponseWriter, r *http.Reque
 		log.Printf("vtext api: get pending mutation for document: %v", err)
 	}
 
-	writeAPIJSON(w, http.StatusOK, vtextDocumentResponse{
-		DocID:                doc.DocID,
-		OwnerID:              doc.OwnerID,
-		Title:                doc.Title,
-		CurrentRevisionID:    doc.CurrentRevisionID,
-		CreatedAt:            doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:            doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		AgentRevisionPending: pendingMutation != nil,
-		AgentRevisionRunID: func() string {
-			if pendingMutation == nil {
-				return ""
-			}
-			return pendingMutation.RunID
-		}(),
-	})
+	resp := h.vtextDocumentResponse(r.Context(), doc)
+	resp.AgentRevisionPending = pendingMutation != nil
+	if pendingMutation != nil {
+		resp.AgentRevisionRunID = pendingMutation.RunID
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
 }
 
 func (h *APIHandler) handleVTextUpdateDocument(w http.ResponseWriter, r *http.Request, docID string) {
@@ -866,9 +833,15 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create revision"})
 		return
 	}
-	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: load created revision: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
 
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
 }
 
 func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, ownerID string, req vtextCreateRevisionRequest, staleParentID string, citations, metadata json.RawMessage, now time.Time) (types.Revision, error) {
@@ -911,7 +884,11 @@ func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, owner
 	if err := h.rt.Store().CreateRevision(ctx, rev); err != nil {
 		return types.Revision{}, fmt.Errorf("create rebased user revision: %w", err)
 	}
-	return rev, nil
+	storedRev, err := h.rt.Store().GetRevision(ctx, rev.RevisionID, ownerID)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("load rebased user revision: %w", err)
+	}
+	return storedRev, nil
 }
 
 func rebaseUserDraftContent(baseContent, headContent, userContent, staleParentID string) (string, string, bool) {
@@ -1293,6 +1270,39 @@ func snippet(value string, limit int) string {
 	return value[:limit-3] + "..."
 }
 
+func (h *APIHandler) vtextDocumentResponse(ctx context.Context, doc types.Document) vtextDocumentResponse {
+	resp := vtextDocumentResponse{
+		DocID:             doc.DocID,
+		OwnerID:           doc.OwnerID,
+		Title:             doc.Title,
+		CurrentRevisionID: doc.CurrentRevisionID,
+		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+	}
+	count, err := h.rt.Store().CountRevisionsByDoc(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		log.Printf("vtext api: count document revisions for recent metadata: %v", err)
+	} else {
+		resp.RevisionCount = count
+	}
+	versionNumber, err := h.rt.Store().CurrentVersionNumberByDoc(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		log.Printf("vtext api: get current document version number: %v", err)
+	} else if versionNumber >= 0 {
+		resp.CurrentVersionNumber = versionNumber
+	}
+	if strings.TrimSpace(doc.CurrentRevisionID) != "" {
+		if rev, err := h.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, doc.OwnerID); err == nil {
+			resp.LastEditor = rev.AuthorLabel
+			resp.LastAuthorKind = string(rev.AuthorKind)
+			resp.CurrentVersionNumber = rev.VersionNumber
+		} else {
+			log.Printf("vtext api: get current revision for recent metadata: %v", err)
+		}
+	}
+	return resp
+}
+
 func revisionResponseFromRecord(rev types.Revision) vtextRevisionResponse {
 	return vtextRevisionResponse{
 		RevisionID:       rev.RevisionID,
@@ -1300,6 +1310,7 @@ func revisionResponseFromRecord(rev types.Revision) vtextRevisionResponse {
 		OwnerID:          rev.OwnerID,
 		AuthorKind:       rev.AuthorKind,
 		AuthorLabel:      rev.AuthorLabel,
+		VersionNumber:    rev.VersionNumber,
 		Content:          rev.Content,
 		Citations:        rev.Citations,
 		Metadata:         rev.Metadata,
@@ -1315,7 +1326,16 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, 50)
+	limit := 10000
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 10000 {
+		limit = 10000
+	}
+	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, limit)
 	if err != nil {
 		log.Printf("vtext api: list revisions: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
@@ -1324,18 +1344,7 @@ func (h *APIHandler) handleVTextListRevisions(w http.ResponseWriter, r *http.Req
 
 	resp := vtextListRevisionsResponse{Revisions: make([]vtextRevisionResponse, 0, len(revs))}
 	for _, rev := range revs {
-		resp.Revisions = append(resp.Revisions, vtextRevisionResponse{
-			RevisionID:       rev.RevisionID,
-			DocID:            rev.DocID,
-			OwnerID:          rev.OwnerID,
-			AuthorKind:       rev.AuthorKind,
-			AuthorLabel:      rev.AuthorLabel,
-			Content:          rev.Content,
-			Citations:        rev.Citations,
-			Metadata:         rev.Metadata,
-			ParentRevisionID: rev.ParentRevisionID,
-			CreatedAt:        rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		})
+		resp.Revisions = append(resp.Revisions, revisionResponseFromRecord(rev))
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
@@ -1368,18 +1377,7 @@ func (h *APIHandler) HandleVTextRevision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, vtextRevisionResponse{
-		RevisionID:       rev.RevisionID,
-		DocID:            rev.DocID,
-		OwnerID:          rev.OwnerID,
-		AuthorKind:       rev.AuthorKind,
-		AuthorLabel:      rev.AuthorLabel,
-		Content:          rev.Content,
-		Citations:        rev.Citations,
-		Metadata:         rev.Metadata,
-		ParentRevisionID: rev.ParentRevisionID,
-		CreatedAt:        rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
+	writeAPIJSON(w, http.StatusOK, revisionResponseFromRecord(rev))
 }
 
 // HandleVTextHistory handles GET /api/vtext/documents/{id}/history.
@@ -1830,8 +1828,14 @@ func (h *APIHandler) HandleVTextAcceptMerge(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to accept merge; document head may have changed"})
 		return
 	}
-	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: load accepted merge revision: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load accepted merge revision"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
 }
 
 func (h *APIHandler) HandleVTextRestoreRevision(w http.ResponseWriter, r *http.Request) {
@@ -1884,8 +1888,14 @@ func (h *APIHandler) HandleVTextRestoreRevision(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to restore revision; document head may have changed"})
 		return
 	}
-	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rev)
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rev))
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: load restored revision: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load restored revision"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
 }
 
 func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request) {

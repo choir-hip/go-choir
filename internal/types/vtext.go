@@ -102,6 +102,11 @@ type Revision struct {
 	// (VAL-ETEXT-006).
 	AuthorLabel string `json:"author_label"`
 
+	// VersionNumber is the durable zero-based document version for this
+	// revision. It is assigned by the store when the revision is created and is
+	// not derived from a paginated revision list.
+	VersionNumber int `json:"version_number"`
+
 	// Content is the full document text at this revision.
 	Content string `json:"content"`
 
