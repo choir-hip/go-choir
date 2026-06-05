@@ -549,3 +549,80 @@ remaining error field:
 - The source placement, placeholder-source rendering, full proposal source
   research, Pretext card flow, publication source access, hard review/PDF, and
   simplification pass remain incomplete.
+
+## 2026-06-05 Deployed Owner Proof: Diagnosis Consistency And Next-Write `.vtext` Migration
+
+status: partial_acceptance_checkpoint
+
+shipped behavior commit:
+
+- `5e177ed49483d11d8c9c821a355cbcd3606e2996`
+  (`fix: canonicalize aliased vtext writes`).
+
+CI and deploy evidence:
+
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27027822264` completed
+  successfully for `5e177ed49483d11d8c9c821a355cbcd3606e2996`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27027822219` completed
+  successfully for the same commit.
+- Staging health at `https://choir.news/health` reported:
+  proxy commit `5e177ed49483d11d8c9c821a355cbcd3606e2996`, proxy
+  `deployed_commit` `5e177ed49483d11d8c9c821a355cbcd3606e2996`, sandbox
+  upstream commit `5e177ed49483d11d8c9c821a355cbcd3606e2996`, and upstream
+  `deployed_commit` `5e177ed49483d11d8c9c821a355cbcd3606e2996`.
+
+Comet owner-account proof:
+
+- Computer Use controlled `/Applications/Comet.app` (`ai.perplexity.comet`) as
+  the authenticated owner browser. Unauthenticated shell `curl` to the owner
+  diagnosis endpoint still returned `401`, so the proof path was the Comet
+  owner session.
+- Before the proof write, reloaded Comet diagnosis for owner document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe` showed the repaired summary signal:
+  `current_version_number: 81` for current revision
+  `0eb2332e-145c-44db-8b3c-96ce6a828c84`. This proves the deployed diagnosis
+  summary now agrees with the current revision row instead of reporting v0.
+- To avoid triggering a broad appagent rewrite, Comet executed a same-origin
+  browser script on `choir.news` that used the public authenticated VText API:
+  it fetched the owner document, fetched the current revision content, and
+  posted a same-content user revision to
+  `/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/revisions` with
+  proof metadata `source: owner_comet_canonicalization_proof`.
+- The Comet page displayed the POST result with HTTP `201`, revision
+  `9087c815-395f-427b-a8a5-0593891831fd`, author kind `user`, and
+  `version_number: 82`.
+- Reloaded Comet diagnosis then showed title
+  `choir_private_legal_cloud_proposal.vtext`, current revision
+  `9087c815-395f-427b-a8a5-0593891831fd`, `current_version_number: 82`,
+  `last_author_kind: "user"`, and updated timestamp
+  `2026-06-05T16:51:04.000Z`.
+
+what this proves:
+
+- The owner document's deployed diagnosis summary no longer misreports the
+  current version number.
+- A generic next VText write against the real owner document migrates the
+  legacy `.md` title to canonical `.vtext` identity without a legal-cloud
+  special case.
+- The next-write proof preserved content by posting the exact current revision
+  content as the new user revision rather than asking an appagent to rewrite the
+  proposal.
+
+limitation recorded:
+
+- The visible VText UI has no explicit no-op "save current canonical head"
+  affordance. The `Revise` button saves only dirty user content and then starts
+  an appagent revision. For this migration proof, using the public authenticated
+  VText API from the Comet page was safer than dirtying the client proposal or
+  triggering an ordinary revise run solely to update title metadata.
+
+remaining error field:
+
+- The mission is still incomplete. The proof has not yet shown focus/edit/save
+  through the visible editor, appagent revise preserving the appendix table,
+  bounded table edit survival, focused-user-edit prompt size and `apply_edits`
+  metadata on the owner document, source gap repair, client-ready researched
+  citations, publication source access, Pretext source-card flow, Markdown
+  export from canonical VText, or post-proof review/PDF/simplification.
