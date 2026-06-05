@@ -2706,3 +2706,54 @@ current belief:
   legal-cloud route in Comet after deployment and continue moving the source
   note toward a journal marginalia/column treatment with less rounded-rectangle
   vocabulary.
+
+## 2026-06-05 Deployed Proof: Weak Source Metadata Chrome Removed
+
+status: deployed_acceptance_proof_recorded
+
+implementation:
+
+- Commit `51d6bd8b05cf3af1ede34dad2d7c9cd2a76e2fa9` (`fix: remove weak
+  inline source metadata chrome`) is the deployed behavior commit.
+- The change removes invented `source available` facts and generic inline
+  source-kind prose from compact article source notes while preserving source
+  windows and canonical metadata.
+
+deployment evidence:
+
+- CI run `https://github.com/choir-hip/go-choir/actions/runs/27037641392`
+  completed successfully, including frontend build, Go runtime shards,
+  non-runtime tests, integration-tagged smoke, vet/build, and Node B staging
+  deploy.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27037641310` completed
+  successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `51d6bd8b05cf3af1ede34dad2d7c9cd2a76e2fa9`, deployed at
+  `2026-06-05T20:13:03Z`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet reloaded the deployed publication route
+  `https://choir.news/pub/vtext/codex-source-snapshot-proof-1780689619462-pub8bc8c0aef`
+  after deploy.
+- Before reload, the existing in-memory page still showed the old source note
+  with `PUBLIC SOURCE` and `source available`, which confirmed the need to
+  reload the deployed frontend bundle.
+- After reload, the compact source marker returned to the article sentence.
+  Expanding it showed only:
+  `Codex public source snapshot 1780689619462`,
+  `Codex staging reader snapshot excerpt: legal AI source evidence stays
+  bounded inline.`, and `Open source` / `Close`.
+- The expanded note no longer rendered `PUBLIC SOURCE`, `public source`, or
+  `source available`.
+- The already-open source reader window still showed the full reader snapshot,
+  including the full-detail paragraph proving publication source snapshots
+  remain inspectable.
+
+current belief:
+
+- The data path and source-window behavior survived the simplification.
+- The source note is still not the final magazine/journal visual treatment, but
+  it is now less metadata-heavy and better aligned with the Pretext article-flow
+  objective.
