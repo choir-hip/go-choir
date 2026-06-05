@@ -1540,6 +1540,80 @@ belief-state update:
 - Bounded table-edit proof, source-gap repair on the owner document, citation
   expansion/open-source proof, and deployed metadata proof remain incomplete.
 
+2026-06-05 deployed pending-state recovery and canonical-VText checkpoint:
+
+status: checkpoint_incomplete
+
+deployed identity and owner UI evidence:
+
+- Pending-state cleanup fix commit
+  `989007787da955e511441fdfa2ec9d3b8f806713` is on `origin/main`.
+  GitHub Actions run `27016828839` completed successfully, including Go vet
+  and build, non-runtime Go tests, all `internal/runtime` shards, integration
+  smoke, and `Deploy to Staging (Node B)`. The frontend build job was skipped
+  by the deploy-impact filter for this backend/runtime change; local frontend
+  build passed before the commit.
+- FlakeHub run `27016828856` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `989007787da955e511441fdfa2ec9d3b8f806713`, deployed at
+  `2026-06-05T13:12:32Z`.
+- Computer Use is available, and the Comet browser is authenticated on staging
+  with the owner account. After the deployed fix, the private owner VText UI
+  for `choir_private_legal_cloud_proposal.md` showed document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe` at `v81`, state `Latest`, with
+  `Revise` enabled and `Publish v81` enabled. The visible status stream showed
+  the `edit_vtext` appagent run receiving tool output and completing.
+- This proves the prior `Revising...` pending-state blocker was cleared by the
+  deployed general reconciliation path, rather than by a document-specific
+  workaround.
+
+answer to the imported `.md`/`.vtext` identity question:
+
+- No, the owner `.md`-named document should not be treated as proven identical
+  to a native `.vtext` document. The mission evidence shows the opposite:
+  source extension, rendered Markdown serialization, and VText revision
+  ownership were still entangled enough for a real `.md` import acting as VText
+  to lose appendix-table structure between v74 and v75.
+- The intended invariant is now sharper: imported `.txt`, `.md`, DOCX, PDF, or
+  other source artifacts may seed v0/source lineage, but the first durable
+  VText revision after import should allocate and write the canonical `.vtext`
+  projection. Export back to `.md` is an export operation from canonical VText,
+  not the live canonical write target.
+- The deployed structural fix enforces this direction for the revision path by
+  allocating a `.vtext` projection when the existing alias is absent or still
+  points at a non-`.vtext` source path, and by preserving Markdown table block
+  structure through parent-to-child draft stabilization. That is a structural
+  identity repair, not a claim that historical `.md` VText documents already
+  behaved identically.
+
+new problem documented before any future code:
+
+- The authenticated browser evidence surfaces are currently inconsistent for
+  this owner document. Computer Use sees the private owner VText surface at
+  `v81 Latest`, while extension-backed DOM/tab control later exposed a
+  `Published v49` root for the same document id. A bounded table-edit
+  instruction was typed into that wrong published/root surface during QA, so it
+  must not be counted as owner-head proof.
+- Until this browser-root ambiguity is repaired or isolated, mutation proof on
+  the real owner document should use Computer Use against the visible private
+  owner UI, and extension-backed DOM should be treated as read-only diagnostic
+  evidence only after confirming the visible root's version and state.
+- The diagnosis endpoint is reachable in authenticated Comet and renders raw
+  JSON in the page, but this session still lacks a reliable structured browser
+  extraction path for prompt-size and `apply_edits` metadata from that page.
+  The accessibility tree proves the endpoint opens under the owner session but
+  not enough structured fields were extracted to claim metadata invariants.
+
+remaining error field:
+
+- Bounded table-edit proof on the deployed owner `v81` head remains incomplete.
+- Source-gap repair on the owner document remains incomplete.
+- Citation marker expansion into transclusion points and source-window opening
+  remain incomplete.
+- Deployed metadata proof for focused prompt sizes and `apply_edits` metadata
+  remains incomplete until diagnosis/export data can be extracted from the
+  authenticated product surface without confusing private and published roots.
+
 suggested resume goal string:
 
 ```text
