@@ -130,6 +130,104 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await expect(rendered).toContainText('One claim still needs source repair [2].');
 });
 
+test('Imported Markdown advances from v0 source artifact to canonical .vtext with Markdown export', async ({ desktopSession }) => {
+  test.setTimeout(60_000);
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const sourcePath = `proposals/imported-md-vtext-${stamp}.md`;
+  const initialContent = [
+    '# Imported Markdown VText Identity',
+    '',
+    '| Term | Definition |',
+    '| --- | --- |',
+    '| Work product | Durable professional output. |',
+    '',
+    'Seeded from Markdown source bytes.',
+  ].join('\n');
+
+  const opened = await fetchJSON(page, '/api/vtext/files/open', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: sourcePath,
+      title: `imported-md-vtext-${stamp}.md`,
+      initial_content: initialContent,
+    }),
+  });
+
+  expect(opened.created).toBe(true);
+  expect(opened.doc_id).toBeTruthy();
+  expect(opened.original_content_id).toBeTruthy();
+
+  const v0Doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  expect(v0Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
+  expect(v0Doc.current_version_number).toBe(0);
+
+  const v1Content = [
+    '# Imported Markdown VText Identity',
+    '',
+    '| Term | Definition |',
+    '| --- | --- |',
+    '| Work product | Durable, reviewable professional output. |',
+    '| VText | Canonical editable document identity. |',
+    '',
+    'Seeded from Markdown source bytes and revised as VText.',
+  ].join('\n');
+
+  const v1 = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: v1Content,
+      author_kind: 'user',
+      author_label: 'browser-test',
+      parent_revision_id: v0Doc.current_revision_id,
+      metadata: {
+        source_path: sourcePath,
+        created_from: 'browser_product_path_markdown_v1_proof',
+      },
+    }),
+  });
+
+  expect(v1.version_number).toBe(1);
+  expect(v1.parent_revision_id).toBe(v0Doc.current_revision_id);
+  expect(v1.metadata?.canonical_vtext_source_path).toMatch(/\.vtext$/);
+  expect(v1.content).toContain('| VText | Canonical editable document identity. |');
+
+  const v1Doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  expect(v1Doc.title).toBe(`imported-md-vtext-${stamp}.vtext`);
+  expect(v1Doc.current_revision_id).toBe(v1.revision_id);
+  expect(v1Doc.current_version_number).toBe(1);
+
+  const reopenedAlias = await fetchJSON(page, '/api/vtext/files/open', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: sourcePath,
+      title: `imported-md-vtext-${stamp}.md`,
+      initial_content: 'Changed original Markdown bytes must not fork canonical VText.',
+    }),
+  });
+  expect(reopenedAlias.created).toBe(false);
+  expect(reopenedAlias.doc_id).toBe(opened.doc_id);
+
+  const manifest = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/manifest`, {
+    method: 'POST',
+  });
+  expect(manifest.source_path).toMatch(/\.vtext$/);
+
+  const exported = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/export?format=md`);
+  expect(exported.format).toBe('md');
+  expect(exported.filename).toBe(`imported-md-vtext-${stamp}.md`);
+  expect(exported.revision_id).toBe(v1.revision_id);
+  expect(exported.content).toBe(v1Content);
+  expect(exported.content_hash).toBeTruthy();
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `imported-md-vtext-${stamp}.vtext` }).click();
+  await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Canonical editable document identity.');
+});
+
 test('Markdown lineage import can migrate from stored ContentItem versions', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
