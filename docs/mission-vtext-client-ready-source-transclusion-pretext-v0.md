@@ -1926,3 +1926,43 @@ acceptance criteria for the correction:
   but readable as source content.
 - Canonical serialization remains unchanged: source markers still roundtrip as
   `[label](source:ENTITY_ID)`, and source-flow DOM is skipped.
+
+## 2026-06-05 Local Correction: Floated Source Note Keeps Article Flow
+
+status: local_code_verified_pending_deploy
+
+implementation:
+
+- Replaced the paragraph-hiding cloned-line overlay with a single floated source
+  note inserted after the expanded citation marker.
+- The floated note is still marked `data-vtext-source-flow`, so serializers skip
+  it and canonical VText remains the original `[label](source:ENTITY_ID)`
+  marker plus article text.
+- The Pretext `layoutSourceJournalFlow` utility still measures/gates whether the
+  note has enough horizontal room to route beside text; rendering then uses the
+  browser's native float behavior so following article blocks continue wrapping
+  beside the note until it clears.
+- The original expanded popover is suppressed only while the floated note is
+  mounted via `data-source-flow-mounted`.
+- Tightened CSS so source excerpts are not uppercased as metadata; only the
+  kind/metadata label receives metadata treatment.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed against
+  a local foreground service stack.
+- The source-flow test now asserts:
+  - floated `data-vtext-source-flow`;
+  - mounted source marker state;
+  - no hidden canonical paragraph;
+  - source open action still launches the Browser/Web Lens window;
+  - table roundtrip regressions remain covered.
+
+next proof:
+
+- Commit and push the correction.
+- Wait for CI/Node B deploy and staging identity.
+- Hard reload the owner publication in Comet and verify the ABA expanded source
+  now leaves no large blank area beside the note and keeps the excerpt readable
+  as source content.

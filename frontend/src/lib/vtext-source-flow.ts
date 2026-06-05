@@ -109,6 +109,9 @@ export function clearSourceJournalFlows(root?: ParentNode | null): void {
   root?.querySelectorAll?.('[data-vtext-source-flow-hidden]').forEach((node) => {
     node.removeAttribute('data-vtext-source-flow-hidden');
   });
+  root?.querySelectorAll?.('[data-source-flow-mounted]').forEach((node) => {
+    node.removeAttribute('data-source-flow-mounted');
+  });
 }
 
 export function mountSourceJournalFlow(sourceRef: Element | null, options: MountSourceJournalFlowOptions): boolean {
@@ -123,16 +126,13 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   if (!text) return false;
 
   const noteWidth = Math.min(380, Math.max(300, Math.floor(containerWidth * 0.42)));
-  const flow = document.createElement('div');
-  flow.setAttribute('data-vtext-source-flow', '');
-  flow.className = 'vtext-source-journal-flow';
-  flow.style.setProperty('--vtext-source-flow-note-width', `${noteWidth}px`);
-
-  const card = document.createElement('aside');
-  card.className = 'vtext-source-journal-note';
-  card.setAttribute('data-vtext-source-flow-note', '');
-  card.setAttribute('role', 'note');
-  card.innerHTML = popover.innerHTML;
+  const note = document.createElement('span');
+  note.setAttribute('data-vtext-source-flow', '');
+  note.setAttribute('data-vtext-source-flow-note', '');
+  note.className = 'vtext-source-journal-note';
+  note.setAttribute('role', 'note');
+  note.style.setProperty('--vtext-source-flow-note-width', `${noteWidth}px`);
+  note.innerHTML = popover.innerHTML;
 
   const close = document.createElement('button');
   close.type = 'button';
@@ -140,11 +140,10 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   close.setAttribute('data-vtext-source-flow-collapse', '');
   close.setAttribute('aria-label', 'Collapse source');
   close.textContent = 'Close';
-  card.append(close);
-  flow.append(card);
-  paragraph.insertAdjacentElement('afterend', flow);
+  note.append(close);
+  sourceRef.insertAdjacentElement('afterend', note);
 
-  const measuredHeight = Math.ceil(card.getBoundingClientRect().height || 0);
+  const measuredHeight = Math.ceil(note.getBoundingClientRect().height || 0);
   const layout = layoutSourceJournalFlow({
     text,
     containerWidth,
@@ -156,20 +155,10 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   });
 
   if (layout.lines.length === 0 || layout.usedNarrowLines === 0) {
-    flow.remove();
+    note.remove();
     return false;
   }
 
-  for (const line of layout.lines) {
-    const lineNode = document.createElement('span');
-    lineNode.className = 'vtext-source-journal-line';
-    lineNode.textContent = line.text;
-    lineNode.style.left = `${line.x}px`;
-    lineNode.style.top = `${line.y}px`;
-    lineNode.style.width = `${Math.ceil(line.width)}px`;
-    flow.append(lineNode);
-  }
-  flow.style.height = `${Math.ceil(layout.height)}px`;
-  paragraph.setAttribute('data-vtext-source-flow-hidden', '');
+  sourceRef.setAttribute('data-source-flow-mounted', 'true');
   return true;
 }

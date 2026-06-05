@@ -3233,6 +3233,19 @@
     vertical-align: baseline;
   }
 
+  .rendered-doc :global(.vtext-source-ref[data-source-flow-mounted="true"]) {
+    display: inline-flex;
+    grid-template-columns: none;
+    min-width: 1.1rem;
+    max-width: none;
+    margin: 0 0.04rem;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 0.62em;
+    line-height: 1;
+    vertical-align: super;
+  }
+
   .rendered-doc :global(.vtext-source-ref:focus-visible) {
     outline: 2px solid var(--choir-state-active-glow);
     outline-offset: 2px;
@@ -3272,6 +3285,10 @@
     box-shadow: none;
   }
 
+  .rendered-doc :global(.vtext-source-ref[data-source-flow-mounted="true"] .vtext-source-ref-popover) {
+    display: none;
+  }
+
   .rendered-doc :global(.vtext-source-ref-popover strong),
   .rendered-doc :global(.vtext-source-ref-popover span) {
     display: block;
@@ -3282,33 +3299,12 @@
     display: block;
   }
 
-  .rendered-doc :global([data-vtext-source-flow-hidden]) {
-    display: none;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-flow) {
-    position: relative;
-    margin: 0 0 1rem;
-    color: inherit;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-line) {
-    position: absolute;
-    display: block;
-    overflow: hidden;
-    color: inherit;
-    font: inherit;
-    line-height: 1.5;
-    white-space: pre;
-  }
-
   .rendered-doc :global(.vtext-source-journal-note) {
-    position: absolute;
-    top: 0;
-    right: 0;
+    float: right;
     display: grid;
     width: var(--vtext-source-flow-note-width);
     max-width: 42%;
+    margin: 0.04rem 0 0.75rem 1.2rem;
     border-left: 2px solid var(--choir-border-strong);
     padding: 0.12rem 0 0.12rem 0.92rem;
     color: var(--choir-text-primary);
@@ -3327,7 +3323,7 @@
     line-height: 1.22;
   }
 
-  .rendered-doc :global(.vtext-source-journal-note > span) {
+  .rendered-doc :global(.vtext-source-journal-note > span:not(.vtext-transclusion-body)) {
     display: block;
     margin-top: 0.12rem;
     color: var(--choir-text-muted);
@@ -3383,12 +3379,11 @@
   }
 
   @media (max-width: 720px) {
-    .rendered-doc :global([data-vtext-source-flow-hidden]) {
-      display: revert;
-    }
-
-    .rendered-doc :global(.vtext-source-journal-flow) {
-      display: none;
+    .rendered-doc :global(.vtext-source-journal-note) {
+      float: none;
+      width: auto;
+      max-width: none;
+      margin: 0.52rem 0;
     }
   }
 
