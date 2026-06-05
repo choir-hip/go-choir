@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -379,17 +380,29 @@ func (s *Service) ExportPublicationByRoute(ctx context.Context, routePath, forma
 	if !publicationExportAllowed(bundle.Policy.Export, format) {
 		return nil, fmt.Errorf("export format %s is not allowed by publication policy", format)
 	}
-	content := formatPublicationExportContent(bundle, format)
+	exported, err := buildPublicationExportBytes(bundle, format)
+	if err != nil {
+		return nil, err
+	}
 	mediaType := exportMediaType(format)
+	filename := publicationExportFilename(bundle.Publication.Slug, bundle.Publication.Title, format)
+	content := string(exported.content)
+	contentBase64 := ""
+	if exportFormatIsBinary(format) {
+		content = ""
+		contentBase64 = base64.StdEncoding.EncodeToString(exported.content)
+	}
 	return &PublicationExport{
 		RoutePath:            bundle.Route.Path,
 		PublicationID:        bundle.Publication.ID,
 		PublicationVersionID: bundle.Version.ID,
 		Format:               format,
 		MediaType:            mediaType,
-		Filename:             publicationExportFilename(bundle.Publication.Slug, bundle.Publication.Title, format),
+		Filename:             filename,
 		Content:              content,
-		ContentHash:          sha256Hex([]byte(content)),
+		ContentBase64:        contentBase64,
+		ContentHash:          sha256Hex(exported.content),
+		Metadata:             exported.metadata,
 	}, nil
 }
 
@@ -717,6 +730,10 @@ func normalizeExportFormat(format string) string {
 		return "md"
 	case "html":
 		return "html"
+	case "docx":
+		return "docx"
+	case "pdf":
+		return "pdf"
 	default:
 		return ""
 	}
@@ -766,8 +783,21 @@ func exportMediaType(format string) string {
 		return "text/html; charset=utf-8"
 	case "md":
 		return "text/markdown; charset=utf-8"
+	case "docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case "pdf":
+		return "application/pdf"
 	default:
 		return textMediaType
+	}
+}
+
+func exportFormatIsBinary(format string) bool {
+	switch format {
+	case "docx", "pdf":
+		return true
+	default:
+		return false
 	}
 }
 

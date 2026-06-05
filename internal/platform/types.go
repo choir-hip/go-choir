@@ -164,14 +164,16 @@ type PublicationBundle struct {
 }
 
 type PublicationExport struct {
-	RoutePath            string `json:"route_path"`
-	PublicationID        string `json:"publication_id"`
-	PublicationVersionID string `json:"publication_version_id"`
-	Format               string `json:"format"`
-	MediaType            string `json:"media_type"`
-	Filename             string `json:"filename"`
-	Content              string `json:"content"`
-	ContentHash          string `json:"content_hash"`
+	RoutePath            string          `json:"route_path"`
+	PublicationID        string          `json:"publication_id"`
+	PublicationVersionID string          `json:"publication_version_id"`
+	Format               string          `json:"format"`
+	MediaType            string          `json:"media_type"`
+	Filename             string          `json:"filename"`
+	Content              string          `json:"content"`
+	ContentBase64        string          `json:"content_base64,omitempty"`
+	ContentHash          string          `json:"content_hash"`
+	Metadata             json.RawMessage `json:"metadata,omitempty"`
 }
 
 type RetrievalSearchResult struct {

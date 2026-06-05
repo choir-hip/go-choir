@@ -1728,7 +1728,8 @@
     if (!route) return;
     try {
       const exported = await exportPublication(route, format);
-      const blob = new Blob([exported.content || ''], { type: exported.media_type || 'text/plain;charset=utf-8' });
+      const body = exported.content_base64 ? base64ToUint8Array(exported.content_base64) : (exported.content || '');
+      const blob = new Blob([body], { type: exported.media_type || 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1741,6 +1742,13 @@
     } catch (err) {
       saveStatus = err.message || 'Download failed';
     }
+  }
+
+  function base64ToUint8Array(value) {
+    const binary = atob(value || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   }
 
   function handleOpenPublishedURL() {

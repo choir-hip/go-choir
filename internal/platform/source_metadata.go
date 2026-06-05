@@ -208,7 +208,7 @@ func defaultPublicationExportPolicy() json.RawMessage {
 	return mustJSONRaw(map[string]any{
 		"copy_allowed":     true,
 		"download_allowed": true,
-		"formats":          []string{"txt", "md", "html"},
+		"formats":          []string{"txt", "md", "html", "docx", "pdf"},
 	})
 }
 

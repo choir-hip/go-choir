@@ -1,10 +1,14 @@
 package platform
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +55,81 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 		_ = dbConnector.Close()
 	})
 	return s, root
+}
+
+func decodeBase64(value string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(value)
+}
+
+func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+
+	resp, err := svc.PublishVText(context.Background(), PublishVTextRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-1",
+		SourceRevisionID: "rev-1",
+		Title:            "Export Proof",
+		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| VText | Canonical artifact. |\n\nThis is the published projection.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
+		RequestedBy:      "user-1",
+	})
+	if err != nil {
+		t.Fatalf("PublishVText: %v", err)
+	}
+
+	docxExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "docx")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute docx: %v", err)
+	}
+	if docxExport.Format != "docx" || docxExport.Content != "" || docxExport.ContentBase64 == "" {
+		t.Fatalf("docx export shape = %#v", docxExport)
+	}
+	if docxExport.MediaType != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || !strings.HasSuffix(docxExport.Filename, ".docx") {
+		t.Fatalf("docx metadata = %#v", docxExport)
+	}
+	docxBytes, err := decodeBase64(docxExport.ContentBase64)
+	if err != nil {
+		t.Fatalf("decode docx base64: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	if err != nil {
+		t.Fatalf("docx is not a zip package: %v", err)
+	}
+	parts := map[string]string{}
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open docx part %s: %v", file.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read docx part %s: %v", file.Name, err)
+		}
+		parts[file.Name] = string(data)
+	}
+	if !strings.Contains(parts["word/document.xml"], "Canonical artifact.") || !strings.Contains(parts["word/document.xml"], "<w:tbl>") {
+		t.Fatalf("docx document did not preserve content/table: %s", parts["word/document.xml"])
+	}
+	if !strings.Contains(parts["docProps/custom.xml"], resp.PublicationVersionID) || !strings.Contains(parts["docProps/custom.xml"], resp.ContentHash) {
+		t.Fatalf("docx custom properties missing public provenance: %s", parts["docProps/custom.xml"])
+	}
+
+	pdfExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "pdf")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute pdf: %v", err)
+	}
+	if pdfExport.Format != "pdf" || pdfExport.Content != "" || pdfExport.ContentBase64 == "" {
+		t.Fatalf("pdf export shape = %#v", pdfExport)
+	}
+	pdfBytes, err := decodeBase64(pdfExport.ContentBase64)
+	if err != nil {
+		t.Fatalf("decode pdf base64: %v", err)
+	}
+	pdfText := string(pdfBytes)
+	if !strings.HasPrefix(pdfText, "%PDF-1.4") || !strings.Contains(pdfText, resp.PublicationVersionID) || !strings.Contains(pdfText, "This is the published projection.") || !strings.Contains(pdfText, "Last line must survive export.") {
+		t.Fatalf("pdf content/provenance missing: %.400s", pdfText)
+	}
 }
 
 func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion(t *testing.T) {
