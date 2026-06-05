@@ -107,6 +107,11 @@
   let sourceRepairPending = false;
   let sourceRepairPayload = '';
   let sourceRepairError = '';
+  let sourceReviewMarker = '';
+  let sourceReviewTitle = '';
+  let sourceReviewURL = '';
+  let sourceReviewExcerpt = '';
+  let sourceReviewStatus = '';
   let selectedSourceEntityID = '';
   let sourceArtifactTitle = '';
   let sourceArtifactURL = '';
@@ -247,6 +252,91 @@
   function ensureSourceRepairPayload() {
     if (sourceRepairPayload.trim()) return;
     sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
+  }
+
+  function safeSourceIDPart(value) {
+    const normalized = String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return normalized || 'source';
+  }
+
+  function prepareSourceReviewForm(marker = sourceRepairCandidates()[0] || sourceReviewMarker) {
+    sourceReviewMarker = marker || '';
+    sourceReviewTitle = '';
+    sourceReviewURL = '';
+    sourceReviewExcerpt = '';
+    sourceReviewStatus = '';
+    sourceRepairError = '';
+  }
+
+  function ensureSourceReviewSelection(candidates = sourceRepairCandidates()) {
+    if (sourceReviewMarker && candidates.includes(sourceReviewMarker)) return;
+    sourceReviewMarker = candidates[0] || '';
+  }
+
+  function sourceReviewEntityID(marker = sourceReviewMarker, title = sourceReviewTitle) {
+    const markerPart = safeSourceIDPart(String(marker || '').replace(/[\[\]]/g, ''));
+    const titlePart = safeSourceIDPart(title).slice(0, 48);
+    const revisionPart = safeSourceIDPart(currentRevision?.revision_id || '').slice(0, 12);
+    return ['src_review', markerPart, titlePart, revisionPart].filter(Boolean).join('_');
+  }
+
+  function sourceReviewPayload() {
+    const marker = String(sourceReviewMarker || '').trim();
+    const title = String(sourceReviewTitle || '').trim();
+    const excerpt = String(sourceReviewExcerpt || '').trim();
+    const url = String(sourceReviewURL || '').trim();
+    const entityID = sourceReviewEntityID(marker, title);
+    const target = url
+      ? {
+        target_kind: 'url',
+        url,
+        canonical_url: url,
+      }
+      : {
+        target_kind: 'source_service_item',
+        item_id: entityID,
+      };
+    return {
+      base_revision_id: currentRevision?.revision_id || '',
+      source_entities: [
+        {
+          entity_id: entityID,
+          kind: url ? 'web_source' : 'source_service_item',
+          label: title,
+          target,
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: excerpt,
+            },
+          ],
+          display: {
+            inline_mode: 'embedded_excerpt',
+            expanded_mode: 'source_card',
+            open_surface: url ? 'browser' : 'source',
+            default_collapsed: true,
+          },
+          evidence: {
+            state: 'available',
+            research_state: 'confirmed',
+          },
+          provenance: {
+            created_by: 'source_review_panel',
+            rights_scope: 'public_source',
+            untrusted_source_text: true,
+          },
+        },
+      ],
+      citation_resolutions: [
+        {
+          marker,
+          entity_id: entityID,
+        },
+      ],
+    };
   }
 
   function selectedSourceEntity() {
@@ -849,6 +939,11 @@
     resetCompareMergeState();
     sourceRepairError = '';
     sourceRepairPayload = '';
+    sourceReviewMarker = '';
+    sourceReviewTitle = '';
+    sourceReviewURL = '';
+    sourceReviewExcerpt = '';
+    sourceReviewStatus = '';
     sourceArtifactError = '';
     sourceArtifactStatus = '';
     const summary = revisions[index];
@@ -1076,6 +1171,11 @@
     sourceRepairPending = false;
     sourceRepairPayload = '';
     sourceRepairError = '';
+    sourceReviewMarker = '';
+    sourceReviewTitle = '';
+    sourceReviewURL = '';
+    sourceReviewExcerpt = '';
+    sourceReviewStatus = '';
     selectedSourceEntityID = '';
     sourceArtifactTitle = '';
     sourceArtifactURL = '';
@@ -1542,9 +1642,7 @@
     sourceRepairError = '';
     if (sourcePanelOpen) {
       ensureSourceRepairPayload();
-      if (!sourceDiagnosis && currentDoc?.doc_id && authenticated && !isPublishedReadOnly) {
-        await handleLoadSourceDiagnosis();
-      }
+      ensureSourceReviewSelection();
     }
   }
 
@@ -1568,6 +1666,66 @@
       saveStatus = 'Source diagnosis failed';
     } finally {
       sourceDiagnosisPending = false;
+    }
+  }
+
+  async function handleApplySourceReview() {
+    if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
+    ensureSourceReviewSelection();
+    const marker = String(sourceReviewMarker || '').trim();
+    const title = String(sourceReviewTitle || '').trim();
+    const excerpt = String(sourceReviewExcerpt || '').trim();
+    if (!marker) {
+      sourceRepairError = 'Choose a citation marker to repair';
+      return;
+    }
+    if (!title) {
+      sourceRepairError = 'Source title is required';
+      return;
+    }
+    if (!excerpt) {
+      sourceRepairError = 'Confirming source excerpt is required';
+      return;
+    }
+    sourceRepairPending = true;
+    sourceRepairError = '';
+    sourceReviewStatus = 'Applying source review...';
+    saveStatus = 'Repairing sources...';
+    try {
+      const payload = {
+        ...sourceReviewPayload(),
+        base_revision_id: currentRevision.revision_id,
+        author_label: getAuthorLabel(),
+      };
+      sourceReviewStatus = 'Sending source review...';
+      const revision = await repairVTextSourceGaps(currentDoc.doc_id, {
+        ...payload,
+      });
+      sourceDiagnosis = null;
+      sourceRepairPayload = '';
+      sourceReviewStatus = `Applied source review for ${marker}`;
+      sourceReviewTitle = '';
+      sourceReviewURL = '';
+      sourceReviewExcerpt = '';
+      saveStatus = 'Loading repaired source revision...';
+      await reloadDocument(revision.revision_id);
+      ensureSourceRepairPayload();
+      ensureSourceReviewSelection();
+      saveStatus = `Repaired sources in ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      sourceRepairError = err.message || 'Source review failed';
+      sourceReviewStatus = '';
+      saveStatus = 'Source repair failed';
+    } finally {
+      sourceRepairPending = false;
     }
   }
 
@@ -2060,6 +2218,7 @@
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
+  $: if (sourcePanelOpen) ensureSourceReviewSelection(sourceCandidates);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: if (sourcePanelOpen) ensureSourceArtifactSelection();
@@ -2419,6 +2578,63 @@
           {/if}
 
           {#if !isPublishedReadOnly}
+            {#if sourceCandidates.length}
+              <div class="source-review-panel" data-vtext-source-review-panel>
+                <div class="source-artifact-heading">
+                  <span class="evidence-label">Source review</span>
+                  <strong>{sourceReviewMarker ? `Repair ${sourceReviewMarker}` : 'Choose marker'}</strong>
+                </div>
+                <div class="source-review-marker-picker" role="listbox" aria-label="Citation marker to repair">
+                  {#each sourceCandidates as marker}
+                    <button
+                      type="button"
+                      class:selected={marker === sourceReviewMarker}
+                      data-vtext-source-review-marker
+                      data-source-marker={marker}
+                      on:click={() => prepareSourceReviewForm(marker)}
+                    >
+                      {marker}
+                    </button>
+                  {/each}
+                </div>
+                <label class="source-artifact-field">
+                  <span>Source title</span>
+                  <input data-vtext-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming or refuting source" />
+                </label>
+                <label class="source-artifact-field">
+                  <span>Source URL</span>
+                  <input data-vtext-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
+                </label>
+                <label class="source-artifact-field">
+                  <span>Confirming excerpt</span>
+                  <textarea
+                    data-vtext-source-review-excerpt
+                    bind:value={sourceReviewExcerpt}
+                    spellcheck="true"
+                    rows="5"
+                    placeholder="Paste the exact source text or concise reader-mode evidence that supports this marker"
+                  ></textarea>
+                </label>
+                <div class="source-panel-actions">
+                  <button
+                    type="button"
+                    class="primary-action"
+                    data-vtext-apply-source-review
+                    on:click={handleApplySourceReview}
+                    disabled={sourceRepairPending || !currentDoc || !currentRevision || !sourceReviewMarker || !sourceReviewTitle.trim() || !sourceReviewExcerpt.trim()}
+                  >
+                    {sourceRepairPending ? 'Applying…' : 'Apply source review'}
+                  </button>
+                  {#if sourceReviewStatus}
+                    <span class="source-artifact-status" role="status">{sourceReviewStatus}</span>
+                  {/if}
+                  {#if sourceRepairError}
+                    <span class="source-repair-error" role="alert">{sourceRepairError}</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+
             <div class="source-artifact-panel" data-vtext-source-artifact-panel>
               <div class="source-artifact-heading">
                 <span class="evidence-label">Source artifact</span>
@@ -2489,7 +2705,7 @@
             </div>
 
             <details class="source-repair-advanced">
-              <summary>Advanced marker repair</summary>
+              <summary>Diagnostic JSON repair</summary>
               <label class="source-repair-editor">
                 <span>Repair JSON</span>
                 <textarea
@@ -2938,6 +3154,7 @@
     text-transform: uppercase;
   }
 
+  .source-review-panel,
   .source-artifact-panel {
     display: grid;
     gap: 0.55rem;
@@ -2962,12 +3179,14 @@
     white-space: nowrap;
   }
 
+  .source-review-marker-picker,
   .source-artifact-picker {
     display: flex;
     flex-wrap: wrap;
     gap: 0.32rem;
   }
 
+  .source-review-marker-picker button,
   .source-artifact-picker button {
     border: 1px solid var(--choir-border-subtle);
     border-radius: 999px;
@@ -2979,6 +3198,7 @@
     cursor: pointer;
   }
 
+  .source-review-marker-picker button.selected,
   .source-artifact-picker button.selected {
     border-color: var(--choir-border-strong);
     color: var(--choir-text-primary);

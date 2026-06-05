@@ -21,6 +21,29 @@ async function fetchJSON(page, path, options = {}) {
   }, { requestPath: path, requestOptions: options });
 }
 
+async function closeDesktopWindows(page, appIds = ['content', 'vtext']) {
+  for (const appId of appIds) {
+    const windows = page.locator(`[data-window-app-id="${appId}"]`);
+    let count = await windows.count();
+    while (count > 0) {
+      await windows.last().locator('[data-window-close]').click({ force: true });
+      await expect(windows).toHaveCount(count - 1, { timeout: 5000 });
+      count -= 1;
+    }
+  }
+}
+
+async function openRecentVTextDocument(page, recentLabel, openedTitle = recentLabel) {
+  await closeDesktopWindows(page);
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const recentWindow = page.locator('[data-window-app-id="vtext"]').filter({ has: page.locator('[data-vtext-recent]') }).last();
+  await expect(recentWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await recentWindow.locator('[data-vtext-recent-document]').filter({ hasText: recentLabel }).click();
+  const documentWindow = page.locator('[data-window-app-id="vtext"]').filter({ hasText: openedTitle }).last();
+  await expect(documentWindow.locator('[data-vtext-app]')).toBeVisible({ timeout: 10000 });
+  return documentWindow.locator('[data-vtext-app]');
+}
+
 test('Markdown lineage import resolves known citation markers into expandable source transclusions', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
@@ -106,10 +129,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
     { marker: '[1]', entity_id: sourceEntityID },
   ]);
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Legal Cloud Sourced Lineage ${stamp}` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `Legal Cloud Sourced Lineage ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref]').first();
@@ -119,9 +139,10 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await expect(citation).toHaveAttribute('data-expanded', 'true');
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  await expect(citation.locator('[data-vtext-open-source]')).toBeVisible();
+  const journalOpenSource = rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]');
+  await expect(journalOpenSource).toBeVisible();
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
-  await citation.locator('[data-vtext-open-source]').click();
+  await journalOpenSource.click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toContainText(sourceLabel);
@@ -220,10 +241,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .vtext wit
   expect(exported.content).toBe(v1Content);
   expect(exported.content_hash).toBeTruthy();
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `imported-md-vtext-${stamp}.vtext` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `imported-md-vtext-${stamp}.vtext`);
   await expect(vtextWindow.locator('[data-vtext-version]')).toHaveText('v1');
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('Canonical editable document identity.');
 });
@@ -345,10 +363,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   expect(historical.metadata?.migration_manifest?.original_content_source).toBe('content_item');
   expect(historical.metadata?.migration_manifest?.original_content_path).toBe(oldItem.file_path);
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Content-backed Legal Cloud ${stamp}` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
@@ -360,10 +375,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   });
   expect(restored.revision_id).toBeTruthy();
   await page.reload();
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const restoredWindow = page.locator('[data-vtext-app]').last();
-  await expect(restoredWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await restoredWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Content-backed Legal Cloud ${stamp}` }).click();
+  const restoredWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
   const restoredRendered = restoredWindow.locator('[data-vtext-rendered]');
   const citation = restoredRendered.locator('[data-vtext-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
@@ -458,10 +470,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   expect(repaired.metadata?.source_entities).toHaveLength(1);
   expect(repaired.metadata?.source_repair_resolutions).toEqual([{ marker: '[2]', entity_id: sourceEntityID }]);
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Source Gap Repair ${stamp}` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `Source Gap Repair ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref]').first();
@@ -471,13 +480,12 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   await expect(citation).toHaveAttribute('data-expanded', 'true');
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
-  await expect(citation.locator('[data-vtext-open-source]')).toBeVisible();
+  await expect(rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]')).toBeVisible();
 });
 
 test('VText Sources panel applies source-gap repair and opens repaired source window', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const sourceEntityID = `src-panel-repair-${stamp}`;
   const sourceLabel = 'Panel Repair Source';
   const excerpt = 'Panel repair source evidence supports the citation.';
 
@@ -500,60 +508,24 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
     }),
   });
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Panel Source Repair ${stamp}` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `Panel Source Repair ${stamp}`);
 
   await vtextWindow.locator('[data-vtext-source-panel]').click();
   const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
   await expect(sourcePanel).toBeVisible({ timeout: 10000 });
   await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
-
-  const repairPayload = {
-    base_revision_id: imported.current_revision_id,
-    source_entities: [
-      {
-        entity_id: sourceEntityID,
-        kind: 'source_service_item',
-        label: sourceLabel,
-        target: {
-          target_kind: 'source_service_item',
-          item_id: `srcitem-panel-repair-${stamp}`,
-        },
-        selectors: [
-          {
-            selector_kind: 'text_quote',
-            text_quote: excerpt,
-            content_hash: `sha256-panel-repair-${stamp}`,
-          },
-        ],
-        display: {
-          inline_mode: 'embedded_excerpt',
-          expanded_mode: 'source_card',
-          open_surface: 'source',
-          default_collapsed: true,
-        },
-        evidence: {
-          state: 'available',
-          research_state: 'represented',
-        },
-        provenance: {
-          created_by: 'source_panel_repair_test',
-          rights_scope: 'source_service_projection',
-          untrusted_source_text: true,
-        },
-      },
-    ],
-    citation_resolutions: [
-      {
-        marker: '[2]',
-        entity_id: sourceEntityID,
-      },
-    ],
-  };
-  await sourcePanel.locator('[data-vtext-source-repair-payload]').fill(JSON.stringify(repairPayload, null, 2));
-  await sourcePanel.locator('[data-vtext-apply-source-repair]').click();
+  await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
+  await expect(sourcePanel.locator('[data-vtext-source-review-marker].selected')).toContainText('[2]');
+  await expect(sourcePanel.locator('[data-vtext-source-repair-payload]')).not.toBeVisible();
+  await sourcePanel.locator('[data-vtext-source-review-title]').fill(sourceLabel);
+  await sourcePanel.locator('[data-vtext-source-review-excerpt]').fill(excerpt);
+  const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
+  const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
+  await sourcePanel.locator('[data-vtext-apply-source-review]').click();
+  const repairRequest = await repairRequestPromise;
+  expect(repairRequest.method()).toBe('POST');
+  const repairResponse = await repairResponsePromise;
+  expect(repairResponse.status()).toBe(201);
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref]').first();
@@ -565,12 +537,12 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
 
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();
-  await citation.locator('[data-vtext-open-source]').click();
+  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toContainText(sourceLabel);
   await expect(sourceWindow).toContainText(excerpt);
-  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
   await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
 
@@ -580,7 +552,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const panelSourceWindow = page.locator('[data-content-viewer]').last();
   await expect(panelSourceWindow).toContainText(sourceLabel);
   await expect(panelSourceWindow).toContainText(excerpt);
-  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
+  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
 });
 
 test('VText Sources panel shows structured edit evidence without raw prompts', async ({ desktopSession }) => {
@@ -614,10 +586,7 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
     }),
   });
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-vtext-app]').last();
-  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Edit Evidence Fixture ${stamp}` }).click();
+  const vtextWindow = await openRecentVTextDocument(page, `Edit Evidence Fixture ${stamp}`);
 
   await vtextWindow.locator('[data-vtext-source-panel]').click();
   const editEvidence = vtextWindow.locator('[data-vtext-edit-evidence]');

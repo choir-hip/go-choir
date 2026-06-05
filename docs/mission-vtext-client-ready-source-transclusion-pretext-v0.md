@@ -5216,3 +5216,67 @@ forbidden shortcuts:
 - Do not remove diagnosis evidence from the source panel.
 - Do not make source review depend on raw repair JSON.
 - Do not add legal-cloud-specific marker handling or source mappings.
+
+## 2026-06-05 Local Repair: Typed Source Review Without Auto Diagnosis
+
+status: local_behavior_verified
+
+changes:
+
+- `VTextEditor.svelte` now exposes an owner-facing `Source review` panel for
+  unresolved citation markers. The owner selects a marker, enters a source
+  title, optional URL, and confirming excerpt, then applies `Apply source
+  review`.
+- The typed form builds the existing canonical source-repair payload and calls
+  `/api/vtext/documents/{doc_id}/source-repairs`. Raw repair JSON remains only
+  under a `Diagnostic JSON repair` disclosure.
+- Opening the Sources panel no longer automatically starts document diagnosis.
+  Diagnosis remains available as an explicit button for debugging/edit
+  evidence, but unresolved markers from the current VText revision are enough
+  to run the owner source-review workflow.
+- The source-review apply path now captures a plain payload with explicit
+  `base_revision_id`, shows `Sending source review...`, and then reloads the
+  repaired revision.
+- `frontend/tests/vtext-markdown-lineage.spec.js` now closes stale VText and
+  source-reader windows before opening each fixture document. This prevents
+  retained EventSource streams in the shared Playwright desktop account from
+  exhausting local browser/proxy connections and masking the source-review
+  behavior under test.
+
+local evidence:
+
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=90000` passed in 3.9s after
+  cleanup, proving the typed owner panel sends a real `POST /source-repairs`,
+  renders the repaired source ref, opens the Pretext journal source note, and
+  opens the repaired source window.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js --project=chromium
+  --timeout=120000` passed all 6 tests in 16.6s. Coverage includes Markdown
+  citation migration, imported `.md` to canonical `.vtext`, stored ContentItem
+  migration, direct canonical backend source repair, typed owner source review,
+  and structured edit metadata without raw prompts.
+- `pnpm --dir frontend build` passed. Vite emitted
+  `VTextEditor-D5Qz-okm.js` and the usual large-chunk warning for existing
+  application bundles.
+
+contract implication:
+
+- Source review now preserves the canonical VText/source-repair path while
+  removing raw JSON as the owner-grade workflow.
+- Diagnosis is no longer a hidden prerequisite for source repair. This better
+  matches the invariant that the source graph is canonical VText metadata and
+  citation/transclusion repair should be a bounded revision operation.
+- The stale-window cleanup is test harness hygiene, not a product workaround.
+  A separate future hardening axis remains: multiplex, pause, or otherwise
+  bound per-window VText streams so long-lived owner desktops cannot starve
+  ordinary API requests under HTTP/1.1-like local conditions.
+
+residual risks:
+
+- The explicit Diagnosis button path still needs a focused performance/hang
+  review. This repair intentionally stops diagnosis from blocking source
+  review; it does not claim the diagnosis endpoint is optimal.
+- The staged owner proof still needs to confirm the same typed source-review
+  behavior on the deployed owner account after push/deploy.
