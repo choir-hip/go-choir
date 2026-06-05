@@ -525,6 +525,76 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
   expect(pdfText).toContain('DOCX and PDF derivatives generated after publish');
 });
 
+test('PDF import can revise, publish, and export DOCX and PDF derivatives', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const fileName = `vtext-pdf-roundtrip-proof-${stamp}.pdf`;
+  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('VText PDF roundtrip proof'));
+
+  await openFilesApp(page);
+  const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
+  await expect(fileItem).toBeVisible({ timeout: 5000 });
+
+  const openResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/vtext/files/open'
+  );
+  await fileItem.locator('[data-import-vtext-btn]').click();
+  const opened = await (await openResponse).json();
+
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText PDF roundtrip proof', { timeout: 10_000 });
+
+  const doc = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}`);
+  const revisedContent = [
+    'VText PDF roundtrip proof',
+    '',
+    'The PDF projection became a revisable VText artifact.',
+    '',
+    '| Capability | Proof |',
+    '| --- | --- |',
+    '| Import | PDF text projected from original bytes |',
+    '| Export | DOCX and PDF derivatives generated from revised VText |',
+  ].join('\n');
+  const revision = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: revisedContent,
+      author_kind: 'user',
+      author_label: 'browser-test',
+      parent_revision_id: doc.current_revision_id,
+      metadata: {
+        proof: 'pdf_import_revise_publish_export',
+        source_path: fileName,
+      },
+    }),
+  });
+  expect(revision.revision_id).toBeTruthy();
+
+  const published = await fetchJSON(page, '/api/platform/vtext/publications', {
+    method: 'POST',
+    body: JSON.stringify({
+      doc_id: opened.doc_id,
+      revision_id: revision.revision_id,
+      slug: `pdf-roundtrip-proof-${stamp}`,
+    }),
+  });
+  expect(published.route_path).toMatch(/^\/pub\/vtext\//);
+
+  const docxExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=docx`);
+  expect(docxExport.format).toBe('docx');
+  expect(docxExport.media_type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  const docxBytes = Buffer.from(docxExport.content_base64, 'base64');
+  expect(docxBytes.subarray(0, 2).toString()).toBe('PK');
+
+  const pdfExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=pdf`);
+  expect(pdfExport.format).toBe('pdf');
+  expect(pdfExport.media_type).toBe('application/pdf');
+  const pdfText = Buffer.from(pdfExport.content_base64, 'base64').toString('latin1');
+  expect(pdfText).toContain('%PDF-1.4');
+  expect(pdfText).toContain('DOCX and PDF derivatives generated from revised VText');
+});
+
 // ---------------------------------------------------------------
 // Test: empty directory shows empty state (VAL-FILES-013)
 // ---------------------------------------------------------------

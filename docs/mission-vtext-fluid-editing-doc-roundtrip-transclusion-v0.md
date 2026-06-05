@@ -937,6 +937,14 @@ what was proven:
   through `/api/platform/vtext/publications`, exports DOCX and PDF through
   `/api/platform/publications/export`, verifies the DOCX is an OOXML package,
   and verifies the PDF bytes include the revised export line.
+- Staging browser fallback QA also passed for PDF import -> revise -> publish
+  -> export:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/file-browser.spec.js -g "PDF import can revise" --workers=1 --reporter=line`.
+  The test uploads a PDF through Files, imports it to VText through the visible
+  `VText` affordance, verifies the VText projection contains text extracted
+  from the original PDF bytes, creates a normal user revision, publishes that
+  revision, exports DOCX and PDF derivatives, verifies the DOCX is an OOXML
+  package, and verifies the PDF bytes include the revised export line.
 
 unproven or partial claims:
 
@@ -960,9 +968,9 @@ unproven or partial claims:
   legal-cloud proposal class, is not complete.
 - DOCX/PDF import now preserves original ContentItems, reads original bytes,
   records real byte hashes, creates VText projections, and has staged browser
-  proof for DOCX import -> revise -> publish -> DOCX/PDF export. Style-profile
-  preservation, asset manifests, full-fidelity PDF text extraction/OCR, and PDF
-  import -> revise -> export proof are not complete.
+  proof for DOCX and PDF import -> revise -> publish -> DOCX/PDF export.
+  Style-profile preservation, asset manifests, and full-fidelity PDF text
+  extraction/OCR are not complete.
 - Source entity behavior is still a frontend interaction proof for existing
   inline source markup; citation repair, source entity creation, publication
   projection, and open-owning-source proof over real legal-cloud citations
@@ -978,8 +986,7 @@ avoid whole-document edits while keeping semantic quality.
 
 next executable probe: use authenticated computer-use on staging to revise the
 legal-cloud proposal through the product path, capture prompt size/latency and
-delta evidence, verify the appendix table survives focus/edit/save/revise,
-prove PDF import -> revise -> export through the owner UI, and implement bulk
-Markdown lineage migration.
+delta evidence, verify the appendix table survives focus/edit/save/revise, and
+implement bulk Markdown lineage migration.
 
 suggested resume goal string: use the Goal String in this document.
