@@ -666,6 +666,66 @@ remaining error field:
 - Verify that the inline Pretext source flow remains the article-reading
   surface while the opened source window renders cleaned reader content.
 
+## 2026-06-05 Local Repair Checkpoint: Content Source Reader Snapshots
+
+status: checkpoint_incomplete
+
+behavior commit:
+
+- `559a72a6` (`fix: publish content source reader snapshots`).
+
+repair implemented:
+
+- `internal/proxy/platform_publish.go` now enriches VText publication metadata
+  before posting to platformd. For source entities that target owner
+  `ContentItem`s and are permitted for publication by source provenance or
+  explicit publication policy, the proxy fetches the owner content item through
+  the authenticated sandbox path and embeds a bounded `reader_snapshot` in the
+  source entity JSON.
+- The `reader_snapshot` records cleaned reader text, title, source/canonical
+  URLs, media type, content hash, source content id, character count,
+  truncation state, and `access_scope: publication_reader`.
+- Private source text is not published: source entities with
+  `private_user_source` provenance are skipped, and content item provenance is
+  checked so a private content item can veto publication even if the source
+  entity points at it.
+- `frontend/src/lib/vtext-source-renderer.ts` now separates inline excerpt text
+  from source-window reader text. Inline source notes continue to use
+  transclusion/selector excerpts; opened source windows can render
+  `reader_snapshot.text_content` before falling back to the bounded excerpt.
+
+local verification:
+
+- `nix develop -c go test ./internal/proxy -run
+  'TestHandleVTextPublication|TestContentItemAllowsPublishedSnapshot'` passed.
+- `nix develop -c go test ./internal/platform -run
+  'TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion|TestPublishVTextCreatesImmutablePublicRecords'`
+  passed.
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed,
+  including the Pretext journal-flow source wrapping test and table roundtrip
+  guards.
+
+local limitation:
+
+- `pnpm --dir frontend e2e
+  tests/vtext-source-service-publication.spec.js` failed locally before UI
+  assertions because `start-services.sh` does not launch platformd or the
+  platform Dolt SQL server. Proxy logged
+  `dial tcp 127.0.0.1:8086: connect: connection refused` for both the existing
+  source-service publication test and the new content-item reader-snapshot
+  publication test. This does not falsify the code path; it records that full
+  publication-route proof must be staging/deployed unless the local harness is
+  expanded to include platformd.
+
+remaining error field:
+
+- Push, wait for CI and Node B deploy, verify staging health/build identity, and
+  prove on the deployed owner/publication path that public-source ContentItem
+  reader snapshots are present in publication `source_entities`, inline source
+  flow remains excerpt-sized, and opening the source window renders the cleaned
+  reader snapshot without relying on iframe rendering.
+
 remaining error field:
 
 - The mission is still incomplete. The proof has not yet shown focus/edit/save
