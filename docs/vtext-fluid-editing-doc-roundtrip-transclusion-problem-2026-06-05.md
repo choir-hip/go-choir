@@ -167,6 +167,13 @@ recognizes `embedded_excerpt`, `embedded_preview`, `expanded`, and
 by fallback and makes default embedding depend on side effects instead of the
 source entity contract.
 
+Staging QA after commit `d755a58f` found a sharper version of the same issue:
+the citation marker expanded in-flow and showed the source title, but the
+inline transclusion did not include the YouTube iframe. The only media embed
+still lived in the separate source rail. That leaves multimedia transclusion
+half-shipped: the citation marker becomes expandable, but users must look
+elsewhere to inspect the media source.
+
 ## Desired State
 
 - Ordinary VText revisions use current head plus user edit diff by default.
