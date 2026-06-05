@@ -5028,3 +5028,57 @@ deployment status:
 - This is behavior-changing frontend code. It is not accepted until committed,
   pushed to `origin/main`, CI/deploy succeeds, Node B reports the new commit,
   and Comet staging proof verifies the deployed legal-cloud source flow.
+
+## 2026-06-05 Deployed Proof: Purpose-Built Journal Source Note
+
+status: deployed_simplification_checkpoint_incomplete
+
+deployment evidence:
+
+- Behavior commit `55762aeeefb6ed1aae94445f8ee3ad160d06e85b`
+  (`fix: render vtext source notes as journal notes`) was pushed to
+  `origin/main`.
+- GitHub Actions CI run `27044800178` succeeded, including Go vet/build,
+  runtime shards, non-runtime tests, frontend build, and Node B deploy.
+- FlakeHub run `27044800187` succeeded for the same head SHA.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `55762aeeefb6ed1aae94445f8ee3ad160d06e85b`, deployed at
+  `2026-06-05T23:09:09Z`.
+- The deployed app shell referenced frontend asset `assets/index-Bg-UU-D2.js`.
+
+staging proof:
+
+- Computer Use on Comet reloaded the deployed legal-cloud route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- After reload, the full client proposal rehydrated with collapsed inline
+  source markers and the already-open ABA Rule 1.6 source reader still
+  available.
+- Clicking the `ABA Formal Opinion 512` source marker expanded a single
+  purpose-built journal source note. The note showed title, source excerpt,
+  `Open source`, and `Close`, while proposal prose routed beside it in a
+  left-column reading flow.
+- The deployed note no longer presented as a rounded source card shell or a
+  cloned popover; the visible surface was a minimal marginal/journal note.
+- Clicking `Open source` from that note opened a separate source reader window
+  for `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`,
+  with reader-mode source content and collapsed `Source evidence`,
+  `Source entity`, and `Provenance` disclosures.
+
+publication/export proof:
+
+- Public resolve for the deployed route returned `7` source entities and `7`
+  transclusions.
+- Public Markdown export returned
+  `choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md`,
+  `text/markdown; charset=utf-8`, 38,398 content bytes, compact `source:`
+  markers, no `missing source` prose, and
+  `metadata.private_material_omitted: true`.
+
+contract implication:
+
+- The journal-note repair changes only the article-side source-note projection.
+  It preserves the canonical VText/publication source graph, opened source
+  windows, source publication access, and Markdown export.
+- This is progress on the magazine/academic journal UX axis, but not the final
+  source UX. The remaining work is source acquisition/cleanup, owner-grade
+  source review, and further editor/runtime simplification.
