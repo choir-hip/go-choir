@@ -626,3 +626,47 @@ remaining error field:
   metadata on the owner document, source gap repair, client-ready researched
   citations, publication source access, Pretext source-card flow, Markdown
   export from canonical VText, or post-proof review/PDF/simplification.
+
+## 2026-06-05 Owner Source-State Probe: Canonical Document Has No Source Graph
+
+status: new_problem_documented_before_fix
+
+Comet owner-account probe:
+
+- Computer Use ran a read-only same-origin inspector in Comet against
+  `/api/vtext/revisions/9087c815-395f-427b-a8a5-0593891831fd`.
+- The revision fetch returned HTTP `200` JSON for the canonical owner head
+  `9087c815-395f-427b-a8a5-0593891831fd`, version `82`.
+- The inspector reported:
+  - `content_chars: 38044`;
+  - `source_entities: 0`;
+  - `source_gaps: 0`;
+  - `unresolved_markers: []`;
+  - `table_blocks: 1`;
+  - metadata keys: `canonical_vtext_source_path`, `proof`, `source`.
+
+new problem:
+
+- The owner proposal is now canonical `.vtext`, but it still has no canonical
+  source graph and no recorded source gaps. This is different from the visible
+  fallback source-backed sibling document, which had source entities and
+  source windows but was not the full client proposal.
+- The absence of `source_gaps` is itself a correctness gap: the full client
+  proposal contains factual/legal/architecture/vendor claims that need
+  researched confirming, refuting, or qualifying sources, but the current head
+  gives the source-repair workflow no durable claim inventory to resolve.
+- Because there are no visible unresolved citation markers, the next repair
+  should not introduce `missing source` prose. It should inventory claims,
+  create/attach source entities with bounded selectors where evidence is
+  warranted, and leave uncited claims uncited only when no source is needed.
+
+remaining error field:
+
+- Need a product path for source graph creation on the full canonical owner
+  proposal. The path must not rely on prose source tables or top-bunched source
+  decks. It must create durable `source_entities`, source gaps/claim inventory
+  where evidence is still pending, source transclusion points in the body, and
+  publication source records that authorized readers can inspect.
+- The source graph repair must preserve the one detected Markdown table block
+  and must be tested against the already repaired `.vtext` owner head, not
+  against a short sibling demo.
