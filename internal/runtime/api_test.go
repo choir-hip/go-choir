@@ -1723,6 +1723,85 @@ exit 2
 	}
 }
 
+func TestBrowserSessionNavigateUsesHTMLFallbackWhenTextSnapshotEmpty(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "obscura")
+	if err := os.WriteFile(bin, []byte(`#!/bin/sh
+mode=text
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--dump" ]; then
+    mode="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ "$mode" = "text" ]; then
+  exit 0
+fi
+if [ "$mode" = "html" ]; then
+  printf '<!doctype html><title>Readable HTML Fallback</title><main><h1>Readable HTML Fallback</h1><p>Source text recovered from html.</p><script>ignored()</script></main>'
+  exit 0
+fi
+if [ "$mode" = "links" ]; then
+  printf 'https://example.com/source\tSource link\n'
+  exit 0
+fi
+`), 0o755); err != nil {
+		t.Fatalf("write fake obscura: %v", err)
+	}
+	rt.cfg.ObscuraPath = bin
+
+	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
+	}
+	var created types.BrowserSessionRecord
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	if navigateW.Code != http.StatusOK {
+		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
+	}
+	var navigated types.BrowserSessionRecord
+	if err := json.NewDecoder(navigateW.Body).Decode(&navigated); err != nil {
+		t.Fatalf("decode navigate: %v", err)
+	}
+	if navigated.State != types.BrowserSessionReady {
+		t.Fatalf("state = %q, want %q; session: %+v", navigated.State, types.BrowserSessionReady, navigated)
+	}
+	if !strings.Contains(navigated.TextSnapshot, "Source text recovered from html.") {
+		t.Fatalf("text_snapshot missing html fallback text: %q", navigated.TextSnapshot)
+	}
+	if !strings.Contains(navigated.HTMLSnapshot, "<title>Readable HTML Fallback</title>") {
+		t.Fatalf("html_snapshot missing raw html: %q", navigated.HTMLSnapshot)
+	}
+	if len(navigated.Links) != 1 || navigated.Links[0].Text != "Source link" {
+		t.Fatalf("links = %+v, want extracted fake link", navigated.Links)
+	}
+	if len(navigated.SnapshotWarnings) != 1 || !strings.Contains(navigated.SnapshotWarnings[0], "used html readable fallback") {
+		t.Fatalf("snapshot_warnings = %+v, want html fallback warning", navigated.SnapshotWarnings)
+	}
+
+	events, err := rt.Store().ListEventsByTrajectory(context.Background(), "user-alice", browserSessionTraceID(created.SessionID), 10)
+	if err != nil {
+		t.Fatalf("list browser trace events: %v", err)
+	}
+	if len(events) != 2 || events[1].Kind != types.EventBrowserNavigationCompleted {
+		t.Fatalf("browser trace events = %+v, want completed navigation", events)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("decode browser completion payload: %v", err)
+	}
+	if int(payload["snapshot_warning_count"].(float64)) != 1 {
+		t.Fatalf("snapshot warning payload = %+v, want count 1", payload)
+	}
+}
+
 func TestBrowserSessionNavigateFailsWhenTextSnapshotFails(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	dir := t.TempDir()

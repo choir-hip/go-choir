@@ -619,14 +619,27 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 		return browserSnapshotResult{}, err
 	}
 	text = strings.TrimSpace(text)
+	htmlTimeout := browserOptionalSnapshotTimeout
 	if text == "" {
-		return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty")
+		htmlTimeout = browserTextSnapshotTimeout
 	}
-	linksRaw, err := runObscuraFetchDump(ctx, resolved, targetURL, "links", browserOptionalSnapshotTimeout)
+	html, err := runObscuraFetchDump(ctx, resolved, targetURL, "html", htmlTimeout)
 	if err != nil {
+		if text == "" {
+			return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty and html fallback failed: %w", err)
+		}
 		result.Warnings = append(result.Warnings, err.Error())
 	}
-	html, err := runObscuraFetchDump(ctx, resolved, targetURL, "html", browserOptionalSnapshotTimeout)
+	html = strings.TrimSpace(html)
+	if text == "" {
+		title, readable := extractReadableHTML([]byte(html))
+		text = browserHTMLFallbackText(title, readable)
+		if text == "" {
+			return browserSnapshotResult{}, fmt.Errorf("backend browser text snapshot was empty and html fallback was unreadable")
+		}
+		result.Warnings = append(result.Warnings, "backend browser text snapshot was empty; used html readable fallback")
+	}
+	linksRaw, err := runObscuraFetchDump(ctx, resolved, targetURL, "links", browserOptionalSnapshotTimeout)
 	if err != nil {
 		result.Warnings = append(result.Warnings, err.Error())
 	}
@@ -641,7 +654,6 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	if len(text) > maxStoredExtractedText {
 		text = text[:maxStoredExtractedText]
 	}
-	html = strings.TrimSpace(html)
 	if len(html) > maxStoredExtractedText {
 		html = html[:maxStoredExtractedText]
 	}
@@ -653,6 +665,18 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	result.ScreenshotPNG = screenshotPNG
 	result.BackendSessionID = backendSessionID
 	return result, nil
+}
+
+func browserHTMLFallbackText(title, readable string) string {
+	title = strings.TrimSpace(title)
+	readable = strings.TrimSpace(readable)
+	if readable == "" {
+		return title
+	}
+	if title == "" || strings.HasPrefix(readable, title) {
+		return readable
+	}
+	return title + "\n\n" + readable
 }
 
 type obscuraCDPVersionEndpoint struct {
