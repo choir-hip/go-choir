@@ -5177,6 +5177,25 @@ root-cause hypothesis:
   fetch makes the owner workflow brittle and creates avoidable request
   concurrency in local/staging proof.
 
+updated root-cause evidence:
+
+- After diagnosis was decoupled, the panel reached `Sending source review...`
+  but Playwright still never observed a `/source-repairs` response before the
+  test timeout.
+- The desktop snapshot showed seven old windows in the same shared Playwright
+  account, including multiple VText windows and a source reader window from
+  earlier runs. Each loaded VText document owns an EventSource stream through
+  `openDocumentStream()`.
+- The direct same-origin API call from `curl` using the same Playwright cookies
+  imported a source-gap document and repaired it through
+  `/api/vtext/documents/{id}/source-repairs` with HTTP `201` immediately. That
+  proves the backend repair contract and payload shape are not the blocker.
+- The current best root cause is local browser/proxy connection pressure from
+  retained desktop windows and VText document streams in the shared test
+  account. The owner workflow still should not auto-start diagnosis, and the
+  test harness should not accumulate stale VText/source windows before proving
+  a source-review interaction.
+
 intended generic repair:
 
 - Make the owner-grade source review path independent of diagnosis completion:
@@ -5188,6 +5207,9 @@ intended generic repair:
 - Prevent overlapping diagnosis/repair interactions from leaving ambiguous UI
   state. The review action should either wait for, cancel/ignore, or run
   independently of diagnosis with clear status.
+- For the E2E proof, close stale VText/source-reader windows before opening the
+  source-review fixture so the test proves the actual owner path rather than
+  testing an exhausted local desktop session.
 
 forbidden shortcuts:
 
