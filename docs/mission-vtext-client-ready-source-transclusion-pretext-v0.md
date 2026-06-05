@@ -4728,3 +4728,50 @@ next executable probe:
   scaffolding without changing behavior, especially `writeThroughToFile`, raw
   source repair payload construction, source artifact panel state, and repeated
   source helper code.
+
+## 2026-06-05 Simplification Pass: Remove Legacy File Write-Through
+
+status: local_simplification_verified_pending_deploy
+
+problem source:
+
+- The hard review identified `writeThroughToFile` as legacy noncanonical
+  compatibility debt. Under the current invariant, canonical document writes go
+  through VText revisions, and Markdown/source files are import artifacts or
+  export projections.
+- Inspection showed every caller of `writeThroughToFile` was already inside a
+  VText document flow with `currentDoc?.doc_id`, and the function returned
+  immediately for that case. It was dead code on normal VText save/autosave/head
+  update paths.
+
+change:
+
+- Removed `writeThroughToFile` and its helper `buildFilePath` from
+  `VTextEditor.svelte`.
+- Removed no-op calls from explicit save, local draft autosave, and head-change
+  handling.
+- Preserved canonical VText revision writes, local draft autosave, manifest
+  creation, source flow behavior, and Markdown export behavior.
+
+verification:
+
+- `pnpm --dir frontend build` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(APICreateRevisionCanonicalizesAliasedImportedDocumentTitle|OpenFileResolvesCanonicalAlias|ImportMarkdownLineageCreatesRevisionHistory|ImportMarkdownLineageResolvesCitationMarkers|ImportMarkdownLineageUsesExistingContentItems|ImportMarkdownLineageRejectsMissingContentItem|ImportMarkdownLineageRejectsUnknownCitationEntity|ImportMarkdownLineageRejectsExistingAlias|OpenFilePreservesDocxAndPDFOriginalArtifacts|OpenFileImportsDocxAndPDFBytesFromFilesRoot|EnsureManifestCreatesAliasAndFile|EnsureManifestReusesExistingAlias|CreateRevisionRejectsStaleHead|CreateRevisionRebasesAllowedStaleUserDraft|AppagentEditCanonicalizesAliasedMarkdownTitle)$'`
+  passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium` passed after
+  manually starting the local auth, proxy, frontend, and existing sandbox
+  listener.
+- First Playwright attempts failed before app behavior because no Vite listener
+  was running on `localhost:4173`, then because auth/proxy had exited after the
+  service script. The successful run used supervised local auth/proxy/frontend
+  sessions.
+
+residual risks:
+
+- This is a small deletion, not the full simplification pass. Raw source repair
+  JSON, source artifact panel complexity, and large editor/runtime modules
+  remain.
+- The simplification still needs commit, push, CI, Node B deploy, staging
+  identity, and renewed Comet proof before it is accepted as deployed behavior.

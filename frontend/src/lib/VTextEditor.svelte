@@ -540,11 +540,6 @@
     }
   }
 
-  function buildFilePath(sourcePath) {
-    if (!sourcePath) return '';
-    return '/api/files/' + sourcePath.split('/').map(encodeURIComponent).join('/');
-  }
-
   function isVTextShortcutPath(sourcePath) {
     return typeof sourcePath === 'string' && sourcePath.toLowerCase().endsWith('.vtext');
   }
@@ -872,22 +867,6 @@
     }
   }
 
-  async function writeThroughToFile(content) {
-    if (!appContext.sourcePath) return;
-    if (isVTextShortcutPath(appContext.sourcePath)) return;
-    if (currentDoc?.doc_id) return;
-    const filePath = buildFilePath(appContext.sourcePath);
-    const fileRes = await fetchWithRenewal(filePath, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      body: content,
-    });
-    if (!fileRes.ok) {
-      const body = await fileRes.json().catch(() => ({}));
-      throw new Error(body.error || `File save failed (${fileRes.status})`);
-    }
-  }
-
   async function ensureFileManifest() {
     if (!currentDoc?.doc_id || isVTextShortcutPath(appContext.sourcePath)) return;
     const manifest = await ensureDocumentManifest(currentDoc.doc_id);
@@ -925,7 +904,6 @@
     }
     if (!currentRevision || editorValue !== (currentRevision.content || '')) {
       saveStatus = statusPrefix;
-      await writeThroughToFile(editorValue);
       return saveUserVersion();
     }
     return currentRevision;
@@ -973,7 +951,6 @@
     saveStatus = 'Saving draft...';
 
     try {
-      await writeThroughToFile(contentAtSave);
       persistLocalDraft(contentAtSave, currentRevision?.revision_id || '');
       lastAutosavedContent = contentAtSave;
       saveStatus = 'Saved';
@@ -1027,9 +1004,6 @@
     await reloadDocument(revisionId);
     clearNewVersionIndicator();
     saveStatus = hadAgentVersionBefore ? 'Agent created next version' : 'First draft ready';
-    if (appContext.sourcePath) {
-      await writeThroughToFile(editorValue);
-    }
   }
 
   async function handleDocumentStreamEvent(event) {
