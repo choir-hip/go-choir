@@ -4442,3 +4442,124 @@ residual risks:
 - The requested whole-mission/current-system review report, iCloud PDF export,
   and simplification/dead-code pass remain pending until the source-reader and
   canonical `.vtext` axes have enough end-to-end behavior to review honestly.
+
+## 2026-06-05 Cognitive Transform: Source Reader Is Article Evidence, Not App Chrome
+
+status: documented_before_next_code
+
+current uncertainty or obstacle:
+
+- The deployed source-open path now works, but the source window that opened in
+  Comet is still a generic metadata card: title, media type, reference URL,
+  SHA-256, then raw preformatted text. For a client-facing legal proposal, that
+  is too much product chrome and not enough reader-mode source content.
+- This is related to, but distinct from, the Pretext source-note work. Pretext
+  is the right tool for magazine/journal wrapping inside the article. The
+  source window should be the opened source artifact: cleaned Markdown first,
+  provenance available on demand, and iframe/Web Lens only as fallback when a
+  cleaned source artifact is absent.
+
+selected cognitive transforms:
+
+1. Audience-level translation - the client is not inspecting a debugging
+   object; the client is reading evidence beside a professional proposal.
+2. Depth extraction - "source available" is shallow if it means a metadata
+   card exists. The load-bearing variable is whether the reader can inspect the
+   supporting source content without losing the article's flow or trust model.
+3. Homotopy/projection - keep one real source graph and one real source window
+   path. Do not add a separate demo reader; improve the existing content-item
+   source viewer so it remains a projection of the publication source artifact.
+4. Dead-path pressure - if source artifacts are already cleaned Markdown, a raw
+   pre block plus visible hashes is a weak shortcut path. Provenance belongs in
+   collapsed evidence details unless the user asks for diagnostics.
+
+changed plan:
+
+- implementation: make `ContentViewer` render text/Markdown content as a
+  content-first reader article with headings, lists, quotes, tables, links, and
+  paragraphs; demote media type, reference URL, hash, and source-entity metadata
+  to compact/collapsed evidence.
+- verifier/evidence: extend existing publication/source tests to assert the
+  source window exposes cleaned reader Markdown, not only raw text inside a
+  metadata card.
+- scope: do not change source graph shape, publication policy, or VText
+  citation metadata. Do not add legal-cloud-specific source rendering.
+- stopping condition: a published/public source window can open from a citation
+  and read as a source artifact first, while article-side source expansion
+  remains the Pretext-wrapped journal note.
+
+next high-information action:
+
+- Repair the generic Source `ContentViewer` reader-mode path and verify it with
+  the existing source publication tests before returning to owner-document
+  staging proof.
+
+## 2026-06-05 Repair: Source Window Reader-Mode Markdown
+
+status: local_behavior_repaired_awaiting_staging_deploy
+
+implementation:
+
+- `ContentViewer.svelte` now treats cleaned text/Markdown source content as the
+  primary surface of a Source window. It renders headings, paragraphs, lists,
+  blockquotes, code blocks, links, and Markdown tables into a reader article
+  (`data-content-reader-markdown`) instead of leading with a rounded metadata
+  card and raw `<pre>` text.
+- The Markdown block parser is shared in `vtext-markdown-renderer.ts` rather
+  than duplicated between VText and Source. VText keeps wrapped document tables;
+  Source uses the same parser with reader heading levels and unwrapped source
+  tables.
+- Source evidence such as media type, reference URL, and SHA-256 remains
+  available under collapsed `Source evidence`. Source-entity and provenance
+  details also remain available on demand.
+- The open-source path and source graph data model are unchanged. This is a
+  generic content-item/source-window presentation repair, not a legal-cloud or
+  ABA-specific branch.
+- The article-side Pretext journal note remains the wrapping mechanism for
+  reading around a source note inside VText. The opened Source window is the
+  source artifact reader, not another in-article card layer.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js:81 --project=chromium` passed
+  for the new reader-mode Markdown regression.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium` passed:
+  5 tests covering media source opening, content-item Markdown source opening,
+  Pretext journal source flow, untouched table roundtrip, and bounded table edit
+  preservation.
+- `git diff --check` passed.
+
+local harness limitation:
+
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js --project=chromium`
+  could not be used as the local verifier because the ad hoc local service
+  stack did not include `platformd` backed by a platform Dolt SQL server, so
+  `/api/platform/vtext/publications` returned `502 failed to publish vtext`.
+  This is a local harness/platformd availability limitation, not evidence about
+  the Source viewer rendering path.
+- During the first attempt, persisted local VText windows from earlier test
+  runs caused a launched Source window to remain at `Opening Source...` until
+  the test explicitly cleared saved desktop windows. This reinforces the
+  existing desktop-recovery residual risk: restored live windows can interfere
+  with source proof and should be controlled in tests and cleaned in Comet
+  screenshots.
+
+behavior proven locally:
+
+- A VText citation can open a content-item Source window whose cleaned Markdown
+  source text renders as reader content with a heading, list items, and table.
+- The reader article contains source substance but not the content item id.
+- Diagnostic source evidence remains available outside the article surface.
+
+residual risks:
+
+- This repair is not accepted until pushed, deployed to Node B, and verified in
+  Comet/staging on the real legal-cloud owner/public route.
+- Browser/Web Lens iframe fallback remains a separate axis; this repair improves
+  cleaned content-item source artifacts, not arbitrary iframe rendering.
+- The full magazine/journal design pass still needs visual tuning across the
+  Pretext source note and opened source window together.

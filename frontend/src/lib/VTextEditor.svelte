@@ -39,7 +39,6 @@
   import {
     mediaRefToSourceEntity,
     publicationBundleSourceEntities as publicationBundleSourceEntitiesFromRenderer,
-    renderInlineMarkdown,
     sourceEntityID,
     sourceEntityKindLabel,
     sourceEntityOpenAppID,
@@ -47,6 +46,7 @@
     sourceEntityTargetURL,
     sourceEntityTitle,
   } from './vtext-source-renderer';
+  import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import { clearSourceJournalFlows, mountSourceJournalFlow } from './vtext-source-flow';
 
   export let currentUser = null;
@@ -125,121 +125,6 @@
   const SOURCE_FLOW_MIN_WIDTH = 620;
   const SOURCE_FLOW_GAP = 24;
   const SOURCE_FLOW_LINE_HEIGHT = 29;
-
-  function renderMarkdown(value, sourceEntities = []) {
-    const normalized = String(value || '').replace(/\|\s+\|/g, '|\n|');
-    const lines = normalized.split(/\r?\n/);
-    const blocks = [];
-    let paragraph = [];
-    let list = [];
-    let quote = [];
-    let table = [];
-
-    function flushParagraph() {
-      if (paragraph.length === 0) return;
-      blocks.push(`<p>${renderInlineMarkdown(paragraph.join(' '), sourceEntities)}</p>`);
-      paragraph = [];
-    }
-
-    function flushList() {
-      if (list.length === 0) return;
-      blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item, sourceEntities)}</li>`).join('')}</ul>`);
-      list = [];
-    }
-
-    function flushQuote() {
-      if (quote.length === 0) return;
-      blocks.push(`<blockquote>${quote.map((item) => `<p>${renderInlineMarkdown(item, sourceEntities)}</p>`).join('')}</blockquote>`);
-      quote = [];
-    }
-
-    function parseTableRow(line) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null;
-      const cells = trimmed
-        .slice(1, -1)
-        .split('|')
-        .map((cell) => cell.trim());
-      return cells.length >= 2 ? cells : null;
-    }
-
-    function isTableSeparator(cells) {
-      return Array.isArray(cells) && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-    }
-
-    function flushTable() {
-      if (table.length === 0) return;
-      const parsed = table.map(parseTableRow).filter(Boolean);
-      if (parsed.length >= 2 && isTableSeparator(parsed[1])) {
-        const headers = parsed[0];
-        const rows = parsed.slice(2);
-        blocks.push(`<div class="table-scroll"><table><thead><tr>${headers.map((cell) => `<th>${renderInlineMarkdown(cell, sourceEntities)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell, sourceEntities)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
-      } else {
-        blocks.push(`<p>${renderInlineMarkdown(table.join(' '), sourceEntities)}</p>`);
-      }
-      table = [];
-    }
-
-    for (const rawLine of lines) {
-      const line = rawLine.trimEnd();
-      const trimmed = line.trim();
-      if (!trimmed) {
-        flushParagraph();
-        flushList();
-        flushQuote();
-        flushTable();
-        continue;
-      }
-
-      const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
-      if (heading) {
-        flushParagraph();
-        flushList();
-        flushQuote();
-        flushTable();
-        const level = heading[1].length;
-        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2], sourceEntities)}</h${level}>`);
-        continue;
-      }
-
-      if (parseTableRow(trimmed)) {
-        flushParagraph();
-        flushList();
-        flushQuote();
-        table.push(trimmed);
-        continue;
-      }
-
-      const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-      if (bullet) {
-        flushParagraph();
-        flushQuote();
-        flushTable();
-        list.push(bullet[1]);
-        continue;
-      }
-
-      const quoteLine = trimmed.match(/^>\s?(.*)$/);
-      if (quoteLine) {
-        flushParagraph();
-        flushList();
-        flushTable();
-        quote.push(quoteLine[1]);
-        continue;
-      }
-
-      flushList();
-      flushQuote();
-      flushTable();
-      paragraph.push(trimmed);
-    }
-
-    flushParagraph();
-    flushList();
-    flushQuote();
-    flushTable();
-    return blocks.join('\n') || '<p class="empty-doc">Blank document.</p>';
-  }
 
   function revisionMediaSourceRefs(revision = currentRevision) {
     const refs = revision?.metadata?.media_source_refs;
@@ -414,7 +299,7 @@
 
   function renderDocumentHTML(value = editorValue) {
     const entities = revisionSourceEntities();
-    return renderMarkdown(value, entities);
+    return renderMarkdownBlocks(value, entities, { emptyHTML: '<p class="empty-doc">Blank document.</p>' });
   }
 
   function serializeInlineMarkdown(node) {

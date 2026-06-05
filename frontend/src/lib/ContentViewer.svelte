@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
+  import { renderMarkdownBlocks } from './vtext-markdown-renderer';
 
   export let appContext = {};
 
@@ -26,6 +27,9 @@
   $: embedUrl = mediaType === 'video/youtube' || /youtube\.com|youtu\.be/.test(sourceUrl)
     ? youtubeEmbedURL(sourceUrl)
     : '';
+  $: readerText = String(item?.text_content || sourceEntitySnapshot || '').trim();
+  $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: false });
+  $: hasReaderText = readerText.length > 0;
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
@@ -99,7 +103,7 @@
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else}
-    <div class="preview-shell">
+    <div class:preview-shell={!hasReaderText || appHint === 'image' || appHint === 'audio' || appHint === 'video' || appHint === 'pdf'} class:reader-shell={hasReaderText}>
       {#if appHint === 'image' && displayUrl}
         <img src={displayUrl} alt={title} />
       {:else if appHint === 'audio' && displayUrl}
@@ -112,24 +116,39 @@
         </video>
       {:else if appHint === 'pdf' && displayUrl}
         <iframe title={title} src={displayUrl} />
+      {:else if hasReaderText}
+        <article class="source-reader" data-content-reader-markdown>
+          {@html readerHTML}
+        </article>
       {:else}
-        <div class="metadata-card">
-          <p><strong>Media type:</strong> {mediaType || 'unknown'}</p>
-          {#if displayUrl}<p><strong>Reference:</strong> {displayUrl}</p>{/if}
-          {#if item?.content_hash}<p><strong>SHA-256:</strong> {item.content_hash}</p>{/if}
-          {#if item?.text_content}
-            <pre>{item.text_content.slice(0, 4000)}</pre>
-          {:else if sourceEntitySnapshot}
-            <pre>{sourceEntitySnapshot.slice(0, 4000)}</pre>
-          {:else}
-            <p>This content is registered in the shared substrate. A dedicated reader/player can render it in Section 7.</p>
-          {/if}
-        </div>
+        <p class="empty-source">This content is registered in the shared substrate. A dedicated reader/player can render it when a cleaned source artifact is available.</p>
       {/if}
     </div>
 
+    <details class="provenance source-evidence" data-content-evidence>
+      <summary>Source evidence</summary>
+      <dl>
+        <div>
+          <dt>Media type</dt>
+          <dd>{mediaType || 'unknown'}</dd>
+        </div>
+        {#if displayUrl}
+          <div>
+            <dt>Reference</dt>
+            <dd>{displayUrl}</dd>
+          </div>
+        {/if}
+        {#if item?.content_hash}
+          <div>
+            <dt>SHA-256</dt>
+            <dd>{item.content_hash}</dd>
+          </div>
+        {/if}
+      </dl>
+    </details>
+
     {#if sourceEntity}
-      <details class="provenance" data-source-entity open>
+      <details class="provenance" data-source-entity>
         <summary>Source entity</summary>
         <p><strong>Entity:</strong> {appContext?.sourceEntityId || sourceEntity?.entity_id || sourceEntity?.source_entity_id || 'source'}</p>
         {#if appContext?.sourceServiceItemId || sourceEntityTarget?.item_id}
@@ -161,9 +180,7 @@
     min-height: 100%;
     padding: 22px;
     color: var(--choir-text-primary);
-    background:
-      radial-gradient(circle at 10% 0%, var(--choir-state-hover), transparent 32%),
-      var(--choir-surface-app);
+    background: var(--choir-surface-app);
     overflow: auto;
   }
 
@@ -190,20 +207,22 @@
   }
 
   .source-link {
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 999px;
-    padding: 9px 14px;
     color: var(--choir-text-accent);
-    text-decoration: none;
-    background: var(--choir-state-selected);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    font-weight: 700;
   }
 
   .preview-shell {
     min-height: 320px;
     border: 1px solid var(--choir-border);
-    border-radius: 22px;
+    border-radius: 8px;
     background: var(--choir-state-selected);
     overflow: hidden;
+  }
+
+  .reader-shell {
+    min-height: 0;
   }
 
   img,
@@ -228,21 +247,102 @@
     width: calc(100% - 48px);
   }
 
-  .metadata-card {
-    padding: 22px;
+  .source-reader {
+    max-width: 72ch;
+    padding: 2px 0 4px;
+    color: var(--choir-text-primary);
+    font-size: 1rem;
+    line-height: 1.7;
   }
 
-  pre {
+  .source-reader :global(h2),
+  .source-reader :global(h3),
+  .source-reader :global(h4),
+  .source-reader :global(h5) {
+    margin: 1.25em 0 0.35em;
+    color: var(--choir-text-accent);
+    line-height: 1.18;
+  }
+
+  .source-reader :global(h2:first-child),
+  .source-reader :global(h3:first-child) {
+    margin-top: 0;
+  }
+
+  .source-reader :global(p) {
+    margin: 0 0 1em;
+  }
+
+  .source-reader :global(blockquote) {
+    margin: 1.1em 0;
+    padding-left: 1em;
+    border-left: 3px solid var(--choir-border-strong);
+    color: var(--choir-text-secondary);
+  }
+
+  .source-reader :global(ul),
+  .source-reader :global(ol) {
+    margin: 0 0 1em 1.3em;
+    padding: 0;
+  }
+
+  .source-reader :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.1em 0;
+    font-size: 0.95em;
+  }
+
+  .source-reader :global(th),
+  .source-reader :global(td) {
+    border-bottom: 1px solid var(--choir-border);
+    padding: 0.45em 0.5em;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .source-reader :global(pre) {
     white-space: pre-wrap;
     word-break: break-word;
-    color: var(--choir-text-accent);
+    padding: 12px;
+    border: 1px solid var(--choir-border);
+    border-radius: 8px;
+    background: var(--choir-state-selected);
+  }
+
+  .empty-source {
+    margin: 0;
+    padding: 18px;
   }
 
   .provenance {
     border: 1px solid var(--choir-border);
-    border-radius: 18px;
+    border-radius: 8px;
     padding: 12px 14px;
-    background: var(--choir-state-selected);
+    background: color-mix(in srgb, var(--choir-text-primary) 4%, transparent);
+    overflow-wrap: anywhere;
+  }
+
+  .source-evidence dl {
+    display: grid;
+    gap: 10px;
+    margin: 12px 0 0;
+  }
+
+  .source-evidence div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .source-evidence dt {
+    color: var(--choir-text-muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .source-evidence dd {
+    margin: 0;
   }
 
   .status,

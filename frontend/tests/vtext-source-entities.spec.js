@@ -78,6 +78,137 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(page.locator('[data-window]').filter({ hasText: 'YouTube source fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
 
+test('VText opens content-item text sources as reader-mode markdown', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  const created = await page.evaluate(async () => {
+    const title = `Content Source Reader Fixture ${Date.now()}`;
+    const contentRes = await fetch('/api/content/items', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'extracted_url',
+        media_type: 'text/markdown',
+        app_hint: 'content',
+        title: 'Reader-mode source fixture',
+        source_url: 'https://example.com/source-reader-fixture',
+        canonical_url: 'https://example.com/source-reader-fixture',
+        text_content: [
+          '# Reader-mode source fixture',
+          '',
+          'Full cleaned reader source detail supports the cited claim.',
+          '',
+          '- First supporting point',
+          '- Second supporting point',
+          '',
+          '| Field | Value |',
+          '| --- | --- |',
+          '| Evidence | Cleaned markdown |',
+        ].join('\n'),
+        provenance: {
+          rights_scope: 'public_source',
+          created_by: 'browser-test',
+        },
+      }),
+    });
+    if (!contentRes.ok) throw new Error(`create content item failed: ${contentRes.status}`);
+    const item = await contentRes.json();
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Content Source Reader Fixture\n\nThis claim has a cleaned source [1](source:src-reader-mode).',
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: {
+          source_entities: [
+            {
+              entity_id: 'src-reader-mode',
+              kind: 'content_item',
+              label: 'Reader-mode source fixture',
+              target: {
+                target_kind: 'content_item',
+                content_id: item.content_id,
+                url: item.source_url,
+                canonical_url: item.canonical_url,
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'Full cleaned reader source detail supports the cited claim.',
+                  content_hash: item.content_hash,
+                },
+              ],
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'content',
+                default_collapsed: true,
+              },
+              evidence: {
+                state: 'available',
+                research_state: 'confirmed',
+              },
+              provenance: {
+                created_by: 'browser-test',
+                rights_scope: 'public_source',
+                untrusted_source_text: true,
+              },
+            },
+          ],
+        },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    return { title, contentID: item.content_id };
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-reader-mode"]');
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+  const flowNote = rendered.locator('[data-vtext-source-flow-note]');
+  await expect(flowNote).toBeVisible();
+  await flowNote.locator('[data-vtext-open-source][data-source-entity-id="src-reader-mode"]').click();
+
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  const reader = sourceWindow.locator('[data-content-reader-markdown]');
+  await expect(reader).toBeVisible();
+  await expect(reader.locator('h2')).toContainText('Reader-mode source fixture');
+  await expect(reader.locator('li')).toHaveCount(2);
+  await expect(reader.locator('table')).toContainText('Cleaned markdown');
+  await expect(reader).toContainText('Full cleaned reader source detail');
+  await expect(reader).not.toContainText(created.contentID);
+  await expect(sourceWindow.locator('[data-content-evidence]')).toContainText('SHA-256');
+});
+
 test('VText lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.setViewportSize({ width: 1440, height: 980 });
