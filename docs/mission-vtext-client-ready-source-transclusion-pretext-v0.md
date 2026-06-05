@@ -2757,3 +2757,43 @@ current belief:
 - The source note is still not the final magazine/journal visual treatment, but
   it is now less metadata-heavy and better aligned with the Pretext article-flow
   objective.
+
+## 2026-06-05 Problem: Appagent Imported-File v1 Lacks Full Canonical Path Metadata
+
+status: problem_recorded_before_code_fix
+
+new evidence:
+
+- The public user revision path in `internal/runtime/vtext.go` calls
+  `ensureCanonicalVTextProjectionPath` before creating a revision. That writes
+  or reuses a `.vtext` shortcut/alias and records
+  `canonical_vtext_source_path` in revision metadata.
+- The VText appagent `edit_vtext` path in `internal/runtime/tools_vtext.go`
+  calls `canonicalizeAliasedVTextDocumentTitle` before creating a revision, but
+  it does not ensure a `.vtext` alias/shortcut and does not record
+  `canonical_vtext_source_path` on the appagent-authored revision.
+- Existing test coverage proves appagent edits rename a legacy Markdown import
+  title to `.vtext`, but the test does not assert the canonical alias/source
+  path metadata that the user revision path already guarantees.
+
+why this matters:
+
+- The owner explicitly clarified that imported `.txt`, `.md`, or other files
+  should become `.vtext` as soon as they advance from v0 to v1.
+- In normal product operation, the first useful v1 may be written by the VText
+  appagent through `edit_vtext`, not by a direct browser user revision. That
+  path must preserve the same canonicalization invariants as user-authored
+  revisions.
+- A title-only conversion is insufficient because Markdown export and original
+  file lineage depend on distinguishing the canonical `.vtext` working object
+  from the original import/source artifact.
+
+required correction:
+
+- Move `.vtext` projection-path/manifest assurance into a shared runtime path
+  that can be called by both API user revisions and appagent `edit_vtext`.
+- Record `canonical_vtext_source_path` on appagent revisions that advance an
+  imported file to canonical VText.
+- Preserve the original import alias so opening the original `.md`/`.txt` path
+  still resolves to the canonical VText document instead of forking a new
+  document.
