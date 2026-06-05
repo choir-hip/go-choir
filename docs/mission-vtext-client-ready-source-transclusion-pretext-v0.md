@@ -3993,3 +3993,93 @@ residual risks:
 - The Pretext journal-flow slice is directionally correct, but the desired
   magazine/academic journal UX still needs a hard design and simplification
   pass after the source-window projection uses the real artifacts.
+
+## 2026-06-05 Repair: Publication Source Entity Normalization
+
+status: deployed_owner_acceptance
+
+implementation:
+
+- `frontend/src/lib/vtext-source-renderer.ts` now normalizes both canonical
+  source entities and publication wrapper objects through the same accessor
+  path.
+- The helper keeps wrapper-level transclusion excerpts available for inline and
+  journal notes, while allowing opened source surfaces to prefer nested
+  `reader_snapshot.text_content` and `published_source.text_content`.
+- The change is generic. It does not special-case ABA, the legal-cloud
+  proposal, glossary tables, or any source id.
+
+local verification:
+
+- A direct Node import regression using the publication wrapper shape passed:
+  wrapper `transclusion.snapshot_text` remained the inline excerpt, while nested
+  `entity.reader_snapshot.text_content` became the opened-source snapshot.
+- `pnpm --dir frontend build` passed.
+- `git diff --check` passed.
+
+landing evidence:
+
+- Behavior commit `e10f35cf64d73c689508e98f31ad2056eba53633`
+  (`fix: normalize publication source entities`) was pushed to `main`.
+- GitHub Actions CI run `27041615290` succeeded, including non-runtime Go
+  tests, runtime shards, integration-tagged smoke, frontend build, vet/build,
+  aggregate, and Node B staging deploy.
+- FlakeHub run `27041615292` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=e10f35cf64d73c689508e98f31ad2056eba53633`,
+  `deployed_at=2026-06-05T21:43:29Z`, with status/upstream `ok`.
+
+deployed Comet proof:
+
+- Reloading the v84 public route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub0d1de6579` loaded the
+  deployed `e10f35cf` frontend.
+- Clicking the ABA Formal Opinion 512 source marker still expanded a right-side
+  journal note with article text continuing beside it. This preserves the
+  Pretext/magazine-flow behavior: the article remains the primary reading
+  surface, and the source note is bounded inline apparatus.
+- Clicking `Open source` from that note opened a source window titled
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` using the
+  content source surface. The window displayed:
+  - `Media type: text/markdown`;
+  - content item `ed981507-cade-4d12-b825-ae5a5aa149ee`;
+  - SHA-256 `aa93d9d2dd5ba3eaac4189b5104b64e797048c88981c6086e4bf7041fec20cfa`;
+  - the attached reader artifact text, including
+    `published Formal Opinion 512 on July 29, 2024`;
+  - the `Reader-mode note` explaining why the source backs the legal-cloud
+    proposal claim.
+- This closes the specific source-window projection gap for the owner ABA
+  source artifact.
+
+post-deploy export proof:
+
+- Markdown export for the same route remained 38,449 bytes.
+- The compact source marker remained:
+  `[ABA Formal Opinion 512](source:src_aba_formal_op_512)`.
+- The glossary table remained present at `| Term | Definition |`.
+- No `TermDefinition` or `missing source` text appeared in the export.
+
+belief update:
+
+- The structural source graph path now works end to end for one real owner
+  source: source artifact creation/attachment, metadata-only VText revision,
+  publication, export, inline source expansion, and opened source inspection.
+- The inline journal note intentionally remains a bounded excerpt. The opened
+  source window is the place where the fuller reader artifact appears.
+- The Pretext axis should continue at the article/source-flow boundary: improve
+  the magazine/academic journal composition and simplify visual chrome without
+  moving source artifacts into a top deck or nested card stack.
+
+remaining risks:
+
+- Only one owner source artifact, ABA Formal Opinion 512, has full deployed
+  proof. The remaining represented sources still need artifact acquisition,
+  attachment, or explicit omission decisions.
+- The source attachment owner controls are functional but still visually
+  utilitarian and can clip in smaller windows.
+- The source content surface is now usable, but it is still a generic content
+  viewer. A future source-reader mode should render cleaned Markdown with a
+  quieter academic/journal treatment.
+- Web Lens iframe preview remains secondary and brittle for blocked sources;
+  the durable source-reading path should be cleaned Markdown reader snapshots
+  plus provenance and open-original links.
