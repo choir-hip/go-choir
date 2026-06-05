@@ -2105,3 +2105,68 @@ next proof:
 - In authenticated Comet on the owner publication, expand the first ABA source
   and verify that the second/next article paragraph continues beside the source
   note instead of starting below it.
+
+## 2026-06-05 Deployed Proof: Composition Works, Nested Citation Loses Affordance
+
+status: deployed_proof_and_new_problem_recorded
+
+deployment evidence:
+
+- Commit `aab5099f` (`fix: compose vtext source notes with pretext`) was pushed
+  to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27035170391` completed
+  successfully, including frontend build, runtime shards, non-runtime tests,
+  vet/build, and Node B staging deploy.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27035170373` completed
+  successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `aab5099fdc763988df2155e631807025cdc82e3c`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet hard reloaded the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- The first viewport showed `choir_private_legal_cloud_proposal.vtext` v83,
+  full proposal content, inline citation markers, no top source deck, and no
+  `missing source` prose.
+- Expanding the ABA Formal Opinion 512 marker rendered a right-side source note
+  and article text continued beside the note across more than the original
+  source paragraph. This confirms the deployed composed-region code is active
+  and improves on the native-float/card behavior.
+- `Open source` still opened the source window; the live PDF preview remains
+  Comet-blocked, matching the known reader-fallback/source-acquisition axis.
+
+newly observed problem:
+
+- The composed presentation region currently flattens other source references
+  inside paragraphs it consumes. On the owner document, the second paragraph's
+  confidentiality citation (`ABA Model Rule 1.6`) appeared as plain prose inside
+  the composed text instead of as an interactive citation/transclusion marker.
+- This violates the invariant that all citations are transclusion points. The
+  hidden canonical paragraph still contains the source marker for serialization,
+  but the visible reading surface must not replace a citation affordance with
+  plain text.
+
+root-cause direction:
+
+- The source-flow text extraction path is plain-text only. It is adequate for
+  paragraphs without nested source refs, but it is not a valid renderer for
+  paragraphs containing additional citation markers.
+- The next correction should either:
+  - use Pretext rich-inline flow for article text plus atomic source-ref
+    markers, preserving clickable marker clones in the presentation layer; or
+  - bound the composed region to paragraphs that do not contain other source
+    refs, accepting less wrapping until rich-inline markers land.
+- Because the clarified UX specifically wants magazine/journal wrapping, the
+  preferred route is rich-inline composition, not retreating to paragraph-local
+  flow.
+
+acceptance criteria for the correction:
+
+- Expanding the first ABA source still lets the next article paragraph use
+  space beside the source note.
+- The confidentiality citation remains visible as an interactive citation
+  marker/transclusion point in the composed presentation layer.
+- Serialization remains canonical and skips presentation-only source-flow DOM.
