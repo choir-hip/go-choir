@@ -948,6 +948,74 @@ remaining error field:
 - Re-deploy and repeat the authenticated Comet/Web Lens Qdrant proof after a
   hard reload so frontend status wording is evaluated against the deployed JS.
 
+## 2026-06-05 Deployed Snapshot Proof: Declared Markdown Alternate Gap
+
+status: problem_documented_before_fix
+
+new evidence:
+
+- Commit `d9d433a3884ca3d4ab26cf92900e8de8c127f664`
+  (`fix: recover browser snapshots from html fallback`) was pushed to `main`.
+  GitHub Actions CI run `27030297501` passed, FlakeHub run `27030297475`
+  passed, the Node B deploy job passed, and `https://choir.news/health`
+  reported proxy and sandbox deployed commit
+  `d9d433a3884ca3d4ab26cf92900e8de8c127f664` with deployed time
+  `2026-06-05T17:37:36Z`.
+- Authenticated Computer Use/Comet proof hard-reloaded the owner publication,
+  confirmed the article-first published VText still renders with inline source
+  markers near the opening paragraphs, then opened Web Lens from the reloaded
+  app shell and navigated to `https://qdrant.tech/documentation/search/`.
+- The Qdrant iframe preview remained blank/blocked, but clicking `Snapshot`
+  now returned a product-visible partial snapshot instead of the prior hard
+  error. Comet showed `Web Lens snapshot partial: obscura` and the warning
+  `backend browser text snapshot was empty; used html readable fallback`.
+- The recovered readable text was still not a useful source surface: the visible
+  snapshot content was essentially the source URL plus a collapsed `HTML source`
+  artifact, not the Qdrant article text.
+- Direct HTTP inspection showed why this was not enough. The requested Qdrant
+  URL returns a small HTML meta-refresh/canonical shell with
+  `rel="alternate"; type="text/markdown"; href="index.md"`. Resolving that
+  alternate against the canonical detail URL
+  `https://qdrant.tech/documentation/search/search/` yields
+  `https://qdrant.tech/documentation/search/search/index.md`, which contains
+  the readable source article text beginning with `# Search` and
+  `# Similarity search`.
+
+root-cause belief:
+
+- The browser source fallback now has the right degradation shape, but it treats
+  low-content HTML-derived text as acceptable even when the page explicitly
+  declares a better readable representation.
+- Many documentation systems publish Markdown alternates or other text
+  alternates beside client-rendered pages. Following declared source alternates
+  is a generic source-inspection behavior, not a Qdrant-specific workaround.
+- A low-content fallback that only proves the URL is not good enough for
+  citation/source inspection. The source window should either show readable
+  source text, show a better declared alternate artifact, or fail precisely.
+
+planned structural repair:
+
+- When primary text is empty and HTML-derived text is low-content, inspect the
+  HTML for declared readable alternates, especially
+  `link[rel~=alternate][type="text/markdown"]`, resolving relative URLs against
+  the HTML canonical URL when present and otherwise the target URL.
+- Fetch the declared Markdown alternate with the same generic URL-fetch
+  discipline used by ContentItem import, store it as `TextSnapshot`, keep the
+  original HTML as `HTMLSnapshot`, and add a warning that the source window used
+  a declared Markdown alternate.
+- Keep low-content HTML fallback as a precise failure if no declared readable
+  alternate exists or the alternate fetch also yields no useful text.
+- Add fake-Obscura regression coverage for an empty text dump, low-content HTML
+  meta shell, canonical URL, and Markdown alternate served by an HTTP test
+  server.
+
+remaining error field:
+
+- Implement and test declared readable alternate fallback without a Qdrant,
+  URL, or document-specific branch.
+- Re-deploy and repeat the Comet Qdrant proof. The acceptance bar is readable
+  Qdrant article text in Web Lens, not merely a partial status label.
+
 ## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
 
 status: checkpoint_incomplete
