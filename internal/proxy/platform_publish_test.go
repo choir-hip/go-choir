@@ -61,7 +61,20 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 				OwnerID:    "user-1",
 				Content:    "public projection content",
 				Citations:  json.RawMessage(`[{"url":"https://example.com"}]`),
-				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-1","kind":"source_service_item","target":{"target_kind":"source_service_item","item_id":"srcitem-1"},"display":{"inline_mode":"collapsed_citation"}}]}`),
+				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-1","kind":"legal_source","target":{"target_kind":"content_item","content_id":"content-public-1"},"display":{"inline_mode":"collapsed_citation"},"provenance":{"rights_scope":"public_source"}}]}`),
+			})
+		case "/api/content/items/content-public-1":
+			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+				ContentID:    "content-public-1",
+				OwnerID:      "user-1",
+				SourceType:   "extracted_url",
+				MediaType:    "text/html; charset=utf-8",
+				AppHint:      "browser",
+				Title:        "Public Source",
+				SourceURL:    "https://example.com/source",
+				CanonicalURL: "https://example.com/source",
+				TextContent:  "Cleaned public source text that should be available to publication readers.",
+				ContentHash:  "hash-public-source",
 			})
 		default:
 			t.Fatalf("sandbox path: got %s", r.URL.Path)
@@ -98,8 +111,11 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if gotPlatformReq.Content != "public projection content" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
 	}
-	if !strings.Contains(string(gotPlatformReq.Metadata), "srcitem-1") {
+	if !strings.Contains(string(gotPlatformReq.Metadata), "content-public-1") {
 		t.Fatalf("platform metadata not forwarded: %s", string(gotPlatformReq.Metadata))
+	}
+	if !strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || !strings.Contains(string(gotPlatformReq.Metadata), "Cleaned public source text") {
+		t.Fatalf("platform metadata missing public source reader snapshot: %s", string(gotPlatformReq.Metadata))
 	}
 	var resp platform.PublishVTextResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
@@ -107,5 +123,102 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 	if resp.PublicURL != "https://choir.news/pub/vtext/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
+	}
+}
+
+func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	var gotPlatformReq platform.PublishVTextRequest
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
+			t.Fatalf("decode platform request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+			PublicationID:        "pub-private",
+			PublicationVersionID: "pubver-private",
+			RoutePath:            "/pub/vtext/private-note-pub",
+			State:                "published",
+		})
+	}))
+	defer platformd.Close()
+
+	contentFetches := 0
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/vtext/documents/doc-private":
+			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+				DocID:             "doc-private",
+				OwnerID:           "user-1",
+				Title:             "Private Note",
+				CurrentRevisionID: "rev-private",
+			})
+		case "/api/vtext/revisions/rev-private":
+			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+				RevisionID: "rev-private",
+				DocID:      "doc-private",
+				OwnerID:    "user-1",
+				Content:    "public projection with private source excerpt",
+				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-private","kind":"client_note","target":{"target_kind":"content_item","content_id":"content-private-1"},"selectors":[{"selector_kind":"text_quote","text_quote":"bounded excerpt"}],"provenance":{"rights_scope":"private_user_source"}}]}`),
+			})
+		case "/api/content/items/content-private-1":
+			contentFetches += 1
+			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+				ContentID:   "content-private-1",
+				OwnerID:     "user-1",
+				TextContent: "private full source text",
+			})
+		default:
+			t.Fatalf("sandbox path: got %s", r.URL.Path)
+		}
+	}))
+	defer sandbox.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-private","revision_id":"rev-private"}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	w := httptest.NewRecorder()
+
+	h.HandleVTextPublication(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
+	}
+	if contentFetches != 0 {
+		t.Fatalf("private source content was fetched for publication: %d", contentFetches)
+	}
+	if strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || strings.Contains(string(gotPlatformReq.Metadata), "private full source text") {
+		t.Fatalf("private source snapshot leaked into platform metadata: %s", string(gotPlatformReq.Metadata))
+	}
+}
+
+func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T) {
+	if !contentItemAllowsPublishedSnapshot(sandboxContentItem{}) {
+		t.Fatalf("empty provenance should not block an entity-level public publication decision")
+	}
+	if contentItemAllowsPublishedSnapshot(sandboxContentItem{
+		Provenance: json.RawMessage(`{"rights_scope":"private_user_source"}`),
+	}) {
+		t.Fatalf("private_user_source content item must not publish a reader snapshot")
+	}
+	if !contentItemAllowsPublishedSnapshot(sandboxContentItem{
+		Provenance: json.RawMessage(`{"rights_scope":"public_source"}`),
+	}) {
+		t.Fatalf("public_source content item should allow a reader snapshot")
 	}
 }

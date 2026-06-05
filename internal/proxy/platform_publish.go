@@ -14,6 +14,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
+const maxPublishedSourceSnapshotRunes = 20000
+
 type publishVTextRequest struct {
 	DocID      string `json:"doc_id"`
 	RevisionID string `json:"revision_id,omitempty"`
@@ -34,6 +36,21 @@ type sandboxVTextRevision struct {
 	Content    string          `json:"content"`
 	Citations  json.RawMessage `json:"citations,omitempty"`
 	Metadata   json.RawMessage `json:"metadata,omitempty"`
+}
+
+type sandboxContentItem struct {
+	ContentID    string          `json:"content_id"`
+	OwnerID      string          `json:"owner_id"`
+	SourceType   string          `json:"source_type"`
+	MediaType    string          `json:"media_type"`
+	AppHint      string          `json:"app_hint"`
+	Title        string          `json:"title,omitempty"`
+	SourceURL    string          `json:"source_url,omitempty"`
+	CanonicalURL string          `json:"canonical_url,omitempty"`
+	TextContent  string          `json:"text_content,omitempty"`
+	ContentHash  string          `json:"content_hash,omitempty"`
+	Metadata     json.RawMessage `json:"metadata,omitempty"`
+	Provenance   json.RawMessage `json:"provenance,omitempty"`
 }
 
 func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +133,13 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		h.lifecycle.record("platform_publish.private_read", "revision_mismatch", time.Since(started))
 		return
 	}
+	enrichedMetadata, err := h.enrichVTextPublicationMetadata(r, sandboxURL, authResult.UserID, rev.Metadata)
+	if err != nil {
+		log.Printf("proxy: platform publish enrich source metadata: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
+		h.lifecycle.record("platform_publish.private_read", "source_metadata_error", time.Since(started))
+		return
+	}
 	h.lifecycle.record("platform_publish.private_read", "ok", time.Since(started))
 
 	platformReq := platform.PublishVTextRequest{
@@ -125,7 +149,7 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 		Title:            doc.Title,
 		Content:          rev.Content,
 		Citations:        rev.Citations,
-		Metadata:         rev.Metadata,
+		Metadata:         enrichedMetadata,
 		Slug:             req.Slug,
 		RequestedBy:      authResult.UserID,
 	}
@@ -149,6 +173,151 @@ func (h *Handler) HandleVTextPublication(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, status, platformResp)
 	h.lifecycle.record("platform_publish.platformd", lifecycleHTTPStatus(status), time.Since(started))
 	h.lifecycle.record("platform_publish.total", "published", time.Since(started))
+}
+
+func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return raw, nil
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return raw, nil
+	}
+	entities, ok := metadata["source_entities"].([]any)
+	if !ok || len(entities) == 0 {
+		return raw, nil
+	}
+	changed := false
+	for _, value := range entities {
+		entity, ok := value.(map[string]any)
+		if !ok || !sourceEntityAllowsPublishedSnapshot(entity) || mapValue(entity["reader_snapshot"]) != nil {
+			continue
+		}
+		contentID := sourceEntityContentID(entity)
+		if contentID == "" {
+			continue
+		}
+		var item sandboxContentItem
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
+			return nil, fmt.Errorf("load content item %s: %w", contentID, err)
+		}
+		if item.OwnerID != userID || item.ContentID != contentID {
+			return nil, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
+		}
+		if !contentItemAllowsPublishedSnapshot(item) {
+			continue
+		}
+		text := strings.TrimSpace(item.TextContent)
+		if text == "" {
+			continue
+		}
+		snapshotText, truncated := truncateRunes(text, maxPublishedSourceSnapshotRunes)
+		entity["reader_snapshot"] = map[string]any{
+			"snapshot_kind":     "cleaned_reader_markdown",
+			"source":            "content_item",
+			"source_content_id": item.ContentID,
+			"title":             firstNonEmptyString(item.Title, item.SourceURL, item.CanonicalURL),
+			"source_url":        item.SourceURL,
+			"canonical_url":     item.CanonicalURL,
+			"media_type":        item.MediaType,
+			"content_hash":      item.ContentHash,
+			"text_content":      snapshotText,
+			"text_char_count":   len([]rune(text)),
+			"truncated":         truncated,
+			"access_scope":      "publication_reader",
+		}
+		changed = true
+	}
+	if !changed {
+		return raw, nil
+	}
+	out, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("marshal enriched metadata: %w", err)
+	}
+	return out, nil
+}
+
+func sourceEntityAllowsPublishedSnapshot(entity map[string]any) bool {
+	provenance := mapValue(entity["provenance"])
+	rights := strings.ToLower(strings.TrimSpace(stringValue(provenance["rights_scope"])))
+	switch rights {
+	case "public_source", "official_public_source", "public_domain", "open_access":
+		return true
+	}
+	policy := mapValue(entity["publication_policy"])
+	if policy == nil {
+		policy = mapValue(entity["access_policy"])
+	}
+	return boolValue(policy["publish_source_snapshot"]) || boolValue(policy["reader_snapshot"])
+}
+
+func contentItemAllowsPublishedSnapshot(item sandboxContentItem) bool {
+	provenance := jsonObjectValue(item.Provenance)
+	rights := strings.ToLower(strings.TrimSpace(stringValue(provenance["rights_scope"])))
+	switch rights {
+	case "", "public_source", "official_public_source", "public_domain", "open_access":
+		return true
+	case "private_user_source":
+		return false
+	}
+	return boolValue(provenance["publish_source_snapshot"]) || boolValue(provenance["reader_snapshot"])
+}
+
+func sourceEntityContentID(entity map[string]any) string {
+	target := mapValue(entity["target"])
+	return firstNonEmptyString(
+		stringValue(target["content_id"]),
+		stringValue(target["content_item_id"]),
+		stringValue(entity["content_id"]),
+		stringValue(entity["content_item_id"]),
+	)
+}
+
+func jsonObjectValue(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func mapValue(value any) map[string]any {
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	return nil
+}
+
+func stringValue(value any) string {
+	if typed, ok := value.(string); ok {
+		return strings.TrimSpace(typed)
+	}
+	return ""
+}
+
+func boolValue(value any) bool {
+	if typed, ok := value.(bool); ok {
+		return typed
+	}
+	if typed, ok := value.(string); ok {
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	}
+	return false
+}
+
+func truncateRunes(value string, limit int) (string, bool) {
+	if limit <= 0 {
+		return "", value != ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value, false
+	}
+	return string(runes[:limit]), true
 }
 
 func (h *Handler) fetchSandboxJSON(r *http.Request, sandboxBase, path, userID string, out any) error {

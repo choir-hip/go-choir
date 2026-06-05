@@ -31,14 +31,22 @@ export function selectorTextQuote(entity: any): string {
   return '';
 }
 
-export function sourceEntitySnapshotText(entity: any): string {
+export function sourceEntityExcerptText(entity: any): string {
   return sourceEntityTransclusion(entity)?.snapshot_text || selectorTextQuote(entity) || '';
+}
+
+export function sourceEntityReaderSnapshotText(entity: any): string {
+  return String(entity?.reader_snapshot?.text_content || entity?.published_source?.text_content || '').trim();
+}
+
+export function sourceEntitySnapshotText(entity: any): string {
+  return sourceEntityReaderSnapshotText(entity) || sourceEntityExcerptText(entity);
 }
 
 export function sourceEntityDisplayPolicy(entity: any): string {
   const raw = String(entity?.display_policy || entity?.display?.display_policy || entity?.display?.inline_mode || '').trim();
   if (raw === 'embedded_excerpt' || raw === 'embedded_preview' || raw === 'expanded' || raw === 'collapsed_citation') return raw;
-  if (sourceEntitySnapshotText(entity)) return 'embedded_excerpt';
+  if (sourceEntityExcerptText(entity)) return 'embedded_excerpt';
   return 'collapsed_citation';
 }
 
@@ -189,7 +197,7 @@ export function renderSourceEntityFacts(entity: any): string {
 }
 
 export function renderSourceTransclusionBody(entity: any, { compact = false } = {}): string {
-  const snapshot = sourceEntitySnapshotText(entity);
+  const snapshot = sourceEntityExcerptText(entity);
   const facts = renderSourceEntityFacts(entity);
   if (compact) {
     return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>

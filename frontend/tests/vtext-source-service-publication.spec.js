@@ -143,3 +143,109 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText('src-service-economy');
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(itemID);
 });
+
+test('publishes public content-item sources with cleaned reader snapshots', async ({ desktopSession }) => {
+  const { page, baseURL } = desktopSession;
+  const stamp = Date.now();
+  const title = `Public Source Snapshot Publication ${stamp}`;
+  const excerpt = 'ABA guidance says lawyers using generative AI must consider competence and confidentiality.';
+  const fullSourceText = [
+    excerpt,
+    'Full cleaned reader source detail: lawyers should evaluate model limitations, protect client information, supervise subordinate use, communicate relevant risks, and ensure fees remain reasonable.',
+    'This sentence is intentionally outside the selected citation excerpt so the source window proves publication carried the cleaned reader snapshot, not only the bounded quote.',
+  ].join('\n\n');
+
+  const contentItem = await fetchJSON(page, '/api/content/items', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_type: 'extracted_url',
+      media_type: 'text/html; charset=utf-8',
+      app_hint: 'browser',
+      title: 'ABA Formal Opinion 512 cleaned source',
+      source_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
+      canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
+      text_content: fullSourceText,
+      provenance: {
+        rights_scope: 'public_source',
+        created_by: 'browser-test',
+      },
+    }),
+  });
+
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  });
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: `# ${title}\n\nThe proposal cites ethics guidance as an inspectable source [1](source:src-public-content). A following sentence keeps normal article flow beside the source note.`,
+      author_kind: 'user',
+      author_label: 'browser-test',
+      metadata: {
+        source_entities: [
+          {
+            entity_id: 'src-public-content',
+            kind: 'ethics_opinion',
+            label: 'ABA Formal Opinion 512 cleaned source',
+            target: {
+              target_kind: 'content_item',
+              content_id: contentItem.content_id,
+              url: contentItem.source_url,
+              canonical_url: contentItem.canonical_url,
+            },
+            selectors: [
+              {
+                selector_kind: 'text_quote',
+                text_quote: excerpt,
+                content_hash: contentItem.content_hash,
+              },
+            ],
+            display: {
+              inline_mode: 'embedded_excerpt',
+              expanded_mode: 'source_card',
+              open_surface: 'source',
+              default_collapsed: true,
+            },
+            evidence: {
+              state: 'available',
+              research_state: 'confirmed',
+            },
+            provenance: {
+              created_by: 'browser-test',
+              rights_scope: 'public_source',
+              untrusted_source_text: true,
+            },
+          },
+        ],
+      },
+    }),
+  });
+
+  const publish = await fetchJSON(page, '/api/platform/vtext/publications', {
+    method: 'POST',
+    body: JSON.stringify({
+      doc_id: doc.doc_id,
+      slug: `public-source-snapshot-${stamp}`,
+    }),
+  });
+  const resolved = await fetchJSON(page, `/api/platform/publications/resolve?route=${encodeURIComponent(publish.route_path)}`);
+  const entity = resolved.source_entities?.[0]?.entity || {};
+  expect(entity.reader_snapshot?.text_content).toContain('Full cleaned reader source detail');
+  expect(resolved.transclusions?.[0]?.snapshot_text).toBe(excerpt);
+
+  await page.goto(`${baseURL}${publish.route_path}`);
+  const publishedReader = page.locator('[data-vtext-published-reader]').last();
+  await expect(publishedReader).toBeVisible({ timeout: 15_000 });
+  const citation = publishedReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
+  await citation.click();
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText('Full cleaned reader source detail');
+
+  await citation.locator('[data-vtext-open-source]').click();
+  const sourceWindow = page.locator('[data-browser-app]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toContainText('Source reader snapshot');
+  await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
+  await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
+});
