@@ -2309,3 +2309,37 @@ remaining error field:
   survival, focused prompt-size/`apply_edits` metadata, and title migration of
   `choir_private_legal_cloud_proposal.md` to canonical `.vtext` on the next
   owner VText write.
+
+2026-06-05 diagnosis edit-evidence visibility checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use remains available, but Comet remains passkey-gated for the
+  private owner proposal. The private owner proof cannot proceed until the
+  passkey ceremony completes.
+- The mission still needs proof that ordinary revisions keep
+  `focused_user_edit_diff` prompt sizes and `apply_edits` metadata. Backend
+  revision metadata already records the necessary fields:
+  `vtext_context_mode`, `vtext_edit_operation`, `vtext_edit_count`,
+  `vtext_run_prompt_chars`, `vtext_edit_delta_chars`, and
+  `vtext_run_latency_ms`.
+- The deployed VText `Sources`/diagnosis panel currently exposes only diagnosis
+  counts such as revision count, run count, latest version, and error count.
+  It does not give an owner-visible structured surface for the current or
+  latest appagent edit evidence. Previous owner-proof attempts therefore had
+  to rely on raw JSON/clipboard extraction from the diagnosis endpoint, which
+  was unreliable in Comet.
+- This is a product-path debuggability gap, not missing VText metadata. The
+  fix should expose a compact, non-prose diagnostic evidence strip in the
+  VText panel. It must not render hidden metadata inside the editable document
+  body, must not expose raw prompts, and must remain generic for any VText
+  document.
+
+belief-state update:
+
+- A small owner-visible edit-evidence surface will make the final owner proof
+  simpler once passkey access is restored: the verifier can confirm
+  `focused_user_edit_diff`, `apply_edits`, prompt chars, edit count, delta
+  chars, and latency from product UI instead of raw JSON extraction.
