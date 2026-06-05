@@ -1479,6 +1479,67 @@ belief-state update:
   general historical-restore/merge/source-repair UX, not a document-specific
   or glossary-specific migration.
 
+2026-06-05 deployed restore-control and owner-table revise checkpoint:
+
+status: checkpoint_incomplete
+
+deployed identity and owner UI evidence:
+
+- Restore-control fix commit `b88e251bc956bc8274223d50be7f5e44ebbc5dc6`
+  is on `origin/main`. GitHub Actions run `27015893011` completed
+  successfully, including frontend build, Go non-runtime tests, all
+  `internal/runtime` shards, and `Deploy to Staging (Node B)`. Staging
+  `/health` reported proxy and sandbox deployed commit
+  `b88e251bc956bc8274223d50be7f5e44ebbc5dc6`, deployed at
+  `2026-06-05T12:52:41Z`.
+- Computer Use on authenticated Comet showed the private owner document
+  `choir_private_legal_cloud_proposal.md` at historical `v74` with a visible
+  `Restore` control. Clicking that owner-visible control created latest
+  revision `v79`.
+- Read-only DOM inspection of the authenticated Comet page after restore found
+  document `f93cea62-f833-4dae-b414-8e44783d8cbe` at `v79`, state `Latest`,
+  with one rendered HTML table in Appendix A, 48 table rows, `Term` and
+  `Definition` headers, and no `TermDefinition` collapse. This repaired the
+  owner head from the known-good historical table shape without a
+  glossary-specific code path.
+- Through the visible editor, a scratch user instruction was appended to the
+  restored owner document and the visible `Revise` control was clicked. The UI
+  saved a long user-authored `v80` draft, submitted appagent run
+  `8ce7ce08-2710-4aa3-bb3c-ab35cf4c8f5a`, and advanced the document to `v81`.
+  The scratch instruction was consumed, Appendix A still rendered as one HTML
+  table, and `TermDefinition` did not reappear. This proves the deployed owner
+  document survives a focus/edit/save/revise path when the table is untouched.
+
+new problem documented before any follow-on code:
+
+- After the `v81` head appeared, the owner VText toolbar remained stuck in
+  `Revising...` for more than 100 seconds with run id
+  `8ce7ce08-2710-4aa3-bb3c-ab35cf4c8f5a`. The `Revise` button remained disabled,
+  `Cancel` remained visible, and `Publish v81` remained disabled even though
+  the document head had advanced and the table-preserving appagent revision was
+  visible. This blocks the next bounded table-edit proof and citation/source
+  repair work through the same owner UI.
+- The read-only browser extension can expose DOM state and the
+  `data-vtext-agent-run-id`, but it cannot use `fetch`, `XMLHttpRequest`,
+  cookies, localStorage, or sessionStorage from its evaluation context. Comet's
+  encrypted Chromium cookies were found on disk, but the Keychain lookup for a
+  guessed Comet safe-storage service hung and was stopped. Therefore deployed
+  prompt-size and `apply_edits` metadata proof is not yet available from this
+  Codex session's authenticated browser surface; it still needs either a
+  product-visible diagnosis/export surface or a reliable authenticated product
+  API client path.
+
+belief-state update:
+
+- The structural table repair and historical restore path are working on the
+  real owner document through deployed Comet UI, and the untouched-table revise
+  path preserves the table in the visible canonical document.
+- The next repair should target the status/pending-mutation cleanup after an
+  appagent revision creates a head revision. It must not be document-specific
+  and should preserve the existing run cancellation/stream semantics.
+- Bounded table-edit proof, source-gap repair on the owner document, citation
+  expansion/open-source proof, and deployed metadata proof remain incomplete.
+
 suggested resume goal string:
 
 ```text
