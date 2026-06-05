@@ -2582,3 +2582,37 @@ remaining error field:
   transclusions on that owner head, source-window opening from that owner head,
   and owner-head focused prompt-size / `apply_edits` metadata in the visible
   edit-evidence strip.
+
+2026-06-05 imported Markdown v0-to-v1 product proof gap checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use is available, but owner-document UI proof remains blocked at the
+  passkey/user-presence boundary. Comet can read the authenticated raw
+  diagnosis JSON for owner doc `f93cea62-f833-4dae-b414-8e44783d8cbe`, but the
+  private VText document itself is not open for safe mutation in this session.
+- Backend tests prove important imported-file invariants: `/api/vtext/files/open`
+  creates `.vtext` canonical document titles for Markdown/DOCX/PDF projections,
+  original source aliases remain resolvable, the next revision can shift the
+  latest alias source path to `.vtext`, and Markdown export returns canonical
+  VText bytes as `.md`.
+- Existing browser tests prove prompt-created `.vtext` shortcuts and
+  DOCX/PDF import-revise-publish-export flows, but they do not prove the exact
+  user-added invariant for an imported Markdown file acting as VText: seed v0
+  from the `.md` source, advance to v1 through the VText revision write path,
+  verify canonical document identity is `.vtext`, verify the original `.md`
+  alias still resolves to the same document, and verify Markdown is available
+  only as export bytes rather than as canonical document identity.
+- This is a product-path proof gap, not currently a known backend behavior
+  failure. The next safe improvement should add a focused browser regression
+  using a disposable imported `.md` fixture and public authenticated VText APIs.
+
+belief-state update:
+
+- A staging browser/API regression for Markdown import v0-to-v1 canonical
+  `.vtext` identity will strengthen the owner-document title-migration proof
+  needed after passkey access is restored, while preserving the invariant that
+  original imported files remain source artifacts/aliases and Markdown remains
+  an export format.
