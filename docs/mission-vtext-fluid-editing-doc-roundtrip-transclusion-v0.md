@@ -2039,3 +2039,76 @@ suggested resume goal string:
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com using the Comet browser, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Treat imported `.txt`, `.md`, and other text-like or document-like files as VText once they first transition from v0 to v1: canonical VText document identity should be `.vtext`, original files remain source artifacts/aliases, and Markdown should be available as an export format rather than as the canonical owner document. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
+
+2026-06-05 deployed imported-file VText identity checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `bbb04c95` recorded the imported-file VText
+  identity gap before code changed.
+- Code commit `2f1f40540cf2483b09042dd4b950ce61164e0aec` is on
+  `origin/main`. It canonicalizes VText document titles created from
+  `POST /api/vtext/files/open` and
+  `POST /api/vtext/markdown-lineage/import` to `.vtext` while preserving the
+  original source path as the alias/import manifest source artifact.
+- The change is generic. Imported Markdown, text, DOCX, PDF, and other
+  VText-opened files no longer keep the original extension as the canonical
+  VText document title. Existing source aliases such as
+  `proposals/legal-cloud.md` still resolve to the canonical VText document.
+- The same commit adds owner-scoped
+  `GET /api/vtext/documents/{doc_id}/export?format=md`, returning the selected
+  or current revision content as Markdown with a `.md` filename and content
+  hash. The export response is revision content only; hidden import/source
+  metadata stays out of visible Markdown prose.
+
+verification and deployment evidence:
+
+- Local verification passed:
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run
+    'TestVText(OpenFileResolvesCanonicalAlias|ImportMarkdownLineageCreatesRevisionHistory|OpenFilePreservesDocxAndPDFOriginalArtifacts|OpenFileImportsDocxAndPDFBytesFromFilesRoot)'`
+  - `nix develop -c go test ./internal/runtime -run
+    'TestVTextPromptInitialRevisionUsesSingleWriterLoop|TestVTextEditRevisionMetadataRecordsOperationEvidence'`
+  - `nix develop -c go test -tags comprehensive ./internal/runtime -run
+    'TestVText(OpenFile|ImportMarkdownLineage|ImportedMarkdown)'`
+  - `git diff --check`
+- GitHub Actions CI run `27019394481` completed successfully for
+  `2f1f40540cf2483b09042dd4b950ce61164e0aec`, including Go vet/build,
+  non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`. Frontend build was skipped because the change
+  did not touch deployed frontend artifacts.
+- FlakeHub run `27019394298` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `2f1f40540cf2483b09042dd4b950ce61164e0aec`, deployed at
+  `2026-06-05T14:02:57Z`.
+
+deployed proof limitation:
+
+- Computer Use is available and Comet still opens the correct private-document
+  URL intent for `choir_private_legal_cloud_proposal.md`, but the page remains
+  on the passkey overlay for `yusefnathanson@me.com` with the prior
+  `Passkey ceremony was cancelled. Please try again.` state.
+- Therefore the deployed generic import/export behavior is proven by local
+  runtime API tests plus CI/deploy identity, but it is not yet proven on the
+  private owner proposal through the authenticated product UI. Completing the
+  passkey ceremony is still required before the owner document can be opened
+  and mutated safely.
+
+remaining error field:
+
+- Still unproven on the actual owner document: canonical title migration for
+  the existing `choir_private_legal_cloud_proposal.md` document, source-gap
+  repair through the deployed `Sources` panel, citation marker expansion into
+  transclusions, source-window opening from the owner head, bounded appendix
+  table edit survival, and focused prompt-size/`apply_edits` metadata.
+- Existing imported documents whose title is already `.md` may need a
+  migration/restore path after owner access is available. The new code fixes
+  newly opened/imported VText projections; it does not bulk-retitle private
+  documents that already exist.
+
+suggested resume goal string:
+
+```text
+/goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com using the Comet browser, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Continue from deployed commit 2f1f40540cf2483b09042dd4b950ce61164e0aec, which canonicalizes newly imported/opened VText projection document titles to `.vtext` and adds owner-scoped Markdown export. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Treat imported `.txt`, `.md`, and other text-like or document-like files as VText once they first transition from v0 to v1: canonical VText document identity should be `.vtext`, original files remain source artifacts/aliases, and Markdown should be available as an export format rather than as the canonical owner document. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
+```
