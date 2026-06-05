@@ -1406,3 +1406,40 @@ remaining error field:
 - Implement the next proofable slice narrowly enough to verify on staging, but
   prune obsolete source-deck/card paths as soon as the article-first path is
   proven.
+
+## 2026-06-05 Source UX Slice: Remove Dead Rail, Keep Inline Markers
+
+status: local_build_passed_pending_deploy_proof
+
+change shape:
+
+- Removed the unused `renderSourceEntityInlineRail` / `renderSourceEntityBlocks`
+  path and the matching `.vtext-source-inline-*` / `.vtext-source-card` CSS.
+  Normal VText rendering already uses inline `[label](source:ENTITY_ID)`
+  markers as the article-first source affordance; this prunes the dead path
+  that could reintroduce top-of-article source bunching.
+- Updated source panel language from `unresolved marker` to `source review
+  marker` and from generic `source entities` to `represented sources`.
+- Updated focused Playwright expectations to assert inline citation expansion
+  and opening the source window from the citation marker rather than from the
+  deleted source rail.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `rg -n "vtext-source-inline|vtext-source-card|vtext-source-meta|vtext-source-kind|unresolved marker|missing source" frontend/src/lib/VTextEditor.svelte frontend/tests -S`
+  returned no matches.
+- Focused Playwright tests
+  `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js tests/vtext-source-service-publication.spec.js`
+  were attempted. Without any server on `localhost:4173` they failed with
+  `ERR_CONNECTION_REFUSED`; with Vite preview started they reached the page but
+  failed during passkey setup with `register/begin failed: 500 {}` because the
+  full local backend/auth stack was not running. No assertion from this source
+  UX change was reached.
+
+remaining error field:
+
+- Commit and deploy this slice, then prove on staging through the authenticated
+  owner publication that source markers remain inline, no top source rail
+  appears, marker expansion still opens a source window, and the source panel
+  uses source-review language.

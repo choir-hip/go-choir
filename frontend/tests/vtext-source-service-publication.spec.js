@@ -124,12 +124,14 @@ test('publishes source-service source entities as expandable transclusions and c
   const publishedReader = page.locator('[data-vtext-published-reader]').last();
   await expect(publishedReader).toBeVisible({ timeout: 15_000 });
   await expect(publishedReader).toHaveAttribute('data-publication-version-id', publish.publication_version_id);
-  await expect(publishedReader.locator('[data-vtext-source-ref]')).toHaveAttribute('data-vtext-citation-transclusion', '');
-  await expect(publishedReader.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-display-policy', 'embedded_excerpt');
-  await expect(publishedReader.locator('[data-vtext-source-inline]')).toHaveAttribute('open', '');
-  await expect(publishedReader.locator('[data-vtext-source-inline]')).toContainText(sourceLabel);
-  await expect(publishedReader.locator('[data-vtext-source-inline]')).not.toContainText(itemID);
-  const openSource = publishedReader.locator('[data-vtext-source-inline] [data-vtext-open-source]');
+  const citation = publishedReader.locator('[data-vtext-source-ref]').first();
+  await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
+  await citation.click();
+  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).not.toContainText(itemID);
+  const openSource = citation.locator('[data-vtext-open-source]');
   await expect(openSource).toBeVisible();
 
   const initialSourceWindows = await page.locator('[data-content-viewer]').count();

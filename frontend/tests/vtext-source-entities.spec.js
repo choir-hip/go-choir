@@ -73,7 +73,6 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('YouTube source fixture');
   await expect(citation.locator('[data-vtext-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('transcript unavailable');
-  await expect(rendered.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-display-policy', 'embedded_preview');
 
   const initialVideoWindows = await page.locator('[data-video-app]').count();
   await citation.locator('[data-vtext-open-source]').click();

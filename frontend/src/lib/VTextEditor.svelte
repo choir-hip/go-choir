@@ -571,32 +571,6 @@
     </div>`;
   }
 
-  function renderSourceEntityInlineRail(entities) {
-    if (!Array.isArray(entities) || entities.length === 0) return '';
-    return `<section class="vtext-source-inline-rail" data-vtext-source-entity contenteditable="false" aria-label="Document sources">
-      ${entities.map((entity, index) => {
-        const entityID = escapeHTML(sourceEntityID(entity) || `source-${index + 1}`);
-        const title = escapeHTML(sourceEntityTitle(entity));
-        const kind = escapeHTML(sourceEntityKindLabel(entity?.kind));
-        const displayPolicy = sourceEntityDisplayPolicy(entity);
-        const open = displayPolicy === 'embedded_excerpt' || displayPolicy === 'embedded_preview' || displayPolicy === 'expanded';
-        const marker = index + 1;
-        return `<details class="vtext-source-inline" data-vtext-source-inline data-vtext-transclusion data-vtext-display-policy="${escapeHTML(displayPolicy)}" data-source-entity-id="${entityID}"${open ? ' open' : ''}>
-          <summary><sup>${marker}</sup><span>${title}</span><small>${kind}</small></summary>
-          <div class="vtext-source-inline-body">
-            ${renderSourceTransclusionBody(entity)}
-            <button type="button" class="vtext-source-open" data-vtext-open-source data-source-entity-id="${entityID}">Open source</button>
-          </div>
-        </details>`;
-      }).join('')}
-    </section>`;
-  }
-
-  function renderSourceEntityBlocks(entities) {
-    if (!Array.isArray(entities) || entities.length === 0) return '';
-    return renderSourceEntityInlineRail(entities);
-  }
-
   function renderDocumentHTML(value = editorValue) {
     const entities = revisionSourceEntities();
     return renderMarkdown(value, entities);
@@ -613,7 +587,7 @@
       const entityID = node.getAttribute('data-source-entity-id') || '';
       return entityID ? `[${label}](source:${entityID})` : label;
     }
-    if (node.closest?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
+    if (node.closest?.('[data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (tag === 'br') return '\n';
@@ -635,7 +609,7 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    if (node.matches?.('[data-vtext-source-card], [data-vtext-source-entity]')) return '';
+    if (node.matches?.('[data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
     if (node.matches?.('.table-scroll') && node.querySelector?.('table')) {
@@ -2462,7 +2436,7 @@
           <div class="source-panel-heading">
             <div>
               <p class="eyebrow">Sources</p>
-              <h3>{sourceCandidates.length ? `${sourceCandidates.length} unresolved marker${sourceCandidates.length === 1 ? '' : 's'}` : `${sourceEntities.length} source entit${sourceEntities.length === 1 ? 'y' : 'ies'}`}</h3>
+              <h3>{sourceCandidates.length ? `${sourceCandidates.length} source review marker${sourceCandidates.length === 1 ? '' : 's'}` : `${sourceEntities.length} represented source${sourceEntities.length === 1 ? '' : 's'}`}</h3>
             </div>
             <button
               type="button"
@@ -2476,7 +2450,7 @@
           </div>
 
           {#if sourceCandidates.length}
-            <div class="source-marker-list" data-vtext-source-gaps>
+            <div class="source-marker-list" data-vtext-source-gaps aria-label="Claims needing source review">
               {#each sourceCandidates as marker}
                 <span>{marker}</span>
               {/each}
@@ -3497,72 +3471,6 @@
     margin-bottom: 0;
   }
 
-  .rendered-doc :global(.vtext-source-inline-rail) {
-    display: grid;
-    gap: 0.5rem;
-    margin: 0 0 0.9rem;
-  }
-
-  .rendered-doc :global(.vtext-source-inline) {
-    min-width: min(100%, 16rem);
-    max-width: 100%;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 8px;
-    background: var(--choir-state-selected);
-  }
-
-  .rendered-doc :global(.vtext-source-inline summary) {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    gap: 0.48rem;
-    align-items: center;
-    min-height: 2.2rem;
-    padding: 0.42rem 0.58rem;
-    cursor: pointer;
-    list-style: none;
-    color: var(--choir-text-accent);
-    font-size: 0.82rem;
-    font-weight: 760;
-  }
-
-  .rendered-doc :global(.vtext-source-inline summary::-webkit-details-marker) {
-    display: none;
-  }
-
-  .rendered-doc :global(.vtext-source-inline summary::after) {
-    content: "+";
-    margin-left: auto;
-    font-weight: 820;
-  }
-
-  .rendered-doc :global(.vtext-source-inline[open] summary::after) {
-    content: "-";
-  }
-
-  .rendered-doc :global(.vtext-source-inline small) {
-    color: var(--choir-text-accent);
-    font-size: 0.68rem;
-    font-weight: 720;
-    text-transform: uppercase;
-  }
-
-  .rendered-doc :global(.vtext-source-inline-body) {
-    display: grid;
-    gap: 0.52rem;
-    padding: 0 0.58rem 0.58rem;
-  }
-
-  .rendered-doc :global(.vtext-source-inline summary sup) {
-    display: inline-grid;
-    place-items: center;
-    min-width: 1.18rem;
-    min-height: 1.18rem;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 50%;
-    font-size: 0.68rem;
-    line-height: 1;
-  }
-
   .rendered-doc :global(.vtext-transclusion-body) {
     display: grid;
     gap: 0.52rem;
@@ -3573,16 +3481,6 @@
     border-left: 3px solid var(--choir-border-strong);
     padding: 0.42rem 0.58rem;
     background: var(--choir-state-hover);
-  }
-
-  .rendered-doc :global(.vtext-source-card) {
-    display: grid;
-    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
-    gap: 0.75rem;
-    overflow: hidden;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 8px;
-    background: var(--choir-state-selected);
   }
 
   .rendered-doc :global(.vtext-source-video),
@@ -3610,35 +3508,6 @@
     height: 100%;
     max-height: 16rem;
     object-fit: contain;
-  }
-
-  .rendered-doc :global(.vtext-source-meta) {
-    min-width: 0;
-    padding: 0.72rem 0.76rem 0.72rem 0;
-  }
-
-  .rendered-doc :global(.vtext-source-kind) {
-    margin-bottom: 0.26rem;
-    color: var(--choir-text-accent);
-    font-size: 0.74rem;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .rendered-doc :global(.vtext-source-title) {
-    margin-bottom: 0.34rem;
-    color: var(--choir-text-accent);
-    font-size: 0.98rem;
-    font-weight: 800;
-    line-height: 1.25;
-  }
-
-  .rendered-doc :global(.vtext-source-card a) {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.82rem;
   }
 
   .rendered-doc :global(.vtext-source-facts) {
@@ -3672,20 +3541,6 @@
 
   .rendered-doc :global(.vtext-source-open:hover) {
     background: var(--choir-state-selected);
-  }
-
-  @media (max-width: 720px) {
-    .rendered-doc :global(.vtext-source-inline-rail) {
-      display: grid;
-    }
-
-    .rendered-doc :global(.vtext-source-card) {
-      grid-template-columns: 1fr;
-    }
-
-    .rendered-doc :global(.vtext-source-meta) {
-      padding: 0 0.72rem 0.72rem;
-    }
   }
 
   .rendered-doc :global(.table-scroll) {
