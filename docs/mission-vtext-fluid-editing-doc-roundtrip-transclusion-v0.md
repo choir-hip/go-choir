@@ -1380,6 +1380,55 @@ remaining error field:
   this session `tool_search` still returned no computer-use/desktop-control
   tool after the user re-enabled it, so API/browser backup was used.
 
+2026-06-05 imported Markdown-as-VText structural identity checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code changes:
+
+- Computer Use is available in this continuation, and the Comet browser is
+  authenticated on staging with the owner account. The owner proposal VText is
+  open at `https://choir.news` as document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, current UI label v78.
+- The document title/source label is still
+  `choir_private_legal_cloud_proposal.md`, and the rendered document is acting
+  as VText. The appendix glossary is visibly flattened in the owner UI as
+  `TermDefinition...`, matching the prior API/browser evidence that v75-v78
+  regressed from the v70-v74 Markdown table shape.
+- The correction target is not to make `.md` behave "close enough" to
+  `.vtext`. Imported `.md`, `.txt`, DOCX, PDF, and other source files should
+  become canonical VText projections once the user begins durable VText work.
+  The original file remains source evidence/import lineage, and export back to
+  `.md`/`.txt` is an explicit export from canonical VText.
+- Specifically, an imported `.txt`, `.md`, or other source artifact may seed
+  v0 as original/source content, but as soon as it advances from v0 to v1 the
+  canonical editable artifact should be a `.vtext` projection/manifest. VText
+  revisions after that point must not write through to the source extension or
+  rely on the source extension's Markdown identity for correctness.
+- Code inspection before mutation found that the backend already has
+  projection/import metadata and `.vtext` shortcut-manifest machinery, while
+  the frontend still preserves `appContext.sourcePath` and contains
+  `writeThroughToFile` behavior for non-`.vtext` source paths when no
+  `currentDoc.doc_id` is present. This does not prove the exact v74->v75
+  transition by itself, but it keeps the `.md` substrate in the live edit
+  boundary and is incompatible with the mission invariant that VText owns the
+  canonical revisable projection after import.
+- The first collapsed transition remains the table fidelity target: v70-v74
+  preserved about 50 Markdown table rows; v75-v78 contain the collapsed
+  `TermDefinition` artifact. The repair must identify and close the structural
+  corruption path for rendered table serialization and imported-source
+  projection identity without a glossary-specific special case.
+
+belief-state update:
+
+- `.md`-labeled owner documents are not proven equivalent to `.vtext` today.
+  The appendix regression is evidence that source-format identity, rendered
+  Markdown serialization, and user-authored draft/revision flow are still
+  entangled. The next code change should make canonical VText projection
+  identity explicit, preserve table structures through serializer coverage,
+  and keep `.md` as import/export lineage rather than a live editable substrate
+  once durable VText revisions begin.
+
 suggested resume goal string:
 
 ```text
