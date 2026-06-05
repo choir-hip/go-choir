@@ -1487,3 +1487,98 @@ what this proves:
   source window without relying on the deleted source-rail renderer.
 - The proof is on the actual owner legal-cloud document, not a local fixture or
   short demo draft.
+
+## 2026-06-05 Architecture Refresh: Source Flow Without Shortcut Layers
+
+status: research_plan_checkpoint_before_next_code
+
+current uncertainty or obstacle:
+
+The accepted owner proof shows the article-first source route works, but the
+implementation is still sitting inside `frontend/src/lib/VTextEditor.svelte` as
+a string-to-HTML Markdown renderer plus global CSS. That is acceptable as a
+deployed slice, but it is a weak long-term owner for Pretext source flow. The
+risk is replacing one shortcut path (top source rail) with another shortcut path
+(manual line routing buried in a monolithic editor string renderer).
+
+selected cognitive transforms:
+
+1. Real Object - The real object is not a source card. It is a typed citation
+   transclusion embedded in a canonical VText revision and projected through
+   reader, editor, publication, and export surfaces.
+2. Depth Extraction - The deeper feature is stable source identity with a
+   selectable reading affordance. Layout is downstream of source graph
+   correctness.
+3. Via Negativa - Delete or quarantine paths that flatten source entities into
+   prose, use rendered DOM as export truth, or make hidden metadata visible.
+4. Invariant Stress - Every proposed source-flow improvement must preserve
+   autosave serialization, focused-user-edit diffs, source metadata, publication
+   bundles, and Markdown export.
+5. Dead-Path Pressure - Cleanup is not polish. Once the article-first source
+   path is proven, stale rail/card/workflow code becomes regression surface and
+   should be pruned or made explicitly diagnostic.
+
+route-changing insights:
+
+- Pretext should live behind a focused source-flow component or utility, not
+  inside the general Markdown string renderer. The existing
+  `PretextInlineDisclosure.svelte` proves the package works in Svelte, but it is
+  an auth-entry disclosure component, not a reusable source-transclusion owner.
+- `@chenglou/pretext/rich-inline` is the right primitive for atomic inline
+  source chips and compact mixed-style labels. It is intentionally not a nested
+  DOM layout engine.
+- Core `layoutNextLineRange()` / `materializeLineRange()` is useful only when
+  Choir intentionally owns manual line placement around an expanded source card.
+  That should be scoped to source-card/article-flow paragraphs, with a readable
+  CSS fallback.
+- The current serializer already treats `[data-vtext-source-ref]` as the
+  canonical `[label](source:ENTITY_ID)` marker and skips rendered source-entity
+  blocks. Any componentization must keep that serialization contract explicit.
+- Publication copy/download already goes through `/api/platform/publications/export`
+  and must stay there. Source card DOM is reader UI, not export truth.
+
+changed implementation plan:
+
+- Introduce a typed renderer boundary for source refs before adding richer
+  layout. The boundary can start as a source-ref model plus rendering helper, but
+  the target is a componentized source transclusion affordance that owns:
+  marker label, compact popover, expanded card, open-source action, and data
+  attributes used by serialization/tests.
+- Keep the current proven inline marker behavior as the fallback path while
+  extracting the code. Do not regress the owner proof while refactoring.
+- Apply Pretext in two small, testable places:
+  1. rich-inline source chip/label layout for compact markers;
+  2. optional expanded-card paragraph flow for long prose adjacent to a card.
+- Defer any whole-document Pretext renderer. Choir's VText renderer still needs
+  normal headings, tables, lists, citations, editability, and browser selection;
+  Pretext should solve the source-flow problem, not replace the editor.
+- Add deletion criteria to the mission review: unused source rail/card CSS,
+  stale source-gap wording, prose-source placeholders, noncanonical `.md`
+  write-through after v1, and any test fixture path that proves only a demo
+  shape rather than the owner document contract.
+
+verification plan:
+
+- Unit/Playwright: source refs remain `[label](source:ENTITY_ID)` through
+  render/edit/autosave serialization; table roundtrip tests still reject
+  `TermDefinition`; source publication test still opens the owning source
+  surface; source panel copy avoids `missing source`/`unresolved marker`.
+- Local build: `pnpm --dir frontend build`.
+- Staging owner proof: authenticated Comet opens
+  `choir_private_legal_cloud_proposal.vtext` v83+ under
+  `YUSEFNATHANSON@ME.COM`, verifies title/content, inline source markers,
+  expansion, open-source window, no top source deck, no visible `missing source`,
+  and source panel review language.
+- API/export proof: owner publication resolve/export returns source entities,
+  transclusions, allowed formats, Markdown content equivalent to VText content,
+  and source access data under publication policy.
+- Only after the artifact works: write the hard mission/system review report in
+  `docs/`, render a PDF to the owner's iCloud Drive, then run the simplification
+  pass against the documented deletion criteria.
+
+next high-information action:
+
+Inspect the current VText renderer and source repair API for the smallest
+component boundary that preserves the owner proof while making Pretext optional
+and testable. Do not add more source UX code until the boundary and deletion
+criteria are explicit in the diff.
