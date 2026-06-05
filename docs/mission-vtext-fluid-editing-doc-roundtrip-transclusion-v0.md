@@ -745,7 +745,8 @@ status: checkpoint_incomplete
 last checkpoint: June 5, 2026. The first implementation checkpoint landed
 after a separate problem-documentation commit. A second checkpoint added real
 platform DOCX/PDF publication export after documenting the staging DOCX export
-blocker.
+blocker. A third checkpoint preserved non-VText originals as ContentItems when
+opening files into VText projections.
 
 current artifact state: problem evidence exists for slow VText revision,
 Markdown table corruption, durable version numbers, publication/export UX, and
@@ -787,6 +788,11 @@ what shipped:
   downloads.
 - `631acb58` expands the default publication export policy to
   `txt`, `md`, `html`, `docx`, and `pdf` for new publications.
+- `0a5a31de` preserves original file artifacts when `.md`, DOCX, or PDF-like
+  files are opened as VText. Text-compatible originals keep text content and an
+  available original hash. Binary originals create separate ContentItems with
+  text content omitted, explicit binary hash-state metadata, and lossy VText
+  projection manifests on the first revision.
 
 what was proven:
 
@@ -832,6 +838,40 @@ what was proven:
 - Decoded PDF proof at `/tmp/choir-pdf-export-proof.pdf` was recognized as
   `PDF document, version 1.4`; extracted strings contained the publication
   version, XMP public provenance, body content, and final content line.
+- Local focused tests passed for non-VText import preservation:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts' -count=1`.
+- Local focused VText prompt tests still passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptUsesDiffFirstContextForDirectUserEdits|TestInitialVTextToolChoiceUsesExactTools' -count=1`.
+- `git diff --check` passed before committing `0a5a31de`.
+- GitHub CI, staging deploy, and FlakeHub publish passed for
+  `0a5a31de4e4c1f0127e5a27b006b66fea5e98e88`.
+- Staging health proved proxy and sandbox deployed commit
+  `0a5a31de4e4c1f0127e5a27b006b66fea5e98e88`.
+- Deployed Node B sandbox service-level proof opened `.md`, DOCX, and PDF
+  paths as VText projections under owner
+  `mission-vtext-import-proof-1780637418`.
+  - Markdown original ContentItem:
+    `56cb0ee0-d729-4a17-b278-7ed33030e39f`, media `text/markdown`,
+    app `vtext`, text length `50`, hash state
+    `available_from_text_projection`.
+  - DOCX original ContentItem:
+    `73978839-1da3-4fa3-b899-9b7899e6cc15`, media
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
+    app `vtext`, text length `0`, hash state
+    `unavailable_until_binary_bytes_adapter`, text policy
+    `not_embedded_for_binary_original`.
+  - PDF original ContentItem:
+    `13f5d192-b9c8-4669-870e-a6b0de2dcb56`, media `application/pdf`,
+    app `pdf`, text length `0`, hash state
+    `unavailable_until_binary_bytes_adapter`, text policy
+    `not_embedded_for_binary_original`.
+- Deployed Node B sandbox revision-metadata proof under owner
+  `mission-vtext-import-revision-proof-1780637446` confirmed the first DOCX and
+  PDF VText revisions carry import manifests with `projection_kind: vtext`,
+  source media type, original ContentItem ID, projection content hash, binary
+  original hash state, and lossy adapter warnings:
+  `docx_projection_requires_style_adapter` and
+  `pdf_projection_requires_extraction_adapter`.
 
 unproven or partial claims:
 
@@ -853,9 +893,10 @@ unproven or partial claims:
 - `.md` file-open normalization now records import and migration manifests, but
   bulk migration of existing versioned Markdown documents, including the
   legal-cloud proposal class, is not complete.
-- DOCX/PDF import, original-file ContentItems, style-profile preservation,
-  import -> revise -> export roundtrip, and inspected imported-document
-  metadata are not complete.
+- DOCX/PDF import now preserves original ContentItems and records inspected
+  first-revision import manifests, but true byte-reading import adapters,
+  style-profile preservation, asset manifests, and import -> revise -> export
+  roundtrip proof are not complete.
 - Source entity behavior is still a frontend interaction proof for existing
   inline source markup; citation repair, source entity creation, publication
   projection, and open-owning-source proof over real legal-cloud citations
