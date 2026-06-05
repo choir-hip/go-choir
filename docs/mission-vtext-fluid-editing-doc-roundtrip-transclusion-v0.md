@@ -1116,6 +1116,47 @@ what was proven:
   historical citation expands in-flow with the supplied source label/excerpt.
 - `10ce194f` corrected the browser proof fixture to use public `file`
   ContentItems instead of the runtime-internal `file_version` source type.
+- `4a2b05a7` documented the next source-substrate gap before the behavior
+  change: migrated Markdown revisions could record unresolved `source_gaps`,
+  but there was no canonical product path to attach later-discovered source
+  evidence, rewrite the matching citation markers into source entities, clear
+  repaired gaps, and create the next durable VText revision.
+- `b9e485d4` adds `POST /api/vtext/documents/{id}/source-repairs`. The route
+  is owner-authenticated, accepts a base revision, source entities, and
+  citation-marker resolutions, validates that every resolution points at a real
+  source entity, rewrites only unresolved Markdown citation markers into
+  `source:` links, preserves unrepaired gaps, clears repaired gaps, and creates
+  the next canonical VText revision with `vtext_source_gap_repair` metadata.
+  It does not re-import the document, does not invent citations, and does not
+  double-link already resolved `source:` markers. Local focused runtime proof
+  passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVText(SourceGapRepair|ImportMarkdownLineage)' -count=1`.
+- GitHub CI run `27001890802` passed for
+  `b9e485d4cf2a26fee34528a3879a29226e00b0aa`; runtime shards, vet/build,
+  integration smoke, non-runtime tests, aggregate Go gate, and Node B staging
+  deploy were green. FlakeHub publish run `27001890817` passed for the same
+  commit.
+- Staging health proved proxy and sandbox deployed commit
+  `b9e485d4cf2a26fee34528a3879a29226e00b0aa`, deployed at
+  `2026-06-05T07:34:17Z`.
+- `7fc64d21` corrected the browser assertion for the repaired source marker:
+  the VText renderer keeps the original citation marker in `data-source-label`
+  while the expanded inline transclusion text contains source-card content.
+  GitHub CI run `27002025582` passed for
+  `7fc64d2171e8efa9614f75bde6fa8c609973870b`; staging deploy was skipped as
+  expected because the change touched only tests. FlakeHub publish run
+  `27002025545` passed for the same commit.
+- Deployed browser-authenticated source-aware lineage proof now passes with
+  the source-gap repair case included:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js --workers=1 --reporter=line`.
+  Result: 3 passed. The proof migrates raw Markdown with a known citation
+  marker into expandable source transclusion, migrates stored ContentItem
+  versions while preserving table rendering and historical restore behavior,
+  then migrates a document with unresolved `[2]`, repairs it through
+  `/source-repairs`, verifies the new revision is parented to the migrated
+  base version with `source_repair_resolutions` metadata and no remaining
+  `source_gaps`, opens the VText UI, and expands the repaired citation into an
+  inline source transclusion with an open-source affordance.
 
 unproven or partial claims:
 
