@@ -670,3 +670,77 @@ remaining error field:
 - The source graph repair must preserve the one detected Markdown table block
   and must be tested against the already repaired `.vtext` owner head, not
   against a short sibling demo.
+
+## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
+
+status: checkpoint_incomplete
+
+code shipped:
+
+- Commit `bab27b09d1a5976d04317448d2407bf5ffd5f75f`
+  (`fix: render vtext sources inline first`).
+- Changed the VText renderer so revision `source_entities` are not rendered as
+  a document-leading source deck before article prose.
+- Changed unresolved source-ref fallback text from literal `missing source` to
+  the ref's supplied label, so source repair gaps do not become fake prose.
+
+local verification:
+
+- `npm run build` in `frontend/` passed.
+- `git diff --check` passed.
+
+landing evidence:
+
+- GitHub CI run `27028496785` succeeded, including frontend build and runtime
+  shards.
+- FlakeHub publish run `27028496760` succeeded.
+- Node B staging deploy job in CI succeeded.
+- `https://choir.news/health` reported proxy and sandbox
+  `deployed_commit`/`commit`
+  `bab27b09d1a5976d04317448d2407bf5ffd5f75f`, deployed at
+  `2026-06-05T17:00:47Z`.
+
+Comet staging proof:
+
+- Computer Use was available, including click actions, and Comet
+  (`/Applications/Comet.app`, bundle `ai.perplexity.comet`) was used for the
+  authenticated staging UI proof.
+- Published source-backed proposal URL:
+  `https://choir.news/pub/vtext/on-this-open-legal-cloud-proposal-source-backed-vtext-document-repair-the-existing-prose-only-pub51a33d8a5`.
+- On reload after the deployed commit, the published reader opened on the
+  article title `Legal Cloud Proposal -- Source-Backed Draft`; no source-card
+  deck appeared above the article.
+- The accessibility tree showed source references as inline source buttons in
+  the paragraph, including:
+  `Source: ABA Tech Survey Finds Growing Adoption of AI in Legal Practice, with
+  Efficiency Gains as Primary Driver | LawSites`.
+- Clicking the inline source marker expanded an inline source card with the
+  source title, `content item` kind, claim excerpt, source availability, and an
+  `Open source` action.
+- Clicking `Open source` opened a separate source/content window with the
+  reference URL, SHA-256 digest
+  `85a8b2021b8d9eb2a8f73fada030ab10b3b402df8a2da39647b46c0b96147bcd`,
+  source entity `src_910da23b47e84b29`, content item
+  `83addb16-cc45-476e-a4ac-920e0c073ff5`, and evidence status
+  `available / represented`.
+
+what this proves:
+
+- Published source metadata can be presented inline without the distracting
+  top-of-article source deck.
+- Removing the source deck did not break inline expansion or opening the
+  source/content window from the published form.
+- The source-backed sibling still has a prose source table and is not the full
+  client proposal; this proof is renderer/source-window evidence, not final
+  client-ready artifact proof.
+
+remaining error field:
+
+- The real owner document head remains version `82` with `source_entities: 0`.
+  The next executable probe is to research and attach a bounded source graph to
+  that full canonical owner proposal while preserving its long prose and
+  appendix table.
+- Expanded cards still use the existing CSS/card path. The Pretext
+  line-routing requirement remains unproven and should be implemented as a
+  focused article-flow component after the source graph exists on the real
+  proposal.
