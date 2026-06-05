@@ -150,6 +150,23 @@ visible citation markers must expand inline, quoted excerpts should default to
 embedded transclusion, and expanded transclusions must be able to open their
 owning source surface in a separate app/window when a source artifact exists.
 
+Current frontend code in `frontend/src/lib/VTextEditor.svelte` already renders
+canonical `[label](source:ENTITY_ID)` Markdown into clickable
+`data-vtext-source-ref` markers, and it can render a source rail containing
+`data-vtext-source-inline` details blocks. However, clicking a citation marker
+currently toggles an absolutely positioned popover and separately opens or
+scrolls a source rail. That proves that source entities are present, but it is
+not the same product behavior as "the citation itself expands into an inline
+transclusion at the citation point." This matters because users read the
+source in context, not in a detached top rail or hover popover.
+
+The default display policy is also inconsistent: frontend-derived media refs
+set `display.inline_mode: "chip"`, while `sourceEntityDisplayPolicy` only
+recognizes `embedded_excerpt`, `embedded_preview`, `expanded`, and
+`collapsed_citation`. That mismatch turns media refs into collapsed citations
+by fallback and makes default embedding depend on side effects instead of the
+source entity contract.
+
 ## Desired State
 
 - Ordinary VText revisions use current head plus user edit diff by default.
