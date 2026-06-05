@@ -2884,3 +2884,62 @@ research refs:
 
 - `https://github.com/chenglou/pretext`
 - `https://github.com/bluedusk/awesome-pretext`
+
+## 2026-06-05 Deployment Evidence: Appagent Import Canonicalization
+
+status: deployed_checkpoint_incomplete
+
+commits:
+
+- Problem checkpoint: `b49c0145` (`docs: record appagent import
+  canonicalization gap`).
+- Behavior repair: `e5e6092436f1b4a885686ad0eec147d043d239b9`
+  (`fix: canonicalize appagent import revisions`).
+
+CI and deploy:
+
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27038173905`
+  completed successfully.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27038173913`
+  completed successfully for the same SHA.
+- `https://choir.news/health` reported both proxy and upstream deployed commit
+  `e5e6092436f1b4a885686ad0eec147d043d239b9`, deployed at
+  `2026-06-05T20:24:48Z`.
+
+deployed owner-account observation:
+
+- Computer Use is available in this session, including `get_app_state`,
+  `click`, `type_text`, and `set_value`. The previous "click unavailable"
+  concern did not reproduce at the tool-surface level.
+- Computer Use against `/Applications/Comet.app` (`ai.perplexity.comet`) showed
+  authenticated staging with the owner legal-cloud document window open as
+  `choir_private_legal_cloud_proposal.vtext`, currently at `v83`.
+- The same Comet state showed inline source markers in the owner proposal and
+  source reader windows for `ABA Formal Opinion 512: Generative Artificial
+  Intelligence Tools` and the source snapshot proof publication. Source windows
+  render cleaned reader snapshot content, not just metadata.
+
+proof boundary:
+
+- The deployed platform identity and CI/runtime-shard coverage prove the code
+  path is live on staging, and local comprehensive tests prove the appagent v1
+  alias/metadata invariant.
+- I did not create a new live owner-account appagent revision solely to test
+  this slice, because that would mutate the real proposal document. A throwaway
+  authenticated staging document through Comet or a reliable Comet-cookie API
+  bridge remains the next proof to close this boundary.
+- Existing mission notes record that direct Comet cookie import into the backup
+  browser/API harness has been unreliable, so browser/API backup should not be
+  claimed as equivalent to owner Comet proof until that bridge is repaired.
+
+next executable probe:
+
+- Build the next proof as a disposable imported `.md` or `.txt` in the owner
+  account, advance it through the product VText revise path, and assert that
+  v1 records `canonical_vtext_source_path` with a `.vtext` alias while the
+  original source alias still opens the same document.
+- Then continue the source UI axis as a real Pretext layout task: model source
+  transclusions as article-flow obstacles and route paragraph lines around
+  expanded source notes rather than stacking sources above the article.
