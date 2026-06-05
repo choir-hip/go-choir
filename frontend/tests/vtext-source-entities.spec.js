@@ -145,3 +145,75 @@ test('VText autosave roundtrips rendered markdown tables without flattening cell
   expect(draft?.content).toContain('| Tokens per second | A measure of inference speed. |');
   expect(draft?.content).not.toContain('TermDefinition');
 });
+
+test('VText autosave preserves table structure when a bounded cell edit is made', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const created = await page.evaluate(async () => {
+    const title = `Bounded Table Edit Fixture ${Date.now()}`;
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const content = [
+      '# Bounded Table Edit Fixture',
+      '',
+      '| Term | Definition |',
+      '| --- | --- |',
+      '| Work product | Durable professional output. |',
+      '| Source entity | A citation-backed source object. |',
+      '',
+      'Only one table cell should change.',
+    ].join('\n');
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata: { source_path: 'fixtures/bounded-table-edit.md', created_from: 'browser-test' },
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
+  const editedDefinition = 'Durable, reviewable professional output with source memory.';
+  await rendered.locator('tbody tr').first().locator('td').nth(1).evaluate((cell, text) => {
+    cell.textContent = text;
+    cell.closest('[data-vtext-rendered]')?.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertText',
+      data: text,
+    }));
+  }, editedDefinition);
+  await expect(rendered.locator('.table-scroll table')).toBeVisible();
+  await page.waitForTimeout(1300);
+
+  const draft = await page.evaluate((docId) => {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i) || '';
+      if (!key.includes(`:${docId}`)) continue;
+      const value = JSON.parse(localStorage.getItem(key) || '{}');
+      if (value?.doc_id === docId) return value;
+    }
+    return null;
+  }, created.doc_id);
+  expect(draft?.content).toContain('| Term | Definition |');
+  expect(draft?.content).toContain(`| Work product | ${editedDefinition} |`);
+  expect(draft?.content).toContain('| Source entity | A citation-backed source object. |');
+  expect(draft?.content).toContain('| --- | --- |');
+  expect(draft?.content).not.toContain('TermDefinition');
+});
