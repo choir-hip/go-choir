@@ -4695,3 +4695,36 @@ residual risks:
 - The review report should audit whether any legacy frontend label or file list
   can still make a canonical `.vtext` document appear to the owner as a mutable
   Markdown source.
+
+## 2026-06-05 Review Artifact: Whole Mission And Current System
+
+status: review_report_and_pdf_created_simplification_pending
+
+artifact evidence:
+
+- The whole-mission/current-system hard review was updated at
+  `docs/vtext-mission-hard-review-2026-06-05.md`.
+- The report covers the mission from checkpoint `f05b4c92` through current
+  `main`, with findings first and a simplification baseline.
+- A PDF copy was rendered to the owner's iCloud Drive at:
+  `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/VText Mission Hard Review - 2026-06-05.pdf`.
+- PDF sanity check: title
+  `VText Mission Hard Review - Current State - 2026-06-05`, producer
+  `WeasyPrint 67.0`, 9 pages, Letter page size, unencrypted.
+
+review conclusion:
+
+- The system has moved from "does the source path exist?" to "is the source
+  path clean, policy-safe, and simple enough to build on?"
+- The highest-risk residual areas are source UX polish, source acquisition and
+  cleanup, publication source policy, raw repair JSON in owner surfaces, and
+  accumulated monolithic editor/runtime code.
+- The next mission action is a simplification/dead-code pass guarded by the
+  current source/window/canonical import tests and then renewed staging proof.
+
+next executable probe:
+
+- Start with `VTextEditor.svelte` simplification: extract or delete the weakest
+  scaffolding without changing behavior, especially `writeThroughToFile`, raw
+  source repair payload construction, source artifact panel state, and repeated
+  source helper code.

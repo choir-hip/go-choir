@@ -1,195 +1,330 @@
-# VText Mission Hard Review - 2026-06-05
+# VText Mission Hard Review - Current State - 2026-06-05
 
-This is a hard review of the current state of the VText fluid editing, document roundtrip, table preservation, and citation transclusion mission. It covers the mission as a whole, not only the latest code changes.
+This is a hard review of the whole VText legal-cloud mission and current
+system state, not a review of only the latest patch. It covers the path from
+checkpoint `f05b4c92` through current `main`.
 
 Review point in time:
 
 - Local branch: `main`
-- Local HEAD and `origin/main`: `400b8084048129c3051b1df0af50d059300304a3`
-- Staging health: `https://choir.news/health` returned `status: ok`, proxy `upstream: ok`, `vmctl_status: ok`
-- Staging deployed commit: `4255dc7efe5407b67bb78075cf477c133958d2f3`, deployed at `2026-06-05T14:26:47Z`
-- Later commits after `4255dc7e` are docs/test-only and did not redeploy staging artifacts
-- Latest observed CI: run `27022749951` passed for `a2c7c62f55c9ad28c7346954a1ccbdd8d7b24c22`; FlakeHub run `27022749965` passed for the same SHA
-- Focused local runtime check: `nix develop -c go test ./internal/runtime -run 'TestVText(Merge|Semantic|Compare|Accept|SourceGap|OpenFile|Imported|ImportMarkdown|EnsureManifest)'` passed
+- Local HEAD and `origin/main`: `21cb34f0`
+- Latest behavior-changing deployed commit: `24cb3cd1fb98ce720bb64befe64fef28bbc56ec7`
+- Staging health: `https://choir.news/health` returned `status: ok`,
+  `upstream: ok`, `vmctl_status: ok`
+- Staging deployed identity: proxy and sandbox upstream both reported
+  `24cb3cd1fb98ce720bb64befe64fef28bbc56ec7`, deployed at
+  `2026-06-05T22:36:03Z`
+- Current docs-only checkpoints after deploy: `7c283c0f` and `21cb34f0`
+- Primary owner/public route:
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+- Review scope: 32 tracked files changed since `f05b4c92`, about 12.8k
+  insertions and 602 deletions
 
 ## Findings
 
-### P0 - The mission is not accepted until owner-account proof is completed
+### P0 - Mission Incomplete: The Review And Simplification Loop Has Not Landed
 
-The deployed system has meaningful generic and owner-adjacent proof, but it does not yet satisfy the mission's own acceptance bar for the actual owner document. The latest mission state still names the unproven owner requirements: canonical title migration from `.md` to `.vtext`, bounded appendix-table edit survival, source-gap repair through the deployed Sources panel on the owner head, citation expansion into transclusions, source-window opening, and focused prompt-size / `apply_edits` metadata on the owner head.
-
-Evidence:
-
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:1449` identifies the first bad owner transition as v74 -> v75.
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:1495` records owner Comet restore from v74 and the table-preserving owner revise to v81.
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:1540` records bounded table-edit, source-gap, citation/source-window, and metadata proof as incomplete.
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:2660` records the current remaining error field.
-
-This is the most important review result. The system is substantially better, but final acceptance still depends on real owner-account UI proof that is currently passkey-gated.
-
-### P1 - Source repair is still a raw JSON repair surface, not an owner-grade workflow
-
-The backend and product path now prove source gap repair on a fixture, and the Sources panel can show source gaps, source entities, candidate markers, and edit evidence. However, the repair action is still driven by a visible `Repair JSON` textarea and an `Apply source repair` button. That is useful for QA and agent operation, but it is not the owner workflow implied by the contract.
+The product path is now much closer to the desired client-ready proposal, but
+the mission stopping condition is not satisfied. The requested hard review was
+not current until this report, the PDF export still needs to be produced from
+this report, and the simplification/dead-code pass has not been run.
 
 Evidence:
 
-- `frontend/src/lib/VTextEditor.svelte:2459` renders the Sources panel with gaps, entities, diagnosis, evidence, and repair JSON.
-- `frontend/src/lib/VTextEditor.svelte:2560` exposes `Repair JSON` directly in the user-visible panel.
-- `frontend/src/lib/VTextEditor.svelte:1886` sends the repair JSON to `handleApplySourceRepair`.
-- `docs/source-external-data-publication.md:287` requires every citation marker to be a transclusion point with a retrievable/openable source.
+- `docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md` still
+  records the hard review, iCloud PDF, and simplification pass as pending before
+  this report.
+- `git diff --stat f05b4c92..HEAD` shows substantial code growth across
+  `VTextEditor.svelte`, source rendering, publication, source materialization,
+  and VText runtime paths.
 
-Recommended direction: keep the proven backend contract, but replace the raw JSON interaction with a typed repair draft model. The UI should present unresolved markers as rows with explicit source candidates, create/attach decisions, and source-opening proof. A raw JSON affordance can remain behind a developer mode if it is still needed for diagnosis.
+Acceptance implication: do not call the mission complete until this report is
+exported to PDF, simplification lands, CI/deploy pass again, and staging proof
+is refreshed after simplification.
 
-### P1 - The diagnosis surface is too broad and too raw for the product proof role it now serves
+### P1 - Source UX Still Has Too Much Product Chrome For The Magazine/Journal Target
 
-The authenticated diagnosis endpoint helped unblock proof when Comet could read private UI state but normal shell/API calls were unauthenticated. It now returns a very broad raw bundle: owner/document identity, store paths, VText paths, revisions, messages, runs, events, evidence, and content fragments. That is acceptable as an internal diagnostic during a mission, but it is too broad to become the durable owner-facing proof surface.
-
-Evidence:
-
-- `internal/runtime/vtext.go:3479` implements `HandleVTextDiagnosis`.
-- The mission records authenticated Comet/raw diagnosis use as the proof path after shell calls returned `401 authentication required`.
-- `docs/source-external-data-publication.md:398` expects product proof from normal product flows, not a broad internal dump.
-
-Recommended direction: split the endpoint or response model into a minimal product-safe diagnosis bundle and a separately authorized deep-debug bundle. The product bundle should expose only what the owner needs to understand document structure, source gaps, transclusion status, revision provenance, and edit evidence.
-
-### P1 - Compare/merge remains brittle because the key owner restoration path failed through model-backed compare
-
-The owner root cause was identified without relying on compare/merge, and the visible Restore path successfully repaired the owner head. However, the built-in compare/merge route failed on the actual owner v74 -> v78 path with `model-backed semantic compare failed`. That leaves the version-compare contract only partially satisfied for the hardest document.
+Pretext is now used for article-side source-note wrapping, and nested source
+cards were fixed. That is real progress. But the visible source apparatus still
+leans toward product controls, rounded panels, buttons, and metadata labels.
+The user clarified that the point of Pretext is the wrapping and magazine or
+academic journal UX: prose should flow around source apparatus, while opened
+sources should read as evidence, not as a dashboard.
 
 Evidence:
 
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:1460` records the staging `COMPARE FAILED` owner path.
-- `internal/runtime/vtext.go:3067` implements `HandleVTextSemanticCompare`.
-- `internal/runtime/vtext.go:3146` implements `HandleVTextMergePreview`.
-- `docs/vtext-version-compare-merge-debuggability-spec.md:360` requires clear acceptance behavior for compare, merge preview, and focused provenance.
+- `frontend/src/lib/vtext-source-flow.ts` implements the current routed source
+  note flow using `data-vtext-source-flow`.
+- `frontend/src/lib/VTextEditor.svelte` still owns large CSS blocks for source
+  notes, source-flow close buttons, mounted markers, source artifacts, and
+  source repair controls.
+- The latest Comet proof shows the source content window is reader-mode, but
+  the in-article source note still needs visual reduction and typography work.
 
-Recommended direction: compare/merge should have a deterministic structural fallback for large VText revisions, especially when model compare fails. The owner path should degrade into an inspectable structural diff rather than blocking repair.
+Recommended direction: keep the current Pretext flow as the behavioral
+foundation, then redesign the source note as a quiet marginal/inline evidence
+apparatus. Remove visual layers that communicate "card stack" rather than
+"citation note".
 
-### P2 - `VTextEditor.svelte` is now too large and owns too many unrelated responsibilities
+### P1 - Source Acquisition Is Still Too Manual And Not Yet A Durable Reader Pipeline
 
-`frontend/src/lib/VTextEditor.svelte` is 4026 lines and currently owns rendering, Markdown/VText serialization, autosave, current revision management, source entity state, source repair, diagnosis, edit evidence display, publication/export actions, compare/merge UI state, and streaming revise state. The mission additions were reasonable under pressure, but the component is now carrying enough responsibilities that future bug fixes will be riskier than necessary.
-
-Evidence:
-
-- `frontend/src/lib/VTextEditor.svelte:292` starts source entity helpers.
-- `frontend/src/lib/VTextEditor.svelte:359` starts edit-evidence helpers.
-- `frontend/src/lib/VTextEditor.svelte:1184` handles manifest creation.
-- `frontend/src/lib/VTextEditor.svelte:1209` handles revision saving.
-- `frontend/src/lib/VTextEditor.svelte:1852` starts source panel actions.
-- `frontend/src/lib/VTextEditor.svelte:2200` derives source panel state.
-- `frontend/src/lib/VTextEditor.svelte:2459` renders source panel UI.
-
-Recommended direction: extract pure helpers and small state modules before adding more mission behavior. Good first cuts are source entity normalization, source repair draft construction, edit evidence extraction, Markdown/VText render helpers, and persistence actions.
-
-### P2 - The default source repair payload builder can generate misleading repairs
-
-`defaultSourceRepairPayload` maps unresolved markers to existing source entities by array position and can emit empty entity IDs. That helped bootstrap manual repair tests, but it is a weak abstraction because it implies a relationship that may not exist.
+The publication/source graph now proves that source entities, transclusions,
+reader snapshots, source attachment, and opened source windows can work. But
+the legal-cloud source artifacts were repaired through manual attachment and
+diagnostic workflows. The durable target is source acquisition that can fetch,
+clean to Markdown, store a reader artifact, and fall back from live preview
+without hand-pasted source text.
 
 Evidence:
 
-- `frontend/src/lib/VTextEditor.svelte:397` builds `attach_existing` repairs by pairing candidates and source entities by index.
+- `frontend/src/lib/VTextEditor.svelte` exposes a `SOURCE ARTIFACT` panel with
+  title, URL, text, import, and attach controls.
+- `internal/runtime/browser.go` and `internal/runtime/vtext_media_sources.go`
+  contain the source snapshot/materialization path, including fallback states.
+- Mission evidence records iframe/Web Lens brittleness and the need to treat
+  cleaned Markdown as the primary reader path, with iframe preview as optional.
 
-Recommended direction: represent repair drafts as typed rows with explicit resolution state: unresolved marker, suggested source candidates, selected entity, create-new-source fields, and validation errors. Do not emit a repair operation until the row has an explicit valid source identity.
+Recommended direction: make "clean public source into Markdown reader artifact"
+the default source pipeline. Keep iframe/live preview as a secondary tab or
+fallback, not the authoritative proof of source readability.
 
-### P2 - `writeThroughToFile` looks like legacy noncanonical write-through under the new VText invariant
+### P1 - Publication Source Policy Needs A Focused Privacy/Licensing Review
 
-The mission now asserts that imported `.txt`, `.md`, and other source formats should become canonical `.vtext` on the v0 -> v1 transition, with export back to the original format as a projection. Under that invariant, `writeThroughToFile` appears to be a legacy path. It returns for `.vtext` paths and for any `currentDoc?.doc_id`, which covers normal canonical VText documents.
-
-Evidence:
-
-- `frontend/src/lib/VTextEditor.svelte:1168` implements `writeThroughToFile`.
-- `frontend/src/lib/VTextEditor.svelte:1173` skips `.vtext` paths.
-- `frontend/src/lib/VTextEditor.svelte:1176` skips paths backed by a current VText document.
-- `docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md:14` frames original files as projection/import/export artifacts, not canonical mutable state.
-
-Recommended direction: prove whether any current noncanonical editor context still requires this path. If not, delete it and route all document writes through canonical VText revisions plus explicit export.
-
-### P2 - Table preservation is repaired, but the structural preservation layer is still reactive
-
-The implemented table stabilization is not a glossary-specific special case, and it directly addresses the observed corruption path. Still, it is reactive: it recognizes and repairs collapsed Markdown table structure after model/user text changes rather than preserving an AST-like document structure through the whole render/edit/save/revise path.
+The current public legal-cloud route exposes seven source entities and seven
+transclusions, and Markdown export reports `private_material_omitted: true`.
+That is encouraging. It is not enough policy proof for broad publication of
+private, licensed, or subscription-derived source artifacts.
 
 Evidence:
 
-- `internal/runtime/vtext.go:2221` implements `stabilizeVTextUserMarkdownStructures`.
-- `docs/vtext-version-compare-merge-debuggability-spec.md:249` requires structured edit semantics by default.
-- The owner incident showed a Markdown glossary table collapsed into prose-like `TermDefinition` artifact between v74 and v75.
+- Public resolve for the route returned `7` source entities and `7`
+  transclusions under public access policy.
+- Public Markdown export returned 38,398 bytes, source markers, and
+  `private_material_omitted: true`.
+- Mission contract requires users authorized to access a publication to inspect
+  permitted sources, which implies source policy must distinguish public,
+  owner-private, licensed, excerpt-only, and no-publish cases.
 
-Recommended direction: keep the stabilization as a regression guard, but treat the durable design as structured VText block preservation. Tables, headings, transclusion points, hidden metadata, and source references should survive as first-class structure, not as text patterns recovered after the fact.
+Recommended direction: add a source publication policy review before expanding
+source import beyond public sources. The export path should continue to prove
+what was omitted and why.
 
-### P2 - Mission documentation is useful but too large to be the primary operator state
+### P1 - Source Repair Is Still Exposed As Raw JSON In The Owner Surface
 
-The mission document is now 2668 lines. It contains the right evidence discipline, but the size makes it hard for a new operator to find the current state, remaining risks, and next action quickly. The mission doc should remain the canonical narrative, but this review should become a checkpoint artifact and the mission doc should gain a compact resumable state section.
-
-Evidence:
-
-- `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md` is 2668 lines.
-- The current remaining error field starts at `docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md:2660`.
-
-Recommended direction: keep evidence append-only, but add a short "Current Checkpoint" near the top that points to detailed evidence sections and this review report.
-
-### P3 - Browser regression coverage is high value but should be made less bulky before it grows again
-
-The new Playwright tests cover important staging/product behavior: imported Markdown canonical `.vtext` identity, Markdown export projection, bounded table autosave, source gap repair, source panel refresh, and source-window opening. The tests are valuable, but the files are getting long and carry repeated setup and fetch helpers.
+The backend source repair contract works, and it helped bootstrap the real
+source graph. But the UI still exposes `Repair JSON` in the main VText editor.
+That is an agent/operator tool, not an owner-grade source workflow.
 
 Evidence:
 
-- `frontend/tests/vtext-markdown-lineage.spec.js` is 633 lines.
-- `frontend/tests/vtext-source-entities.spec.js` is 219 lines.
-- Recent CI passed for the test-only commits that added this coverage.
+- `frontend/src/lib/VTextEditor.svelte` still renders `Repair JSON`.
+- `defaultSourceRepairPayload` still exists near the top of the component.
+- The source artifact panel is useful but still reads like a control surface
+  rather than a citation review workflow.
 
-Recommended direction: extract shared VText fixture setup and `fetchJSON`/product API helpers into a test helper module. Keep the scenario tests readable and focused on product contracts.
+Recommended direction: replace raw repair JSON with typed claim/source rows:
+claim, current marker, candidate source, confirming/refuting/omit decision,
+bounded selector, and source-window preview. Keep raw JSON behind diagnostics
+only if needed.
+
+### P2 - `VTextEditor.svelte` Is Too Large And Owns Too Many Domains
+
+The component is now 4,141 lines. It owns document rendering, autosave,
+revision state, title/manifest behavior, publishing/export, compare/merge,
+source entities, source artifacts, source repair, edit evidence, Pretext flow
+integration, and large CSS blocks. This size is now a correctness risk.
+
+Evidence:
+
+- `frontend/src/lib/VTextEditor.svelte`: 4,141 lines.
+- Source-flow integration alone touches event handling, source marker cloning,
+  mounted marker state, and hundreds of CSS lines.
+- New helper files exist (`vtext-source-flow.ts`, `vtext-source-renderer.ts`,
+  `vtext-markdown-renderer.ts`), but the editor still centralizes too much
+  state and UI.
+
+Recommended direction: extract source panel state, source artifact actions,
+repair draft construction, edit evidence extraction, and publication/export
+actions into smaller modules or components before adding more UX.
+
+### P2 - `internal/runtime/vtext.go` Is Becoming A Second Monolith
+
+The runtime VText API file is now 5,214 lines and contains file import,
+Markdown lineage import, export, diagnosis, compare/merge, source repair,
+source attachment, source prompt construction, and source artifact plumbing.
+Some of this belongs together, but the current file size makes review and
+future change isolation harder.
+
+Evidence:
+
+- `internal/runtime/vtext.go`: 5,214 lines.
+- Related source materialization logic also exists in
+  `internal/runtime/vtext_media_sources.go`,
+  `internal/runtime/browser.go`, and `internal/proxy/platform_publish.go`.
+
+Recommended direction: split by contract boundary, not by convenience:
+import/export, source graph/source attachment, diagnosis/debug, compare/merge,
+and prompt/context construction.
+
+### P2 - Legacy Write-Through Still Looks Like Dead Or Dangerous Compatibility Debt
+
+`writeThroughToFile` remains in `VTextEditor.svelte` and is called from save
+paths, although it skips `.vtext` and any current VText document. Under the
+current invariant, canonical writes should go through VText revisions, and
+Markdown should be an export projection.
+
+Evidence:
+
+- `frontend/src/lib/VTextEditor.svelte` still defines and calls
+  `writeThroughToFile`.
+- The current canonical import tests and deployed owner proof support `.vtext`
+  convergence rather than source-file write-through.
+
+Recommended direction: prove whether any current noncanonical editor path still
+needs this function. If not, delete it. If yes, fence it explicitly as legacy
+noncanonical file editing and keep it out of VText document flows.
+
+### P2 - Structural Preservation Is Better, But Still Too Text-Recovery-Centered
+
+The table regression was repaired without a glossary-specific hardcode, and
+tests cover untouched and bounded table edits. But the underlying strategy
+still includes Markdown-structure stabilization after content edits. Durable
+VText should preserve table, list, citation, and hidden metadata structure as
+first-class document structure through render/edit/save/revise, not recover
+them from text shape after damage.
+
+Evidence:
+
+- Mission evidence identified v74 -> v75 as the first owner transition that
+  collapsed the glossary table into `TermDefinition`.
+- Current tests cover bounded table preservation and source-aware roundtrip.
+- The mission still names structured VText preservation as a core invariant.
+
+Recommended direction: keep stabilization as a guardrail, but drive future work
+toward explicit VText block/inline structure and structured edit operations.
+
+### P2 - Test Coverage Is Valuable But Too Scattered And Setup-Heavy
+
+The mission added good regression coverage, especially around source entities,
+publication source service, Markdown lineage, and desktop state. The tests now
+need consolidation before the next expansion.
+
+Evidence:
+
+- `frontend/tests/vtext-source-entities.spec.js`: 525 lines.
+- `frontend/tests/vtext-source-service-publication.spec.js`: 251 lines.
+- `frontend/tests/vtext-markdown-lineage.spec.js`: 633 lines.
+- Focused comprehensive runtime tests are behind `-tags comprehensive`, so a
+  normal `go test ./internal/runtime -run ...` can report no tests to run.
+
+Recommended direction: extract shared product API helpers and fixtures for
+VText documents, publications, source entities, source artifacts, and desktop
+state reset. Document comprehensive-tag test invocation near the tests or in
+the mission report.
+
+### P3 - Mission Docs Are Valuable But Too Large For Fast Resumption
+
+The mission documentation discipline is a strength: newly found problems were
+documented before code, and evidence was preserved. The downside is size. The
+current client-ready mission doc is 4,697 lines, and the earlier fluid-editing
+mission doc is 3,182 lines.
+
+Recommended direction: keep the append-only evidence ledger, but add or update
+a short "Run Checkpoint & Resumption State" section near the top with latest
+artifact state, proven behavior, unproven behavior, next executable probe, and
+links to this review.
 
 ## What Works Now
 
-- Computer Use is available, and authenticated Comet was used for owner staging QA where the UI allowed it.
-- The real owner regression was root-caused to the first bad transition v74 -> v75. v70-v74 preserved the rendered appendix table, while v75-v78 collapsed the table into a `TermDefinition` artifact.
-- The real owner document was restored from v74 through a visible owner UI Restore control, creating a newer head with the table visible.
-- The real owner document survived a focus/edit/save/revise path when the table was untouched. Appendix A still rendered as one HTML table and `TermDefinition` did not reappear.
-- Generic staging regression coverage now proves bounded rendered-table cell autosave without corrupting table shape.
-- Generic staging regression coverage now proves unresolved source repair can create/attach source entities and open the source window from the Sources panel.
-- Generic staging regression coverage now proves imported Markdown advances to canonical `.vtext` identity on v0 -> v1 while retaining Markdown export as projection.
-- Focused local runtime coverage for merge, compare, source gap, open-file, imported Markdown, import Markdown, and manifest paths passes under `nix develop`.
+- Computer Use is available and was used against authenticated Comet.
+- The real owner legal-cloud proposal has a canonical `.vtext` path in the
+  current proof chain.
+- The original Markdown owner artifact is treated as legacy/import source
+  material, with Markdown export available as projection.
+- Imported/opened `.md`, `.txt`, DOCX, PDF, and related artifacts converge to
+  `.vtext` identity on VText revision paths in current source code.
+- Focused comprehensive runtime tests pass for canonical user revision,
+  appagent edit, file open, Markdown lineage import, manifest, stale revision,
+  and import preservation behavior.
+- The public legal-cloud route exports Markdown with compact `source:` markers
+  and no `missing source` prose.
+- Publication resolve exposes seven source entities and seven transclusions for
+  the legal-cloud publication.
+- Source cards no longer bunch at the top of the article by default.
+- Clicking source markers in the article opens inline source apparatus, and
+  clicking a marker inside a Pretext-routed flow remounts one active source note
+  instead of nesting a second card.
+- Opened source windows now render cleaned Markdown content as reader-mode
+  source artifacts with evidence/provenance demoted to collapsed details.
+- The appendix table regression was root-caused in the earlier mission to the
+  v74 -> v75 transition, and current table-focused tests protect the repair
+  path.
+- CI and Node B deploy succeeded for the latest behavior-changing commit
+  `24cb3cd1`.
 
 ## What Is Not Proven Yet
 
-- Actual owner document bounded appendix-table edit survival.
-- Actual owner document source-gap repair through the deployed Sources panel.
-- Actual owner document citation marker expansion into transclusion points.
-- Actual owner document source-window opening from repaired owner citations.
-- Actual owner document visible focused prompt-size and `apply_edits` metadata after ordinary revisions.
-- Actual owner document title migration from `choir_private_legal_cloud_proposal.md` to canonical `.vtext` on the next owner VText write.
-- Complete external source lifecycle from external source fetch/search/read through transclusion and publication proof.
-- Owner compare/merge repair path for v74 -> latest. Restore worked, compare/merge failed.
-- Passkey-completed owner Comet acceptance. Current private UI proof is blocked by passkey overlay/cancelled ceremony for `yusefnathanson@me.com`.
+- The post-report simplification pass has not happened.
+- Final magazine/academic journal source-note design is not complete.
+- Automated source acquisition/cleanup into Markdown reader artifacts is not
+  complete.
+- Source publication policy for private/licensed/subscription material needs
+  dedicated review.
+- The owner-facing source repair workflow is still operator-grade in places.
+- The current public export filename is a route-derived `.md` filename, not
+  necessarily the owner-friendly canonical proposal name.
+- The current route proof does not by itself prove every future imported legacy
+  file label in Files UI will read clearly to the owner as source artifact
+  versus canonical VText.
+- Compare/merge robustness on the original owner table-regression transition
+  remains a separate open risk from the earlier mission.
 
 ## Current System State
 
-The current system is in a mixed but understandable state:
+The system is no longer a source-demo slice. It now has a real full-length
+legal-cloud proposal, canonical `.vtext` behavior, source graph, publication
+source records, inline citation expansion, source windows, Markdown export, and
+staging proof. The remaining risk has shifted from "does the path exist?" to
+"is the path clean enough, policy-safe enough, and simple enough to build on?"
 
-- Canonical VText direction is correct: imported `.md` should behave as canonical VText after first revision, and Markdown should be an export projection.
-- The table corruption incident is contained for the tested paths, including the real owner untouched-table revise and generic bounded table edit.
-- The source/citation path has enough backend and fixture proof to continue, but the owner document remains the acceptance gate.
-- The frontend editor has accumulated mission-specific UI, diagnosis, and repair responsibilities that should be simplified before the next broad expansion.
-- Staging is healthy and serving `4255dc7e`; repo main is ahead with docs/test-only commits at `400b8084`.
+That shift matters. It means the next high-value work is not another narrow
+source patch. It is a simplification and product-quality pass that keeps the
+staging-proven behavior while removing weak scaffolding.
 
-## Simplification Plan
+## Simplification Pass
 
-Do this only after preserving the report and without weakening the existing tests.
+Do this with tests as guardrails and with small commits:
 
-1. Extract source entity normalization, source gap projection, edit evidence extraction, and source repair draft construction from `VTextEditor.svelte` into pure helpers with focused unit tests.
-2. Replace `defaultSourceRepairPayload` with a typed repair draft builder that never emits an operation with an empty or inferred source entity ID.
-3. Audit `writeThroughToFile`; delete it if no current canonical VText flow depends on it, or fence it behind an explicit noncanonical legacy path with tests.
-4. Keep the backend table stabilization regression guard, but name it as structural preservation scaffolding and add tests that show it is not glossary-specific.
-5. Extract repeated Playwright product API setup from VText browser tests into shared helpers.
-6. Add a compact current-checkpoint section to the mission document that links to this review and the latest remaining error field.
+1. Extract source panel state and actions from `VTextEditor.svelte`.
+2. Replace `Repair JSON` as the normal visible workflow with typed source
+   repair rows.
+3. Audit and delete or fence `writeThroughToFile`.
+4. Split source artifact attachment/import UI from the main editor body.
+5. Split `internal/runtime/vtext.go` by import/export, source graph,
+   diagnosis, compare/merge, and prompt/context boundaries.
+6. Extract shared Playwright helpers for VText documents, publications, source
+   entities, and desktop-state reset.
+7. Keep `vtext-markdown-renderer.ts` as the shared renderer only if both VText
+   and source reader continue to use it cleanly; otherwise split source-reader
+   rendering from editor rendering.
+8. Add a compact resumption section to the mission doc after this report and
+   PDF are generated.
+
+## Verification Baseline For Simplification
+
+Before and after simplification, keep at least this baseline green:
+
+- `pnpm --dir frontend build`
+- `pnpm --dir frontend exec playwright test frontend/tests/vtext-source-entities.spec.js --project=chromium`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVText(APICreateRevisionCanonicalizesAliasedImportedDocumentTitle|OpenFileResolvesCanonicalAlias|ImportMarkdownLineageCreatesRevisionHistory|ImportMarkdownLineageResolvesCitationMarkers|ImportMarkdownLineageUsesExistingContentItems|ImportMarkdownLineageRejectsMissingContentItem|ImportMarkdownLineageRejectsUnknownCitationEntity|ImportMarkdownLineageRejectsExistingAlias|OpenFilePreservesDocxAndPDFOriginalArtifacts|OpenFileImportsDocxAndPDFBytesFromFilesRoot|EnsureManifestCreatesAliasAndFile|EnsureManifestReusesExistingAlias|CreateRevisionRejectsStaleHead|CreateRevisionRebasesAllowedStaleUserDraft|AppagentEditCanonicalizesAliasedMarkdownTitle)$'`
+- Public export route still returns Markdown with compact `source:` markers and
+  no `missing source` prose.
+- Comet route still opens a source window as reader-mode Markdown and keeps one
+  active Pretext source note.
 
 ## Landing Recommendation
 
-Do not mark the mission complete yet. The next acceptance-producing work should be:
-
-1. Unblock owner Comet/passkey UI access or obtain an equivalent authenticated owner product path.
-2. Prove owner bounded table edit survival.
-3. Prove owner source repair, citation expansion, and source-window opening.
-4. Prove owner visible edit evidence for prompt sizes and `apply_edits`.
-5. Then run the simplification pass with the current regression tests as guardrails.
-
+Do not mark the mission complete yet. The immediate next step is to export this
+report to PDF in iCloud, commit the report, then run the simplification pass
+against the baseline above. After simplification, push `main`, monitor CI and
+Node B deploy, confirm staging identity, and rerun the owner/public Comet proof.
