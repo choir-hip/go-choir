@@ -921,6 +921,14 @@ what was proven:
     `bef1fd0cac52b2077cb01be6d117402d8680247b37b2fc94858b7c74afc0ff3d`.
   - PDF import manifest adapter was `pdf_literal_text_projection`, hash state
     `available_from_original_bytes`, with warning `pdf_layout_is_best_effort`.
+- Staging browser fallback QA passed for the visible file-browser import path:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/file-browser.spec.js -g "PDF files expose explicit VText import|DOCX files import to VText" --workers=1 --reporter=line`.
+  - PDF proof: clicking a PDF file still opens the dedicated PDF reader, while
+    the explicit `VText` import affordance opens a VText window whose editor
+    contains text projected from the uploaded PDF bytes.
+  - DOCX proof: uploading a DOCX fixture, clicking the explicit `VText` import
+    affordance, and opening the VText window showed paragraph text and table
+    terms projected from the original DOCX bytes.
 
 unproven or partial claims:
 

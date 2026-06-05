@@ -15,7 +15,7 @@
  * - VAL-FILES-018: Responsive on mobile
  */
 import { test, expect } from './helpers/fixtures.js';
-import { buildEpubBytes, buildPdfBytes, putBinaryFile } from './helpers/media-fixtures.js';
+import { buildDocxBytes, buildEpubBytes, buildPdfBytes, putBinaryFile } from './helpers/media-fixtures.js';
 
 // Helper: open the Files app from the floating desktop icon
 async function openFilesApp(page) {
@@ -400,6 +400,32 @@ test('PDF files expose explicit VText import without replacing the PDF reader ro
   const vtextWindow = page.locator('[data-vtext-app]').last();
   await expect(vtextWindow).toBeVisible({ timeout: 5000 });
   await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText imported PDF proof', { timeout: 10_000 });
+});
+
+test('DOCX files import to VText from original bytes with table projection', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const fileName = `vtext-import-proof-${Date.now()}.docx`;
+  await putBinaryFile(page, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', await buildDocxBytes({
+    paragraphs: ['VText imported DOCX proof', 'This sentence must be projected from DOCX bytes.'],
+    table: [
+      ['Term', 'Definition'],
+      ['Work product', 'Durable professional output'],
+    ],
+  }));
+
+  await openFilesApp(page);
+  const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
+  await expect(fileItem).toBeVisible({ timeout: 5000 });
+  await expect(fileItem.locator('[data-import-vtext-btn]')).toBeVisible();
+
+  await fileItem.locator('[data-import-vtext-btn]').click();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  const editor = vtextWindow.locator('[data-vtext-editor-area]');
+  await expect(editor).toContainText('VText imported DOCX proof', { timeout: 10_000 });
+  await expect(editor).toContainText('This sentence must be projected from DOCX bytes');
+  await expect(editor).toContainText('Work product');
+  await expect(editor).toContainText('Durable professional output');
 });
 
 // ---------------------------------------------------------------

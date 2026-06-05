@@ -35,6 +35,54 @@ export function buildPdfBytes(text = 'Choir PDF reader proof') {
   return encoder.encode(pdf);
 }
 
+export async function buildDocxBytes({
+  paragraphs = ['Choir DOCX import proof'],
+  table = [
+    ['Term', 'Definition'],
+    ['Work product', 'Durable professional output'],
+  ],
+} = {}) {
+  const zip = new JSZip();
+  const escapeXML = (value) => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const paragraphXML = paragraphs.map((paragraph) =>
+    `<w:p><w:r><w:t>${escapeXML(paragraph)}</w:t></w:r></w:p>`
+  ).join('');
+  const tableXML = table.length
+    ? `<w:tbl>${table.map((row) =>
+      `<w:tr>${row.map((cell) =>
+        `<w:tc><w:p><w:r><w:t>${escapeXML(cell)}</w:t></w:r></w:p></w:tc>`
+      ).join('')}</w:tr>`
+    ).join('')}</w:tbl>`
+    : '';
+
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+  );
+  zip.file(
+    'word/document.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${paragraphXML}${tableXML}</w:body>
+</w:document>`
+  );
+
+  return zip.generateAsync({
+    type: 'uint8array',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    compression: 'DEFLATE',
+  });
+}
+
 export async function buildEpubBytes({
   title = 'Choir EPUB Reader Proof',
   chapters = [
