@@ -1678,8 +1678,8 @@ func TestVTextAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testin
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != "required" {
-		t.Fatalf("initial vtext tool_choice = %#v, want first choice required", provider.choices)
+	if len(provider.choices) == 0 || provider.choices[0] != exactRequiredToolChoice("edit_vtext") {
+		t.Fatalf("initial vtext tool_choice = %#v, want first choice %q", provider.choices, exactRequiredToolChoice("edit_vtext"))
 	}
 }
 

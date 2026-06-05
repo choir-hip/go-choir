@@ -35,6 +35,7 @@ import (
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -3806,6 +3807,7 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		}
 	}
 
+	contextMode := vtextAgentRevisionContextMode(currentRevision, previousRevision)
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, nil)
 
 	// Create the runtime run with vtext agent revision metadata.
@@ -3821,7 +3823,7 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 		"current_revision_id": doc.CurrentRevisionID,
 		"request_intent":      strings.TrimSpace(req.Intent),
 		"original_prompt":     strings.TrimSpace(req.Prompt),
-		"vtext_context_mode":  "current_head_plus_user_edit_diff",
+		"vtext_context_mode":  contextMode,
 		"vtext_prompt_chars":  len(agentPrompt),
 	}
 	if scheduledMessageSeq > 0 {
@@ -3922,6 +3924,17 @@ func vtextHardRequirementHints(parts ...string) []string {
 		return out[:32]
 	}
 	return out
+}
+
+func vtextAgentRevisionContextMode(current types.Revision, previous *types.Revision) string {
+	if vtextUseFocusedUserEditContext(current, previous) {
+		return "focused_user_edit_diff"
+	}
+	return "current_head_plus_user_edit_diff"
+}
+
+func vtextUseFocusedUserEditContext(current types.Revision, previous *types.Revision) bool {
+	return current.AuthorKind == types.AuthorUser && previous != nil && len(current.Content) >= 12000
 }
 
 // buildAgentRevisionRequest constructs the backend-owned vtext revision
@@ -4035,13 +4048,20 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\nVText may ask for clarification or continuation; VText must not directly control worker/vsuper/co-super runs.")
 		}
 	}
-	b.WriteString("\n\nCurrent canonical document content:\n---\n")
-	if current.Content != "" {
-		b.WriteString(current.Content)
+	if vtextUseFocusedUserEditContext(current, previous) {
+		b.WriteString("\n\nFocused current-head context for this long user-authored draft:\n---\n")
+		b.WriteString(summarizeFocusedUserEditContext(current, previous))
+		b.WriteString("\n---\n")
+		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to call apply_edits against the current base revision. Retrieve prior versions, metadata, or broader document context only when the edit cannot be safely resolved from the changed regions.")
 	} else {
-		b.WriteString("(empty document)")
+		b.WriteString("\n\nCurrent canonical document content:\n---\n")
+		if current.Content != "" {
+			b.WriteString(current.Content)
+		} else {
+			b.WriteString("(empty document)")
+		}
+		b.WriteString("\n---\n")
 	}
-	b.WriteString("\n---\n")
 	hardRequirements := vtextHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
 	hasSuperDelivery := vtextWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper)
 	if !hasSuperDelivery {
@@ -4299,6 +4319,170 @@ func summarizeDiffResult(diff types.DiffResult) string {
 		changesShown++
 	}
 	return b.String()
+}
+
+func summarizeFocusedUserEditContext(current types.Revision, previous *types.Revision) string {
+	currentLines := splitPromptLines(current.Content)
+	if previous == nil {
+		return truncatePromptSnippet(current.Content, 12000)
+	}
+	changed := changedToLineIndexes(previous.Content, current.Content)
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Document length: %d chars, %d lines. Full document omitted for ordinary long-document edit latency.\n", len(current.Content), len(currentLines)))
+	if len(changed) == 0 {
+		b.WriteString("No changed lines detected. First bounded current-head excerpt:\n")
+		b.WriteString(truncatePromptSnippet(current.Content, 6000))
+		return b.String()
+	}
+	ranges := focusedLineRanges(changed, len(currentLines), 4)
+	const maxChars = 18000
+	for i, r := range ranges {
+		if b.Len() >= maxChars {
+			b.WriteString("\nAdditional changed regions omitted for prompt size.")
+			break
+		}
+		start, end := r[0], r[1]
+		if start < 0 {
+			start = 0
+		}
+		if end >= len(currentLines) {
+			end = len(currentLines) - 1
+		}
+		if start > end || start >= len(currentLines) {
+			continue
+		}
+		excerpt := strings.Join(currentLines[start:end+1], "")
+		if len(excerpt) > 5000 {
+			excerpt = truncatePromptSnippet(excerpt, 5000)
+		}
+		b.WriteString(fmt.Sprintf("\nChanged region %d, current lines %d-%d:\n", i+1, start+1, end+1))
+		b.WriteString(excerpt)
+		if !strings.HasSuffix(excerpt, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func splitPromptLines(content string) []string {
+	if content == "" {
+		return nil
+	}
+	lines := strings.SplitAfter(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+type promptLineMatch struct {
+	from int
+	to   int
+}
+
+func changedToLineIndexes(from, to string) []int {
+	fromLines := splitPromptLines(from)
+	toLines := splitPromptLines(to)
+	matches := promptLineLCS(fromLines, toLines)
+	changed := make(map[int]bool)
+	fi, ti := 0, 0
+	markToGap := func(start, end int) {
+		for i := start; i < end; i++ {
+			if i >= 0 && i < len(toLines) {
+				changed[i] = true
+			}
+		}
+	}
+	for _, match := range matches {
+		if ti < match.to {
+			markToGap(ti, match.to)
+		}
+		if fi < match.from && ti == match.to {
+			if match.to < len(toLines) {
+				changed[match.to] = true
+			} else if match.to > 0 {
+				changed[match.to-1] = true
+			}
+		}
+		fi = match.from + 1
+		ti = match.to + 1
+	}
+	if ti < len(toLines) {
+		markToGap(ti, len(toLines))
+	}
+	if fi < len(fromLines) && ti == len(toLines) && len(toLines) > 0 {
+		changed[len(toLines)-1] = true
+	}
+	out := make([]int, 0, len(changed))
+	for idx := range changed {
+		out = append(out, idx)
+	}
+	sort.Ints(out)
+	return out
+}
+
+func promptLineLCS(fromLines, toLines []string) []promptLineMatch {
+	m, n := len(fromLines), len(toLines)
+	if m == 0 || n == 0 {
+		return nil
+	}
+	dp := make([][]int, m+1)
+	for i := range dp {
+		dp[i] = make([]int, n+1)
+	}
+	for i := m - 1; i >= 0; i-- {
+		for j := n - 1; j >= 0; j-- {
+			if fromLines[i] == toLines[j] {
+				dp[i][j] = dp[i+1][j+1] + 1
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i][j] = dp[i+1][j]
+			} else {
+				dp[i][j] = dp[i][j+1]
+			}
+		}
+	}
+	var matches []promptLineMatch
+	for i, j := 0, 0; i < m && j < n; {
+		switch {
+		case fromLines[i] == toLines[j]:
+			matches = append(matches, promptLineMatch{from: i, to: j})
+			i++
+			j++
+		case dp[i+1][j] >= dp[i][j+1]:
+			i++
+		default:
+			j++
+		}
+	}
+	return matches
+}
+
+func focusedLineRanges(changed []int, lineCount, radius int) [][2]int {
+	if lineCount <= 0 {
+		return nil
+	}
+	if radius < 0 {
+		radius = 0
+	}
+	ranges := make([][2]int, 0, len(changed))
+	for _, idx := range changed {
+		start := idx - radius
+		if start < 0 {
+			start = 0
+		}
+		end := idx + radius
+		if end >= lineCount {
+			end = lineCount - 1
+		}
+		if len(ranges) == 0 || start > ranges[len(ranges)-1][1]+1 {
+			ranges = append(ranges, [2]int{start, end})
+			continue
+		}
+		if end > ranges[len(ranges)-1][1] {
+			ranges[len(ranges)-1][1] = end
+		}
+	}
+	return ranges
 }
 
 // emitVTextAgentEvent is a helper that emits an vtext-specific agent revision

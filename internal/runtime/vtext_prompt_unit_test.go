@@ -98,6 +98,67 @@ func TestVTextPromptUsesDiffFirstContextForDirectUserEdits(t *testing.T) {
 	}
 }
 
+func TestVTextPromptFocusesLongDirectUserEdits(t *testing.T) {
+	var before strings.Builder
+	before.WriteString("# Proposal\n\n")
+	before.WriteString("Executive section before the edit.\n")
+	for i := 0; i < 360; i++ {
+		before.WriteString("Distant untouched appendix line that should not be preloaded into ordinary revise prompts.\n")
+	}
+	before.WriteString("Target section before user edit.\n")
+	before.WriteString("Stale paragraph that should be replaced after the user instruction.\n")
+	for i := 0; i < 80; i++ {
+		before.WriteString("More untouched material after the edit.\n")
+	}
+
+	after := strings.Replace(before.String(),
+		"Stale paragraph that should be replaced after the user instruction.\n",
+		"Stale paragraph that should be replaced after the user instruction.\nUser note: replace the stale paragraph above with the cleaner appendix table wording.\nCleaner appendix table wording.\n",
+		1)
+
+	current := types.Revision{
+		DocID:            "doc-long-direct-edit",
+		RevisionID:       "rev-user-long-draft",
+		ParentRevisionID: "rev-appagent-long-base",
+		Content:          after,
+		AuthorKind:       types.AuthorUser,
+	}
+	previous := &types.Revision{
+		DocID:      "doc-long-direct-edit",
+		RevisionID: "rev-appagent-long-base",
+		Content:    before.String(),
+		AuthorKind: types.AuthorAppAgent,
+	}
+	request := buildAgentRevisionRequest(current, previous, nil, vtextAgentRevisionRequest{
+		Intent: "revise",
+	}, "added a user note and cleaner appendix table wording", false, nil, nil)
+
+	for _, want := range []string{
+		"Focused current-head context for this long user-authored draft:",
+		"Full document omitted for ordinary long-document edit latency.",
+		"User note: replace the stale paragraph above with the cleaner appendix table wording.",
+		"Cleaner appendix table wording.",
+		"operation\":\"apply_edits",
+		"complete current document is intentionally not preloaded",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("focused long-edit prompt missing %q:\n%s", want, request)
+		}
+	}
+	if strings.Contains(request, "Current canonical document content:") {
+		t.Fatalf("long direct-edit prompt should not include full current content section:\n%s", request)
+	}
+	if strings.Count(request, "Distant untouched appendix line that should not be preloaded") > 12 {
+		t.Fatalf("long direct-edit prompt preloaded too much untouched content; count=%d len=%d", strings.Count(request, "Distant untouched appendix line that should not be preloaded"), len(request))
+	}
+	if len(request) >= len(after) {
+		t.Fatalf("focused prompt len=%d should be smaller than current content len=%d", len(request), len(after))
+	}
+	if got := vtextAgentRevisionContextMode(current, previous); got != "focused_user_edit_diff" {
+		t.Fatalf("context mode = %q, want focused_user_edit_diff", got)
+	}
+}
+
 func TestVTextPromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-baseball",
