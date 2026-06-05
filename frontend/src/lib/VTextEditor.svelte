@@ -36,6 +36,7 @@
   } from './vtext.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { previewVTextDocument } from './public-preview-data';
+  import { buildSourceReviewPayload } from './vtext-source-review.js';
   import {
     mediaRefToSourceEntity,
     publicationBundleSourceEntities as publicationBundleSourceEntitiesFromRenderer,
@@ -254,14 +255,6 @@
     sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
   }
 
-  function safeSourceIDPart(value) {
-    const normalized = String(value || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
-    return normalized || 'source';
-  }
-
   function prepareSourceReviewForm(marker = sourceRepairCandidates()[0] || sourceReviewMarker) {
     sourceReviewMarker = marker || '';
     sourceReviewTitle = '';
@@ -276,67 +269,14 @@
     sourceReviewMarker = candidates[0] || '';
   }
 
-  function sourceReviewEntityID(marker = sourceReviewMarker, title = sourceReviewTitle) {
-    const markerPart = safeSourceIDPart(String(marker || '').replace(/[\[\]]/g, ''));
-    const titlePart = safeSourceIDPart(title).slice(0, 48);
-    const revisionPart = safeSourceIDPart(currentRevision?.revision_id || '').slice(0, 12);
-    return ['src_review', markerPart, titlePart, revisionPart].filter(Boolean).join('_');
-  }
-
   function sourceReviewPayload() {
-    const marker = String(sourceReviewMarker || '').trim();
-    const title = String(sourceReviewTitle || '').trim();
-    const excerpt = String(sourceReviewExcerpt || '').trim();
-    const url = String(sourceReviewURL || '').trim();
-    const entityID = sourceReviewEntityID(marker, title);
-    const target = url
-      ? {
-        target_kind: 'url',
-        url,
-        canonical_url: url,
-      }
-      : {
-        target_kind: 'source_service_item',
-        item_id: entityID,
-      };
-    return {
-      base_revision_id: currentRevision?.revision_id || '',
-      source_entities: [
-        {
-          entity_id: entityID,
-          kind: url ? 'web_source' : 'source_service_item',
-          label: title,
-          target,
-          selectors: [
-            {
-              selector_kind: 'text_quote',
-              text_quote: excerpt,
-            },
-          ],
-          display: {
-            inline_mode: 'embedded_excerpt',
-            expanded_mode: 'source_card',
-            open_surface: url ? 'browser' : 'source',
-            default_collapsed: true,
-          },
-          evidence: {
-            state: 'available',
-            research_state: 'confirmed',
-          },
-          provenance: {
-            created_by: 'source_review_panel',
-            rights_scope: 'public_source',
-            untrusted_source_text: true,
-          },
-        },
-      ],
-      citation_resolutions: [
-        {
-          marker,
-          entity_id: entityID,
-        },
-      ],
-    };
+    return buildSourceReviewPayload({
+      marker: sourceReviewMarker,
+      title: sourceReviewTitle,
+      excerpt: sourceReviewExcerpt,
+      url: sourceReviewURL,
+      revisionID: currentRevision?.revision_id || '',
+    });
   }
 
   function selectedSourceEntity() {

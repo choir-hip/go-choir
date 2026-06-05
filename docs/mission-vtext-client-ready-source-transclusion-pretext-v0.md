@@ -5342,3 +5342,36 @@ residual risks:
   the deployed owner/private legal-cloud source-marker and source-window proof.
 - The hard mission review report, PDF export to iCloud, and simplification pass
   remain open mission work after this deployed checkpoint.
+
+## 2026-06-05 Hard Review And First Simplification Pass
+
+status: local_refactor_verified
+
+review artifacts:
+
+- Markdown report:
+  `docs/vtext-mission-current-system-hard-review-2026-06-05.md`.
+- PDF report:
+  `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/vtext-mission-current-system-hard-review-2026-06-05.pdf`.
+
+first simplification:
+
+- Extracted source-review entity-id and payload construction from
+  `VTextEditor.svelte` into `frontend/src/lib/vtext-source-review.js`.
+- The editor still owns the source-review form state and submit action, but the
+  canonical source-repair payload shape is now a pure helper rather than
+  another inline editor concern.
+
+local evidence:
+
+- `pnpm --dir frontend build` passed after the extraction.
+- After restarting the local dev stack, `pnpm --dir frontend exec playwright
+  test frontend/tests/vtext-markdown-lineage.spec.js --project=chromium
+  --timeout=120000` passed all 6 tests in 15.7s.
+
+remaining simplification field:
+
+- The hard-review report still recommends extracting the full source panel,
+  bounding Diagnosis, moving diagnostic JSON behind operator/developer mode,
+  and budgeting/multiplexing VText streams. Those are not done in this first
+  simplification pass.
