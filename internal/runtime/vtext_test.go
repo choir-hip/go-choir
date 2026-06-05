@@ -3647,6 +3647,202 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 	t.Fatalf("missing original source snapshot item: %#v", items)
 }
 
+func TestVTextSourceGapRepairCreatesRevision(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	entity := vtextSourceEntity{
+		EntityID: "src-aba-rule-16-repair",
+		Kind:     "source_service_item",
+		Label:    "ABA Model Rule 1.6",
+		Target: vtextSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     "srcitem_aba_rule_16_repair",
+		},
+		Selectors: []vtextSourceEntitySelector{{
+			SelectorKind: "text_quote",
+			TextQuote:    "A lawyer shall not reveal information relating to the representation of a client.",
+		}},
+		Display: vtextSourceEntityDisplay{
+			InlineMode:       "embedded_excerpt",
+			ExpandedMode:     "source_card",
+			OpenSurface:      "source",
+			DefaultCollapsed: false,
+		},
+		Evidence: vtextSourceEntityEvidence{
+			State:         "available",
+			ResearchState: "represented",
+		},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "source_gap_repair",
+			RightsScope:         "source_service_projection",
+			UntrustedSourceText: true,
+		},
+	}
+
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud-repairable.md",
+		Title:      "legal-cloud-repairable.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v44",
+			Content: "# Proposal\n\nConfidentiality matters [1].\n",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+
+	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+		BaseRevisionID: imported.CurrentRevisionID,
+		SourceEntities: []vtextSourceEntity{
+			entity,
+		},
+		CitationResolutions: []vtextCitationMarkerResolution{{
+			Marker:   "[1]",
+			EntityID: entity.EntityID,
+		}},
+	})
+	repairW := httptest.NewRecorder()
+	h.HandleVTextRouter(repairW, repairReq)
+	if repairW.Code != http.StatusCreated {
+		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
+	}
+	var repaired vtextRevisionResponse
+	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
+		t.Fatalf("decode repair response: %v", err)
+	}
+	if repaired.ParentRevisionID != imported.CurrentRevisionID || repaired.VersionNumber != 1 {
+		t.Fatalf("repaired revision = %#v", repaired)
+	}
+	if !strings.Contains(repaired.Content, "[1](source:src-aba-rule-16-repair)") {
+		t.Fatalf("repaired content = %q", repaired.Content)
+	}
+	if strings.Contains(repaired.Content, "[1](source:src-aba-rule-16-repair)(source:") {
+		t.Fatalf("repaired content double-linked marker: %q", repaired.Content)
+	}
+	meta := decodeRevisionMetadata(repaired.Metadata)
+	if meta["source"] != "vtext_source_gap_repair" || meta["base_revision_id"] != imported.CurrentRevisionID {
+		t.Fatalf("repair metadata = %#v", meta)
+	}
+	if _, ok := meta["source_gaps"]; ok {
+		t.Fatalf("source_gaps should be cleared after repair: %#v", meta["source_gaps"])
+	}
+	sourceEntities := decodeVTextSourceEntities(meta["source_entities"])
+	if len(sourceEntities) != 1 || sourceEntities[0].EntityID != entity.EntityID {
+		t.Fatalf("source_entities = %#v", meta["source_entities"])
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), imported.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 2 || revs[0].RevisionID != repaired.RevisionID {
+		t.Fatalf("stored revisions = %#v", revs)
+	}
+}
+
+func TestVTextSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	entity := vtextSourceEntity{
+		EntityID: "src-rule-one",
+		Kind:     "source_service_item",
+		Label:    "Rule One",
+		Target:   vtextSourceEntityTarget{TargetKind: "source_service_item", ItemID: "srcitem_rule_one"},
+		Display:  vtextSourceEntityDisplay{InlineMode: "collapsed_citation", ExpandedMode: "source_card", OpenSurface: "source", DefaultCollapsed: true},
+		Evidence: vtextSourceEntityEvidence{State: "available", ResearchState: "represented"},
+		Provenance: vtextSourceEntityProvenance{
+			CreatedBy:           "source_gap_repair",
+			RightsScope:         "source_service_projection",
+			UntrustedSourceText: true,
+		},
+	}
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud-partial-repair.md",
+		Title:      "legal-cloud-partial-repair.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v44",
+			Content: "Known [1]. Still unknown [2].",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+
+	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+		SourceEntities: []vtextSourceEntity{entity},
+		CitationResolutions: []vtextCitationMarkerResolution{{
+			Marker:   "[1]",
+			EntityID: entity.EntityID,
+		}},
+	})
+	repairW := httptest.NewRecorder()
+	h.HandleVTextRouter(repairW, repairReq)
+	if repairW.Code != http.StatusCreated {
+		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
+	}
+	var repaired vtextRevisionResponse
+	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
+		t.Fatalf("decode repair response: %v", err)
+	}
+	if !strings.Contains(repaired.Content, "[1](source:src-rule-one)") || !strings.Contains(repaired.Content, "Still unknown [2]") {
+		t.Fatalf("repaired content = %q", repaired.Content)
+	}
+	meta := decodeRevisionMetadata(repaired.Metadata)
+	gaps, ok := meta["source_gaps"].([]any)
+	if !ok || len(gaps) != 1 {
+		t.Fatalf("source_gaps = %#v", meta["source_gaps"])
+	}
+	gap := gaps[0].(map[string]any)
+	if gap["marker"] != "[2]" {
+		t.Fatalf("remaining source gap = %#v", gap)
+	}
+}
+
+func TestVTextSourceGapRepairRejectsUnknownEntity(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	importReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud-bad-repair.md",
+		Title:      "legal-cloud-bad-repair.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v44",
+			Content: "Unknown [1].",
+		}},
+	})
+	importW := httptest.NewRecorder()
+	h.HandleVTextRouter(importW, importReq)
+	if importW.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
+	}
+	var imported vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+
+	repairReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+imported.DocID+"/source-repairs", vtextSourceGapRepairRequest{
+		CitationResolutions: []vtextCitationMarkerResolution{{
+			Marker:   "[1]",
+			EntityID: "missing-source",
+		}},
+	})
+	repairW := httptest.NewRecorder()
+	h.HandleVTextRouter(repairW, repairReq)
+	if repairW.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", repairW.Code, http.StatusBadRequest, repairW.Body.String())
+	}
+	if !strings.Contains(repairW.Body.String(), "references unknown source entity missing-source") {
+		t.Fatalf("body = %s", repairW.Body.String())
+	}
+}
+
 func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()

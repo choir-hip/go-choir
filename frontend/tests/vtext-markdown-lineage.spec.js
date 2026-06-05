@@ -267,3 +267,104 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
 });
+
+test('Migrated source gaps can be repaired as canonical VText revisions', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const sourceEntityID = `src-repaired-gap-${stamp}`;
+  const sourceLabel = 'Repaired Legal Source';
+  const excerpt = 'Repaired source evidence supports the migrated citation.';
+
+  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: `proposals/source-gap-repair-${stamp}.md`,
+      title: `Source Gap Repair ${stamp}`,
+      versions: [
+        {
+          label: 'v44',
+          source_revision_id: `legacy-gap-v44-${stamp}`,
+          content: [
+            '# Source Gap Repair',
+            '',
+            'This migrated claim starts with a repairable citation gap [2].',
+          ].join('\n'),
+        },
+      ],
+    }),
+  });
+
+  const revisionsBefore = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
+  expect(revisionsBefore.revisions).toHaveLength(1);
+  expect(revisionsBefore.revisions[0].metadata?.source_gaps?.[0]?.marker).toBe('[2]');
+
+  const repaired = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/source-repairs`, {
+    method: 'POST',
+    body: JSON.stringify({
+      base_revision_id: imported.current_revision_id,
+      source_entities: [
+        {
+          entity_id: sourceEntityID,
+          kind: 'source_service_item',
+          label: sourceLabel,
+          target: {
+            target_kind: 'source_service_item',
+            item_id: `srcitem-repaired-gap-${stamp}`,
+          },
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: excerpt,
+              content_hash: `sha256-repaired-gap-${stamp}`,
+            },
+          ],
+          display: {
+            inline_mode: 'embedded_excerpt',
+            expanded_mode: 'source_card',
+            open_surface: 'source',
+            default_collapsed: true,
+          },
+          evidence: {
+            state: 'available',
+            research_state: 'represented',
+          },
+          provenance: {
+            created_by: 'source_gap_repair',
+            rights_scope: 'source_service_projection',
+            untrusted_source_text: true,
+          },
+        },
+      ],
+      citation_resolutions: [
+        {
+          marker: '[2]',
+          entity_id: sourceEntityID,
+        },
+      ],
+    }),
+  });
+
+  expect(repaired.version_number).toBe(1);
+  expect(repaired.parent_revision_id).toBe(imported.current_revision_id);
+  expect(repaired.content).toContain(`[2](source:${sourceEntityID})`);
+  expect(repaired.content).not.toContain(`[2](source:${sourceEntityID})(source:`);
+  expect(repaired.metadata?.source).toBe('vtext_source_gap_repair');
+  expect(repaired.metadata?.source_gaps).toBeUndefined();
+  expect(repaired.metadata?.source_entities).toHaveLength(1);
+  expect(repaired.metadata?.source_repair_resolutions).toEqual([{ marker: '[2]', entity_id: sourceEntityID }]);
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Source Gap Repair ${stamp}` }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await expect(citation).toHaveText('2');
+  await citation.click();
+  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+  await expect(citation.locator('[data-vtext-open-source]')).toBeVisible();
+});

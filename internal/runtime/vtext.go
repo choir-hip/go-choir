@@ -131,6 +131,13 @@ type vtextMarkdownLineageImportResponse struct {
 	ExistingDocID      string                  `json:"existing_doc_id,omitempty"`
 }
 
+type vtextSourceGapRepairRequest struct {
+	BaseRevisionID      string                          `json:"base_revision_id,omitempty"`
+	SourceEntities      []vtextSourceEntity             `json:"source_entities,omitempty"`
+	CitationResolutions []vtextCitationMarkerResolution `json:"citation_resolutions,omitempty"`
+	AuthorLabel         string                          `json:"author_label,omitempty"`
+}
+
 type vtextFileImportProjection struct {
 	SourcePath               string
 	MediaType                string
@@ -593,18 +600,38 @@ func detectMarkdownLineageSourceGaps(content string, resolutions []vtextCitation
 }
 
 func markdownLineageProjectionContent(content string, resolutions []vtextCitationMarkerResolution) string {
+	return applyVTextCitationResolutions(content, resolutions)
+}
+
+func applyVTextCitationResolutions(content string, resolutions []vtextCitationMarkerResolution) string {
 	resolved := markdownLineageResolutionMap(resolutions)
 	if len(resolved) == 0 {
 		return content
 	}
-	return vtextMarkdownLineageCitationRefRE.ReplaceAllStringFunc(content, func(marker string) string {
+	matches := vtextMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
+	if len(matches) == 0 {
+		return content
+	}
+	var b strings.Builder
+	last := 0
+	changed := false
+	for _, match := range matches {
+		marker := content[match[0]:match[1]]
 		entityID := resolved[marker]
-		if entityID == "" {
-			return marker
+		if entityID == "" || strings.HasPrefix(content[match[1]:], "(source:") {
+			continue
 		}
+		b.WriteString(content[last:match[0]])
 		label := strings.TrimSuffix(strings.TrimPrefix(marker, "["), "]")
-		return fmt.Sprintf("[%s](source:%s)", label, entityID)
-	})
+		b.WriteString(fmt.Sprintf("[%s](source:%s)", label, entityID))
+		last = match[1]
+		changed = true
+	}
+	if !changed {
+		return content
+	}
+	b.WriteString(content[last:])
+	return b.String()
 }
 
 func markdownLineageResolutionMap(resolutions []vtextCitationMarkerResolution) map[string]string {
@@ -690,6 +717,45 @@ func validateMarkdownLineageCitationResolutions(entities []vtextSourceEntity, re
 		}
 	}
 	return nil
+}
+
+func filterVTextSourceGaps(value any, repaired map[string]string) []map[string]any {
+	if len(repaired) == 0 || value == nil {
+		return decodeVTextSourceGaps(value)
+	}
+	gaps := decodeVTextSourceGaps(value)
+	if len(gaps) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(gaps))
+	for _, gap := range gaps {
+		marker, _ := gap["marker"].(string)
+		if repaired[strings.TrimSpace(marker)] != "" {
+			continue
+		}
+		out = append(out, gap)
+	}
+	return out
+}
+
+func decodeVTextSourceGaps(value any) []map[string]any {
+	if value == nil {
+		return nil
+	}
+	var gaps []map[string]any
+	switch typed := value.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		data, _ := json.Marshal(typed)
+		_ = json.Unmarshal(data, &gaps)
+	case json.RawMessage:
+		_ = json.Unmarshal(typed, &gaps)
+	default:
+		data, _ := json.Marshal(typed)
+		_ = json.Unmarshal(data, &gaps)
+	}
+	return gaps
 }
 
 func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version vtextMarkdownLineageVersion, content string, now time.Time) types.ContentItem {
@@ -2885,6 +2951,122 @@ func (h *APIHandler) HandleVTextAcceptMerge(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		log.Printf("vtext api: load accepted merge revision: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load accepted merge revision"})
+		return
+	}
+	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
+	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
+}
+
+func (h *APIHandler) HandleVTextSourceGapRepair(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
+		return
+	}
+	var req vtextSourceGapRepairRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if len(req.CitationResolutions) == 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "citation_resolutions are required"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	baseRevisionID := strings.TrimSpace(req.BaseRevisionID)
+	if baseRevisionID == "" {
+		baseRevisionID = doc.CurrentRevisionID
+	}
+	if baseRevisionID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "base revision is required"})
+		return
+	}
+	baseRev, err := h.rt.Store().GetRevision(r.Context(), baseRevisionID, ownerID)
+	if err != nil || baseRev.DocID != docID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "base revision not found"})
+		return
+	}
+
+	metadata := decodeRevisionMetadata(baseRev.Metadata)
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	existingEntities := decodeVTextSourceEntities(metadata["source_entities"])
+	sourceEntities, _ := mergeVTextSourceEntities(existingEntities, req.SourceEntities)
+	resolutions := markdownLineageCitationResolutions(nil, req.CitationResolutions)
+	if len(resolutions) == 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "citation_resolutions are required"})
+		return
+	}
+	if err := validateMarkdownLineageCitationResolutions(sourceEntities, resolutions); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+
+	repaired := markdownLineageResolutionMap(resolutions)
+	repairedContent := applyVTextCitationResolutions(baseRev.Content, resolutions)
+	if repairedContent == baseRev.Content {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "citation_resolutions did not match unresolved markers in the base revision"})
+		return
+	}
+	remainingGaps := filterVTextSourceGaps(metadata["source_gaps"], repaired)
+
+	nextMetadata := map[string]any{}
+	for key, value := range metadata {
+		nextMetadata[key] = value
+	}
+	nextMetadata["source"] = "vtext_source_gap_repair"
+	nextMetadata["base_revision_id"] = baseRev.RevisionID
+	nextMetadata["draft_line"] = defaultDraftLine()
+	nextMetadata["source_repair_resolution_count"] = len(resolutions)
+	nextMetadata["source_repair_resolutions"] = markdownLineageResolutionManifest(resolutions)
+	if len(sourceEntities) > 0 {
+		nextMetadata["source_entities"] = sourceEntities
+	}
+	if len(remainingGaps) > 0 {
+		nextMetadata["source_gaps"] = remainingGaps
+	} else {
+		delete(nextMetadata, "source_gaps")
+	}
+	encoded, _ := json.Marshal(nextMetadata)
+	authorLabel := strings.TrimSpace(req.AuthorLabel)
+	if authorLabel == "" {
+		authorLabel = ownerID
+	}
+	rev := types.Revision{
+		RevisionID:       uuid.New().String(),
+		DocID:            docID,
+		OwnerID:          ownerID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      authorLabel,
+		Content:          repairedContent,
+		Citations:        baseRev.Citations,
+		Metadata:         encoded,
+		ParentRevisionID: baseRev.RevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}
+	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+		log.Printf("vtext api: repair source gaps: %v", err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to repair source gaps; document head may have changed"})
+		return
+	}
+	storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+	if err != nil {
+		log.Printf("vtext api: load source gap repair revision: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load source gap repair revision"})
 		return
 	}
 	h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, storedRev)
