@@ -4775,3 +4775,55 @@ residual risks:
   remain.
 - The simplification still needs commit, push, CI, Node B deploy, staging
   identity, and renewed Comet proof before it is accepted as deployed behavior.
+
+## 2026-06-05 Deployed Proof: Legacy Write-Through Removed
+
+status: deployed_simplification_checkpoint_incomplete
+
+deployment evidence:
+
+- Simplification commit
+  `85ae3990d4736388111e297c38f00288aca35617`
+  (`refactor: remove legacy vtext file write-through`) was pushed to
+  `origin/main`.
+- GitHub Actions CI run `27044299886` succeeded, including Go tests, runtime
+  shards, frontend build, and Node B deploy.
+- FlakeHub run `27044299892` succeeded for the same head SHA.
+- Node B deploy installed frontend asset `index-Bqj-6E78.js`.
+- `https://choir.news/health` reported proxy and sandbox upstream deployed
+  commit `85ae3990d4736388111e297c38f00288aca35617`, deployed at
+  `2026-06-05T22:54:47Z`.
+
+staging proof:
+
+- Computer Use on Comet opened and reloaded the deployed legal-cloud route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The full legal-cloud proposal rehydrated after VM bootstrap.
+- Clicking the `ABA Formal Opinion 512` inline source marker expanded a
+  Pretext-routed source note in the article flow with `Open source` and
+  `Close` controls.
+- The already open `ABA Model Rule 1.6` source window still rendered
+  reader-mode source content as headings and prose, with `Source evidence`,
+  `Source entity`, and `Provenance` collapsed.
+- Public resolve still returned `7` source entities and `7` transclusions under
+  public access policy.
+- Public Markdown export still returned 38,398 content bytes, compact
+  `source:` markers, no `missing source` prose, and
+  `private_material_omitted: true`.
+
+contract implication:
+
+- Removing the legacy noncanonical file write-through did not break VText
+  rendering, source expansion, source-window reader mode, or Markdown export on
+  the deployed owner/public route.
+- Canonical VText revision writes remain the only write path exercised by this
+  deployed proof; Markdown remains an export projection.
+
+remaining simplification field:
+
+- Raw source repair JSON is still visible in the owner/editor surface.
+- Source artifact acquisition remains manual/operator-oriented.
+- `VTextEditor.svelte` and `internal/runtime/vtext.go` remain too large and
+  should be split after the next behavior-preserving extraction.
+- The source-note design still needs the magazine/journal visual pass the user
+  requested.
