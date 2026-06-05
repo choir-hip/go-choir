@@ -393,17 +393,23 @@
     return 'content';
   }
 
-  function sourceEntityMedia(entity) {
+  function sourceEntityMedia(entity, { inline = false } = {}) {
     const kind = String(entity?.kind || '').toLowerCase();
     const sourceURL = sourceEntityTargetURL(entity);
     const title = escapeHTML(sourceEntityTitle(entity));
     if (kind === 'youtube_video') {
       const embed = youtubeEmbedURL(sourceURL);
       if (embed) {
+        if (inline) {
+          return `<span class="vtext-source-video vtext-source-video--inline"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></span>`;
+        }
         return `<div class="vtext-source-video"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
       }
     }
     if (kind === 'image' && sourceURL) {
+      if (inline) {
+        return `<span class="vtext-source-image vtext-source-image--inline"><img src="${escapeHTML(sourceURL)}" alt="${title}" loading="lazy"></span>`;
+      }
       return `<div class="vtext-source-image"><img src="${escapeHTML(sourceURL)}" alt="${title}" loading="lazy"></div>`;
     }
     return '';
@@ -431,6 +437,7 @@
     if (compact) {
       return `<span class="vtext-transclusion-body vtext-transclusion-body--compact" data-vtext-transclusion-body>
         ${snapshot ? `<span class="vtext-transclusion-quote">${renderInlineMarkdown(snapshot, [])}</span>` : ''}
+        ${sourceEntityMedia(entity, { inline: true })}
         <span class="vtext-source-facts">${facts}</span>
       </span>`;
     }
@@ -3029,8 +3036,14 @@
 
   .rendered-doc :global(.vtext-source-video),
   .rendered-doc :global(.vtext-source-image) {
+    display: block;
     min-height: 8rem;
     background: var(--choir-state-selected);
+  }
+
+  .rendered-doc :global(.vtext-source-video--inline),
+  .rendered-doc :global(.vtext-source-image--inline) {
+    margin: 0.35rem 0;
   }
 
   .rendered-doc :global(.vtext-source-video iframe) {
