@@ -1326,3 +1326,83 @@ remaining error field:
 - The hard mission/system review and simplification pass remain gated on a
   working client-ready artifact with staging proof, not just this source
   acquisition repair.
+
+## 2026-06-05 Next Axis Problem: Source UX Must Become Article Flow
+
+status: problem_and_plan_documented_before_code
+
+new evidence and research:
+
+- The owner publication now renders the full legal-cloud proposal with inline
+  source buttons and no `missing source` prose in the visible article, but the
+  current source/transclusion UI still has weak paths: source cards can behave
+  like stacked cards rather than flowing article annotations, and the source
+  side panel still frames unresolved markers as a diagnostic list instead of a
+  research/confirm/refute/omit workflow.
+- `frontend/src/lib/VTextEditor.svelte` renders `[label](source:ENTITY_ID)` as
+  inline source refs with compact popovers, but expanded transclusion bodies
+  are still ordinary HTML/CSS details/blockquote/card fragments.
+- The old source rail functions remain in the renderer and can still produce a
+  top-of-article source bunching shape if called. They should either be removed
+  from normal publication rendering or reduced to an explicit diagnostics/export
+  surface.
+- The official Pretext README describes two relevant APIs for this axis:
+  `@chenglou/pretext/rich-inline` is intentionally narrow and appropriate for
+  inline rich fragments/chips; `layoutNextLineRange()` supports line-by-line
+  manual layout when available width changes around a floated object. The
+  community `awesome-pretext` index reinforces that the mature use cases are
+  dynamic layout, rich inline text, masonry/virtualization, and text flowing
+  around shapes, not general DOM replacement.
+
+contract constraints:
+
+- `docs/source-external-data-publication.md` requires every citation marker to
+  be a transclusion point; expanded transclusions must remain typed source
+  artifacts and must open the owning source/media/VText surface under
+  publication policy.
+- `docs/vtext-version-compare-merge-debuggability-spec.md` requires ordinary
+  revisions to preserve visible citations/source/transclusion markers and to
+  update citation metadata through structured edits rather than rewriting whole
+  documents.
+- `docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md` requires
+  copy/download to use canonical private revision or publication artifacts, not
+  rendered DOM. Source UX changes must not make rendered source cards the
+  canonical export representation.
+
+planned repair shape:
+
+- Keep inline citation markers in the article text as the primary reader
+  affordance. Do not render a source deck at the top of normal publication.
+- Add or adapt a Pretext-backed inline source component for atomic source chips
+  and compact rich-inline labels. Use `break: never`/`extraWidth` for chip
+  chrome, matching Pretext's intended `rich-inline` scope.
+- For expanded source cards, use Pretext line routing only for the part of the
+  layout that needs it: prose lines adjacent to an expanded source block should
+  route around the block instead of leaving a full-width blank band. Keep the
+  actual source record/transclusion as typed data and normal accessible DOM,
+  not a canvas-only artifact.
+- Convert the source side panel copy from `missing/unresolved marker` semantics
+  to a workflow that says whether a claim has a represented source, needs
+  research, was refuted, or intentionally has no source requirement.
+- Remove or fence dead/weak source-rail/card paths once staging proof shows the
+  article-first path covers owner publication, source expansion, open-source
+  windows, and export/copy invariants.
+
+acceptance for this axis:
+
+- On the owner legal-cloud publication, sources do not bunch at the top and no
+  `missing source` prose appears in the article.
+- Inline citation/source markers expand to transclusions in place and can open
+  the source window.
+- An expanded source card lets surrounding prose wrap naturally, with no large
+  wasted blank column/band, and remains readable on desktop and mobile.
+- Source metadata and transclusions remain in the publication bundle and are
+  available to authorized readers and exports as policy permits.
+- Focus/edit/save/revise proof still shows ordinary revisions preserving
+  `focused_user_edit_diff` prompt sizing and apply-edits metadata.
+
+remaining error field:
+
+- Implement the next proofable slice narrowly enough to verify on staging, but
+  prune obsolete source-deck/card paths as soon as the article-first path is
+  proven.
