@@ -79,6 +79,26 @@ import manifests, selector/confidence data, style/export profiles, and
 server-side export artifacts. They cannot be treated as frontend-only format
 conversions.
 
+### Binary Original Preservation Is Still Projection-Only
+
+After checkpoint `0a5a31de`, the backend creates separate original
+`ContentItem` rows for `.md`, DOCX, and PDF file opens, and the first VText
+revision records an import manifest. That repaired the identity boundary, but
+the DOCX/PDF path still depends on the caller sending `initial_content` text.
+The runtime does not yet read the original bytes from the owner filesystem,
+does not hash the real binary bytes, and does not run a real import adapter to
+create the VText projection.
+
+The frontend also only calls `/api/vtext/files/open` from
+`handleOpenTextFile`. Files whose names route to media apps, including PDF,
+open in media surfaces instead of offering an import-to-VText path. DOCX is not
+handled as a first-class VText import target in the file browser either.
+
+This means the current deployed state can prove "VText projection plus
+preserved original record," but not the required DOCX/PDF
+`original bytes -> ContentItem -> import manifest -> VText projection`
+roundtrip.
+
 ### Publish Download UI Exposes DOCX/PDF Before Backend Export Exists
 
 After the first mission checkpoint, staging served commit
@@ -121,6 +141,10 @@ owning source surface in a separate app/window when a source artifact exists.
   ContentItems; VText owns the revisable projection.
 - Import -> revise -> export works for MD, TXT, HTML, DOCX, and PDF with
   provenance metadata and policy.
+- DOCX/PDF import reads the original owner-file bytes on the server, stores a
+  real binary content hash, creates a best-effort VText projection through an
+  explicit adapter, and records adapter warnings/lossiness rather than relying
+  on caller-supplied projection text.
 - Every citation marker is an expandable source entity/transclusion target.
 - Expanded transclusions can open their owning source app/window.
 
