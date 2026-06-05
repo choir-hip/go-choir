@@ -1626,3 +1626,84 @@ remaining error field:
   panel copy remains source-review oriented.
 - This extraction does not yet implement Pretext card wrapping. It is a
   prerequisite cleanup/boundary step before that richer layout work.
+
+## 2026-06-05 Clarified Source UX Problem: Journal Flow And Reader Fallback
+
+status: problem_clarified_before_next_ui_code
+
+new user clarification:
+
+- The current source UI still has too many nested card/pill/rounded-rectangle
+  layers. Even after the top rail was removed, expanded citations can look like
+  UI chrome inserted into prose rather than a source excerpt integrated into an
+  article.
+- The desired experience is closer to a magazine or academic journal layout:
+  columns or shaped text flow alongside a source excerpt/card, with source
+  content emphasized over metadata.
+- The rest of the article text should wrap around the expanded source content.
+  It should not leave a large blank band or behave like a full-width block
+  unless the viewport is too narrow.
+- The iframe Web Lens/source preview path is proving fragile. Some web sources
+  refuse to load in frames or fail for unrelated rendering reasons.
+- Obscura snapshots are useful, but the cleaned content is not yet good enough.
+  The better product path is to clean source content into Markdown, then render
+  that Markdown as a reader-mode fallback when the iframe/page preview fails.
+
+corrected interpretation:
+
+- Source cards are not the product target. They are one fallback projection of a
+  source transclusion.
+- Pretext is in scope specifically because it can support the wrapping,
+  magazine/journal layout. If a change only restyles pills/cards without routing
+  article text around source content, it is not the intended Pretext work.
+- The primary reader affordance should be:
+  1. compact inline citation marker;
+  2. expanded source excerpt that reads like a marginal/journal note;
+  3. surrounding article text reflowing around it where there is horizontal
+     room;
+  4. open-source action that can show either the live page/PDF/media surface or
+     a cleaned Markdown reader-mode snapshot when live embedding fails.
+- Metadata should remain accessible but visually subordinate. The visible source
+  surface should lead with source title and useful excerpt/content, not internal
+  ids, target kinds, or diagnostic fields.
+
+implementation implications:
+
+- Use Pretext line routing for the article/source-flow problem, not merely to
+  restyle the existing card. The load-bearing implementation is text wrapping:
+  article prose should lay out in available line bands beside the expanded
+  source excerpt on desktop and fall back to a normal stacked flow on narrow
+  viewports.
+- Keep the source transclusion as normal accessible DOM or a DOM-equivalent
+  projection with explicit serialization boundaries. Do not make a canvas-only
+  source surface.
+- Split source opening into two product states:
+  - `page preview`: attempts live iframe/browser/PDF/media surface;
+  - `reader snapshot`: cleaned Markdown rendered from Obscura/source-service
+    content when live preview is blocked, blank, or low-content.
+- Improve Obscura cleanup as source acquisition work, not as frontend chrome:
+  raw snapshot -> cleaned Markdown -> source item/transclusion snapshot ->
+  VText reader-mode fallback.
+- Do not hardcode for the legal-cloud proposal or for ABA/Qdrant. The behavior
+  must be source-kind and policy driven.
+
+acceptance criteria for the next source UX/source acquisition slice:
+
+- Owner legal-cloud VText publication shows inline citations and, when expanded
+  on desktop, a source excerpt with article text flowing beside it in a
+  journal-like layout.
+- On mobile/narrow windows, the same source content remains readable without
+  overlap or horizontal scrolling.
+- The visible expanded source area emphasizes title and excerpt/content, with
+  metadata available only as secondary detail.
+- Opening a source that refuses iframe rendering offers a cleaned Markdown
+  reader-mode snapshot, not only an iframe error or low-content raw HTML.
+- The cleaned Markdown snapshot remains tied to source metadata/transclusion
+  records and publication policy; it is not rendered as hidden prose in the
+  canonical VText document.
+
+remaining error field:
+
+- First land and prove the source-rendering boundary extraction. Then implement
+  the journal-flow/reader-mode slice against that boundary and the source
+  acquisition contract.
