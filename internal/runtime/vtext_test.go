@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -3644,6 +3645,140 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 		}
 	}
 	t.Fatalf("missing original source snapshot item: %#v", items)
+}
+
+func TestVTextImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	oldContent := "# Proposal\n\nStored historical glossary [1].\n"
+	latestContent := "# Proposal\n\nStored latest appendix table.\n"
+	oldItem := types.ContentItem{
+		ContentID:   "content-lineage-v44",
+		OwnerID:     "user-1",
+		SourceType:  "file_version",
+		MediaType:   "text/markdown",
+		AppHint:     "vtext",
+		Title:       "legal-cloud.md v44",
+		FilePath:    "proposals/legal-cloud-content-backed.md#v44",
+		TextContent: oldContent,
+		ContentHash: contentHash(oldContent),
+		Metadata:    json.RawMessage(`{"source":"fixture"}`),
+		Provenance:  json.RawMessage(`{"created_from":"content_item_fixture"}`),
+		CreatedAt:   now.Add(-time.Hour),
+		UpdatedAt:   now.Add(-time.Hour),
+	}
+	latestItem := types.ContentItem{
+		ContentID:   "content-lineage-v49",
+		OwnerID:     "user-1",
+		SourceType:  "file_version",
+		MediaType:   "text/markdown",
+		AppHint:     "vtext",
+		Title:       "legal-cloud.md v49",
+		FilePath:    "proposals/legal-cloud-content-backed.md#v49",
+		TextContent: latestContent,
+		ContentHash: contentHash(latestContent),
+		Metadata:    json.RawMessage(`{"source":"fixture"}`),
+		Provenance:  json.RawMessage(`{"created_from":"content_item_fixture"}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := s.CreateContentItem(ctx, oldItem); err != nil {
+		t.Fatalf("CreateContentItem old: %v", err)
+	}
+	if err := s.CreateContentItem(ctx, latestItem); err != nil {
+		t.Fatalf("CreateContentItem latest: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud-content-backed.md",
+		Title:      "legal-cloud-content-backed.md",
+		Versions: []vtextMarkdownLineageVersion{
+			{
+				Label:         "v44",
+				ContentItemID: oldItem.ContentID,
+			},
+			{
+				Label:         "v49",
+				ContentItemID: latestItem.ContentID,
+			},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	if got, want := resp.OriginalContentIDs, []string{oldItem.ContentID, latestItem.ContentID}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("original_content_ids = %#v, want %#v", got, want)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, resp.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("len(revisions) = %d, want 2", len(revs))
+	}
+	if !strings.Contains(revs[0].Content, "Stored latest appendix table") {
+		t.Fatalf("latest revision content = %q", revs[0].Content)
+	}
+	oldest := revs[1]
+	if !strings.Contains(oldest.Content, "Stored historical glossary [1]") {
+		t.Fatalf("oldest revision content = %q", oldest.Content)
+	}
+	meta := decodeRevisionMetadata(oldest.Metadata)
+	manifest := meta["migration_manifest"].(map[string]any)
+	if manifest["original_content_id"] != oldItem.ContentID || manifest["source_content_item_id"] != oldItem.ContentID {
+		t.Fatalf("manifest content ids = %#v", manifest)
+	}
+	if manifest["original_content_path"] != oldItem.FilePath || manifest["original_content_source"] != "content_item" {
+		t.Fatalf("manifest content source = %#v", manifest)
+	}
+	lineage, ok := manifest["version_lineage"].([]any)
+	if !ok || len(lineage) != 2 {
+		t.Fatalf("version_lineage = %#v", manifest["version_lineage"])
+	}
+	first := lineage[0].(map[string]any)
+	if first["original_content_id"] != oldItem.ContentID || first["original_content_source"] != "content_item" {
+		t.Fatalf("lineage first = %#v", first)
+	}
+	items, err := s.ListContentItems(ctx, "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListContentItems: %v", err)
+	}
+	var matching int
+	for _, item := range items {
+		if strings.HasPrefix(item.FilePath, "proposals/legal-cloud-content-backed.md#") {
+			matching++
+		}
+	}
+	if matching != 2 {
+		t.Fatalf("matching content-backed source items = %d, want existing two without duplicates; items=%#v", matching, items)
+	}
+}
+
+func TestVTextImportMarkdownLineageRejectsMissingContentItem(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/missing-content-item.md",
+		Title:      "missing-content-item.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:         "v1",
+			ContentItemID: "missing-content-item",
+		}},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "content_item_id missing-content-item not found") {
+		t.Fatalf("body = %s", w.Body.String())
+	}
 }
 
 func TestVTextImportMarkdownLineageRejectsUnknownCitationEntity(t *testing.T) {
