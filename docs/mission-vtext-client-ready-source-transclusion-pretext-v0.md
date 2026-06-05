@@ -3027,3 +3027,55 @@ remaining proof:
 - Push, CI, Node B deploy, staging health identity, and Comet owner-account
   visual proof are required before this source-flow repair is accepted as
   deployed behavior.
+
+## 2026-06-05 Deployment Evidence: Pretext Source Flow Layout
+
+status: deployed_checkpoint_incomplete
+
+commits:
+
+- Problem checkpoint: `b17f0678` (`docs: record pretext source flow proof
+  gap`).
+- Behavior repair: `e495e6821d792763620e95739c5249c0199385f2`
+  (`fix: strengthen pretext source flow layout`).
+
+CI and deploy:
+
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27038686484`
+  completed successfully, including frontend build, Go runtime shards,
+  non-runtime tests, integration smoke, vet/build, and Node B staging deploy.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27038686463`
+  completed successfully for the same SHA.
+- `https://choir.news/health` reported both proxy and upstream deployed commit
+  `e495e6821d792763620e95739c5249c0199385f2`, deployed at
+  `2026-06-05T20:35:57Z`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet reloaded
+  `https://choir.news/pub/vtext/codex-source-snapshot-proof-1780689619462-pub8bc8c0aef`
+  after the Node B deploy so the published page used the deployed frontend
+  bundle for `e495e6821d792763620e95739c5249c0199385f2`.
+- After reload, the source marker returned to a compact inline marker inside
+  the sentence: `The article keeps its citation compact [1]. A normal
+  following sentence should remain readable around the source note.`
+- Expanding the marker showed the source note as a transparent side apparatus
+  with title, bounded reader-snapshot excerpt, and `Open source` / `Close`
+  text actions. The article sentence stayed alongside the note instead of
+  becoming a top stack of source cards.
+- The already-open source reader window for `Codex public source snapshot
+  1780689619462` still showed the cleaned reader snapshot and full-detail
+  publication proof text.
+
+proof boundary:
+
+- The deployed synthetic publication is a narrow article-flow proof, not the
+  full client-ready legal-cloud proposal. The owner proposal remains open in
+  Comet as `choir_private_legal_cloud_proposal.vtext` at `v83`, but this slice
+  did not mutate or republish the owner proposal.
+- Next realism axis remains applying the same source-flow behavior and
+  cleaned-reader fallback quality to the long owner proposal/publication with
+  many sources, while preserving canonical VText and publication source-access
+  policy.
