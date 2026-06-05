@@ -3139,3 +3139,62 @@ proof boundary:
   route. The next proof should publish or resolve the current owner revision
   and verify that all visible citation markers become published
   transclusions/source windows with publication-carried source snapshots.
+
+## 2026-06-05 Owner Publication Source Snapshot Gap
+
+status: problem_recorded_before_code_fix
+
+authenticated staging evidence:
+
+- The owner proposal `v83` was published from the Comet UI.
+- Publication route:
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub33c6bc736`.
+- Public publication resolve API returned:
+  - `publication_id=pub-33c6bc73-615b-4498-a4a3-32a1d9c9ae0d`;
+  - `publication_version_id=pubver-4fd51f3a-087c-497c-8fc0-adc1798f4145`;
+  - `source_entities=7`;
+  - `transclusions=7`;
+  - export formats `txt`, `md`, `html`, `docx`, and `pdf`.
+- Markdown export for the owner route returned
+  `choir-private-legal-cloud-proposal-vtext-pub33c6bc736.md`, content hash
+  `4e6f3f9888c7ed41fe2b386620445985290285001bd0d3c16dfb02ad600f81bc`,
+  and length `38398`. It contains no `missing source` prose.
+- Correction to an earlier local check: the exported owner Markdown does
+  preserve the Appendix A glossary as a Markdown table with `| Term |
+  Definition |`; the `TermDefinition` collapse is not present in this current
+  owner publication export.
+- Opening the first published citation source in Comet creates an ABA Formal
+  Opinion 512 source window that defaults to `Source reader snapshot`, so the
+  source window is available even without relying on a live iframe.
+
+newly confirmed problem:
+
+- The published source window's fallback snapshot for URL-backed owner sources
+  is only the bounded citation excerpt. It is not a fuller cleaned
+  reader-mode source artifact.
+- Public resolve shows each owner source entity has `target_kind=url`,
+  `rights_scope=public_url_snapshot`, and no `reader_snapshot`.
+- The current proxy enrichment path in `internal/proxy/platform_publish.go`
+  only enriches publication metadata with `reader_snapshot` when a source
+  entity has a content-item id and the rights policy allows publication. It
+  does not handle public URL targets that explicitly declare
+  `public_url_snapshot`.
+
+required correction:
+
+- Extend publication-source enrichment generically for public URL targets with
+  publication-safe rights, preferably by importing/snapshotting the URL through
+  the existing content/source ingestion path and storing a cleaned reader
+  Markdown snapshot in the published source entity.
+- Preserve the bounded transclusion excerpt separately from the fuller source
+  snapshot. The expanded citation should stay compact; `Open source` should
+  reveal the fuller cleaned source artifact when available.
+- Do not special-case the legal-cloud proposal or ABA/Hetzner/OVH/NixOS/Qdrant
+  sources. The rule is about publication-safe URL source entities.
+
+proof boundary:
+
+- The owner route currently proves publication of source metadata,
+  transclusions, Markdown export, source windows, and glossary-table export.
+  It does not yet prove publication-carried full reader snapshots for URL
+  sources.
