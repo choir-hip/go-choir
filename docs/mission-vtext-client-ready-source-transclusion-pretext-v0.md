@@ -3079,3 +3079,63 @@ proof boundary:
   cleaned-reader fallback quality to the long owner proposal/publication with
   many sources, while preserving canonical VText and publication source-access
   policy.
+
+## 2026-06-05 Owner Source UX Evidence And Remaining Workflow Debt
+
+status: problem_recorded_before_code_fix
+
+authenticated Comet evidence:
+
+- Computer Use is available and active for `/Applications/Comet.app`
+  (`ai.perplexity.comet`). The earlier click concern was a session-state issue:
+  `get_app_state` must be called before click/type actions in the active turn.
+- The owner proposal is open on staging as
+  `choir_private_legal_cloud_proposal.vtext`, currently `v83`, and the visible
+  body is the long legal-cloud proposal rather than the short fallback draft.
+- The owner source panel reports `7 represented sources`: ABA Formal Opinion
+  512, ABA Model Rule 1.6, Hetzner data centers, OVHcloud Hosted Private Cloud,
+  NixOS reproducible configuration and rollback, GDPR Article 32, and Qdrant
+  similarity search documentation.
+- The same panel reports revision/run/edit evidence for the live owner
+  document: `80 revisions`, `80 runs`, `v83`, and latest appagent edit evidence
+  from `v81` with `context=focused_user_edit_diff`,
+  `operation=apply_edits`, `prompt chars=12886`, `edits=2`,
+  `delta chars=-216`, and `latency ms=19`.
+- Clicking the first owner citation expands it in place. The expansion appears
+  as right-side source apparatus with title `ABA Formal Opinion 512:
+  Generative Artificial Intelligence Tools`, bounded text about lawyer duties
+  when using generative AI, and `Open source` / `Close` actions. The main
+  proposal prose continues in the article column beside and below the note.
+- The already-open source reader window for ABA Formal Opinion 512 renders a
+  cleaned reader snapshot instead of relying only on a live iframe. It shows
+  the source URL and the same bounded source text.
+
+newly confirmed problem:
+
+- The owner source management panel still exposes `Repair JSON` as a visible
+  owner workflow, with an editable JSON payload and `Apply repair` button.
+  That is acceptable as a diagnostic surface during development, but it is not
+  an owner-grade source workflow for a client-ready proposal.
+- The source management panel also still reads as a compact grid of source
+  cards. That is less urgent than article rendering, because it is a management
+  panel rather than document prose, but it should not become the default mental
+  model for source-backed reading.
+
+required correction:
+
+- Preserve the source graph and low-level repair API, but move owner-facing
+  source repair toward claim/source review controls: claim inventory, source
+  candidate, confirm/refute/no-source-needed decisions, and bounded repair
+  application.
+- Keep raw JSON available only in an explicit diagnostic/developer disclosure
+  or remove it from the owner path after equivalent structured controls exist.
+- Continue using Pretext for the article-flow apparatus. The point of Pretext
+  in this mission is magazine/journal wrapping: text columns beside source
+  notes and continued prose flow, not more rounded-card chrome.
+
+proof boundary:
+
+- This checkpoint does not mutate the owner proposal or publish a new owner
+  route. The next proof should publish or resolve the current owner revision
+  and verify that all visible citation markers become published
+  transclusions/source windows with publication-carried source snapshots.
