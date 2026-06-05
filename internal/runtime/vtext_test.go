@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -3510,6 +3511,141 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 			t.Fatalf("%s should not have markdown migration manifest: %#v", tc.name, meta)
 		}
 	}
+}
+
+func TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	filesRoot := t.TempDir()
+	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
+	importsDir := filepath.Join(filesRoot, "imports")
+	if err := os.MkdirAll(importsDir, 0o755); err != nil {
+		t.Fatalf("create imports dir: %v", err)
+	}
+	docxBytes := buildMinimalDOCX(t, []string{"Proposal Title", "Opening paragraph"}, [][]string{
+		{"Term", "Definition"},
+		{"Work product", "Durable professional output"},
+	})
+	pdfBytes := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 72 >>\nstream\nBT\n/F1 12 Tf\n72 720 Td\n(Imported PDF sentence) Tj\n0 -20 Td\n(Second line) Tj\nET\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF")
+	if err := os.WriteFile(filepath.Join(importsDir, "brief.docx"), docxBytes, 0o644); err != nil {
+		t.Fatalf("write docx: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(importsDir, "brief.pdf"), pdfBytes, 0o644); err != nil {
+		t.Fatalf("write pdf: %v", err)
+	}
+
+	openFile := func(sourcePath string) vtextOpenFileResponse {
+		req := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+			"source_path": sourcePath,
+			"title":       filepath.Base(sourcePath),
+		})
+		w := httptest.NewRecorder()
+		h.HandleVTextRouter(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("open %s: status = %d, want %d; body: %s", sourcePath, w.Code, http.StatusCreated, w.Body.String())
+		}
+		var resp vtextOpenFileResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode open %s: %v", sourcePath, err)
+		}
+		return resp
+	}
+
+	docx := openFile("imports/brief.docx")
+	pdf := openFile("imports/brief.pdf")
+
+	docxRevs, err := s.ListRevisionsByDoc(context.Background(), docx.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("docx ListRevisionsByDoc: %v", err)
+	}
+	if len(docxRevs) != 1 {
+		t.Fatalf("docx revisions = %d, want 1", len(docxRevs))
+	}
+	if !strings.Contains(docxRevs[0].Content, "Proposal Title") || !strings.Contains(docxRevs[0].Content, "| Term | Definition |") || !strings.Contains(docxRevs[0].Content, "| Work product | Durable professional output |") {
+		t.Fatalf("docx projection content = %q", docxRevs[0].Content)
+	}
+	docxItem, err := s.GetContentItem(context.Background(), "user-1", docx.OriginalContentID)
+	if err != nil {
+		t.Fatalf("docx original item: %v", err)
+	}
+	if docxItem.ContentHash != contentHashBytes(docxBytes) || docxItem.TextContent != "" {
+		t.Fatalf("docx original item hash/text = %#v", docxItem)
+	}
+	docxManifest := decodeRevisionMetadata(docxRevs[0].Metadata)["import_manifest"].(map[string]any)
+	if docxManifest["import_adapter"] != "docx_ooxml_text_table_projection" || docxManifest["original_content_hash_state"] != "available_from_original_bytes" {
+		t.Fatalf("docx manifest = %#v", docxManifest)
+	}
+	if docxManifest["original_content_hash"] != "sha256:"+contentHashBytes(docxBytes) {
+		t.Fatalf("docx original hash = %#v", docxManifest)
+	}
+
+	pdfRevs, err := s.ListRevisionsByDoc(context.Background(), pdf.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("pdf ListRevisionsByDoc: %v", err)
+	}
+	if len(pdfRevs) != 1 {
+		t.Fatalf("pdf revisions = %d, want 1", len(pdfRevs))
+	}
+	if !strings.Contains(pdfRevs[0].Content, "Imported PDF sentence") || !strings.Contains(pdfRevs[0].Content, "Second line") {
+		t.Fatalf("pdf projection content = %q", pdfRevs[0].Content)
+	}
+	pdfItem, err := s.GetContentItem(context.Background(), "user-1", pdf.OriginalContentID)
+	if err != nil {
+		t.Fatalf("pdf original item: %v", err)
+	}
+	if pdfItem.ContentHash != contentHashBytes(pdfBytes) || pdfItem.TextContent != "" {
+		t.Fatalf("pdf original item hash/text = %#v", pdfItem)
+	}
+	pdfManifest := decodeRevisionMetadata(pdfRevs[0].Metadata)["import_manifest"].(map[string]any)
+	if pdfManifest["import_adapter"] != "pdf_literal_text_projection" || pdfManifest["original_content_hash_state"] != "available_from_original_bytes" {
+		t.Fatalf("pdf manifest = %#v", pdfManifest)
+	}
+	if pdfManifest["original_content_hash"] != "sha256:"+contentHashBytes(pdfBytes) {
+		t.Fatalf("pdf original hash = %#v", pdfManifest)
+	}
+}
+
+func buildMinimalDOCX(t *testing.T, paragraphs []string, table [][]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	add := func(name, body string) {
+		t.Helper()
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create docx part %s: %v", name, err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatalf("write docx part %s: %v", name, err)
+		}
+	}
+	var body strings.Builder
+	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>`)
+	for _, paragraph := range paragraphs {
+		body.WriteString(`<w:p><w:r><w:t>`)
+		body.WriteString(escapeDocxText(paragraph))
+		body.WriteString(`</w:t></w:r></w:p>`)
+	}
+	body.WriteString(`<w:tbl>`)
+	for _, row := range table {
+		body.WriteString(`<w:tr>`)
+		for _, cell := range row {
+			body.WriteString(`<w:tc><w:p><w:r><w:t>`)
+			body.WriteString(escapeDocxText(cell))
+			body.WriteString(`</w:t></w:r></w:p></w:tc>`)
+		}
+		body.WriteString(`</w:tr>`)
+	}
+	body.WriteString(`</w:tbl></w:body></w:document>`)
+	add("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>`)
+	add("word/document.xml", body.String())
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close docx zip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func escapeDocxText(text string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&apos;").Replace(text)
 }
 
 func TestVTextEnsureManifestCreatesAliasAndFile(t *testing.T) {

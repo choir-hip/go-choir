@@ -392,6 +392,14 @@
     }
   }
 
+  function handleImportIntoVText(entry) {
+    dispatch('opentextfile', {
+      pathSegments: [...currentPath, entry.name],
+      fileName: entry.name,
+      importToVText: true,
+    });
+  }
+
   function isVTextShortcutName(name) {
     return typeof name === 'string' && name.toLowerCase().endsWith('.vtext');
   }
@@ -411,6 +419,11 @@
       'css', 'scss', 'html', 'htm', 'xml', 'svg',
       'c', 'h', 'cpp', 'hpp', 'java', 'kt', 'swift', 'rb', 'php', 'pl', 'lua', 'sql',
     ].includes(ext);
+  }
+
+  function isVTextImportableDocumentName(name) {
+    const lower = String(name || '').toLowerCase();
+    return lower.endsWith('.docx') || lower.endsWith('.pdf');
   }
 
   function fileIconFor(entry) {
@@ -694,6 +707,17 @@
               <span class="file-name" data-file-name>{entry.name}</span>
               {#if entry.type === 'file'}
                 <span class="file-size" data-file-size>{formatFileSize(entry.size)}</span>
+                {#if isVTextImportableDocumentName(entry.name)}
+                  <button
+                    class="import-vtext-btn"
+                    data-import-vtext-btn
+                    on:click|stopPropagation={() => handleImportIntoVText(entry)}
+                    title="Open {entry.name} in VText"
+                    aria-label="Open {entry.name} in VText"
+                  >
+                    VText
+                  </button>
+                {/if}
               {/if}
               <button
                 class="delete-btn"
@@ -1025,6 +1049,24 @@
     font-size: 0.75rem;
     flex-shrink: 0;
     margin-right: 4px;
+  }
+
+  .import-vtext-btn {
+    flex-shrink: 0;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--choir-border);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+    color: var(--choir-text-accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .import-vtext-btn:hover,
+  .import-vtext-btn:focus-visible {
+    background: var(--choir-state-hover);
   }
 
   /* Delete button - hidden until hover, always visible on mobile */

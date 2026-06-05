@@ -20,12 +20,15 @@
 package runtime
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -81,6 +84,20 @@ type vtextOpenFileResponse struct {
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 	Created           bool   `json:"created"`
 	OriginalContentID string `json:"original_content_id,omitempty"`
+}
+
+type vtextFileImportProjection struct {
+	SourcePath               string
+	MediaType                string
+	ProjectionContent        string
+	OriginalBytes            []byte
+	OriginalContentHash      string
+	OriginalContentHashState string
+	ProjectionContentHash    string
+	ImportAdapter            string
+	ImportAdapterVersion     int
+	LossinessScore           int
+	Warnings                 []string
 }
 
 type vtextEnsureManifestResponse struct {
@@ -365,26 +382,36 @@ func marshalVTextShortcutFile(doc types.Document, sourcePath string) ([]byte, er
 	}, "", "  ")
 }
 
-func buildFileOpenVTextMetadata(sourcePath, content string, original *types.ContentItem) json.RawMessage {
+func buildFileOpenVTextMetadata(projection vtextFileImportProjection, original *types.ContentItem) json.RawMessage {
+	sourcePath := strings.TrimSpace(projection.SourcePath)
+	content := projection.ProjectionContent
+	mediaType := projection.MediaType
+	if mediaType == "" {
+		mediaType = detectMediaType("", sourcePath, "")
+	}
 	sourcePath = strings.TrimSpace(sourcePath)
 	sum := sha256.Sum256([]byte(content))
 	ext := strings.TrimPrefix(strings.ToLower(pathpkg.Ext(sourcePath)), ".")
 	if ext == "" {
 		ext = "text"
 	}
-	mediaType := detectMediaType("", sourcePath, "")
-	lossinessScore := 0
-	warnings := []string{}
-	switch mediaType {
-	case "application/pdf":
-		lossinessScore = 80
-		warnings = append(warnings, "pdf_projection_requires_extraction_adapter")
-	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-		lossinessScore = 40
-		warnings = append(warnings, "docx_projection_requires_style_adapter")
-	case "application/octet-stream":
-		lossinessScore = 100
-		warnings = append(warnings, "unknown_file_type_projection_is_placeholder")
+	lossinessScore := projection.LossinessScore
+	warnings := append([]string{}, projection.Warnings...)
+	importAdapter := projection.ImportAdapter
+	if importAdapter == "" {
+		importAdapter = "vtext_file_open_projection"
+	}
+	importAdapterVersion := projection.ImportAdapterVersion
+	if importAdapterVersion <= 0 {
+		importAdapterVersion = 1
+	}
+	projectionHash := "sha256:" + hex.EncodeToString(sum[:])
+	if projection.ProjectionContentHash != "" {
+		projectionHash = "sha256:" + projection.ProjectionContentHash
+	}
+	originalHash := projectionHash
+	if projection.OriginalContentHash != "" {
+		originalHash = "sha256:" + projection.OriginalContentHash
 	}
 	metadata := map[string]any{
 		"source_path":  sourcePath,
@@ -393,11 +420,11 @@ func buildFileOpenVTextMetadata(sourcePath, content string, original *types.Cont
 			"source_path":             sourcePath,
 			"source_kind":             ext,
 			"source_media_type":       mediaType,
-			"original_content_hash":   "sha256:" + hex.EncodeToString(sum[:]),
-			"projection_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
+			"original_content_hash":   originalHash,
+			"projection_content_hash": projectionHash,
 			"projection_kind":         "vtext",
-			"import_adapter":          "vtext_file_open_projection",
-			"import_adapter_version":  1,
+			"import_adapter":          importAdapter,
+			"import_adapter_version":  importAdapterVersion,
 			"lossiness_score":         lossinessScore,
 			"warnings":                warnings,
 		},
@@ -413,12 +440,19 @@ func buildFileOpenVTextMetadata(sourcePath, content string, original *types.Cont
 		}
 		if manifest, ok := metadata["import_manifest"].(map[string]any); ok {
 			manifest["original_content_id"] = original.ContentID
-			if vtextFileTypeCanStoreTextProjection(original.MediaType) {
+			if projection.OriginalContentHashState != "" {
+				manifest["original_content_hash_state"] = projection.OriginalContentHashState
+			}
+			if vtextFileTypeCanStoreTextProjection(original.MediaType) || projection.OriginalContentHash != "" {
 				manifest["original_content_hash"] = "sha256:" + original.ContentHash
-				manifest["original_content_hash_state"] = "available_from_text_projection"
+				if manifest["original_content_hash_state"] == nil {
+					manifest["original_content_hash_state"] = "available_from_original_bytes"
+				}
 			} else {
 				manifest["original_content_hash"] = ""
-				manifest["original_content_hash_state"] = "unavailable_until_binary_bytes_adapter"
+				if manifest["original_content_hash_state"] == nil {
+					manifest["original_content_hash_state"] = "unavailable_until_binary_bytes_adapter"
+				}
 				manifest["original_identity_hash"] = "sha256:" + original.ContentHash
 			}
 		}
@@ -442,10 +476,14 @@ func buildFileOpenVTextMetadata(sourcePath, content string, original *types.Cont
 	return data
 }
 
-func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID, sourcePath, title, content string, now time.Time) (types.ContentItem, error) {
-	mediaType := detectMediaType("", sourcePath, "")
-	hash := contentHash(content)
-	if !vtextFileTypeCanStoreTextProjection(mediaType) || hash == "" {
+func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID, title string, projection vtextFileImportProjection, now time.Time) (types.ContentItem, error) {
+	sourcePath := strings.TrimSpace(projection.SourcePath)
+	mediaType := projection.MediaType
+	hash := projection.OriginalContentHash
+	if hash == "" {
+		hash = contentHash(projection.ProjectionContent)
+	}
+	if hash == "" {
 		hash = contentHash(sourcePath)
 	}
 	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 1000)
@@ -458,7 +496,7 @@ func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID
 	} else {
 		log.Printf("vtext api: list content items for original file %s: %v", sourcePath, err)
 	}
-	projectionText := content
+	projectionText := projection.ProjectionContent
 	if !vtextFileTypeCanStoreTextProjection(mediaType) {
 		projectionText = ""
 	}
@@ -472,7 +510,7 @@ func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID
 		FilePath:    sourcePath,
 		TextContent: projectionText,
 		ContentHash: hash,
-		Metadata:    buildOriginalFileContentMetadata(sourcePath, mediaType, content),
+		Metadata:    buildOriginalFileContentMetadata(projection),
 		Provenance:  json.RawMessage(`{"created_from":"vtext_file_open","original_preserved":true}`),
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -495,23 +533,383 @@ func vtextFileTypeCanStoreTextProjection(mediaType string) bool {
 	}
 }
 
-func buildOriginalFileContentMetadata(sourcePath, mediaType, content string) json.RawMessage {
-	sum := sha256.Sum256([]byte(content))
-	metadata := map[string]any{
-		"schema":                "choir.content.original_file.v0",
-		"source_path":           sourcePath,
-		"media_type":            mediaType,
-		"original_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
-		"preservation":          "original_file_path_preserved_in_user_filesystem",
+func buildVTextFileImportProjection(sourcePath, initialContent string) vtextFileImportProjection {
+	sourcePath = strings.TrimSpace(sourcePath)
+	mediaType := detectMediaType("", sourcePath, "")
+	projection := vtextFileImportProjection{
+		SourcePath:           sourcePath,
+		MediaType:            mediaType,
+		ProjectionContent:    initialContent,
+		ImportAdapter:        "vtext_file_open_projection",
+		ImportAdapterVersion: 1,
+		Warnings:             []string{},
 	}
-	if !vtextFileTypeCanStoreTextProjection(mediaType) {
+	if bytes, ok := readVTextSourceFileBytes(sourcePath); ok {
+		projection.OriginalBytes = bytes
+		projection.OriginalContentHash = contentHashBytes(bytes)
+		projection.OriginalContentHashState = "available_from_original_bytes"
+		switch mediaType {
+		case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+			docxProjection := extractVTextProjectionFromDOCX(bytes)
+			docxProjection.SourcePath = sourcePath
+			docxProjection.MediaType = mediaType
+			docxProjection.OriginalBytes = bytes
+			docxProjection.OriginalContentHash = projection.OriginalContentHash
+			docxProjection.OriginalContentHashState = projection.OriginalContentHashState
+			return docxProjection.withProjectionFallback(initialContent)
+		case "application/pdf":
+			pdfProjection := extractVTextProjectionFromPDF(bytes)
+			pdfProjection.SourcePath = sourcePath
+			pdfProjection.MediaType = mediaType
+			pdfProjection.OriginalBytes = bytes
+			pdfProjection.OriginalContentHash = projection.OriginalContentHash
+			pdfProjection.OriginalContentHashState = projection.OriginalContentHashState
+			return pdfProjection.withProjectionFallback(initialContent)
+		default:
+			if vtextFileTypeCanStoreTextProjection(mediaType) {
+				projection.ProjectionContent = string(bytes)
+				projection.ImportAdapter = "vtext_text_file_import"
+				projection.ImportAdapterVersion = 1
+			}
+		}
+	} else if initialContent == "" && !isVTextShortcutPath(sourcePath) {
+		projection.Warnings = append(projection.Warnings, "source_file_bytes_unavailable_projection_empty")
+	}
+	if projection.ImportAdapter == "" {
+		projection.ImportAdapter = "vtext_file_open_projection"
+	}
+	if projection.ImportAdapterVersion <= 0 {
+		projection.ImportAdapterVersion = 1
+	}
+	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	if projection.OriginalContentHashState == "" {
+		if projection.OriginalContentHash != "" {
+			projection.OriginalContentHashState = "available_from_original_bytes"
+		} else if vtextFileTypeCanStoreTextProjection(mediaType) {
+			projection.OriginalContentHash = projection.ProjectionContentHash
+			projection.OriginalContentHashState = "available_from_text_projection"
+		} else {
+			projection.OriginalContentHashState = "unavailable_until_binary_bytes_adapter"
+			switch mediaType {
+			case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+				projection.LossinessScore = 40
+				projection.Warnings = appendIfMissing(projection.Warnings, "docx_projection_requires_style_adapter")
+			case "application/pdf":
+				projection.LossinessScore = 80
+				projection.Warnings = appendIfMissing(projection.Warnings, "pdf_projection_requires_extraction_adapter")
+			case "application/octet-stream":
+				projection.LossinessScore = 100
+				projection.Warnings = appendIfMissing(projection.Warnings, "unknown_file_type_projection_is_placeholder")
+			}
+		}
+	}
+	return projection
+}
+
+func (p vtextFileImportProjection) withProjectionFallback(initialContent string) vtextFileImportProjection {
+	if strings.TrimSpace(p.ProjectionContent) == "" && strings.TrimSpace(initialContent) != "" {
+		p.ProjectionContent = initialContent
+		p.Warnings = appendIfMissing(p.Warnings, "projection_used_caller_supplied_initial_content")
+	}
+	if p.ProjectionContentHash == "" {
+		p.ProjectionContentHash = contentHash(p.ProjectionContent)
+	}
+	if p.ImportAdapter == "" {
+		p.ImportAdapter = "vtext_file_open_projection"
+	}
+	if p.ImportAdapterVersion <= 0 {
+		p.ImportAdapterVersion = 1
+	}
+	return p
+}
+
+func readVTextSourceFileBytes(sourcePath string) ([]byte, bool) {
+	sourcePath = normalizeVTextSourcePath(sourcePath)
+	if sourcePath == "" || isVTextShortcutPath(sourcePath) {
+		return nil, false
+	}
+	filesRoot := sandbox.ResolveFilesRoot("")
+	absPath := filepath.Join(filesRoot, filepath.FromSlash(sourcePath))
+	cleanRoot, err := filepath.Abs(filesRoot)
+	if err != nil {
+		return nil, false
+	}
+	cleanPath, err := filepath.Abs(absPath)
+	if err != nil {
+		return nil, false
+	}
+	if cleanPath != cleanRoot && !strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator)) {
+		return nil, false
+	}
+	info, err := os.Stat(cleanPath)
+	if err != nil || info.IsDir() || info.Size() > 25*1024*1024 {
+		return nil, false
+	}
+	data, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+func appendIfMissing(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func extractVTextProjectionFromDOCX(data []byte) vtextFileImportProjection {
+	projection := vtextFileImportProjection{
+		ImportAdapter:        "docx_ooxml_text_table_projection",
+		ImportAdapterVersion: 1,
+		LossinessScore:       35,
+		Warnings:             []string{"docx_styles_preserved_as_manifest_only"},
+	}
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		projection.LossinessScore = 90
+		projection.Warnings = append(projection.Warnings, "docx_zip_open_failed")
+		return projection
+	}
+	var documentXML []byte
+	for _, file := range reader.File {
+		if file.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			projection.LossinessScore = 90
+			projection.Warnings = append(projection.Warnings, "docx_document_xml_open_failed")
+			return projection
+		}
+		documentXML, err = io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			projection.LossinessScore = 90
+			projection.Warnings = append(projection.Warnings, "docx_document_xml_read_failed")
+			return projection
+		}
+		break
+	}
+	if len(documentXML) == 0 {
+		projection.LossinessScore = 90
+		projection.Warnings = append(projection.Warnings, "docx_document_xml_missing")
+		return projection
+	}
+	projection.ProjectionContent = strings.TrimSpace(docxDocumentXMLToMarkdown(documentXML))
+	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	return projection
+}
+
+func docxDocumentXMLToMarkdown(data []byte) string {
+	text := string(data)
+	tableRE := regexp.MustCompile(`(?is)<w:tbl\b.*?</w:tbl>`)
+	paragraphRE := regexp.MustCompile(`(?is)<w:p\b.*?</w:p>`)
+	var out strings.Builder
+	last := 0
+	for _, loc := range tableRE.FindAllStringIndex(text, -1) {
+		for _, paragraph := range paragraphRE.FindAllString(text[last:loc[0]], -1) {
+			if paragraphText := strings.TrimSpace(docxParagraphText(paragraph)); paragraphText != "" {
+				out.WriteString(paragraphText)
+				out.WriteString("\n\n")
+			}
+		}
+		rows := docxTableRows(text[loc[0]:loc[1]])
+		if len(rows) > 0 {
+			out.WriteString(markdownTable(rows))
+			out.WriteString("\n\n")
+		}
+		last = loc[1]
+	}
+	for _, paragraph := range paragraphRE.FindAllString(text[last:], -1) {
+		if paragraphText := strings.TrimSpace(docxParagraphText(paragraph)); paragraphText != "" {
+			out.WriteString(paragraphText)
+			out.WriteString("\n\n")
+		}
+	}
+	return strings.TrimSpace(out.String())
+}
+
+func docxParagraphText(xmlFragment string) string {
+	textRE := regexp.MustCompile(`(?is)<w:t(?:\s+[^>]*)?>(.*?)</w:t>`)
+	var parts []string
+	for _, match := range textRE.FindAllStringSubmatch(xmlFragment, -1) {
+		parts = append(parts, htmlEntityText(match[1]))
+	}
+	return strings.Join(parts, "")
+}
+
+func docxTableRows(tableXML string) [][]string {
+	rowRE := regexp.MustCompile(`(?is)<w:tr\b.*?</w:tr>`)
+	cellRE := regexp.MustCompile(`(?is)<w:tc\b.*?</w:tc>`)
+	var rows [][]string
+	for _, rowXML := range rowRE.FindAllString(tableXML, -1) {
+		var row []string
+		for _, cellXML := range cellRE.FindAllString(rowXML, -1) {
+			row = append(row, strings.TrimSpace(docxParagraphText(cellXML)))
+		}
+		if len(row) > 0 {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+func markdownTable(rows [][]string) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	cols := 0
+	for _, row := range rows {
+		if len(row) > cols {
+			cols = len(row)
+		}
+	}
+	if cols == 0 {
+		return ""
+	}
+	normalize := func(row []string) []string {
+		out := make([]string, cols)
+		for i := 0; i < cols; i++ {
+			if i < len(row) {
+				out[i] = strings.ReplaceAll(row[i], "|", "\\|")
+			}
+		}
+		return out
+	}
+	var b strings.Builder
+	b.WriteString("| ")
+	b.WriteString(strings.Join(normalize(rows[0]), " | "))
+	b.WriteString(" |\n| ")
+	separators := make([]string, cols)
+	for i := range separators {
+		separators[i] = "---"
+	}
+	b.WriteString(strings.Join(separators, " | "))
+	b.WriteString(" |")
+	for _, row := range rows[1:] {
+		b.WriteString("\n| ")
+		b.WriteString(strings.Join(normalize(row), " | "))
+		b.WriteString(" |")
+	}
+	return b.String()
+}
+
+func htmlEntityText(text string) string {
+	replacements := strings.NewReplacer(
+		"&amp;", "&",
+		"&lt;", "<",
+		"&gt;", ">",
+		"&quot;", "\"",
+		"&apos;", "'",
+	)
+	return replacements.Replace(text)
+}
+
+func extractVTextProjectionFromPDF(data []byte) vtextFileImportProjection {
+	projection := vtextFileImportProjection{
+		ImportAdapter:        "pdf_literal_text_projection",
+		ImportAdapterVersion: 1,
+		LossinessScore:       80,
+		Warnings:             []string{"pdf_layout_is_best_effort"},
+	}
+	text := extractPDFLiteralText(data)
+	if strings.TrimSpace(text) == "" {
+		projection.LossinessScore = 95
+		projection.Warnings = append(projection.Warnings, "pdf_text_extraction_empty")
+	} else {
+		projection.ProjectionContent = strings.TrimSpace(text)
+	}
+	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	return projection
+}
+
+func extractPDFLiteralText(data []byte) string {
+	raw := string(data)
+	literalRE := regexp.MustCompile(`\((?:\\.|[^\\()])+\)\s*Tj`)
+	arrayRE := regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
+	stringRE := regexp.MustCompile(`\((?:\\.|[^\\()])+\)`)
+	var parts []string
+	for _, match := range literalRE.FindAllString(raw, -1) {
+		if loc := stringRE.FindStringIndex(match); loc != nil {
+			parts = append(parts, decodePDFLiteralString(match[loc[0]:loc[1]]))
+		}
+	}
+	for _, array := range arrayRE.FindAllString(raw, -1) {
+		for _, lit := range stringRE.FindAllString(array, -1) {
+			parts = append(parts, decodePDFLiteralString(lit))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func decodePDFLiteralString(literal string) string {
+	literal = strings.TrimPrefix(strings.TrimSuffix(literal, ")"), "(")
+	var b strings.Builder
+	escaped := false
+	for _, r := range literal {
+		if escaped {
+			switch r {
+			case 'n':
+				b.WriteRune('\n')
+			case 'r':
+				b.WriteRune('\r')
+			case 't':
+				b.WriteRune('\t')
+			case 'b', 'f':
+			default:
+				b.WriteRune(r)
+			}
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func buildOriginalFileContentMetadata(projection vtextFileImportProjection) json.RawMessage {
+	sourcePath := strings.TrimSpace(projection.SourcePath)
+	mediaType := projection.MediaType
+	projectionHash := projection.ProjectionContentHash
+	if projectionHash == "" {
+		projectionHash = contentHash(projection.ProjectionContent)
+	}
+	originalHash := projection.OriginalContentHash
+	if originalHash == "" && projection.OriginalContentHashState != "unavailable_until_binary_bytes_adapter" {
+		originalHash = projectionHash
+	}
+	metadata := map[string]any{
+		"schema":                  "choir.content.original_file.v0",
+		"source_path":             sourcePath,
+		"media_type":              mediaType,
+		"projection_content_hash": "sha256:" + projectionHash,
+		"import_adapter":          projection.ImportAdapter,
+		"import_adapter_version":  projection.ImportAdapterVersion,
+		"lossiness_score":         projection.LossinessScore,
+		"warnings":                projection.Warnings,
+		"preservation":            "original_file_path_preserved_in_user_filesystem",
+	}
+	if originalHash == "" {
 		metadata["original_content_hash"] = ""
-		metadata["original_content_hash_state"] = "unavailable_until_binary_bytes_adapter"
 		metadata["original_identity_hash"] = "sha256:" + contentHash(sourcePath)
-		metadata["projection_content_hash"] = "sha256:" + hex.EncodeToString(sum[:])
-		metadata["text_content_policy"] = "not_embedded_for_binary_original"
+	} else {
+		metadata["original_content_hash"] = "sha256:" + originalHash
+	}
+	if projection.OriginalContentHashState != "" {
+		metadata["original_content_hash_state"] = projection.OriginalContentHashState
 	} else {
 		metadata["original_content_hash_state"] = "available_from_text_projection"
+	}
+	if !vtextFileTypeCanStoreTextProjection(mediaType) {
+		metadata["text_content_policy"] = "not_embedded_for_binary_original"
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {
@@ -633,9 +1031,10 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 	}
 
 	now := time.Now().UTC()
+	projection := buildVTextFileImportProjection(sourcePath, req.InitialContent)
 	var original *types.ContentItem
 	if !isVTextShortcutPath(sourcePath) {
-		item, err := h.ensureVTextOriginalContentItem(r.Context(), ownerID, sourcePath, title, req.InitialContent, now)
+		item, err := h.ensureVTextOriginalContentItem(r.Context(), ownerID, title, projection, now)
 		if err != nil {
 			log.Printf("vtext api: preserve original content item for %s: %v", sourcePath, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to preserve original file artifact"})
@@ -661,8 +1060,8 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 		OwnerID:     ownerID,
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: ownerID,
-		Content:     req.InitialContent,
-		Metadata:    buildFileOpenVTextMetadata(sourcePath, req.InitialContent, original),
+		Content:     projection.ProjectionContent,
+		Metadata:    buildFileOpenVTextMetadata(projection, original),
 		CreatedAt:   now,
 	}
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {

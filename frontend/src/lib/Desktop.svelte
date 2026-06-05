@@ -1262,19 +1262,23 @@
     }
     const pathSegments = event.detail?.pathSegments || [];
     const fileName = event.detail?.fileName || pathSegments[pathSegments.length - 1] || 'Document';
+    const importToVText = event.detail?.importToVText === true;
     const path = '/api/files/' + pathSegments.map(encodeURIComponent).join('/');
 
     try {
-      const res = await fetchWithRenewal(path, { method: 'GET' });
-      if (!res.ok) {
-        if (res.status === 401) {
-          dispatch('authexpired');
+      let content = '';
+      if (!importToVText) {
+        const res = await fetchWithRenewal(path, { method: 'GET' });
+        if (!res.ok) {
+          if (res.status === 401) {
+            dispatch('authexpired');
+            return;
+          }
+          showToast(`Could not open ${fileName}`);
           return;
         }
-        showToast(`Could not open ${fileName}`);
-        return;
+        content = await res.text();
       }
-      const content = await res.text();
       const doc = await openFileDocument({
         sourcePath: pathSegments.join('/'),
         title: fileName,
@@ -1286,7 +1290,7 @@
         docId: doc.doc_id,
         sourcePath: pathSegments.join('/'),
       });
-      showToast(`Opened ${fileName} in VText`);
+      showToast(importToVText ? `Imported ${fileName} into VText` : `Opened ${fileName} in VText`);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');

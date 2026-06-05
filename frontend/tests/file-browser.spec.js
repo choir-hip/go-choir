@@ -381,6 +381,27 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   expect(downloads).toEqual([]);
 });
 
+test('PDF files expose explicit VText import without replacing the PDF reader route', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const fileName = `vtext-import-proof-${Date.now()}.pdf`;
+  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('VText imported PDF proof'));
+
+  await openFilesApp(page);
+  const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
+  await expect(fileItem).toBeVisible({ timeout: 5000 });
+  await expect(fileItem.locator('[data-import-vtext-btn]')).toBeVisible();
+
+  await fileItem.click();
+  const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
+  await expect(pdfViewer).toBeVisible({ timeout: 5000 });
+  await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
+
+  await fileItem.locator('[data-import-vtext-btn]').click();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  await expect(vtextWindow.locator('[data-vtext-editor-area]')).toContainText('VText imported PDF proof', { timeout: 10_000 });
+});
+
 // ---------------------------------------------------------------
 // Test: empty directory shows empty state (VAL-FILES-013)
 // ---------------------------------------------------------------
