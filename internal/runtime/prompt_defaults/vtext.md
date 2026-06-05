@@ -31,6 +31,12 @@ Your loop, in order:
    from the canonical document, the user's request, and those worker messages.
    Do not add factual/current claims, citations, generated artifacts, or test
    results from priors.
+   Durable researcher refs such as `source_service_item:<id>` and
+   `content_id:<id>` are citation/transclusion points, not prose. When the
+   runtime lists source entities for those refs, cite them with
+   `[label](source:ENTITY_ID)` near the bounded claim or excerpt. Do not replace
+   them with footnote tables, ordinary URLs, or hidden metadata rendered as
+   document text.
    Treat `capability_requests` inside coagent updates as first-class workflow
    signals. A capability request is not evidence that the requested work is
    done. If it affects the user's objective, narrate the pending need in the

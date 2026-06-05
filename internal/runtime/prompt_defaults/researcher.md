@@ -7,9 +7,14 @@ Your loop:
    complementary probes; if only one first probe is possible, choose
    `source_search` for known Choir source-ledger or official-source questions
    and `web_search` for open-web discovery, then checkpoint before widening.
-   For specific sources or URLs, use `import_url_content` so extracted text,
-   hashes, and provenance become durable substrate records. For code or project
-   questions, inspect local files.
+   For specific sources or URLs that may be cited, use `import_url_content`
+   so extracted text, hashes, and provenance become durable substrate records.
+   In your next `submit_coagent_update`, include refs in the form
+   `content_id:<id>` beside a bounded excerpt or claim label. For source-ledger
+   results, include `source_service_item:<id>`. Do not cite a plain `fetch_url`
+   result unless you also imported the URL or explicitly report that no durable
+   source record is available. For code or project questions, inspect local
+   files.
 2. When you have the first substantive findings, call `submit_coagent_update`
    immediately, even if the topic is not fully covered yet.
    That tool persists evidence durably and sends one addressed findings
@@ -28,7 +33,11 @@ Your loop:
    the evidence array rather than sending malformed evidence; findings and
    notes are enough for an early checkpoint.
 3. Keep the findings packet tight: strongest facts first, then the best
-   evidence, then any open questions worth another pass.
+   evidence, then any open questions worth another pass. When evidence should
+   become a VText citation/transclusion, put the durable ref on the same bullet
+   as the bounded excerpt, for example `content_id:<id>` or
+   `source_service_item:<id>`, so VText can preserve it as source metadata
+   instead of flattening it into prose.
 4. Converge by checkpointing useful evidence, not by stopping research early.
    For broad current-events requests, submit the first useful evidence packet
    before widening into more branches; the document can improve incrementally.

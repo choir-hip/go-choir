@@ -5528,6 +5528,102 @@ func TestVTextAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	}
 }
 
+func TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *testing.T) {
+	h, s, rt := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	item := types.ContentItem{
+		ContentID:    "content-cloud-audit",
+		OwnerID:      "user-1",
+		SourceType:   "extracted_url",
+		MediaType:    "text/html",
+		AppHint:      "web",
+		Title:        "Cloud auditability source",
+		SourceURL:    "https://example.com/cloud-audit",
+		CanonicalURL: "https://example.com/cloud-audit",
+		TextContent:  "Cloud providers should preserve auditability and source-backed change records.",
+		ContentHash:  "sha256-cloud-audit",
+		Metadata:     json.RawMessage(`{}`),
+		Provenance:   json.RawMessage(`{"source_url":"https://example.com/cloud-audit"}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.CreateContentItem(ctx, item); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+
+	docID, _ := createDocWithUserRevision(t, h)
+	researchRun := types.RunRecord{
+		RunID:     "run-content-source-research",
+		OwnerID:   "user-1",
+		SandboxID: "sandbox-vtext-test",
+		ChannelID: docID,
+		State:     types.RunCompleted,
+		Metadata: map[string]any{
+			runMetadataAgentRole: AgentProfileResearcher,
+		},
+	}
+	if err := s.CreateRun(ctx, researchRun); err != nil {
+		t.Fatalf("CreateRun researcher: %v", err)
+	}
+	message := &types.ChannelMessage{
+		ChannelID:   docID,
+		From:        "researcher",
+		FromRunID:   researchRun.RunID,
+		FromAgentID: "researcher-content-source",
+		ToAgentID:   "vtext:" + docID,
+		Role:        AgentProfileResearcher,
+		Content: strings.Join([]string{
+			"Coagent update ready.",
+			"Role: researcher.",
+			"Kind: findings.",
+			"",
+			"Findings:",
+			"- The source supports this bounded claim: \"Cloud providers should preserve auditability.\" content_id:content-cloud-audit",
+		}, "\n"),
+		Timestamp: now,
+	}
+	if err := s.AppendChannelMessage(ctx, message, "user-1"); err != nil {
+		t.Fatalf("AppendChannelMessage: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docID+"/revise",
+		map[string]string{"intent": "integrate_worker_findings"})
+	w := httptest.NewRecorder()
+	h.HandleVTextAgentRevision(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("revise status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp vtextAgentRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	run, err := rt.GetRun(ctx, resp.RunID, "user-1")
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	sourceEntities := decodeVTextSourceEntities(run.Metadata["source_entities"])
+	if len(sourceEntities) != 1 {
+		t.Fatalf("source_entities len = %d, want 1: %#v", len(sourceEntities), sourceEntities)
+	}
+	entity := sourceEntities[0]
+	if entity.Kind != "content_item" ||
+		entity.Target.ContentID != item.ContentID ||
+		entity.Target.CanonicalURL != item.CanonicalURL ||
+		entity.Display.OpenSurface != "content" ||
+		entity.Evidence.ResearchState != "represented" ||
+		len(entity.Selectors) != 1 ||
+		entity.Selectors[0].SelectorKind != "text_quote" ||
+		entity.Selectors[0].ContentHash != item.ContentHash {
+		t.Fatalf("content source entity = %#v", entity)
+	}
+	if !strings.Contains(run.Prompt, "Detected VText source entities") ||
+		!strings.Contains(run.Prompt, "content_id=content-cloud-audit") ||
+		!strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
+		t.Fatalf("compiled prompt missing content source entity contract: %q", run.Prompt)
+	}
+}
+
 func TestMarkVTextMediaSourceRefsResearchState(t *testing.T) {
 	metadata := map[string]any{
 		"media_source_research_required": true,

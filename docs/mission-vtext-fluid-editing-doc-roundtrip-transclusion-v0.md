@@ -2998,3 +2998,56 @@ remaining error field:
   successor: Sources panel must show real source entities; embedded citation
   markers must expand into source transclusions; `Open source` must open a
   source window; publishing must include source access for authorized viewers.
+
+2026-06-05 generic content-item source entity repair checkpoint:
+
+status: checkpoint_incomplete
+
+root cause:
+
+- Existing generic source promotion only recognized source-ledger refs such as
+  `source_service_item:<id>` and raw `srcitem_...` ids in researcher channel
+  messages.
+- The owner legal-cloud derivative researcher used open-web discovery and
+  fetches. The writer then rendered a prose source table, but no durable
+  source ids reached `source_entities`, so VText had nothing structural to
+  preserve, render as transclusion anchors, or publish as source graph data.
+- `fetch_url` output by itself is not durable canonical source substrate. Open
+  web citations need a durable `ContentItem` from `import_url_content`, then a
+  researcher delivery that names the source with `content_id:<id>`.
+
+repair landed locally before staging deploy:
+
+- Added a generic VText metadata bridge from addressed researcher worker
+  messages to source entities for durable content item refs:
+  `content_id:<id>`, `content_item:<id>`, and `content item id:<id>`.
+- The bridge looks up the owner-scoped `ContentItem`, creates a `content_item`
+  source entity with URL/canonical URL/content hash, marks it represented, and
+  captures a bounded same-bullet quote selector when the researcher included an
+  excerpt.
+- Existing source-service behavior remains in place and is merged with the new
+  content-item path; no legal-cloud-specific parsing or glossary/table logic was
+  added.
+- Researcher prompt now requires `import_url_content` for citable URLs and a
+  `content_id:<id>` ref beside the bounded excerpt. VText prompt now treats
+  `content_id:<id>` and `source_service_item:<id>` as citation/transclusion
+  points and instructs the writer to use `[label](source:ENTITY_ID)`.
+
+local verification:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestVText(DerivesContentItemSourceEntitiesFromResearcherRefs|PromptDerivesSourceServiceEntitiesFromResearcherUpdates)$'`
+  passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestVTextAgentRevisionRegistersMediaSourceRefs'`
+  passed.
+
+remaining error field:
+
+- This does not retroactively recover the owner derivative's prose-only source
+  table because the original researcher did not create durable `ContentItem`
+  citation refs. The next owner-path proof should request a fresh/source-repair
+  pass that imports cited URLs, emits `content_id:<id>` refs, then verifies that
+  Sources shows nonzero entities, inline `source:` anchors expand, source
+  windows open, and publishing exposes source snapshots/transclusions to
+  authorized published readers.

@@ -333,6 +333,36 @@ func TestVTextPromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing
 	}
 }
 
+func TestVTextDerivesContentItemSourceEntitiesFromResearcherRefs(t *testing.T) {
+	content := strings.Join([]string{
+		"Findings:",
+		"- The official source supports the bounded claim: \"Cloud providers should preserve auditability.\" content_id:content-cloud-audit",
+		"- Duplicate JSON ref should not add a second entity: \"content_id\":\"content-cloud-audit\"",
+	}, "\n")
+	ids := contentItemIDsFromWorkerMessage(content)
+	if len(ids) != 1 || ids[0] != "content-cloud-audit" {
+		t.Fatalf("content item ids = %#v", ids)
+	}
+
+	entity := contentItemRefToSourceEntity(types.ContentItem{
+		ContentID:    "content-cloud-audit",
+		Title:        "Cloud auditability source",
+		SourceURL:    "https://example.com/cloud-audit",
+		CanonicalURL: "https://example.com/cloud-audit",
+		ContentHash:  "sha256-cloud-audit",
+	}, content)
+	if entity.Kind != "content_item" ||
+		entity.Target.TargetKind != "content_item" ||
+		entity.Target.ContentID != "content-cloud-audit" ||
+		entity.Display.OpenSurface != "content" ||
+		entity.Evidence.ResearchState != "represented" ||
+		entity.Selectors[0].SelectorKind != "text_quote" ||
+		entity.Selectors[0].ContentHash != "sha256-cloud-audit" ||
+		!strings.Contains(entity.Selectors[0].TextQuote, "Cloud providers should preserve auditability") {
+		t.Fatalf("derived content item source entity = %#v", entity)
+	}
+}
+
 func TestVTextPromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-long-rubric-super",
