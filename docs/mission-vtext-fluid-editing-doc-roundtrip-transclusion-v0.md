@@ -2343,3 +2343,66 @@ belief-state update:
   simpler once passkey access is restored: the verifier can confirm
   `focused_user_edit_diff`, `apply_edits`, prompt chars, edit count, delta
   chars, and latency from product UI instead of raw JSON extraction.
+
+2026-06-05 deployed diagnosis edit-evidence checkpoint:
+
+status: checkpoint_incomplete
+
+landed platform change:
+
+- Documentation-first checkpoint `e4a5fe61` recorded the diagnosis
+  edit-evidence visibility gap before code changed.
+- Code commit `4255dc7efe5407b67bb78075cf477c133958d2f3` is on
+  `origin/main`. It adds a compact edit-evidence strip to the VText
+  `Sources`/diagnosis panel, deriving fields from revision metadata:
+  `vtext_context_mode`, `vtext_edit_operation`, `vtext_run_prompt_chars`,
+  `vtext_edit_count`, `vtext_edit_delta_chars`, and
+  `vtext_run_latency_ms`.
+- The evidence strip is outside the editable document body and does not render
+  raw prompt text. It is generic for any VText revision carrying the existing
+  edit metadata; it does not add classifiers, workflow scaffolding, or
+  document-specific handling.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- GitHub Actions CI run `27020641535` completed successfully for
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`, including frontend build, Go
+  vet/build, non-runtime Go tests, all runtime shards, integration smoke, and
+  `Deploy to Staging (Node B)`.
+- FlakeHub run `27020641521` completed successfully for the same head.
+- Staging `/health` reported proxy and sandbox deployed commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`, deployed at
+  `2026-06-05T14:26:47Z`.
+- After deploy, the focused staging regression passed:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "VText Sources panel shows
+  structured edit evidence" --project=chromium`. This proves a disposable
+  authenticated product VText can show `focused_user_edit_diff`,
+  `apply_edits`, prompt chars, edit count, delta chars, and latency in the
+  diagnosis panel while keeping raw prompt text out of the panel and rendered
+  document body.
+- The source-repair regression was also rerun and passed:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium`.
+
+deployed owner-account proof limitation:
+
+- Computer Use remains available. Comet still opens the private VText deep
+  link for owner doc `f93cea62-f833-4dae-b414-8e44783d8cbe` to the correct
+  passkey overlay, but the passkey ceremony for `yusefnathanson@me.com` remains
+  cancelled/not completed in this session.
+- Therefore the product-visible edit-evidence surface is proven on deployed
+  staging with a disposable authenticated product document, but not yet on the
+  actual owner proposal.
+
+remaining error field:
+
+- Still unproven on the actual owner document: bounded appendix-table edit
+  survival, source-gap repair through the deployed `Sources` panel, citation
+  marker expansion into transclusions, source-window opening from the owner
+  head, owner-head focused prompt-size/`apply_edits` metadata in the new
+  evidence strip, and title migration of `choir_private_legal_cloud_proposal.md`
+  to canonical `.vtext` on the next owner VText write.
