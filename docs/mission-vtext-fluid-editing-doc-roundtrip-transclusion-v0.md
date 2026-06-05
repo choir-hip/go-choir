@@ -3133,3 +3133,50 @@ remaining error field:
   to become visible "missing source" artifacts if the user includes them
   literally. This is not a source-entity bridge failure, but it is product-text
   friction for future source-repair prompts.
+
+2026-06-05 published proposal UX/content fidelity checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before product-code fix:
+
+- Owner screenshots of the published fallback proposal show the source list
+  rendered as three full-width source cards before the title. This is not a
+  scalable reading surface: real client-facing proposals can have tens or
+  hundreds of sources, and the source graph should improve trust without
+  displacing the article.
+- The screenshots show a visible `missing source` pill in the objective. This
+  came from literal prompt/example syntax, not from an actual claim needing a
+  source. The product should not turn placeholder syntax into reader-facing
+  citation chrome. If a claim needs evidence, research should confirm or refute
+  it and attach a real source; if no source is needed, no citation marker should
+  appear.
+- Expanded source cards currently consume full-column vertical space and leave
+  the neighboring text flow underused. Pretext research points to a better
+  long-term shape: use `layoutNextLineRange`/`materializeLineRange` for
+  variable-width line routing around inline source cards, and the
+  `rich-inline` helper for atomic source chips and mixed inline fragments. The
+  near-term CSS/layout repair should make cards compact and let prose wrap
+  beside them where the browser can already do so; the durable follow-up is a
+  Pretext-driven rich inline flow for source-card occlusion.
+- The fallback source-backed proposal is far shorter than the earlier long
+  `choir_private_legal_cloud_proposal.md`. For client review, the canonical
+  `.vtext` proposal must be content-equivalent to the earlier Markdown version,
+  with source/citation affordances layered onto the full proposal rather than a
+  new abbreviated article that only demonstrates the source feature.
+
+belief-state update:
+
+- The deployed content-item source path is structurally promising, but the
+  published fallback is not yet a client-ready artifact. The next fix should
+  reduce source chrome prominence, suppress placeholder source artifacts, and
+  preserve article continuity before attempting another owner/client proposal
+  proof.
+
+remaining error field:
+
+- Repair the published/private VText reader so source entities do not bunch at
+  the top by default, placeholder `source:ENTITY_ID` examples do not render as
+  citation badges, expanded source cards use available inline space better, and
+  the next legal-cloud `.vtext` proof derives from the full original proposal
+  rather than a short demo draft.
