@@ -1206,6 +1206,40 @@ are sufficient for fast high-quality structured edits on the legal-cloud
 proposal, or whether a stronger block/section selector operation is needed to
 avoid whole-document edits while keeping semantic quality.
 
+2026-06-05 owner-account continuation probe:
+
+- With owner authorization, the active `yusefnathanson@me.com` primary user
+  computer on staging was identified as
+  `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`, serving sandbox build
+  `b9e485d4cf2a26fee34528a3879a29226e00b0aa`.
+- The owner-authenticated sandbox VText API lists
+  `choir_private_legal_cloud_proposal.md` as document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, current version 76 with 77
+  revisions. The version cap bug is no longer present on this document.
+- The recent owner revision history confirms the earlier failure mode: many
+  user-authored revisions were created within seconds during manual editing,
+  old appagent revisions used `replace_all`, and newer appagent revisions use
+  `apply_edits`.
+- The latency/context invariant is still broken. Recent real proposal VText
+  runs had prompt lengths around 61k-76k characters, input token counts around
+  50k-136k, output token counts around 5k-18k, and wall-clock run durations
+  from roughly 43 seconds to 112 seconds. The newest revision records
+  `vtext_edit_operation: apply_edits`, but still records
+  `vtext_run_prompt_chars: 76446`.
+- Root cause evidence in the deployed source: `buildAgentRevisionRequest`
+  states that the default context is “current head plus the exact user edit
+  diff,” but the same builder always appends the complete current canonical
+  document content and additional guidance/context. This makes the product
+  behavior materially different from the mission contract: the model is still
+  asked to process the long document every ordinary revise turn instead of
+  receiving a small instruction-bearing diff plus retrieval tools.
+
+new problem to fix after this documentation checkpoint: make ordinary VText
+revision prompts actually honor the small-context contract. The VText agent
+must receive the user-authored diff and only the bounded current-head regions
+needed to apply it by default; full current-document context should be reserved
+for explicit whole-document transformations or retrieved on demand.
+
 next executable probe: use authenticated computer-use on staging with access to
 the owner's actual legal-cloud proposal snapshots to migrate the lineage
 through the deployed product path, attach known source entities where evidence
