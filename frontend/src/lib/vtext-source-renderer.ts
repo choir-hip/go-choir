@@ -9,7 +9,14 @@ export function escapeHTML(value: unknown): string {
 }
 
 export function sourceEntityID(entity: any): string {
-  return String(entity?.entity_id || entity?.source_entity_id || '').trim();
+  const record = sourceEntityRecord(entity);
+  return String(
+    entity?.entity_id ||
+    entity?.source_entity_id ||
+    record?.entity_id ||
+    record?.source_entity_id ||
+    ''
+  ).trim();
 }
 
 export function findSourceEntity(sourceEntities: any[] = [], entityID = ''): any | null {
@@ -18,12 +25,22 @@ export function findSourceEntity(sourceEntities: any[] = [], entityID = ''): any
   return sourceEntities.find((entity) => sourceEntityID(entity) === normalized) || null;
 }
 
+export function sourceEntityRecord(entity: any): any {
+  if (entity?.entity && typeof entity.entity === 'object') return entity.entity;
+  return entity || {};
+}
+
 export function sourceEntityTransclusion(entity: any): any | null {
-  return entity?.transclusion || null;
+  const record = sourceEntityRecord(entity);
+  return entity?.transclusion || record?.transclusion || null;
 }
 
 export function selectorTextQuote(entity: any): string {
-  const selectors = Array.isArray(entity?.selectors) ? entity.selectors : [];
+  const record = sourceEntityRecord(entity);
+  const selectors = [
+    ...(Array.isArray(entity?.selectors) ? entity.selectors : []),
+    ...(Array.isArray(record?.selectors) ? record.selectors : []),
+  ];
   for (const selector of selectors) {
     const text = String(selector?.text_quote || '').trim();
     if (text) return text;
@@ -36,7 +53,14 @@ export function sourceEntityExcerptText(entity: any): string {
 }
 
 export function sourceEntityReaderSnapshotText(entity: any): string {
-  return String(entity?.reader_snapshot?.text_content || entity?.published_source?.text_content || '').trim();
+  const record = sourceEntityRecord(entity);
+  return String(
+    entity?.reader_snapshot?.text_content ||
+    entity?.published_source?.text_content ||
+    record?.reader_snapshot?.text_content ||
+    record?.published_source?.text_content ||
+    ''
+  ).trim();
 }
 
 export function sourceEntitySnapshotText(entity: any): string {
@@ -44,7 +68,16 @@ export function sourceEntitySnapshotText(entity: any): string {
 }
 
 export function sourceEntityDisplayPolicy(entity: any): string {
-  const raw = String(entity?.display_policy || entity?.display?.display_policy || entity?.display?.inline_mode || '').trim();
+  const record = sourceEntityRecord(entity);
+  const raw = String(
+    entity?.display_policy ||
+    entity?.display?.display_policy ||
+    entity?.display?.inline_mode ||
+    record?.display_policy ||
+    record?.display?.display_policy ||
+    record?.display?.inline_mode ||
+    ''
+  ).trim();
   if (raw === 'embedded_excerpt' || raw === 'embedded_preview' || raw === 'expanded' || raw === 'collapsed_citation') return raw;
   if (sourceEntityExcerptText(entity)) return 'embedded_excerpt';
   return 'collapsed_citation';
@@ -56,25 +89,45 @@ export function sourceEntityKindLabel(kind: unknown): string {
 }
 
 export function sourceEntityTitle(entity: any): string {
-  return entity?.label || sourceEntityKindLabel(entity?.kind);
+  const record = sourceEntityRecord(entity);
+  return entity?.label || record?.label || sourceEntityKindLabel(entity?.kind || record?.kind);
 }
 
 export function sourceEntityTargetURL(entity: any): string {
-  return entity?.target?.canonical_url || entity?.target?.url || entity?.canonical_url || entity?.url || '';
+  const record = sourceEntityRecord(entity);
+  return (
+    entity?.target?.canonical_url ||
+    entity?.target?.url ||
+    entity?.canonical_url ||
+    entity?.url ||
+    record?.target?.canonical_url ||
+    record?.target?.url ||
+    record?.canonical_url ||
+    record?.url ||
+    ''
+  );
 }
 
 export function sourceEntityTargetKind(entity: any): string {
-  return String(entity?.target?.target_kind || entity?.target_kind || '').trim();
+  const record = sourceEntityRecord(entity);
+  return String(
+    entity?.target?.target_kind ||
+    entity?.target_kind ||
+    record?.target?.target_kind ||
+    record?.target_kind ||
+    ''
+  ).trim();
 }
 
 export function sourceEntityOpenAppID(entity: any): string {
+  const record = sourceEntityRecord(entity);
   const targetKind = sourceEntityTargetKind(entity);
-  const requested = String(entity?.display?.open_surface || '').trim();
+  const requested = String(entity?.display?.open_surface || record?.display?.open_surface || '').trim();
   if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') return 'vtext';
   if (requested === 'source' && sourceEntityTargetURL(entity)) return 'browser';
   if (requested === 'source' || requested === 'content') return 'content';
   if (requested) return requested;
-  if (entity?.kind === 'youtube_video') return 'video';
+  if ((entity?.kind || record?.kind) === 'youtube_video') return 'video';
   if (targetKind === 'content_item' || targetKind === 'source_service_item') return 'content';
   if (sourceEntityTargetURL(entity)) return 'browser';
   return 'content';
