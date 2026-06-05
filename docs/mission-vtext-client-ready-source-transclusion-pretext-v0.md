@@ -671,6 +671,85 @@ remaining error field:
   and must be tested against the already repaired `.vtext` owner head, not
   against a short sibling demo.
 
+## 2026-06-05 Owner Source Graph Seed: Canonical VText v83
+
+status: checkpoint_incomplete
+
+Comet owner-account mutation:
+
+- Computer Use was available and Comet remained the proof surface.
+- The authenticated owner session first renewed `/auth/session`, then used the
+  public VText document and revision APIs from the same `choir.news` page.
+- Base head:
+  `9087c815-395f-427b-a8a5-0593891831fd`, version `82`,
+  title `choir_private_legal_cloud_proposal.vtext`.
+- The mutation made bounded exact-string replacements in the full owner
+  proposal and posted a new user revision to
+  `/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/revisions`.
+- POST result shown in Comet:
+  - HTTP `201`;
+  - revision `537cba5f-a09e-4708-9c7a-2e9c3e7fa433`;
+  - version `83`;
+  - author kind `user`;
+  - owner `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+
+source graph attached:
+
+- `source_entities: 7`;
+- inline marker count: `7`;
+- missing-source prose count: `0`;
+- content length: `38,398` characters;
+- table line count after mutation: `49`;
+- metadata keys:
+  `canonical_vtext_source_path`, `proof`, `source`, `source_entities`,
+  `source_graph_seed`.
+
+seeded source entities:
+
+- `src_aba_formal_op_512`: ABA Formal Opinion 512 PDF for generative AI
+  professional-responsibility duties.
+- `src_aba_rule_16`: ABA Model Rule 1.6 confidentiality rule.
+- `src_hetzner_datacenters`: Hetzner data center infrastructure page.
+- `src_ovh_private_cloud`: OVHcloud hosted private cloud service offering.
+- `src_nixos_rollback`: NixOS reproducible configuration and rollback
+  documentation.
+- `src_gdpr_article_32`: GDPR Article 32 security-of-processing reference.
+- `src_qdrant_search`: Qdrant vector similarity search documentation.
+
+what this proves:
+
+- The full owner proposal, not the short sibling demo, now has canonical VText
+  source metadata and inline source transclusion points.
+- The `.md` legacy identity did not recur: the owner head remained
+  `choir_private_legal_cloud_proposal.vtext` after the source write.
+- The appendix/glossary table was not collapsed by this bounded source edit;
+  the owner head still exposes the same `49` Markdown table lines after the
+  source graph seed.
+
+limitations recorded:
+
+- This seed is intentionally partial. It establishes the product data path for
+  source-backed VText but does not complete every factual citation in the client
+  proposal.
+- The source entities are URL-backed sources, not imported source snapshots yet.
+  The publication contract still needs proof or repair so published readers can
+  inspect all published source records and source windows without relying on the
+  author's private session.
+- The visible editor/published reader still need owner-account proof for inline
+  expansion and open-source behavior on this real v83 owner document.
+- Pretext-backed source-card wrapping remains unimplemented; the current card
+  flow is the earlier CSS path.
+
+remaining error field:
+
+- Publish or otherwise open the owner v83 document through the product UI and
+  prove that inline URL-backed source markers expand and open a source surface.
+- If URL-backed source entities only open an external browser without a Choir
+  source/transclusion window, document that as the next problem before code and
+  repair publication/source-window materialization generically.
+- Continue citation research beyond this seed, adding sources only where they
+  improve the proposal and leaving non-source-needed prose uncited.
+
 ## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
 
 status: checkpoint_incomplete
