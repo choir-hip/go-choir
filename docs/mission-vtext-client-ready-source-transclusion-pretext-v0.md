@@ -444,3 +444,58 @@ rollback refs:
 - `origin/main` before this draft: `06d2be48`.
 - Behavior rollback for source metadata bridge, if needed:
   `61a6498f192cb0eba9140024489f7e4f1d799927^`.
+
+## 2026-06-05 Owner Product-State Probe
+
+status: checkpoint_incomplete
+
+primary QA capability:
+
+- Computer Use is available, and Comet is running as `ai.perplexity.comet`.
+- Comet is authenticated on `choir.news`; shell `curl` to the same diagnosis
+  endpoint returned `401 authentication required`, so Comet is the authoritative
+  product-path observation for this checkpoint.
+
+Comet-authenticated evidence:
+
+- URL observed:
+  `https://choir.news/api/vtext/documents/f93cea62-f833-4dae-b414-8e44783d8cbe/diagnosis?limit=160`.
+- The diagnosis payload identifies owner
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`, doc
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, `store_path`
+  `/mnt/persistent/state`, and `vtext_path` `/mnt/persistent/state.vtext`.
+- The document summary still reports title
+  `choir_private_legal_cloud_proposal.md`, current revision
+  `0eb2332e-145c-44db-8b3c-96ce6a828c84`, and
+  `current_version_number: 0`.
+- The same authenticated diagnosis payload's first revision row for revision
+  `0eb2332e-145c-44db-8b3c-96ce6a828c84` reports
+  `version_number: 81`, `author_kind: "appagent"`, and the long proposal body.
+- The visible owner VText window behind the diagnosis tab also shows
+  `choir_private_legal_cloud_proposal.md` at `v81`.
+
+new problem documented before product-code fix:
+
+- The owner document is still presented as the legacy Markdown title/source even
+  though the working surface is VText and the latest visible revision is v81.
+  This confirms that `.md` acting as VText is not merely a naming concern; the
+  product state has not completed the canonical `.vtext` migration required by
+  this mission.
+- The authenticated document summary reports `current_version_number: 0` while
+  the current revision row and visible VText UI report v81 for the same current
+  revision id. That makes the document summary an unreliable migration/proof
+  signal for this owner document and may explain earlier uncertainty around
+  whether the `.md` and `.vtext` paths behave identically.
+- The next code change should first root-cause why document summary version
+  metadata can disagree with current revision metadata, and should treat the
+  owner `.md` title/source path as compatibility debt to migrate rather than as
+  proof of canonical VText identity.
+
+remaining error field:
+
+- Need a generic repair that makes imported Markdown documents advance to
+  canonical `.vtext` identity and exposes consistent document-summary version
+  state, without hardcoding the legal-cloud document.
+- Need renewed owner proof after the repair: document title/source identity,
+  current revision/version consistency, long-form content preservation, table
+  preservation, source graph, publication source access, and Markdown export.
