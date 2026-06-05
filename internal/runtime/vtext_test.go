@@ -567,6 +567,49 @@ func TestVTextAPICreateRevisionUserEdit(t *testing.T) {
 	}
 }
 
+func TestVTextAPICreateRevisionCanonicalizesAliasedImportedDocumentTitle(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	ctx := context.Background()
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/documents",
+		map[string]string{"title": "legacy-import.md"})
+	w := httptest.NewRecorder()
+	h.HandleVTextCreateDocument(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create document status = %d, body: %s", w.Code, w.Body.String())
+	}
+	var docResp vtextCreateDocResponse
+	if err := json.NewDecoder(w.Body).Decode(&docResp); err != nil {
+		t.Fatalf("decode document response: %v", err)
+	}
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "imports/legacy-import.md", docResp.DocID, time.Now().UTC()); err != nil {
+		t.Fatalf("UpsertDocumentAlias: %v", err)
+	}
+
+	revReq := vtextCreateRevisionRequest{Content: "Imported projection first durable edit"}
+	req = vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+docResp.DocID+"/revisions", revReq)
+	w = httptest.NewRecorder()
+	h.HandleVTextRevisions(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create revision status = %d, body: %s", w.Code, w.Body.String())
+	}
+
+	doc, err := s.GetDocument(ctx, docResp.DocID, "user-1")
+	if err != nil {
+		t.Fatalf("GetDocument: %v", err)
+	}
+	if doc.Title != "legacy-import.vtext" {
+		t.Fatalf("document title = %q, want legacy-import.vtext", doc.Title)
+	}
+	docID, err := s.GetDocumentAlias(ctx, "user-1", "imports/legacy-import.md")
+	if err != nil {
+		t.Fatalf("GetDocumentAlias original source: %v", err)
+	}
+	if docID != docResp.DocID {
+		t.Fatalf("original source alias doc_id = %q, want %q", docID, docResp.DocID)
+	}
+}
+
 func TestVTextAPIListRevisionsReturnsDurableVersionNumbersPastFifty(t *testing.T) {
 	h, _ := vtextAPISetup(t)
 

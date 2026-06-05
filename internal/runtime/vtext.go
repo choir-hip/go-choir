@@ -417,6 +417,26 @@ func canonicalVTextImportTitle(sourcePath, requestedTitle string) string {
 	return stem + ".vtext"
 }
 
+func (h *APIHandler) canonicalizeAliasedVTextDocumentTitle(ctx context.Context, ownerID string, doc *types.Document, updatedAt time.Time) error {
+	if doc == nil || strings.EqualFold(pathpkg.Ext(strings.TrimSpace(doc.Title)), ".vtext") {
+		return nil
+	}
+	sourcePath, err := h.rt.Store().GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	nextTitle := canonicalVTextImportTitle(sourcePath, doc.Title)
+	if strings.TrimSpace(nextTitle) == "" || nextTitle == doc.Title {
+		return nil
+	}
+	doc.Title = nextTitle
+	doc.UpdatedAt = updatedAt
+	return h.rt.Store().UpdateDocument(ctx, *doc)
+}
+
 func slugifyVTextManifestStem(raw string) string {
 	raw = strings.TrimSpace(strings.ToLower(raw))
 	if raw == "" {
@@ -2034,6 +2054,11 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 	}
 
 	now := time.Now().UTC()
+	if err := h.canonicalizeAliasedVTextDocumentTitle(r.Context(), ownerID, &doc, now); err != nil {
+		log.Printf("vtext api: canonicalize aliased document title: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
+		return
+	}
 
 	// If parent_revision_id is not specified, use the document's current head.
 	parentID := req.ParentRevisionID
