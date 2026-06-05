@@ -2498,3 +2498,37 @@ remaining error field:
   deployed `Sources` panel, citation marker expansion into transclusions,
   source-window opening from the owner head, and owner-head focused prompt-size
   / `apply_edits` metadata in the visible edit-evidence strip.
+
+2026-06-05 source panel open-source proof gap checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use is available in this turn. Comet still reaches the private
+  action passkey overlay for owner document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, and the passkey ceremony for
+  `yusefnathanson@me.com` remains cancelled/not completed. No private owner
+  mutation is authorized from this session.
+- The authenticated Comet diagnosis tab for the same owner document remains
+  readable as raw JSON, while unauthenticated shell access to the same
+  diagnosis endpoint returns `401 authentication required`. This is
+  owner-session evidence, not public access, and it remains too raw for
+  owner-safe product proof.
+- Existing deployed source-repair proof exercises the `Sources` panel repair
+  control, then verifies that the repaired inline citation expands into a
+  transclusion and that the citation's `Open source` control opens a source
+  window.
+- The owner repair workflow also needs the `Sources` panel itself to be a
+  reliable source browser after repair: once a repaired entity appears in the
+  panel, its source-entity chip should open the owning source window. That
+  panel-chip open path is generic code, but current focused regression evidence
+  does not prove it on the repaired-source path.
+
+belief-state update:
+
+- A focused fixture regression that applies a source-gap repair through the
+  product `Sources` panel, observes the repaired entity in that same panel,
+  clicks the panel source chip, and verifies the source window will strengthen
+  the next owner-account proof without touching the private owner proposal or
+  adding document-specific behavior.
