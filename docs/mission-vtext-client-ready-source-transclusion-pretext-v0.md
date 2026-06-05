@@ -1,6 +1,6 @@
 # MissionGradient v0: Client-Ready VText Source Transclusion And Proposal Cleanup
 
-Status: draft for owner review
+Status: checkpoint_incomplete
 Date: 2026-06-05
 
 Requirements contracts:
@@ -10,6 +10,100 @@ Requirements contracts:
 
 Related mission:
 [mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md](mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md)
+
+## Run Checkpoint & Resumption State
+
+status: checkpoint_incomplete
+
+last checkpoint:
+
+- Docs checkpoint `bf0edd7a` records deployed proof for simplification commit
+  `85ae3990d4736388111e297c38f00288aca35617`.
+
+current artifact state:
+
+- The legal-cloud proposal now exists on the deployed public `.vtext` route as
+  the full client proposal, not the short source-demo draft.
+- Imported Markdown/source files are treated as migration/source artifacts; the
+  canonical editable object is VText, and Markdown is an export projection.
+- Seven public source entities and seven citation transclusions resolve on the
+  published route, and opened sources render as reader-mode Markdown artifacts.
+
+what shipped:
+
+- Source markers expand in article flow through the Pretext-routed journal note
+  path.
+- Source windows prefer cleaned reader Markdown with provenance and diagnostics
+  demoted behind disclosure.
+- Legacy noncanonical VText editor file write-through was removed.
+
+what was proven:
+
+- CI run `27044299886` and FlakeHub run `27044299892` succeeded for
+  `85ae3990d4736388111e297c38f00288aca35617`.
+- Node B `/health` reported proxy and sandbox deployed at that SHA on
+  `2026-06-05T22:54:47Z`.
+- Comet staging proof opened the deployed legal-cloud route, expanded an inline
+  source marker, and kept the opened source window in reader-mode source
+  presentation.
+- Public Markdown export remained 38,398 bytes with compact `source:` markers,
+  no `missing source` prose, and `private_material_omitted: true`.
+
+unproven or partial claims:
+
+- The final magazine/academic-journal visual design is not complete.
+- The source acquisition and cleanup path is still too manual; arbitrary iframe
+  Web Lens fallback remains weaker than cleaned Markdown reader artifacts.
+- Raw source repair JSON remains too visible in the owner/editor surface.
+
+belief-state changes:
+
+- Pretext must be treated as the layout/wrapping mechanism for article-side
+  evidence notes: columns or routed line ranges of proposal prose should flow
+  alongside a minimal source note. It is not just a way to style chips, cards,
+  or pill-shaped citation widgets.
+- Opened source windows are separate source artifact readers. They should show
+  content first, with source entity metadata available but visually secondary.
+
+remaining error field:
+
+- Reduce card/pill/rounded-rectangle layering in the inline source note.
+- Replace operator-grade source repair controls with typed claim/source review.
+- Improve Obscura/web-source cleanup into Markdown reader artifacts and keep
+  iframe/Web Lens as fallback.
+- Continue simplification in `VTextEditor.svelte`, source artifact state, and
+  `internal/runtime/vtext.go` without changing the source graph contract.
+
+highest-impact remaining uncertainty:
+
+- Whether the next UI pass can make source expansion feel like a journal
+  footnote/marginal note that preserves reading flow while still opening the
+  full source artifact and preserving all publication policy boundaries.
+
+next executable probe:
+
+- Make a documented design/engineering pass over the source-note surface:
+  inspect current Pretext flow code, identify removable chrome and dead helper
+  paths, then implement the smallest generic source-note component split that
+  improves magazine/journal wrapping without changing citation/source data
+  semantics.
+
+suggested resume goal string:
+
+```text
+/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint bf0edd7a. Treat Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes, not as card styling. Before code, document any newly found source-UI/source-acquisition problem. Then simplify the source-note/editor code while preserving canonical VText, source transclusions, reader-mode source windows, Markdown export, CI, Node B deploy, Comet staging proof, and publication source policy.
+```
+
+evidence artifact refs:
+
+- [vtext-mission-hard-review-2026-06-05.md](vtext-mission-hard-review-2026-06-05.md)
+- `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/VText Mission Hard Review - 2026-06-05.pdf`
+
+rollback refs:
+
+- Last deployed behavior-changing commit:
+  `85ae3990d4736388111e297c38f00288aca35617`.
+- Last docs checkpoint: `bf0edd7a`.
 
 ## Goal String
 
