@@ -1010,6 +1010,48 @@ what was proven:
   This proves a published source-service source entity resolves to an
   expandable transclusion, keeps canonical export behavior, and no longer
   exposes the raw source-service item id as user-visible prose.
+- `91dfaeb1` documented a debuggability gap found during live staging proof:
+  `/api/vtext/documents/{id}/diagnosis` could omit the VText run returned by
+  the same document's `/revise` call because diagnosis listed recent owner
+  runs, not document-linked runs.
+- `dad21f1b` added document-channel runs to VText diagnosis and introduced an
+  opt-in live staging proof:
+  `frontend/tests/vtext-long-doc-fluid-editing-live.spec.js`.
+- Staging QA on `dad21f1b` proved the live long-document edit path content
+  behavior but showed that some live revise runs are linked through
+  `metadata.doc_id` rather than the `channel_id` column. `5b7dbbc2` added the
+  metadata-linked fallback and a runtime regression where the document run is
+  outside the owner-level limit and not indexed by the document channel.
+- Local focused runtime proof passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextDiagnosisIncludesDocumentChannelRuns' -count=1`.
+- GitHub CI run `27000115994` passed for
+  `5b7dbbc256a8cb8310dc61da2186f8aefab33129`; runtime shards, vet/build,
+  integration smoke, non-runtime tests, and Node B staging deploy were green.
+- FlakeHub publish run `27000115981` passed for the same commit.
+- Staging health proved proxy and sandbox deployed commit
+  `5b7dbbc256a8cb8310dc61da2186f8aefab33129`, deployed at
+  `2026-06-05T06:50:35Z`.
+- Deployed browser-authenticated live long-document VText proof passed:
+  `GO_CHOIR_RUN_LIVE_VTEXT_EDIT=1 PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-long-doc-fluid-editing-live.spec.js --workers=1 --reporter=line`.
+  This creates a legal-cloud-class long VText, creates a direct user-authored
+  edit diff with an instruction line in the document body, triggers `/revise`
+  with no meta syntax, waits for the appagent revision, and verifies:
+  - the final revision keeps the intended recommendation;
+  - the instruction line is consumed and removed;
+  - the stale `Draft needs tightening` text is removed;
+  - the appendix Markdown table is preserved;
+  - revision metadata records `vtext_context_mode:
+    current_head_plus_user_edit_diff`;
+  - revision metadata records `vtext_edit_operation: apply_edits`;
+  - revision metadata records prompt size under 40k chars (`18731` chars in
+    the diagnostic run) and latency metadata;
+  - diagnosis with `limit=3` includes the returned `loop_id`.
+- Deployed browser-authenticated DOCX/PDF roundtrip QA passed on the same
+  deployed build:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/file-browser.spec.js --grep "DOCX files import|DOCX import can revise|PDF import can revise" --workers=1 --reporter=line`.
+- Deployed browser-authenticated citation/source transclusion QA passed on the
+  same deployed build:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js tests/vtext-source-service-publication.spec.js --workers=1 --reporter=line`.
 
 unproven or partial claims:
 
@@ -1017,8 +1059,9 @@ unproven or partial claims:
   expose Mac computer-use control. The deployed browser proof used
   `agent-browser` as the backup path.
 - The deployed staging proof did not authenticate into
-  `yusefnathanson@me.com` and did not run a live long-document revise on the
-  legal-cloud proposal after deployment.
+  `yusefnathanson@me.com` and did not run on the owner's existing
+  `choir_private_legal_cloud_proposal.md`. It did run a deployed live
+  long-document revise on a legal-cloud-class VText fixture.
 - DOCX and PDF buttons are visible in the publish download menu, and backend
   DOCX/PDF export and import adapters now work for the service paths. This
   checkpoint still does not prove owner-authenticated VText publish/download UX
@@ -1043,9 +1086,11 @@ unproven or partial claims:
   publication source-service transclusions, hidden raw source IDs, and
   open-owning-source behavior. Citation repair/source-entity creation over the
   actual legal-cloud proposal lineage remains incomplete.
-- Latency improvement is architecturally enabled by smaller prompt context and
-  recorded prompt size, but a deployed before/after timing proof on a real long
-  VText revision is still required.
+- Latency improvement now has deployed positive evidence on a live
+  legal-cloud-class long VText: the appagent revision used `apply_edits`,
+  carried `vtext_context_mode: current_head_plus_user_edit_diff`, and recorded
+  prompt size under 40k chars. A before/after timing proof on the owner's
+  existing long proposal is still required.
 
 highest-impact remaining uncertainty: whether the existing VText edit tools
 are sufficient for fast high-quality structured edits on the legal-cloud
