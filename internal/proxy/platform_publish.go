@@ -193,18 +193,26 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 		if !ok || !sourceEntityAllowsPublishedSnapshot(entity) || mapValue(entity["reader_snapshot"]) != nil {
 			continue
 		}
-		item, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
+		item, state, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
+			if state != "" {
+				entity["reader_snapshot_status"] = map[string]any{"state": state}
+				changed = true
+			}
 			continue
 		}
 		if !contentItemAllowsPublishedSnapshot(item) {
+			entity["reader_snapshot_status"] = map[string]any{"state": "not_publication_safe"}
+			changed = true
 			continue
 		}
 		text := strings.TrimSpace(item.TextContent)
 		if text == "" {
+			entity["reader_snapshot_status"] = map[string]any{"state": "bounded_excerpt_only", "reason": "source_import_empty"}
+			changed = true
 			continue
 		}
 		snapshotText, truncated := truncateRunes(text, maxPublishedSourceSnapshotRunes)
@@ -222,6 +230,11 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 			"truncated":         truncated,
 			"access_scope":      "publication_reader",
 		}
+		entity["reader_snapshot_status"] = map[string]any{
+			"state":           "reader_snapshot_ready",
+			"text_char_count": len([]rune(text)),
+			"truncated":       truncated,
+		}
 		changed = true
 	}
 	if !changed {
@@ -234,30 +247,30 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 	return out, nil
 }
 
-func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, bool, error) {
+func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, string, bool, error) {
 	if contentID := sourceEntityContentID(entity); contentID != "" {
 		var item sandboxContentItem
 		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
-			return sandboxContentItem{}, false, fmt.Errorf("load content item %s: %w", contentID, err)
+			return sandboxContentItem{}, "", false, fmt.Errorf("load content item %s: %w", contentID, err)
 		}
 		if item.OwnerID != userID || item.ContentID != contentID {
-			return sandboxContentItem{}, false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
+			return sandboxContentItem{}, "", false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
 		}
-		return item, true, nil
+		return item, "", true, nil
 	}
 	sourceURL := sourceEntityTargetURL(entity)
 	if sourceURL == "" {
-		return sandboxContentItem{}, false, nil
+		return sandboxContentItem{}, "source_target_missing", false, nil
 	}
-	item, err := h.importSandboxURLContent(r, sandboxURL, userID, sourceURL)
+	item, err := h.importSandboxURLContent(r, sandboxURL, userID, sourceURL, sourceEntityImportQuery(entity))
 	if err != nil {
 		log.Printf("proxy: platform publish source URL snapshot import failed for %s: %v", sourceURL, err)
-		return sandboxContentItem{}, false, nil
+		return sandboxContentItem{}, "import_failed", false, nil
 	}
 	if item.OwnerID != userID {
-		return sandboxContentItem{}, false, fmt.Errorf("imported source URL item does not belong to authenticated user")
+		return sandboxContentItem{}, "", false, fmt.Errorf("imported source URL item does not belong to authenticated user")
 	}
-	return item, true, nil
+	return item, "", true, nil
 }
 
 func sourceEntityAllowsPublishedSnapshot(entity map[string]any) bool {
@@ -303,6 +316,19 @@ func sourceEntityTargetURL(entity map[string]any) string {
 		stringValue(target["url"]),
 		stringValue(entity["canonical_url"]),
 		stringValue(entity["url"]),
+	)
+}
+
+func sourceEntityImportQuery(entity map[string]any) string {
+	display := mapValue(entity["display"])
+	target := mapValue(entity["target"])
+	return firstNonEmptyString(
+		stringValue(entity["label"]),
+		stringValue(entity["title"]),
+		stringValue(display["title"]),
+		stringValue(display["label"]),
+		stringValue(target["title"]),
+		stringValue(entity["entity_id"]),
 	)
 }
 
@@ -378,12 +404,16 @@ func (h *Handler) fetchSandboxJSON(r *http.Request, sandboxBase, path, userID st
 	return nil
 }
 
-func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, sourceURL string) (sandboxContentItem, error) {
+func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, sourceURL, query string) (sandboxContentItem, error) {
 	target, err := joinBasePath(sandboxBase, "/api/content/import-url")
 	if err != nil {
 		return sandboxContentItem{}, err
 	}
-	data, err := json.Marshal(map[string]string{"url": sourceURL})
+	payload := map[string]string{"url": sourceURL}
+	if strings.TrimSpace(query) != "" {
+		payload["query"] = strings.TrimSpace(query)
+	}
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return sandboxContentItem{}, fmt.Errorf("marshal content import request: %w", err)
 	}

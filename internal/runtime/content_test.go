@@ -131,6 +131,56 @@ func TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent(t *testing.T)
 	}
 }
 
+func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>Refreshed Source</title></head><body><main><h1>Refreshed Source</h1><p>This refreshed source has readable body text after an older empty import.</p></main></body></html>`))
+	}))
+	defer source.Close()
+
+	now := time.Now().UTC()
+	if err := rt.Store().CreateContentItem(context.Background(), types.ContentItem{
+		ContentID:    "empty-existing",
+		OwnerID:      "user-content",
+		SourceType:   "extracted_url",
+		MediaType:    "text/html",
+		AppHint:      "browser",
+		Title:        "Empty Existing",
+		SourceURL:    source.URL,
+		CanonicalURL: source.URL,
+		TextContent:  "",
+		ContentHash:  contentHash(""),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("seed empty content item: %v", err)
+	}
+
+	body := `{"url":` + strconvQuote(source.URL) + `,"query":"refreshed source"}`
+	req := authenticatedRequest(http.MethodPost, "/api/content/import-url", body, "user-content")
+	w := httptest.NewRecorder()
+	handler.HandleContentImportURL(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	var item struct {
+		ContentID   string `json:"content_id"`
+		Title       string `json:"title"`
+		TextContent string `json:"text_content"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if item.ContentID == "empty-existing" {
+		t.Fatalf("empty existing content item was reused")
+	}
+	if item.Title != "Refreshed Source" || !strings.Contains(item.TextContent, "readable body text") {
+		t.Fatalf("refreshed import = %#v", item)
+	}
+}
+
 func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 	_, handler := testAPISetup(t)
 	body := `{"source_type":"file","file_path":"uploads/book.epub","media_type":"application/epub+zip","title":"Book"}`

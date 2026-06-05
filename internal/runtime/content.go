@@ -292,7 +292,7 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	if isYouTubeURL(normalizedURL) {
 		return rt.importYouTubeURLContent(ctx, ownerID, normalizedURL)
 	}
-	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, normalizedURL, ""); ok {
+	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, normalizedURL, ""); ok && reusableImportedURLContent(existing) {
 		return existing, nil
 	}
 	started := time.Now().UTC()
@@ -569,6 +569,14 @@ func (rt *Runtime) findExistingURLContentItem(ctx context.Context, ownerID, cano
 		}
 	}
 	return types.ContentItem{}, false
+}
+
+func reusableImportedURLContent(item types.ContentItem) bool {
+	mediaType := normalizeMediaType(item.MediaType)
+	if isHTMLMedia(mediaType) || isTextMedia(mediaType) {
+		return strings.TrimSpace(item.TextContent) != ""
+	}
+	return true
 }
 
 func fetchYouTubeTranscript(ctx context.Context, videoID string) youtubeTranscriptFetchResult {

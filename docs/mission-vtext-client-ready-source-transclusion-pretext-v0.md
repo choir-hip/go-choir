@@ -3382,3 +3382,63 @@ next executable probe:
 - Continue the Pretext axis at the article/source-flow boundary: use Pretext to
   route article lines around expanded apparatus, while keeping the source
   content itself minimal and reader-like.
+
+## 2026-06-05 Repair: Source Snapshot Materialization State And Empty Import Refresh
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `internal/proxy/platform_publish.go` now records
+  `reader_snapshot_status` on publication source entities when a full reader
+  snapshot is ready or when materialization degrades.
+- Publication-safe URL sources now preserve explicit states such as:
+  - `reader_snapshot_ready`;
+  - `import_failed`;
+  - `bounded_excerpt_only` with `reason=source_import_empty`;
+  - `source_target_missing`;
+  - `not_publication_safe`.
+- These states are publication metadata only. They are not article prose and do
+  not replace bounded transclusion selectors.
+- Publication URL imports now send a query derived from source label/title or
+  entity id. This gives the existing SearXNG alternate-discovery ladder enough
+  context to find a usable source artifact when the canonical URL blocks direct
+  import.
+- `internal/runtime/content.go` no longer reuses an existing empty HTML/text
+  URL content item as a valid import result. This prevents an older failed or
+  low-content import from permanently poisoning later source publication
+  attempts.
+
+local verification:
+
+- `nix develop -c go test ./internal/proxy -run 'TestHandleVTextPublication'`
+  passed.
+- `nix develop -c go test ./internal/proxy` passed.
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURL'`
+  passed.
+- `git diff --check` passed.
+
+evidence detail:
+
+- New proxy coverage verifies that a publication-safe URL source import sends
+  the source-derived query, preserves the bounded selector, embeds
+  `reader_snapshot` on success, and records `reader_snapshot_ready`.
+- New proxy coverage verifies that an import failure still publishes the VText
+  and bounded selector while recording `reader_snapshot_status:
+  import_failed`; it does not synthesize a fake reader snapshot.
+- New runtime coverage verifies that an old empty HTML URL content item is not
+  reused and that a fresh import creates a new readable source artifact.
+
+remaining proof:
+
+- Push, wait for deploy, confirm staging identity, republish the owner v83
+  legal-cloud proposal, and re-check the owner publication route for
+  per-source `reader_snapshot_status`.
+- Expected improvement: OVH and other directly fetchable sources should no
+  longer be blocked by stale empty content items.
+- Expected residual risk: ABA pages/PDFs currently return HTTP 403 to direct
+  import probes. If the deployed alternate-discovery ladder cannot find an
+  allowed readable source, the publication should now expose `import_failed`
+  metadata while retaining the bounded citation excerpt. A later source
+  acquisition pass should attach an imported/allowed reader artifact or use an
+  official accessible source variant.
