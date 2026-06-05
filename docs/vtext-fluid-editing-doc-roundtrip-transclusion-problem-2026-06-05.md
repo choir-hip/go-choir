@@ -79,6 +79,31 @@ import manifests, selector/confidence data, style/export profiles, and
 server-side export artifacts. They cannot be treated as frontend-only format
 conversions.
 
+### Versioned Markdown Lineage Has No Product Migration Path
+
+After the import/export checkpoints, a single `.md` file can be opened as a
+VText projection with an original ContentItem and migration manifest. That is
+not enough for the existing legal-cloud proposal class of documents. Those
+documents are valuable precisely because they have historical versions: older
+versions can have better appendix/table formatting, better glossary structure,
+or source material worth merging into the current draft.
+
+Current runtime APIs only support:
+
+- opening one file path as one initial VText revision;
+- creating later revisions one at a time after the document already exists;
+- manually attaching arbitrary metadata to those revisions.
+
+There is no owner-authenticated product API that accepts a Markdown lineage,
+preserves each source version as migration evidence, creates a single VText
+document, imports each historical Markdown snapshot as ordered VText revisions,
+records the original source path/hash for each migrated version, and aliases
+the canonical VText document back to its source path. Without that path, bulk
+migration is either a one-off database/script operation or a lossy import of
+only the latest file content. Both would violate the mission invariant that
+existing versioned Markdown documents become real VTexts with preserved version
+lineage, historical publish/compare/merge, and later citation/source repair.
+
 ### Binary Original Preservation Is Still Projection-Only
 
 After checkpoint `0a5a31de`, the backend creates separate original
@@ -137,6 +162,9 @@ owning source surface in a separate app/window when a source artifact exists.
   focus/edit/save/revise/reload.
 - Existing versioned Markdown docs migrate into real VTexts with durable
   version lineage.
+- Markdown lineage migration is exposed through an authenticated product API,
+  not a raw database script, and records each imported Markdown snapshot as
+  migration evidence linked to the resulting VText revision.
 - `.md`, DOCX, and PDF originals are preserved as source artifacts or
   ContentItems; VText owns the revisable projection.
 - Import -> revise -> export works for MD, TXT, HTML, DOCX, and PDF with
