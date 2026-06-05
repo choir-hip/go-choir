@@ -375,3 +375,102 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
   await expect(citation.locator('[data-vtext-open-source]')).toBeVisible();
 });
+
+test('VText Sources panel applies source-gap repair and opens repaired source window', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const sourceEntityID = `src-panel-repair-${stamp}`;
+  const sourceLabel = 'Panel Repair Source';
+  const excerpt = 'Panel repair source evidence supports the citation.';
+
+  const imported = await fetchJSON(page, '/api/vtext/markdown-lineage/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_path: `proposals/panel-source-gap-repair-${stamp}.md`,
+      title: `Panel Source Repair ${stamp}`,
+      versions: [
+        {
+          label: 'v44',
+          source_revision_id: `legacy-panel-gap-v44-${stamp}`,
+          content: [
+            '# Panel Source Repair',
+            '',
+            'This owner-visible source panel claim starts with a citation gap [2].',
+          ].join('\n'),
+        },
+      ],
+    }),
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Panel Source Repair ${stamp}` }).click();
+
+  await vtextWindow.locator('[data-vtext-source-panel]').click();
+  const sourcePanel = vtextWindow.locator('[data-vtext-source-diagnostics]');
+  await expect(sourcePanel).toBeVisible({ timeout: 10000 });
+  await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
+
+  const repairPayload = {
+    base_revision_id: imported.current_revision_id,
+    source_entities: [
+      {
+        entity_id: sourceEntityID,
+        kind: 'source_service_item',
+        label: sourceLabel,
+        target: {
+          target_kind: 'source_service_item',
+          item_id: `srcitem-panel-repair-${stamp}`,
+        },
+        selectors: [
+          {
+            selector_kind: 'text_quote',
+            text_quote: excerpt,
+            content_hash: `sha256-panel-repair-${stamp}`,
+          },
+        ],
+        display: {
+          inline_mode: 'embedded_excerpt',
+          expanded_mode: 'source_card',
+          open_surface: 'source',
+          default_collapsed: true,
+        },
+        evidence: {
+          state: 'available',
+          research_state: 'represented',
+        },
+        provenance: {
+          created_by: 'source_panel_repair_test',
+          rights_scope: 'source_service_projection',
+          untrusted_source_text: true,
+        },
+      },
+    ],
+    citation_resolutions: [
+      {
+        marker: '[2]',
+        entity_id: sourceEntityID,
+      },
+    ],
+  };
+  await sourcePanel.locator('[data-vtext-source-repair-payload]').fill(JSON.stringify(repairPayload, null, 2));
+  await sourcePanel.locator('[data-vtext-apply-source-repair]').click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  await expect(citation).toBeVisible({ timeout: 15000 });
+  await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
+  await citation.click();
+  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+
+  const initialSourceWindows = await page.locator('[data-content-viewer]').count();
+  await citation.locator('[data-vtext-open-source]').click();
+  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toContainText(sourceLabel);
+  await expect(sourceWindow).toContainText(excerpt);
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
+});
