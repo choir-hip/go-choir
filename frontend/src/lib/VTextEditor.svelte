@@ -342,6 +342,58 @@
     };
   }
 
+  function numberMetadataValue(metadata, key) {
+    const value = metadata?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  }
+
+  function stringMetadataValue(metadata, key) {
+    return String(metadata?.[key] || '').trim();
+  }
+
+  function revisionEditEvidence(revision) {
+    const metadata = revision?.metadata || {};
+    const contextMode = stringMetadataValue(metadata, 'vtext_context_mode');
+    const operation = stringMetadataValue(metadata, 'vtext_edit_operation');
+    const promptChars = numberMetadataValue(metadata, 'vtext_run_prompt_chars');
+    const editCount = numberMetadataValue(metadata, 'vtext_edit_count');
+    const deltaChars = numberMetadataValue(metadata, 'vtext_edit_delta_chars');
+    const latencyMs = numberMetadataValue(metadata, 'vtext_run_latency_ms');
+    if (!contextMode && !operation && promptChars === null && editCount === null && deltaChars === null && latencyMs === null) {
+      return null;
+    }
+    return {
+      revisionID: revision?.revision_id || '',
+      version: typeof revision?.version_number === 'number' ? `v${revision.version_number}` : '',
+      author: [revision?.author_kind, revision?.author_label].filter(Boolean).join(':'),
+      contextMode,
+      operation,
+      promptChars,
+      editCount,
+      deltaChars,
+      latencyMs,
+    };
+  }
+
+  function sourceEditEvidence(current = currentRevision, diagnosis = sourceDiagnosis) {
+    const revisions = Array.isArray(diagnosis?.revisions) ? diagnosis.revisions : [];
+    const candidates = [current, ...revisions].filter(Boolean);
+    const seen = new Set();
+    for (const revision of candidates) {
+      const revisionID = revision?.revision_id || '';
+      if (revisionID && seen.has(revisionID)) continue;
+      if (revisionID) seen.add(revisionID);
+      const evidence = revisionEditEvidence(revision);
+      if (evidence) return evidence;
+    }
+    return null;
+  }
+
   function defaultSourceRepairPayload() {
     const candidates = sourceRepairCandidates();
     const existing = revisionSourceEntities();
@@ -2151,6 +2203,7 @@
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
+  $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2451,6 +2504,56 @@
               {#if sourceSummary.errorCount}
                 <span>{sourceSummary.errorCount} errors</span>
               {/if}
+            </div>
+          {/if}
+
+          {#if editEvidence}
+            <div class="source-edit-evidence" data-vtext-edit-evidence>
+              <div>
+                <span class="evidence-label">Edit evidence</span>
+                <strong>{editEvidence.version || 'revision'}</strong>
+                {#if editEvidence.author}
+                  <span>{editEvidence.author}</span>
+                {/if}
+              </div>
+              <dl>
+                {#if editEvidence.contextMode}
+                  <div data-vtext-edit-context-mode>
+                    <dt>context</dt>
+                    <dd>{editEvidence.contextMode}</dd>
+                  </div>
+                {/if}
+                {#if editEvidence.operation}
+                  <div data-vtext-edit-operation>
+                    <dt>operation</dt>
+                    <dd>{editEvidence.operation}</dd>
+                  </div>
+                {/if}
+                {#if editEvidence.promptChars !== null}
+                  <div data-vtext-edit-prompt-chars>
+                    <dt>prompt chars</dt>
+                    <dd>{editEvidence.promptChars}</dd>
+                  </div>
+                {/if}
+                {#if editEvidence.editCount !== null}
+                  <div data-vtext-edit-count>
+                    <dt>edits</dt>
+                    <dd>{editEvidence.editCount}</dd>
+                  </div>
+                {/if}
+                {#if editEvidence.deltaChars !== null}
+                  <div data-vtext-edit-delta-chars>
+                    <dt>delta chars</dt>
+                    <dd>{editEvidence.deltaChars}</dd>
+                  </div>
+                {/if}
+                {#if editEvidence.latencyMs !== null}
+                  <div data-vtext-edit-latency-ms>
+                    <dt>latency ms</dt>
+                    <dd>{editEvidence.latencyMs}</dd>
+                  </div>
+                {/if}
+              </dl>
             </div>
           {/if}
 
@@ -2806,6 +2909,62 @@
     background: var(--choir-state-selected);
     font-size: 0.72rem;
     font-weight: 720;
+  }
+
+  .source-edit-evidence {
+    display: grid;
+    gap: 0.52rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.58rem;
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .source-edit-evidence > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.38rem;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .source-edit-evidence strong {
+    color: var(--choir-text-primary);
+    font-size: 0.82rem;
+  }
+
+  .evidence-label {
+    color: var(--choir-text-accent);
+    font-weight: 760;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .source-edit-evidence dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.42rem;
+    margin: 0;
+  }
+
+  .source-edit-evidence dl div {
+    min-width: 0;
+  }
+
+  .source-edit-evidence dt {
+    margin: 0 0 0.12rem;
+    color: var(--choir-text-muted);
+    font-size: 0.66rem;
+  }
+
+  .source-edit-evidence dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--choir-text-primary);
+    font-size: 0.76rem;
+    font-weight: 700;
   }
 
   .source-entity-list {

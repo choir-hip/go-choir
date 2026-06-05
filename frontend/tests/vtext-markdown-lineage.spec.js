@@ -474,3 +474,52 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(sourceWindow).toContainText(excerpt);
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
 });
+
+test('VText Sources panel shows structured edit evidence without raw prompts', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  const stamp = Date.now();
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Edit Evidence Fixture ${stamp}`,
+    }),
+  });
+
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: [
+        '# Edit Evidence Fixture',
+        '',
+        'This revision carries structured edit metadata for diagnosis.',
+      ].join('\n'),
+      metadata: {
+        source: 'edit_vtext',
+        vtext_context_mode: 'focused_user_edit_diff',
+        vtext_edit_operation: 'apply_edits',
+        vtext_edit_count: 2,
+        vtext_run_prompt_chars: 9382,
+        vtext_edit_delta_chars: -41,
+        vtext_run_latency_ms: 1275,
+        original_prompt: 'raw prompt text must stay out of the diagnosis panel',
+      },
+    }),
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Edit Evidence Fixture ${stamp}` }).click();
+
+  await vtextWindow.locator('[data-vtext-source-panel]').click();
+  const editEvidence = vtextWindow.locator('[data-vtext-edit-evidence]');
+  await expect(editEvidence).toBeVisible({ timeout: 10000 });
+  await expect(editEvidence.locator('[data-vtext-edit-context-mode]')).toContainText('focused_user_edit_diff');
+  await expect(editEvidence.locator('[data-vtext-edit-operation]')).toContainText('apply_edits');
+  await expect(editEvidence.locator('[data-vtext-edit-prompt-chars]')).toContainText('9382');
+  await expect(editEvidence.locator('[data-vtext-edit-count]')).toContainText('2');
+  await expect(editEvidence.locator('[data-vtext-edit-delta-chars]')).toContainText('-41');
+  await expect(editEvidence.locator('[data-vtext-edit-latency-ms]')).toContainText('1275');
+  await expect(editEvidence).not.toContainText('raw prompt text must stay out');
+  await expect(vtextWindow.locator('[data-vtext-rendered]')).not.toContainText('focused_user_edit_diff');
+});
