@@ -872,6 +872,55 @@ what was proven:
   original hash state, and lossy adapter warnings:
   `docx_projection_requires_style_adapter` and
   `pdf_projection_requires_extraction_adapter`.
+- `ee4c6582` documented the remaining binary import projection gap: the first
+  DOCX/PDF import checkpoint preserved original ContentItems but still relied on
+  caller-supplied projection text instead of reading original bytes from the
+  user-computer file root.
+- `c5e5e919` adds deployed DOCX and PDF byte import adapters for
+  `/api/vtext/files/open`. The runtime now reads original bytes from the
+  sandbox file root, creates a VText working projection, stores the original
+  binary ContentItem without text flattening, and records the real original
+  byte hash in the import manifest.
+- Local focused runtime tests passed for the byte adapters:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextOpenFileResolvesCanonicalAlias|TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts|TestVTextOpenFileImportsDocxAndPDFBytesFromFilesRoot' -count=1`.
+- Local focused VText prompt tests still passed:
+  `nix develop -c go test ./internal/runtime -run 'TestVTextPromptUsesDiffFirstContextForDirectUserEdits|TestInitialVTextToolChoiceUsesExactTools' -count=1`.
+- Local frontend build passed after adding explicit file-browser VText import
+  affordances for binary document files: `npm --prefix frontend run build`.
+- Local focused Playwright E2E passed for the file-browser PDF route:
+  `npm --prefix frontend run e2e -- tests/file-browser.spec.js -g "PDF files expose explicit VText import" --workers=1 --reporter=line`.
+- GitHub CI, staging deploy, and FlakeHub publish passed for
+  `c5e5e91966fe17375efc3b0750d2fe3958e93117`.
+- Staging health proved proxy and sandbox deployed commit
+  `c5e5e91966fe17375efc3b0750d2fe3958e93117` at
+  `2026-06-05T05:49:34Z`.
+- Deployed Node B sandbox service-level proof under owner
+  `vtext-byte-import-proof-2026-06-05@example.com` uploaded unique DOCX and PDF
+  files through `/api/files`, then opened them through `/api/vtext/files/open`
+  without `initial_content`.
+  - DOCX VText doc `cd050c63-2f80-4ec7-ad1a-3eab54d97a13` created original
+    ContentItem `7579440d-dc3d-473a-82b3-adef08c42e3c`; the first revision
+    content included `Deployed DOCX Import Proof`, a paragraph from the DOCX
+    bytes, and the table rows `| Term | Definition |` and
+    `| Work product | Durable professional output |`.
+  - DOCX original ContentItem media type was
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
+    text length was `0`, and both ContentItem hash and manifest
+    `original_content_hash` matched the uploaded byte SHA-256
+    `f4480acbf313efeb191b48898a0f40ec1d77ae0052c207b060963da7872cbbba`.
+  - DOCX import manifest adapter was `docx_ooxml_text_table_projection`, hash
+    state `available_from_original_bytes`, with warning
+    `docx_styles_preserved_as_manifest_only`.
+  - PDF VText doc `222abb38-23a3-4510-a28a-3ecacafaab76` created original
+    ContentItem `f368f71f-9c95-4a3d-8858-6675db22f809`; the first revision
+    content included `Deployed PDF Import Proof` and
+    `Second PDF line from bytes`.
+  - PDF original ContentItem media type was `application/pdf`, text length was
+    `0`, and both ContentItem hash and manifest `original_content_hash` matched
+    the uploaded byte SHA-256
+    `bef1fd0cac52b2077cb01be6d117402d8680247b37b2fc94858b7c74afc0ff3d`.
+  - PDF import manifest adapter was `pdf_literal_text_projection`, hash state
+    `available_from_original_bytes`, with warning `pdf_layout_is_best_effort`.
 
 unproven or partial claims:
 
@@ -881,10 +930,10 @@ unproven or partial claims:
 - The deployed staging proof did not authenticate into
   `yusefnathanson@me.com` and did not run a live long-document revise on the
   legal-cloud proposal after deployment.
-- DOCX and PDF buttons are visible in the publish download menu, but backend
-  import adapters are not implemented. Backend DOCX/PDF export now works for
-  new publications whose policy permits those formats, but this checkpoint does
-  not yet prove owner-authenticated VText publish/download UX by computer use.
+- DOCX and PDF buttons are visible in the publish download menu, and backend
+  DOCX/PDF export and import adapters now work for the service paths. This
+  checkpoint still does not prove owner-authenticated VText publish/download UX
+  by computer use.
 - Existing immutable publications keep their historical export policy. The
   prior route
   `/pub/vtext/staging-long-compare-merge-proof-1780614390072-pub32bd3c150`
@@ -893,10 +942,10 @@ unproven or partial claims:
 - `.md` file-open normalization now records import and migration manifests, but
   bulk migration of existing versioned Markdown documents, including the
   legal-cloud proposal class, is not complete.
-- DOCX/PDF import now preserves original ContentItems and records inspected
-  first-revision import manifests, but true byte-reading import adapters,
-  style-profile preservation, asset manifests, and import -> revise -> export
-  roundtrip proof are not complete.
+- DOCX/PDF import now preserves original ContentItems, reads original bytes,
+  records real byte hashes, and creates VText projections. Style-profile
+  preservation, asset manifests, full-fidelity PDF text extraction/OCR, and
+  import -> revise -> export roundtrip proof are not complete.
 - Source entity behavior is still a frontend interaction proof for existing
   inline source markup; citation repair, source entity creation, publication
   projection, and open-owning-source proof over real legal-cloud citations
@@ -913,8 +962,8 @@ avoid whole-document edits while keeping semantic quality.
 next executable probe: use authenticated computer-use on staging to publish and
 download a real owner VText as DOCX/PDF from the UI, then revise the
 legal-cloud proposal through the product path, capture prompt size/latency and
-delta evidence, verify the appendix table survives focus/edit/save/revise, and
-implement the missing DOCX/PDF import adapters plus bulk Markdown lineage
-migration.
+delta evidence, verify the appendix table survives focus/edit/save/revise,
+prove import -> revise -> export for DOCX/PDF through the owner UI, and
+implement bulk Markdown lineage migration.
 
 suggested resume goal string: use the Goal String in this document.
