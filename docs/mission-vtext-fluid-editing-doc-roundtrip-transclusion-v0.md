@@ -1910,6 +1910,31 @@ remaining error field:
 
 suggested resume goal string:
 
+2026-06-05 source-panel repair proof gap checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- The source-gap repair backend is covered by API tests, and generic source
+  windows are now covered for non-media citations. However, the product path
+  that the owner must use on the proposal is the VText `Sources` panel:
+  inspect unresolved markers, edit the repair JSON, apply the repair, then
+  verify the resulting citation transclusion and source window.
+- Existing browser tests do not exercise that panel apply path. This leaves a
+  realism gap between the shipped source-repair UI and the owner-document
+  acceptance requirement.
+
+belief-state update:
+
+- The next safe improvement should add a browser-level regression for applying
+  a source repair through the VText `Sources` panel on a fixture document with
+  a repairable citation gap, then verify the repaired marker renders as a
+  source transclusion and opens the generic source window. This does not
+  mutate the owner document and does not add document-specific behavior.
+
+suggested resume goal string:
+
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
