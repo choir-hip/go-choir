@@ -1856,3 +1856,73 @@ next proof:
 - Use authenticated Comet on the owner publication to expand the ABA source
   marker and prove that surrounding article prose now routes beside the source
   note instead of leaving the previous large rectangular gap.
+
+## 2026-06-05 Deployed Proof: Paragraph Flow Works, Cross-Paragraph Waste Remains
+
+status: deployed_proof_and_new_problem_recorded
+
+deployment evidence:
+
+- Commit `2560d5b0` (`fix: route vtext source excerpts with pretext`) was
+  pushed to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27033870086` completed
+  successfully, including frontend build, runtime shards, non-runtime tests,
+  vet/build, and Node B staging deploy.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27033870062` completed
+  successfully.
+- `https://choir.news/health` reported build commit and upstream deployed
+  commit `2560d5b05fd84d953aedec43aac4c1626c255d0a`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet hard reloaded the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- After the bootstrap recovered, the first viewport showed the full owner
+  proposal, inline source markers, no top source deck, and no visible
+  `missing source` prose.
+- Expanding the ABA Formal Opinion 512 marker rendered a right-side journal
+  source note while the first paragraph text flowed in narrower lines beside
+  it. This proves the deployed Pretext source-flow slice is active on the real
+  owner document.
+- The expanded note preserved `Open source` and `Close` actions.
+
+newly observed problem:
+
+- The source-flow overlay currently routes only the paragraph that contains the
+  citation marker. On the owner document, that paragraph is shorter than the
+  expanded source note, so the following paragraph still begins below the note
+  and leaves a visible blank area to the left of the lower half of the note.
+  This is better than the old card insertion but still violates the clarified
+  magazine/journal goal: article text should keep using space beside a source
+  note until the note's vertical footprint is consumed.
+- The source note styling also uppercased the excerpt/facts more aggressively
+  than intended. The source excerpt should read like source content, not like
+  metadata chrome.
+- The source window still falls back to the known iframe/Web Lens behavior:
+  Comet blocks the ABA PDF live preview, and the readable snapshot cleanup
+  problem remains a separate source-acquisition axis.
+
+root-cause direction:
+
+- The current noncanonical source-flow layer is too narrow in scope. It owns a
+  single paragraph, which preserves serialization safely but cannot route
+  following article blocks around a tall note.
+- The next correction should preserve the canonical paragraph/source-ref DOM but
+  let browser/source-flow layout consume following block space as needed. A
+  native floated source note, gated/measured by the Pretext source-flow utility
+  and marked `data-vtext-source-flow` for serializer exclusion, is a simpler
+  candidate than cloning multiple paragraphs into a manual overlay.
+- Tighten note CSS so only metadata labels receive metadata treatment; excerpts
+  and facts should remain readable article/source text.
+
+acceptance criteria for the correction:
+
+- Expanding the first ABA source on the owner publication leaves no large blank
+  area to the left of the note; following article text continues beside the
+  note until the note is cleared.
+- The source excerpt is not all-caps and is visually subordinate to the article
+  but readable as source content.
+- Canonical serialization remains unchanged: source markers still roundtrip as
+  `[label](source:ENTITY_ID)`, and source-flow DOM is skipped.
