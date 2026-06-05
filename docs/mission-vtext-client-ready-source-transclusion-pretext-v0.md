@@ -5134,3 +5134,63 @@ forbidden shortcuts:
   semantics unless a separate backend problem is documented first.
 - Do not remove tests for raw repair entirely; retain a diagnostic fallback so
   operators can still recover unusual source graph cases.
+
+## 2026-06-05 Problem: Source Diagnosis Blocks The Owner Review Panel
+
+status: documented_before_code
+
+problem:
+
+- While validating the new typed source-review panel, the owner panel stayed in
+  `Loading...` diagnosis state on an imported source-gap VText document.
+- `frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair"` timed out waiting for
+  `[data-vtext-load-diagnosis]` to return from `Loading...` to `Diagnosis`.
+- When the test did not wait for diagnosis, the same panel could enter
+  `Applying source review...` while diagnosis was still loading, leaving the
+  owner with two concurrent source-panel requests and no completed review
+  revision within the assertion window.
+
+evidence:
+
+- Playwright error context for
+  `frontend/test-results/vtext-markdown-lineage-VTe-e57b0-pens-repaired-source-window-chromium/error-context.md`
+  showed the current window
+  `Panel Source Repair 1780702168517.vtext` at `v0`, the source panel open,
+  `[2]` listed under `Claims needing source review`, the diagnosis button
+  disabled as `Loading...`, and the document body still rendering the
+  unresolved `[2]` marker.
+- The same error context from the previous run showed `Applying source
+  review...` while the diagnosis button remained `Loading...`.
+- The backend source-repair endpoint remains proven by the direct API repair
+  test in the same spec; the failure is the owner panel's coupling between
+  automatic diagnosis loading and review action timing.
+
+root-cause hypothesis:
+
+- `handleOpenSourcePanel()` starts source diagnosis automatically for editable
+  documents. The typed source-review controls are available while that
+  diagnostic request is still pending, so the owner can trigger repair before
+  the panel has reached a settled diagnosis state.
+- Diagnosis is supporting evidence, not a prerequisite for canonical
+  source-gap repair. Coupling review availability to an unbounded diagnosis
+  fetch makes the owner workflow brittle and creates avoidable request
+  concurrency in local/staging proof.
+
+intended generic repair:
+
+- Make the owner-grade source review path independent of diagnosis completion:
+  unresolved markers from revision metadata/content should be enough to select
+  a marker, enter a title/excerpt/URL, and apply source review.
+- Keep diagnosis as an explicit secondary refresh path for edit evidence and
+  deeper debugging, with loading state visible but not blocking the basic
+  source-review workflow.
+- Prevent overlapping diagnosis/repair interactions from leaving ambiguous UI
+  state. The review action should either wait for, cancel/ignore, or run
+  independently of diagnosis with clear status.
+
+forbidden shortcuts:
+
+- Do not remove diagnosis evidence from the source panel.
+- Do not make source review depend on raw repair JSON.
+- Do not add legal-cloud-specific marker handling or source mappings.
