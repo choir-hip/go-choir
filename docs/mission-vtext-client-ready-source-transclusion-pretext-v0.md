@@ -831,6 +831,66 @@ remaining error field:
 - After the artifact proof is complete, run the requested hard mission/system
   review and simplification/dead-code pass.
 
+## 2026-06-05 Source Window Snapshot Fallback Root Cause
+
+status: problem_documented_before_fix
+
+new evidence:
+
+- Computer Use remains available and can read Comet state. After the Qdrant
+  source-window fallback problem was recorded, the currently visible Comet state
+  returned to the owner v83 `.vtext` publication with inline source cards; it
+  did not show a recovered Qdrant readable snapshot window.
+- Staging health for the deployed behavior build is still commit
+  `bab27b09d1a5976d04317448d2407bf5ffd5f75f`; the newer head
+  `134021f7da4a6415d8f9b4ed1b0f407eac127498` is docs-only and correctly did
+  not trigger a deploy.
+- Code inspection found that `BrowserApp.svelte` reports
+  `Web Lens snapshot ready: obscura` whenever `showingSnapshot` is true, even
+  while `backendSnapshot` is empty and the UI body says
+  `Loading Web Lens snapshot...`. That status wording is misleading: snapshot
+  mode is active, but no readable source snapshot has arrived.
+- Code inspection found that `fetchBrowserSnapshots` runs Obscura `text`,
+  `links`, and `html` dumps serially. Each dump can take up to the 30 second
+  wrapper timeout around an Obscura `--timeout 15` command, and any failure from
+  links or HTML aborts the whole snapshot response.
+
+root-cause belief:
+
+- The source-window fallback currently treats text, links, HTML, and optional
+  screenshot capture as one all-or-nothing navigation result. That is the wrong
+  contract for citation/source inspection. A reader needs the source text or a
+  precise failure quickly; links, raw HTML, and screenshot evidence are useful
+  supporting artifacts but should not block or discard an already-available
+  readable text snapshot.
+- The frontend state model compounds the issue by making the mode label sound
+  successful before a snapshot exists. This can make a slow or partial backend
+  fetch look like a permanently loaded empty source view.
+
+planned structural repair:
+
+- Change the Browser/Web Lens snapshot path so text extraction is the primary
+  readable artifact and optional artifacts degrade independently. If text
+  succeeds, return `200` with text even when links or HTML fail; record warnings
+  in the session/error metadata or trace payload rather than throwing away the
+  source text.
+- Keep a hard failure when text extraction fails and there is no other readable
+  artifact. The UI should then show a precise source fallback error, not a
+  successful-looking empty snapshot.
+- Update the frontend status label so it distinguishes `loading`, `ready`, and
+  `failed/partial` source snapshot states.
+- Add focused regression coverage with fake Obscura dumps: text success plus
+  links/HTML failure must still produce a ready browser session with
+  `TextSnapshot`; total text failure must remain a navigation failure.
+
+remaining error field:
+
+- Implement and test the generic fallback repair without any Qdrant-specific or
+  legal-cloud-specific branch.
+- Re-deploy, then use Comet to open the owner v83 publication, expand a source
+  marker, open a URL-backed source that refuses iframe embedding, and prove that
+  the readable snapshot path returns source text or a precise failure.
+
 ## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
 
 status: checkpoint_incomplete
