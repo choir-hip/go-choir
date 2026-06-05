@@ -5375,3 +5375,21 @@ remaining simplification field:
   bounding Diagnosis, moving diagnostic JSON behind operator/developer mode,
   and budgeting/multiplexing VText streams. Those are not done in this first
   simplification pass.
+
+deployed refactor evidence:
+
+- Refactor commit `9c7637ee8397814f1034658ee0f232efd8e8c3be`
+  (`refactor: extract vtext source review payload`) was pushed to `main`.
+- GitHub Actions CI run `27046250324` completed successfully, including
+  frontend build, Go gates, and `Deploy to Staging (Node B)`.
+- FlakeHub run `27046250328` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `9c7637ee8397814f1034658ee0f232efd8e8c3be`, deployed at
+  `2026-06-05T23:54:43Z`.
+- Deployed source-review proof passed:
+  `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> `1 passed
+  (14.9s)`.
