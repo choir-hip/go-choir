@@ -1429,6 +1429,56 @@ belief-state update:
   and keep `.md` as import/export lineage rather than a live editable substrate
   once durable VText revisions begin.
 
+2026-06-05 deployed owner-document transition and restore-route checkpoint:
+
+status: checkpoint_incomplete
+
+deployed identity and owner UI evidence:
+
+- Behavior fix commit `c2cc8eb74e1de930067e9c9fb0cbdb9e0d5f6de4` is on
+  `origin/main`, CI run `27015378414` passed, FlakeHub run `27015378389`
+  passed, and staging `/health` reports proxy and sandbox deployed commit
+  `c2cc8eb74e1de930067e9c9fb0cbdb9e0d5f6de4` with deployed timestamp
+  `2026-06-05T12:41:26Z`.
+- Computer Use is available. Comet is authenticated on staging and the private
+  owner VText window for document `f93cea62-f833-4dae-b414-8e44783d8cbe` is
+  visible as `choir_private_legal_cloud_proposal.md`.
+- Extension-backed DOM reading of the authenticated Comet page identified the
+  target private VText root with doc id
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, version v78, state `Latest`.
+- Authenticated UI/DOM comparison of v78 -> v74 found the first collapsed
+  transition: v78, v77, v76, and v75 contain `TermDefinition` with zero rendered
+  HTML tables and one stray Markdown pipe row; v74 is a historical version with
+  one rendered HTML table and no `TermDefinition` collapse. This confirms the
+  first bad transition is v74 -> v75.
+
+new problem documented before any follow-on code:
+
+- The product has backend endpoints for historical restore, diagnosis, and
+  source-gap repair, but the visible VText editor does not expose restore or
+  source-repair controls.
+- Attempting to use the built-in compare/merge UI from v74 into latest v78
+  failed on staging with `COMPARE FAILED`, `Could not compare v74 to v78`, and
+  `model-backed semantic compare failed`. This blocks owner-document repair by
+  the currently visible historical-merge route.
+- The browser security policy rejected a `javascript:` URL API probe. That path
+  was not pursued further. Read-only DOM proof remains available through the
+  extension-backed browser client, but mutating owner-product state still needs
+  a visible product control or an ordinary authenticated product API call from
+  an allowed surface.
+
+belief-state update:
+
+- The structural code fix is deployed and covers the future corruption class
+  where an incoming user draft collapses a Markdown table while the parent
+  canonical revision still has table structure. It cannot by itself repair an
+  already-corrupted head whose parent is also corrupted.
+- The owner document still needs a product-visible restoration path from v74
+  table structure into the current head before the untouched-table and
+  bounded-table-edit staging proofs can be completed. That path should be a
+  general historical-restore/merge/source-repair UX, not a document-specific
+  or glossary-specific migration.
+
 suggested resume goal string:
 
 ```text
