@@ -2738,3 +2738,45 @@ remaining error field:
   attaches real source entities through the deployed `Sources` panel, citation
   marker expansion into transclusions on that owner head, and source-window
   opening from that owner head.
+
+2026-06-05 canonical legal-cloud proposal VText pivot:
+
+status: checkpoint_incomplete
+
+new problem documented before mutation/code:
+
+- The current private owner artifact `choir_private_legal_cloud_proposal.md` is
+  an imported Markdown/source artifact acting as VText. Even with alias
+  canonicalization, continuing to force this historical `.md` document to carry
+  the whole acceptance burden confuses source identity with canonical document
+  identity.
+- The better product target is a new canonical VText proposal derived from the
+  legal-cloud proposal content. The old `.md` should remain a source artifact or
+  alias with export/import lineage, while the new owner-facing working proposal
+  should have `.vtext` identity from the start.
+- The new proposal should not merely preserve existing prose. It should perform
+  research where claims need support, produce citation/source points as VText
+  transclusion points, expand those points into embedded source transclusions,
+  and allow each source to open in its own source window.
+- Publication has a source-graph requirement: publishing the canonical VText
+  proposal must also publish or share the cited source entities/transclusion
+  targets so every viewer authorized to access the published proposal can see
+  the supporting sources. A published VText whose citations render but whose
+  sources are unavailable to the viewer is not accepted.
+
+belief-state update:
+
+- The restored `choir_private_legal_cloud_proposal.md` remains valuable evidence
+  for the original table corruption regression and for import/alias
+  compatibility. It should not be treated as the ideal long-term artifact.
+- The next realism axis should create or derive a canonical owner `.vtext`
+  legal-cloud proposal and prove the complete source/citation publication loop
+  there, while preserving the old `.md` as a noncanonical source projection.
+
+remaining error field:
+
+- Still unproven: canonical owner `.vtext` legal-cloud proposal creation or
+  derivation from the existing `.md`; research-backed citation/source point
+  creation; embedded source transclusion rendering; source-window opening from
+  those transclusions; and publication that grants authorized proposal viewers
+  access to the cited sources.
