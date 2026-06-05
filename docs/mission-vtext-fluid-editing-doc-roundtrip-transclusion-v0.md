@@ -977,6 +977,39 @@ what was proven:
   version-lineage array, original ContentItem refs, and `[1]` source gap, and
   verified a second import of the same `source_path` returns `409` with the
   existing document id. The temporary `*.tmp.spec.js` was deleted after proof.
+- `aa2aa5f8` documented that VText source citations were still popover/source
+  rail shaped rather than in-flow transclusions at the citation target, and
+  that frontend-derived media refs used an unrecognized `chip` display policy.
+- `d755a58f` changed VText citation rendering so clicking/tapping a
+  `source:` citation expands an in-flow transclusion card at the marker,
+  normalizes frontend-derived media refs to `embedded_preview`, and hides raw
+  source IDs/evidence internals from user-visible source cards.
+- Staging QA on `d755a58f` caught a sharper multimedia gap: the citation card
+  expanded in-flow but did not include the YouTube iframe; media was still only
+  in the separate source rail. `c8aa13e3` documented that finding before the
+  follow-up fix.
+- `bae534ae` adds inline media rendering for expanded citation cards while
+  preserving the open-owning-source button.
+- Local frontend builds passed for the citation work:
+  `npm --prefix frontend run build`.
+- GitHub CI run `26999307285` passed for `d755a58f`; GitHub CI run
+  `26999451279` passed for `bae534ae`. Both Node B staging deploy jobs were
+  green, and both corresponding FlakeHub publish runs succeeded.
+- Staging health proved proxy and sandbox deployed commit
+  `bae534ae61f5c4585f55d537faf9026487992594`, deployed at
+  `2026-06-05T06:32:49Z`.
+- Deployed browser-authenticated source-entity QA passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js --workers=1 --reporter=line`.
+  This proves a real VText with a YouTube source entity renders a citation
+  marker, expands it in-flow at the marker, shows the YouTube iframe inside
+  the expanded citation card, preserves the source rail's embedded-preview
+  policy, opens the owning video app/window from the citation card, and still
+  preserves table roundtrip behavior through the same test file.
+- Deployed browser-authenticated publication source QA passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js --workers=1 --reporter=line`.
+  This proves a published source-service source entity resolves to an
+  expandable transclusion, keeps canonical export behavior, and no longer
+  exposes the raw source-service item id as user-visible prose.
 
 unproven or partial claims:
 
@@ -1005,10 +1038,11 @@ unproven or partial claims:
   proof for DOCX and PDF import -> revise -> publish -> DOCX/PDF export.
   Style-profile preservation, asset manifests, and full-fidelity PDF text
   extraction/OCR are not complete.
-- Source entity behavior is still a frontend interaction proof for existing
-  inline source markup; citation repair, source entity creation, publication
-  projection, and open-owning-source proof over real legal-cloud citations
-  remain incomplete.
+- Source entity behavior now has deployed frontend proof for existing inline
+  `source:` markup, in-flow citation expansion, embedded YouTube media,
+  publication source-service transclusions, hidden raw source IDs, and
+  open-owning-source behavior. Citation repair/source-entity creation over the
+  actual legal-cloud proposal lineage remains incomplete.
 - Latency improvement is architecturally enabled by smaller prompt context and
   recorded prompt size, but a deployed before/after timing proof on a real long
   VText revision is still required.
