@@ -1132,3 +1132,54 @@ remaining error field:
   Qdrant source text.
 - Re-run the authenticated Comet action proof when the Computer Use action
   channel is available again.
+
+## 2026-06-05 Backup Proof Checkpoint: Auth Cookie Import Blocked
+
+status: authenticated_backup_blocked
+
+new evidence:
+
+- The deployed runtime under test remains commit
+  `25ac30d83f561b5afc6a2df171656bdfa5b5475a`; `https://choir.news/health`
+  reported proxy and sandbox commit/deployed_commit
+  `25ac30d83f561b5afc6a2df171656bdfa5b5475a`, deployed at
+  `2026-06-05T17:47:17Z`.
+- The public publication API for
+  `/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`
+  resolved the owner publication as
+  `pub-a5931445-451d-4443-9880-6a321dfcdefb` /
+  `pubver-f4fcf985-57e3-49c6-aec2-282adbd2d14c`, title
+  `choir_private_legal_cloud_proposal.vtext`, with a 38,398-character
+  published artifact, 7 source entities, 7 transclusions, and 7 inline
+  `source:` markers.
+- The unauthenticated browser-session API correctly returned `401`, so it
+  cannot be used as an auth bypass.
+- Direct Qdrant inspection confirmed the target source shape for the deployed
+  fix: `https://qdrant.tech/documentation/search/search/` declares
+  `link rel=alternate type=text/markdown
+  href=https://qdrant.tech/documentation/search/search/index.md`, and that
+  Markdown alternate begins with `# Search`, `# Similarity search`, and Query
+  API content.
+- The gstack cookie-import backup path can import Comet cookies directly for a
+  domain, but importing `choir.news` from Comet is currently blocked by a macOS
+  Keychain permission dialog for `Comet Safe Storage`. The headless browser
+  cookie jar still reports no imported cookies.
+
+root-cause belief:
+
+- The code path is deployed and the external source has the declared Markdown
+  alternate the backend repair is designed to follow, but the required
+  authenticated product-path call to `/api/browser/sessions/{id}/navigate`
+  is blocked by local QA-tool permissions, not by a known product error.
+- No endpoint should be called with forged `X-Authenticated-User` headers as a
+  substitute for the proxy-authenticated product path.
+
+remaining error field:
+
+- After the Keychain permission is granted, import only `choir.news` Comet
+  cookies into the browser backup session and call the public product browser
+  API with those cookies.
+- Acceptance remains: the deployed browser-session navigate response for
+  `https://qdrant.tech/documentation/search/` must include readable Qdrant
+  Markdown text and a snapshot warning indicating the declared Markdown
+  alternate was used.
