@@ -122,6 +122,30 @@ distinguish between unresolved markers, which remain repairable source gaps,
 and resolved markers, which become clickable citation/transclusion points in
 the migrated VText content.
 
+### Resolved Markdown Lineage Citations Used Non-Renderable Source Syntax
+
+Staging proof after commit `5745c6f3` showed that the source-aware lineage
+import API accepted known `source_entities`, preserved unresolved marker `[2]`
+as a source gap, and rewrote resolved marker `[1]` into VText content as:
+
+```text
+[[1]](source:ENTITY_ID)
+```
+
+That syntax preserved the visual marker text but did not render as a clickable
+VText source reference in the app. The VText renderer intentionally recognizes
+canonical inline source syntax shaped as:
+
+```text
+[label](source:ENTITY_ID)
+```
+
+where `label` cannot contain `]`. Therefore a migrated citation marker cannot
+use the full bracketed marker as its Markdown link label. The migration
+projection must preserve the original bracketed marker in metadata while
+rewriting the VText working projection into renderer-compatible source syntax
+such as `[1](source:ENTITY_ID)`.
+
 ### Binary Original Preservation Is Still Projection-Only
 
 After checkpoint `0a5a31de`, the backend creates separate original
