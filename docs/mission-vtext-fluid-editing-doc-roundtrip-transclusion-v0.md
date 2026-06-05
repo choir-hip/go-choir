@@ -2872,3 +2872,74 @@ remaining error field:
   point creation on that owner proposal; owner embedded transclusion rendering;
   owner source-window opening; and publishing that owner proposal with its
   source graph.
+
+2026-06-05 canonical owner `.vtext` creation and revision-lock checkpoint:
+
+status: checkpoint_incomplete
+
+owner-path evidence:
+
+- Computer Use remained available through Comet using bundle id
+  `ai.perplexity.comet`.
+- In the authenticated owner account, the command prompt accepted the bounded
+  request to create a new canonical VText proposal derived from
+  `choir_private_legal_cloud_proposal.md` without overwriting that Markdown
+  source.
+- Choir opened a new VText window titled
+  `Create a new canonical VText proposal derived from
+  choir_private_legal_cloud_proposal.md`, initially at `v0`.
+- The owner-path run advanced the document to `v1` with a planning revision
+  titled `legal_cloud_proposal_source_backed.vtext -- Working v1`.
+- Researcher evidence then completed: visible trace showed
+  `5fa6f7a4-64bb-4a5c-814c-26de3a6bd975` completed a run with
+  "Full Document Extraction + 10-Claim Verification" after `read_file`,
+  `web_search`, and `fetch_url` calls.
+- The VText writer run `ddbf8621-fca7-478c-97e3-8ba0d398da93` called
+  `edit_vtext`, created a new revision, and reported that the document was
+  stored as revision `bbbeb19e-06fe-4646-8d6f-a0f0f745cde5`.
+- The visible document advanced to `v2` titled
+  `legal_cloud_proposal_source_backed.vtext`. It rendered a converted proposal
+  with source document note `choir_private_legal_cloud_proposal.md (preserved
+  as-is, unmodified)`, `Document type: VText proposal with source
+  transclusions`, and `Status: Ready for owner review`.
+- The rendered document includes all main proposal sections and a real
+  accessibility `table` for Appendix A with `Term` and `Definition` column
+  headers, rather than the earlier collapsed prose artifact.
+- The owner-review section rendered a source summary table headed "What sources
+  were attached (10 source transclusions)" with claim/status/source rows and
+  notes for partially verified or outdated claims.
+
+new problem documented before product-code fix:
+
+- After the writer reported completion and the v2 content rendered, the VText
+  window remained stuck in `Revising...` state for more than three minutes.
+- The top bar continued to show run `03e6e5ce-b...d6353d`, with `Cancel`
+  visible and `Sources`, `Publish v2`, `Compare`, and `Revise` controls still
+  disabled.
+- Because Sources and Publish remained disabled, the owner-path proof could not
+  yet verify that the claimed 10 source transclusions are real VText source
+  entities, expand into embedded source transclusions, open Source windows, or
+  publish with a source graph.
+- The visible document text claims publication/source opening readiness, but
+  the product UI state prevents validating that claim. This is evidence of a
+  stale or stuck run/revision lock after a completed `edit_vtext`, not evidence
+  that the source graph is actually publish-ready.
+
+belief-state update:
+
+- The product can now create a new owner `.vtext` derivative from the old
+  Markdown proposal and can preserve the appendix table as structured VText
+  render output.
+- The source/citation axis remains only partially proven on this owner
+  derivative. The prose reports 10 source transclusions, but the source panel
+  and publish proof are blocked by the stuck revision state.
+
+remaining error field:
+
+- Root-cause why a completed owner-path VText writer run can leave the VText
+  window locked in `Revising...` with source/publish controls disabled.
+- After that is repaired or conclusively classified as transient UI state, use
+  the Sources panel to verify real source entities on
+  `legal_cloud_proposal_source_backed.vtext`, open at least one source window,
+  publish the proposal, and prove authorized published readers can see and open
+  the published sources.
