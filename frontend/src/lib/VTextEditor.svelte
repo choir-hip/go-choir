@@ -78,6 +78,7 @@
   let publishResult = null;
   let cancelPending = false;
   let compareResult = null;
+  let compareError = '';
   let comparePending = false;
   let mergePending = false;
   let mergePreview = null;
@@ -834,6 +835,7 @@
 
   function resetCompareMergeState({ keepEditor = true } = {}) {
     compareResult = null;
+    compareError = '';
     mergePreview = null;
     selectedMergeSuggestionIds = [];
     if (!keepEditor && currentRevision) {
@@ -1569,6 +1571,8 @@
     }
     comparePending = true;
     error = '';
+    compareError = '';
+    publishResult = null;
     mergePreview = null;
     try {
       compareResult = await semanticCompareVText(currentDoc.doc_id, {
@@ -1582,7 +1586,7 @@
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to compare versions';
+      compareError = err.message || 'Failed to compare versions';
       saveStatus = 'Compare failed';
     } finally {
       comparePending = false;
@@ -2144,16 +2148,18 @@
     {/if}
 
     <div class="document-body" data-vtext-document-body>
-      {#if compareResult || mergePreview || comparePending || mergePending}
-        <section class="compare-panel" data-vtext-compare-panel>
+      {#if compareResult || mergePreview || comparePending || mergePending || compareError}
+        <section class="compare-panel" class:compare-panel-error={compareError && !comparePending && !mergePending} data-vtext-compare-panel>
           <div class="compare-heading">
             <div>
-              <p class="eyebrow">{mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
+              <p class="eyebrow">{compareError ? 'Compare failed' : mergePreview ? 'Merge preview' : `What changed since ${versionLabel}`}</p>
               <h3>
                 {#if mergePending}
                   Model merge in progress
                 {:else if comparePending}
                   Model compare in progress
+                {:else if compareError}
+                  Could not compare {versionLabel} to {compareTargetVersionLabel()}
                 {:else}
                   {mergePreview ? `Merged into ${nextVersionLabel}` : `Compare ${versionLabel} → ${compareTargetVersionLabel()}`}
                 {/if}
@@ -2167,6 +2173,14 @@
             <div class="compare-working" role="status" aria-live="polite">
               <span class="work-pulse" aria-hidden="true"></span>
               <span>{mergePending ? 'Building a reviewable merge preview with the configured VText model.' : 'Comparing versions with the configured VText model.'}</span>
+            </div>
+          {/if}
+          {#if compareError && !comparePending && !mergePending}
+            <div class="compare-error" role="alert" data-vtext-compare-error>
+              <span>{compareError}</span>
+              <button type="button" class="secondary-action" on:click={handleCompareToDraft}>
+                Retry compare
+              </button>
             </div>
           {/if}
           {#if compareResult?.summary?.length}
@@ -2411,6 +2425,10 @@
     color: var(--choir-text-primary);
   }
 
+  .compare-panel-error {
+    border-bottom-color: var(--choir-status-danger);
+  }
+
   .compare-heading {
     display: flex;
     align-items: flex-start;
@@ -2444,6 +2462,21 @@
     color: var(--choir-text-secondary);
     font-size: 0.74rem;
     line-height: 1.35;
+  }
+
+  .compare-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--choir-text-primary);
+    font-size: 0.74rem;
+    line-height: 1.35;
+  }
+
+  .compare-error span {
+    flex: 1 1 18rem;
+    min-width: 0;
   }
 
   .compare-summary,
@@ -2998,23 +3031,6 @@
     white-space: nowrap;
   }
 
-  .publication-facts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    justify-content: flex-end;
-    color: var(--choir-text-accent);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.68rem;
-  }
-
-  .publication-facts span {
-    max-width: 14rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .publication-result {
     background: var(--choir-status-success-soft);
     border-bottom-color: var(--choir-status-success);
@@ -3170,7 +3186,7 @@
     border-radius: 12px;
     border: 1px solid var(--choir-status-danger);
     background: var(--choir-status-danger);
-    color: var(--choir-status-danger);
+    color: var(--choir-text-on-accent);
     padding: 0.55rem 0.75rem;
     font-size: 0.75rem;
     line-height: 1.4;
