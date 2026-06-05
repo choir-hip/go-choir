@@ -743,7 +743,9 @@ call a partial implementation complete.
 status: checkpoint_incomplete
 
 last checkpoint: June 5, 2026. The first implementation checkpoint landed
-after a separate problem-documentation commit.
+after a separate problem-documentation commit. A second checkpoint added real
+platform DOCX/PDF publication export after documenting the staging DOCX export
+blocker.
 
 current artifact state: problem evidence exists for slow VText revision,
 Markdown table corruption, durable version numbers, publication/export UX, and
@@ -772,6 +774,19 @@ what shipped:
 - `19f41da9` adds publish-surface download choices for Markdown, Text, HTML,
   DOCX, and PDF, while leaving unsupported backend formats as explicit
   failures rather than fake exports.
+- `52379bec` documented that staging commit `19f41da9` still returned a public
+  export failure for DOCX on the prior public route because platformd only
+  accepted text-like formats and that route's immutable export policy allowed
+  only `txt`, `md`, and `html`.
+- `631acb58` adds platform-owned DOCX and PDF export generation from canonical
+  publication bundles. DOCX is emitted as an OOXML package with document,
+  core-properties, custom-properties, table preservation, and compact public
+  provenance. PDF is emitted as valid PDF 1.4 bytes with paginated text and XMP
+  public provenance. Binary exports travel through the public JSON export API
+  as `content_base64`, and the VText download UI decodes that payload for file
+  downloads.
+- `631acb58` expands the default publication export policy to
+  `txt`, `md`, `html`, `docx`, and `pdf` for new publications.
 
 what was proven:
 
@@ -789,6 +804,34 @@ what was proven:
   rendered the prior long published VText.
 - Staging public export API returned Markdown, Text, and HTML exports for that
   public route.
+- Local platform/proxy tests passed for publication/export paths, including
+  DOCX and PDF bytes generated from canonical publication content with table
+  preservation and public provenance metadata.
+- Frontend build passed after adding binary export decoding.
+- GitHub CI, staging deploy, and FlakeHub publish passed for
+  `631acb588eb991186b1cab10c4fcccdaa4d7b7b1`.
+- Staging health proved proxy and sandbox deployed commit
+  `631acb588eb991186b1cab10c4fcccdaa4d7b7b1` at
+  `2026-06-05T05:15:16Z`.
+- A fresh staging publication
+  `/pub/vtext/staging-docx-pdf-export-proof-pub479b3a5d9` was created with the
+  new default export policy. Its public resolve API returned
+  `txt`, `md`, `html`, `docx`, and `pdf` as allowed formats.
+- Public export API calls for that route returned:
+  - DOCX:
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
+    filename `staging-docx-pdf-export-proof-pub479b3a5d9.docx`,
+    `content_base64`, and `choir.publication_export.v0` metadata.
+  - PDF: `application/pdf`, filename
+    `staging-docx-pdf-export-proof-pub479b3a5d9.pdf`, `content_base64`, and
+    `choir.publication_export.v0` metadata.
+- Decoded DOCX proof at `/tmp/choir-docx-export-proof.docx` was recognized as
+  `Microsoft Word 2007+`; `word/document.xml` preserved the table and final
+  content line; `docProps/custom.xml` contained the publication version and
+  content hash.
+- Decoded PDF proof at `/tmp/choir-pdf-export-proof.pdf` was recognized as
+  `PDF document, version 1.4`; extracted strings contained the publication
+  version, XMP public provenance, body content, and final content line.
 
 unproven or partial claims:
 
@@ -799,13 +842,20 @@ unproven or partial claims:
   `yusefnathanson@me.com` and did not run a live long-document revise on the
   legal-cloud proposal after deployment.
 - DOCX and PDF buttons are visible in the publish download menu, but backend
-  DOCX/PDF export adapters are not implemented; staging `format=docx` returned
-  a server export failure.
+  import adapters are not implemented. Backend DOCX/PDF export now works for
+  new publications whose policy permits those formats, but this checkpoint does
+  not yet prove owner-authenticated VText publish/download UX by computer use.
+- Existing immutable publications keep their historical export policy. The
+  prior route
+  `/pub/vtext/staging-long-compare-merge-proof-1780614390072-pub32bd3c150`
+  still allows only `txt`, `md`, and `html`, so DOCX/PDF are correctly rejected
+  there unless a new version is published with an updated policy.
 - `.md` file-open normalization now records import and migration manifests, but
   bulk migration of existing versioned Markdown documents, including the
   legal-cloud proposal class, is not complete.
 - DOCX/PDF import, original-file ContentItems, style-profile preservation,
-  revise/export roundtrip, and inspected document metadata are not complete.
+  import -> revise -> export roundtrip, and inspected imported-document
+  metadata are not complete.
 - Source entity behavior is still a frontend interaction proof for existing
   inline source markup; citation repair, source entity creation, publication
   projection, and open-owning-source proof over real legal-cloud citations
@@ -819,10 +869,11 @@ are sufficient for fast high-quality structured edits on the legal-cloud
 proposal, or whether a stronger block/section selector operation is needed to
 avoid whole-document edits while keeping semantic quality.
 
-next executable probe: use authenticated computer-use on staging to revise the
+next executable probe: use authenticated computer-use on staging to publish and
+download a real owner VText as DOCX/PDF from the UI, then revise the
 legal-cloud proposal through the product path, capture prompt size/latency and
-delta evidence, verify the appendix table survives focus/edit/save/revise, then
-implement the missing DOCX/PDF import/export adapters and bulk Markdown lineage
+delta evidence, verify the appendix table survives focus/edit/save/revise, and
+implement the missing DOCX/PDF import adapters plus bulk Markdown lineage
 migration.
 
 suggested resume goal string: use the Goal String in this document.
