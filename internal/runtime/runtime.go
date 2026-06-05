@@ -1931,6 +1931,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 var durableMetadataKeys = []string{
 	"seed_prompt",
 	"source_path",
+	"canonical_vtext_source_path",
 	"conductor_loop_id",
 	"media_source_refs",
 	"media_source_research_required",

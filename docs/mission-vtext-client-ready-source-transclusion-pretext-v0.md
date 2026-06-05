@@ -2797,3 +2797,90 @@ required correction:
 - Preserve the original import alias so opening the original `.md`/`.txt` path
   still resolves to the canonical VText document instead of forking a new
   document.
+
+## 2026-06-05 Repair: Appagent v1 Imports Now Establish Canonical `.vtext`
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `internal/runtime/vtext.go` now exposes the `.vtext` shortcut/manifest
+  assurance through a shared store-backed helper instead of keeping it only on
+  the API handler path.
+- `internal/runtime/tools_vtext.go` calls the shared helper before creating an
+  appagent-authored VText revision and records
+  `canonical_vtext_source_path` in the revision metadata.
+- `internal/runtime/runtime.go` treats `canonical_vtext_source_path` as durable
+  appagent metadata so subsequent appagent revisions carry the canonical
+  working-document path forward.
+- `TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle` now fails if the
+  appagent path only renames the title. It asserts the v1 metadata, latest
+  alias source path, canonical `.vtext` alias, and preservation of the original
+  Markdown alias.
+
+local verification:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle|TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable|TestVTextOpenFileResolvesCanonicalAlias'`
+  passed.
+- A first run without `-tags comprehensive` produced `no tests to run`, which
+  confirmed that this file's focused VText tests require the comprehensive build
+  tag. The tagged run is the accepted local evidence.
+
+belief update:
+
+- Imported `.md` documents that advance from v0 to v1 through appagent
+  `edit_vtext` now follow the same canonical `.vtext` projection invariant as
+  direct user revisions.
+- The repair is extension-generic because it is driven by document alias state
+  and `.vtext` projection manifest creation, not by Markdown, glossary, or
+  legal-cloud-specific content.
+
+remaining proof:
+
+- Push, CI, Node B deploy, staging health identity, and deployed owner-account
+  proof are still required before this is accepted as platform behavior.
+
+## 2026-06-05 Cognitive Transform: Source UI Is Article Flow, Not Card Chrome
+
+status: route_change_recorded
+
+current obstacle:
+
+- The compact source note is no longer polluted by invented metadata chrome,
+  but expanded source content is still visually treated as a card-like object
+  beside or inside the prose. That misses the owner's point: Pretext matters
+  because it can route text around source transclusions in a magazine or
+  academic-journal style layout.
+
+selected transforms:
+
+- Depth extraction: the deep version of "use Pretext" is not "measure text";
+  it is caller-owned line routing where source cards are obstacles and inline
+  citation chips are atomic fragments.
+- Audience translation: for a client reader, sources should feel like margin
+  notes, pull quotes, footnotes, or journal apparatus that support the article
+  without becoming the article's top stack of metadata.
+- Invariant recovery: VText remains canonical and citations remain
+  transclusion points; layout is a projection over canonical structure, not a
+  new source table or rendered-DOM export.
+
+route-changing implications:
+
+- Use Pretext `rich-inline` for compact source atoms and chips only where
+  inline atomicity is needed.
+- Use Pretext variable-width line routing (`layoutNextLineRange` /
+  `layoutNextRichInlineLineRange`) for expanded source cards so each text line
+  can route around a floated source note or margin apparatus.
+- Treat iframe source windows as optional live web views. The durable fallback
+  should be cleaned reader Markdown rendered as source content, so publications
+  remain readable when third-party frames fail or Obscura snapshots need
+  cleanup.
+- Do not bunch many sources at the top. The source graph belongs near the
+  claims it supports, with expanded detail entering the flow at the citation
+  point.
+
+research refs:
+
+- `https://github.com/chenglou/pretext`
+- `https://github.com/bluedusk/awesome-pretext`

@@ -5180,6 +5180,24 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if len(revs) != 2 || revs[0].VersionNumber != 1 || !strings.Contains(revs[0].Content, "canonical VText") {
 		t.Fatalf("revisions = %+v, want appagent v1 canonical edit", revs)
 	}
+	meta := decodeRevisionMetadata(revs[0].Metadata)
+	canonicalPath, ok := meta["canonical_vtext_source_path"].(string)
+	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
+		t.Fatalf("canonical_vtext_source_path = %#v, want .vtext", meta["canonical_vtext_source_path"])
+	}
+	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, doc.OwnerID, doc.DocID)
+	if err != nil {
+		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
+	}
+	if sourcePath != canonicalPath {
+		t.Fatalf("latest alias source path = %q, want canonical path %q", sourcePath, canonicalPath)
+	}
+	if docID, err := s.GetDocumentAlias(ctx, doc.OwnerID, canonicalPath); err != nil || docID != doc.DocID {
+		t.Fatalf("canonical alias docID = %q, err = %v, want %q", docID, err, doc.DocID)
+	}
+	if docID, err := s.GetDocumentAlias(ctx, doc.OwnerID, "proposals/legacy-proposal.md"); err != nil || docID != doc.DocID {
+		t.Fatalf("original markdown alias docID = %q, err = %v, want %q", docID, err, doc.DocID)
+	}
 }
 
 func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {

@@ -376,7 +376,17 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	if err != nil {
 		return types.Revision{}, err
 	}
+
+	canonicalPath, err := rt.ensureCanonicalVTextProjectionPath(ctx, rec.OwnerID, doc)
+	if err != nil {
+		return types.Revision{}, fmt.Errorf("ensure canonical vtext projection path: %w", err)
+	}
 	revMeta := addVTextEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized, rec)
+	if canonicalPath != "" {
+		revMeta = mergeVTextRevisionMetadata(revMeta, map[string]any{
+			"canonical_vtext_source_path": canonicalPath,
+		})
+	}
 	now := time.Now().UTC()
 	rev := types.Revision{
 		RevisionID:       uuid.NewString(),

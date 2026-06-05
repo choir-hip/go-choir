@@ -1809,12 +1809,37 @@ func (h *APIHandler) HandleVTextExportDocument(w http.ResponseWriter, r *http.Re
 }
 
 func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, doc types.Document) (string, error) {
-	sourcePath, err := h.rt.Store().GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
+	return ensureVTextManifest(ctx, h.rt.Store(), ownerID, doc)
+}
+
+func (rt *Runtime) ensureCanonicalVTextProjectionPath(ctx context.Context, ownerID string, doc types.Document) (string, error) {
+	sourcePath, err := rt.ensureVTextManifest(ctx, ownerID, doc)
+	if err != nil {
+		return "", err
+	}
+	if !isVTextShortcutPath(sourcePath) {
+		return "", fmt.Errorf("manifest path %q is not a .vtext shortcut", sourcePath)
+	}
+	return sourcePath, nil
+}
+
+func (rt *Runtime) ensureVTextManifest(ctx context.Context, ownerID string, doc types.Document) (string, error) {
+	if rt == nil || rt.store == nil {
+		return "", fmt.Errorf("runtime store unavailable")
+	}
+	return ensureVTextManifest(ctx, rt.store, ownerID, doc)
+}
+
+func ensureVTextManifest(ctx context.Context, st *store.Store, ownerID string, doc types.Document) (string, error) {
+	if st == nil {
+		return "", fmt.Errorf("store unavailable")
+	}
+	sourcePath, err := st.GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
 	if err != nil && err != store.ErrNotFound {
 		return "", err
 	}
 	if err == store.ErrNotFound || !isVTextShortcutPath(sourcePath) {
-		sourcePath, err = h.allocateVTextManifestPath(ctx, ownerID, doc)
+		sourcePath, err = allocateVTextManifestPath(ctx, st, ownerID, doc)
 		if err != nil {
 			return "", err
 		}
@@ -1833,7 +1858,7 @@ func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, do
 	if err := os.WriteFile(absPath, content, 0o644); err != nil {
 		return "", fmt.Errorf("write manifest file: %w", err)
 	}
-	if err := h.rt.Store().UpsertDocumentAlias(ctx, ownerID, sourcePath, doc.DocID, time.Now().UTC()); err != nil {
+	if err := st.UpsertDocumentAlias(ctx, ownerID, sourcePath, doc.DocID, time.Now().UTC()); err != nil {
 		return "", err
 	}
 	return sourcePath, nil
@@ -1870,7 +1895,7 @@ func (h *APIHandler) ensureCanonicalVTextProjectionPath(ctx context.Context, own
 	return sourcePath, nil
 }
 
-func (h *APIHandler) allocateVTextManifestPath(ctx context.Context, ownerID string, doc types.Document) (string, error) {
+func allocateVTextManifestPath(ctx context.Context, st *store.Store, ownerID string, doc types.Document) (string, error) {
 	stem := slugifyVTextManifestStem(doc.Title)
 	suffix := shortDocIDSuffix(doc.DocID)
 	candidates := []string{
@@ -1879,7 +1904,7 @@ func (h *APIHandler) allocateVTextManifestPath(ctx context.Context, ownerID stri
 	}
 	filesRoot := sandbox.ResolveFilesRoot("")
 	for _, candidate := range candidates {
-		docID, err := h.rt.Store().GetDocumentAlias(ctx, ownerID, candidate)
+		docID, err := st.GetDocumentAlias(ctx, ownerID, candidate)
 		if err == nil {
 			if docID == doc.DocID {
 				return candidate, nil
