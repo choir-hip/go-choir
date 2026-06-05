@@ -3542,3 +3542,75 @@ remaining proof:
 - Run focused proxy tests, commit/push/deploy, republish the owner v83 route,
   and confirm the three failing owner sources expose error classes. This should
   make the next source-acquisition repair evidence-driven instead of inferred.
+
+## 2026-06-05 Deployment Evidence: Source Import Failure Diagnostics
+
+status: deployed_owner_proof_partial
+
+deployment evidence:
+
+- Behavior commit:
+  `4573d766c37feb7280e3354cd3dde0d2f27f5500`
+  (`fix: expose source import failure diagnostics`).
+- GitHub Actions CI run `27040126793` succeeded, including Go tests, runtime
+  shards, integration smoke, vet/build, aggregate status, and Node B deploy.
+- FlakeHub run `27040126800` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=4573d766c37feb7280e3354cd3dde0d2f27f5500`,
+  `deployed_at=2026-06-05T21:07:43Z`, and status/upstream/vmctl `ok`.
+
+owner publication proof:
+
+- Authenticated Computer Use/Comet was active against staging.
+- The owner v83 document was republished from Comet after the deploy.
+- Fresh route:
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub0cf7008e9`.
+- Public resolve API returned:
+  - `publication_id=pub-0cf7008e-9dbf-4ad3-8210-739b367a90e2`;
+  - `publication_version_id=pubver-6d4c3c83-9549-4374-b7f4-94c9d5dffac9`;
+  - 7 `source_entities`;
+  - 7 `transclusions`.
+- Source materialization states:
+  - `src_gdpr_article_32`: `reader_snapshot_ready`, 7,993 chars;
+  - `src_nixos_rollback`: `reader_snapshot_ready`, 11,642 chars;
+  - `src_hetzner_datacenters`: `reader_snapshot_ready`, 12,179 chars;
+  - `src_qdrant_search`: `reader_snapshot_ready`, 48 chars;
+  - `src_aba_rule_16`: `import_failed`,
+    `reason=source_import_failed`, `error_class=http_403`,
+    `http_status=403`;
+  - `src_aba_formal_op_512`: `import_failed`,
+    `reason=source_import_failed`, `error_class=http_403`,
+    `http_status=403`;
+  - `src_ovh_private_cloud`: `import_failed`,
+    `reason=source_import_failed`, `error_class=http_403`,
+    `http_status=403`.
+- Markdown export returned
+  `choir-private-legal-cloud-proposal-vtext-pub0cf7008e9.md`, hash
+  `4e6f3f9888c7ed41fe2b386620445985290285001bd0d3c16dfb02ad600f81bc`,
+  length `38398`, no `missing source`, `| Term | Definition |` present, and
+  no `TermDefinition`.
+
+belief-state change:
+
+- The remaining owner source gap is now root-caused to staging source
+  acquisition receiving HTTP 403 from the canonical URLs. This includes the
+  two ABA sources and the OVH support source.
+- The product path still preserves the source graph, citation transclusions,
+  source statuses, Markdown export, and the appendix table. Four source
+  windows can use publication-carried reader snapshots; three currently need a
+  repairable source-acquisition path or an allowed alternate/imported source
+  artifact.
+- The next repair should not add source-specific exceptions. It should provide
+  a general path to attach a permitted imported source artifact or use an
+  allowed accessible alternate when a canonical source URL blocks server-side
+  import.
+
+next executable probe:
+
+- Use the source-repair/import workflow on staging to attach permitted readable
+  source artifacts for the HTTP 403 sources, or improve the acquisition ladder
+  generically so canonical-blocked public sources can resolve via approved
+  alternates without hiding the canonical URL.
+- For the article UI, continue to treat Pretext as article/source-flow layout:
+  citation atoms remain inline; expanded source apparatus should route article
+  lines around content-first reader snippets rather than stack nested cards.
