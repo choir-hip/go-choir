@@ -1240,12 +1240,59 @@ must receive the user-authored diff and only the bounded current-head regions
 needed to apply it by default; full current-document context should be reserved
 for explicit whole-document transformations or retrieved on demand.
 
-next executable probe: use authenticated computer-use on staging with access to
-the owner's actual legal-cloud proposal snapshots to migrate the lineage
-through the deployed product path, attach known source entities where evidence
-exists, repair unresolved citation gaps through researcher/source tooling,
-revise the migrated VText through the product path, capture prompt size/latency
-and delta evidence, and verify the appendix table survives
-focus/edit/save/revise.
+2026-06-05 focused long-edit prompt repair:
+
+- Problem checkpoint commit `3170bb0c` recorded the owner-account evidence
+  before the fix.
+- Behavior commit `6feda8f275967513c5785228228256e52e87d4f9` changes ordinary
+  long user-authored VText revise prompts to use `focused_user_edit_diff`.
+  For long direct-edit drafts, VText now receives exact changed regions plus
+  nearby current-head context instead of the whole document body. Short docs
+  and non-direct-edit paths keep the previous full-current-content context.
+- The fix also corrected a stale test assertion that still expected broad
+  `"required"` tool choice. Current VText policy uses exact
+  `function:edit_vtext` tool choice for the first VText write and leaves
+  worker-wake turns unconstrained when appropriate.
+- Local verification:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVTextPrompt|TestVTextAgentRevision' -count=1` passed, and
+  `nix develop -c scripts/go-test-runtime-shards` passed.
+- GitHub CI run `27014358456` passed for
+  `6feda8f275967513c5785228228256e52e87d4f9`, including all four
+  `internal/runtime` shards, non-runtime tests, vet, build, and Node B staging
+  deploy. FlakeHub publish run `27014358497` passed.
+- Staging health then reported sandbox commit
+  `6feda8f275967513c5785228228256e52e87d4f9`, deployed at
+  `2026-06-05T12:19:07Z`.
+- Owner-account deployed proof ran on the actual
+  `choir_private_legal_cloud_proposal.md` VText document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`. A temporary user-authored revision
+  v77 appended a probe instruction line; the deployed VText appagent then
+  created v78 and removed the probe line while leaving the document length back
+  at 37,385 chars.
+- The v78 revision metadata proves the repaired path:
+  `vtext_context_mode: focused_user_edit_diff`,
+  `vtext_edit_operation: apply_edits`, `vtext_edit_count: 1`,
+  `vtext_run_prompt_chars: 9291`, and `vtext_edit_delta_chars: -128`.
+  The previous comparable owner proposal appagent revisions recorded prompt
+  sizes around 74k-76k chars.
+- The matching deployed run completed from `2026-06-05T12:20:55Z` to
+  `2026-06-05T12:21:05Z` with `input_tokens: 17034`,
+  `output_tokens: 976`, provider `fireworks`, model
+  `accounts/fireworks/models/deepseek-v4-flash`, and no
+  `Incorrect string value` diagnosis matches.
+
+remaining risk after this repair: this proves the fast path for a simple
+single-region direct edit on the owner legal-cloud proposal. It does not yet
+prove multi-region semantic edits, table-preserving appendix repair under the
+new focused context, or citation/transclusion repairs on the same owner
+document.
+
+next executable probe: use authenticated computer-use on staging when that
+capability is available, or browser/API backup otherwise, to prove the next
+realism axis on the owner legal-cloud proposal: multi-region semantic edits,
+appendix-table preservation through focus/edit/save/revise, unresolved citation
+gap repair through source tooling, and citation expansion/open-source behavior
+on the migrated owner document.
 
 suggested resume goal string: use the Goal String in this document.
