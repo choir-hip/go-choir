@@ -33,6 +33,27 @@ async function openApp(page, appId) {
   await page.locator('[data-window]').first().waitFor({ state: 'visible', timeout: 5000 });
 }
 
+async function fetchJSON(page, path, options = {}) {
+  return page.evaluate(async ({ requestPath, requestOptions }) => {
+    const res = await fetch(requestPath, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(requestOptions.headers || {}) },
+      ...requestOptions,
+    });
+    const text = await res.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (_err) {
+      body = text;
+    }
+    if (!res.ok) {
+      throw new Error(`${requestOptions.method || 'GET'} ${requestPath} failed ${res.status}: ${text}`);
+    }
+    return body;
+  }, { requestPath: path, requestOptions: options });
+}
+
 // Helper: get window positions and sizes from the DOM
 async function getWindowStates(page) {
   return page.evaluate(() => {
@@ -119,6 +140,41 @@ test('stale bare email URL intent does not override restored desktop state', asy
   await expect(page.locator('[data-vtext-app]').last()).toBeVisible({ timeout: 10000 });
   await expect(page.locator('[data-email-app]')).toHaveCount(0);
   await expect(page).not.toHaveURL(/app=email/);
+});
+
+test('private vtext URL intent opens the requested authenticated document', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, authenticator, email);
+
+  const stamp = Date.now();
+  const title = `Deep Linked VText ${stamp}`;
+  const doc = await fetchJSON(page, '/api/vtext/documents', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  });
+  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: `# ${title}\n\nPrivate deep link fixture.`,
+      author_kind: 'user',
+      author_label: 'Browser test',
+    }),
+  });
+
+  await page.goto(`${BASE_URL}?app=vtext&doc=${encodeURIComponent(doc.doc_id)}&title=${encodeURIComponent(title)}`);
+  await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
+    state: 'visible',
+    timeout: 120000,
+  });
+
+  const editor = page.locator(`[data-vtext-editor][data-vtext-doc-id="${doc.doc_id}"]`).last();
+  await expect(editor).toBeVisible({ timeout: 15000 });
+  await expect(editor.locator('[data-vtext-rendered]')).toContainText('Private deep link fixture');
+  await expect(page).not.toHaveURL(/app=vtext/);
+  await expect(page).not.toHaveURL(/doc=/);
 });
 
 test('email app view state persists through universal app context after reload', async ({

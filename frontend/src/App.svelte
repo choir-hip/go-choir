@@ -107,6 +107,9 @@
     if (intent.kind === 'published_vtext_edit') {
       return `Edit your version of ${intent.title || 'this published VText'}.`;
     }
+    if (intent.kind === 'private_vtext_document') {
+      return `Open ${intent.title || 'this VText document'} from your private computer.`;
+    }
     return 'Continue with private computer state.';
   }
 
@@ -145,6 +148,21 @@
       };
       return;
     }
+    if (intent?.kind === 'private_vtext_document' && intent.docId) {
+      appReplay = {
+        id: `app-replay-${++appReplayCounter}`,
+        appId: 'vtext',
+        appName: 'VText',
+        icon: '📝',
+        appContext: {
+          docId: intent.docId,
+          windowTitle: intent.title || 'VText',
+          createInitialVersion: false,
+          allowMultiple: true,
+        },
+      };
+      return;
+    }
     if (intent?.kind === 'app_launch' && intent.appId) {
       appReplay = {
         id: `app-replay-${++appReplayCounter}`,
@@ -160,25 +178,43 @@
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search || '');
     const appId = (params.get('app') || '').trim().toLowerCase();
-    if (appId !== 'email') return null;
-    const draftId = (params.get('draft') || '').trim();
-    const approvalToken = (params.get('approval') || '').trim();
-    if (!draftId && !approvalToken) {
-      clearConsumedAppIntentFromURL();
-      return null;
+    if (appId === 'vtext') {
+      const docId = (params.get('doc') || params.get('doc_id') || '').trim();
+      if (!docId) {
+        clearConsumedAppIntentFromURL();
+        return null;
+      }
+      return {
+        kind: 'private_vtext_document',
+        source: 'url',
+        docId,
+        title: (params.get('title') || '').trim() || 'VText',
+      };
     }
-    return {
-      kind: 'app_launch',
-      source: 'url',
-      appId: 'email',
-      appName: 'Email',
-      icon: '✉️',
-      appContext: {
-        draftId,
-        approvalToken,
-        windowTitle: 'Email',
-      },
-    };
+    if (appId === 'email') {
+      const draftId = (params.get('draft') || '').trim();
+      const approvalToken = (params.get('approval') || '').trim();
+      if (!draftId && !approvalToken) {
+        clearConsumedAppIntentFromURL();
+        return null;
+      }
+      return {
+        kind: 'app_launch',
+        source: 'url',
+        appId: 'email',
+        appName: 'Email',
+        icon: '✉️',
+        appContext: {
+          draftId,
+          approvalToken,
+          windowTitle: 'Email',
+        },
+      };
+    }
+    if (appId) {
+      clearConsumedAppIntentFromURL();
+    }
+    return null;
   }
 
   function clearConsumedAppIntentFromURL(intent = null) {
@@ -189,6 +225,9 @@
     url.searchParams.delete('app');
     url.searchParams.delete('draft');
     url.searchParams.delete('approval');
+    url.searchParams.delete('doc');
+    url.searchParams.delete('doc_id');
+    url.searchParams.delete('title');
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next || '/');
   }
