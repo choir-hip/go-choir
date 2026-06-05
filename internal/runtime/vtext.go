@@ -3687,6 +3687,12 @@ func (h *APIHandler) pendingAgentMutationByDoc(ctx context.Context, docID, owner
 	if err != nil || mutation == nil {
 		return mutation, err
 	}
+	reconciled, reconcileErr := h.reconcilePendingMutationFromDocumentHead(ctx, mutation)
+	if reconcileErr != nil {
+		log.Printf("vtext api: reconcile pending mutation %s from document head: %v", mutation.RunID, reconcileErr)
+	} else if reconciled {
+		return nil, nil
+	}
 	run, err := h.rt.GetRun(ctx, mutation.RunID, ownerID)
 	if err != nil {
 		return mutation, nil
@@ -3699,6 +3705,34 @@ func (h *APIHandler) pendingAgentMutationByDoc(ctx context.Context, docID, owner
 		return mutation, nil
 	}
 	return nil, nil
+}
+
+func (h *APIHandler) reconcilePendingMutationFromDocumentHead(ctx context.Context, mutation *store.AgentMutation) (bool, error) {
+	if mutation == nil || strings.TrimSpace(mutation.RunID) == "" || strings.TrimSpace(mutation.DocID) == "" || strings.TrimSpace(mutation.OwnerID) == "" {
+		return false, nil
+	}
+	doc, err := h.rt.Store().GetDocument(ctx, mutation.DocID, mutation.OwnerID)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+		return false, nil
+	}
+	rev, err := h.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, mutation.OwnerID)
+	if err != nil {
+		return false, err
+	}
+	if rev.AuthorKind != types.AuthorAppAgent {
+		return false, nil
+	}
+	meta := decodeRevisionMetadata(rev.Metadata)
+	if metadataStringValue(meta, "source") != "edit_vtext" || metadataStringValue(meta, "loop_id") != mutation.RunID {
+		return false, nil
+	}
+	if err := h.rt.Store().CompleteAgentMutation(ctx, mutation.RunID, rev.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+		return false, err
+	}
+	return true, nil
 }
 
 // HandleTestVTextResearchFindings is a local-only dry-run browser test seam that

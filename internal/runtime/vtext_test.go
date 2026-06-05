@@ -4592,6 +4592,60 @@ func TestVTextDocumentResponseReportsPendingAgentMutation(t *testing.T) {
 	}
 }
 
+func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	docID, baseRevisionID := createDocWithUserRevision(t, h)
+	runID := "run-vtext-head-already-written"
+	if err := s.CreateAgentMutation(context.Background(), store.AgentMutation{
+		DocID:     docID,
+		RunID:     runID,
+		OwnerID:   "user-1",
+		State:     "pending",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+	meta, _ := json.Marshal(map[string]any{
+		"source":  "edit_vtext",
+		"loop_id": runID,
+	})
+	if err := s.CreateRevision(context.Background(), types.Revision{
+		RevisionID:       "rev-appagent-current-head",
+		DocID:            docID,
+		OwnerID:          "user-1",
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		Content:          "Hello, edited document.",
+		Citations:        json.RawMessage("[]"),
+		Metadata:         meta,
+		ParentRevisionID: baseRevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create appagent head revision: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID, nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextDocument(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get document: status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp vtextDocumentResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode document response: %v", err)
+	}
+	if resp.AgentRevisionPending {
+		t.Fatalf("agent_revision_pending = true after current head reconciliation; response=%+v", resp)
+	}
+	mutation, err := s.GetAgentMutationByRun(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation.State != "completed" || mutation.RevisionID != "rev-appagent-current-head" {
+		t.Fatalf("mutation not reconciled to completed current head: %+v", mutation)
+	}
+}
+
 func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)
