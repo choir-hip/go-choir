@@ -2780,3 +2780,44 @@ remaining error field:
   creation; embedded source transclusion rendering; source-window opening from
   those transclusions; and publication that grants authorized proposal viewers
   access to the cited sources.
+
+2026-06-05 published source-window proof gap checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before product-code fix:
+
+- The existing source-service publication regression already proves that a
+  published VText bundle stores `source_entities` and `transclusions`, resolves
+  them through `/api/platform/publications/resolve`, exports canonical
+  publication bytes, and renders an embedded source transclusion with a visible
+  `Open source` control.
+- Extending that regression to click the published reader's `Open source`
+  control failed on deployed staging (`https://choir.news`): after clicking the
+  control, Playwright expected one additional `[data-content-viewer]` Source
+  window but observed zero for 10 seconds.
+- This means the publication path currently proves source metadata and inline
+  transclusion rendering, but does not yet prove that published viewers can open
+  the source in its own window. That violates the new publication-source
+  requirement for the canonical legal-cloud proposal.
+
+verification evidence:
+
+- Failing command:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-source-service-publication.spec.js --project=chromium`
+- Failure:
+  `expect(locator('[data-content-viewer]')).toHaveCount(1)` received `0` after
+  clicking `[data-vtext-source-inline] [data-vtext-open-source]`.
+
+belief-state update:
+
+- The likely failure surface is frontend event handling in published read-only
+  mode, not backend publication storage. The backend bundle already contains the
+  source entity and transclusion, and the published reader renders the open
+  button.
+
+remaining error field:
+
+- Repair the published-reader source-open path without hardcoding legal-cloud or
+  source-service fixtures. Then rerun the staging publication regression and use
+  it as a prerequisite for the new canonical owner `.vtext` proposal proof.
