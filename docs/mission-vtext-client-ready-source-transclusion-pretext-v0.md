@@ -4921,3 +4921,56 @@ remaining simplification field:
   should be split after the next behavior-preserving extraction.
 - The source-note design still needs the magazine/journal visual pass the user
   requested.
+
+## 2026-06-05 Problem: Journal Source Note Still Clones Popover Markup
+
+status: documented_before_code
+
+problem:
+
+- `frontend/src/lib/vtext-source-flow.ts` now uses Pretext to route article
+  text around an expanded source note, but `mountSourceJournalFlow` still builds
+  the note with `note.innerHTML = popover.innerHTML`.
+- That means the magazine/journal surface is structurally coupled to
+  `.vtext-source-ref-popover`, which was designed as a hidden hover/focus
+  popover for inline markers.
+- The result is not merely visual. A future source-note design pass has to
+  fight inherited popover markup, card assumptions, generic span display rules,
+  and button placement instead of rendering a purpose-built evidence note.
+
+evidence:
+
+- `vtext-source-flow.ts` creates the Pretext flow region and then copies the
+  entire `[data-vtext-source-ref-popover]` subtree into
+  `[data-vtext-source-flow-note]`.
+- `VTextEditor.svelte` CSS must then override popover, transclusion body,
+  facts, and source button styling inside `.vtext-source-journal-note`.
+- The hard-review artifact already recorded that the user wants a
+  magazine/academic journal UX with text wrapping around source apparatus, not
+  more rounded card/pill layers.
+
+root-cause hypothesis:
+
+- The first source-flow repair reused the popover DOM because it was the
+  quickest way to preserve title, excerpt, facts, and `Open source`. That
+  preserved behavior, but it also preserved the wrong abstraction boundary:
+  hover popover markup became the source for the journal note.
+
+intended generic repair:
+
+- Keep the current Pretext line-routing and source graph semantics.
+- Replace popover-subtree cloning with a small source-note content builder that
+  extracts only the title, excerpt/media/facts, and source-open button from the
+  existing rendered marker.
+- Give the journal note its own minimal classes and typography so it reads like
+  a footnote or marginal evidence note, while the opened source window remains
+  the full reader-mode source artifact.
+
+forbidden shortcuts:
+
+- Do not special-case the legal-cloud document, ABA sources, glossary tables,
+  or any source id.
+- Do not change source entity metadata, publication policy, Markdown export, or
+  canonical VText revision semantics as part of this UI simplification.
+- Do not remove the hover popover contract unless separate tests prove that the
+  inline collapsed marker affordance remains accessible.
