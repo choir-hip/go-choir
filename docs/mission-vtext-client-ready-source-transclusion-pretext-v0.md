@@ -4974,3 +4974,57 @@ forbidden shortcuts:
   canonical VText revision semantics as part of this UI simplification.
 - Do not remove the hover popover contract unless separate tests prove that the
   inline collapsed marker affordance remains accessible.
+
+## 2026-06-05 Local Repair: Purpose-Built Journal Source Note
+
+status: local_verified_pending_deploy
+
+change:
+
+- `frontend/src/lib/vtext-source-flow.ts` now builds the Pretext journal note
+  with a dedicated source-note content builder instead of copying
+  `.vtext-source-ref-popover` wholesale.
+- The note extracts the source title, compact transclusion body, facts/media,
+  and `Open source` action from the rendered marker, then adds the journal
+  `Close` action in a purpose-built action row.
+- The note width was reduced from a 300-380px / 42% range to a 260-340px / 34%
+  range so more proposal prose remains in the reading column.
+- The journal note has a modest line-height-based minimum height so the
+  evidence note behaves like a marginal/journal aside with routed article text
+  beside it, rather than a tiny tooltip replacement.
+
+test changes:
+
+- `frontend/tests/vtext-source-entities.spec.js` now asserts that the journal
+  note contains `[data-vtext-source-flow-note-title]`, has no cloned
+  `[data-vtext-source-ref-popover]`, and keeps an `Open source` action.
+- The journal-flow geometry assertion now verifies that the second paragraph
+  routes beside the note and that the next normal paragraph resumes below the
+  flow. This matches the current flow, where the fixture's third paragraph can
+  also be routed into the Pretext region.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium` passed:
+  5/5 tests.
+- The first run of the focused suite failed after the DOM simplification
+  because the old geometry assertion assumed the third paragraph would remain
+  outside the flow. The failure context showed the second and third paragraphs
+  were now inside the routed journal flow. The verifier was updated to assert
+  the actual magazine/journal contract instead of a stale fixture boundary.
+
+local harness cleanup:
+
+- The focused Playwright suite ran against a local stack started with
+  `CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`.
+- After verification, the foreground stack was interrupted and orphaned local
+  gateway/vmctl children from that stack were stopped.
+- The pre-existing sandbox listener on `127.0.0.1:8085` was preserved.
+
+deployment status:
+
+- This is behavior-changing frontend code. It is not accepted until committed,
+  pushed to `origin/main`, CI/deploy succeeds, Node B reports the new commit,
+  and Comet staging proof verifies the deployed legal-cloud source flow.

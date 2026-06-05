@@ -3578,6 +3578,7 @@
     display: block;
     width: var(--vtext-source-flow-note-width);
     max-width: calc(100% - var(--vtext-source-flow-gap) - 12rem);
+    min-height: calc(var(--vtext-source-flow-line-height) * 7);
     margin: 0;
     border-left: 2px solid var(--choir-border-strong);
     padding: 0.08rem 0 0.16rem 0.86rem;
@@ -3589,27 +3590,19 @@
     text-transform: none;
   }
 
-  .rendered-doc :global(.vtext-source-journal-note strong) {
+  .rendered-doc :global(.vtext-source-journal-cite) {
     display: block;
     color: var(--choir-text-accent);
     font-size: 0.94rem;
     font-weight: 760;
+    font-style: normal;
     line-height: 1.22;
   }
 
-  .rendered-doc :global(.vtext-source-journal-note > span:not(.vtext-transclusion-body)) {
-    display: block;
-    margin-top: 0.12rem;
-    color: var(--choir-text-muted);
-    font-size: 0.72rem;
-    font-weight: 650;
-    text-transform: uppercase;
-  }
-
-  .rendered-doc :global(.vtext-source-journal-note .vtext-transclusion-body--compact) {
+  .rendered-doc :global(.vtext-source-journal-body.vtext-transclusion-body--compact) {
     display: grid;
-    gap: 0.38rem;
-    margin-top: 0.44rem;
+    gap: 0.34rem;
+    margin-top: 0.36rem;
   }
 
   .rendered-doc :global(.vtext-source-journal-note .vtext-transclusion-quote) {
@@ -3619,6 +3612,14 @@
     color: var(--choir-text-primary);
     font-size: 0.86rem;
     font-weight: 600;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    margin-top: 0.42rem;
   }
 
   .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts) {
@@ -3644,7 +3645,7 @@
 
   .rendered-doc :global(.vtext-source-journal-note .vtext-source-open),
   .rendered-doc :global(.vtext-source-journal-note .vtext-source-flow-close) {
-    margin-top: 0.44rem;
+    margin-top: 0;
     border: 0;
     border-radius: 0;
     padding: 0;

@@ -74,6 +74,12 @@ const MIN_LINE_WIDTH = 180;
 const MAX_FLOW_BLOCKS = 6;
 const SOURCE_FLOW_BLOCK_SELECTOR = 'p';
 
+function cloneHTMLElement(element: Element | null): HTMLElement | null {
+  if (!element) return null;
+  const clone = element.cloneNode(true);
+  return clone instanceof HTMLElement ? clone : null;
+}
+
 function normalizeFlowText(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -241,6 +247,29 @@ function isSourceFlowBlock(element: Element | null): boolean {
   return !!normalizeFlowText(element.textContent);
 }
 
+function buildSourceJournalNoteContent(note: HTMLElement, popover: Element, close: HTMLButtonElement): void {
+  const title = document.createElement('cite');
+  title.className = 'vtext-source-journal-cite';
+  title.setAttribute('data-vtext-source-flow-note-title', '');
+  title.textContent = normalizeFlowText(popover.querySelector('strong')?.textContent) || 'Source';
+  note.append(title);
+
+  const body = cloneHTMLElement(popover.querySelector('[data-vtext-transclusion-body]'));
+  if (body) {
+    body.classList.add('vtext-source-journal-body');
+    body.setAttribute('data-vtext-source-flow-note-body', '');
+    note.append(body);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'vtext-source-journal-actions';
+  actions.setAttribute('data-vtext-source-flow-note-actions', '');
+  const open = cloneHTMLElement(popover.querySelector('[data-vtext-open-source]'));
+  if (open) actions.append(open);
+  actions.append(close);
+  note.append(actions);
+}
+
 function collectSourceFlowBlocks(paragraph: Element, sourceRef: Element, layoutOptions: SourceJournalFlowBlocksOptions): {
   blocks: SourceJournalFlowBlock[];
   layout: SourceJournalFlowLayout;
@@ -285,7 +314,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   const text = sourceFlowText(paragraph, sourceRef).replace(/\s+/g, ' ').trim();
   if (!text) return false;
 
-  const noteWidth = Math.min(380, Math.max(300, Math.floor(containerWidth * 0.42)));
+  const noteWidth = Math.min(340, Math.max(260, Math.floor(containerWidth * 0.34)));
   const paragraphGap = Math.max(8, Math.round(options.lineHeight * 0.55));
   const flow = document.createElement('div');
   flow.setAttribute('data-vtext-source-flow', '');
@@ -301,7 +330,6 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   note.setAttribute('data-vtext-source-flow-note', '');
   note.className = 'vtext-source-journal-note';
   note.setAttribute('role', 'note');
-  note.innerHTML = popover.innerHTML;
 
   const close = document.createElement('button');
   close.type = 'button';
@@ -309,7 +337,7 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
   close.setAttribute('data-vtext-source-flow-collapse', '');
   close.setAttribute('aria-label', 'Collapse source');
   close.textContent = 'Close';
-  note.append(close);
+  buildSourceJournalNoteContent(note, popover, close);
   flow.append(note);
   paragraph.insertAdjacentElement('beforebegin', flow);
 

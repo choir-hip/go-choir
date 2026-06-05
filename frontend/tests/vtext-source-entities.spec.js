@@ -319,6 +319,9 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
   const note = flow.locator('[data-vtext-source-flow-note]');
   expect(await note.evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+  await expect(note.locator('[data-vtext-source-flow-note-title]')).toContainText('ABA Formal Opinion 512 fixture');
+  await expect(note.locator('[data-vtext-source-ref-popover]')).toHaveCount(0);
+  await expect(note.locator('[data-vtext-source-flow-note-actions] [data-vtext-open-source]')).toBeVisible();
   await expect(flow).toHaveAttribute('data-vtext-source-flow-routed-lines', /^[3-9]\d*$/);
   const journalGeometry = await flow.evaluate((node) => {
     const note = node.querySelector('[data-vtext-source-flow-note]');
@@ -331,15 +334,16 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
       const lineBox = line.getBoundingClientRect();
       return lineBox.right <= noteBox.left - 10;
     });
-    const lowerWrappedLine = Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
+    const secondParagraphBesideNote = Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
       const top = line.getBoundingClientRect().top - node.getBoundingClientRect().top;
-      return top > noteBottom * 0.45 && top < noteBottom && line.textContent.includes('Second paragraph');
+      const lineBox = line.getBoundingClientRect();
+      return top >= 0 && top < noteBottom && lineBox.right <= noteBox.left - 10 && line.textContent.includes('Second paragraph');
     });
-    return { besideLineCount, sideColumnIsClear, lowerWrappedLine };
+    return { besideLineCount, sideColumnIsClear, secondParagraphBesideNote };
   });
   const continuedBelowFlow = await rendered.evaluate((node) => {
     const flow = node.querySelector('[data-vtext-source-flow]');
-    const followingParagraph = Array.from(node.querySelectorAll('p')).find((paragraph) => paragraph.textContent.includes('Third paragraph'));
+    const followingParagraph = Array.from(node.querySelectorAll('p')).find((paragraph) => paragraph.textContent.includes('Fourth paragraph'));
     if (!flow || !followingParagraph) return false;
     const flowBox = flow.getBoundingClientRect();
     const paragraphBox = followingParagraph.getBoundingClientRect();
@@ -347,7 +351,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   });
   expect(journalGeometry.besideLineCount).toBeGreaterThanOrEqual(3);
   expect(journalGeometry.sideColumnIsClear).toBe(true);
-  expect(journalGeometry.lowerWrappedLine).toBe(true);
+  expect(journalGeometry.secondParagraphBesideNote).toBe(true);
   expect(continuedBelowFlow).toBe(true);
   const noteFactStyle = await note.locator('.vtext-source-facts span').first().evaluate((node) => {
     const style = getComputedStyle(node);
