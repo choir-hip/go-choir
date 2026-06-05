@@ -111,7 +111,7 @@
   function sourceEntityDisplayPolicy(entity) {
     const raw = String(entity?.display_policy || entity?.display?.display_policy || entity?.display?.inline_mode || '').trim();
     if (raw === 'embedded_excerpt' || raw === 'embedded_preview' || raw === 'expanded' || raw === 'collapsed_citation') return raw;
-    if (entity?.transclusion?.snapshot_text) return 'embedded_excerpt';
+    if (sourceEntitySnapshotText(entity)) return 'embedded_excerpt';
     return 'collapsed_citation';
   }
 
@@ -143,7 +143,7 @@
     const marker = sourceEntities.indexOf(entity) + 1 || '';
     return `<span class="vtext-source-ref" data-vtext-source-ref data-vtext-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
       <span class="vtext-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
-      <span class="vtext-source-ref-popover" data-vtext-source-ref-popover role="note">
+      <span class="vtext-source-ref-popover" data-vtext-source-ref-popover data-vtext-inline-transclusion role="note">
         <strong>${escapeHTML(title)}</strong>
         <span>${escapeHTML(kind)}</span>
         ${renderSourceTransclusionBody(entity, { compact: true })}
@@ -346,7 +346,7 @@
         canonical_url: canonical,
       },
       display: {
-        inline_mode: 'chip',
+        inline_mode: kind === 'youtube' || kind === 'image' ? 'embedded_preview' : 'collapsed_citation',
         expanded_mode: kind === 'youtube' ? 'media_player' : 'source_card',
         open_surface: ref?.app_hint || (kind === 'youtube' ? 'video' : kind),
         default_collapsed: true,
@@ -410,19 +410,18 @@
   }
 
   function renderSourceEntityFacts(entity) {
-    const contentID = escapeHTML(entity?.target?.content_id || '');
-    const itemID = escapeHTML(entity?.target?.item_id || '');
-    const transcript = escapeHTML(entity?.evidence?.transcript_availability || '');
-    const evidence = escapeHTML(entity?.evidence?.state || 'pending');
-    const research = escapeHTML(entity?.evidence?.research_state || 'pending');
-    const surface = escapeHTML(entity?.display?.open_surface || '');
+    const transcript = String(entity?.evidence?.transcript_availability || '').trim();
+    const selectors = Array.isArray(entity?.selectors) ? entity.selectors : [];
+    const supports = selectors
+      .map((selector) => String(selector?.supports || selector?.label || '').trim())
+      .filter(Boolean)
+      .slice(0, 2);
+    const facts = [];
+    if (transcript) facts.push(`transcript ${transcript}`);
+    for (const support of supports) facts.push(`supports ${support}`);
+    if (facts.length === 0) facts.push('source available');
     return `
-      ${contentID ? `<span>content ${contentID}</span>` : ''}
-      ${itemID ? `<span>item ${itemID}</span>` : ''}
-      ${transcript ? `<span>transcript ${transcript}</span>` : ''}
-      <span>evidence ${evidence}</span>
-      <span>research ${research}</span>
-      ${surface ? `<span>opens ${surface}</span>` : ''}
+      ${facts.map((fact) => `<span>${escapeHTML(fact)}</span>`).join('')}
     `;
   }
 
@@ -1889,14 +1888,7 @@
     }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
     if (!sourceRef) return;
-    const entityID = sourceRef.getAttribute('data-source-entity-id') || '';
-    if (!entityID) return;
-    const inline = Array.from(editorSurface?.querySelectorAll?.('[data-vtext-source-inline]') || [])
-      .find((item) => item.getAttribute('data-source-entity-id') === entityID);
-    if (inline && inline.tagName?.toLowerCase() === 'details') {
-      inline.open = true;
-      inline.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
+    event.preventDefault();
   }
 
   function handleEditorKeydown(event) {
@@ -1923,6 +1915,7 @@
   }
 
   function handleEditorPointerDown(event) {
+    if (event.target?.closest?.('[data-vtext-open-source]')) return;
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
     if (!sourceRef) return;
     event.preventDefault();
@@ -2865,6 +2858,20 @@
     cursor: pointer;
   }
 
+  .rendered-doc :global(.vtext-source-ref[data-expanded="true"]) {
+    display: inline-grid;
+    grid-template-columns: auto minmax(12rem, 1fr);
+    align-items: start;
+    min-width: min(24rem, 100%);
+    max-width: min(30rem, 100%);
+    margin: 0.28rem 0.08rem;
+    border-radius: 8px;
+    padding: 0.18rem 0.22rem;
+    font-size: 0.88rem;
+    line-height: 1.35;
+    vertical-align: baseline;
+  }
+
   .rendered-doc :global(.vtext-source-ref:focus-visible) {
     outline: 2px solid var(--choir-state-active-glow);
     outline-offset: 2px;
@@ -2893,14 +2900,24 @@
     text-transform: none;
   }
 
+  .rendered-doc :global(.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover) {
+    position: static;
+    z-index: auto;
+    display: grid;
+    width: auto;
+    margin-left: 0.42rem;
+    border-color: color-mix(in srgb, var(--choir-border-strong) 72%, transparent);
+    background: color-mix(in srgb, var(--choir-surface-pane) 88%, transparent);
+    box-shadow: none;
+  }
+
   .rendered-doc :global(.vtext-source-ref-popover strong),
   .rendered-doc :global(.vtext-source-ref-popover span) {
     display: block;
   }
 
-  .rendered-doc :global(.vtext-source-ref[data-expanded="true"] .vtext-source-ref-popover),
-  .rendered-doc :global(.vtext-source-ref:hover .vtext-source-ref-popover),
-  .rendered-doc :global(.vtext-source-ref:focus .vtext-source-ref-popover) {
+  .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):hover .vtext-source-ref-popover),
+  .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):focus .vtext-source-ref-popover) {
     display: block;
   }
 

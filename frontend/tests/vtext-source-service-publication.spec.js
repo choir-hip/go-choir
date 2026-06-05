@@ -128,6 +128,6 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(publishedReader.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-display-policy', 'embedded_excerpt');
   await expect(publishedReader.locator('[data-vtext-source-inline]')).toHaveAttribute('open', '');
   await expect(publishedReader.locator('[data-vtext-source-inline]')).toContainText(sourceLabel);
-  await expect(publishedReader.locator('[data-vtext-source-inline]')).toContainText(itemID);
+  await expect(publishedReader.locator('[data-vtext-source-inline]')).not.toContainText(itemID);
   await expect(publishedReader.locator('[data-vtext-source-inline] [data-vtext-open-source]')).toBeVisible();
 });

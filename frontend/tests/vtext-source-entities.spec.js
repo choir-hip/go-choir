@@ -68,16 +68,15 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(rendered.locator('[data-vtext-source-ref]')).toBeVisible({ timeout: 10000 });
   await expect(rendered.locator('[data-vtext-source-ref]')).toHaveAttribute('data-vtext-citation-transclusion', '');
   await rendered.locator('[data-vtext-source-ref]').click();
-  await expect(rendered.locator('[data-vtext-source-ref-popover], .vtext-source-ref-popover')).toContainText('YouTube source fixture');
-  await expect(rendered.locator('[data-vtext-source-inline]')).toBeVisible({ timeout: 10000 });
-  await expect(rendered.locator('[data-vtext-source-inline]')).toContainText('YouTube source fixture');
-  await expect(rendered.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-transclusion', '');
+  const citation = rendered.locator('[data-vtext-source-ref]');
+  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('YouTube source fixture');
+  await expect(citation.locator('[data-vtext-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
+  await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('transcript unavailable');
   await expect(rendered.locator('[data-vtext-source-inline]')).toHaveAttribute('data-vtext-display-policy', 'embedded_preview');
-  await expect(rendered.locator('[data-vtext-source-inline] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
-  await expect(rendered.locator('[data-vtext-source-inline]')).toContainText('transcript unavailable');
 
   const initialVideoWindows = await page.locator('[data-video-app]').count();
-  await rendered.locator('[data-vtext-source-inline] [data-vtext-open-source]').click();
+  await citation.locator('[data-vtext-open-source]').click();
   await expect(page.locator('[data-video-app]')).toHaveCount(initialVideoWindows + 1, { timeout: 10000 });
   await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
 });
