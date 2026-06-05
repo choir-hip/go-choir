@@ -1,0 +1,446 @@
+# MissionGradient v0: Client-Ready VText Source Transclusion And Proposal Cleanup
+
+Status: draft for owner review
+Date: 2026-06-05
+
+Requirements contracts:
+[source-external-data-publication.md](source-external-data-publication.md),
+[vtext-version-compare-merge-debuggability-spec.md](vtext-version-compare-merge-debuggability-spec.md),
+[vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md](vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md)
+
+Related mission:
+[mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md](mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md)
+
+## Goal String
+
+```text
+/goal Run docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md as a Codex-operated MissionGradient mission. Build the real client-ready legal-cloud proposal artifact, not a short source-demo draft. Treat choir_private_legal_cloud_proposal.md, doc f93cea62-f833-4dae-b414-8e44783d8cbe, as a legacy Markdown import/migration source whose next VText write must produce a canonical .vtext working document with preserved version lineage, table/list structure, source graph, citation/transclusion points, and Markdown export as a projection. Preserve the contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. Use authenticated staging UI QA through Computer Use on Comet as the primary proof path, with browser/API backup only when explicitly recorded as a limitation. Research, confirm, refute, or omit citations by claim; do not render "missing source" placeholder prose. Publish source metadata and source snapshots/transclusions with the VText so every user authorized to access the published form can inspect the sources permitted by publication policy. Use Pretext where it actually fits: rich-inline helpers for source chips/atomic inline fragments and layoutNextLineRange/manual line routing for expanded cards that should let prose wrap around them. Do not implement document-specific glossary/legal-cloud hardcodes, classifier/workflow scaffolding, prose source tables, rendered-DOM export, noncanonical Markdown write-through, hidden metadata prose, or whole-document rewrite for ordinary edits. After the artifact works on staging, perform a hard review of the whole mission and current system state, write the Markdown report in docs, render a PDF copy into the owner's iCloud Drive, then do a simplification pass that removes old/dead/weak/shortcut-style paths while preserving the staging-proven behavior. Land by commit, push main, CI, Node B deploy, staging identity, and deployed owner-account proof.
+```
+
+## Thesis
+
+The target artifact is a professional client proposal that demonstrates Choir by
+being useful in its own right. Source-backed VText is not a decorative citation
+demo. The proposal should read like the long original legal-cloud proposal,
+while giving the client lightweight ways to inspect evidence, open sources, and
+understand provenance when needed.
+
+The current failure mode is broader than source-card placement. A Markdown file
+is acting like VText, a short fallback proposal replaced a longer client-ready
+document, source evidence can be represented as prose tables instead of
+canonical source entities, placeholder syntax can render as article chrome, and
+expanded cards currently interrupt reading instead of integrating with it. The
+mission should repair that document graph and delete weak paths as they become
+unnecessary.
+
+## Current State And Belief
+
+- The original owner document is `choir_private_legal_cloud_proposal.md`, doc
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`.
+- The file is Markdown by name/source, but the product has been treating it as
+  a VText-like working artifact. Do not assume `.md` behavior is identical to
+  `.vtext`; prove the differences and migrate the canonical working object.
+- Earlier mission proof identified a real appendix table regression between
+  owner versions v74 and v75, and table preservation has partial owner and
+  generic proof. The new mission must keep that invariant while changing source
+  behavior.
+- A source-backed fallback VText was published and proved that content-item
+  source entities can survive publication and open source windows. It is not
+  accepted as the client proposal because it is a sibling fallback, not the
+  full original proposal migrated and repaired in place.
+- Owner screenshots show four new problems already documented in the related
+  mission doc before code changes: top-bunched sources, visible `missing
+  source`, source-card layout waste, and content-fidelity loss.
+- Computer Use is available in this Codex session. Tool discovery exposed
+  Computer Use click/state/type tools, and `list_apps` confirmed Comet is
+  running as `ai.perplexity.comet`. Authenticated Comet staging QA is therefore
+  the primary acceptance route, not a fallback.
+
+## Cognitive Transforms
+
+Current uncertainty or obstacle:
+
+The system is close enough to tempt narrow fixes: hide the top rail, suppress
+one missing-source badge, and make a source card smaller. That would not create
+the desired artifact. The real uncertainty is whether VText currently preserves
+document identity, source identity, publication access policy, and client-ready
+reading quality across import, edit, save, revise, publish, export, and cleanup.
+
+Selected transforms:
+
+1. Audience-Level Translation - The client is not evaluating citation
+   infrastructure. The client is reading a legal-cloud proposal and should feel
+   that the evidence is available, not that the evidence system has taken over
+   the document.
+2. Depth Extraction - The feature is not "show source cards." The deeper
+   feature is "claims are backed by inspectable source artifacts with stable
+   selectors and publication policy." Cards are one projection of that graph.
+3. Via Negativa - Remove paths that create fake confidence: prose source
+   tables, placeholder badges, top source decks, Markdown write-through after
+   canonicalization, rendered-DOM export, repair JSON as primary UX, and
+   document-specific table/source hardcodes.
+4. Homotopy / Real Artifact - Start with the full owner proposal and lower
+   resolution only by hiding optional affordances, not by replacing it with a
+   short demo. The final object must continuously deform from the original
+   Markdown content into canonical VText with sources and exports.
+5. Evidence-First Debugging - Acceptance is staged owner-account behavior:
+   full document, real sources, real publication, public/authorized source
+   visibility, and edit/revise metadata. Unit tests are guardrails, not the
+   success claim.
+
+Route-changing insights:
+
+- Source placement is a reading-design problem over canonical metadata, not a
+  renderer-only list-placement problem.
+- `missing source` is a source-gap workflow failure when it appears in prose.
+  The right choices are attach researched evidence, record a source gap in a
+  repair surface, or omit a citation marker when no source is needed.
+- The legal-cloud proposal should be regenerated/migrated as a real `.vtext`
+  successor with equivalent content, not maintained as a Markdown file that
+  happens to pass through VText code.
+- Pretext should not be used as a magic styling library. Use
+  `@chenglou/pretext/rich-inline` for inline chips/markers and the core
+  `layoutNextLineRange` flow for expanded cards that change available line
+  width.
+- Cleanup is part of correctness. Once canonical VText import/export works,
+  legacy write-through and renderer repair shortcuts become risks.
+
+Changed plan:
+
+- Implementation: create/migrate the full owner legal-cloud proposal as
+  canonical `.vtext`; attach source entities from real research/content items;
+  render source affordances inline and contextual by display policy; route
+  expanded cards through compact/flow-aware layout; preserve Markdown export.
+- Verifier/evidence: use Comet Computer Use on staging for owner-account proof;
+  use Playwright/API probes only for repeatable public-route and export checks;
+  record screenshots, route paths, doc/revision/publication IDs, source entity
+  counts, source-window evidence, and prompt/edit metadata.
+- Scope: include cleanup review and simplification after behavior works; do
+  not add a one-off legal-cloud renderer patch.
+- Stopping condition: deployed owner-account proof that the full canonical
+  `.vtext` proposal reads correctly, publishes with source access, exports to
+  Markdown, survives bounded edits, and no weak legacy path remains in the
+  active route without an explicit residual-risk note.
+
+Next high-information action:
+
+Retrieve the owner document's current head, original long Markdown content,
+version lineage, source metadata, publication state, and export behavior from
+staging through authenticated product paths. Compare that to a newly created
+canonical `.vtext` successor before changing renderer code.
+
+## Pretext Research
+
+Primary source: [chenglou/pretext](https://github.com/chenglou/pretext).
+Community survey source:
+[bluedusk/awesome-pretext](https://github.com/bluedusk/awesome-pretext).
+Local installed package: `frontend/node_modules/@chenglou/pretext`, version
+`0.0.7`.
+
+Research findings:
+
+- Pretext's core value is DOM-free text measurement and layout. The README
+  describes `prepare()`/`layout()` for height measurement and
+  `prepareWithSegments()` with line-range APIs for manual layout.
+- `layoutNextLineRange()` is the relevant primitive for text that should route
+  one line at a time around a changing obstacle. That is the source-card
+  wrapping model: each line band can have less width while it overlaps an
+  expanded source card and full width after the card ends.
+- `@chenglou/pretext/rich-inline` is intentionally narrower. It supports raw
+  inline items, caller-owned `extraWidth`, and `break: 'never'` for chips or
+  mentions. It is not a nested markup or general CSS inline formatting engine.
+- Choir already uses `@chenglou/pretext/rich-inline` in
+  `frontend/src/lib/PretextInlineDisclosure.svelte` for inline fragments,
+  cached prepared layouts, `ResizeObserver`, and explicit materialized line
+  fragments.
+- The Pretext demos include dynamic/editorial layouts that route continuous
+  text around obstacles using prepared text, cursors, line bands, and explicit
+  line positioning. This is closer to expanded source-card wrapping than the
+  existing inline disclosure component.
+- `awesome-pretext` is useful as a community gallery showing real-time
+  editorial layout, draggable reflow, masonry, chat bubble, and text-flow demos,
+  but it is not a product contract. Use it for design inspiration, not as a
+  normative API source.
+
+Implication for this mission:
+
+- Near-term source-reader repair may use conventional CSS for compact inline
+  cards if it preserves behavior and proves quickly.
+- Durable source-card wrap should introduce a focused Pretext component that
+  owns only the source-card/article-flow problem. Do not bury manual line
+  routing inside `VTextEditor.svelte`.
+- The Pretext component must degrade safely: if fonts or `Intl.Segmenter` are
+  unavailable, render a readable block/card layout rather than losing source
+  text.
+
+## Invariants
+
+- VText is canonical for document revisions. Imported `.md`, `.txt`, DOCX,
+  PDF, and future document formats become VText projections when the user
+  advances from v0 to v1.
+- The original imported file remains a `ContentItem` or migration/source
+  artifact with hashes and import evidence.
+- Markdown is an export projection after canonicalization, not the mutable
+  working substrate.
+- Only VText writes canonical `.vtext` revisions.
+- Hidden metadata, source payloads, hashes, prompts, and repair instructions
+  must not render as article prose.
+- Every visible citation marker is a transclusion point with a resolvable
+  source entity or a repairable source gap. Do not render fake citation badges.
+- A claim can have a confirming source, a refuting/qualifying source, or no
+  source when no source is needed. "Missing source" is not article copy.
+- Publication stores source metadata, transclusions, access policy, export
+  policy, manifests, and source snapshots/refs so users authorized to access
+  the publication can inspect permitted sources.
+- Whole-document rewrite is explicit and exceptional. Ordinary edits preserve
+  focused user edit diffs and `apply_edits` metadata.
+- Table/list/source structure survives render, focus, edit, save, revise,
+  compare/merge where applicable, publish, and export.
+- No classifiers/workflow scaffolding or hardcoded document-specific fixes.
+
+## Homotopy Axes
+
+1. Artifact identity:
+   legacy Markdown title/source -> migration manifest -> canonical `.vtext`
+   successor -> Markdown export projection.
+2. Content fidelity:
+   short fallback draft -> structurally comparable full original proposal ->
+   full proposal with researched sources -> client-ready publication.
+3. Source semantics:
+   prose source table -> source gaps/candidates -> canonical `source_entities`
+   with selectors -> publication transclusions/source snapshots.
+4. Source placement:
+   top source rail -> inline collapsed citation markers -> contextual source
+   panel/drawer -> compact expanded cards -> Pretext-routed article flow.
+5. Source quality:
+   literal placeholder -> no marker -> researched confirming/refuting evidence
+   -> bounded excerpt selector -> openable source surface.
+6. Proof:
+   local fixture -> staging API probe -> authenticated Comet owner UI ->
+   public/authorized publication route -> export artifact inspection.
+7. Code quality:
+   mission scaffolding -> extracted pure helpers -> deleted dead paths ->
+   small tested components/modules with owner-facing behavior preserved.
+
+## Forbidden Shortcuts
+
+- No legal-cloud-specific table/source renderer branch.
+- No glossary-specific repair beyond generic table/list structure preservation.
+- No top-of-document source deck as the default article reading model.
+- No visible `missing source` prose for placeholder syntax.
+- No source table in prose as a substitute for `source_entities`.
+- No raw `Repair JSON` as the owner-grade source workflow.
+- No continuing to mutate Markdown as canonical after the first VText revision.
+- No export by scraping rendered DOM.
+- No publishing private source text without publication/access policy.
+- No hiding source failures by dropping markers without recording repairable
+  gaps when a real claim needs evidence.
+- No routine whole-document rewrite to fix localized source/card/table issues.
+
+## Work Surfaces To Review Or Replace
+
+These are investigation targets, not pre-approved deletion instructions:
+
+- `frontend/src/lib/VTextEditor.svelte` missing-source rendering around
+  `[label](source:ENTITY_ID)` placeholders.
+- `frontend/src/lib/VTextEditor.svelte` source entity inline rail and
+  publication rendering path that can prepend source cards before the article.
+- `frontend/src/lib/VTextEditor.svelte` source repair panel and raw repair JSON
+  workflow.
+- `frontend/src/lib/VTextEditor.svelte` `writeThroughToFile` and callers, under
+  the invariant that imported Markdown becomes canonical VText and Markdown is
+  export-only.
+- `internal/runtime/vtext.go` source syntax prompt/repair paths that may
+  encourage placeholder `source:ENTITY_ID` text to enter the document.
+- `internal/runtime/vtext.go` structural stabilization paths for Markdown
+  tables, preserving them as regression guards while moving toward first-class
+  VText block preservation.
+- Playwright VText tests with repeated setup/fetch helpers, after behavior is
+  accepted.
+
+## Receding-Horizon Execution
+
+### Horizon 1 - Product State And Migration Proof
+
+- Use authenticated staging paths to retrieve the owner document head, versions
+  v70-v78 evidence, current `.md` identity, current source metadata, and export
+  behavior.
+- Prove whether `.md` currently behaves identically to `.vtext` for edit,
+  save, revise, source metadata, publish, and export. Record differences.
+- Create or identify the canonical `.vtext` successor for the legal-cloud
+  proposal with migration evidence from the original Markdown content.
+- Preserve the long original proposal content and appendix table structure.
+
+Exit evidence:
+
+- doc IDs, revision IDs, current title/extension identity, content length/hash
+  comparison, table structure evidence, and Markdown export result.
+
+### Horizon 2 - Source Research And Canonical Source Graph
+
+- Inventory claims in the full proposal that need sources.
+- Research confirming, refuting, or qualifying evidence. If no source is
+  needed, remove/avoid a marker.
+- Import citable URLs/content into durable `ContentItem`s or Source Service
+  items.
+- Attach bounded selectors/excerpts as `source_entities`.
+- Remove prose source tables as source authority once metadata exists.
+
+Exit evidence:
+
+- nonzero canonical `source_entities`, selector/excerpt evidence, no fake
+  placeholder markers, source windows open from private editor.
+
+### Horizon 3 - Reader And Publication UX
+
+- Remove top-bunched source cards from the default article flow.
+- Render compact inline citation markers from display policy.
+- Expand source cards contextually without wasting full-column space.
+- Use Pretext where needed for line routing around expanded cards; keep a
+  readable fallback.
+- Publish with source metadata/snapshots/transclusions and access policy.
+- Verify authorized/public readers can inspect permitted sources and open source
+  windows.
+
+Exit evidence:
+
+- Comet screenshots/video or screenshot refs showing private and published
+  reading surfaces, source expansion, source opening, no top source bunching,
+  no visible placeholder source badge, and source access on publication.
+
+### Horizon 4 - Edit/Revise/Export Preservation
+
+- Prove the table survives focus, edit, save, and revise when untouched.
+- Prove a bounded table edit survives without `TermDefinition` collapse.
+- Prove ordinary revisions keep focused user edit diff prompt sizes and
+  `apply_edits` metadata.
+- Export Markdown from canonical VText and compare it to the expected proposal
+  projection.
+
+Exit evidence:
+
+- revision IDs, prompt-size/edit metadata, table DOM/text evidence, exported
+  Markdown hash/content checks, publication/export metadata.
+
+### Horizon 5 - Hard Review And Simplification
+
+- Write a hard review of the whole mission and current system state in `docs/`.
+- Render a PDF copy to the owner's iCloud Drive.
+- Simplify after behavior works: extract helpers, delete dead paths, remove
+  shortcut abstractions, and keep tests/proofs green.
+- Re-run owner staging proof after cleanup.
+
+Exit evidence:
+
+- review Markdown path, PDF path, simplification commit(s), CI status, Node B
+  deploy identity, and repeated owner/public acceptance proof.
+
+## Acceptance Proof
+
+Acceptance requires deployed staging evidence, not local-only proof:
+
+- Computer Use/Comet owner account used for primary UI QA, or a precise
+  recorded limitation with browser/API backup.
+- Original long Markdown proposal content is represented in a canonical
+  `.vtext` successor with migration/lineage evidence.
+- Export back to Markdown works from canonical VText.
+- The appendix glossary/table remains a table through untouched edit/save/revise
+  and through a bounded table edit.
+- Sources do not bunch at the top of the article by default.
+- No literal `missing source` or `source:ENTITY_ID` placeholder appears in
+  reader prose.
+- Citation markers expand into source/transclusion cards.
+- Expanded source cards use available reading space responsibly, with Pretext
+  routing where the durable design requires it.
+- Open source actions open the owning source/content/publication surface.
+- Published VText includes source metadata and access/export policy so all
+  authorized publication readers can inspect permitted sources.
+- Ordinary revisions preserve focused user edit diff prompt sizes and
+  `apply_edits` metadata.
+- The hard review exists in Markdown and PDF, and the post-proof simplification
+  pass removes or fences old/dead/weak paths without regressing staging proof.
+
+## Evidence Ledger Template
+
+For each proof claim, record:
+
+- claim;
+- exact date/time;
+- staging URL or route;
+- Comet/browser/API command or observation;
+- doc ID, revision ID, publication ID/version ID when applicable;
+- source entity IDs/content item IDs when applicable;
+- screenshot/video/log/export path;
+- result;
+- caveat;
+- whether it supports deployment acceptance.
+
+## Run Checkpoint And Resumption State
+
+status: draft_not_started
+
+last checkpoint:
+
+- 2026-06-05 docs checkpoint `06d2be48` recorded published proposal UX/content
+  fidelity problems before code changes.
+
+current artifact state:
+
+- Main branch contains deployed content-item source publication behavior and
+  mission documentation.
+- The client-ready canonical `.vtext` legal-cloud proposal is not yet proven.
+
+what shipped:
+
+- Earlier behavior commit `61a6498f192cb0eba9140024489f7e4f1d799927` proved
+  generic content-item refs can become VText source entities and survive
+  publication.
+
+what was proven:
+
+- Fallback published VText can expose content-item source transclusions and open
+  source windows.
+
+unproven or partial claims:
+
+- Exact owner legal-cloud proposal migration to full canonical `.vtext`.
+- Content equivalence to the original long Markdown proposal.
+- Owner-account source research/repair in place.
+- Published source UX at client quality.
+- Post-proof simplification and dead-path deletion.
+
+belief-state changes:
+
+- `.md` acting as VText should be treated as compatibility debt, not as proof
+  of identical behavior.
+- The next accepted artifact must be the full client proposal with source graph,
+  not another short source-backed sibling draft.
+
+remaining error field:
+
+- Build, verify, publish, review, and simplify the real canonical VText
+  proposal while preserving all VText/source/publication invariants.
+
+highest-impact remaining uncertainty:
+
+- Whether the current staging product path can migrate the original Markdown
+  document to canonical `.vtext` without losing long-form content, table
+  structure, version lineage, or source metadata.
+
+next executable probe:
+
+- Authenticated staging retrieval/comparison of the owner document's current
+  Markdown identity, original content, version lineage, source metadata, and
+  export behavior, followed by a documented migration plan before code changes.
+
+suggested resume goal string:
+
+```text
+/goal Start docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md. First use Computer Use on Comet to collect owner staging state for doc f93cea62-f833-4dae-b414-8e44783d8cbe, compare current Markdown-acting-as-VText behavior to canonical .vtext behavior, and document any newly found problem before code. Then migrate/build the full client-ready legal-cloud proposal as canonical VText with researched source entities, publish source-aware proof, and simplify dead/weak paths after acceptance.
+```
+
+rollback refs:
+
+- `origin/main` before this draft: `06d2be48`.
+- Behavior rollback for source metadata bridge, if needed:
+  `61a6498f192cb0eba9140024489f7e4f1d799927^`.
