@@ -2440,3 +2440,61 @@ belief-state update:
   passkey-gated acceptance. If it fails, the fix should stay in the generic
   rendered-table serialization path rather than adding owner/glossary-specific
   recovery code.
+
+2026-06-05 bounded rendered-table edit regression checkpoint:
+
+status: checkpoint_incomplete
+
+landed proof artifact:
+
+- Documentation-first checkpoint `806fefce` recorded the bounded table-cell
+  edit proof gap before the regression test was added.
+- Test commit `fcbaf5b40c79f3e54e45ada128e19d166389fc05` is on
+  `origin/main`. It adds a generic browser regression in
+  `frontend/tests/vtext-source-entities.spec.js` that creates a fixture VText
+  document with a Markdown pipe table, edits one rendered table cell through
+  the product surface, waits for the normal autosave/draft path, and verifies
+  the saved Markdown still contains the table header, separator row, untouched
+  sibling row, bounded edited cell text, and no `TermDefinition` artifact.
+- The regression is deliberately fixture-based. It does not mutate the private
+  owner proposal and does not add owner-specific, glossary-specific, or
+  classifier/workflow behavior.
+
+verification and deployment evidence:
+
+- Local verification before commit passed: `npm --prefix frontend run build`
+  and `git diff --check`.
+- Deployed staging proof also passed before the test commit, against deployed
+  behavior commit `4255dc7efe5407b67bb78075cf477c133958d2f3`:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-source-entities.spec.js -g "bounded cell edit"
+  --project=chromium`.
+- GitHub Actions CI run `27020985659` completed successfully for
+  `fcbaf5b40c79f3e54e45ada128e19d166389fc05`, including Go vet/build,
+  non-runtime Go tests, all runtime shards, integration smoke, and the final
+  Go gate aggregator. Frontend build and staging deploy were skipped because
+  this commit changed only the browser regression test.
+- FlakeHub run `27020985709` completed successfully for the same head.
+- Staging `/health` still reports proxy and sandbox deployed commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`, deployed at
+  `2026-06-05T14:26:47Z`; this is expected because `fcbaf5b4` did not change
+  deployed artifacts.
+
+deployed owner-account proof limitation:
+
+- Computer Use remains available, and Comet still reaches the private action
+  passkey overlay for `yusefnathanson@me.com` on owner document
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`.
+- The passkey ceremony remains cancelled/not completed in this session.
+  Therefore the new bounded rendered-table edit proof is durable on generic
+  deployed staging fixtures, but the actual owner appendix table still has not
+  been exercised through focus/edit/save/revise on the private owner head.
+
+remaining error field:
+
+- Still unproven on the actual owner document: canonical title migration from
+  `choir_private_legal_cloud_proposal.md` to `.vtext` on the next owner VText
+  write, bounded appendix-table edit survival, source-gap repair through the
+  deployed `Sources` panel, citation marker expansion into transclusions,
+  source-window opening from the owner head, and owner-head focused prompt-size
+  / `apply_edits` metadata in the visible edit-evidence strip.
