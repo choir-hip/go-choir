@@ -1409,7 +1409,7 @@ remaining error field:
 
 ## 2026-06-05 Source UX Slice: Remove Dead Rail, Keep Inline Markers
 
-status: local_build_passed_pending_deploy_proof
+status: deployed_authenticated_owner_proof_passed
 
 change shape:
 
@@ -1439,7 +1439,51 @@ local verification:
 
 remaining error field:
 
-- Commit and deploy this slice, then prove on staging through the authenticated
-  owner publication that source markers remain inline, no top source rail
-  appears, marker expansion still opens a source window, and the source panel
-  uses source-review language.
+- The source-rail pruning slice is deployed and proven through the authenticated
+  owner document path. Continue with the harder source-card flow axis: make
+  expanded cards wrap surrounding article text more naturally, using Pretext only
+  where it improves the real layout rather than adding another abstraction layer.
+
+land/deploy evidence:
+
+- Commit `4597d5dff71f9feebddde456587abb8ea1b87017`
+  (`fix: keep vtext sources inline`) was pushed to `origin/main`.
+- GitHub Actions CI run `27032346306` passed, including runtime shards,
+  integration smoke, frontend build, and Node B deploy.
+- FlakeHub publish run `27032346349` passed.
+- `https://choir.news/health` reported proxy and sandbox
+  commit/deployed_commit `4597d5dff71f9feebddde456587abb8ea1b87017`,
+  deployed at `2026-06-05T18:20:12Z`.
+
+authenticated Comet owner proof:
+
+- Computer Use click/state actions were available. Comet
+  (`/Applications/Comet.app`, bundle `ai.perplexity.comet`) was authenticated as
+  `YUSEFNATHANSON@ME.COM` and remained on the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- Opening VText from the authenticated Desk showed
+  `choir_private_legal_cloud_proposal.vtext` as the most recent living document,
+  `v83`, owner id `5bd6de97-3b58-408c-bf89-c42c81b083de`, timestamp
+  `Jun 5, 1:09 PM`.
+- Opening that document showed title
+  `Proposal for [Redacted]: A Private Legal Cloud`, toolbar `v83`, `Primary
+  draft`, `Latest`, and inline source buttons in the article text:
+  `Source: ABA Formal Opinion 512: Generative Artificial Intelligence Tools`
+  and `Source: ABA Model Rule 1.6: Confidentiality of Information`.
+- The first viewport did not show a top source rail/deck before the article
+  title, and the visible article did not contain `missing source` prose.
+- Clicking the ABA Formal Opinion 512 inline marker expanded an inline source
+  card with the source title, kind `ethics opinion`, summary text about lawyers'
+  duties when using generative AI tools, `source available`, and an `Open source`
+  button.
+- Clicking `Open source` opened a separate source window titled
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` with URL
+  `https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf`.
+
+what this proves:
+
+- The deployed owner-account path now keeps source affordances inline with the
+  VText article, opens source transclusions from citation points, and opens the
+  source window without relying on the deleted source-rail renderer.
+- The proof is on the actual owner legal-cloud document, not a local fixture or
+  short demo draft.
