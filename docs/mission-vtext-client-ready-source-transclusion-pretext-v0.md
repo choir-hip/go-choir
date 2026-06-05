@@ -499,3 +499,53 @@ remaining error field:
 - Need renewed owner proof after the repair: document title/source identity,
   current revision/version consistency, long-form content preservation, table
   preservation, source graph, publication source access, and Markdown export.
+
+## 2026-06-05 Local Repair Checkpoint: Summary Version And Next-Write Canonicalization
+
+status: checkpoint_incomplete
+
+root cause:
+
+- `HandleVTextDiagnosis` hand-built a partial `vtextDocumentResponse` instead
+  of using the shared helper that counts revisions, loads the current head
+  revision, fills `last_author_kind`, and sets `current_version_number` from
+  the current revision. This explains the authenticated Comet observation where
+  the diagnosis document summary reported v0 while the latest revision and
+  visible VText window reported v81.
+- Canonical `.vtext` title migration for aliased non-VText imports existed only
+  in the user revision path. The owner legal-cloud head was appagent-authored,
+  and source repair, merge accept, restore, and appagent `edit_vtext` could
+  create canonical revisions without first migrating a legacy `.md` title to
+  `.vtext`.
+
+repair implemented locally:
+
+- Extracted generic aliased-title canonicalization so both API handlers and
+  runtime/appagent tool paths can use the same logic.
+- Wired canonicalization before new canonical revision creation in:
+  user revisions, appagent `edit_vtext`, source-gap repair, merge accept, and
+  restore.
+- Changed VText diagnosis to call the shared document-response helper instead
+  of hand-building incomplete summary JSON.
+- Added focused comprehensive regression tests:
+  `TestVTextDiagnosisReportsCurrentRevisionVersion` and
+  `TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle`.
+
+local verification:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(DiagnosisReportsCurrentRevisionVersion|AppagentEditCanonicalizesAliasedMarkdownTitle|ImportMarkdownLineageCreatesRevisionHistory|ImportedMarkdownFileCreatesCanonicalVTextProjection)'`
+  passed.
+- `nix develop -c go test ./internal/runtime -run
+  'TestCleanVTextToolContentRemovesWrapperTags|TestMaterializeVTextToolEditRequiresRationaleForLongRewrite'`
+  passed.
+
+remaining error field:
+
+- This is not owner acceptance yet. It still needs commit, push, CI, Node B
+  deploy, staging identity proof, and Comet owner proof that the next write on
+  `f93cea62-f833-4dae-b414-8e44783d8cbe` migrates title/source identity and
+  exposes consistent document summary/current revision version state.
+- The source placement, placeholder-source rendering, full proposal source
+  research, Pretext card flow, publication source access, hard review/PDF, and
+  simplification pass remain incomplete.

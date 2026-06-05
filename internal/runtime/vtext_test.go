@@ -4723,6 +4723,45 @@ func TestVTextDocumentResponseReconcilesPendingMutationFromCurrentHead(t *testin
 	}
 }
 
+func TestVTextDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
+	h, s := vtextAPISetup(t)
+	docID, baseRevisionID := createDocWithUserRevision(t, h)
+	if err := s.CreateRevision(context.Background(), types.Revision{
+		RevisionID:       "rev-diagnosis-v1",
+		DocID:            docID,
+		OwnerID:          "user-1",
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		Content:          "Second revision content",
+		Citations:        json.RawMessage("[]"),
+		Metadata:         json.RawMessage(`{"source":"edit_vtext"}`),
+		ParentRevisionID: baseRevisionID,
+		CreatedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create second revision: %v", err)
+	}
+
+	req := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+docID+"/diagnosis?limit=10", nil)
+	w := httptest.NewRecorder()
+	h.HandleVTextDiagnosis(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnosis status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp vtextDiagnosisResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode diagnosis: %v", err)
+	}
+	if resp.Document == nil {
+		t.Fatal("diagnosis missing document summary")
+	}
+	if resp.Document.CurrentRevisionID != "rev-diagnosis-v1" || resp.Document.CurrentVersionNumber != 1 || resp.Document.LastAuthorKind != string(types.AuthorAppAgent) {
+		t.Fatalf("diagnosis document summary = %+v, want current v1 appagent head", resp.Document)
+	}
+	if len(resp.Revisions) == 0 || resp.Revisions[0].RevisionID != "rev-diagnosis-v1" || resp.Revisions[0].VersionNumber != 1 {
+		t.Fatalf("diagnosis revisions = %+v, want latest v1 first", resp.Revisions)
+	}
+}
+
 func TestVTextDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	docID, _ := createDocWithUserRevision(t, h)
@@ -5053,6 +5092,96 @@ func TestVTextAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 
 // TestVTextAgentRevisionMutationCompletedOnlyOnce verifies that edit_vtext is
 // the idempotency boundary for canonical appagent revisions (VAL-CROSS-122).
+func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
+	_, s, rt := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     "doc-legacy-md-agent",
+		OwnerID:   "user-1",
+		Title:     "legacy-proposal.md",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "proposals/legacy-proposal.md", doc.DocID, now); err != nil {
+		t.Fatalf("upsert document alias: %v", err)
+	}
+	base := types.Revision{
+		RevisionID:  "rev-legacy-md-v0",
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "alice",
+		Content:     "# Legacy Proposal\n\nImported Markdown body.",
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("create base revision: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     "run-legacy-md-agent",
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create agent mutation: %v", err)
+	}
+	run := &types.RunRecord{
+		RunID:        "run-legacy-md-agent",
+		AgentID:      "vtext:" + doc.DocID,
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-vtext-test",
+		State:        types.RunCompleted,
+		Prompt:       "Revise the imported markdown proposal.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		AgentProfile: AgentProfileVText,
+		AgentRole:    AgentProfileVText,
+		Metadata: map[string]any{
+			"type":                "vtext_agent_revision",
+			"doc_id":              doc.DocID,
+			"current_revision_id": base.RevisionID,
+			runMetadataAgentID:    "vtext:" + doc.DocID,
+			runMetadataChannelID:  doc.DocID,
+		},
+	}
+	rawArgs, err := json.Marshal(editVTextArgs{
+		DocID:          doc.DocID,
+		BaseRevisionID: base.RevisionID,
+		Operation:      "apply_edits",
+		Edits: []vtextTextEdit{{
+			Op:      "replace",
+			Find:    "Imported Markdown body.",
+			Replace: "Imported Markdown body revised as canonical VText.",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal edit args: %v", err)
+	}
+	if _, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, run), "edit_vtext", rawArgs); err != nil {
+		t.Fatalf("edit_vtext: %v", err)
+	}
+	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	if got.Title != "legacy-proposal.vtext" {
+		t.Fatalf("document title = %q, want legacy-proposal.vtext", got.Title)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revs) != 2 || revs[0].VersionNumber != 1 || !strings.Contains(revs[0].Content, "canonical VText") {
+		t.Fatalf("revisions = %+v, want appagent v1 canonical edit", revs)
+	}
+}
+
 func TestVTextAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 	_, s, rt := vtextAPISetupWithRuntime(t)
 

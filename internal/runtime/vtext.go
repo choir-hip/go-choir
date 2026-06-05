@@ -418,10 +418,24 @@ func canonicalVTextImportTitle(sourcePath, requestedTitle string) string {
 }
 
 func (h *APIHandler) canonicalizeAliasedVTextDocumentTitle(ctx context.Context, ownerID string, doc *types.Document, updatedAt time.Time) error {
+	return canonicalizeAliasedVTextDocumentTitle(ctx, h.rt.Store(), ownerID, doc, updatedAt)
+}
+
+func (rt *Runtime) canonicalizeAliasedVTextDocumentTitle(ctx context.Context, ownerID string, doc *types.Document, updatedAt time.Time) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	return canonicalizeAliasedVTextDocumentTitle(ctx, rt.store, ownerID, doc, updatedAt)
+}
+
+func canonicalizeAliasedVTextDocumentTitle(ctx context.Context, st *store.Store, ownerID string, doc *types.Document, updatedAt time.Time) error {
 	if doc == nil || strings.EqualFold(pathpkg.Ext(strings.TrimSpace(doc.Title)), ".vtext") {
 		return nil
 	}
-	sourcePath, err := h.rt.Store().GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
+	if st == nil {
+		return nil
+	}
+	sourcePath, err := st.GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
@@ -434,7 +448,7 @@ func (h *APIHandler) canonicalizeAliasedVTextDocumentTitle(ctx context.Context, 
 	}
 	doc.Title = nextTitle
 	doc.UpdatedAt = updatedAt
-	return h.rt.Store().UpdateDocument(ctx, *doc)
+	return st.UpdateDocument(ctx, *doc)
 }
 
 func slugifyVTextManifestStem(raw string) string {
@@ -3262,6 +3276,16 @@ func (h *APIHandler) HandleVTextAcceptMerge(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "target revision not found"})
 		return
 	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	if err := h.canonicalizeAliasedVTextDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
+		log.Printf("vtext api: canonicalize merge document title: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
+		return
+	}
 	metadata := map[string]any{}
 	for k, v := range req.Metadata {
 		metadata[k] = v
@@ -3327,6 +3351,11 @@ func (h *APIHandler) HandleVTextSourceGapRepair(w http.ResponseWriter, r *http.R
 	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	if err := h.canonicalizeAliasedVTextDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
+		log.Printf("vtext api: canonicalize source repair document title: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
 		return
 	}
 	baseRevisionID := strings.TrimSpace(req.BaseRevisionID)
@@ -3442,6 +3471,11 @@ func (h *APIHandler) HandleVTextRestoreRevision(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
 	}
+	if err := h.canonicalizeAliasedVTextDocumentTitle(r.Context(), ownerID, &doc, time.Now().UTC()); err != nil {
+		log.Printf("vtext api: canonicalize restore document title: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
+		return
+	}
 	metadata := mergeVTextRevisionMetadata(sourceRev.Metadata, map[string]any{
 		"source":                     "restore_historical_revision",
 		"restored_from_revision_id":  sourceRev.RevisionID,
@@ -3501,14 +3535,7 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 	}
 	if docID != "" {
 		if doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID); err == nil {
-			docResp := vtextDocumentResponse{
-				DocID:             doc.DocID,
-				OwnerID:           doc.OwnerID,
-				Title:             doc.Title,
-				CurrentRevisionID: doc.CurrentRevisionID,
-				CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-				UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-			}
+			docResp := h.vtextDocumentResponse(r.Context(), doc)
 			resp.Document = &docResp
 			if revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, limit); err == nil {
 				for _, rev := range revs {

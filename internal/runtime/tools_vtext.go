@@ -358,6 +358,9 @@ func (rt *Runtime) commitVTextToolEdit(ctx context.Context, rec *types.RunRecord
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("get vtext document: %w", err)
 	}
+	if err := rt.canonicalizeAliasedVTextDocumentTitle(ctx, rec.OwnerID, &doc, time.Now().UTC()); err != nil {
+		return types.Revision{}, fmt.Errorf("canonicalize vtext document title: %w", err)
+	}
 	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
 		return types.Revision{}, fmt.Errorf("document has no current revision")
 	}
