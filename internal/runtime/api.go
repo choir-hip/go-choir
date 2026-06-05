@@ -1629,6 +1629,7 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 //	POST   /api/vtext/documents/{id}/source-repairs → repair unresolved source gaps
 //	POST   /api/vtext/documents/{id}/restore  → restore historical revision as latest
 //	GET    /api/vtext/documents/{id}/diagnosis → owner-scoped diagnosis bundle
+//	GET    /api/vtext/documents/{id}/export    → export current VText revision
 //	GET    /api/vtext/documents/{id}/history   → revision history
 //	GET    /api/vtext/revisions/{id}          → get revision (snapshot)
 //	GET    /api/vtext/revisions/{id}/blame     → blame revision
@@ -1714,6 +1715,10 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.HasSuffix(rest, "/diagnosis") {
 			h.HandleVTextDiagnosis(w, r)
+			return
+		}
+		if strings.HasSuffix(rest, "/export") {
+			h.HandleVTextExportDocument(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/agent-revision") {

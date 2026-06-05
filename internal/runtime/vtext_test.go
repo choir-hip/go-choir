@@ -3378,6 +3378,13 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if firstResp.OriginalContentID == "" {
 		t.Fatalf("first open original_content_id is empty")
 	}
+	doc, err := s.GetDocument(context.Background(), firstResp.DocID, "user-1")
+	if err != nil {
+		t.Fatalf("GetDocument opened file: %v", err)
+	}
+	if doc.Title != "ai-news.vtext" {
+		t.Fatalf("opened document title = %q, want ai-news.vtext", doc.Title)
+	}
 
 	second := openReq("Changed file bytes that should not fork a new doc")
 	if second.Code != http.StatusOK {
@@ -3434,6 +3441,19 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	}
 	if migrationManifest["migration_adapter"] != "markdown_to_vtext_projection" || migrationManifest["source_gap_policy"] != "repairable_gap_no_invented_citations" {
 		t.Fatalf("migration manifest = %#v", migrationManifest)
+	}
+	exportReq := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+firstResp.DocID+"/export?format=md", nil)
+	exportW := httptest.NewRecorder()
+	h.HandleVTextRouter(exportW, exportReq)
+	if exportW.Code != http.StatusOK {
+		t.Fatalf("export markdown: status = %d, want %d; body: %s", exportW.Code, http.StatusOK, exportW.Body.String())
+	}
+	var exported vtextDocumentExportResponse
+	if err := json.NewDecoder(exportW.Body).Decode(&exported); err != nil {
+		t.Fatalf("decode export response: %v", err)
+	}
+	if exported.Format != "md" || exported.Filename != "ai-news.md" || exported.Content != "Initial file content" || exported.ContentHash == "" {
+		t.Fatalf("export response = %#v", exported)
 	}
 }
 
@@ -3576,6 +3596,13 @@ func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	}
 	if docID != resp.DocID {
 		t.Fatalf("alias doc = %q, want %q", docID, resp.DocID)
+	}
+	doc, err := s.GetDocument(context.Background(), resp.DocID, "user-1")
+	if err != nil {
+		t.Fatalf("GetDocument imported lineage: %v", err)
+	}
+	if doc.Title != "legal-cloud.vtext" {
+		t.Fatalf("imported lineage document title = %q, want legal-cloud.vtext", doc.Title)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), resp.DocID, "user-1", 10)
 	if err != nil {
@@ -4152,6 +4179,13 @@ func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: "vtext", lossiness: 40, warning: "docx_projection_requires_style_adapter", expectTextless: true},
 		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", expectTextless: true},
 	} {
+		doc, err := s.GetDocument(context.Background(), tc.resp.DocID, "user-1")
+		if err != nil {
+			t.Fatalf("%s GetDocument: %v", tc.name, err)
+		}
+		if doc.Title != "legal-cloud-proposal.vtext" {
+			t.Fatalf("%s document title = %q, want legal-cloud-proposal.vtext", tc.name, doc.Title)
+		}
 		item, err := s.GetContentItem(context.Background(), "user-1", tc.resp.OriginalContentID)
 		if err != nil {
 			t.Fatalf("%s GetContentItem: %v", tc.name, err)

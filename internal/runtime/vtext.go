@@ -159,6 +159,16 @@ type vtextEnsureManifestResponse struct {
 	SourcePath string `json:"source_path"`
 }
 
+type vtextDocumentExportResponse struct {
+	DocID       string `json:"doc_id"`
+	RevisionID  string `json:"revision_id"`
+	Format      string `json:"format"`
+	MediaType   string `json:"media_type"`
+	Filename    string `json:"filename"`
+	Content     string `json:"content"`
+	ContentHash string `json:"content_hash"`
+}
+
 type vtextShortcutFile struct {
 	Kind       string `json:"kind"`
 	DocID      string `json:"doc_id"`
@@ -381,6 +391,30 @@ func normalizeVTextSourcePath(raw string) string {
 		return ""
 	}
 	return cleaned
+}
+
+func canonicalVTextImportTitle(sourcePath, requestedTitle string) string {
+	base := strings.TrimSpace(requestedTitle)
+	if base == "" {
+		base = pathpkg.Base(strings.TrimSpace(sourcePath))
+	}
+	base = strings.TrimSpace(base)
+	if base == "" || base == "." || base == "/" {
+		base = "Untitled VText"
+	}
+	base = pathpkg.Base(base)
+	ext := pathpkg.Ext(base)
+	if strings.EqualFold(ext, ".vtext") {
+		return base
+	}
+	stem := strings.TrimSpace(strings.TrimSuffix(base, ext))
+	if stem == "" {
+		stem = strings.TrimSpace(base)
+	}
+	if stem == "" {
+		stem = "Untitled VText"
+	}
+	return stem + ".vtext"
 }
 
 func slugifyVTextManifestStem(raw string) string {
@@ -1392,6 +1426,7 @@ func (h *APIHandler) HandleVTextImportMarkdownLineage(w http.ResponseWriter, r *
 		parts := strings.Split(sourcePath, "/")
 		title = parts[len(parts)-1]
 	}
+	canonicalTitle := canonicalVTextImportTitle(sourcePath, title)
 	if existingDocID, err := h.rt.Store().GetDocumentAlias(r.Context(), ownerID, sourcePath); err == nil {
 		writeAPIJSON(w, http.StatusConflict, vtextMarkdownLineageImportResponse{
 			SourcePath:    sourcePath,
@@ -1435,7 +1470,7 @@ func (h *APIHandler) HandleVTextImportMarkdownLineage(w http.ResponseWriter, r *
 	doc := types.Document{
 		DocID:     uuid.New().String(),
 		OwnerID:   ownerID,
-		Title:     title,
+		Title:     canonicalTitle,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1556,6 +1591,7 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 		parts := strings.Split(sourcePath, "/")
 		title = parts[len(parts)-1]
 	}
+	canonicalTitle := canonicalVTextImportTitle(sourcePath, title)
 
 	docID, err := h.rt.Store().GetDocumentAlias(r.Context(), ownerID, sourcePath)
 	if err == nil {
@@ -1593,7 +1629,7 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 	doc := types.Document{
 		DocID:     uuid.New().String(),
 		OwnerID:   ownerID,
-		Title:     title,
+		Title:     canonicalTitle,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1678,6 +1714,66 @@ func (h *APIHandler) HandleVTextEnsureManifest(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (h *APIHandler) HandleVTextExportDocument(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	docID := extractDocID(r.URL.Path)
+	if docID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
+		return
+	}
+	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	if format == "" {
+		format = "md"
+	}
+	if format == "markdown" {
+		format = "md"
+	}
+	if format != "md" && format != "txt" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsupported export format"})
+		return
+	}
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
+	revisionID := strings.TrimSpace(r.URL.Query().Get("revision_id"))
+	if revisionID == "" {
+		revisionID = doc.CurrentRevisionID
+	}
+	if revisionID == "" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document has no current revision"})
+		return
+	}
+	rev, err := h.rt.Store().GetRevision(r.Context(), revisionID, ownerID)
+	if err != nil || rev.DocID != doc.DocID {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
+	}
+	mediaType := "text/markdown; charset=utf-8"
+	if format == "txt" {
+		mediaType = "text/plain; charset=utf-8"
+	}
+	content := rev.Content
+	writeAPIJSON(w, http.StatusOK, vtextDocumentExportResponse{
+		DocID:       doc.DocID,
+		RevisionID:  rev.RevisionID,
+		Format:      format,
+		MediaType:   mediaType,
+		Filename:    vtextDocumentExportFilename(doc.Title, format),
+		Content:     content,
+		ContentHash: contentHash(content),
+	})
+}
+
 func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, doc types.Document) (string, error) {
 	sourcePath, err := h.rt.Store().GetDocumentAliasSourcePath(ctx, ownerID, doc.DocID)
 	if err != nil && err != store.ErrNotFound {
@@ -1707,6 +1803,26 @@ func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, do
 		return "", err
 	}
 	return sourcePath, nil
+}
+
+func vtextDocumentExportFilename(title, format string) string {
+	format = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(format)), ".")
+	if format == "" {
+		format = "md"
+	}
+	base := strings.TrimSpace(pathpkg.Base(title))
+	if base == "" || base == "." || base == "/" {
+		base = "vtext"
+	}
+	ext := pathpkg.Ext(base)
+	if ext != "" {
+		base = strings.TrimSuffix(base, ext)
+	}
+	base = strings.Trim(base, ". ")
+	if base == "" {
+		base = "vtext"
+	}
+	return base + "." + format
 }
 
 func (h *APIHandler) ensureCanonicalVTextProjectionPath(ctx context.Context, ownerID string, doc types.Document) (string, error) {
