@@ -2800,6 +2800,17 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 		} else {
 			log.Printf("vtext api: list channel diagnosis runs for %s: %v", docID, err)
 		}
+		if ownerRuns, err := h.rt.Store().ListRunsByOwner(r.Context(), ownerID, diagnosisOwnerRunScanLimit(limit)); err == nil {
+			var docRuns []types.RunRecord
+			for _, run := range ownerRuns {
+				if runRecordBelongsToVTextDoc(run, docID) {
+					docRuns = append(docRuns, run)
+				}
+			}
+			resp.Runs = appendUniqueRunRecords(resp.Runs, docRuns...)
+		} else {
+			log.Printf("vtext api: list owner runs for document diagnosis %s: %v", docID, err)
+		}
 	}
 	if runs, err := h.rt.Store().ListRunsByOwner(r.Context(), ownerID, limit); err == nil {
 		resp.Runs = appendUniqueRunRecords(resp.Runs, runs...)
@@ -2821,6 +2832,34 @@ func (h *APIHandler) HandleVTextDiagnosis(w http.ResponseWriter, r *http.Request
 		resp.Evidence = evidence
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+func diagnosisOwnerRunScanLimit(limit int) int {
+	scanLimit := limit * 20
+	if scanLimit < 500 {
+		scanLimit = 500
+	}
+	if scanLimit > 2000 {
+		scanLimit = 2000
+	}
+	return scanLimit
+}
+
+func runRecordBelongsToVTextDoc(run types.RunRecord, docID string) bool {
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return false
+	}
+	if strings.TrimSpace(run.ChannelID) == docID {
+		return true
+	}
+	if metadataStringValue(run.Metadata, "doc_id") == docID {
+		return true
+	}
+	if metadataStringValue(run.Metadata, runMetadataChannelID) == docID {
+		return true
+	}
+	return false
 }
 
 func appendUniqueRunRecords(existing []types.RunRecord, more ...types.RunRecord) []types.RunRecord {

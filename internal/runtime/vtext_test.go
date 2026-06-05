@@ -4733,7 +4733,7 @@ func TestVTextDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 		runMetadataAgentProfile: AgentProfileVText,
 		runMetadataAgentRole:    AgentProfileVText,
 		runMetadataAgentID:      "vtext:" + docID,
-		runMetadataChannelID:    docID,
+		runMetadataChannelID:    "legacy-parent-channel",
 		"doc_id":                docID,
 	})
 	if err != nil {

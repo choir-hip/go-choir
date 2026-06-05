@@ -142,7 +142,8 @@ test('live VText revision consumes direct edit instructions and keeps long-docum
   expect(appagent.content).toContain('| Term | Definition |');
   expect(appagent.content).toContain('| Work product | Durable, reviewable professional output. |');
 
-  await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?limit=100`);
+  const diagnosis = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?limit=3`);
+  expect((diagnosis.runs || []).some((run) => run.run_id === revise.loop_id)).toBe(true);
   expect(appagent.metadata?.vtext_context_mode).toBe('current_head_plus_user_edit_diff');
   expect(appagent.metadata?.vtext_edit_operation).toBe('apply_edits');
   expect(Number(appagent.metadata?.vtext_run_prompt_chars || 0)).toBeLessThan(40_000);
