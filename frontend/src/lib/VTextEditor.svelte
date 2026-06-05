@@ -18,11 +18,13 @@
     exportPublication,
     getDocument,
     getRevision,
+    getVTextDiagnosis,
     listDocuments,
     listRevisions,
     openDocumentStream,
     previewVTextMerge,
     publishVText,
+    repairVTextSourceGaps,
     resolvePublication,
     restoreVTextRevision,
     semanticCompareVText,
@@ -85,6 +87,12 @@
   let restorePending = false;
   let mergePreview = null;
   let selectedMergeSuggestionIds = [];
+  let sourcePanelOpen = false;
+  let sourceDiagnosis = null;
+  let sourceDiagnosisPending = false;
+  let sourceRepairPending = false;
+  let sourceRepairPayload = '';
+  let sourceRepairError = '';
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
@@ -292,6 +300,64 @@
     const entities = currentRevision?.metadata?.source_entities;
     if (Array.isArray(entities) && entities.length > 0) return entities;
     return revisionMediaSourceRefs().map(mediaRefToSourceEntity).filter(Boolean);
+  }
+
+  function revisionSourceGaps() {
+    const gaps = currentRevision?.metadata?.source_gaps;
+    return Array.isArray(gaps) ? gaps : [];
+  }
+
+  function unresolvedCitationMarkers(content = editorValue) {
+    const sourceLinked = new Set();
+    for (const match of String(content || '').matchAll(/\[([^\]]+)\]\(source:[^)]+\)/g)) {
+      sourceLinked.add(`[${match[1]}]`);
+    }
+    const markers = new Set();
+    for (const match of String(content || '').matchAll(/\[(\d+)\](?!\()/g)) {
+      const marker = `[${match[1]}]`;
+      if (!sourceLinked.has(marker)) markers.add(marker);
+    }
+    return [...markers];
+  }
+
+  function sourceRepairCandidates() {
+    const fromGaps = revisionSourceGaps()
+      .map((gap) => String(gap?.marker || '').trim())
+      .filter(Boolean);
+    return [...new Set([...fromGaps, ...unresolvedCitationMarkers()])];
+  }
+
+  function sourceDiagnosisSummary() {
+    if (!sourceDiagnosis) return null;
+    const revisions = Array.isArray(sourceDiagnosis.revisions) ? sourceDiagnosis.revisions : [];
+    const runs = Array.isArray(sourceDiagnosis.runs) ? sourceDiagnosis.runs : [];
+    const latest = revisions[0] || null;
+    return {
+      revisionCount: revisions.length,
+      runCount: runs.length,
+      latestRevisionId: latest?.revision_id || '',
+      latestVersion: latest ? versionLabelForRevision(latest, revisions.length - 1) : '',
+      latestAuthor: latest ? `${latest.author_kind || ''}:${latest.author_label || ''}` : '',
+      errorCount: Array.isArray(sourceDiagnosis.error_matches) ? sourceDiagnosis.error_matches.length : 0,
+    };
+  }
+
+  function defaultSourceRepairPayload() {
+    const candidates = sourceRepairCandidates();
+    const existing = revisionSourceEntities();
+    return {
+      base_revision_id: currentRevision?.revision_id || '',
+      source_entities: [],
+      citation_resolutions: candidates.map((marker, index) => ({
+        marker,
+        entity_id: sourceEntityID(existing[index]) || '',
+      })),
+    };
+  }
+
+  function ensureSourceRepairPayload() {
+    if (sourceRepairPayload.trim()) return;
+    sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
   }
 
   function publicationBundleSourceEntities() {
@@ -1030,6 +1096,8 @@
   async function loadRevisionAt(index) {
     if (index < 0 || index >= revisions.length) return;
     resetCompareMergeState();
+    sourceRepairError = '';
+    sourceRepairPayload = '';
     const summary = revisions[index];
     const revision = await getRevision(summary.revision_id);
     currentRevision = revision;
@@ -1040,6 +1108,7 @@
     if (summary.revision_id === knownHeadId) {
       clearNewVersionIndicator();
     }
+    if (sourcePanelOpen) ensureSourceRepairPayload();
   }
 
   async function writeThroughToFile(content) {
@@ -1266,6 +1335,12 @@
     toolbarHidden = false;
     lastDocumentScrollTop = 0;
     toolbarHideSettleUntil = 0;
+    sourcePanelOpen = false;
+    sourceDiagnosis = null;
+    sourceDiagnosisPending = false;
+    sourceRepairPending = false;
+    sourceRepairPayload = '';
+    sourceRepairError = '';
     resetCompareMergeState();
     clearAutosaveTimer();
     clearNewVersionIndicator();
@@ -1720,6 +1795,83 @@
     }
   }
 
+  async function handleOpenSourcePanel() {
+    sourcePanelOpen = !sourcePanelOpen;
+    sourceRepairError = '';
+    if (sourcePanelOpen) {
+      ensureSourceRepairPayload();
+      if (!sourceDiagnosis && currentDoc?.doc_id && authenticated && !isPublishedReadOnly) {
+        await handleLoadSourceDiagnosis();
+      }
+    }
+  }
+
+  async function handleLoadSourceDiagnosis() {
+    if (!currentDoc?.doc_id || sourceDiagnosisPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'vtext_diagnosis', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
+    sourceDiagnosisPending = true;
+    sourceRepairError = '';
+    try {
+      sourceDiagnosis = await getVTextDiagnosis(currentDoc.doc_id, 80);
+      saveStatus = 'Source diagnosis loaded';
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      sourceRepairError = err.message || 'Could not load source diagnosis';
+      saveStatus = 'Source diagnosis failed';
+    } finally {
+      sourceDiagnosisPending = false;
+    }
+  }
+
+  async function handleApplySourceRepair() {
+    if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'vtext_source_repair', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(sourceRepairPayload || '{}');
+    } catch (_err) {
+      sourceRepairError = 'Repair payload must be valid JSON';
+      return;
+    }
+    if (!Array.isArray(payload?.citation_resolutions) || payload.citation_resolutions.length === 0) {
+      sourceRepairError = 'Repair payload needs citation_resolutions';
+      return;
+    }
+    sourceRepairPending = true;
+    sourceRepairError = '';
+    saveStatus = 'Repairing sources...';
+    try {
+      const revision = await repairVTextSourceGaps(currentDoc.doc_id, {
+        ...payload,
+        base_revision_id: payload.base_revision_id || currentRevision.revision_id,
+        author_label: getAuthorLabel(),
+      });
+      sourceDiagnosis = null;
+      sourceRepairPayload = '';
+      await reloadDocument(revision.revision_id);
+      ensureSourceRepairPayload();
+      saveStatus = `Repaired sources in ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      sourceRepairError = err.message || 'Source repair failed';
+      saveStatus = 'Source repair failed';
+    } finally {
+      sourceRepairPending = false;
+    }
+  }
+
   async function handleDiscardMerge() {
     const targetId = mergePreview?.target_revision_id || currentDoc?.current_revision_id || currentRevision?.revision_id || '';
     resetCompareMergeState();
@@ -1992,6 +2144,10 @@
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
+  $: sourceGaps = revisionSourceGaps();
+  $: sourceEntities = revisionSourceEntities();
+  $: sourceCandidates = sourceRepairCandidates();
+  $: sourceSummary = sourceDiagnosisSummary();
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2186,6 +2342,14 @@
               >
                 {comparePending ? 'Comparing…' : 'Compare'}
               </button>
+              <button
+                class="secondary-action"
+                data-vtext-source-panel
+                on:click={handleOpenSourcePanel}
+                disabled={loading || submitting || agentPending || !currentDoc}
+              >
+                Sources{sourceCandidates.length ? ` ${sourceCandidates.length}` : ''}
+              </button>
               {#if isViewingHistorical}
                 <button
                   class="secondary-action"
@@ -2237,6 +2401,84 @@
     {/if}
 
     <div class="document-body" data-vtext-document-body>
+      {#if sourcePanelOpen}
+        <section class="source-panel" data-vtext-source-diagnostics>
+          <div class="source-panel-heading">
+            <div>
+              <p class="eyebrow">Sources</p>
+              <h3>{sourceCandidates.length ? `${sourceCandidates.length} unresolved marker${sourceCandidates.length === 1 ? '' : 's'}` : `${sourceEntities.length} source entit${sourceEntities.length === 1 ? 'y' : 'ies'}`}</h3>
+            </div>
+            <button
+              type="button"
+              class="secondary-action"
+              data-vtext-load-diagnosis
+              on:click={handleLoadSourceDiagnosis}
+              disabled={sourceDiagnosisPending || !currentDoc || isPublishedReadOnly}
+            >
+              {sourceDiagnosisPending ? 'Loading…' : 'Diagnosis'}
+            </button>
+          </div>
+
+          {#if sourceCandidates.length}
+            <div class="source-marker-list" data-vtext-source-gaps>
+              {#each sourceCandidates as marker}
+                <span>{marker}</span>
+              {/each}
+            </div>
+          {/if}
+
+          {#if sourceEntities.length}
+            <div class="source-entity-list" data-vtext-source-entities>
+              {#each sourceEntities as entity}
+                <button type="button" class="source-entity-chip" data-vtext-source-entity-chip on:click={() => handleSourceEntityOpen(entity)}>
+                  <strong>{sourceEntityTitle(entity)}</strong>
+                  <span>{sourceEntityKindLabel(entity.kind)}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if sourceSummary}
+            <div class="source-diagnosis-facts" data-vtext-diagnosis-summary>
+              <span>{sourceSummary.revisionCount} revisions</span>
+              <span>{sourceSummary.runCount} runs</span>
+              {#if sourceSummary.latestVersion}
+                <span>{sourceSummary.latestVersion}</span>
+              {/if}
+              {#if sourceSummary.errorCount}
+                <span>{sourceSummary.errorCount} errors</span>
+              {/if}
+            </div>
+          {/if}
+
+          {#if !isPublishedReadOnly}
+            <label class="source-repair-editor">
+              <span>Repair JSON</span>
+              <textarea
+                data-vtext-source-repair-payload
+                bind:value={sourceRepairPayload}
+                spellcheck="false"
+                rows="6"
+              ></textarea>
+            </label>
+            <div class="source-panel-actions">
+              <button
+                type="button"
+                class="primary-action"
+                data-vtext-apply-source-repair
+                on:click={handleApplySourceRepair}
+                disabled={sourceRepairPending || !currentDoc || !currentRevision}
+              >
+                {sourceRepairPending ? 'Repairing…' : 'Apply repair'}
+              </button>
+              {#if sourceRepairError}
+                <span class="source-repair-error" role="alert">{sourceRepairError}</span>
+              {/if}
+            </div>
+          {/if}
+        </section>
+      {/if}
+
       {#if compareResult || mergePreview || comparePending || mergePending || compareError}
         <section class="compare-panel" class:compare-panel-error={compareError && !comparePending && !mergePending} data-vtext-compare-panel>
           <div class="compare-heading">
@@ -2517,6 +2759,116 @@
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-surface-raised);
     color: var(--choir-text-primary);
+  }
+
+  .source-panel {
+    flex: 0 0 auto;
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.74rem 0.86rem;
+    border-bottom: 1px solid var(--choir-border-strong);
+    background: var(--choir-surface-raised);
+    color: var(--choir-text-primary);
+  }
+
+  .source-panel-heading,
+  .source-panel-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.7rem;
+    min-width: 0;
+  }
+
+  .source-panel-heading h3 {
+    margin: 0.12rem 0 0;
+    color: var(--choir-text-primary);
+    font-size: 0.92rem;
+    line-height: 1.2;
+  }
+
+  .source-marker-list,
+  .source-diagnosis-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .source-marker-list span,
+  .source-diagnosis-facts span {
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    padding: 0.18rem 0.46rem;
+    color: var(--choir-text-accent);
+    background: var(--choir-state-selected);
+    font-size: 0.72rem;
+    font-weight: 720;
+  }
+
+  .source-entity-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .source-entity-chip {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.48rem 0.58rem;
+    color: var(--choir-text-primary);
+    background: var(--choir-state-selected);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .source-entity-chip strong,
+  .source-entity-chip span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-entity-chip strong {
+    font-size: 0.76rem;
+  }
+
+  .source-entity-chip span {
+    color: var(--choir-text-secondary);
+    font-size: 0.66rem;
+    font-weight: 720;
+    text-transform: uppercase;
+  }
+
+  .source-repair-editor {
+    display: grid;
+    gap: 0.32rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.72rem;
+    font-weight: 720;
+  }
+
+  .source-repair-editor textarea {
+    width: 100%;
+    min-height: 6rem;
+    resize: vertical;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.54rem 0.6rem;
+    color: var(--choir-text-primary);
+    background: var(--choir-state-selected);
+    font: 0.72rem/1.42 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .source-repair-error {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--choir-status-danger);
+    font-size: 0.74rem;
+    line-height: 1.35;
   }
 
   .compare-panel-error {

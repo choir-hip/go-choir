@@ -297,6 +297,20 @@ export async function getVTextDiagnosis(docId, limit = 50) {
   return res.json();
 }
 
+export async function repairVTextSourceGaps(docId, payload = {}) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/source-repairs`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Repair VText sources failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export async function getBlame(revisionId) {
   const res = await fetchWithRenewal(vtextPath(`/revisions/${encodeURIComponent(revisionId)}/blame`), {
     method: 'GET',
