@@ -4367,3 +4367,78 @@ residual risks:
   the nested-overlap failure mode while preserving the current Pretext routing
   model; it does not yet redesign source typography, multi-note navigation, or
   reader-mode source windows.
+
+## 2026-06-05 Deployed Proof: Single Active Pretext Journal Source Note
+
+status: staging_behavior_proven_next_axis_open
+
+behavior commit:
+
+- `f01a5037c5fa9103557763a09801a22c7c2ad727`
+  (`fix: remount source notes inside pretext flow`) was pushed to `origin/main`.
+- GitHub CI run `27042800876` succeeded.
+- FlakeHub publish run `27042800918` succeeded.
+- Node B deploy logs checked out `f01a5037`, built the frontend bundle, and
+  installed public asset graph `index-gGRthBcw.js`. The deploy health line
+  recorded deployed commit `f01a5037c5fa9103557763a09801a22c7c2ad727` at
+  `2026-06-05T22:13:26Z`.
+- Public `https://choir.news/health` still returns `status=ok` without a public
+  deployed commit field, so deploy identity for this proof comes from the Node
+  B deploy log rather than the public health payload.
+
+authenticated staging proof:
+
+- Computer Use was available for Comet and was used against the authenticated
+  staging UI route
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- Reloading the public owner route showed the client-ready legal-cloud VText
+  publication with the desktop recovery overlay present on the left side. The
+  overlay obstructs part of the reader but does not cover the source-flow region
+  used for this proof.
+- Clicking the first source marker expanded a single Pretext journal note for
+  "ABA Formal Opinion 512: Generative Artificial Intelligence Tools"; article
+  prose was routed beside the note instead of rendering the source as a top
+  source list or stacked card.
+- Clicking the second source marker inside the routed text remounted one active
+  journal note for "ABA Model Rule 1.6: Confidentiality of Information". The
+  ABA Formal note disappeared, the ABA Rule note became the only expanded note,
+  and no nested source card/popover remained inside the synthetic Pretext line
+  layer.
+- The remounted ABA Rule note exposed `Open source` and `Collapse source`
+  controls. Opening the source produced a separate source-content window for
+  "ABA Model Rule 1.6: Confidentiality of Information" containing the cleaned
+  Markdown source artifact, reference URL, SHA-256, content-item id
+  `39c3296c-9c03-4b92-93cb-c7c8bfc4b52e`, and source-entity id
+  `src_aba_rule_16`.
+
+behavior proven on deployed owner document:
+
+- The published reader no longer treats source markers cloned into a Pretext
+  journal flow as independent inline card/popover hosts.
+- There is one active expanded source note at a time, and clicking a later
+  citation inside the routed prose moves the journal note instead of nesting
+  cards.
+- Source expansion remains content-first: the source note itself is compact,
+  and full source material opens in its own source-content window.
+- Published source artifacts are available to the public reader route together
+  with the VText publication; the source window resolved from the published
+  source graph, not from a private author-only object.
+
+residual risks:
+
+- The current visual treatment is a repaired prototype, not the final
+  magazine/journal design. The next design pass should reduce rounded
+  card/pill chrome, tune typography, and make the source note read more like an
+  academic marginal note or inline float than a product card.
+- The desktop recovery overlay is still visible in Comet and should be cleaned
+  up separately so public proof screenshots are not visually contaminated.
+- The source-content window works for the curated Markdown source artifact, but
+  iframe/Web Lens remains an unreliable primary source reader for arbitrary web
+  URLs. The next source-window axis should improve Obscura cleanup into
+  Markdown/reader-mode artifacts and use iframe/Web Lens only as fallback.
+- Canonical import migration is still pending: `.md`, `.txt`, and other text
+  imports should become `.vtext` when advancing from v0 to v1, with Markdown
+  preserved as an export format rather than the canonical edited document.
+- The requested whole-mission/current-system review report, iCloud PDF export,
+  and simplification/dead-code pass remain pending until the source-reader and
+  canonical `.vtext` axes have enough end-to-end behavior to review honestly.
