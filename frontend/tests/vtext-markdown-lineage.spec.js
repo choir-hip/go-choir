@@ -361,7 +361,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
   const citation = rendered.locator('[data-vtext-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
-  await expect(citation).toHaveText('2');
+  await expect(citation).toHaveAttribute('data-source-label', '2');
   await citation.click();
   await expect(citation).toHaveAttribute('data-expanded', 'true');
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText(sourceLabel);
