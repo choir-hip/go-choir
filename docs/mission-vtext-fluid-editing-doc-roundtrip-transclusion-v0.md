@@ -2406,3 +2406,37 @@ remaining error field:
   head, owner-head focused prompt-size/`apply_edits` metadata in the new
   evidence strip, and title migration of `choir_private_legal_cloud_proposal.md`
   to canonical `.vtext` on the next owner VText write.
+
+2026-06-05 bounded table-cell edit proof gap checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use remains available, but the owner proposal deep link is still at
+  the passkey overlay for `yusefnathanson@me.com`; the actual owner document
+  cannot be safely mutated from this session.
+- Existing deployed and local tests prove that rendered Markdown tables survive
+  focus/autosave when the edit is outside the table, and backend stabilization
+  preserves a parent Markdown table when an incoming draft has already
+  collapsed it.
+- The remaining owner acceptance explicitly requires the table to survive when
+  a bounded table edit is requested. Current fixture coverage does not prove
+  that editing a rendered table cell through the product surface serializes
+  back to canonical Markdown table structure instead of flattening cells or
+  dropping row separators.
+- This is a proof gap along the same structural corruption axis as the owner
+  appendix regression. The next safe improvement should add a generic browser
+  regression that edits a single table cell in the rendered VText surface,
+  waits for the normal local draft/autosave path, and verifies the resulting
+  Markdown still has a valid pipe table, the bounded cell edit, and no
+  `TermDefinition`-style collapse. The test must use a fixture document, not
+  the owner proposal.
+
+belief-state update:
+
+- If the fixture passes on deployed staging, it will strengthen the generic
+  bounded-table-edit proof but still will not replace the required owner-head
+  passkey-gated acceptance. If it fails, the fix should stay in the generic
+  rendered-table serialization path rather than adding owner/glossary-specific
+  recovery code.
