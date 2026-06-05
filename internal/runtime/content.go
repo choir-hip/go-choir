@@ -1553,6 +1553,8 @@ func detectMediaType(sourceURL, filePath, contentType string) string {
 		return "text/html"
 	case ".pdf":
 		return "application/pdf"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	case ".epub":
 		return "application/epub+zip"
 	case ".png":
@@ -1590,6 +1592,8 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 		return "audio"
 	case mediaType == "application/pdf":
 		return "pdf"
+	case mediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return "vtext"
 	case mediaType == "application/epub+zip":
 		return "epub"
 	case mediaType == "application/rss+xml" || strings.Contains(strings.ToLower(sourceURL+filePath), "podcast"):

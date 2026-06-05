@@ -3373,6 +3373,9 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if !firstResp.Created {
 		t.Fatalf("first open created = false, want true")
 	}
+	if firstResp.OriginalContentID == "" {
+		t.Fatalf("first open original_content_id is empty")
+	}
 
 	second := openReq("Changed file bytes that should not fork a new doc")
 	if second.Code != http.StatusOK {
@@ -3410,12 +3413,102 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if importManifest["projection_kind"] != "vtext" || importManifest["source_kind"] != "md" || importManifest["original_content_hash"] == "" {
 		t.Fatalf("import manifest = %#v", importManifest)
 	}
+	if importManifest["original_content_id"] != firstResp.OriginalContentID {
+		t.Fatalf("import manifest original_content_id = %q, want %q", importManifest["original_content_id"], firstResp.OriginalContentID)
+	}
+	originalItem, err := s.GetContentItem(context.Background(), "user-1", firstResp.OriginalContentID)
+	if err != nil {
+		t.Fatalf("GetContentItem original: %v", err)
+	}
+	if originalItem.FilePath != "notes/ai-news.md" || originalItem.MediaType != "text/markdown" || originalItem.AppHint != "vtext" {
+		t.Fatalf("original content item = %#v", originalItem)
+	}
+	if originalItem.TextContent != "Initial file content" || originalItem.ContentHash == "" {
+		t.Fatalf("original text/hash = %#v", originalItem)
+	}
 	migrationManifest, ok := meta["migration_manifest"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing migration_manifest: %#v", meta)
 	}
 	if migrationManifest["migration_adapter"] != "markdown_to_vtext_projection" || migrationManifest["source_gap_policy"] != "repairable_gap_no_invented_citations" {
 		t.Fatalf("migration manifest = %#v", migrationManifest)
+	}
+}
+
+func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+
+	openFile := func(sourcePath, title, initialContent string) vtextOpenFileResponse {
+		req := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+			"source_path":     sourcePath,
+			"title":           title,
+			"initial_content": initialContent,
+		})
+		w := httptest.NewRecorder()
+		h.HandleVTextRouter(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("open %s: status = %d, want %d; body: %s", sourcePath, w.Code, http.StatusCreated, w.Body.String())
+		}
+		var resp vtextOpenFileResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode open %s: %v", sourcePath, err)
+		}
+		if resp.OriginalContentID == "" {
+			t.Fatalf("open %s original_content_id is empty", sourcePath)
+		}
+		return resp
+	}
+
+	docx := openFile("imports/legal-cloud-proposal.docx", "legal-cloud-proposal.docx", "Extracted DOCX projection text")
+	pdf := openFile("imports/legal-cloud-proposal.pdf", "legal-cloud-proposal.pdf", "Extracted PDF projection text")
+
+	for _, tc := range []struct {
+		name           string
+		resp           vtextOpenFileResponse
+		mediaType      string
+		appHint        string
+		lossiness      float64
+		warning        string
+		expectTextless bool
+	}{
+		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: "vtext", lossiness: 40, warning: "docx_projection_requires_style_adapter", expectTextless: true},
+		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", expectTextless: true},
+	} {
+		item, err := s.GetContentItem(context.Background(), "user-1", tc.resp.OriginalContentID)
+		if err != nil {
+			t.Fatalf("%s GetContentItem: %v", tc.name, err)
+		}
+		if item.MediaType != tc.mediaType || item.AppHint != tc.appHint || item.FilePath == "" || item.ContentHash == "" {
+			t.Fatalf("%s original item = %#v", tc.name, item)
+		}
+		if tc.expectTextless && item.TextContent != "" {
+			t.Fatalf("%s original text content stored for binary: %q", tc.name, item.TextContent)
+		}
+		revs, err := s.ListRevisionsByDoc(context.Background(), tc.resp.DocID, "user-1", 10)
+		if err != nil {
+			t.Fatalf("%s ListRevisionsByDoc: %v", tc.name, err)
+		}
+		if len(revs) != 1 {
+			t.Fatalf("%s len(revisions) = %d, want 1", tc.name, len(revs))
+		}
+		meta := decodeRevisionMetadata(revs[0].Metadata)
+		importManifest, ok := meta["import_manifest"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing import_manifest: %#v", tc.name, meta)
+		}
+		if importManifest["original_content_id"] != tc.resp.OriginalContentID || importManifest["source_media_type"] != tc.mediaType || importManifest["lossiness_score"] != tc.lossiness {
+			t.Fatalf("%s import manifest = %#v", tc.name, importManifest)
+		}
+		if importManifest["original_content_hash_state"] != "unavailable_until_binary_bytes_adapter" || importManifest["original_content_hash"] != "" || importManifest["original_identity_hash"] == "" {
+			t.Fatalf("%s binary hash state = %#v", tc.name, importManifest)
+		}
+		warnings, ok := importManifest["warnings"].([]any)
+		if !ok || len(warnings) != 1 || warnings[0] != tc.warning {
+			t.Fatalf("%s warnings = %#v", tc.name, importManifest["warnings"])
+		}
+		if _, ok := meta["migration_manifest"]; ok {
+			t.Fatalf("%s should not have markdown migration manifest: %#v", tc.name, meta)
+		}
 	}
 }
 

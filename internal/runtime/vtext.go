@@ -80,6 +80,7 @@ type vtextOpenFileResponse struct {
 	DocID             string `json:"doc_id"`
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 	Created           bool   `json:"created"`
+	OriginalContentID string `json:"original_content_id,omitempty"`
 }
 
 type vtextEnsureManifestResponse struct {
@@ -364,26 +365,63 @@ func marshalVTextShortcutFile(doc types.Document, sourcePath string) ([]byte, er
 	}, "", "  ")
 }
 
-func buildFileOpenVTextMetadata(sourcePath, content string) json.RawMessage {
+func buildFileOpenVTextMetadata(sourcePath, content string, original *types.ContentItem) json.RawMessage {
 	sourcePath = strings.TrimSpace(sourcePath)
 	sum := sha256.Sum256([]byte(content))
 	ext := strings.TrimPrefix(strings.ToLower(pathpkg.Ext(sourcePath)), ".")
 	if ext == "" {
 		ext = "text"
 	}
+	mediaType := detectMediaType("", sourcePath, "")
+	lossinessScore := 0
+	warnings := []string{}
+	switch mediaType {
+	case "application/pdf":
+		lossinessScore = 80
+		warnings = append(warnings, "pdf_projection_requires_extraction_adapter")
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		lossinessScore = 40
+		warnings = append(warnings, "docx_projection_requires_style_adapter")
+	case "application/octet-stream":
+		lossinessScore = 100
+		warnings = append(warnings, "unknown_file_type_projection_is_placeholder")
+	}
 	metadata := map[string]any{
 		"source_path":  sourcePath,
 		"created_from": "file_open",
 		"import_manifest": map[string]any{
-			"source_path":            sourcePath,
-			"source_kind":            ext,
-			"original_content_hash":  "sha256:" + hex.EncodeToString(sum[:]),
-			"projection_kind":        "vtext",
-			"import_adapter":         "vtext_file_open_projection",
-			"import_adapter_version": 1,
-			"lossiness_score":        0,
-			"warnings":               []string{},
+			"source_path":             sourcePath,
+			"source_kind":             ext,
+			"source_media_type":       mediaType,
+			"original_content_hash":   "sha256:" + hex.EncodeToString(sum[:]),
+			"projection_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
+			"projection_kind":         "vtext",
+			"import_adapter":          "vtext_file_open_projection",
+			"import_adapter_version":  1,
+			"lossiness_score":         lossinessScore,
+			"warnings":                warnings,
 		},
+	}
+	if original != nil && original.ContentID != "" {
+		metadata["original_content_item"] = map[string]any{
+			"content_id":   original.ContentID,
+			"source_type":  original.SourceType,
+			"media_type":   original.MediaType,
+			"app_hint":     original.AppHint,
+			"file_path":    original.FilePath,
+			"content_hash": original.ContentHash,
+		}
+		if manifest, ok := metadata["import_manifest"].(map[string]any); ok {
+			manifest["original_content_id"] = original.ContentID
+			if vtextFileTypeCanStoreTextProjection(original.MediaType) {
+				manifest["original_content_hash"] = "sha256:" + original.ContentHash
+				manifest["original_content_hash_state"] = "available_from_text_projection"
+			} else {
+				manifest["original_content_hash"] = ""
+				manifest["original_content_hash_state"] = "unavailable_until_binary_bytes_adapter"
+				manifest["original_identity_hash"] = "sha256:" + original.ContentHash
+			}
+		}
 	}
 	if ext == "md" || ext == "markdown" {
 		metadata["migration_manifest"] = map[string]any{
@@ -400,6 +438,84 @@ func buildFileOpenVTextMetadata(sourcePath, content string) json.RawMessage {
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return json.RawMessage(`{"created_from":"file_open"}`)
+	}
+	return data
+}
+
+func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID, sourcePath, title, content string, now time.Time) (types.ContentItem, error) {
+	mediaType := detectMediaType("", sourcePath, "")
+	hash := contentHash(content)
+	if !vtextFileTypeCanStoreTextProjection(mediaType) || hash == "" {
+		hash = contentHash(sourcePath)
+	}
+	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 1000)
+	if err == nil {
+		for _, item := range items {
+			if item.SourceType == "file" && item.FilePath == sourcePath && item.MediaType == mediaType {
+				return item, nil
+			}
+		}
+	} else {
+		log.Printf("vtext api: list content items for original file %s: %v", sourcePath, err)
+	}
+	projectionText := content
+	if !vtextFileTypeCanStoreTextProjection(mediaType) {
+		projectionText = ""
+	}
+	item := types.ContentItem{
+		ContentID:   uuid.NewString(),
+		OwnerID:     ownerID,
+		SourceType:  "file",
+		MediaType:   mediaType,
+		AppHint:     normalizeAppHint(appHintForMedia(mediaType, "", sourcePath)),
+		Title:       strings.TrimSpace(title),
+		FilePath:    sourcePath,
+		TextContent: projectionText,
+		ContentHash: hash,
+		Metadata:    buildOriginalFileContentMetadata(sourcePath, mediaType, content),
+		Provenance:  json.RawMessage(`{"created_from":"vtext_file_open","original_preserved":true}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if item.Title == "" {
+		item.Title = fallbackContentTitle(item)
+	}
+	if err := h.rt.Store().CreateContentItem(ctx, item); err != nil {
+		return types.ContentItem{}, err
+	}
+	return item, nil
+}
+
+func vtextFileTypeCanStoreTextProjection(mediaType string) bool {
+	switch normalizeMediaType(mediaType) {
+	case "text/plain", "text/markdown", "text/html":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildOriginalFileContentMetadata(sourcePath, mediaType, content string) json.RawMessage {
+	sum := sha256.Sum256([]byte(content))
+	metadata := map[string]any{
+		"schema":                "choir.content.original_file.v0",
+		"source_path":           sourcePath,
+		"media_type":            mediaType,
+		"original_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
+		"preservation":          "original_file_path_preserved_in_user_filesystem",
+	}
+	if !vtextFileTypeCanStoreTextProjection(mediaType) {
+		metadata["original_content_hash"] = ""
+		metadata["original_content_hash_state"] = "unavailable_until_binary_bytes_adapter"
+		metadata["original_identity_hash"] = "sha256:" + contentHash(sourcePath)
+		metadata["projection_content_hash"] = "sha256:" + hex.EncodeToString(sum[:])
+		metadata["text_content_policy"] = "not_embedded_for_binary_original"
+	} else {
+		metadata["original_content_hash_state"] = "available_from_text_projection"
+	}
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return json.RawMessage(`{"schema":"choir.content.original_file.v0"}`)
 	}
 	return data
 }
@@ -517,6 +633,16 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 	}
 
 	now := time.Now().UTC()
+	var original *types.ContentItem
+	if !isVTextShortcutPath(sourcePath) {
+		item, err := h.ensureVTextOriginalContentItem(r.Context(), ownerID, sourcePath, title, req.InitialContent, now)
+		if err != nil {
+			log.Printf("vtext api: preserve original content item for %s: %v", sourcePath, err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to preserve original file artifact"})
+			return
+		}
+		original = &item
+	}
 	doc := types.Document{
 		DocID:     uuid.New().String(),
 		OwnerID:   ownerID,
@@ -536,7 +662,7 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: ownerID,
 		Content:     req.InitialContent,
-		Metadata:    buildFileOpenVTextMetadata(sourcePath, req.InitialContent),
+		Metadata:    buildFileOpenVTextMetadata(sourcePath, req.InitialContent, original),
 		CreatedAt:   now,
 	}
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
@@ -554,7 +680,15 @@ func (h *APIHandler) HandleVTextOpenFile(w http.ResponseWriter, r *http.Request)
 		DocID:             doc.DocID,
 		CurrentRevisionID: rev.RevisionID,
 		Created:           true,
+		OriginalContentID: contentIDOrEmpty(original),
 	})
+}
+
+func contentIDOrEmpty(item *types.ContentItem) string {
+	if item == nil {
+		return ""
+	}
+	return item.ContentID
 }
 
 // HandleVTextEnsureManifest ensures a canonical vtext document has a
