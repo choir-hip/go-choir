@@ -1707,3 +1707,94 @@ remaining error field:
 - First land and prove the source-rendering boundary extraction. Then implement
   the journal-flow/reader-mode slice against that boundary and the source
   acquisition contract.
+
+## 2026-06-05 Deployed Proof: Source Boundary Stable, Journal Flow Still Missing
+
+status: deployed_proof_and_problem_recorded_before_next_code
+
+deployment evidence:
+
+- Commit `4dbad35e` (`refactor: extract vtext source rendering boundary`) and
+  commit `e094459c` (`docs: clarify pretext journal source flow`) were pushed to
+  `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27033021265` completed
+  successfully for
+  `e094459c4c55dfa65cbeb7dd67f0df9e994c503d`.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27033021259` completed
+  successfully for the same SHA.
+- `https://choir.news/health` reported build commit
+  `e094459c4c55dfa65cbeb7dd67f0df9e994c503d` and upstream deployed commit
+  `e094459c4c55dfa65cbeb7dd67f0df9e994c503d`.
+
+authenticated Comet owner proof:
+
+- Computer Use was available and used against Comet on the authenticated staging
+  session.
+- Hard reloading
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`
+  initially showed the Choir BIOS/candidate route bootstrap, then recovered to
+  the deployed Choir desktop.
+- The published VText window showed the owner artifact
+  `choir_private_legal_cloud_proposal.vtext`, version `v83`, title
+  `Proposal for [Redacted]: A Private Legal Cloud`, and the full client
+  proposal body rather than the earlier short source-demo draft.
+- The first viewport showed inline source buttons in article prose for
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` and
+  `ABA Model Rule 1.6: Confidentiality of Information`.
+- The first viewport did not show a top source deck before the article title and
+  did not render visible `missing source` prose.
+- Clicking the ABA Formal Opinion 512 marker expanded an inline source
+  transclusion with the title, kind `ethics opinion`, useful summary text,
+  `source available`, and `Open source`.
+- Clicking `Open source` opened a separate source window with the ABA PDF URL:
+  `https://www.americanbar.org/content/dam/aba/administrative/professional_responsibility/ethics-opinions/aba-formal-opinion-512.pdf`.
+- The source window exposed a product fallback action,
+  `Open readable Web Lens snapshot`.
+
+newly observed problems:
+
+- The expanded inline source still behaves like a rectangular card inserted into
+  a paragraph. It pushes article lines apart and leaves an obvious blank band
+  instead of routing nearby prose alongside the source excerpt. This confirms
+  the user clarification: Pretext must be used for wrapping/magazine/journal
+  flow, not for another round of card styling.
+- The ABA readable snapshot fallback returned
+  `Web Lens snapshot ready: obscura`, but the semantic snapshot content was the
+  raw fragment
+  `<div class="h">...Enable JavaScript and cookies to continue...</div>` plus a
+  collapsed `HTML source` panel. That is not a cleaned Markdown reader-mode
+  source surface.
+- Earlier Comet proof also observed a stale dynamic import failure in an Email
+  window after deploy (`Failed to fetch dynamically imported module:
+  https://choir.news/assets/EmailApp-DHbT84i9.js`). It did not block the VText
+  proof, but it should be tracked as a shell/deploy refresh problem if it
+  recurs or affects the current source workflow.
+
+root-cause direction:
+
+- The source rendering boundary extraction is deployed and stable for the
+  existing article-first source path.
+- The remaining source UX issue is structural layout ownership: the current
+  source transclusion DOM is still a popover/card projection. The next code
+  should introduce a focused source-flow owner that can compute prose line
+  ranges around an expanded source excerpt, with accessible DOM fallback.
+- The reader snapshot issue is source acquisition/cleanup ownership: Obscura can
+  fetch a fallback artifact, but it currently accepts low-value bot/cookie HTML
+  as a "ready" semantic snapshot. The next repair should clean source content
+  into Markdown or return a precise low-content/bot-blocked failure; it should
+  not hide the problem in VText chrome.
+
+acceptance criteria for the next code slice:
+
+- On the owner legal-cloud VText publication, expanding a source marker produces
+  a journal/magazine source excerpt where adjacent article text uses available
+  line space instead of leaving a rectangular void.
+- On narrow viewports, the same source excerpt stacks readably without overlap
+  or horizontal scrolling.
+- The source window reader fallback renders cleaned Markdown source content
+  where possible, or a precise failure reason when only bot/cookie/low-content
+  HTML is available.
+- The implementation remains generic over source entities and source kinds, and
+  preserves canonical VText serialization as `[label](source:ENTITY_ID)`.
