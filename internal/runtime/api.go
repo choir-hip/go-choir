@@ -1614,6 +1614,7 @@ func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
 // Route mapping:
 //
 //	POST   /api/vtext/files/open               → resolve/create aliased file document
+//	POST   /api/vtext/markdown-lineage/import  → migrate ordered Markdown snapshots into VText revisions
 //	POST   /api/vtext/documents/{id}/manifest  → ensure a filesystem manifestation
 //	GET    /api/vtext/documents/{id}           → get document
 //	PUT    /api/vtext/documents/{id}           → update document
@@ -1641,6 +1642,10 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "/api/vtext/files/open" {
 		h.HandleVTextOpenFile(w, r)
+		return
+	}
+	if path == "/api/vtext/markdown-lineage/import" {
+		h.HandleVTextImportMarkdownLineage(w, r)
 		return
 	}
 

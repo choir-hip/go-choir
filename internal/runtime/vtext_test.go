@@ -3436,6 +3436,148 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	}
 }
 
+func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", vtextMarkdownLineageImportRequest{
+		SourcePath: "proposals/legal-cloud.md",
+		Title:      "legal-cloud.md",
+		Versions: []vtextMarkdownLineageVersion{
+			{
+				Label:            "v44",
+				SourceRevisionID: "git-a",
+				Content:          "# Proposal\n\nGlossary table survives here. [1]\n",
+				CreatedAt:        "2026-06-04T10:00:00Z",
+			},
+			{
+				Label:            "v47",
+				SourceRevisionID: "git-b",
+				Content:          "# Proposal\n\n| Term | Definition |\n| --- | --- |\n| Work product | Durable output |\n",
+				CreatedAt:        "2026-06-04T11:00:00Z",
+			},
+			{
+				Label:            "v49",
+				SourceRevisionID: "git-c",
+				Content:          "# Proposal\n\nLatest citations and conclusion.\n",
+				CreatedAt:        "2026-06-04T12:00:00Z",
+				Metadata:         json.RawMessage(`{"import_note":"owner selected current draft"}`),
+			},
+		},
+	})
+	w := httptest.NewRecorder()
+	h.HandleVTextRouter(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	var resp vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	if !resp.Created || resp.RevisionCount != 3 || len(resp.Revisions) != 3 || len(resp.OriginalContentIDs) != 3 {
+		t.Fatalf("import response = %#v", resp)
+	}
+	if resp.Revisions[0].VersionNumber != 0 || resp.Revisions[1].VersionNumber != 1 || resp.Revisions[2].VersionNumber != 2 {
+		t.Fatalf("response version numbers = %#v", resp.Revisions)
+	}
+	if resp.Revisions[0].ParentRevisionID != "" || resp.Revisions[1].ParentRevisionID != resp.Revisions[0].RevisionID || resp.Revisions[2].ParentRevisionID != resp.Revisions[1].RevisionID {
+		t.Fatalf("response parent chain = %#v", resp.Revisions)
+	}
+	if resp.CurrentRevisionID != resp.Revisions[2].RevisionID {
+		t.Fatalf("current revision = %q, want latest %q", resp.CurrentRevisionID, resp.Revisions[2].RevisionID)
+	}
+
+	docID, err := s.GetDocumentAlias(context.Background(), "user-1", "proposals/legal-cloud.md")
+	if err != nil {
+		t.Fatalf("GetDocumentAlias: %v", err)
+	}
+	if docID != resp.DocID {
+		t.Fatalf("alias doc = %q, want %q", docID, resp.DocID)
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), resp.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 3 {
+		t.Fatalf("len(revisions) = %d, want 3", len(revs))
+	}
+	if revs[0].VersionNumber != 2 || !strings.Contains(revs[0].Content, "Latest citations") {
+		t.Fatalf("latest stored revision = %#v", revs[0])
+	}
+	oldest := revs[2]
+	meta := decodeRevisionMetadata(oldest.Metadata)
+	manifest, ok := meta["migration_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing migration_manifest: %#v", meta)
+	}
+	if manifest["migration_adapter"] != "markdown_lineage_to_vtext_revisions" || manifest["lineage_count"] != float64(3) || manifest["source_gap_policy"] != "repairable_gap_no_invented_citations" {
+		t.Fatalf("migration manifest = %#v", manifest)
+	}
+	lineage, ok := manifest["version_lineage"].([]any)
+	if !ok || len(lineage) != 3 {
+		t.Fatalf("version lineage = %#v", manifest["version_lineage"])
+	}
+	if manifest["original_content_id"] == "" || manifest["original_content_hash"] == "" {
+		t.Fatalf("missing original snapshot refs in manifest: %#v", manifest)
+	}
+	gaps, ok := meta["source_gaps"].([]any)
+	if !ok || len(gaps) != 1 {
+		t.Fatalf("source gaps = %#v", meta["source_gaps"])
+	}
+	latestMeta := decodeRevisionMetadata(revs[0].Metadata)
+	if latestMeta["source_metadata"].(map[string]any)["import_note"] != "owner selected current draft" {
+		t.Fatalf("latest source metadata = %#v", latestMeta["source_metadata"])
+	}
+
+	items, err := s.ListContentItems(context.Background(), "user-1", 10)
+	if err != nil {
+		t.Fatalf("ListContentItems: %v", err)
+	}
+	var foundSnapshots int
+	for _, item := range items {
+		if item.SourceType == "file_version" && item.FilePath != "" && strings.HasPrefix(item.FilePath, "proposals/legal-cloud.md#") {
+			foundSnapshots++
+			if item.MediaType != "text/markdown" || item.AppHint != "vtext" || item.TextContent == "" || item.ContentHash == "" {
+				t.Fatalf("snapshot content item = %#v", item)
+			}
+		}
+	}
+	if foundSnapshots != 3 {
+		t.Fatalf("found snapshot content items = %d, want 3", foundSnapshots)
+	}
+}
+
+func TestVTextImportMarkdownLineageRejectsExistingAlias(t *testing.T) {
+	h, _, _ := vtextAPISetupWithRuntime(t)
+	body := vtextMarkdownLineageImportRequest{
+		SourcePath: "notes/duplicate.md",
+		Title:      "duplicate.md",
+		Versions: []vtextMarkdownLineageVersion{{
+			Label:   "v1",
+			Content: "Initial version",
+		}},
+	}
+	req := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", body)
+	first := httptest.NewRecorder()
+	h.HandleVTextRouter(first, req)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first import: status = %d, want %d; body: %s", first.Code, http.StatusCreated, first.Body.String())
+	}
+
+	secondReq := vtextRequest(t, http.MethodPost, "/api/vtext/markdown-lineage/import", body)
+	second := httptest.NewRecorder()
+	h.HandleVTextRouter(second, secondReq)
+	if second.Code != http.StatusConflict {
+		t.Fatalf("second import: status = %d, want %d; body: %s", second.Code, http.StatusConflict, second.Body.String())
+	}
+	var resp vtextMarkdownLineageImportResponse
+	if err := json.NewDecoder(second.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode conflict response: %v", err)
+	}
+	if resp.Created || resp.ExistingDocID == "" {
+		t.Fatalf("conflict response = %#v", resp)
+	}
+}
+
 func TestVTextOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 

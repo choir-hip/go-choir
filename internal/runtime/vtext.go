@@ -86,6 +86,31 @@ type vtextOpenFileResponse struct {
 	OriginalContentID string `json:"original_content_id,omitempty"`
 }
 
+type vtextMarkdownLineageImportRequest struct {
+	SourcePath string                        `json:"source_path"`
+	Title      string                        `json:"title"`
+	Versions   []vtextMarkdownLineageVersion `json:"versions"`
+}
+
+type vtextMarkdownLineageVersion struct {
+	Label            string          `json:"label,omitempty"`
+	SourceRevisionID string          `json:"source_revision_id,omitempty"`
+	Content          string          `json:"content"`
+	CreatedAt        string          `json:"created_at,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+}
+
+type vtextMarkdownLineageImportResponse struct {
+	DocID              string                  `json:"doc_id"`
+	CurrentRevisionID  string                  `json:"current_revision_id"`
+	SourcePath         string                  `json:"source_path"`
+	Created            bool                    `json:"created"`
+	RevisionCount      int                     `json:"revision_count"`
+	Revisions          []vtextRevisionResponse `json:"revisions"`
+	OriginalContentIDs []string                `json:"original_content_ids"`
+	ExistingDocID      string                  `json:"existing_doc_id,omitempty"`
+}
+
 type vtextFileImportProjection struct {
 	SourcePath               string
 	MediaType                string
@@ -474,6 +499,121 @@ func buildFileOpenVTextMetadata(projection vtextFileImportProjection, original *
 		return json.RawMessage(`{"created_from":"file_open"}`)
 	}
 	return data
+}
+
+func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdownLineageVersion, contentID, contentHashValue string, index, count int, lineage []map[string]any) (json.RawMessage, error) {
+	sourceMeta := map[string]any{}
+	if len(bytes.TrimSpace(version.Metadata)) > 0 {
+		if err := json.Unmarshal(version.Metadata, &sourceMeta); err != nil {
+			return nil, fmt.Errorf("decode version metadata: %w", err)
+		}
+	}
+	metadata := map[string]any{
+		"source_path":  sourcePath,
+		"created_from": "markdown_lineage_import",
+		"migration_manifest": map[string]any{
+			"source_path":              sourcePath,
+			"source_kind":              "markdown",
+			"source_media_type":        "text/markdown",
+			"projection_kind":          "vtext",
+			"migration_adapter":        "markdown_lineage_to_vtext_revisions",
+			"migration_version":        1,
+			"lineage_index":            index,
+			"lineage_count":            count,
+			"source_label":             strings.TrimSpace(version.Label),
+			"source_revision_id":       strings.TrimSpace(version.SourceRevisionID),
+			"original_content_id":      contentID,
+			"original_content_hash":    "sha256:" + contentHashValue,
+			"version_lineage":          lineage,
+			"source_gap_policy":        "repairable_gap_no_invented_citations",
+			"source_gap_detector":      "markdown_lineage_numeric_citation_scan_v1",
+			"citation_resolution_rule": "do_not_invent_sources",
+		},
+	}
+	if len(sourceMeta) > 0 {
+		metadata["source_metadata"] = sourceMeta
+	}
+	if gaps := detectMarkdownLineageSourceGaps(version.Content); len(gaps) > 0 {
+		metadata["source_gaps"] = gaps
+	}
+	raw, _ := json.Marshal(metadata)
+	return raw, nil
+}
+
+var vtextMarkdownLineageCitationRefRE = regexp.MustCompile(`\[(?:\d{1,3}|\^[A-Za-z0-9_-]{1,40})\]`)
+
+func detectMarkdownLineageSourceGaps(content string) []map[string]any {
+	matches := vtextMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	gaps := make([]map[string]any, 0, len(matches))
+	seen := map[string]bool{}
+	for _, match := range matches {
+		marker := content[match[0]:match[1]]
+		if seen[marker] {
+			continue
+		}
+		seen[marker] = true
+		gaps = append(gaps, map[string]any{
+			"kind":   "unresolved_markdown_citation_marker",
+			"marker": marker,
+			"policy": "repairable_gap_no_invented_citations",
+		})
+	}
+	return gaps
+}
+
+func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version vtextMarkdownLineageVersion, now time.Time) types.ContentItem {
+	label := strings.TrimSpace(version.Label)
+	if label == "" {
+		label = strings.TrimSpace(version.SourceRevisionID)
+	}
+	if label == "" {
+		label = "snapshot"
+	}
+	hash := contentHash(version.Content)
+	meta, _ := json.Marshal(map[string]any{
+		"source_path":        sourcePath,
+		"source_label":       label,
+		"source_revision_id": strings.TrimSpace(version.SourceRevisionID),
+		"snapshot_hash":      "sha256:" + hash,
+	})
+	prov, _ := json.Marshal(map[string]any{
+		"created_from":       "vtext_markdown_lineage_import",
+		"original_preserved": true,
+		"source_path":        sourcePath,
+		"source_label":       label,
+		"source_revision_id": strings.TrimSpace(version.SourceRevisionID),
+	})
+	return types.ContentItem{
+		ContentID:   uuid.New().String(),
+		OwnerID:     ownerID,
+		SourceType:  "file_version",
+		MediaType:   "text/markdown",
+		AppHint:     "vtext",
+		Title:       fmt.Sprintf("%s %s", title, label),
+		FilePath:    fmt.Sprintf("%s#%s", sourcePath, label),
+		TextContent: version.Content,
+		ContentHash: hash,
+		Metadata:    meta,
+		Provenance:  prov,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+}
+
+func buildMarkdownLineageSummary(versions []vtextMarkdownLineageVersion) []map[string]any {
+	lineage := make([]map[string]any, 0, len(versions))
+	for i, version := range versions {
+		lineage = append(lineage, map[string]any{
+			"index":              i,
+			"label":              strings.TrimSpace(version.Label),
+			"source_revision_id": strings.TrimSpace(version.SourceRevisionID),
+			"content_hash":       "sha256:" + contentHash(version.Content),
+		})
+	}
+	return lineage
 }
 
 func (h *APIHandler) ensureVTextOriginalContentItem(ctx context.Context, ownerID, title string, projection vtextFileImportProjection, now time.Time) (types.ContentItem, error) {
@@ -977,6 +1117,145 @@ func (h *APIHandler) HandleVTextCreateDocument(w http.ResponseWriter, r *http.Re
 		OwnerID:   doc.OwnerID,
 		Title:     doc.Title,
 		CreatedAt: doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+	})
+}
+
+// HandleVTextImportMarkdownLineage migrates ordered Markdown snapshots into one
+// canonical VText document with durable version-numbered revisions.
+func (h *APIHandler) HandleVTextImportMarkdownLineage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+
+	var req vtextMarkdownLineageImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	sourcePath := normalizeVTextSourcePath(req.SourcePath)
+	if sourcePath == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_path is required"})
+		return
+	}
+	if len(req.Versions) == 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "versions are required"})
+		return
+	}
+	if len(req.Versions) > 10000 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "too many versions"})
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		parts := strings.Split(sourcePath, "/")
+		title = parts[len(parts)-1]
+	}
+	if existingDocID, err := h.rt.Store().GetDocumentAlias(r.Context(), ownerID, sourcePath); err == nil {
+		writeAPIJSON(w, http.StatusConflict, vtextMarkdownLineageImportResponse{
+			SourcePath:    sourcePath,
+			Created:       false,
+			ExistingDocID: existingDocID,
+		})
+		return
+	} else if err != store.ErrNotFound {
+		log.Printf("vtext api: lookup markdown lineage alias %s: %v", sourcePath, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve document alias"})
+		return
+	}
+	for i, version := range req.Versions {
+		if strings.TrimSpace(version.Content) == "" {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d].content is required", i)})
+			return
+		}
+		if len(bytes.TrimSpace(version.Metadata)) > 0 {
+			var obj map[string]any
+			if err := json.Unmarshal(version.Metadata, &obj); err != nil || obj == nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d].metadata must be a JSON object", i)})
+				return
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     uuid.New().String(),
+		OwnerID:   ownerID,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.rt.Store().CreateDocument(r.Context(), doc); err != nil {
+		log.Printf("vtext api: create markdown lineage document: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create document"})
+		return
+	}
+
+	lineage := buildMarkdownLineageSummary(req.Versions)
+	revisionResponses := make([]vtextRevisionResponse, 0, len(req.Versions))
+	originalIDs := make([]string, 0, len(req.Versions))
+	parentID := ""
+	for i, version := range req.Versions {
+		versionNow := now.Add(time.Duration(i) * time.Millisecond)
+		if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(version.CreatedAt)); err == nil {
+			versionNow = parsed.UTC()
+		}
+		item := buildMarkdownLineageContentItem(ownerID, sourcePath, title, version, versionNow)
+		if err := h.rt.Store().CreateContentItem(r.Context(), item); err != nil {
+			log.Printf("vtext api: preserve markdown lineage snapshot %s: %v", sourcePath, err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to preserve markdown source snapshot"})
+			return
+		}
+		metadata, err := buildMarkdownLineageRevisionMetadata(sourcePath, version, item.ContentID, item.ContentHash, i, len(req.Versions), lineage)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d].metadata must be a JSON object", i)})
+			return
+		}
+		rev := types.Revision{
+			RevisionID:       uuid.New().String(),
+			DocID:            doc.DocID,
+			OwnerID:          ownerID,
+			AuthorKind:       types.AuthorUser,
+			AuthorLabel:      ownerID,
+			Content:          version.Content,
+			Metadata:         metadata,
+			ParentRevisionID: parentID,
+			CreatedAt:        versionNow,
+		}
+		if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
+			log.Printf("vtext api: create markdown lineage revision %s[%d]: %v", sourcePath, i, err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create markdown lineage revision"})
+			return
+		}
+		storedRev, err := h.rt.Store().GetRevision(r.Context(), rev.RevisionID, ownerID)
+		if err != nil {
+			log.Printf("vtext api: reload markdown lineage revision %s: %v", rev.RevisionID, err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
+			return
+		}
+		revisionResponses = append(revisionResponses, revisionResponseFromRecord(storedRev))
+		originalIDs = append(originalIDs, item.ContentID)
+		parentID = rev.RevisionID
+		doc.CurrentRevisionID = rev.RevisionID
+	}
+	if err := h.rt.Store().UpsertDocumentAlias(r.Context(), ownerID, sourcePath, doc.DocID, now); err != nil {
+		log.Printf("vtext api: upsert markdown lineage alias %s -> %s: %v", sourcePath, doc.DocID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to persist document alias"})
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, vtextMarkdownLineageImportResponse{
+		DocID:              doc.DocID,
+		CurrentRevisionID:  doc.CurrentRevisionID,
+		SourcePath:         sourcePath,
+		Created:            true,
+		RevisionCount:      len(revisionResponses),
+		Revisions:          revisionResponses,
+		OriginalContentIDs: originalIDs,
 	})
 }
 
