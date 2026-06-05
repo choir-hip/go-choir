@@ -891,6 +891,63 @@ remaining error field:
   marker, open a URL-backed source that refuses iframe embedding, and prove that
   the readable snapshot path returns source text or a precise failure.
 
+## 2026-06-05 Deployed Snapshot Proof: Empty Text Extraction Gap
+
+status: problem_documented_before_fix
+
+new evidence:
+
+- Commit `bd548d339195fcdac4f6f8468674597994d261e1`
+  (`fix: degrade browser source snapshots gracefully`) was pushed to `main`,
+  passed GitHub Actions run `27029887443`, passed FlakeHub run `27029887434`,
+  deployed to Node B, and staging health reported proxy and sandbox deployed
+  commit `bd548d339195fcdac4f6f8468674597994d261e1` with deployed time
+  `2026-06-05T17:29:14Z`.
+- Authenticated Comet/Computer Use proof opened the staging Web Lens app and
+  navigated to `https://qdrant.tech/documentation/search/`. The iframe preview
+  remained blocked/blank for the Qdrant page, so the source-window fallback path
+  was still required.
+- Clicking `Snapshot` no longer left the request hanging on optional links/HTML
+  artifacts. Instead, the backend returned a precise failure:
+  `backend browser text snapshot was empty`.
+- The visible Comet status still showed stale-looking snapshot copy
+  (`Web Lens snapshot ready: obscura` plus `Loading Web Lens snapshot...`) while
+  the error banner showed the new backend failure. The backend evidence proves
+  the deployed graceful-degradation code is active; the UI text needs a hard
+  reload/recheck before treating the status label itself as current evidence.
+
+root-cause belief:
+
+- The first repair removed the all-or-nothing optional-artifact failure mode,
+  but readable extraction still assumes Obscura's `--dump text` output is the
+  only acceptable text source. Some JavaScript-heavy documentation pages can
+  return success with an empty text dump even when an HTML dump may still contain
+  enough readable content for source inspection.
+- For citation/source windows, an empty primary text dump should not be the end
+  of the recovery ladder. The product contract is a readable source surface or a
+  precise failure. HTML-derived text is a generic source-window fallback; a
+  Qdrant-specific branch would be another shortcut.
+
+planned structural repair:
+
+- If the primary text dump returns only whitespace, fetch the HTML artifact and
+  derive readable text from it using the existing runtime HTML extraction helper.
+- Store the raw HTML artifact when available, store the derived readable text as
+  `TextSnapshot`, and attach a warning such as "text dump was empty; used HTML
+  readable fallback" so trace/session evidence preserves the degradation.
+- Keep a hard error when neither the primary text dump nor the HTML fallback
+  yields readable text.
+- Add regression coverage for empty text plus readable HTML. Existing text
+  command failures should still fail unless a later documented problem proves a
+  second fallback rung is needed.
+
+remaining error field:
+
+- Implement and test the HTML-readable fallback without any URL-specific,
+  source-specific, or document-specific cases.
+- Re-deploy and repeat the authenticated Comet/Web Lens Qdrant proof after a
+  hard reload so frontend status wording is evaluated against the deployed JS.
+
 ## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
 
 status: checkpoint_incomplete
