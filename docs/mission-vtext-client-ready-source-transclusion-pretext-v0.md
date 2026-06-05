@@ -750,6 +750,84 @@ remaining error field:
 - Continue citation research beyond this seed, adding sources only where they
   improve the proposal and leaving non-source-needed prose uncited.
 
+## 2026-06-05 Owner v83 Publication Source Proof
+
+status: checkpoint_incomplete
+
+published owner artifact:
+
+- Public route:
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- Publication id: `pub-a5931445-451d-4443-9880-6a321dfcdefb`.
+- Publication version id:
+  `pubver-f4fcf985-57e3-49c6-aec2-282adbd2d14c`.
+- Source revision hash:
+  `f318b85ce26eee15a80e996067c3d04c04d7cbb8a8e0b780f94e1d827c9e60ab`.
+- Published at: `2026-06-05T17:13:40Z`.
+
+Comet staging proof:
+
+- The owner v83 VText was published through the product
+  `/api/platform/vtext/publications` path from the authenticated Comet session.
+- The published VText reader opened directly on the full proposal title
+  `Proposal for [Redacted]: A Private Legal Cloud`, not on a source deck.
+- The first paragraph showed inline source markers for
+  `ABA Formal Opinion 512: Generative Artificial Intelligence Tools` and
+  `ABA Model Rule 1.6: Confidentiality of Information`.
+- Clicking the ABA Formal Opinion 512 marker expanded an inline source card in
+  place with the ethics-opinion label, excerpt, `source available`, and
+  `Open source`; surrounding article prose wrapped around the expanded card.
+- In the owner VText window for the same v83 revision, clicking
+  `Open source` on a URL-backed source opened a separate Choir Browser/source
+  window. The ABA Rule 1.6 source window rendered the American Bar Association
+  page in page-preview mode, including the Rule 1.6 heading and rule text.
+
+unauthenticated publication data proof:
+
+- `curl` without Comet cookies against
+  `/api/platform/publications/resolve?route=/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`
+  returned HTTP `200`.
+- The response included:
+  - `source_entity_count: 7`;
+  - `marker_count: 7`;
+  - `table_pipe_lines: 49`;
+  - publication state `published`;
+  - seven source records with `target_kind: url`, `open_surface: source`,
+    `display_policy: embedded_excerpt`, and evidence state `available`.
+
+what this proves:
+
+- The real owner proposal now publishes source metadata with the public VText
+  artifact. A reader who can resolve the publication route can also resolve the
+  published source records.
+- The visible reader is article-first; sources no longer bunch at the top.
+- Inline source cards and source windows work for at least one URL-backed
+  published source on staging.
+- The appendix/glossary table remains structurally present in the published
+  artifact, with `49` table-pipe lines.
+
+limitations recorded:
+
+- The proof is still partial source coverage, not a completed legal-research
+  citation pass over every source-worthy claim in the proposal.
+- Some URL-backed sources may refuse embedded preview. A Qdrant source window
+  opened, but the embedded Browser preview reported
+  `qdrant.tech refused to connect`; the UI exposed an `Open readable Web Lens
+  snapshot` action, but that fallback was not yet proved for this mission.
+- The current source-card layout is still the existing CSS flow. It behaves
+  better than the top deck, but the Pretext-backed wrapping requirement remains
+  an implementation axis.
+
+remaining error field:
+
+- Prove or repair the Web Lens/snapshot fallback for sources that refuse iframe
+  embedding.
+- Continue researched source coverage until the client proposal has enough
+  high-value citations to send confidently, without turning the document into a
+  source-card catalog.
+- After the artifact proof is complete, run the requested hard mission/system
+  review and simplification/dead-code pass.
+
 ## 2026-06-05 Published Source Reader Checkpoint: Inline Sources First
 
 status: checkpoint_incomplete
