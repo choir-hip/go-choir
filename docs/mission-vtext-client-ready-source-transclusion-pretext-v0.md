@@ -4285,3 +4285,85 @@ current residual risks:
 - The hard whole-mission/current-system review and PDF report are intentionally
   pending until the source UI and canonical `.vtext` ingestion axes are real
   enough to review as the current system, not as a half-fixed slice.
+
+## 2026-06-05 Repair: Single Active Pretext Journal Source Note
+
+status: local_behavior_repaired_awaiting_staging_deploy
+
+research input:
+
+- The official `chenglou/pretext` README identifies `layoutNextLineRange()` as
+  the primitive for row-by-row manual routing when line width changes around a
+  floated object, and `@chenglou/pretext/rich-inline` as a narrow helper for
+  inline chips/fragments with caller-owned chrome.
+- `bluedusk/awesome-pretext` reinforces that the strong Pretext use case is
+  editorial/dynamic text flow and text wrapping around interactive material,
+  not decorating cards.
+- Mission implication: use `rich-inline` only for atomic source markers inside
+  article text, and use the existing `layoutNextLineRange`/manual flow path for
+  expanded source notes that should let prose wrap beside them.
+
+root cause:
+
+- `frontend/src/lib/vtext-source-flow.ts` already routes article prose beside a
+  single expanded source note using Pretext.
+- The failure seen in Comet happened after clicking a second citation inside
+  that synthetic journal flow. `VTextEditor.svelte` treated the cloned source
+  marker inside the generated flow as a normal inline source marker and expanded
+  its hidden popover inside the synthetic line layer.
+- That created a nested source card inside the Pretext flow, overlapping the
+  article and the first note. The problem was generic to source markers inside
+  generated journal-flow lines; it was not specific to ABA, Rule 1.6, or the
+  legal-cloud document.
+
+implementation:
+
+- `VTextEditor.svelte` now treats a source marker clicked inside
+  `[data-vtext-source-flow]` as navigation to a new single active journal note:
+  it clears the current flow, reveals the original rendered paragraph, finds
+  the canonical rendered source marker by `data-source-entity-id`, and mounts a
+  new Pretext journal flow for that source.
+- Source markers cloned into the synthetic journal line layer no longer show
+  their inline popovers on hover/focus. The cloned marker remains a source
+  target, but the opened note belongs to the single active journal flow.
+- The change is source/entity generic and does not special-case any document or
+  glossary/source id.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js:81 --project=chromium` passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium` passed:
+  source refs/media opening, Pretext journal source flow, table roundtrip, and
+  bounded table edit preservation all passed.
+- `git diff --check` passed.
+
+behavior proven by regression:
+
+- Expanding the first source creates one Pretext journal flow with article text
+  routed beside the source note.
+- A second source marker inside that synthetic flow has no visible nested inline
+  transclusion/popover.
+- Clicking the second marker remounts exactly one journal flow owned by the
+  second source.
+- The original rendered second source marker is marked as the active
+  flow-mounted marker; no source marker inside the synthetic flow is left with
+  `data-expanded="true"`.
+- The remounted source note can still launch the correct source window.
+
+residual risks:
+
+- This is local proof only until the behavior-changing commit is pushed,
+  deployed to Node B, and verified in Comet against the real owner v87
+  publication.
+- The source window for URL-backed source fixtures can still remain in
+  `Opening Web Lens...` long enough to be unreliable as a test assertion. This
+  remains part of the already documented source-window axis: opened citations
+  should prefer cleaned Markdown source artifacts and use iframe/Web Lens as a
+  fallback, not as the primary source-reader contract.
+- The broader magazine/journal design pass is not complete. This repair removes
+  the nested-overlap failure mode while preserving the current Pretext routing
+  model; it does not yet redesign source typography, multi-note navigation, or
+  reader-mode source windows.

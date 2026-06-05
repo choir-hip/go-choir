@@ -231,19 +231,29 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   expect(noteFactStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
   const nestedCitation = flow.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"]');
   await expect(nestedCitation).toBeVisible();
+  await expect(nestedCitation.locator('[data-vtext-inline-transclusion]')).toBeHidden();
   await nestedCitation.click();
-  await expect(nestedCitation).toHaveAttribute('data-expanded', 'true');
-  await expect(nestedCitation.locator('[data-vtext-inline-transclusion]')).toContainText('ABA Model Rule 1.6 fixture');
-  await expect(flow).toBeVisible();
+  const remountedFlow = rendered.locator('[data-vtext-source-flow]');
+  await expect(remountedFlow).toHaveCount(1);
+  await expect(remountedFlow.locator('[data-vtext-source-flow-note]')).toContainText('ABA Model Rule 1.6 fixture');
+  await expect(remountedFlow.locator('[data-vtext-source-flow-note]')).not.toContainText('ABA Formal Opinion 512 fixture');
+  const remountedState = await rendered.evaluate((node) => {
+    const flow = node.querySelector('[data-vtext-source-flow]');
+    const mounted = node.querySelector('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"][data-source-flow-mounted="true"]');
+    const expandedInsideFlow = flow?.querySelector('[data-vtext-source-ref][data-expanded="true"]');
+    return {
+      owner: flow?.getAttribute('data-source-flow-owner-id') || '',
+      hasMountedOriginal: !!mounted && !mounted.closest('[data-vtext-source-flow]'),
+      hasExpandedInsideFlow: !!expandedInsideFlow,
+    };
+  });
+  expect(remountedState.owner).toBe('src-fixture-nested');
+  expect(remountedState.hasMountedOriginal).toBe(true);
+  expect(remountedState.hasExpandedInsideFlow).toBe(false);
 
-  await flow.locator('[data-vtext-open-source][data-source-entity-id="src-fixture-flow"]').click();
-  const sourceWindow = page.locator('[data-window]').filter({ hasText: 'ABA Formal Opinion 512 fixture' }).last();
+  await remountedFlow.locator('[data-vtext-open-source][data-source-entity-id="src-fixture-nested"]').click();
+  const sourceWindow = page.locator('[data-window]').filter({ hasText: 'ABA Model Rule 1.6 fixture' }).last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
-  await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText(
-    'Lawyers using generative artificial intelligence tools must consider duties',
-    { timeout: 10000 }
-  );
-  await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
 });
 
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {

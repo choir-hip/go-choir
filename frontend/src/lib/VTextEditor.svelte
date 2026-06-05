@@ -2097,15 +2097,34 @@
     }));
   }
 
+  function renderedSourceRefForEntity(entityID) {
+    if (!entityID || !editorSurface) return null;
+    return Array.from(editorSurface.querySelectorAll?.('[data-vtext-source-ref]') || [])
+      .find((node) => !node.closest?.('[data-vtext-source-flow]') && node.getAttribute?.('data-source-entity-id') === entityID) || null;
+  }
+
+  function expandSourceRefAsJournalFlow(sourceRef) {
+    if (!sourceRef) return;
+    sourceRef.setAttribute('data-expanded', 'true');
+    requestAnimationFrame(() => mountSourceJournalFlow(sourceRef, {
+      minWidth: SOURCE_FLOW_MIN_WIDTH,
+      gap: SOURCE_FLOW_GAP,
+      lineHeight: SOURCE_FLOW_LINE_HEIGHT,
+    }));
+  }
+
   function toggleInlineSourceRef(sourceRef) {
     if (!sourceRef) return;
     const flow = sourceRef.closest?.('[data-vtext-source-flow]');
     if (flow) {
-      const expanded = sourceRef.getAttribute('data-expanded') === 'true';
-      flow.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
-        if (node !== sourceRef) node.setAttribute('data-expanded', 'false');
+      const entityID = sourceRef.getAttribute('data-source-entity-id') || '';
+      const ownerID = flow.getAttribute('data-source-flow-owner-id') || '';
+      clearSourceJournalFlows(editorSurface);
+      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+        node.setAttribute('data-expanded', 'false');
       });
-      sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
+      if (!entityID || entityID === ownerID) return;
+      expandSourceRefAsJournalFlow(renderedSourceRefForEntity(entityID));
       return;
     }
     const expanded = sourceRef.getAttribute('data-expanded') === 'true';
@@ -2115,11 +2134,7 @@
     });
     sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
     if (!expanded) {
-      requestAnimationFrame(() => mountSourceJournalFlow(sourceRef, {
-        minWidth: SOURCE_FLOW_MIN_WIDTH,
-        gap: SOURCE_FLOW_GAP,
-        lineHeight: SOURCE_FLOW_LINE_HEIGHT,
-      }));
+      expandSourceRefAsJournalFlow(sourceRef);
     }
   }
 
@@ -3690,6 +3705,10 @@
 
   .rendered-doc :global(.vtext-source-journal-fragment--source .vtext-source-ref) {
     vertical-align: super;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-flow .vtext-source-ref-popover) {
+    display: none !important;
   }
 
   .rendered-doc :global(.vtext-source-journal-note) {
