@@ -1726,6 +1726,41 @@ remaining error field:
 
 suggested resume goal string:
 
+2026-06-05 private VText deep-link blocker checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- A Comet probe navigated the authenticated-looking session from the public
+  proposal route to `https://choir.news/?desktop_recovery=1`. The resulting
+  page rendered the signed-out/preview desktop with `Choir Preview`, not the
+  private owner desktop recovery surface. This means the public proposal route
+  was readable, but it did not prove the current tab had a usable private
+  owner session.
+- The product has a stable public VText route (`/pub/vtext/...`) and app URL
+  intents for some apps, but there is no generic private VText deep link that
+  opens a specific authenticated document by `doc_id`. Owner proof therefore
+  depends on restored desktop window state, app-switcher ordering, and visual
+  foregrounding, which already produced a public/private root confusion for
+  doc `f93cea62-f833-4dae-b414-8e44783d8cbe`.
+- This is a product-path debuggability and QA problem, not a document-specific
+  data problem. A root-safe owner proof needs a private, authenticated VText
+  URL intent that opens a requested canonical document or shows the normal
+  passkey overlay and then replays the same intent after login.
+
+belief-state update:
+
+- The next structural fix should add a generic authenticated VText URL intent,
+  such as `/?app=vtext&doc=<doc_id>&title=<optional-title>`, using the
+  existing app replay/auth overlay machinery. It must not bypass auth, must not
+  expose private documents publicly, and must not hardcode the owner proposal.
+- After that ships, the owner-account proof can use Comet to open the private
+  doc directly, verify `v81+ Latest`, and continue source-repair/table-edit
+  acceptance without relying on saved desktop state.
+
+suggested resume goal string:
+
 ```text
 /goal Continue docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md as a Codex-operated MissionGradient mission from checkpoint f05b4c92. Use the requirements contracts in docs/source-external-data-publication.md, docs/vtext-version-compare-merge-debuggability-spec.md, and docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md. First verify whether computer-use is available; if it is, use authenticated staging UI QA on yusefnathanson@me.com, otherwise use browser/API backup and record that limitation. Do not write code before documenting any newly found problem. Root-cause the real owner document appendix-table regression in choir_private_legal_cloud_proposal.md (doc f93cea62-f833-4dae-b414-8e44783d8cbe): compare v70-v78 and identify the first transition that collapses the Markdown glossary table into the TermDefinition artifact. Repair the structural corruption path, not with a glossary-specific special case but by preserving VText document structure through render/edit/save/revise. Prove on staging with the actual owner document that table formatting survives focus/edit/save/revise both when the table is untouched and when a bounded table edit is requested, while ordinary revisions keep focused_user_edit_diff prompt sizes and apply_edits metadata. Then continue the next realism axis: repair unresolved citation/source gaps on the same owner document so citation markers expand into transclusions and open source windows. Preserve invariants: VText is canonical, only VText writes canonical .vtext revisions, hidden metadata must not render as prose, all citations are transclusion points, whole-document rewrite is explicit and exceptional, and no classifiers/workflow scaffolding or hardcoded document-specific fixes. Land with commit -> push main -> CI -> Node B deploy -> staging identity -> deployed owner-account proof, and update this mission doc with evidence and residual risks.
 ```
