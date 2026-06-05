@@ -3614,3 +3614,54 @@ next executable probe:
 - For the article UI, continue to treat Pretext as article/source-flow layout:
   citation atoms remain inline; expanded source apparatus should route article
   lines around content-first reader snippets rather than stack nested cards.
+
+## 2026-06-05 Problem Checkpoint: Existing Source Repair Cannot Attach Artifacts
+
+status: documented_before_fix
+
+problem:
+
+- The current VText source repair endpoint only repairs unresolved Markdown
+  citation markers. It requires `citation_resolutions`, rewrites matching
+  `[n]` markers into `[n](source:ENTITY_ID)`, and rejects a request that does
+  not change article content.
+- That is the wrong operation for the current owner source gap. The legal-cloud
+  proposal already has stable source entities and inline transclusion points.
+  The missing piece is attaching a permitted readable source artifact to an
+  existing source entity whose canonical URL blocks server-side import.
+- Using the existing `/source-repairs` endpoint for this would force a fake
+  citation-resolution payload and risk an unnecessary content rewrite. That
+  would violate the mission invariant that ordinary source repair should
+  preserve VText document structure and avoid whole-document or marker churn.
+
+evidence:
+
+- `internal/runtime/vtext.go` `HandleVTextSourceGapRepair` requires
+  `citation_resolutions`, validates unresolved markers, applies
+  `applyVTextCitationResolutions`, and rejects no-op content repairs with
+  `citation_resolutions did not match unresolved markers in the base revision`.
+- The owner v83 document already publishes 7 source entities and 7
+  transclusions. The three failing sources now have explicit
+  `reader_snapshot_status` values showing HTTP 403 import failure, not missing
+  citation markers.
+- `internal/runtime/content.go` already supports owner-created content items
+  with `source_url`, `canonical_url`, `text_content`, `metadata`, and
+  `provenance`. The missing system seam is binding such a ContentItem to an
+  existing VText source entity as a new canonical VText revision without
+  changing article content.
+
+required shape:
+
+- Add a generic metadata-only VText source-attachment operation that:
+  - authenticates the owner;
+  - loads the current/base revision;
+  - verifies each target source entity exists;
+  - verifies each attached ContentItem belongs to the owner and has readable
+    text;
+  - preserves existing citation markers and article content exactly;
+  - updates the source entity target/content metadata and evidence state;
+  - creates a normal VText revision so the attachment is canonical and
+    publishable.
+- Do not make the operation legal-cloud-specific. It should work for any VText
+  source entity whose source artifact is supplied later through an allowed
+  import/upload/research path.
