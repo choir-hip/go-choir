@@ -146,7 +146,7 @@
     const entity = findSourceEntity(sourceEntities, entityID);
     const displayLabel = label || entity?.label || 'source';
     if (!entity) {
-      return `<span class="vtext-source-ref vtext-source-ref--missing" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">missing source</span>`;
+      return `<span class="vtext-source-ref vtext-source-ref--missing" data-vtext-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
     }
     const kind = sourceEntityKindLabel(entity?.kind);
     const title = sourceEntityTitle(entity);
@@ -599,7 +599,7 @@
 
   function renderDocumentHTML(value = editorValue) {
     const entities = revisionSourceEntities();
-    return renderSourceEntityBlocks(entities) + renderMarkdown(value, entities);
+    return renderMarkdown(value, entities);
   }
 
   function serializeInlineMarkdown(node) {
