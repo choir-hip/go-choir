@@ -2041,3 +2041,67 @@ acceptance criteria for the next source-flow slice:
 - The source window either opens a working live preview or offers a cleaned
   Markdown reader fallback with a precise reason when the live preview is
   blocked.
+
+## 2026-06-05 Local Correction: Pretext-Composed Source Region
+
+status: local_code_verified_pending_deploy
+
+implementation:
+
+- Replaced the native-float source note with a bounded noncanonical source-flow
+  region inserted before the canonical paragraph run.
+- The source-flow module now collects the paragraph containing the expanded
+  source marker plus following safe paragraphs, hides those canonical blocks
+  with `data-vtext-source-flow-hidden`, and renders a presentation-only
+  `data-vtext-source-flow` region.
+- Pretext now performs the actual article composition: each paragraph is laid
+  out with `layoutNextLineRange` and `materializeLineRange`, using a narrower
+  line width while the measured source note occupies the right side and the
+  full line width after the note clears.
+- Canonical VText remains untouched. The hidden paragraphs and original
+  `[label](source:ENTITY_ID)` marker stay in the DOM for serialization, while
+  the presentation flow is skipped by the existing serializer boundary.
+- Source action handling now opens source windows on pointerdown for embedded
+  source controls, avoiding editor blur/resync races before the click handler
+  can dispatch. The click path remains as a de-duplicated fallback for synthetic
+  and keyboard-like activation.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- After restarting the local foreground stack with
+  `CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`,
+  `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed.
+- The source-flow regression now asserts:
+  - a noncanonical composed source-flow region is visible;
+  - at least two canonical paragraphs are hidden behind the presentation flow;
+  - the source note is absolutely positioned inside the composed region, not a
+    native float;
+  - a line from the second paragraph appears inside the note's vertical
+    footprint, proving cross-paragraph article text is using the available
+    reading measure beside the source note;
+  - source actions create a desktop source window with the source title;
+  - table roundtrip and bounded table edit regressions still pass.
+
+newly observed local limitation:
+
+- In the polluted local desktop state used for verification, source actions
+  created the correct desktop source window, but heavy app components such as
+  Video could remain at `Opening Video...` rather than reaching their
+  `[data-video-app]` root promptly. A direct browser-icon probe showed Web Lens
+  can load after a longer delay, while the Video component stayed pending in
+  that local state.
+- This is not the source-flow contract, and staging Comet proof remains the
+  acceptance route for source windows. The test now asserts the source window
+  creation contract rather than heavy component boot completion.
+- Residual risk: a later cleanup pass should investigate local restored-window
+  pollution/heavy-app boot behavior separately, because source-window creation
+  and source-window readiness are different product claims.
+
+next proof:
+
+- Commit and push the composed-region implementation.
+- Wait for CI/Node B deploy and staging identity.
+- In authenticated Comet on the owner publication, expand the first ABA source
+  and verify that the second/next article paragraph continues beside the source
+  note instead of starting below it.

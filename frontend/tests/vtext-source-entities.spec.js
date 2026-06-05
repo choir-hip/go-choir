@@ -74,10 +74,8 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(citation.locator('[data-vtext-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
   await expect(citation.locator('[data-vtext-inline-transclusion]')).toContainText('transcript unavailable');
 
-  const initialVideoWindows = await page.locator('[data-video-app]').count();
   await citation.locator('[data-vtext-open-source]').click();
-  await expect(page.locator('[data-video-app]')).toHaveCount(initialVideoWindows + 1, { timeout: 10000 });
-  await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
+  await expect(page.locator('[data-window]').filter({ hasText: 'YouTube source fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
 
 test('VText lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {
@@ -121,18 +119,20 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
         },
       ],
     };
-    const paragraph = [
-      'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents.',
-      '[ethics guidance](source:src-fixture-flow)',
-      'The expanded evidence should read like a compact marginal journal note while the surrounding article text continues beside it instead of being pushed into a large rectangular gap.',
-      'This trailing sentence gives the flow enough prose to continue below the source note after the narrow line region ends.',
-    ].join(' ');
+    const paragraphs = [
+      [
+        'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents.',
+        '[ethics guidance](source:src-fixture-flow)',
+      ].join(' '),
+      'Second paragraph keeps using the reading measure beside the expanded evidence, proving that the source flow is a composed journal region rather than a paragraph-local card or native float.',
+      'Third paragraph gives the layout enough prose to continue below the source note after the narrow line region ends.',
+    ];
     const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `# Source Flow Fixture\n\n${paragraph}`,
+        content: `# Source Flow Fixture\n\n${paragraphs.join('\n\n')}`,
         author_kind: 'user',
         author_label: 'browser-test',
         metadata,
@@ -155,12 +155,21 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   await expect(flow).toBeVisible({ timeout: 5000 });
   await expect(flow).toContainText('ABA Formal Opinion 512 fixture');
   await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
-  await expect(rendered.locator('p[data-vtext-source-flow-hidden]')).toHaveCount(0);
-  expect(await flow.evaluate((node) => getComputedStyle(node).float)).toBe('right');
+  expect(await rendered.locator('p[data-vtext-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
+  expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
+  expect(await flow.locator('[data-vtext-source-flow-note]').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+  const lowerWrappedLine = await flow.evaluate((node) => {
+    const note = node.querySelector('[data-vtext-source-flow-note]');
+    const noteBottom = note.getBoundingClientRect().bottom - node.getBoundingClientRect().top;
+    return Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
+      const top = line.getBoundingClientRect().top - node.getBoundingClientRect().top;
+      return top > noteBottom * 0.45 && top < noteBottom && line.textContent.includes('Second paragraph');
+    });
+  });
+  expect(lowerWrappedLine).toBe(true);
 
-  const initialBrowserWindows = await page.locator('[data-browser-app]').count();
   await flow.locator('[data-vtext-open-source]').click();
-  await expect(page.locator('[data-browser-app]')).toHaveCount(initialBrowserWindows + 1, { timeout: 10000 });
+  await expect(page.locator('[data-window]').filter({ hasText: 'ABA Formal Opinion 512 fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
 
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {

@@ -103,6 +103,8 @@
   let sourceRepairPending = false;
   let sourceRepairPayload = '';
   let sourceRepairError = '';
+  let sourceOpenPointerHandledAt = 0;
+  let sourceOpenPointerHandledEntityID = '';
   let removeLiveListener = () => {};
 
   const AUTOSAVE_DELAY_MS = 900;
@@ -1877,14 +1879,21 @@
     });
   }
 
+  function handleSourceOpenButton(button) {
+    const entityID = button?.getAttribute?.('data-source-entity-id') || '';
+    const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
+    handleSourceEntityOpen(entity);
+    return entityID;
+  }
+
   function handleEditorClick(event) {
     const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
       event.stopPropagation();
-      const flow = collapse.closest?.('[data-vtext-source-flow]');
-      const previous = flow?.previousElementSibling;
-      previous?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]')?.setAttribute('data-expanded', 'false');
+      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+        node.setAttribute('data-expanded', 'false');
+      });
       clearSourceJournalFlows(editorSurface);
       return;
     }
@@ -1893,8 +1902,10 @@
       event.preventDefault();
       event.stopPropagation();
       const entityID = button.getAttribute('data-source-entity-id') || '';
-      const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
-      handleSourceEntityOpen(entity);
+      if (entityID && entityID === sourceOpenPointerHandledEntityID && Date.now() - sourceOpenPointerHandledAt < 800) {
+        return;
+      }
+      handleSourceOpenButton(button);
       return;
     }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
@@ -1914,9 +1925,7 @@
     if (!button || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
     event.stopPropagation();
-    const entityID = button.getAttribute('data-source-entity-id') || '';
-    const entity = revisionSourceEntities().find((item) => sourceEntityID(item) === entityID);
-    handleSourceEntityOpen(entity);
+    handleSourceOpenButton(button);
   }
 
   function refreshSourceJournalFlow() {
@@ -1951,13 +1960,20 @@
     const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
-      const flow = collapse.closest?.('[data-vtext-source-flow]');
-      const previous = flow?.previousElementSibling;
-      previous?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]')?.setAttribute('data-expanded', 'false');
+      editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+        node.setAttribute('data-expanded', 'false');
+      });
       clearSourceJournalFlows(editorSurface);
       return;
     }
-    if (event.target?.closest?.('[data-vtext-open-source]')) return;
+    const sourceOpen = event.target?.closest?.('[data-vtext-open-source]');
+    if (sourceOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      sourceOpenPointerHandledEntityID = handleSourceOpenButton(sourceOpen);
+      sourceOpenPointerHandledAt = Date.now();
+      return;
+    }
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
     if (!sourceRef) return;
     event.preventDefault();
@@ -3299,14 +3315,44 @@
     display: block;
   }
 
+  .rendered-doc :global([data-vtext-source-flow-hidden]) {
+    display: none !important;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-flow) {
+    position: relative;
+    margin: 0.28rem 0 1.05rem;
+    color: var(--choir-text-primary);
+    font: inherit;
+    line-height: var(--vtext-source-flow-line-height);
+  }
+
+  .rendered-doc :global(.vtext-source-journal-lines) {
+    position: absolute;
+    inset: 0;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-line) {
+    position: absolute;
+    display: block;
+    min-height: var(--vtext-source-flow-line-height);
+    color: var(--choir-text-primary);
+    font: inherit;
+    line-height: var(--vtext-source-flow-line-height);
+    white-space: pre;
+  }
+
   .rendered-doc :global(.vtext-source-journal-note) {
-    float: right;
-    display: grid;
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    display: block;
     width: var(--vtext-source-flow-note-width);
-    max-width: 42%;
-    margin: 0.04rem 0 0.75rem 1.2rem;
+    max-width: calc(100% - var(--vtext-source-flow-gap) - 12rem);
+    margin: 0;
     border-left: 2px solid var(--choir-border-strong);
-    padding: 0.12rem 0 0.12rem 0.92rem;
+    padding: 0.08rem 0 0.16rem 0.86rem;
     color: var(--choir-text-primary);
     background: transparent;
     font-size: 0.86rem;
@@ -3379,8 +3425,22 @@
   }
 
   @media (max-width: 720px) {
+    .rendered-doc :global(.vtext-source-journal-flow) {
+      height: auto !important;
+    }
+
+    .rendered-doc :global(.vtext-source-journal-lines) {
+      position: static;
+    }
+
+    .rendered-doc :global(.vtext-source-journal-line) {
+      position: static;
+      display: inline;
+      white-space: normal;
+    }
+
     .rendered-doc :global(.vtext-source-journal-note) {
-      float: none;
+      position: static;
       width: auto;
       max-width: none;
       margin: 0.52rem 0;
