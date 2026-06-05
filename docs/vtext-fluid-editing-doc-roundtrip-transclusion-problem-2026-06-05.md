@@ -174,6 +174,22 @@ still lived in the separate source rail. That leaves multimedia transclusion
 half-shipped: the citation marker becomes expandable, but users must look
 elsewhere to inspect the media source.
 
+### Diagnosis Bundles Can Omit The Relevant VText Run
+
+Live staging proof for the long-document fluid-edit path created a VText
+document, direct user-edit revision, and appagent revision successfully. The
+appagent revision metadata recorded the VText context mode and structured edit
+operation, but `/api/vtext/documents/{id}/diagnosis?limit=100` did not include
+the `loop_id` returned by the document's own `/revise` call in `runs`.
+
+The endpoint currently appends recent owner runs through `ListRunsByOwner`.
+That is useful for broad retrospective context, but it is not sufficient for a
+document diagnosis bundle: active or recent runs on the document channel can be
+older than the last N owner runs, especially in QA accounts with multiple
+windows and tests. For VText debuggability, a document-scoped diagnosis must
+include runs whose channel/doc metadata points at the document before falling
+back to owner-level recent runs.
+
 ## Desired State
 
 - Ordinary VText revisions use current head plus user edit diff by default.
@@ -199,6 +215,8 @@ elsewhere to inspect the media source.
   on caller-supplied projection text.
 - Every citation marker is an expandable source entity/transclusion target.
 - Expanded transclusions can open their owning source app/window.
+- Document diagnosis includes the document's own VText/appagent runs even when
+  they are not among the latest owner-level runs.
 
 ## Remaining Error Field
 
