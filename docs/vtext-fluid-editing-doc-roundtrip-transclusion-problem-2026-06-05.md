@@ -104,6 +104,24 @@ only the latest file content. Both would violate the mission invariant that
 existing versioned Markdown documents become real VTexts with preserved version
 lineage, historical publish/compare/merge, and later citation/source repair.
 
+### Markdown Lineage Import Cannot Yet Attach Known Source Evidence
+
+The first lineage import endpoint creates durable VText revisions and records
+unresolved numeric/footnote citations as repairable `source_gaps`. That is the
+right behavior when evidence is missing, but it is incomplete when the migration
+input already has source evidence. Existing versioned Markdown documents may
+include footnotes, source sections, appendix references, quoted excerpts, URLs,
+or manually known citation mappings. The product path needs to carry that
+evidence into revision-scoped `source_entities` and convert resolved citation
+markers such as `[1]` into live `source:` transclusion targets.
+
+Without that capability, migrating the legal-cloud proposal class of documents
+would require a follow-up script or manual database edit to attach sources.
+That would be a workaround, not the intended product path. The importer should
+distinguish between unresolved markers, which remain repairable source gaps,
+and resolved markers, which become clickable citation/transclusion points in
+the migrated VText content.
+
 ### Binary Original Preservation Is Still Projection-Only
 
 After checkpoint `0a5a31de`, the backend creates separate original
@@ -205,6 +223,10 @@ back to owner-level recent runs.
 - Markdown lineage migration is exposed through an authenticated product API,
   not a raw database script, and records each imported Markdown snapshot as
   migration evidence linked to the resulting VText revision.
+- Markdown lineage migration accepts known source entities and citation-marker
+  resolutions, stores them as revision metadata, and rewrites resolved markers
+  into live VText source links while leaving unresolved markers as repairable
+  source gaps.
 - `.md`, DOCX, and PDF originals are preserved as source artifacts or
   ContentItems; VText owns the revisable projection.
 - Import -> revise -> export works for MD, TXT, HTML, DOCX, and PDF with
