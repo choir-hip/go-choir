@@ -3437,6 +3437,89 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	}
 }
 
+func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+
+	initialContent := strings.Join([]string{
+		"# Legal Cloud",
+		"",
+		"Appendix A: Glossary",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Work product | Durable output of professional work. |",
+		"| Vector database | Storage optimized for similarity search. |",
+		"",
+		"Closing paragraph.",
+	}, "\n")
+	openReq := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+		"source_path":     "proposals/legal-cloud.md",
+		"title":           "legal-cloud.md",
+		"initial_content": initialContent,
+	})
+	openW := httptest.NewRecorder()
+	h.HandleVTextRouter(openW, openReq)
+	if openW.Code != http.StatusCreated {
+		t.Fatalf("open markdown: status = %d, want %d; body: %s", openW.Code, http.StatusCreated, openW.Body.String())
+	}
+	var opened vtextOpenFileResponse
+	if err := json.NewDecoder(openW.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode open response: %v", err)
+	}
+
+	collapsedDraft := strings.Join([]string{
+		"# Legal Cloud",
+		"",
+		"Appendix A: Glossary",
+		"",
+		"TermDefinitionWork productDurable output of professional work.Vector databaseStorage optimized for similarity search.",
+		"",
+		"Closing paragraph with a user edit.",
+	}, "\n")
+	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content: collapsedDraft,
+		Metadata: json.RawMessage(`{
+			"source_path":"proposals/legal-cloud.md",
+			"created_from":"browser_user_edit"
+		}`),
+	})
+	revW := httptest.NewRecorder()
+	h.HandleVTextRevisions(revW, revReq)
+	if revW.Code != http.StatusCreated {
+		t.Fatalf("create collapsed draft revision: status = %d, want %d; body: %s", revW.Code, http.StatusCreated, revW.Body.String())
+	}
+	var revision vtextRevisionResponse
+	if err := json.NewDecoder(revW.Body).Decode(&revision); err != nil {
+		t.Fatalf("decode revision response: %v", err)
+	}
+	if !strings.Contains(revision.Content, "| Term | Definition |") ||
+		!strings.Contains(revision.Content, "| Vector database | Storage optimized for similarity search. |") {
+		t.Fatalf("revision did not preserve markdown table:\n%s", revision.Content)
+	}
+	if strings.Contains(revision.Content, "TermDefinitionWork product") {
+		t.Fatalf("revision retained collapsed table artifact:\n%s", revision.Content)
+	}
+	meta := decodeRevisionMetadata(revision.Metadata)
+	if meta["vtext_structure_stabilized"] != true {
+		t.Fatalf("metadata did not record structure stabilization: %#v", meta)
+	}
+	canonicalPath, ok := meta["canonical_vtext_source_path"].(string)
+	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
+		t.Fatalf("canonical_vtext_source_path = %#v, want .vtext", meta["canonical_vtext_source_path"])
+	}
+	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, "user-1", opened.DocID)
+	if err != nil {
+		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
+	}
+	if filepath.Ext(sourcePath) != ".vtext" {
+		t.Fatalf("latest alias source_path = %q, want .vtext", sourcePath)
+	}
+	if docID, err := s.GetDocumentAlias(ctx, "user-1", "proposals/legal-cloud.md"); err != nil || docID != opened.DocID {
+		t.Fatalf("original markdown alias docID = %q, err = %v, want %q", docID, err, opened.DocID)
+	}
+}
+
 func TestVTextImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 

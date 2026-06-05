@@ -57,6 +57,7 @@ var (
 	vtextSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 	vtextInlineSourceRefRE     = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)`)
 	vtextMergePreviewCommentRE = regexp.MustCompile(`(?is)\n*\s*<!--\s*VText merge preview provenance\b.*?-->\s*`)
+	markdownTableSeparatorRE   = regexp.MustCompile(`^:?-{3,}:?$`)
 )
 
 // ----- Request/Response types -----
@@ -1682,7 +1683,7 @@ func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, do
 	if err != nil && err != store.ErrNotFound {
 		return "", err
 	}
-	if err == store.ErrNotFound {
+	if err == store.ErrNotFound || !isVTextShortcutPath(sourcePath) {
 		sourcePath, err = h.allocateVTextManifestPath(ctx, ownerID, doc)
 		if err != nil {
 			return "", err
@@ -1704,6 +1705,17 @@ func (h *APIHandler) ensureVTextManifest(ctx context.Context, ownerID string, do
 	}
 	if err := h.rt.Store().UpsertDocumentAlias(ctx, ownerID, sourcePath, doc.DocID, time.Now().UTC()); err != nil {
 		return "", err
+	}
+	return sourcePath, nil
+}
+
+func (h *APIHandler) ensureCanonicalVTextProjectionPath(ctx context.Context, ownerID string, doc types.Document) (string, error) {
+	sourcePath, err := h.ensureVTextManifest(ctx, ownerID, doc)
+	if err != nil {
+		return "", err
+	}
+	if !isVTextShortcutPath(sourcePath) {
+		return "", fmt.Errorf("manifest path %q is not a .vtext shortcut", sourcePath)
 	}
 	return sourcePath, nil
 }
@@ -1921,6 +1933,28 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 	if metadata == nil {
 		metadata = json.RawMessage("{}")
 	}
+	content := req.Content
+	if strings.TrimSpace(parentID) != "" {
+		if parentRev, err := h.rt.Store().GetRevision(r.Context(), parentID, ownerID); err == nil {
+			var stabilized bool
+			content, stabilized = stabilizeVTextUserMarkdownStructures(parentRev.Content, content)
+			if stabilized {
+				metadata = mergeVTextRevisionMetadata(metadata, map[string]any{
+					"vtext_structure_stabilized":        true,
+					"vtext_structure_stabilized_reason": "preserved_parent_markdown_table_after_collapsed_draft",
+				})
+			}
+		} else {
+			log.Printf("vtext api: load parent revision for structure stabilization %s: %v", parentID, err)
+		}
+	}
+	if canonicalPath, err := h.ensureCanonicalVTextProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
+		metadata = mergeVTextRevisionMetadata(metadata, map[string]any{
+			"canonical_vtext_source_path": canonicalPath,
+		})
+	} else if err != nil {
+		log.Printf("vtext api: ensure canonical vtext projection path: %v", err)
+	}
 
 	rev := types.Revision{
 		RevisionID:       uuid.New().String(),
@@ -1928,7 +1962,7 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
-		Content:          req.Content,
+		Content:          content,
 		Citations:        citations,
 		Metadata:         metadata,
 		ParentRevisionID: parentID,
@@ -1939,6 +1973,7 @@ func (h *APIHandler) handleVTextCreateRevision(w http.ResponseWriter, r *http.Re
 		log.Printf("vtext api: create revision: %v", err)
 		if errors.Is(err, store.ErrStaleDocumentHead) {
 			if req.AllowRebase && parentID != "" {
+				req.Content = content
 				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
 				if rebaseErr == nil {
 					h.rt.emitVTextDocumentRevisionEvent(r.Context(), ownerID, rebased)
@@ -2035,6 +2070,172 @@ func rebaseUserDraftContent(baseContent, headContent, userContent, staleParentID
 		"\n\n---\n\nRecovered user draft based on revision " + staleParentID + ":\n\n" +
 		strings.TrimSpace(userContent) + "\n"
 	return recovered, "append_recovered_draft", false
+}
+
+type markdownTableBlock struct {
+	Text  string
+	Cells []string
+}
+
+func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (string, bool) {
+	parentTables := extractMarkdownTableBlocks(parentContent)
+	if len(parentTables) == 0 {
+		return userContent, false
+	}
+	userTables := extractMarkdownTableBlocks(userContent)
+	if len(userTables) >= len(parentTables) {
+		return userContent, false
+	}
+	out := userContent
+	changed := false
+	for _, table := range parentTables {
+		if strings.Contains(out, table.Text) {
+			continue
+		}
+		next, ok := replaceCollapsedMarkdownTable(out, table)
+		if !ok {
+			continue
+		}
+		out = next
+		changed = true
+	}
+	return out, changed
+}
+
+func extractMarkdownTableBlocks(content string) []markdownTableBlock {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	var blocks []markdownTableBlock
+	for i := 0; i < len(lines); {
+		if markdownTableRowCells(lines[i]) == nil {
+			i++
+			continue
+		}
+		start := i
+		for i < len(lines) && markdownTableRowCells(lines[i]) != nil {
+			i++
+		}
+		tableLines := lines[start:i]
+		if len(tableLines) < 3 {
+			continue
+		}
+		separator := markdownTableRowCells(tableLines[1])
+		if !isMarkdownTableSeparatorCells(separator) {
+			continue
+		}
+		var cells []string
+		for _, line := range tableLines {
+			rowCells := markdownTableRowCells(line)
+			if isMarkdownTableSeparatorCells(rowCells) {
+				continue
+			}
+			for _, cell := range rowCells {
+				cell = strings.TrimSpace(cell)
+				if cell != "" {
+					cells = append(cells, cell)
+				}
+			}
+		}
+		blocks = append(blocks, markdownTableBlock{
+			Text:  strings.Join(tableLines, "\n"),
+			Cells: cells,
+		})
+	}
+	return blocks
+}
+
+func markdownTableRowCells(line string) []string {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
+		return nil
+	}
+	parts := strings.Split(strings.Trim(trimmed, "|"), "|")
+	if len(parts) < 2 {
+		return nil
+	}
+	cells := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cells = append(cells, strings.TrimSpace(strings.ReplaceAll(part, `\|`, "|")))
+	}
+	return cells
+}
+
+func isMarkdownTableSeparatorCells(cells []string) bool {
+	if len(cells) == 0 {
+		return false
+	}
+	for _, cell := range cells {
+		if !markdownTableSeparatorRE.MatchString(strings.TrimSpace(cell)) {
+			return false
+		}
+	}
+	return true
+}
+
+func replaceCollapsedMarkdownTable(content string, table markdownTableBlock) (string, bool) {
+	if len(table.Cells) < 4 {
+		return content, false
+	}
+	startNeedle := collapsedTableNeedle(table.Cells[:minInt(4, len(table.Cells))])
+	if startNeedle == "" {
+		return content, false
+	}
+	start := strings.Index(collapsedComparableText(content), startNeedle)
+	if start < 0 {
+		return content, false
+	}
+	originalStart, ok := comparableBoundaryToOriginalIndex(content, start)
+	if !ok {
+		return content, false
+	}
+	lastCells := table.Cells
+	if len(lastCells) > 4 {
+		lastCells = lastCells[len(lastCells)-4:]
+	}
+	endNeedle := collapsedTableNeedle(lastCells)
+	endComparable := collapsedComparableText(content[originalStart:])
+	end := strings.Index(endComparable, endNeedle)
+	if end < 0 {
+		return content, false
+	}
+	originalEndRel, ok := comparableBoundaryToOriginalIndex(content[originalStart:], end+len(endNeedle))
+	if !ok {
+		return content, false
+	}
+	originalEnd := originalStart + originalEndRel
+	return strings.TrimRight(content[:originalStart], " \t") + table.Text + strings.TrimLeft(content[originalEnd:], " \t"), true
+}
+
+func collapsedTableNeedle(cells []string) string {
+	return collapsedComparableText(strings.Join(cells, ""))
+}
+
+func collapsedComparableText(value string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(value) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func comparableBoundaryToOriginalIndex(value string, comparableBoundary int) (int, bool) {
+	if comparableBoundary <= 0 {
+		return 0, true
+	}
+	seen := 0
+	for index, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if seen == comparableBoundary {
+				return index, true
+			}
+			seen++
+			if seen == comparableBoundary {
+				return index + len(string(r)), true
+			}
+		}
+	}
+	return len(value), seen == comparableBoundary
 }
 
 func mergeVTextRevisionMetadata(raw json.RawMessage, additions map[string]any) json.RawMessage {

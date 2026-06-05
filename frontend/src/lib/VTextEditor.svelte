@@ -1057,7 +1057,7 @@
   }
 
   async function ensureFileManifest() {
-    if (!currentDoc?.doc_id || appContext.sourcePath) return;
+    if (!currentDoc?.doc_id || isVTextShortcutPath(appContext.sourcePath)) return;
     const manifest = await ensureDocumentManifest(currentDoc.doc_id);
     if (!manifest?.source_path) return;
     const bits = manifest.source_path.split('/');
