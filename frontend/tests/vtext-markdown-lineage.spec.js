@@ -133,7 +133,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   const oldItem = await fetchJSON(page, '/api/content/items', {
     method: 'POST',
     body: JSON.stringify({
-      source_type: 'file_version',
+      source_type: 'file',
       media_type: 'text/markdown',
       app_hint: 'vtext',
       title: `Content-backed Legal Cloud v44 ${stamp}`,
@@ -150,7 +150,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   const latestItem = await fetchJSON(page, '/api/content/items', {
     method: 'POST',
     body: JSON.stringify({
-      source_type: 'file_version',
+      source_type: 'file',
       media_type: 'text/markdown',
       app_hint: 'vtext',
       title: `Content-backed Legal Cloud v49 ${stamp}`,
