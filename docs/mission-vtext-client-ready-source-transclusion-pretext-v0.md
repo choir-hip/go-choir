@@ -2328,3 +2328,69 @@ required correction:
   monospace preformatted text.
 - Preserve the live page preview as an explicit alternate view and leave backend
   Web Lens snapshot controls intact when available.
+
+## 2026-06-05 Deployed Proof: Source Windows Use Reader Snapshot Fallback
+
+status: deployed_acceptance_proof_recorded
+
+implementation:
+
+- Commit `ca7678158be85c3c9cc824b6bd6c2e12738ce3e7` (`fix: render source
+  snapshots as reader fallback`) makes BrowserApp treat source entity
+  snapshot/transclusion text as an initial reader snapshot.
+- BrowserApp now renders snapshots as escaped Markdown-ish reader prose under
+  `data-browser-reader-markdown` rather than raw monospace `<pre>` text.
+- URL navigation still supports live page preview, and backend Web Lens
+  snapshots remain available when the backend browser capability is present.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed:
+  source expansion, Pretext source-flow wrapping, nested citation preservation,
+  source-window reader fallback, table roundtrip, and bounded table edit.
+- `pnpm --dir frontend e2e tests/browser-app.spec.js -g "go button triggers
+  navigation|browser app preserves data urls"` passed.
+- `pnpm --dir frontend e2e tests/web-surface-rationalization.spec.js -g "Web
+  Lens imports Obscura semantic snapshot into VText without iframe rendering"`
+  still failed before reaching the mocked backend capability path:
+  BrowserApp reported `frontend_iframe` rather than the mocked
+  `obscura_cli_fetch` substrate. This remains a test/auth capability-surface
+  problem to investigate separately.
+
+deployment evidence:
+
+- CI run `https://github.com/choir-hip/go-choir/actions/runs/27036206641`
+  completed successfully, including frontend build, Go runtime shards,
+  non-runtime tests, vet/build, and Node B staging deploy.
+- FlakeHub run `https://github.com/choir-hip/go-choir/actions/runs/27036206582`
+  completed successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `ca7678158be85c3c9cc824b6bd6c2e12738ce3e7`, deployed at
+  `2026-06-05T19:41:50Z`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet hard reloaded the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- The owner publication rehydrated as `choir_private_legal_cloud_proposal.vtext`
+  v83 with full proposal body, inline citations, no source deck, and no
+  `missing source` prose.
+- The first ABA source marker remained a normal source button. Opening the ABA
+  Formal Opinion 512 source window rendered `Source reader snapshot`, `Open in
+  VText`, and the readable excerpt: "Lawyers using generative artificial
+  intelligence tools must consider duties including competence,
+  confidentiality, communication, supervision, candor, and reasonable fees."
+- The source window no longer depended on the Comet-blocked live PDF iframe for
+  the first readable view. The live page preview remains available as an
+  explicit alternate mode.
+
+current belief:
+
+- Source windows now satisfy the minimum publication-reader contract for
+  source-inspection: an authorized reader can open a cited source and see the
+  published source excerpt/snapshot even when live web/PDF embedding fails.
+- The fallback is still excerpt-level. The next realism axis is fuller source
+  acquisition: durable cleaned Markdown snapshots from Obscura/Web Lens/content
+  import, attached to source entities and publication bundles so source windows
+  can show more than the selected quote when policy permits.
