@@ -1621,6 +1621,46 @@ remaining error field:
   remains incomplete until diagnosis/export data can be extracted from the
   authenticated product surface without confusing private and published roots.
 
+2026-06-05 owner-visible source repair and diagnosis blocker checkpoint:
+
+status: checkpoint_incomplete
+
+new problem documented before code:
+
+- Computer Use remains available in Comet, but the foreground Choir surface is
+  the public VText route for the owner proposal, not the private `v81` owner
+  head. The visible proposal window is still `v49`, state `Published v49`.
+- The Comet desktop/window list includes a
+  `choir_private_legal_cloud_proposal.md` entry, but selecting it from the
+  visible list focused the entry without raising a root that could be verified
+  as the private `v81 Latest` owner surface. Mutation proof through this visible
+  page would therefore risk acting on the wrong published root.
+- The backend already has generic product APIs for document diagnosis and
+  source-gap repair. The diagnosis URL opens under the authenticated owner
+  session, but the page is a raw JSON dump with no owner-safe structured
+  extraction or product UI. Copying selected JSON through Comet produced only a
+  short selection artifact (`F8J212BTWHT`) in the system clipboard, so this
+  session still cannot rely on clipboard extraction for prompt-size,
+  `apply_edits`, or source-gap metadata proof.
+- Source-gap repair is also backend-only from the owner user's point of view:
+  VText can render source entities, but there is no visible repair affordance
+  that lets an owner inspect unresolved citation markers, attach source
+  entities, apply the generic repair endpoint, and then test citation expansion
+  and source-window opening from the same root-safe VText surface.
+
+belief-state update:
+
+- The remaining citation/transclusion realism axis is not just missing data on
+  the owner document. It is missing owner-visible, root-safe repair and
+  diagnostic affordances. Adding such affordances is aligned with the
+  requirements contracts because citations are transclusion points and
+  diagnosis/debug evidence must be product-accessible rather than raw
+  spelunking.
+- The next code change should expose existing generic source-gap repair and
+  diagnosis data through VText UI without adding document-specific repairs,
+  classifiers, or workflow scaffolding. It should preserve VText as canonical
+  and keep hidden metadata out of prose.
+
 suggested resume goal string:
 
 ```text
