@@ -2666,3 +2666,29 @@ remaining error field:
   transclusions on that owner head, source-window opening from that owner head,
   and owner-head focused prompt-size / `apply_edits` metadata in the visible
   edit-evidence strip.
+
+2026-06-05 whole-mission hard-review checkpoint:
+
+status: checkpoint_incomplete
+
+review artifact:
+
+- Added `docs/vtext-mission-hard-review-2026-06-05.md` as a hard review of the
+  whole mission and current system state. A PDF copy was rendered to
+  `/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/vtext-mission-hard-review-2026-06-05.pdf`.
+- The review records that `origin/main` is at
+  `400b8084048129c3051b1df0af50d059300304a3`, while staging still serves
+  behavior commit `4255dc7efe5407b67bb78075cf477c133958d2f3`; this is expected
+  because later commits are docs/test-only.
+- The review finding field is intentionally hard-edged: the mission is not
+  accepted until owner-account proof completes; the source repair UI remains a
+  raw JSON repair surface; diagnosis is too broad/raw for durable product proof;
+  compare/merge remains brittle on the owner restoration path; and
+  `VTextEditor.svelte` needs a simplification pass before further mission
+  expansion.
+
+remaining error field:
+
+- The next code pass should be simplification and pruning only where it preserves
+  the existing tested behavior. It should not be treated as acceptance proof and
+  should not replace the owner-account proof still blocked by passkey access.
