@@ -2972,3 +2972,58 @@ required correction:
 - Continue reducing visible metadata chrome in the expanded note so the source
   reads as journal apparatus: title, bounded excerpt/snapshot, and small text
   actions rather than card/pill stacks.
+
+## 2026-06-05 Repair: Source Flow Verifier Now Proves Journal Geometry
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `frontend/src/lib/vtext-source-flow.ts` now annotates mounted source-flow
+  projections with total line count, routed line count, and per-line
+  beside-note markers. These are DOM evidence for the Pretext layout contract,
+  not canonical VText content.
+- `frontend/src/lib/VTextEditor.svelte` removes pill/card styling from facts
+  inside the routed journal note. Facts now render as small inline apparatus
+  text, while the note remains a transparent side note with a left rule and
+  text actions.
+- `frontend/tests/vtext-source-entities.spec.js` now verifies:
+  - multiple routed article lines beside the source note;
+  - routed line right edges stay clear of the note column;
+  - a later paragraph continues below the flow in normal article measure;
+  - nested citation atoms still work inside reconstructed Pretext lines;
+  - source facts in the journal note no longer render as pills;
+  - the source window still opens cleaned reader Markdown without iframe.
+
+local verification:
+
+- Initial `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` failed
+  because no local harness was listening on `localhost:4173`.
+- Started the normal local service stack with
+  `CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`.
+- The first strengthened geometry run failed because the verifier incorrectly
+  expected below-note prose inside the reconstructed flow. Browser snapshot
+  evidence showed the implementation had routed the first two paragraphs and
+  left later paragraphs as normal content below the flow, which is the intended
+  projection. The test was corrected to measure the following normal paragraph
+  against the flow boundary.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed: 4/4.
+- `pnpm --dir frontend build` passed.
+- Local service ports `4173`, `8081`, and `8082` were stopped and verified
+  clear after the run.
+
+belief update:
+
+- The source-flow path is now better aligned with the owner's Pretext
+  requirement: Pretext routing is the tested behavior, and expanded source
+  content is closer to journal apparatus than card chrome.
+- This is still not the final client-ready legal-cloud article. The remaining
+  source UI work is to apply the same projection quality to the actual owner
+  proposal/publication on staging and continue replacing weak source windows
+  with cleaned reader-mode Markdown fallback where live iframe/web views fail.
+
+remaining proof:
+
+- Push, CI, Node B deploy, staging health identity, and Comet owner-account
+  visual proof are required before this source-flow repair is accepted as
+  deployed behavior.

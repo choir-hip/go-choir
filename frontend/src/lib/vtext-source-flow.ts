@@ -330,12 +330,18 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
     flow.remove();
     return false;
   }
+  flow.setAttribute('data-vtext-source-flow-lines', String(layout.lines.length));
+  flow.setAttribute('data-vtext-source-flow-routed-lines', String(layout.usedNarrowLines));
 
   const lineLayer = document.createElement('div');
   lineLayer.className = 'vtext-source-journal-lines';
   for (const line of layout.lines) {
     const lineNode = document.createElement('span');
     lineNode.className = 'vtext-source-journal-line';
+    if (line.y < layout.noteHeight) {
+      lineNode.setAttribute('data-vtext-source-flow-line-beside-note', '');
+    }
+    lineNode.setAttribute('data-vtext-source-flow-line-width', String(Math.ceil(line.width)));
     lineNode.style.left = `${line.x}px`;
     lineNode.style.top = `${line.y}px`;
     lineNode.style.width = `${Math.ceil(line.width + 2)}px`;

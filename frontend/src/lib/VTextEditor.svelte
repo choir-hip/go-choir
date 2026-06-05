@@ -3412,12 +3412,24 @@
   }
 
   .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.28rem;
+    display: block;
     color: var(--choir-text-muted);
     font-size: 0.72rem;
     font-weight: 600;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts span) {
+    display: inline;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    font-size: inherit;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts span + span::before) {
+    content: "; ";
   }
 
   .rendered-doc :global(.vtext-source-journal-note .vtext-source-open),

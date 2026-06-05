@@ -106,6 +106,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
             {
               selector_kind: 'text_quote',
               text_quote: 'Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees.',
+              supports: 'ethics guidance',
             },
           ],
           display: {
@@ -149,7 +150,9 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
         '[ethics guidance](source:src-fixture-flow)',
       ].join(' '),
       'Second paragraph keeps using the reading measure beside the expanded evidence while preserving [confidentiality](source:src-fixture-nested) as its own citation marker rather than flattening it into prose.',
-      'Third paragraph gives the layout enough prose to continue below the source note after the narrow line region ends.',
+      'Third paragraph gives the layout enough prose to continue below the source note after the narrow line region ends, using ordinary article text that should not become a separate card or metadata block.',
+      'Fourth paragraph proves the article continues in the normal full measure once the source apparatus no longer occupies the right column.',
+      'Fifth paragraph gives the verifier another full-width line after the note so the test cannot pass merely because one paragraph happened to wrap narrowly beside the source.',
     ];
     const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
@@ -183,16 +186,49 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
   expect(await rendered.locator('p[data-vtext-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
   expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
-  expect(await flow.locator('[data-vtext-source-flow-note]').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
-  const lowerWrappedLine = await flow.evaluate((node) => {
+  const note = flow.locator('[data-vtext-source-flow-note]');
+  expect(await note.evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+  await expect(flow).toHaveAttribute('data-vtext-source-flow-routed-lines', /^[3-9]\d*$/);
+  const journalGeometry = await flow.evaluate((node) => {
     const note = node.querySelector('[data-vtext-source-flow-note]');
+    const flowBox = node.getBoundingClientRect();
+    const noteBox = note.getBoundingClientRect();
     const noteBottom = note.getBoundingClientRect().bottom - node.getBoundingClientRect().top;
-    return Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
+    const besideLines = Array.from(node.querySelectorAll('[data-vtext-source-flow-line-beside-note]'));
+    const besideLineCount = besideLines.length;
+    const sideColumnIsClear = besideLines.every((line) => {
+      const lineBox = line.getBoundingClientRect();
+      return lineBox.right <= noteBox.left - 10;
+    });
+    const lowerWrappedLine = Array.from(node.querySelectorAll('.vtext-source-journal-line')).some((line) => {
       const top = line.getBoundingClientRect().top - node.getBoundingClientRect().top;
       return top > noteBottom * 0.45 && top < noteBottom && line.textContent.includes('Second paragraph');
     });
+    return { besideLineCount, sideColumnIsClear, lowerWrappedLine };
   });
-  expect(lowerWrappedLine).toBe(true);
+  const continuedBelowFlow = await rendered.evaluate((node) => {
+    const flow = node.querySelector('[data-vtext-source-flow]');
+    const followingParagraph = Array.from(node.querySelectorAll('p')).find((paragraph) => paragraph.textContent.includes('Third paragraph'));
+    if (!flow || !followingParagraph) return false;
+    const flowBox = flow.getBoundingClientRect();
+    const paragraphBox = followingParagraph.getBoundingClientRect();
+    return paragraphBox.top >= flowBox.bottom - 1;
+  });
+  expect(journalGeometry.besideLineCount).toBeGreaterThanOrEqual(3);
+  expect(journalGeometry.sideColumnIsClear).toBe(true);
+  expect(journalGeometry.lowerWrappedLine).toBe(true);
+  expect(continuedBelowFlow).toBe(true);
+  const noteFactStyle = await note.locator('.vtext-source-facts span').first().evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      borderStyle: style.borderStyle,
+      borderRadius: style.borderRadius,
+      backgroundColor: style.backgroundColor,
+    };
+  });
+  expect(noteFactStyle.borderStyle).toBe('none');
+  expect(noteFactStyle.borderRadius).toBe('0px');
+  expect(noteFactStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
   const nestedCitation = flow.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"]');
   await expect(nestedCitation).toBeVisible();
   await nestedCitation.click();
