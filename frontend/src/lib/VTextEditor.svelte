@@ -43,6 +43,7 @@
     sourceEntityTargetURL,
     sourceEntityTitle,
   } from './vtext-source-renderer';
+  import { clearSourceJournalFlows, mountSourceJournalFlow } from './vtext-source-flow';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -108,6 +109,9 @@
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
   const TOOLBAR_HIDE_SCROLL_TOP = 56;
   const TOOLBAR_HIDE_SETTLE_MS = 260;
+  const SOURCE_FLOW_MIN_WIDTH = 620;
+  const SOURCE_FLOW_GAP = 24;
+  const SOURCE_FLOW_LINE_HEIGHT = 29;
 
   function renderMarkdown(value, sourceEntities = []) {
     const normalized = String(value || '').replace(/\|\s+\|/g, '|\n|');
@@ -367,6 +371,7 @@
       const entityID = node.getAttribute('data-source-entity-id') || '';
       return entityID ? `[${label}](source:${entityID})` : label;
     }
+    if (node.closest?.('[data-vtext-source-flow]')) return '';
     if (node.closest?.('[data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
@@ -389,6 +394,7 @@
       return (node.textContent || '').replace(/\u00a0/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    if (node.matches?.('[data-vtext-source-flow]')) return '';
     if (node.matches?.('[data-vtext-source-entity]')) return '';
 
     const tag = node.tagName.toLowerCase();
@@ -1872,6 +1878,16 @@
   }
 
   function handleEditorClick(event) {
+    const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
+    if (collapse) {
+      event.preventDefault();
+      event.stopPropagation();
+      const flow = collapse.closest?.('[data-vtext-source-flow]');
+      const previous = flow?.previousElementSibling;
+      previous?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]')?.setAttribute('data-expanded', 'false');
+      clearSourceJournalFlows(editorSurface);
+      return;
+    }
     const button = event.target?.closest?.('[data-vtext-open-source]');
     if (button) {
       event.preventDefault();
@@ -1903,13 +1919,44 @@
     handleSourceEntityOpen(entity);
   }
 
+  function refreshSourceJournalFlow() {
+    const expanded = editorSurface?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]');
+    if (!expanded) return;
+    clearSourceJournalFlows(editorSurface);
+    requestAnimationFrame(() => mountSourceJournalFlow(expanded, {
+      minWidth: SOURCE_FLOW_MIN_WIDTH,
+      gap: SOURCE_FLOW_GAP,
+      lineHeight: SOURCE_FLOW_LINE_HEIGHT,
+    }));
+  }
+
   function toggleInlineSourceRef(sourceRef) {
     if (!sourceRef) return;
     const expanded = sourceRef.getAttribute('data-expanded') === 'true';
+    clearSourceJournalFlows(editorSurface);
+    editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+      if (node !== sourceRef) node.setAttribute('data-expanded', 'false');
+    });
     sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
+    if (!expanded) {
+      requestAnimationFrame(() => mountSourceJournalFlow(sourceRef, {
+        minWidth: SOURCE_FLOW_MIN_WIDTH,
+        gap: SOURCE_FLOW_GAP,
+        lineHeight: SOURCE_FLOW_LINE_HEIGHT,
+      }));
+    }
   }
 
   function handleEditorPointerDown(event) {
+    const collapse = event.target?.closest?.('[data-vtext-source-flow-collapse]');
+    if (collapse) {
+      event.preventDefault();
+      const flow = collapse.closest?.('[data-vtext-source-flow]');
+      const previous = flow?.previousElementSibling;
+      previous?.querySelector?.('[data-vtext-source-ref][data-expanded="true"]')?.setAttribute('data-expanded', 'false');
+      clearSourceJournalFlows(editorSurface);
+      return;
+    }
     if (event.target?.closest?.('[data-vtext-open-source]')) return;
     const sourceRef = event.target?.closest?.('[data-vtext-source-ref]');
     if (!sourceRef) return;
@@ -1976,12 +2023,14 @@
         void loadRecentDocuments();
       }
     });
+    window.addEventListener('resize', refreshSourceJournalFlow);
   });
 
   onDestroy(() => {
     clearAutosaveTimer();
     closeDocumentStream();
     removeLiveListener();
+    window.removeEventListener('resize', refreshSourceJournalFlow);
   });
 </script>
 
@@ -3231,6 +3280,116 @@
   .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):hover .vtext-source-ref-popover),
   .rendered-doc :global(.vtext-source-ref:not([data-expanded="true"]):focus .vtext-source-ref-popover) {
     display: block;
+  }
+
+  .rendered-doc :global([data-vtext-source-flow-hidden]) {
+    display: none;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-flow) {
+    position: relative;
+    margin: 0 0 1rem;
+    color: inherit;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-line) {
+    position: absolute;
+    display: block;
+    overflow: hidden;
+    color: inherit;
+    font: inherit;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    width: var(--vtext-source-flow-note-width);
+    max-width: 42%;
+    border-left: 2px solid var(--choir-border-strong);
+    padding: 0.12rem 0 0.12rem 0.92rem;
+    color: var(--choir-text-primary);
+    background: transparent;
+    font-size: 0.86rem;
+    font-weight: 540;
+    line-height: 1.35;
+    text-transform: none;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note strong) {
+    display: block;
+    color: var(--choir-text-accent);
+    font-size: 0.94rem;
+    font-weight: 760;
+    line-height: 1.22;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note > span) {
+    display: block;
+    margin-top: 0.12rem;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-transform: uppercase;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-transclusion-body--compact) {
+    display: grid;
+    gap: 0.38rem;
+    margin-top: 0.44rem;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-transclusion-quote) {
+    border-left: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--choir-text-primary);
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-facts) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    color: var(--choir-text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-open),
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-flow-close) {
+    margin-top: 0.44rem;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    width: fit-content;
+    color: var(--choir-text-accent);
+    background: transparent;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 760;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-note .vtext-source-flow-close) {
+    color: var(--choir-text-muted);
+    font-weight: 640;
+  }
+
+  @media (max-width: 720px) {
+    .rendered-doc :global([data-vtext-source-flow-hidden]) {
+      display: revert;
+    }
+
+    .rendered-doc :global(.vtext-source-journal-flow) {
+      display: none;
+    }
   }
 
   .rendered-doc :global(code) {

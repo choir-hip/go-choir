@@ -1798,3 +1798,61 @@ acceptance criteria for the next code slice:
   HTML is available.
 - The implementation remains generic over source entities and source kinds, and
   preserves canonical VText serialization as `[label](source:ENTITY_ID)`.
+
+## 2026-06-05 Local Source Flow Implementation: Pretext Journal Lines
+
+status: local_code_verified_pending_deploy
+
+implementation:
+
+- Added `frontend/src/lib/vtext-source-flow.ts` as the focused owner for source
+  excerpt/article-flow layout.
+- The source-flow utility uses Pretext `prepareWithSegments`,
+  `layoutNextLineRange`, and `materializeLineRange` to route paragraph text one
+  line at a time around an expanded right-side source note.
+- `VTextEditor.svelte` now keeps the canonical paragraph/source-ref DOM intact
+  and mounts a noncanonical `data-vtext-source-flow` presentation layer only
+  while a non-media text source is expanded in a wide paragraph.
+- The serializer explicitly skips `data-vtext-source-flow`, so autosave/export
+  continue to preserve canonical `[label](source:ENTITY_ID)` markers and the
+  hidden original paragraph remains the canonical source of truth.
+- Media sources such as YouTube remain on the existing inline transclusion path;
+  the journal-flow overlay applies to text/source excerpts, not iframe/media
+  previews.
+- The source-flow note uses lighter journal-style styling: title, kind, excerpt,
+  facts, and open/close actions without nested card/pill chrome.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed against
+  a local service stack started via `nix develop -c ./start-services.sh` in
+  foreground mode.
+- The targeted spec now includes:
+  - existing media source expansion/opening behavior;
+  - a non-media URL source that expands into `data-vtext-source-flow`;
+  - multiple Pretext-produced `.vtext-source-journal-line` entries;
+  - a `data-vtext-source-flow-note` source note;
+  - preserved table autosave roundtrip and bounded table edit checks.
+
+residual risks:
+
+- This is a first structural source-flow slice. The overlay currently renders
+  plain paragraph text around the note; richer inline markup inside the routed
+  lines remains future work.
+- The source-flow note starts at the paragraph flow region rather than perfectly
+  matching the exact visual line containing the original marker. That is still
+  substantially closer to journal/magazine flow than the previous rectangular
+  card insertion, but deployed visual proof on the owner document must decide
+  whether anchoring needs a second pass.
+- Reader-mode snapshot cleanup is not fixed by this slice. The ABA snapshot
+  still needs source-acquisition cleanup so bot/cookie HTML does not become a
+  successful-looking semantic reader surface.
+
+next proof:
+
+- Commit and push this source-flow slice.
+- Wait for CI/Node B deploy and verify staging identity.
+- Use authenticated Comet on the owner publication to expand the ABA source
+  marker and prove that surrounding article prose now routes beside the source
+  note instead of leaving the previous large rectangular gap.

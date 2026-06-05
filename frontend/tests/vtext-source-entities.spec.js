@@ -80,6 +80,88 @@ test('VText renders source entities as expandable sources and opens owning media
   await expect(page.locator('[data-video-frame]').last()).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
 });
 
+test('VText lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.setViewportSize({ width: 1440, height: 980 });
+  const created = await page.evaluate(async () => {
+    const title = `Source Flow Fixture ${Date.now()}`;
+    const docRes = await fetch('/api/vtext/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const metadata = {
+      source_entities: [
+        {
+          entity_id: 'src-fixture-flow',
+          kind: 'ethics_opinion',
+          label: 'ABA Formal Opinion 512 fixture',
+          target: {
+            target_kind: 'url',
+            url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
+            canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
+          },
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: 'Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees.',
+            },
+          ],
+          display: {
+            inline_mode: 'embedded_excerpt',
+            expanded_mode: 'source_card',
+            open_surface: 'source',
+            default_collapsed: true,
+          },
+          evidence: { state: 'available', research_state: 'confirmed' },
+          provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+        },
+      ],
+    };
+    const paragraph = [
+      'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents.',
+      '[ethics guidance](source:src-fixture-flow)',
+      'The expanded evidence should read like a compact marginal journal note while the surrounding article text continues beside it instead of being pushed into a large rectangular gap.',
+      'This trailing sentence gives the flow enough prose to continue below the source note after the narrow line region ends.',
+    ].join(' ');
+    const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `# Source Flow Fixture\n\n${paragraph}`,
+        author_kind: 'user',
+        author_label: 'browser-test',
+        metadata,
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
+    return doc;
+  });
+
+  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  const vtextWindow = page.locator('[data-vtext-app]').last();
+  await expect(vtextWindow.locator('[data-vtext-recent]')).toBeVisible({ timeout: 5000 });
+  await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = vtextWindow.locator('[data-vtext-rendered]');
+  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  await expect(citation).toBeVisible({ timeout: 10000 });
+  await citation.click();
+  const flow = rendered.locator('[data-vtext-source-flow]');
+  await expect(flow).toBeVisible({ timeout: 5000 });
+  await expect(flow.locator('[data-vtext-source-flow-note]')).toContainText('ABA Formal Opinion 512 fixture');
+  await expect(rendered.locator('p[data-vtext-source-flow-hidden]')).toHaveCount(1);
+  expect(await flow.locator('.vtext-source-journal-line').count()).toBeGreaterThan(2);
+
+  const initialBrowserWindows = await page.locator('[data-browser-app]').count();
+  await flow.locator('[data-vtext-open-source]').click();
+  await expect(page.locator('[data-browser-app]')).toHaveCount(initialBrowserWindows + 1, { timeout: 10000 });
+});
+
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
