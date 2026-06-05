@@ -2821,3 +2821,54 @@ remaining error field:
 - Repair the published-reader source-open path without hardcoding legal-cloud or
   source-service fixtures. Then rerun the staging publication regression and use
   it as a prerequisite for the new canonical owner `.vtext` proposal proof.
+
+2026-06-05 published source-window deployed proof checkpoint:
+
+status: checkpoint_incomplete
+
+landed proof artifact:
+
+- Documentation-first checkpoint `7975092d` recorded the published
+  source-window proof gap before the product-code fix.
+- Fix commit `33dfef6b7cf5dfa67105ee83784ed189c1e84813` is on `origin/main`.
+  The generic repair narrows published source entity app routing so
+  `publication_route_path` no longer forces every published source entity to
+  reopen VText; only actual `published_vtext_span` or `publication_version`
+  targets route to VText. Source-service/content targets with `open_surface:
+  source` now route to the Source viewer.
+- The regression in `frontend/tests/vtext-source-service-publication.spec.js`
+  now clicks the published reader's embedded `Open source` control and verifies
+  that a `[data-content-viewer]` Source window opens with the source label,
+  excerpt, source entity id, and source-service item id.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- GitHub Actions CI run `27024518431` completed successfully for
+  `33dfef6b7cf5dfa67105ee83784ed189c1e84813`, including frontend build, Go
+  non-runtime tests, runtime shards, integration-tagged smoke, and Node B deploy.
+- FlakeHub run `27024518360` completed successfully for the same SHA.
+- Staging `/health` reports proxy and sandbox deployed commit
+  `33dfef6b7cf5dfa67105ee83784ed189c1e84813`, deployed at
+  `2026-06-05T15:40:43Z`.
+- Deployed staging proof passed:
+  `BASE_URL=https://choir.news npx playwright test tests/vtext-source-service-publication.spec.js --project=chromium`.
+
+belief-state update:
+
+- The published VText source-graph loop is now proven for disposable
+  source-service source entities: publication stores source metadata and
+  transclusions, published readers render embedded transclusions, and published
+  source controls open a source window for authorized/public readers.
+- This satisfies the generic publication-source prerequisite for the new
+  canonical legal-cloud proposal, but it does not yet create the owner proposal
+  `.vtext` or prove owner-specific research/citation creation.
+
+remaining error field:
+
+- Still unproven: creating or deriving the canonical owner `.vtext`
+  legal-cloud proposal from the existing `.md`; research-backed citation/source
+  point creation on that owner proposal; owner embedded transclusion rendering;
+  owner source-window opening; and publishing that owner proposal with its
+  source graph.
