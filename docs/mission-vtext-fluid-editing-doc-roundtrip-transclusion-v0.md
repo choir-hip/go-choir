@@ -2532,3 +2532,53 @@ belief-state update:
   clicks the panel source chip, and verifies the source window will strengthen
   the next owner-account proof without touching the private owner proposal or
   adding document-specific behavior.
+
+2026-06-05 source panel repaired-source opening checkpoint:
+
+status: checkpoint_incomplete
+
+landed proof artifact:
+
+- Documentation-first checkpoint `4353b17d` recorded the source-panel
+  open-source proof gap before the regression changed.
+- Test commit `68794d61fe436ac961c5d847fbe73ef51b2c97d1` is on
+  `origin/main`. It extends the generic `VText Sources panel applies
+  source-gap repair and opens repaired source window` regression so the test
+  now repairs a citation gap through the product `Sources` panel, verifies the
+  inline citation expands into a transclusion and opens a source window, closes
+  that source window, verifies the repaired source entity appears in the
+  `Sources` panel, clicks the panel source-entity chip, and verifies that chip
+  opens the same owning source window with label, excerpt, and entity id.
+- The test remains fixture-based and uses disposable authenticated staging
+  product state. It does not mutate the private owner proposal and does not add
+  owner-specific or glossary-specific behavior.
+
+verification and deployment evidence:
+
+- Local verification passed: `npm --prefix frontend run build` and
+  `git diff --check`.
+- Deployed staging proof passed against deployed behavior commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`:
+  `BASE_URL=https://choir.news npx playwright test
+  tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium`.
+- GitHub Actions CI run `27021693186` completed successfully for
+  `68794d61fe436ac961c5d847fbe73ef51b2c97d1`, including Go vet/build,
+  non-runtime Go tests, all runtime shards, integration smoke, and the final
+  Go gate aggregator. Frontend build and staging deploy were skipped because
+  this commit changed only the browser regression test.
+- FlakeHub run `27021693234` completed successfully for the same head.
+- Staging `/health` still reports proxy and sandbox deployed commit
+  `4255dc7efe5407b67bb78075cf477c133958d2f3`, deployed at
+  `2026-06-05T14:26:47Z`; this is expected because `68794d61` did not change
+  deployed artifacts.
+
+remaining error field:
+
+- Still unproven on the actual owner document: canonical title migration from
+  `choir_private_legal_cloud_proposal.md` to `.vtext` on the next owner VText
+  write, bounded appendix-table edit survival, source-gap repair through the
+  deployed `Sources` panel on the owner head, citation marker expansion into
+  transclusions on that owner head, source-window opening from that owner head,
+  and owner-head focused prompt-size / `apply_edits` metadata in the visible
+  edit-evidence strip.
