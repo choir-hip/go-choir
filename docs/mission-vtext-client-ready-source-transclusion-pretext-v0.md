@@ -3198,3 +3198,39 @@ proof boundary:
   transclusions, Markdown export, source windows, and glossary-table export.
   It does not yet prove publication-carried full reader snapshots for URL
   sources.
+
+## 2026-06-05 Repair: Publication Enriches Public URL Source Snapshots
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `internal/proxy/platform_publish.go` now treats `rights_scope:
+  public_url_snapshot` as publication-safe for source snapshot enrichment.
+- If a publication-safe source entity already targets a content item, the
+  previous enrichment path remains unchanged.
+- If a publication-safe source entity targets a URL and has no content item,
+  the proxy imports the URL through the existing sandbox
+  `/api/content/import-url` path and stores the resulting cleaned text as the
+  published entity's `reader_snapshot`.
+- The bounded transclusion selector is preserved separately. A citation can
+  still expand compactly to the bounded quote, while `Open source` can reveal
+  the fuller cleaned reader artifact when the URL import succeeds.
+- URL import failure is best-effort and does not block publication; it leaves
+  the bounded transclusion behavior intact and logs the import failure.
+
+local verification:
+
+- `nix develop -c go test ./internal/proxy -run 'TestHandleVTextPublication'`
+  passed.
+- New coverage verifies that a `target_kind=url` source with
+  `rights_scope=public_url_snapshot` calls `/api/content/import-url`, embeds a
+  `reader_snapshot` with cleaned source text in the platform publication
+  request, and keeps the bounded citation selector.
+
+remaining proof:
+
+- Push the behavior commit, wait for CI/deploy, verify `https://choir.news`
+  reports the deployed SHA, republish or create a new owner-route version, and
+  confirm the owner legal-cloud publication resolves URL source entities with
+  fuller `reader_snapshot` text.

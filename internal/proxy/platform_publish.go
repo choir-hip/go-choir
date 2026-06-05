@@ -193,16 +193,12 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 		if !ok || !sourceEntityAllowsPublishedSnapshot(entity) || mapValue(entity["reader_snapshot"]) != nil {
 			continue
 		}
-		contentID := sourceEntityContentID(entity)
-		if contentID == "" {
+		item, ok, err := h.publicationSourceSnapshotItem(r, sandboxURL, userID, entity)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
-		}
-		var item sandboxContentItem
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
-			return nil, fmt.Errorf("load content item %s: %w", contentID, err)
-		}
-		if item.OwnerID != userID || item.ContentID != contentID {
-			return nil, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
 		}
 		if !contentItemAllowsPublishedSnapshot(item) {
 			continue
@@ -238,11 +234,37 @@ func (h *Handler) enrichVTextPublicationMetadata(r *http.Request, sandboxURL, us
 	return out, nil
 }
 
+func (h *Handler) publicationSourceSnapshotItem(r *http.Request, sandboxURL, userID string, entity map[string]any) (sandboxContentItem, bool, error) {
+	if contentID := sourceEntityContentID(entity); contentID != "" {
+		var item sandboxContentItem
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/api/content/items/"+url.PathEscape(contentID), userID, &item); err != nil {
+			return sandboxContentItem{}, false, fmt.Errorf("load content item %s: %w", contentID, err)
+		}
+		if item.OwnerID != userID || item.ContentID != contentID {
+			return sandboxContentItem{}, false, fmt.Errorf("content item %s does not belong to authenticated user", contentID)
+		}
+		return item, true, nil
+	}
+	sourceURL := sourceEntityTargetURL(entity)
+	if sourceURL == "" {
+		return sandboxContentItem{}, false, nil
+	}
+	item, err := h.importSandboxURLContent(r, sandboxURL, userID, sourceURL)
+	if err != nil {
+		log.Printf("proxy: platform publish source URL snapshot import failed for %s: %v", sourceURL, err)
+		return sandboxContentItem{}, false, nil
+	}
+	if item.OwnerID != userID {
+		return sandboxContentItem{}, false, fmt.Errorf("imported source URL item does not belong to authenticated user")
+	}
+	return item, true, nil
+}
+
 func sourceEntityAllowsPublishedSnapshot(entity map[string]any) bool {
 	provenance := mapValue(entity["provenance"])
 	rights := strings.ToLower(strings.TrimSpace(stringValue(provenance["rights_scope"])))
 	switch rights {
-	case "public_source", "official_public_source", "public_domain", "open_access":
+	case "public_source", "official_public_source", "public_domain", "open_access", "public_url_snapshot":
 		return true
 	}
 	policy := mapValue(entity["publication_policy"])
@@ -271,6 +293,16 @@ func sourceEntityContentID(entity map[string]any) string {
 		stringValue(target["content_item_id"]),
 		stringValue(entity["content_id"]),
 		stringValue(entity["content_item_id"]),
+	)
+}
+
+func sourceEntityTargetURL(entity map[string]any) string {
+	target := mapValue(entity["target"])
+	return firstNonEmptyString(
+		stringValue(target["canonical_url"]),
+		stringValue(target["url"]),
+		stringValue(entity["canonical_url"]),
+		stringValue(entity["url"]),
 	)
 }
 
@@ -344,6 +376,38 @@ func (h *Handler) fetchSandboxJSON(r *http.Request, sandboxBase, path, userID st
 		return fmt.Errorf("decode sandbox response: %w", err)
 	}
 	return nil
+}
+
+func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, sourceURL string) (sandboxContentItem, error) {
+	target, err := joinBasePath(sandboxBase, "/api/content/import-url")
+	if err != nil {
+		return sandboxContentItem{}, err
+	}
+	data, err := json.Marshal(map[string]string{"url": sourceURL})
+	if err != nil {
+		return sandboxContentItem{}, fmt.Errorf("marshal content import request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(data))
+	if err != nil {
+		return sandboxContentItem{}, fmt.Errorf("build sandbox import request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Authenticated-User", userID)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return sandboxContentItem{}, fmt.Errorf("call sandbox import: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return sandboxContentItem{}, fmt.Errorf("sandbox import status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var item sandboxContentItem
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return sandboxContentItem{}, fmt.Errorf("decode sandbox import response: %w", err)
+	}
+	return item, nil
 }
 
 func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishVTextRequest) (any, int, error) {

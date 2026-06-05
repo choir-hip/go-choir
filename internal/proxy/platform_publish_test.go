@@ -126,6 +126,117 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	}
 }
 
+func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	var gotPlatformReq platform.PublishVTextRequest
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/platform/publications/vtext" {
+			t.Fatalf("platformd path: got %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
+			t.Fatalf("decode platform request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
+			PublicationID:        "pub-url",
+			PublicationVersionID: "pubver-url",
+			RoutePath:            "/pub/vtext/url-note-pub1",
+			ContentHash:          "hash",
+			SourceRevisionHash:   "source-hash",
+			State:                "published",
+		})
+	}))
+	defer platformd.Close()
+
+	var importCalled bool
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Authenticated-User") != "user-1" {
+			t.Fatalf("sandbox trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/vtext/documents/doc-url":
+			_ = json.NewEncoder(w).Encode(sandboxVTextDocument{
+				DocID:             "doc-url",
+				OwnerID:           "user-1",
+				Title:             "URL Note",
+				CurrentRevisionID: "rev-url",
+			})
+		case "/api/vtext/revisions/rev-url":
+			_ = json.NewEncoder(w).Encode(sandboxVTextRevision{
+				RevisionID: "rev-url",
+				DocID:      "doc-url",
+				OwnerID:    "user-1",
+				Content:    "public projection content [1](source:src-url)",
+				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-url","kind":"legal_source","target":{"target_kind":"url","url":"https://example.com/source","canonical_url":"https://example.com/source"},"selectors":[{"selector_kind":"text_quote","text_quote":"bounded excerpt"}],"display":{"inline_mode":"embedded_excerpt","open_surface":"source"},"provenance":{"rights_scope":"public_url_snapshot"}}]}`),
+			})
+		case "/api/content/import-url":
+			importCalled = true
+			if r.Method != http.MethodPost {
+				t.Fatalf("import method: got %s", r.Method)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode import body: %v", err)
+			}
+			if body["url"] != "https://example.com/source" {
+				t.Fatalf("import url: got %q", body["url"])
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(sandboxContentItem{
+				ContentID:    "content-url-1",
+				OwnerID:      "user-1",
+				SourceType:   "extracted_url",
+				MediaType:    "text/html; charset=utf-8",
+				AppHint:      "browser",
+				Title:        "Imported URL Source",
+				SourceURL:    "https://example.com/source",
+				CanonicalURL: "https://example.com/source",
+				TextContent:  "Cleaned URL source text that is longer than the bounded citation excerpt.",
+				ContentHash:  "hash-url-source",
+			})
+		default:
+			t.Fatalf("sandbox path: got %s", r.URL.Path)
+		}
+	}))
+	defer sandbox.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-url","revision_id":"rev-url","slug":"url-note"}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	w := httptest.NewRecorder()
+
+	h.HandleVTextPublication(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
+	}
+	if !importCalled {
+		t.Fatalf("expected public URL source import")
+	}
+	metadata := string(gotPlatformReq.Metadata)
+	if !strings.Contains(metadata, "reader_snapshot") || !strings.Contains(metadata, "Cleaned URL source text") {
+		t.Fatalf("platform metadata missing URL reader snapshot: %s", metadata)
+	}
+	if !strings.Contains(metadata, "bounded excerpt") {
+		t.Fatalf("platform metadata lost bounded transclusion selector: %s", metadata)
+	}
+}
+
 func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
