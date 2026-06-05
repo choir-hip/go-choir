@@ -945,6 +945,38 @@ what was proven:
   from the original PDF bytes, creates a normal user revision, publishes that
   revision, exports DOCX and PDF derivatives, verifies the DOCX is an OOXML
   package, and verifies the PDF bytes include the revised export line.
+- `839cd676` documented the next migration gap before code: existing
+  versioned Markdown documents had no owner-authenticated product path to
+  migrate ordered historical Markdown snapshots into one canonical VText with
+  durable version numbers, preserved source snapshot evidence, aliasing, and
+  repairable citation-gap metadata.
+- `5ab52672` adds `POST /api/vtext/markdown-lineage/import`. The route accepts
+  an ordered Markdown lineage, creates one VText document, stores each source
+  snapshot as a `file_version` ContentItem, creates sequential VText revisions
+  with durable version numbers, records a `markdown_lineage_to_vtext_revisions`
+  migration manifest, refuses duplicate source-path aliases with `409`, and
+  records unresolved numeric/footnote citation markers as repairable source
+  gaps instead of inventing source entities.
+- Local focused runtime tests passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVText(OpenFile|ImportMarkdownLineage)' -count=1`.
+- Local default runtime compile path passed:
+  `nix develop -c go test ./internal/runtime -run TestNonexistentCompileOnly -count=1`.
+- GitHub CI run `26998977583` passed for
+  `5ab52672396c23fb1260e29f0051a12aaba22bc3`; runtime shards, vet/build,
+  integration smoke, non-runtime tests, and Node B staging deploy were green.
+- FlakeHub publish run `26998977615` passed for the same commit.
+- Staging health proved proxy and sandbox deployed commit
+  `5ab52672396c23fb1260e29f0051a12aaba22bc3`, deployed at
+  `2026-06-05T06:19:44Z`.
+- Deployed browser-authenticated staging proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.tmp.spec.js --workers=1 --reporter=line`.
+  The temporary proof spec used the existing `desktopSession` fixture, posted
+  a three-snapshot legal-cloud-style Markdown lineage, verified VText revisions
+  `v0`, `v1`, and `v2` in order, verified the current revision is the latest
+  snapshot, verified the oldest revision carries the migration manifest,
+  version-lineage array, original ContentItem refs, and `[1]` source gap, and
+  verified a second import of the same `source_path` returns `409` with the
+  existing document id. The temporary `*.tmp.spec.js` was deleted after proof.
 
 unproven or partial claims:
 
@@ -963,9 +995,11 @@ unproven or partial claims:
   `/pub/vtext/staging-long-compare-merge-proof-1780614390072-pub32bd3c150`
   still allows only `txt`, `md`, and `html`, so DOCX/PDF are correctly rejected
   there unless a new version is published with an updated policy.
-- `.md` file-open normalization now records import and migration manifests, but
-  bulk migration of existing versioned Markdown documents, including the
-  legal-cloud proposal class, is not complete.
+- `.md` file-open normalization now records import and migration manifests, and
+  the deployed Markdown lineage API can migrate ordered snapshots into durable
+  VText revisions. The actual owner-authenticated bulk migration of existing
+  legal-cloud-class documents has not yet been run, and source entities still
+  need to be repaired or attached after lineage import.
 - DOCX/PDF import now preserves original ContentItems, reads original bytes,
   records real byte hashes, creates VText projections, and has staged browser
   proof for DOCX and PDF import -> revise -> publish -> DOCX/PDF export.
@@ -984,9 +1018,10 @@ are sufficient for fast high-quality structured edits on the legal-cloud
 proposal, or whether a stronger block/section selector operation is needed to
 avoid whole-document edits while keeping semantic quality.
 
-next executable probe: use authenticated computer-use on staging to revise the
-legal-cloud proposal through the product path, capture prompt size/latency and
-delta evidence, verify the appendix table survives focus/edit/save/revise, and
-implement bulk Markdown lineage migration.
+next executable probe: use authenticated computer-use on staging to migrate the
+legal-cloud proposal lineage through the new product path, repair/attach source
+entities for its citations, revise the migrated VText through the product path,
+capture prompt size/latency and delta evidence, and verify the appendix table
+survives focus/edit/save/revise.
 
 suggested resume goal string: use the Goal String in this document.
