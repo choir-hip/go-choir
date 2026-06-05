@@ -588,7 +588,8 @@ func markdownLineageProjectionContent(content string, resolutions []vtextCitatio
 		if entityID == "" {
 			return marker
 		}
-		return fmt.Sprintf("[%s](source:%s)", marker, entityID)
+		label := strings.TrimSuffix(strings.TrimPrefix(marker, "["), "]")
+		return fmt.Sprintf("[%s](source:%s)", label, entityID)
 	})
 }
 

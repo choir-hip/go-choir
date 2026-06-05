@@ -3606,7 +3606,7 @@ func TestVTextImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 	if len(revs) != 1 {
 		t.Fatalf("len(revisions) = %d, want 1", len(revs))
 	}
-	if !strings.Contains(revs[0].Content, "[[1]](source:src-aba-rule-16)") {
+	if !strings.Contains(revs[0].Content, "[1](source:src-aba-rule-16)") {
 		t.Fatalf("resolved citation was not rewritten as source link: %q", revs[0].Content)
 	}
 	if !strings.Contains(revs[0].Content, "Unresolved claim [2]") {

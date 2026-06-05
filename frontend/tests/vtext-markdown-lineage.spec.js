@@ -96,7 +96,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   const revisions = await fetchJSON(page, `/api/vtext/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   expect(revisions.revisions).toHaveLength(1);
   const revision = revisions.revisions[0];
-  expect(revision.content).toContain(`[[1]](source:${sourceEntityID})`);
+  expect(revision.content).toContain(`[1](source:${sourceEntityID})`);
   expect(revision.content).toContain('One claim still needs source repair [2].');
   expect(revision.content).not.toContain('Confidentiality matters for private legal-cloud work [1].');
   expect(revision.metadata?.source_entities).toHaveLength(1);
@@ -112,7 +112,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: `Legal Cloud Sourced Lineage ${stamp}` }).click();
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref]').filter({ hasText: '[1]' }).first();
+  const citation = rendered.locator('[data-vtext-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await expect(citation).toHaveAttribute('data-vtext-citation-transclusion', '');
   await citation.click();
