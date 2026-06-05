@@ -1594,6 +1594,13 @@ new problem documented before any future code:
   `Published v49` root for the same document id. A bounded table-edit
   instruction was typed into that wrong published/root surface during QA, so it
   must not be counted as owner-head proof.
+- A follow-up Computer Use check of the visible Choir tab confirmed the same
+  wrong root: the URL was the public VText URL, the visible document window was
+  `choir_private_legal_cloud_proposal.md` at `v49`, state `Published v49`,
+  and it still contained the accidental `QA scratch instruction`. The visible
+  `Cancel` control was clicked and the UI reported `Revision cancelled. You
+  can revise again from the current version.` This cancellation is protective
+  cleanup only; it is not bounded table-edit acceptance evidence.
 - Until this browser-root ambiguity is repaired or isolated, mutation proof on
   the real owner document should use Computer Use against the visible private
   owner UI, and extension-backed DOM should be treated as read-only diagnostic
