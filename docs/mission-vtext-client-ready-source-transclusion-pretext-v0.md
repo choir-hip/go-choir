@@ -1966,3 +1966,78 @@ next proof:
 - Hard reload the owner publication in Comet and verify the ABA expanded source
   now leaves no large blank area beside the note and keeps the excerpt readable
   as source content.
+
+## 2026-06-05 Deployed Proof: Native Float Still Not Magazine Flow
+
+status: deployed_proof_and_new_problem_recorded
+
+deployment evidence:
+
+- Commit `bc7eabb6` (`fix: float vtext source notes through article flow`) was
+  pushed to `origin/main`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27034220439` completed
+  successfully, including frontend build, runtime shards, non-runtime tests,
+  vet/build, and Node B staging deploy.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27034220471` completed
+  successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `bc7eabb6ebf6537db944ce6703654934975598a2`.
+
+authenticated Comet proof:
+
+- Computer Use was available, including app state, screenshot, and click
+  actions. No browser/API fallback was needed for this proof.
+- In Comet, the owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`
+  showed `choir_private_legal_cloud_proposal.vtext` v83 with the full
+  client-ready owner proposal, inline citation/source markers, no top source
+  deck, and no `missing source` prose in the visible article.
+- Expanding the ABA Formal Opinion 512 marker rendered a right-side source note
+  with `Open source` and `Close` actions. The Web Lens/source window opened and
+  still showed the known Comet-blocked ABA PDF live preview.
+
+newly observed problem:
+
+- The native floated source note reduces some chrome but still does not satisfy
+  the clarified Pretext objective. The article behaves as block paragraphs
+  around a sidebar: the paragraph containing the marker occupies the left
+  column, while later paragraphs begin below the note instead of continuing as
+  journal/magazine text beside the remaining source-note height.
+- The UX still has too many nested rounded/card/pill affordances inside the
+  source note. The desired direction is content-first source matter with sparse
+  controls, closer to a margin note or academic/journal pull source than a stack
+  of UI components.
+- The source acquisition/readability problem remains: iframe/Web Lens live
+  preview can be blocked, and the fallback snapshot path can preserve raw
+  cookie/bot HTML rather than cleaned Markdown reader content.
+
+root-cause direction:
+
+- Browser floats alone are not enough because VText rendering is already a
+  block/document renderer. The load-bearing requirement is not "put a card on
+  the right"; it is to let the source transclusion and article paragraphs share
+  a composed reading measure across multiple source-adjacent blocks.
+- Pretext should own the wrapping/composition decision for a source region, not
+  merely gate whether a native float may appear. The next implementation should
+  identify a bounded article region around an expanded source marker, compose
+  text line boxes beside the source excerpt using Pretext, and keep the original
+  canonical VText DOM hidden from presentation without changing serialization.
+- Source windows need a reader-mode contract: prefer cleaned Markdown rendered
+  as source content when iframe preview fails or yields low-content/block pages;
+  keep the raw iframe as a live lens, not as the only readable proof surface.
+
+acceptance criteria for the next source-flow slice:
+
+- On the owner legal-cloud VText publication, expanding the first ABA source
+  marker produces a composed article/source region where subsequent article
+  prose continues beside the source note until the note's vertical footprint is
+  consumed.
+- The source note reads as source content with minimal controls and no nested
+  card/pill stack.
+- Canonical VText serialization is unchanged and still skips all presentation
+  flow DOM.
+- The source window either opens a working live preview or offers a cleaned
+  Markdown reader fallback with a precise reason when the live preview is
+  blocked.
