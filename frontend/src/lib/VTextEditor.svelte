@@ -804,7 +804,8 @@
   function openPublishedURL(result = publishResult) {
     const publicURL = publicURLForPublishResult(result);
     if (!publicURL || typeof window === 'undefined') return false;
-    window.location.assign(publicURL);
+    const nextURL = new URL(publicURL, window.location.href);
+    window.history.pushState({ choirPublicRoute: nextURL.pathname }, '', nextURL);
     return true;
   }
 
@@ -1709,7 +1710,14 @@
   function handleOpenPublishedURL() {
     if (!openPublishedURL()) {
       saveStatus = 'Could not open public link';
+      return;
     }
+    saveStatus = 'Public link shown in address bar';
+  }
+
+  function handlePublishedLinkClick(event) {
+    event.preventDefault();
+    handleOpenPublishedURL();
   }
 
   async function handleCreatePublishedDerivative() {
@@ -2209,6 +2217,7 @@
               class="public-link"
               data-vtext-public-link
               href={publicURLForPublishResult(publishResult)}
+              on:click={handlePublishedLinkClick}
             >
               {publicURLForPublishResult(publishResult) || 'Public route ready'}
             </a>
