@@ -79,6 +79,24 @@ import manifests, selector/confidence data, style/export profiles, and
 server-side export artifacts. They cannot be treated as frontend-only format
 conversions.
 
+### Publish Download UI Exposes DOCX/PDF Before Backend Export Exists
+
+After the first mission checkpoint, staging served commit
+`19f41da9d649395bb010480a45a7c278ff890fa4`. The public export endpoint
+successfully returned Markdown, Text, and HTML for an existing published VText
+route, but:
+
+```text
+GET /api/platform/publications/export?route=/pub/vtext/staging-long-compare-merge-proof-1780614390072-pub32bd3c150&format=docx
+-> 502 {"error":"failed to export publication"}
+```
+
+The proxy was forwarding to platformd correctly; platformd rejected the format
+because `normalizeExportFormat` only accepts text-like exports. The durable fix
+belongs in the platform publication export service, with canonical
+publication-bundle bytes and compact provenance metadata, not in a frontend
+download shim.
+
 ### Citation Markers Are Not Complete Without Transclusion And Source Windows
 
 Existing docs define `source_entities`, display policies, and every citation
