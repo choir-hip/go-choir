@@ -4146,3 +4146,142 @@ next executable probe:
   the new revision, and prove on staging that source windows open the attached
   artifacts while Markdown export still preserves source markers and the
   glossary table.
+
+## 2026-06-05 Repair Evidence: Remaining Source Coverage Raised To Usable
+
+status: owner_data_repair_proven_with_residual_ui_problem
+
+problem-ordering checkpoint:
+
+- The weak-source problem was documented first in commit `30fc131e` before
+  any source data repair. This section records the subsequent owner-product-path
+  repair and the new UI/source-window problems observed during proof.
+
+data repair performed through authenticated Comet owner UI:
+
+- Starting from the owner document
+  `choir_private_legal_cloud_proposal.vtext`, the source artifact panel was used
+  on staging as `yusefnathanson@me.com`.
+- Attached a cleaned Markdown source artifact for
+  `OVHcloud Hosted Private Cloud service offerings`, using the official OVH
+  support URL:
+  `https://support.us.ovhcloud.com/hc/en-us/articles/360000857284-Hosted-Private-Cloud-Service-Offerings`.
+  The owner document advanced from v84 to v85.
+- Attached a cleaned Markdown source artifact for
+  `ABA Model Rule 1.6: Confidentiality of Information`, using the official ABA
+  URL:
+  `https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/`.
+  The owner document advanced from v85 to v86.
+- Attached a cleaned Markdown source artifact for
+  `Qdrant similarity search documentation`, using the official Qdrant
+  documentation URL: `https://qdrant.tech/documentation/search/`.
+  The owner document advanced from v86 to v87.
+- Published v87 to
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+
+publication source graph evidence:
+
+- Publication id: `pub-270a62fb-62e6-4509-9779-c0b9b32d2c71`.
+- Publication version id: `pubver-fe47bb49-edd1-4390-b0e8-454b81833619`.
+- Artifact manifest id: `artman-5b11106b-4741-4f56-99e6-996af83bb94e`.
+- Source revision hash:
+  `3463557020e9d5e2a780c1d7488d3a328aa495e83be29455a64d3b3e96b94609`.
+- The deployed resolve API returned seven represented source entities:
+  - OVH private cloud: content item
+    `30bec229-6aee-4808-9687-b31305b37ad4`, 871 reader characters.
+  - NixOS rollback: URL source, 11,642 reader characters.
+  - Qdrant search: content item
+    `994ee32a-ea97-43f8-b103-689bff1822d1`, 817 reader characters.
+  - ABA Formal Opinion 512: content item
+    `ed981507-cade-4d12-b825-ae5a5aa149ee`, 993 reader characters.
+  - Hetzner data centers: URL source, 12,179 reader characters.
+  - GDPR Article 32: URL source, 7,993 reader characters.
+  - ABA Rule 1.6: content item
+    `39c3296c-9c03-4b92-93cb-c7c8bfc4b52e`, 1,008 reader characters.
+
+export evidence:
+
+- Markdown export for the v87 public route was 38,449 bytes.
+- The export contained exactly seven compact source markers.
+- The glossary table header remained present at line 269:
+  `| Term | Definition |`.
+- The export did not contain `TermDefinition`.
+- The export did not contain `missing source`.
+
+Comet visual proof:
+
+- Computer Use was available and used against Comet on staging.
+- The public v87 reader showed the legal-cloud VText publication with article
+  text and inline source markers.
+- The ABA Formal Opinion 512 source remained expanded in a right-side journal
+  note while the main article text continued beside it.
+- Clicking the newly repaired ABA Rule 1.6 marker expanded a second source note
+  in the article.
+- Clicking `Open source` for ABA Rule 1.6 opened a Web Lens source reader
+  snapshot for the official ABA Rule 1.6 URL, displaying the relevant
+  confidentiality excerpt.
+
+new problem recorded before any fix:
+
+- The source expansion surface now proves source availability, but the visual
+  composition is not yet acceptable for the user goal. Multiple source notes can
+  overlap and produce nested card/pill/rounded-rectangle layers. The result is
+  not the intended magazine or academic-journal reading surface.
+- The point of Pretext in this mission is wrapping and article flow: source
+  apparatus should let surrounding prose occupy columns beside the source
+  material, not create a floating card stack that occludes the article.
+- The ABA Rule 1.6 open-source path used a Web Lens reader snapshot window. That
+  is useful fallback evidence, but it is not the durable target. Published
+  citations should prefer cleaned Markdown source artifacts rendered in a quiet
+  reader mode, with iframe/page preview as optional fallback for sources that
+  permit it.
+
+cognitive transforms applied:
+
+- Audience-level translation: a client-reader does not want a source dashboard;
+  they want a readable proposal whose evidence is available at the exact point
+  of need. This changes the UI target from "show sources" to "preserve the
+  article while evidence opens beside it."
+- Depth extraction: "source-backed" is not a badge or metadata label. The
+  load-bearing variable is provenance that survives canonical VText,
+  publication, export, and reader inspection without turning evidence into
+  prose or presentation DOM.
+- Deletion/simplification lens: once the source path is proven, temporary
+  owner-side scaffolding, duplicate renderer branches, demo snapshot paths, and
+  card-heavy visual treatments should be reviewed for deletion or consolidation.
+- Realism-gradient lens: the next proof must keep using the actual owner legal
+  cloud document and public route, because local fixtures can prove helper
+  mechanics but cannot prove the client-ready reading experience.
+
+changed mission plan:
+
+- Treat imported `.md`, `.txt`, and other text documents as ingestion formats.
+  Once an imported document advances from v0 to v1, canonical storage should be
+  `.vtext`; Markdown is an export format, not the canonical edited artifact.
+- Continue the source axis by making citations resolve to transclusion points
+  whose opened surfaces use cleaned Markdown source artifacts by default.
+- Continue the Pretext axis by replacing the current stacked source-card UI with
+  a minimal magazine/journal apparatus: source notes that participate in
+  wrapping/columns, carry content first, and expose provenance controls without
+  dominating the article.
+- Continue the review axis only after the above works: produce a whole-mission
+  and current-system review report in `docs/`, export a PDF to iCloud Drive,
+  then do a simplification pass that prunes dead, weak, and shortcut-style code
+  while preserving the proven behavior.
+
+current residual risks:
+
+- Source artifacts for OVH, ABA Rule 1.6, and Qdrant were manually curated into
+  concise reader-mode Markdown. Automated research/import cleanup and Obscura
+  reader extraction remain future work.
+- The published source graph now has usable source text for all seven
+  represented sources, but visual source expansion still overlaps in the public
+  reader.
+- Public `/health` currently reports `status=ok` but does not expose a deployed
+  commit identity in its public payload; `/api/health` is authenticated. The
+  latest behavior-changing code deploy identity remains the previously recorded
+  `e10f35cf64d73c689508e98f31ad2056eba53633`, while this section records a
+  data-only owner publication repair on top of that deployment.
+- The hard whole-mission/current-system review and PDF report are intentionally
+  pending until the source UI and canonical `.vtext` ingestion axes are real
+  enough to review as the current system, not as a half-fixed slice.
