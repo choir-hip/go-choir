@@ -25,6 +25,11 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
+  import {
+    renderInlineMarkdown,
+    sourceEntitySnapshotText,
+    sourceEntityTitle,
+  } from './vtext-source-renderer.ts';
 
   export let appContext = {};
   export let authenticated = false;
@@ -32,6 +37,8 @@
 
   // ---- State ----
   const initialTarget = appContext?.initialUrl || appContext?.sourceUrl || '';
+  const sourceEntity = appContext?.sourceEntity || null;
+  const initialSourceSnapshot = sourceEntitySnapshotText(sourceEntity);
   let urlInput = initialTarget || 'https://en.wikipedia.org';
   let currentUrl = initialTarget ? normalizeUrl(initialTarget) : '';
   let loading = false;
@@ -40,12 +47,13 @@
   let browserCapabilities = null;
   let capabilityError = '';
   let backendSession = null;
-  let backendSnapshot = '';
+  let backendSnapshot = initialSourceSnapshot;
+  let snapshotMode = initialSourceSnapshot ? 'source_entity' : '';
   let backendHTML = '';
   let backendLinks = [];
   let backendScreenshotPNG = '';
   let backendWarnings = [];
-  let showingSnapshot = false;
+  let showingSnapshot = !!initialSourceSnapshot;
   let controlSelector = '';
   let controlValue = '';
   let controlStatus = '';
@@ -60,6 +68,7 @@
   // Can go back/forward?
   $: canGoBack = historyIndex > 0;
   $: canGoForward = historyIndex < history.length - 1;
+  $: readableSnapshotHTML = renderSnapshotMarkdown(backendSnapshot);
 
   // ---- Navigation ----
 
@@ -90,8 +99,13 @@
     loading = true;
     urlInput = normalized;
     currentUrl = normalized;
-    showingSnapshot = false;
     clearBackendSnapshots();
+    if (browserCapabilities?.available) {
+      showingSnapshot = true;
+      navigateBackend(normalized);
+    } else {
+      showingSnapshot = false;
+    }
 
     if (addToHistory) {
       // Trim forward history
@@ -105,6 +119,7 @@
 
   function clearBackendSnapshots() {
     backendSnapshot = '';
+    snapshotMode = '';
     backendHTML = '';
     backendLinks = [];
     backendScreenshotPNG = '';
@@ -213,6 +228,9 @@
       browserCapabilities = await res.json();
       if (browserCapabilities?.available) {
         await ensureBackendSession();
+        if (currentUrl && !backendSnapshot) {
+          navigateBackend(currentUrl);
+        }
       }
     } catch (err) {
       if (handleAuthError(err)) return;
@@ -258,6 +276,7 @@
       }
       backendSession = body;
       backendSnapshot = body.text_snapshot || '';
+      snapshotMode = 'backend';
       backendHTML = body.html_snapshot || '';
       backendLinks = Array.isArray(body.links) ? body.links : [];
       backendScreenshotPNG = body.screenshot_png_base64 || '';
@@ -344,12 +363,13 @@
   }
 
   function importSnapshotToVText() {
-    if (!backendSession?.session_id || !backendSnapshot) return;
+    if (!backendSnapshot) return;
+    const sessionID = backendSession?.session_id || 'source-entity-snapshot';
     const lines = [
-      `# Web Lens import`,
+      `# ${snapshotMode === 'source_entity' ? 'Source reader import' : 'Web Lens import'}`,
       ``,
-      `Source: ${currentUrl || backendSession.current_url || 'unknown'}`,
-      `Session: ${backendSession.session_id}`,
+      `Source: ${currentUrl || backendSession?.current_url || 'unknown'}`,
+      `Session: ${sessionID}`,
       ``,
       `## Snapshot`,
       ``,
@@ -362,11 +382,11 @@
       }
     }
     dispatch('openvtext', {
-      title: backendSession.title || 'Web Lens Import',
+      title: backendSession?.title || sourceEntityTitle(sourceEntity) || 'Web Lens Import',
       initialContent: lines.join('\n'),
-      seedPrompt: `Import Web Lens snapshot for ${currentUrl || backendSession.current_url || 'web page'}`,
-      sourceUrl: currentUrl || backendSession.current_url || '',
-      sourceContentId: backendSession.session_id,
+      seedPrompt: `Import Web Lens snapshot for ${currentUrl || backendSession?.current_url || 'web page'}`,
+      sourceUrl: currentUrl || backendSession?.current_url || '',
+      sourceContentId: sessionID,
       appHint: 'web_lens',
       createdFrom: 'web_lens',
       toastMessage: 'Opened Web Lens snapshot in VText',
@@ -380,8 +400,46 @@
   }
 
   function showSnapshot() {
-    if (!currentUrl || !browserCapabilities?.available) return;
-    navigateBackend(currentUrl);
+    if (!currentUrl) return;
+    if (browserCapabilities?.available) {
+      navigateBackend(currentUrl);
+      return;
+    }
+    if (initialSourceSnapshot) {
+      backendSnapshot = initialSourceSnapshot;
+      snapshotMode = 'source_entity';
+      showingSnapshot = true;
+    }
+  }
+
+  function renderSnapshotMarkdown(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const lines = raw.split(/\r?\n/);
+    const blocks = [];
+    let paragraph = [];
+    const flushParagraph = () => {
+      const text = paragraph.join(' ').trim();
+      if (text) blocks.push(`<p>${renderInlineMarkdown(text, [])}</p>`);
+      paragraph = [];
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        flushParagraph();
+        continue;
+      }
+      const heading = /^(#{1,4})\s+(.+)$/.exec(trimmed);
+      if (heading) {
+        flushParagraph();
+        const level = Math.min(4, heading[1].length + 1);
+        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2], [])}</h${level}>`);
+        continue;
+      }
+      paragraph.push(trimmed);
+    }
+    flushParagraph();
+    return blocks.join('\n');
   }
 
   // Monitor for iframe load timeout (sites that block may not fire error event)
@@ -497,7 +555,9 @@
     data-browser-session-state={backendSession?.state || ''}
   >
     <span>
-      {#if browserCapabilities?.available}
+      {#if showingSnapshot && snapshotMode === 'source_entity' && backendSnapshot}
+        Source reader snapshot
+      {:else if browserCapabilities?.available}
         {#if backendSession?.state === 'closed'}
           Web Lens snapshot closed: {browserCapabilities.provider}
         {:else if showingSnapshot && loading}
@@ -517,7 +577,7 @@
         Iframe preview mode - Web Lens backend not configured
       {/if}
     </span>
-    {#if browserCapabilities?.available && currentUrl && !showingSnapshot}
+    {#if currentUrl && !showingSnapshot && (browserCapabilities?.available || initialSourceSnapshot)}
       <button
         class="backend-close"
         data-browser-open-snapshot
@@ -622,13 +682,13 @@
 
   <!-- iframe -->
   {#if currentUrl}
-    {#if browserCapabilities?.available && showingSnapshot}
+    {#if showingSnapshot && backendSnapshot}
       <div class="backend-snapshot" data-browser-backend-snapshot>
         {#if backendSnapshot}
           <div class="backend-snapshot-layout">
             <div class="backend-main">
               <div class="snapshot-actions">
-                <span>{backendWarnings.length ? 'Semantic snapshot with warnings' : 'Semantic snapshot'}</span>
+                <span>{snapshotMode === 'source_entity' ? 'Source reader snapshot' : backendWarnings.length ? 'Semantic snapshot with warnings' : 'Semantic snapshot'}</span>
                 <button
                   class="import-btn"
                   data-browser-import-vtext
@@ -657,7 +717,9 @@
                   />
                 </figure>
               {/if}
-              <pre>{backendSnapshot}</pre>
+              <article class="snapshot-reader" data-browser-reader-markdown>
+                {@html readableSnapshotHTML}
+              </article>
             </div>
             {#if backendLinks.length || backendHTML}
               <aside
@@ -969,6 +1031,32 @@
     white-space: pre-wrap;
     word-break: break-word;
     font: 0.9rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .snapshot-reader {
+    max-width: 70ch;
+    color: var(--choir-text-primary);
+    font: 0.95rem/1.62 ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+
+  .snapshot-reader :global(p) {
+    margin: 0 0 0.95rem;
+  }
+
+  .snapshot-reader :global(h2),
+  .snapshot-reader :global(h3),
+  .snapshot-reader :global(h4),
+  .snapshot-reader :global(h5) {
+    margin: 1.15rem 0 0.55rem;
+    color: var(--choir-text-accent);
+    font-family: inherit;
+    line-height: 1.2;
+  }
+
+  .snapshot-reader :global(a) {
+    color: var(--choir-text-accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.16em;
   }
 
   .backend-snapshot-layout {

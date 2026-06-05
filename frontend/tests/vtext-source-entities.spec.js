@@ -199,7 +199,13 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   await expect(flow).toBeVisible();
 
   await flow.locator('[data-vtext-open-source][data-source-entity-id="src-fixture-flow"]').click();
-  await expect(page.locator('[data-window]').filter({ hasText: 'ABA Formal Opinion 512 fixture' }).last()).toBeVisible({ timeout: 10000 });
+  const sourceWindow = page.locator('[data-window]').filter({ hasText: 'ABA Formal Opinion 512 fixture' }).last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText(
+    'Lawyers using generative artificial intelligence tools must consider duties',
+    { timeout: 10000 }
+  );
+  await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
 });
 
 test('VText autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {
