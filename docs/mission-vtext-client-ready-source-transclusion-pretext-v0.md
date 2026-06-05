@@ -3728,3 +3728,85 @@ remaining proof:
 - Continue the Pretext UI pass separately: the source apparatus must support
   article wrapping and reduced chrome, not merely successful metadata
   attachment.
+
+## 2026-06-05 Deployment Evidence: Source Artifact Attachment Endpoint
+
+status: deployed_structural_repair_owner_proof_blocked
+
+deployment evidence:
+
+- Behavior commit:
+  `1b466a90699beb5374a1f60e5c1fc1607c160e38`
+  (`fix: attach vtext source artifacts`).
+- GitHub Actions CI run `27040668324` succeeded, including non-runtime Go
+  tests, runtime shards, integration-tagged smoke, vet/build, aggregate gate,
+  and Node B staging deploy.
+- FlakeHub run `27040668312` succeeded.
+- Staging `/health` reported proxy and upstream sandbox
+  `deployed_commit=1b466a90699beb5374a1f60e5c1fc1607c160e38`,
+  `deployed_at=2026-06-05T21:20:28Z`, and status/upstream/vmctl `ok`.
+
+local acceptance carried by the commit:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestVText(SourceGapRepair|SourceArtifactAttachment)'` passed before push.
+- `git diff --check` passed before push.
+
+authenticated Comet observation:
+
+- Computer Use is available and Comet is authenticated on staging.
+- Comet showed the owner legal-cloud document as
+  `choir_private_legal_cloud_proposal.vtext` at v83, with the current source
+  panel still exposing the older `Repair JSON` source workflow.
+- The owner publication/source window still shows the ABA Formal Opinion 512
+  source as a `Source reader snapshot` containing only the bounded excerpt.
+  This is expected before attaching a readable source artifact.
+
+proof boundary:
+
+- The endpoint is deployed but not yet owner-proven. The current product UI has
+  no owner-grade way to create/import a cleaned source artifact and bind it to
+  an existing source entity through `/source-attachments`.
+- A same-page Comet bookmarklet probe did not provide a reliable authenticated
+  API bridge, and reading Comet's encrypted Chromium cookies would require
+  Keychain access that did not return promptly. I stopped that path rather than
+  relying on credential plumbing.
+- Therefore the source-attachment repair is accepted only as a deployed
+  structural slice with local runtime proof. It is not yet accepted as owner
+  workflow proof.
+
+## 2026-06-05 Problem Checkpoint: Source Artifact Attachment Has No Owner UI
+
+status: problem_recorded_before_code_fix
+
+problem:
+
+- The deployed source-attachment endpoint repairs the canonical metadata seam,
+  but the owner-facing VText source panel still exposes only `Repair JSON` and
+  `Apply repair` for the older unresolved-marker repair path.
+- That makes the new operation hard to prove through authenticated Comet and
+  hard for an owner to use. It also conflicts with the mission invariant that
+  raw repair JSON is not an owner-grade source workflow.
+- Without a UI or product agent tool path, attaching source artifacts to the
+  three HTTP 403 owner sources depends on an authenticated API bridge rather
+  than the product surface. That is a verification weakness and a UX debt, not
+  a source-specific acquisition issue.
+
+required correction:
+
+- Add a generic owner source-artifact workflow in the VText source panel:
+  import or create a readable source artifact for a selected source entity,
+  attach it through `/source-attachments`, and refresh the revision/publish
+  state.
+- Keep the UI content-first and minimal. It should not add another nested card
+  stack or a second raw JSON editor. The immediate control can be utilitarian,
+  but it must operate on source entities and content artifacts directly.
+- Preserve the Pretext/journal axis separately: attachment controls manage the
+  source graph; Pretext manages article flow around expanded evidence.
+
+next executable probe:
+
+- Implement the smallest owner-grade source attachment UI path that can create
+  or import readable content for a selected source entity, call the deployed
+  endpoint, and prove in Comet that the legal-cloud proposal gains a new
+  metadata-only revision without changing article content.
