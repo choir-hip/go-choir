@@ -2502,3 +2502,159 @@ current belief:
   acquisition: durable cleaned Markdown snapshots from Obscura/Web Lens/content
   import, attached to source entities and publication bundles so source windows
   can show more than the selected quote when policy permits.
+
+## 2026-06-05 Cognitive Transform Checkpoint: Pretext Means Article Flow
+
+status: mission_axis_refined_after_owner_clarification
+
+current uncertainty or obstacle:
+
+- The source UI can regress into a pile of cards, pills, and metadata chrome
+  even when the data path is correct. That violates the owner goal: sources
+  should improve the article, not distract from it, and there may be tens or
+  hundreds of sources.
+
+selected transforms:
+
+- Object transform: the real object is not a source card. It is a cited article
+  whose text flow can temporarily route around source evidence.
+- Material transform: the medium is long-form reading, closer to a magazine or
+  academic journal than an app dashboard. The source artifact should feel like
+  a marginal/inline evidence object, not a separate product surface embedded in
+  the prose.
+- Prototype honesty: using Pretext only to place decorative wrappers would fake
+  the hard part. The honest use of Pretext is line measurement/routing so prose
+  wraps beside expanded source content.
+- Deletion-first: every layer of source card/pill/rounded rectangle chrome
+  must justify itself against the reader's attention. Metadata should be
+  minimized unless it helps evaluate the source.
+
+route-changing insights:
+
+- Pretext belongs at the article/source-flow composition boundary. It should
+  decide available line width around a source region and materialize article
+  lines accordingly.
+- The compact inline citation and the expanded source evidence are separate
+  states of the same transclusion point. The expanded state should borrow
+  reading space without moving source decks to the top or turning the article
+  into a dashboard.
+- Full cleaned source content belongs in the opened source reader window. The
+  inline expanded view should normally show the bounded quote/excerpt that
+  supports the nearby claim.
+
+changed plan:
+
+- Implementation: keep the deployed reader-snapshot publication path, then move
+  source-flow UI toward a focused Pretext composition component that routes text
+  around minimal source evidence.
+- Verifier/evidence: acceptance must include screenshots or DOM/geometry proof
+  that article text forms columns/lines beside the expanded source region, not
+  just that the source card opens.
+- Scope: do not build a whole-document Pretext renderer. Use Pretext for the
+  source-flow problem only, while VText remains canonical.
+- Stopping condition: the legal-cloud proposal should read like a client-ready
+  cited proposal with expandable evidence, not like a source demo or metadata
+  inventory.
+
+next high-information action:
+
+- Record and verify the deployed publication-source snapshot repair, then use
+  the next code pass to simplify the source-flow boundary and reduce visual
+  chrome while preserving the Comet-proven data path.
+
+## 2026-06-05 Deployed Proof: Published Content Sources Carry Reader Snapshots
+
+status: deployed_acceptance_proof_recorded
+
+implementation:
+
+- Commit `559a72a60bedcfa7b33d0380004477fa3a572718` (`fix: publish content
+  source reader snapshots`) enriches VText publication metadata before calling
+  platformd. Public/publishable `ContentItem` source entities now carry a
+  `reader_snapshot` with cleaned reader Markdown, source URLs, content hash,
+  media type, and publication-reader access scope.
+- The inline transclusion snapshot remains bounded to the selected quote. The
+  full cleaned source text is used by the opened source window, not by the
+  article's compact inline citation.
+- Commit `d395a8db140c0bacb18ba122624ea15e5532e161` records the local repair
+  evidence and is the deployed main commit for this proof.
+
+local verification:
+
+- `nix develop -c go test ./internal/proxy -run
+  'TestHandleVTextPublication|TestContentItemAllowsPublishedSnapshot'` passed.
+- `nix develop -c go test ./internal/platform -run
+  'TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion|TestPublishVTextCreatesImmutablePublicRecords'`
+  passed.
+- `pnpm --dir frontend build` passed.
+- `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed,
+  including Pretext source-flow wrapping, source expansion, table roundtrip, and
+  bounded table edit coverage.
+- `pnpm --dir frontend e2e tests/vtext-source-service-publication.spec.js`
+  could not complete locally because the local service harness does not start
+  platformd on `127.0.0.1:8086`. The proxy logged `connect: connection refused`.
+  This remains a local harness limitation, not a staging acceptance failure.
+
+deployment evidence:
+
+- GitHub Actions run
+  `https://github.com/choir-hip/go-choir/actions/runs/27036977761` completed
+  successfully, including Go runtime shards, non-runtime tests, frontend build,
+  integration-tagged smoke, vet/build, and Node B staging deploy.
+- FlakeHub run
+  `https://github.com/choir-hip/go-choir/actions/runs/27036977769` completed
+  successfully.
+- `https://choir.news/health` reported proxy and upstream deployed commit
+  `d395a8db140c0bacb18ba122624ea15e5532e161`, deployed at
+  `2026-06-05T19:58:36Z`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet opened the deployed publication route:
+  `https://choir.news/pub/vtext/codex-source-snapshot-proof-1780689619462-pub8bc8c0aef`.
+- The published reader showed the article title `Codex source snapshot proof
+  1780689619462` and a compact source marker in the sentence: "The article
+  keeps its citation compact [source]. A normal following sentence should remain
+  readable around the source note."
+- Expanding the marker displayed only the bounded excerpt:
+  `Codex staging reader snapshot excerpt: legal AI source evidence stays
+  bounded inline.`
+- Opening the source created a source window titled `Codex public source
+  snapshot 1780689619462` with `Source reader snapshot` and the full cleaned
+  reader content, including:
+  `Full cleaned reader source detail 1780689619462: publication readers can
+  inspect the cleaned source artifact, not just the citation excerpt.`
+- The source window also showed the extra paragraph proving that the opened
+  source window used the `reader_snapshot` text carried by publication
+  metadata, rather than depending on the live iframe.
+
+public publication payload check:
+
+- `GET /api/platform/publications/resolve?route=/pub/vtext/codex-source-snapshot-proof-1780689619462-pub8bc8c0aef`
+  returned one `source_entity` and one `transclusion`.
+- The source entity's `reader_snapshot.text_content` contained the full 344
+  character cleaned reader snapshot, including the full-detail paragraph.
+- The transclusion's `snapshot_text` remained exactly the bounded excerpt:
+  `Codex staging reader snapshot excerpt: legal AI source evidence stays
+  bounded inline.`
+
+current belief:
+
+- Published VText now carries enough source artifact data for authorized
+  readers to inspect public/publishable content sources after publication,
+  without needing owner-private ContentItem access or a successful iframe load.
+- The data path is now better than the visual source treatment. The next source
+  UI pass should use Pretext for magazine/journal wrapping and should delete or
+  collapse excess card/pill chrome.
+
+residual risks:
+
+- The owner legal-cloud proposal still needs a full client-ready source research
+  pass, with confirming/refuting citations rather than placeholders.
+- The mission-wide hard review report, PDF export to iCloud Drive, and
+  simplification/dead-code pass remain incomplete.
+- The local service harness still lacks platformd startup, which prevents local
+  end-to-end publication-source E2E from replacing staging proof.
+- Publication-source policy needs broader review for private, licensed, and
+  client-confidential sources before the legal-cloud document uses non-public
+  research artifacts.
