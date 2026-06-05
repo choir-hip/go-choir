@@ -2170,3 +2170,45 @@ acceptance criteria for the correction:
 - The confidentiality citation remains visible as an interactive citation
   marker/transclusion point in the composed presentation layer.
 - Serialization remains canonical and skips presentation-only source-flow DOM.
+
+## 2026-06-05 Local Correction: Rich-Inline Citation Markers In Source Flow
+
+status: local_code_verified_pending_deploy
+
+implementation:
+
+- Updated the source-flow composition path to use
+  `@chenglou/pretext/rich-inline` for paragraphs that contain inline source
+  markers.
+- Source-flow blocks now carry rich inline items. Ordinary text remains text;
+  non-active source refs become atomic `break: never` items with cloned
+  `data-vtext-source-ref` HTML.
+- The presentation flow renders line fragments instead of flattening line text.
+  Cloned source markers remain inside `data-vtext-source-flow`, so the
+  serializer still skips them, while the hidden canonical paragraphs retain the
+  true VText source markers.
+- Clicking a cloned marker inside the composed source-flow region now toggles
+  its own inline transclusion affordance without clearing the active source
+  note region.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- After restarting the local foreground stack,
+  `pnpm --dir frontend e2e tests/vtext-source-entities.spec.js` passed.
+- The source-flow E2E fixture now includes a second source marker in the
+  paragraph that is composed beside the expanded note. It asserts that:
+  - the nested marker remains visible in the presentation flow;
+  - the nested marker can be expanded and shows its own source transclusion;
+  - the source-flow region remains visible after expanding the nested marker;
+  - source-window creation still works for the active note;
+  - table roundtrip and bounded table edit regressions still pass.
+
+next proof:
+
+- Commit and push the rich-inline correction.
+- Wait for CI/Node B deploy and staging identity.
+- In authenticated Comet on the owner publication, expand the first ABA source
+  and verify both outcomes together: the following paragraph still wraps beside
+  the source note, and the `ABA Model Rule 1.6` confidentiality citation remains
+  a visible interactive marker rather than plain prose.

@@ -4,12 +4,27 @@ import {
   prepareWithSegments,
   type LayoutCursor,
 } from '@chenglou/pretext';
+import {
+  layoutNextRichInlineLineRange,
+  materializeRichInlineLineRange,
+  prepareRichInline,
+  type RichInlineCursor,
+} from '@chenglou/pretext/rich-inline';
+
+export type SourceJournalFlowFragment = {
+  text: string;
+  itemIndex: number;
+  gapBefore: number;
+  occupiedWidth: number;
+  sourceRefHTML?: string;
+};
 
 export type SourceJournalFlowLine = {
   text: string;
   width: number;
   x: number;
   y: number;
+  fragments?: SourceJournalFlowFragment[];
 };
 
 export type SourceJournalFlowLayout = {
@@ -33,6 +48,15 @@ export type SourceJournalFlowOptions = {
 export type SourceJournalFlowBlock = {
   element?: Element;
   text: string;
+  items?: SourceJournalFlowItem[];
+};
+
+export type SourceJournalFlowItem = {
+  text: string;
+  font?: string;
+  break?: 'normal' | 'never';
+  extraWidth?: number;
+  sourceRefHTML?: string;
 };
 
 export type SourceJournalFlowBlocksOptions = Omit<SourceJournalFlowOptions, 'text'> & {
@@ -73,27 +97,69 @@ export function layoutSourceJournalFlowBlocks(options: SourceJournalFlowBlocksOp
   let usedNarrowLines = 0;
 
   for (const block of options.blocks || []) {
+    const richItems = Array.isArray(block?.items)
+      ? block.items
+        .map((item) => ({
+          ...item,
+          text: String(item?.text || ''),
+          font: item?.font || options.font,
+        }))
+        .filter((item) => item.text)
+      : [];
     const text = normalizeFlowText(block?.text);
-    if (!text) continue;
-    const prepared = prepareWithSegments(text, options.font);
-    let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
+    if (richItems.length === 0 && !text) continue;
     const blockStartLineCount = lines.length;
 
-    while (true) {
-      const besideNote = canRouteBesideNote && y < noteHeight;
-      const maxWidth = besideNote ? narrowWidth : containerWidth;
-      const range = layoutNextLineRange(prepared, cursor, maxWidth);
-      if (range === null) break;
-      const line = materializeLineRange(prepared, range);
-      lines.push({
-        text: line.text,
-        width: line.width,
-        x: 0,
-        y,
-      });
-      if (besideNote) usedNarrowLines += 1;
-      cursor = range.end;
-      y += lineHeight;
+    if (richItems.length > 0) {
+      const prepared = prepareRichInline(richItems.map((item) => ({
+        text: item.text,
+        font: item.font || options.font,
+        break: item.break,
+        extraWidth: item.extraWidth,
+      })));
+      let cursor: RichInlineCursor | undefined;
+      while (true) {
+        const besideNote = canRouteBesideNote && y < noteHeight;
+        const maxWidth = besideNote ? narrowWidth : containerWidth;
+        const range = layoutNextRichInlineLineRange(prepared, maxWidth, cursor);
+        if (range === null) break;
+        const line = materializeRichInlineLineRange(prepared, range);
+        lines.push({
+          text: line.fragments.map((fragment) => fragment.text).join(''),
+          width: line.width,
+          x: 0,
+          y,
+          fragments: line.fragments.map((fragment) => ({
+            text: fragment.text,
+            itemIndex: fragment.itemIndex,
+            gapBefore: fragment.gapBefore,
+            occupiedWidth: fragment.occupiedWidth,
+            sourceRefHTML: richItems[fragment.itemIndex]?.sourceRefHTML,
+          })),
+        });
+        if (besideNote) usedNarrowLines += 1;
+        cursor = line.end;
+        y += lineHeight;
+      }
+    } else {
+      const prepared = prepareWithSegments(text, options.font);
+      let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
+      while (true) {
+        const besideNote = canRouteBesideNote && y < noteHeight;
+        const maxWidth = besideNote ? narrowWidth : containerWidth;
+        const range = layoutNextLineRange(prepared, cursor, maxWidth);
+        if (range === null) break;
+        const line = materializeLineRange(prepared, range);
+        lines.push({
+          text: line.text,
+          width: line.width,
+          x: 0,
+          y,
+        });
+        if (besideNote) usedNarrowLines += 1;
+        cursor = range.end;
+        y += lineHeight;
+      }
     }
 
     if (lines.length > blockStartLineCount) {
@@ -134,10 +200,38 @@ function sourceFlowText(node: Node | null, activeSourceRef: Element): string {
   if (node.nodeType !== Node.ELEMENT_NODE) return '';
   const element = node as Element;
   if (element.matches?.('[data-vtext-source-ref]')) {
-    const label = element.getAttribute('data-source-label') || element.querySelector?.('.vtext-source-ref-label')?.textContent || '';
+    const label = element.querySelector?.('.vtext-source-ref-label')?.textContent || element.getAttribute('data-source-label') || '';
     return label ? ` ${label} ` : ' ';
   }
   return Array.from(node.childNodes).map((child) => sourceFlowText(child, activeSourceRef)).join('');
+}
+
+function sourceRefFlowItem(element: Element): SourceJournalFlowItem {
+  const label = element.querySelector?.('.vtext-source-ref-label')?.textContent
+    || element.getAttribute('data-source-label')
+    || 'source';
+  const width = Math.ceil(element.getBoundingClientRect?.().width || 0);
+  return {
+    text: label,
+    font: sourceFlowFont(element),
+    break: 'never',
+    extraWidth: Math.max(0, width - label.length * 4),
+    sourceRefHTML: element.outerHTML,
+  };
+}
+
+function sourceFlowItems(node: Node | null, activeSourceRef: Element, font: string): SourceJournalFlowItem[] {
+  if (!node) return [];
+  if (node === activeSourceRef) return [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    return [{ text: node.textContent || '', font }];
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return [];
+  const element = node as Element;
+  if (element.matches?.('[data-vtext-source-ref]')) {
+    return [sourceRefFlowItem(element)];
+  }
+  return Array.from(node.childNodes).flatMap((child) => sourceFlowItems(child, activeSourceRef, font));
 }
 
 function isSourceFlowBlock(element: Element | null): boolean {
@@ -160,6 +254,7 @@ function collectSourceFlowBlocks(paragraph: Element, sourceRef: Element, layoutO
     blocks.push({
       element: cursor,
       text: sourceFlowText(cursor, sourceRef),
+      items: sourceFlowItems(cursor, sourceRef, layoutOptions.font),
     });
     layout = layoutSourceJournalFlowBlocks({ ...layoutOptions, blocks });
     if (layout.lines.length > 0 && layout.height >= layoutOptions.noteHeight + layoutOptions.lineHeight) break;
@@ -238,14 +333,33 @@ export function mountSourceJournalFlow(sourceRef: Element | null, options: Mount
 
   const lineLayer = document.createElement('div');
   lineLayer.className = 'vtext-source-journal-lines';
-  lineLayer.setAttribute('aria-hidden', 'true');
   for (const line of layout.lines) {
     const lineNode = document.createElement('span');
     lineNode.className = 'vtext-source-journal-line';
-    lineNode.textContent = line.text;
     lineNode.style.left = `${line.x}px`;
     lineNode.style.top = `${line.y}px`;
     lineNode.style.width = `${Math.ceil(line.width + 2)}px`;
+    if (line.fragments?.length) {
+      for (const fragment of line.fragments) {
+        const fragmentNode = document.createElement('span');
+        fragmentNode.className = fragment.sourceRefHTML ? 'vtext-source-journal-fragment vtext-source-journal-fragment--source' : 'vtext-source-journal-fragment';
+        if (fragment.gapBefore > 0) {
+          fragmentNode.style.marginLeft = `${fragment.gapBefore}px`;
+        }
+        if (fragment.sourceRefHTML) {
+          const template = document.createElement('template');
+          template.innerHTML = fragment.sourceRefHTML;
+          const clone = template.content.firstElementChild;
+          if (clone) fragmentNode.append(clone);
+          else fragmentNode.textContent = fragment.text;
+        } else {
+          fragmentNode.textContent = fragment.text;
+        }
+        lineNode.append(fragmentNode);
+      }
+    } else {
+      lineNode.textContent = line.text;
+    }
     lineLayer.append(lineNode);
   }
   flow.append(lineLayer);

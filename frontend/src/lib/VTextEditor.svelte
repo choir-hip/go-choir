@@ -1941,6 +1941,15 @@
 
   function toggleInlineSourceRef(sourceRef) {
     if (!sourceRef) return;
+    const flow = sourceRef.closest?.('[data-vtext-source-flow]');
+    if (flow) {
+      const expanded = sourceRef.getAttribute('data-expanded') === 'true';
+      flow.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
+        if (node !== sourceRef) node.setAttribute('data-expanded', 'false');
+      });
+      sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
+      return;
+    }
     const expanded = sourceRef.getAttribute('data-expanded') === 'true';
     clearSourceJournalFlows(editorSurface);
     editorSurface?.querySelectorAll?.('[data-vtext-source-ref][data-expanded="true"]').forEach((node) => {
@@ -3340,6 +3349,15 @@
     font: inherit;
     line-height: var(--vtext-source-flow-line-height);
     white-space: pre;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-fragment) {
+    display: inline;
+    white-space: pre;
+  }
+
+  .rendered-doc :global(.vtext-source-journal-fragment--source .vtext-source-ref) {
+    vertical-align: super;
   }
 
   .rendered-doc :global(.vtext-source-journal-note) {

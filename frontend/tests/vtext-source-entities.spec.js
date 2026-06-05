@@ -117,6 +117,30 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
           evidence: { state: 'available', research_state: 'confirmed' },
           provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
         },
+        {
+          entity_id: 'src-fixture-nested',
+          kind: 'ethics_rule',
+          label: 'ABA Model Rule 1.6 fixture',
+          target: {
+            target_kind: 'url',
+            url: 'https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/',
+            canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/',
+          },
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: 'A lawyer shall not reveal information relating to the representation of a client unless the client gives informed consent.',
+            },
+          ],
+          display: {
+            inline_mode: 'embedded_excerpt',
+            expanded_mode: 'source_card',
+            open_surface: 'source',
+            default_collapsed: true,
+          },
+          evidence: { state: 'available', research_state: 'confirmed' },
+          provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+        },
       ],
     };
     const paragraphs = [
@@ -124,7 +148,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
         'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents.',
         '[ethics guidance](source:src-fixture-flow)',
       ].join(' '),
-      'Second paragraph keeps using the reading measure beside the expanded evidence, proving that the source flow is a composed journal region rather than a paragraph-local card or native float.',
+      'Second paragraph keeps using the reading measure beside the expanded evidence while preserving [confidentiality](source:src-fixture-nested) as its own citation marker rather than flattening it into prose.',
       'Third paragraph gives the layout enough prose to continue below the source note after the narrow line region ends.',
     ];
     const revRes = await fetch(`/api/vtext/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
@@ -148,7 +172,7 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
   await vtextWindow.locator('[data-vtext-recent-document]').filter({ hasText: created.title }).click();
 
   const rendered = vtextWindow.locator('[data-vtext-rendered]');
-  const citation = rendered.locator('[data-vtext-source-ref]').first();
+  const citation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
   const flow = rendered.locator('[data-vtext-source-flow]');
@@ -167,8 +191,14 @@ test('VText lays out expanded text sources as noncanonical journal flow', async 
     });
   });
   expect(lowerWrappedLine).toBe(true);
+  const nestedCitation = flow.locator('[data-vtext-source-ref][data-source-entity-id="src-fixture-nested"]');
+  await expect(nestedCitation).toBeVisible();
+  await nestedCitation.click();
+  await expect(nestedCitation).toHaveAttribute('data-expanded', 'true');
+  await expect(nestedCitation.locator('[data-vtext-inline-transclusion]')).toContainText('ABA Model Rule 1.6 fixture');
+  await expect(flow).toBeVisible();
 
-  await flow.locator('[data-vtext-open-source]').click();
+  await flow.locator('[data-vtext-open-source][data-source-entity-id="src-fixture-flow"]').click();
   await expect(page.locator('[data-window]').filter({ hasText: 'ABA Formal Opinion 512 fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
 
