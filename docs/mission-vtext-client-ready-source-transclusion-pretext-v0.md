@@ -1275,3 +1275,54 @@ remaining error field:
 
 - Commit, push, wait for CI and Node B deploy, confirm staging commit identity,
   then rerun the authenticated Comet/Web Lens Qdrant proof.
+
+## 2026-06-05 Deployed Proof: Canonical Alternate Recovery Works
+
+status: deployed_authenticated_proof_passed
+
+land/deploy evidence:
+
+- Commit `b3c6fbba0cc8b404b9372855454b7c200fa60877`
+  (`fix: follow browser canonical alternates`) was pushed to `origin/main`.
+- GitHub Actions CI run `27031813065` passed, including all runtime shards,
+  integration-tagged smoke, non-runtime tests, Go vet/build, and Node B deploy.
+- FlakeHub publish run `27031813002` passed.
+- `https://choir.news/health` reported proxy and sandbox
+  commit/deployed_commit `b3c6fbba0cc8b404b9372855454b7c200fa60877`,
+  deployed at `2026-06-05T18:09:13Z`.
+
+authenticated Comet proof:
+
+- Computer Use on Comet opened the authenticated owner account session at the
+  owner publication route
+  `https://choir.news/pub/vtext/legal-cloud-proposal-source-backed-owner-vtext-v83-puba59314454`.
+- The stale pre-deploy Web Lens session was closed, then Web Lens was
+  navigated fresh to `https://qdrant.tech/documentation/search/`.
+- The iframe/page preview still failed with `qdrant.tech refused to connect`,
+  which is expected for a frame-blocked external page and is not the acceptance
+  target.
+- Opening the readable Web Lens snapshot returned `Web Lens snapshot partial:
+  obscura`, the warning
+  `backend browser text snapshot was empty; used declared markdown alternate
+  https://qdrant.tech/documentation/search/search/index.md`, and readable
+  Qdrant Markdown beginning with `# Search`, `# Similarity search`, and prose
+  about nearest-vector search.
+
+what this proves:
+
+- The deployed authenticated product path now recovers a readable source
+  snapshot from a low-content canonical/meta-refresh shell by following the
+  canonical page's declared Markdown alternate.
+- The fix is in the generic browser snapshot acquisition path and does not rely
+  on Qdrant, legal-cloud, or VText renderer special cases.
+
+remaining error field:
+
+- Continue the next mission axis on the owner proposal: source/citation
+  expansion must become a real article workflow, not top-of-article source
+  bunching, placeholder `missing source` prose, or static source cards.
+- Implement the Pretext-backed inline/expanded source-card layout after the
+  current source graph and owner publication behavior remain stable.
+- The hard mission/system review and simplification pass remain gated on a
+  working client-ready artifact with staging proof, not just this source
+  acquisition repair.
