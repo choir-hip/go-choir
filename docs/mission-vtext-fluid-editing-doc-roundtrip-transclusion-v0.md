@@ -2692,3 +2692,49 @@ remaining error field:
 - The next code pass should be simplification and pruning only where it preserves
   the existing tested behavior. It should not be treated as acceptance proof and
   should not replace the owner-account proof still blocked by passkey access.
+
+2026-06-05 owner Sources-panel access checkpoint:
+
+status: checkpoint_incomplete
+
+new evidence before code:
+
+- Computer Use remains available. The `get_app_state` read path worked for
+  Comet, but click attempts using `app: "Comet"` returned a plugin/session
+  state error saying Computer Use was not active. Retrying with the exact bundle
+  id `ai.perplexity.comet` and a coordinate click worked. This is a tool
+  targeting/session quirk, not a Choir product failure.
+- The authenticated Comet Choir tab is currently open to staging
+  `https://choir.news/` with the private owner document
+  `choir_private_legal_cloud_proposal.md` visible at `v81`, state `Latest`.
+  The page is not currently blocked by the passkey overlay.
+- Opening the owner document `Sources` panel through Computer Use exposed
+  visible owner-head metadata evidence for `v81`: `revision kind`
+  `focused_user_edit_diff`, `operation type` `apply_edits`, `prompt chars`
+  `12886`, `edits` `2`, `delta chars` `-216`, and `latency ms` `19`.
+  This is deployed owner-account UI evidence that ordinary revision metadata is
+  visible on the owner head.
+- The same owner `Sources` panel reports `0 source entities`; its repair JSON
+  contains an empty `citation_resolutions` array. Therefore the source/citation
+  realism axis is not yet accepted on the owner document: there is no visible
+  owner source entity to open, and no owner citation resolution has been applied
+  through the deployed panel.
+
+belief-state update:
+
+- The prior passkey blocker is not absolute in the current Comet session. Owner
+  UI proof can resume, but mutating the owner document should remain bounded and
+  reversible.
+- The owner metadata proof gap is substantially reduced by the visible v81
+  edit-evidence strip. Remaining owner proof should focus on bounded appendix
+  table edit survival, canonical `.vtext` title migration, and creating or
+  repairing source/citation transclusion points from the current owner head.
+
+remaining error field:
+
+- Still unproven on the actual owner document: canonical title migration from
+  `choir_private_legal_cloud_proposal.md` to `.vtext` on the next owner VText
+  write, bounded appendix-table edit survival, source-gap repair that creates or
+  attaches real source entities through the deployed `Sources` panel, citation
+  marker expansion into transclusions on that owner head, and source-window
+  opening from that owner head.
