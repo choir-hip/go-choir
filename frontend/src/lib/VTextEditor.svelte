@@ -24,6 +24,7 @@
     previewVTextMerge,
     publishVText,
     resolvePublication,
+    restoreVTextRevision,
     semanticCompareVText,
     submitAgentRevision,
     submitPublicationProposal,
@@ -81,6 +82,7 @@
   let compareError = '';
   let comparePending = false;
   let mergePending = false;
+  let restorePending = false;
   let mergePreview = null;
   let selectedMergeSuggestionIds = [];
   let removeLiveListener = () => {};
@@ -1693,6 +1695,31 @@
     }
   }
 
+  async function handleRestoreHistoricalRevision() {
+    if (!currentDoc || !currentRevision || !isViewingHistorical || restorePending) return;
+    restorePending = true;
+    error = '';
+    saveStatus = `Restoring ${versionLabel}...`;
+    try {
+      const revision = await restoreVTextRevision(currentDoc.doc_id, {
+        revisionId: currentRevision.revision_id,
+        mode: 'restore_as_latest',
+      });
+      resetCompareMergeState();
+      await reloadDocument(revision.revision_id);
+      saveStatus = `Restored ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      error = err.message || 'Failed to restore version';
+      saveStatus = 'Restore failed';
+    } finally {
+      restorePending = false;
+    }
+  }
+
   async function handleDiscardMerge() {
     const targetId = mergePreview?.target_revision_id || currentDoc?.current_revision_id || currentRevision?.revision_id || '';
     resetCompareMergeState();
@@ -2159,6 +2186,16 @@
               >
                 {comparePending ? 'Comparing…' : 'Compare'}
               </button>
+              {#if isViewingHistorical}
+                <button
+                  class="secondary-action"
+                  data-vtext-restore-version
+                  on:click={handleRestoreHistoricalRevision}
+                  disabled={loading || submitting || agentPending || restorePending || !currentRevision}
+                >
+                  {restorePending ? 'Restoring…' : 'Restore'}
+                </button>
+              {/if}
               {#if compareResult}
                 <button
                   class="secondary-action"
