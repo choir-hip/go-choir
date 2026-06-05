@@ -11,7 +11,9 @@
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
     acceptVTextMerge,
+    attachVTextSourceArtifacts,
     cancelAgentRevision,
+    createContentItem,
     createDocument,
     createRevision,
     ensureDocumentManifest,
@@ -25,6 +27,7 @@
     previewVTextMerge,
     publishVText,
     repairVTextSourceGaps,
+    importContentURL,
     resolvePublication,
     restoreVTextRevision,
     semanticCompareVText,
@@ -40,6 +43,7 @@
     sourceEntityID,
     sourceEntityKindLabel,
     sourceEntityOpenAppID,
+    selectorTextQuote,
     sourceEntityTargetURL,
     sourceEntityTitle,
   } from './vtext-source-renderer';
@@ -103,6 +107,13 @@
   let sourceRepairPending = false;
   let sourceRepairPayload = '';
   let sourceRepairError = '';
+  let selectedSourceEntityID = '';
+  let sourceArtifactTitle = '';
+  let sourceArtifactURL = '';
+  let sourceArtifactText = '';
+  let sourceArtifactPending = false;
+  let sourceArtifactStatus = '';
+  let sourceArtifactError = '';
   let sourceOpenPointerHandledAt = 0;
   let sourceOpenPointerHandledEntityID = '';
   let removeLiveListener = () => {};
@@ -351,6 +362,50 @@
   function ensureSourceRepairPayload() {
     if (sourceRepairPayload.trim()) return;
     sourceRepairPayload = JSON.stringify(defaultSourceRepairPayload(), null, 2);
+  }
+
+  function selectedSourceEntity() {
+    return sourceEntities.find((entity) => sourceEntityID(entity) === selectedSourceEntityID) || sourceEntities[0] || null;
+  }
+
+  function prepareSourceArtifactForm(entity = selectedSourceEntity()) {
+    if (!entity) return;
+    selectedSourceEntityID = sourceEntityID(entity);
+    sourceArtifactTitle = sourceEntityTitle(entity);
+    sourceArtifactURL = sourceEntityTargetURL(entity);
+    sourceArtifactText = '';
+    sourceArtifactStatus = '';
+    sourceArtifactError = '';
+  }
+
+  function ensureSourceArtifactSelection() {
+    if (selectedSourceEntityID && sourceEntities.some((entity) => sourceEntityID(entity) === selectedSourceEntityID)) return;
+    if (sourceEntities.length > 0) {
+      prepareSourceArtifactForm(sourceEntities[0]);
+    }
+  }
+
+  function contentItemPayloadForSource(entity, text) {
+    const title = sourceArtifactTitle.trim() || sourceEntityTitle(entity);
+    const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
+    return {
+      source_type: 'text',
+      media_type: 'text/markdown',
+      app_hint: 'content',
+      title,
+      source_url: sourceURL,
+      canonical_url: sourceURL,
+      text_content: text,
+      metadata: {
+        source_entity_id: sourceEntityID(entity),
+        created_from: 'vtext_source_artifact_ui',
+      },
+      provenance: {
+        rights_scope: 'public_source',
+        publish_source_snapshot: true,
+        untrusted_source_text: true,
+      },
+    };
   }
 
   function publicationBundleSourceEntities(bundle = publishedBundle) {
@@ -914,6 +969,8 @@
     resetCompareMergeState();
     sourceRepairError = '';
     sourceRepairPayload = '';
+    sourceArtifactError = '';
+    sourceArtifactStatus = '';
     const summary = revisions[index];
     const revision = await getRevision(summary.revision_id);
     currentRevision = revision;
@@ -924,7 +981,10 @@
     if (summary.revision_id === knownHeadId) {
       clearNewVersionIndicator();
     }
-    if (sourcePanelOpen) ensureSourceRepairPayload();
+    if (sourcePanelOpen) {
+      ensureSourceRepairPayload();
+      ensureSourceArtifactSelection();
+    }
   }
 
   async function writeThroughToFile(content) {
@@ -1157,6 +1217,13 @@
     sourceRepairPending = false;
     sourceRepairPayload = '';
     sourceRepairError = '';
+    selectedSourceEntityID = '';
+    sourceArtifactTitle = '';
+    sourceArtifactURL = '';
+    sourceArtifactText = '';
+    sourceArtifactPending = false;
+    sourceArtifactStatus = '';
+    sourceArtifactError = '';
     resetCompareMergeState();
     clearAutosaveTimer();
     clearNewVersionIndicator();
@@ -1688,6 +1755,97 @@
     }
   }
 
+  async function attachContentItemToSelectedSource(item, entity = selectedSourceEntity()) {
+    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !sourceEntityID(entity) || !item?.content_id) {
+      throw new Error('Choose a source and readable content item first');
+    }
+    const revision = await attachVTextSourceArtifacts(currentDoc.doc_id, {
+      base_revision_id: currentRevision.revision_id,
+      author_label: getAuthorLabel(),
+      attachments: [{
+        entity_id: sourceEntityID(entity),
+        content_id: item.content_id,
+        text_quote: selectorTextQuote(entity),
+      }],
+    });
+    sourceDiagnosis = null;
+    sourceRepairPayload = '';
+    await reloadDocument(revision.revision_id);
+    ensureSourceRepairPayload();
+    return revision;
+  }
+
+  async function handleImportAndAttachSourceArtifact() {
+    const entity = selectedSourceEntity();
+    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
+    const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
+    if (!sourceURL) {
+      sourceArtifactError = 'Source URL is required for URL import';
+      return;
+    }
+    sourceArtifactPending = true;
+    sourceArtifactError = '';
+    sourceArtifactStatus = 'Importing source URL...';
+    saveStatus = 'Importing source artifact...';
+    try {
+      const item = await importContentURL(sourceURL, sourceArtifactTitle.trim() || sourceEntityTitle(entity));
+      sourceArtifactStatus = 'Attaching imported source...';
+      await attachContentItemToSelectedSource(item, entity);
+      sourceArtifactStatus = `Attached imported source to ${sourceEntityTitle(entity)}`;
+      saveStatus = `Attached source artifact in ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      sourceArtifactError = err.message || 'Source import failed';
+      sourceArtifactStatus = '';
+      saveStatus = 'Source attachment failed';
+    } finally {
+      sourceArtifactPending = false;
+    }
+  }
+
+  async function handleCreateAndAttachSourceArtifact() {
+    const entity = selectedSourceEntity();
+    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'vtext_source_artifact', appId: 'vtext', appName: 'VText', title: currentDoc.title });
+      return;
+    }
+    const text = sourceArtifactText.trim();
+    if (!text) {
+      sourceArtifactError = 'Readable source text is required';
+      return;
+    }
+    sourceArtifactPending = true;
+    sourceArtifactError = '';
+    sourceArtifactStatus = 'Creating source artifact...';
+    saveStatus = 'Creating source artifact...';
+    try {
+      const item = await createContentItem(contentItemPayloadForSource(entity, text));
+      sourceArtifactStatus = 'Attaching source artifact...';
+      await attachContentItemToSelectedSource(item, entity);
+      sourceArtifactText = '';
+      sourceArtifactStatus = `Attached source artifact to ${sourceEntityTitle(entity)}`;
+      saveStatus = `Attached source artifact in ${versionLabel}`;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      sourceArtifactError = err.message || 'Source attachment failed';
+      sourceArtifactStatus = '';
+      saveStatus = 'Source attachment failed';
+    } finally {
+      sourceArtifactPending = false;
+    }
+  }
+
   async function handleDiscardMerge() {
     const targetId = mergePreview?.target_revision_id || currentDoc?.current_revision_id || currentRevision?.revision_id || '';
     resetCompareMergeState();
@@ -2030,6 +2188,7 @@
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
+  $: if (sourcePanelOpen) ensureSourceArtifactSelection();
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2386,29 +2545,101 @@
           {/if}
 
           {#if !isPublishedReadOnly}
-            <label class="source-repair-editor">
-              <span>Repair JSON</span>
-              <textarea
-                data-vtext-source-repair-payload
-                bind:value={sourceRepairPayload}
-                spellcheck="false"
-                rows="6"
-              ></textarea>
-            </label>
-            <div class="source-panel-actions">
-              <button
-                type="button"
-                class="primary-action"
-                data-vtext-apply-source-repair
-                on:click={handleApplySourceRepair}
-                disabled={sourceRepairPending || !currentDoc || !currentRevision}
-              >
-                {sourceRepairPending ? 'Repairing…' : 'Apply repair'}
-              </button>
-              {#if sourceRepairError}
-                <span class="source-repair-error" role="alert">{sourceRepairError}</span>
+            <div class="source-artifact-panel" data-vtext-source-artifact-panel>
+              <div class="source-artifact-heading">
+                <span class="evidence-label">Source artifact</span>
+                <strong>{selectedSourceEntity() ? sourceEntityTitle(selectedSourceEntity()) : 'Choose a source'}</strong>
+              </div>
+              {#if sourceEntities.length > 0}
+                <div class="source-artifact-picker" role="listbox" aria-label="Source artifact target">
+                  {#each sourceEntities as entity}
+                    <button
+                      type="button"
+                      class:selected={sourceEntityID(entity) === selectedSourceEntityID}
+                      data-vtext-source-artifact-target
+                      data-source-entity-id={sourceEntityID(entity)}
+                      on:click={() => prepareSourceArtifactForm(entity)}
+                    >
+                      {sourceEntityTitle(entity)}
+                    </button>
+                  {/each}
+                </div>
+                <label class="source-artifact-field">
+                  <span>Title</span>
+                  <input data-vtext-source-artifact-title bind:value={sourceArtifactTitle} />
+                </label>
+                <label class="source-artifact-field">
+                  <span>URL</span>
+                  <input data-vtext-source-artifact-url bind:value={sourceArtifactURL} />
+                </label>
+                <div class="source-panel-actions">
+                  <button
+                    type="button"
+                    class="secondary-action"
+                    data-vtext-import-source-artifact
+                    on:click={handleImportAndAttachSourceArtifact}
+                    disabled={sourceArtifactPending || !currentDoc || !currentRevision || !sourceArtifactURL.trim()}
+                  >
+                    {sourceArtifactPending ? 'Working…' : 'Import URL'}
+                  </button>
+                </div>
+                <label class="source-artifact-field">
+                  <span>Readable source text</span>
+                  <textarea
+                    data-vtext-source-artifact-text
+                    bind:value={sourceArtifactText}
+                    spellcheck="true"
+                    rows="7"
+                  ></textarea>
+                </label>
+                <div class="source-panel-actions">
+                  <button
+                    type="button"
+                    class="primary-action"
+                    data-vtext-attach-source-artifact
+                    on:click={handleCreateAndAttachSourceArtifact}
+                    disabled={sourceArtifactPending || !currentDoc || !currentRevision || !sourceArtifactText.trim()}
+                  >
+                    {sourceArtifactPending ? 'Attaching…' : 'Attach text'}
+                  </button>
+                  {#if sourceArtifactStatus}
+                    <span class="source-artifact-status" role="status">{sourceArtifactStatus}</span>
+                  {/if}
+                  {#if sourceArtifactError}
+                    <span class="source-repair-error" role="alert">{sourceArtifactError}</span>
+                  {/if}
+                </div>
+              {:else}
+                <p class="source-artifact-empty">No source entities are available in this revision.</p>
               {/if}
             </div>
+
+            <details class="source-repair-advanced">
+              <summary>Advanced marker repair</summary>
+              <label class="source-repair-editor">
+                <span>Repair JSON</span>
+                <textarea
+                  data-vtext-source-repair-payload
+                  bind:value={sourceRepairPayload}
+                  spellcheck="false"
+                  rows="6"
+                ></textarea>
+              </label>
+              <div class="source-panel-actions">
+                <button
+                  type="button"
+                  class="secondary-action"
+                  data-vtext-apply-source-repair
+                  on:click={handleApplySourceRepair}
+                  disabled={sourceRepairPending || !currentDoc || !currentRevision}
+                >
+                  {sourceRepairPending ? 'Repairing…' : 'Apply marker repair'}
+                </button>
+                {#if sourceRepairError}
+                  <span class="source-repair-error" role="alert">{sourceRepairError}</span>
+                {/if}
+              </div>
+            </details>
           {/if}
         </section>
       {/if}
@@ -2831,6 +3062,107 @@
     font-size: 0.66rem;
     font-weight: 720;
     text-transform: uppercase;
+  }
+
+  .source-artifact-panel {
+    display: grid;
+    gap: 0.55rem;
+    border-left: 2px solid var(--choir-border-strong);
+    padding-left: 0.7rem;
+  }
+
+  .source-artifact-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .source-artifact-heading strong {
+    min-width: 0;
+    color: var(--choir-text-primary);
+    font-size: 0.82rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-artifact-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.32rem;
+  }
+
+  .source-artifact-picker button {
+    border: 1px solid var(--choir-border-subtle);
+    border-radius: 999px;
+    padding: 0.24rem 0.52rem;
+    color: var(--choir-text-secondary);
+    background: transparent;
+    font-size: 0.68rem;
+    font-weight: 720;
+    cursor: pointer;
+  }
+
+  .source-artifact-picker button.selected {
+    border-color: var(--choir-border-strong);
+    color: var(--choir-text-primary);
+    background: var(--choir-state-selected);
+  }
+
+  .source-artifact-field {
+    display: grid;
+    gap: 0.26rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 720;
+  }
+
+  .source-artifact-field input,
+  .source-artifact-field textarea {
+    width: 100%;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 6px;
+    padding: 0.48rem 0.54rem;
+    color: var(--choir-text-primary);
+    background: var(--choir-state-selected);
+    font: inherit;
+    line-height: 1.35;
+  }
+
+  .source-artifact-field textarea {
+    min-height: 7rem;
+    resize: vertical;
+  }
+
+  .source-artifact-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--choir-text-secondary);
+    font-size: 0.74rem;
+    line-height: 1.35;
+  }
+
+  .source-artifact-empty {
+    margin: 0;
+    color: var(--choir-text-secondary);
+    font-size: 0.76rem;
+  }
+
+  .source-repair-advanced {
+    color: var(--choir-text-secondary);
+    font-size: 0.72rem;
+  }
+
+  .source-repair-advanced summary {
+    cursor: pointer;
+    font-weight: 760;
+  }
+
+  .source-repair-advanced[open] {
+    display: grid;
+    gap: 0.5rem;
   }
 
   .source-repair-editor {

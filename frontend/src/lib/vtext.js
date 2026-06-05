@@ -17,6 +17,9 @@
  *   GET    /api/vtext/revisions/{id}/blame        — blame revision
  *   GET    /api/vtext/documents/{id}/stream       — document-scoped stream
  *   POST   /api/vtext/documents/{id}/revise        — request a VText revision
+ *   POST   /api/vtext/documents/{id}/source-attachments — attach readable source artifacts
+ *   POST   /api/content/items                      — create owner-scoped content item
+ *   POST   /api/content/import-url                 — import readable URL content
  *   POST   /api/platform/vtext/publications        — publish selected VText revision
  *   GET    /api/platform/publications/resolve      — resolve public publication bundle
  *   GET    /api/platform/publications/export       — export canonical publication artifact
@@ -33,6 +36,10 @@ function vtextPath(path) {
 
 function platformPath(path) {
   return `/api/platform${path}`;
+}
+
+function contentPath(path) {
+  return `/api/content${path}`;
 }
 
 async function decodeError(res, fallback) {
@@ -306,6 +313,48 @@ export async function repairVTextSourceGaps(docId, payload = {}) {
 
   if (!res.ok) {
     await decodeError(res, `Repair VText sources failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function attachVTextSourceArtifacts(docId, payload = {}) {
+  const res = await fetchWithRenewal(vtextPath(`/documents/${encodeURIComponent(docId)}/source-attachments`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Attach VText source artifacts failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function createContentItem(payload = {}) {
+  const res = await fetchWithRenewal(contentPath('/items'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Create content item failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function importContentURL(url, query = '') {
+  const res = await fetchWithRenewal(contentPath('/import-url'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, query }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Import source URL failed (${res.status})`);
   }
 
   return res.json();

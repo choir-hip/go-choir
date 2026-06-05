@@ -3810,3 +3810,48 @@ next executable probe:
   or import readable content for a selected source entity, call the deployed
   endpoint, and prove in Comet that the legal-cloud proposal gains a new
   metadata-only revision without changing article content.
+
+## 2026-06-05 Repair: Source Artifact Attachment UI
+
+status: local_repair_verified_pending_deploy
+
+implementation:
+
+- `frontend/src/lib/vtext.js` now exposes client helpers for:
+  - `POST /api/vtext/documents/{id}/source-attachments`;
+  - `POST /api/content/items`;
+  - `POST /api/content/import-url`.
+- `frontend/src/lib/VTextEditor.svelte` now adds an owner-facing source
+  artifact workflow to the source panel:
+  - select an existing source entity;
+  - import its URL as a readable content item;
+  - or paste readable Markdown/text into a content item;
+  - attach the resulting content item to the selected source entity as a
+    metadata-only VText revision;
+  - refresh the document head after the canonical revision is created.
+- The older unresolved-marker `Repair JSON` editor remains available only under
+  an advanced disclosure. It is no longer the primary visible source workflow.
+
+local verification:
+
+- `pnpm --dir frontend build` passed.
+- `git diff --check` passed.
+
+belief update:
+
+- The deployed source-attachment endpoint now has a Comet-operable owner UI
+  path. This should enable owner proof without bookmarklets, cookie extraction,
+  raw API calls, or the old marker-repair JSON workaround.
+- This is still intentionally utilitarian. The UI lets the owner repair the
+  source graph; it does not claim to solve the Pretext/journal article-flow
+  axis or the broader source-reader cleanup.
+
+remaining proof:
+
+- Commit, push, wait for CI and Node B deploy, confirm staging identity.
+- In authenticated Comet, select one of the HTTP 403 owner sources, attach a
+  readable source artifact, verify the proposal advances to a new revision
+  without changing article content, republish, and prove the public/authorized
+  source window uses the attached reader snapshot.
+- Repeat or generalize for all three failing owner sources only after the first
+  owner proof confirms the UI and endpoint operate correctly on staging.
