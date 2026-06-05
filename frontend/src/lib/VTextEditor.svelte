@@ -804,8 +804,8 @@
   function openPublishedURL(result = publishResult) {
     const publicURL = publicURLForPublishResult(result);
     if (!publicURL || typeof window === 'undefined') return false;
-    const opened = window.open(publicURL, '_blank', 'noopener,noreferrer');
-    return !!opened;
+    window.location.assign(publicURL);
+    return true;
   }
 
   async function copyPublicURL(publicURL) {
@@ -2209,8 +2209,6 @@
               class="public-link"
               data-vtext-public-link
               href={publicURLForPublishResult(publishResult)}
-              target="_blank"
-              rel="noreferrer"
             >
               {publicURLForPublishResult(publishResult) || 'Public route ready'}
             </a>
