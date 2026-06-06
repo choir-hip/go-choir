@@ -498,6 +498,136 @@ remaining risks:
 - Visual/manual inspection of downloaded real proposal artifacts still remains
   for final Loop 8 acceptance.
 
+### Problem L8-5: HTML Rich Export Is Semantic But Browser-Default, Not Document-Professional
+
+Status: `documented_unfixed`.
+
+problem: after the first rich export fix, HTML no longer leaks raw Markdown
+syntax, but visual inspection of a staging-generated artifact shows a
+browser-default document rather than a professional publication export. The
+page uses default margins/fonts, unbounded line length, plain tables without
+document styling, and an unpolished source appendix. That is better than copied
+Markdown, but it is not the Loop 8 target: a format-native, content-forward
+professional document with source provenance.
+
+evidence:
+
+```text
+staging product-path artifact:
+  /tmp/choir-rich-export-visual-proof/rich-export-visual-proof.html
+
+visual render:
+  /tmp/choir-rich-export-visual-proof/html-render.png
+
+publication:
+  https://choir.news/pub/vtext/rich-export-visual-proof-1780777604534-pubdba4af408
+
+observed:
+  semantic headings, paragraphs, table, and source appendix are present;
+  no raw Markdown syntax is visible;
+  document typography, width, spacing, table borders, citation styling, and
+  source appendix styling are still browser defaults.
+```
+
+acceptance:
+
+- HTML rich export includes a default-professional document profile with
+  bounded readable measure, page margins, heading hierarchy, paragraph rhythm,
+  table borders/cell padding, citation marker styling, and source appendix
+  styling;
+- the profile is represented as an explicit export-profile concept, not as
+  unrelated ad hoc CSS constants;
+- embedded JSON-LD and `choir-source-manifest` remain present;
+- source IDs may remain in machine-readable attributes/manifests, but visible
+  body citations should read as professional markers or labels.
+
+### Problem L8-6: PDF Rich Export Flattens Structure And Misrenders Document Glyphs
+
+Status: `documented_unfixed`.
+
+problem: after the first rich export fix, PDF content is generated from the
+`PublicationDocument` spine, but the visual artifact still looks like a plain
+text dump. It duplicates the document title, does not differentiate heading
+levels, flattens tables into pipe-delimited text, and renders list bullets with
+an incorrect glyph under the current PDF font encoding. This fails the
+format-native PDF requirement even though source metadata and visible source
+appendix text are present.
+
+evidence:
+
+```text
+staging product-path artifact:
+  /tmp/choir-rich-export-visual-proof/rich-export-visual-proof.pdf
+
+visual render:
+  /tmp/choir-rich-export-visual-proof/pdf-pages/page-1.png
+
+observed:
+  title appears twice;
+  heading hierarchy is not visibly represented;
+  list bullets render as bad glyphs;
+  table content is flattened with pipes rather than rendered as a table;
+  source appendix exists but shares the same plain text treatment as body text.
+```
+
+acceptance:
+
+- PDF renders blocks directly as layout operations, not by flattening the whole
+  document to wrapped plain text first;
+- title and first H1 are not duplicated;
+- headings, paragraphs, lists, tables, source markers, and source appendix have
+  distinct PDF layout treatment;
+- bullet/list markers render predictably under the chosen PDF font encoding;
+- source manifest XMP metadata remains embedded and extraction tests still
+  prove it.
+
+### Problem L8-7: DOCX Rich Export Still Exposes Internal Source IDs And Lacks Profile Polish
+
+Status: `documented_unfixed`.
+
+problem: after the first rich export fix, DOCX is a true WordprocessingML
+package with runs, tables, custom properties, and a custom XML source manifest.
+Visual Quick Look inspection shows it is much closer to a real document than
+the previous Markdown-in-container export. However, the visible inline source
+marker exposes the internal source entity id (`src-...`), the default Word
+styling is crude, and the source/citation rendering is not yet a
+professional-profile choice such as numeric footnote/endnote markers with a
+source appendix.
+
+evidence:
+
+```text
+staging product-path artifact:
+  /tmp/choir-rich-export-visual-proof/rich-export-visual-proof.docx
+
+visual render:
+  /tmp/choir-rich-export-visual-proof/docx-quicklook/rich-export-visual-proof.docx.png
+
+local limitation:
+  LibreOffice/soffice is not installed in this environment, so the full
+  render_docx.py page-render workflow could not be used. Quick Look thumbnail
+  inspection was used as the available visual check.
+
+observed:
+  WordprocessingML headings, bold runs, table borders, source marker, source
+  appendix, custom properties, and custom XML manifest are present;
+  visible body marker includes internal source id rather than a professional
+  citation marker;
+  typography, heading hierarchy, table spacing, and source appendix treatment
+  need a default-professional export profile.
+```
+
+acceptance:
+
+- DOCX visible source references use profile-selected citation markers
+  instead of exposing internal source entity IDs in body text;
+- internal source IDs remain recoverable from custom XML/custom properties and
+  any machine-readable relationship metadata;
+- DOCX styles define the default-professional profile for title/headings/body,
+  list/table/source appendix treatment, and future firm-specific overrides;
+- extraction tests verify the manifest, policy, and source IDs survive while
+  body text no longer exposes raw `src-...` markers as the visible citation.
+
 ## Suggested Goal String
 
 ```text
