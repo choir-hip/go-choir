@@ -3,7 +3,14 @@
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
-  import { sourceEntityExcerptText, sourceEntityReaderSnapshotText } from './vtext-source-renderer';
+  import {
+    normalizeSourceEvidenceState,
+    sourceEntityExcerptText,
+    sourceEntityReaderSnapshotText,
+    sourceEvidenceResearchLabel,
+    sourceEvidenceState,
+    sourceEvidenceStateLabel,
+  } from './vtext-source-renderer';
 
   export let appContext = {};
 
@@ -37,7 +44,10 @@
   $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);
   $: sourceOpenPlan = appContext?.sourceOpenPlan || {};
   $: allowLiveImport = !!appContext?.allowLiveImport || !!sourceOpenPlan.liveOriginal;
-  $: sourceState = sourceEntity?.evidence?.state || sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '';
+  $: sourceState = sourceEvidenceState(sourceEntity)
+    || normalizeSourceEvidenceState(sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '');
+  $: sourceStateLabel = sourceEvidenceStateLabel(sourceState);
+  $: sourceResearchLabel = sourceEvidenceResearchLabel(sourceEntity?.evidence?.research_state);
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
@@ -108,7 +118,7 @@
       <h2>{title}</h2>
       {#if isSourceReader && (sourceState || mediaType)}
         <p class="source-kicker">
-          {#if sourceState}<span>{sourceState}</span>{/if}
+          {#if sourceState}<span>{sourceStateLabel}</span>{/if}
           {#if mediaType}<span>{mediaType}</span>{/if}
         </p>
       {/if}
@@ -179,7 +189,7 @@
             <p><strong>Content item:</strong> {sourceEntityTarget.content_id}</p>
           {/if}
           {#if sourceEntity?.evidence}
-            <p><strong>Evidence:</strong> {sourceEntity.evidence.state || 'available'} / {sourceEntity.evidence.research_state || 'unclassified'}</p>
+            <p><strong>Evidence:</strong> {sourceStateLabel}{sourceResearchLabel ? ` / ${sourceResearchLabel}` : ''}</p>
           {/if}
         </details>
       {/if}

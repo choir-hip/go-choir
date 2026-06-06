@@ -557,18 +557,19 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toContainText(sourceLabel);
   await expect(sourceWindow).toContainText(excerpt);
-  await expect(sourceWindow.locator('[data-source-entity]')).toContainText('confirms / owner_supplied');
+  await expect(sourceWindow.locator('[data-source-entity]')).toContainText('Confirms claim / Owner supplied');
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
   await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
 
   await expect(sourcePanel.locator('[data-vtext-source-entities]')).toContainText(sourceLabel);
+  await expect(sourcePanel.locator('[data-vtext-source-entity-chip]').filter({ hasText: sourceLabel })).toContainText('Confirms claim');
   await sourcePanel.locator('[data-vtext-source-entity-chip]').filter({ hasText: sourceLabel }).click();
   await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
   const panelSourceWindow = page.locator('[data-content-viewer]').last();
   await expect(panelSourceWindow).toContainText(sourceLabel);
   await expect(panelSourceWindow).toContainText(excerpt);
-  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText('confirms / owner_supplied');
+  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText('Confirms claim / Owner supplied');
   await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
 });
 

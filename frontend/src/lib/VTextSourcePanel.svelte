@@ -5,6 +5,8 @@
     sourceEntityKindLabel,
     sourceEntityTargetURL,
     sourceEntityTitle,
+    sourceEvidenceState,
+    sourceEvidenceStateLabel,
   } from './vtext-source-renderer';
 
   export let currentDoc = null;
@@ -92,6 +94,7 @@
         >
           <strong>{sourceEntityTitle(entity)}</strong>
           <span>{sourceEntityKindLabel(entity.kind)}</span>
+          <span class="source-evidence-state" data-vtext-source-evidence-state>{sourceEvidenceStateLabel(sourceEvidenceState(entity) || 'available')}</span>
         </button>
       {/each}
     </div>
@@ -584,6 +587,10 @@
     font-size: 0.66rem;
     font-weight: 720;
     text-transform: uppercase;
+  }
+
+  .source-entity-chip .source-evidence-state {
+    color: var(--choir-text-accent);
   }
 
   .source-review-panel,

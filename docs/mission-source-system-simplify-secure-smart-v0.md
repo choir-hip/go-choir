@@ -2625,6 +2625,51 @@ acceptance for fix:
 remaining error field: this is a frontend/user-surface contract fix and does
 not replace the broader backend/runtime/platform shared schema consolidation.
 
+### 2026-06-06 Source Evidence State UI Fix
+
+Status: `local_correctness_passed_pending_ci_deploy`.
+
+Implementation:
+
+- `frontend/src/lib/vtext-source-renderer.ts` now exposes a frontend
+  evidence-state normalizer plus owner/guest-readable labels for the typed
+  source states.
+- Media-derived source entities now use `candidate` instead of the out-of-band
+  `pending` state when no durable content id exists.
+- `frontend/src/lib/VTextSourcePanel.svelte` renders a compact typed evidence
+  label on each represented source chip.
+- `frontend/src/lib/ContentViewer.svelte` renders normalized evidence labels
+  in Source Viewer header/details instead of raw `state / research_state`
+  tokens.
+
+Local verification:
+
+```text
+npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g "source evidence states normalize"
+result: passed
+
+npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies source-gap repair"
+result: passed
+
+npm --prefix frontend run build
+result: passed
+```
+
+What this proves locally:
+
+- the frontend evidence normalizer maps aliases including `pending`,
+  `no-source-needed`, and `access-blocked` into the typed evidence vocabulary;
+- the source repair product flow still creates a confirming source, renders the
+  repaired inline source, opens Source Viewer, and now shows `Confirms claim /
+  Owner supplied` instead of raw tokens;
+- the VText Sources panel source chip exposes the typed `Confirms claim` state
+  before opening the source artifact.
+
+Residual risk: this closes Problem 15 for the frontend user surfaces covered by
+the focused tests. CI, deploy, and staging acceptance are still pending for
+this behavior commit, and the backend/runtime/platform shared schema remains a
+separate consolidation axis.
+
 ## Suggested `/goal`
 
 ```text

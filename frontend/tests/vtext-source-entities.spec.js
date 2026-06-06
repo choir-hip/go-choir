@@ -1,5 +1,12 @@
 import { test, expect } from './helpers/fixtures.js';
-import { sourceEntityInlineExcerptText, sourceEntityOpenPlan } from '../src/lib/vtext-source-renderer.ts';
+import {
+  mediaRefToSourceEntity,
+  normalizeSourceEvidenceState,
+  sourceEntityInlineExcerptText,
+  sourceEntityOpenPlan,
+  sourceEvidenceState,
+  sourceEvidenceStateLabel,
+} from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
 
 test('source review URL repairs default to Source Viewer open surface', () => {
@@ -41,6 +48,18 @@ test('source inline excerpts prefer selected transclusion over full reader snaps
   };
 
   expect(sourceEntityInlineExcerptText(entity)).toBe('Selected bounded citation excerpt.');
+});
+
+test('source evidence states normalize to typed reader labels', () => {
+  expect(normalizeSourceEvidenceState('pending')).toBe('candidate');
+  expect(normalizeSourceEvidenceState('no-source-needed')).toBe('no_source_needed');
+  expect(normalizeSourceEvidenceState('access-blocked')).toBe('blocked_by_access');
+  expect(sourceEvidenceState({ evidence: { state: 'represented' } })).toBe('confirms');
+  expect(sourceEvidenceStateLabel('confirms')).toBe('Confirms claim');
+  expect(sourceEvidenceStateLabel('blocked_by_access')).toBe('Blocked by access');
+
+  const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
+  expect(mediaEntity?.evidence?.state).toBe('candidate');
 });
 
 test('source open plans normalize Web Lens and Source Viewer aliases', () => {
