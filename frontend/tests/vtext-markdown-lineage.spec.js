@@ -516,7 +516,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
   await expect(sourcePanel.locator('[data-vtext-source-gaps]')).toContainText('[2]');
   await expect(sourcePanel.locator('[data-vtext-source-review-panel]')).toBeVisible();
   await expect(sourcePanel.locator('[data-vtext-source-review-marker].selected')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-vtext-source-repair-payload]')).not.toBeVisible();
+  await expect(sourcePanel.locator('[data-vtext-source-repair-payload]')).toHaveCount(0);
   await sourcePanel.locator('[data-vtext-source-review-title]').fill(sourceLabel);
   await sourcePanel.locator('[data-vtext-source-review-excerpt]').fill(excerpt);
   const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));

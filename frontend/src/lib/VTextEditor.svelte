@@ -2193,6 +2193,10 @@
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: if (sourcePanelOpen) ensureSourceArtifactSelection();
+  $: showSourceRepairDiagnostics = !!(
+    appContext?.showSourceRepairDiagnostics
+    || appContext?.debugSourceRepair
+  );
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2474,6 +2478,7 @@
           {sourceArtifactStatus}
           {sourceArtifactError}
           bind:sourceRepairPayload
+          showDiagnosticRepair={showSourceRepairDiagnostics}
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
           on:source-review-marker={(event) => prepareSourceReviewForm(event.detail.marker)}

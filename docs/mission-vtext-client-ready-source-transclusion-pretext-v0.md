@@ -6467,3 +6467,57 @@ belief-state update:
 - Remaining high-value source workflow risks are diagnostic JSON still being
   owner-visible and source repair/import write logic still living in the large
   editor module.
+
+## 2026-06-06 Simplification Pass: Hide Owner-Facing Diagnostic JSON
+
+status: local_verified_pending_deploy
+
+documented problem:
+
+- The hard review recorded the source panel's `Diagnostic JSON repair`
+  disclosure as an operator/debug control still living in an owner-facing
+  workflow.
+- That was a UX and ownership problem, not a source-specific content problem:
+  owner source review should use bounded source review/import controls, while
+  raw repair JSON belongs behind an explicit diagnostic/operator affordance.
+
+change:
+
+- `VTextSourcePanel.svelte` now renders the raw JSON repair editor only when
+  `showDiagnosticRepair` is true.
+- `VTextEditor.svelte` enables that prop only from explicit app launch context
+  flags (`showSourceRepairDiagnostics` or `debugSourceRepair`), so ordinary
+  owner windows do not render the raw repair textarea at all.
+- The source-panel Playwright proof now asserts
+  `[data-vtext-source-repair-payload]` has count `0` in the normal owner source
+  panel, rather than merely being collapsed or visually hidden.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- A first parallel run of the source-panel test timed out before reaching the
+  source panel because another concurrently running Playwright proof had opened
+  a separate VText fixture in the same desktop session. This was recorded as a
+  verifier interference issue, not product behavior evidence.
+- The source-panel proof then passed when rerun in isolation:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000`.
+
+deployment proof still needed:
+
+- Commit and push the diagnostic-affordance simplification, wait for CI and
+  Node B deploy, confirm staging identity, then repeat deployed source-panel
+  and Pretext source-flow proofs.
+
+belief-state update:
+
+- The owner-facing source panel now has less debugging scaffolding while
+  preserving the existing source review/import/source-window path.
+- The next source-workflow simplification should either extract the repair/import
+  write functions out of `VTextEditor.svelte` or replace the diagnostic JSON
+  path with a clearer operator-only diagnostics surface.

@@ -30,6 +30,7 @@
   export let sourceArtifactStatus = '';
   export let sourceArtifactError = '';
   export let sourceRepairPayload = '';
+  export let showDiagnosticRepair = false;
 
   const dispatch = createEventDispatcher();
 
@@ -275,32 +276,34 @@
       {/if}
     </div>
 
-    <details class="source-repair-advanced">
-      <summary>Diagnostic JSON repair</summary>
-      <label class="source-repair-editor">
-        <span>Repair JSON</span>
-        <textarea
-          data-vtext-source-repair-payload
-          bind:value={sourceRepairPayload}
-          spellcheck="false"
-          rows="6"
-        ></textarea>
-      </label>
-      <div class="source-panel-actions">
-        <button
-          type="button"
-          class="secondary-action"
-          data-vtext-apply-source-repair
-          on:click={() => dispatch('apply-source-repair')}
-          disabled={sourceRepairPending || !currentDoc || !currentRevision}
-        >
-          {sourceRepairPending ? 'Repairing...' : 'Apply marker repair'}
-        </button>
-        {#if sourceRepairError}
-          <span class="source-repair-error" role="alert">{sourceRepairError}</span>
-        {/if}
-      </div>
-    </details>
+    {#if showDiagnosticRepair}
+      <details class="source-repair-advanced">
+        <summary>Diagnostic JSON repair</summary>
+        <label class="source-repair-editor">
+          <span>Repair JSON</span>
+          <textarea
+            data-vtext-source-repair-payload
+            bind:value={sourceRepairPayload}
+            spellcheck="false"
+            rows="6"
+          ></textarea>
+        </label>
+        <div class="source-panel-actions">
+          <button
+            type="button"
+            class="secondary-action"
+            data-vtext-apply-source-repair
+            on:click={() => dispatch('apply-source-repair')}
+            disabled={sourceRepairPending || !currentDoc || !currentRevision}
+          >
+            {sourceRepairPending ? 'Repairing...' : 'Apply marker repair'}
+          </button>
+          {#if sourceRepairError}
+            <span class="source-repair-error" role="alert">{sourceRepairError}</span>
+          {/if}
+        </div>
+      </details>
+    {/if}
   {/if}
 </section>
 
