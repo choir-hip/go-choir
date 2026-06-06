@@ -6074,7 +6074,7 @@ producer matrix remains open.
 
 ### Problem 36: Publication Visibility Policy Is Stored But Not Enforced For Resolve/Search
 
-Status: `fixed_with_local_policy_proof_pending_ci_deploy`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: `access_policy.visibility` and route policy are stored in
 `publication_policies` and export metadata, but platform route resolution and
@@ -6179,13 +6179,35 @@ deploy-impact:
   frontend/guest/vmctl/host_os deploy flags=false
 ```
 
-remaining proof required: push the behavior commit, monitor CI and FlakeHub,
-confirm Node B deployed identity, and run a deployed product-path proof for
-public versus unlisted/private publication resolve/search/export.
+post-push CI/deploy/staging proof:
+
+```text
+behavior commit:
+  14a3eba6a9bc169f90857769ceacdbfb33c3ffd2
+  platform: enforce publication visibility on public surfaces
+
+CI:
+  https://github.com/choir-hip/go-choir/actions/runs/27071249654
+  conclusion=success
+  Deploy to Staging (Node B) job 79900868926: success
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27071249673
+  conclusion=success after rerun; first attempt failed with Determinate Nix
+  login failure.
+
+staging health before proxy-status follow-up:
+  proxy/upstream deployed_commit=14a3eba6a9bc169f90857769ceacdbfb33c3ffd2
+  deployed_at=2026-06-06T19:08:52Z
+```
+
+final deployed product-path proof is recorded under Problem 37 because the
+proxy status mapping needed the follow-up commit before the full public
+resolve/export/search acceptance could be unambiguous.
 
 ### Problem 37: Public Publication Proxy Turns Platform Policy Misses Into 502
 
-Status: `fixed_with_local_proxy_proof_pending_ci_deploy`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: after Problem 36, platformd can return `sql.ErrNoRows`/404 for
 publication routes that are inactive, nonexistent, or no longer public according
@@ -6263,9 +6285,108 @@ deploy-impact:
   frontend/guest/vmctl/host_os deploy flags=false
 ```
 
-remaining proof required: push the proxy behavior commit, monitor CI/deploy,
-confirm Node B identity, and run the deployed public/unlisted/private
-publication proof.
+post-push CI/deploy/staging proof:
+
+```text
+behavior commit:
+  7b4bcf678af4f9980eaf163c45cb25b8c4d5554a
+  proxy: propagate publication policy misses as not found
+
+CI:
+  https://github.com/choir-hip/go-choir/actions/runs/27071362258
+  conclusion=success
+  Go gates: success
+  Build Frontend: skipped
+  Deploy to Staging (Node B) job 79901174388: success
+
+FlakeHub:
+  https://github.com/choir-hip/go-choir/actions/runs/27071362251
+  conclusion=success
+
+staging health:
+  https://choir.news/health
+  status=ok
+  vmctl_status=ok
+  proxy deployed_commit=7b4bcf678af4f9980eaf163c45cb25b8c4d5554a
+  upstream deployed_commit=7b4bcf678af4f9980eaf163c45cb25b8c4d5554a
+  deployed_at=2026-06-06T19:14:02Z
+
+deployed product-path proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-publication-visibility.tmp.spec.js
+  result: 1 passed
+
+temporary verifier behavior:
+  the deployed spec created public, unlisted, and private VTexts through
+  /api/vtext/documents and revision APIs, published each through
+  /api/platform/vtext/publications, verified the public publication resolves,
+  exports Markdown, and appears in retrieval search, then verified unlisted and
+  private publication routes return 404 for public resolve/export and do not
+  appear in public retrieval search.
+```
+
+remaining error field: Problems 36 and 37 are closed for the current public
+publication surface. Full authenticated private/password/role-gated
+publication reading remains a future feature and should not be implied by this
+public-surface denial proof.
+
+### Problem 38: Publication Policy Proof Escaped Into Persistent Document Chrome
+
+Status: `documented_pending_fix`.
+
+problem: the VText authoring UI renders a persistent `PUBLICATION POLICY` band
+above every editable document. The band contains pill-shaped labels
+(`Public route`, `Source snapshots`, and copy/download formats) that are not
+interactive controls, plus a checkbox that enables the toolbar publish button.
+This consumes first-screen reading space, visually competes with the document
+title and source transclusions, and exposes an internal safety proof as
+always-on product chrome instead of placing publication policy at the publish
+decision point.
+
+affected contract/invariant: publication must remain explicit and policy-rich,
+but source and publication controls should be content-forward. The durable
+source-system mission is trying to simplify reader/editor surfaces, not accrete
+proof panels. A public-route/export/source-snapshot policy should be shown only
+when the owner invokes publishing and should use real commands or plain facts,
+not fake control pills.
+
+confirmed evidence:
+
+```text
+user screenshot:
+  /Users/wiz/media/local screenshots/Screenshot 2026-06-06 at 15.15.31.png
+  shows the deployed VText legal proposal with the persistent publication
+  policy band occupying the top of the document surface.
+
+frontend/src/lib/VTextEditor.svelte:
+  handlePublishCurrent blocks publish unless publishPolicyReady is set.
+  the toolbar Publish button is disabled when !publishPolicyReady.
+  data-vtext-publish-policy renders unconditionally for editable documents.
+  handlePublishPolicyAcknowledgement stores checkbox state per revision.
+
+frontend/tests/vtext-authoring-history.spec.js:
+  the publish regression test asserts the banner is visible, the fake policy
+  summary contains Public route, and Publish is disabled until the checkbox is
+  checked.
+```
+
+acceptance for fix:
+
+- remove the persistent publication policy band from the document surface;
+- keep the toolbar `Publish vN` command available when publishing is otherwise
+  allowed;
+- make `Publish vN` open a compact policy menu/popover only at the publish
+  decision point;
+- show route, source snapshot, and export facts as plain review rows inside
+  that menu, not pill controls;
+- make the final menu command the explicit owner approval to publish to a
+  public route, with cancel/close available;
+- preserve the explicit access/export policy payload sent to the publish API;
+- delete the obsolete checkbox acknowledgement state and tests that require the
+  banner.
+
+remaining error field: this is a product-surface and simplification regression.
+It does not change the backend public publication policy contract from
+Problems 36 and 37.
 
 ## Suggested `/goal`
 
