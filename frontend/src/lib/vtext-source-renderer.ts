@@ -1,4 +1,15 @@
 import { youtubeEmbedURL } from './media-utils.js';
+import {
+  normalizeSourceEvidenceState,
+  normalizeSourceOpenSurface,
+  sourceEvidenceStateLabel,
+} from './source-contract.js';
+
+export {
+  normalizeSourceEvidenceState,
+  normalizeSourceOpenSurface,
+  sourceEvidenceStateLabel,
+} from './source-contract.js';
 
 export function escapeHTML(value: unknown): string {
   return String(value || '')
@@ -97,78 +108,10 @@ export function sourceEntityReaderSnapshotStatus(entity: any): any {
   return entity?.reader_snapshot_status || record?.reader_snapshot_status || null;
 }
 
-export function normalizeSourceEvidenceState(value: unknown): string {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  switch (normalized) {
-    case 'candidate':
-    case 'available':
-    case 'confirms':
-    case 'refutes':
-    case 'qualifies':
-    case 'no_source_needed':
-    case 'stale':
-    case 'blocked_by_access':
-    case 'unavailable':
-      return normalized;
-    case 'pending':
-    case 'needs_source':
-    case 'source_needed':
-      return 'candidate';
-    case 'confirming':
-    case 'confirmed':
-    case 'represented':
-    case 'owner_supplied':
-      return 'confirms';
-    case 'refuting':
-    case 'refuted':
-      return 'refutes';
-    case 'qualifying':
-    case 'qualified':
-      return 'qualifies';
-    case 'blocked':
-    case 'blocked_access':
-    case 'access_blocked':
-      return 'blocked_by_access';
-    case 'not_needed':
-    case 'no_source':
-      return 'no_source_needed';
-    default:
-      return normalized;
-  }
-}
-
 export function sourceEvidenceState(entity: any): string {
   const record = sourceEntityRecord(entity);
   const evidence = entity?.evidence || record?.evidence || {};
   return normalizeSourceEvidenceState(evidence?.state || evidence?.relation || evidence?.research_state || '');
-}
-
-export function sourceEvidenceStateLabel(value: unknown): string {
-  const state = normalizeSourceEvidenceState(value);
-  switch (state) {
-    case 'candidate':
-      return 'Candidate source';
-    case 'available':
-      return 'Available source';
-    case 'confirms':
-      return 'Confirms claim';
-    case 'refutes':
-      return 'Refutes claim';
-    case 'qualifies':
-      return 'Qualifies claim';
-    case 'no_source_needed':
-      return 'No source needed';
-    case 'stale':
-      return 'Stale source';
-    case 'blocked_by_access':
-      return 'Blocked by access';
-    case 'unavailable':
-      return 'Unavailable source';
-    case 'reader_snapshot_ready':
-      return 'Reader snapshot ready';
-    default:
-      return String(value || '').trim().replace(/[_-]+/g, ' ') || 'Evidence unclassified';
-  }
 }
 
 export function sourceEvidenceResearchLabel(value: unknown): string {
@@ -252,37 +195,6 @@ export function sourceEntityTargetKind(entity: any): string {
     record?.target_kind ||
     ''
   ).trim();
-}
-
-export function normalizeSourceOpenSurface(value: unknown): string {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  switch (normalized) {
-    case 'web_lens':
-    case 'weblens':
-    case 'browser':
-    case 'web':
-    case 'live':
-    case 'original':
-    case 'live_original':
-      return 'web_lens';
-    case 'source_viewer':
-    case 'source_reader':
-    case 'reader':
-    case 'content':
-    case 'source':
-      return 'source';
-    case 'published_vtext':
-    case 'publication_version':
-    case 'published_vtext_span':
-    case 'vtext':
-      return 'vtext';
-    case 'video':
-      return 'video';
-    case 'image':
-      return 'image';
-    default:
-      return normalized;
-  }
 }
 
 function sourceEntityRequestedOpenSurface(entity: any): string {

@@ -54,9 +54,14 @@ test('source evidence states normalize to typed reader labels', () => {
   expect(normalizeSourceEvidenceState('pending')).toBe('candidate');
   expect(normalizeSourceEvidenceState('no-source-needed')).toBe('no_source_needed');
   expect(normalizeSourceEvidenceState('access-blocked')).toBe('blocked_by_access');
+  expect(normalizeSourceEvidenceState('error')).toBe('unavailable');
+  expect(normalizeSourceEvidenceState('fetch_failed')).toBe('unavailable');
+  expect(normalizeSourceEvidenceState('unknown-state')).toBe('');
   expect(sourceEvidenceState({ evidence: { state: 'represented' } })).toBe('confirms');
   expect(sourceEvidenceStateLabel('confirms')).toBe('Confirms claim');
   expect(sourceEvidenceStateLabel('blocked_by_access')).toBe('Blocked by access');
+  expect(sourceEvidenceStateLabel('fetch_failed')).toBe('Unavailable source');
+  expect(sourceEvidenceStateLabel('reader_snapshot_ready')).toBe('Evidence unclassified');
 
   const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
   expect(mediaEntity?.evidence?.state).toBe('candidate');
