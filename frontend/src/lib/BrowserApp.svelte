@@ -31,6 +31,7 @@
     sourceEntitySnapshotText,
     sourceEntityTitle,
   } from './vtext-source-renderer.ts';
+  import { createContentItem } from './vtext.js';
 
   export let appContext = {};
   export let authenticated = false;
@@ -374,13 +375,55 @@
     }
   }
 
-  function importSnapshotToVText() {
+  async function importSnapshotToVText() {
     if (!backendSnapshot) return;
     const sessionID = backendSession?.session_id || 'source-entity-snapshot';
+    const sourceURL = currentUrl || backendSession?.current_url || initialTarget || '';
+    const title = backendSession?.title || sourceEntityTitle(sourceEntity) || 'Web Lens Import';
+    loading = true;
+    error = '';
+    let contentItem = null;
+    try {
+      contentItem = await createContentItem({
+        source_type: 'text',
+        media_type: 'text/markdown',
+        app_hint: 'content',
+        title,
+        source_url: sourceURL,
+        canonical_url: sourceURL,
+        text_content: backendSnapshot,
+        metadata: {
+          reader_artifact_kind: 'web_lens_reader_markdown',
+          snapshot_mode: snapshotMode || 'web_lens',
+          browser_session_id: sessionID,
+          warning_count: backendWarnings.length,
+          warnings: backendWarnings,
+          link_count: backendLinks.length,
+          has_html_snapshot: !!backendHTML,
+          has_screenshot: !!backendScreenshotPNG,
+          source_entity_id: sourceEntity?.entity_id || sourceEntity?.source_entity_id || '',
+        },
+        provenance: {
+          created_by: 'web_lens',
+          source_url: sourceURL,
+          browser_session_id: sessionID,
+          rights_scope: 'public_source',
+          publish_source_snapshot: true,
+          untrusted_source_text: true,
+        },
+      });
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      error = err.message || 'Web Lens snapshot import failed';
+      loading = false;
+      return;
+    }
+    loading = false;
     const lines = [
       `# ${snapshotMode === 'source_entity' ? 'Source reader import' : 'Web Lens import'}`,
       ``,
-      `Source: ${currentUrl || backendSession?.current_url || 'unknown'}`,
+      `Source: ${sourceURL || 'unknown'}`,
+      `Content item: ${contentItem?.content_id || 'unknown'}`,
       `Session: ${sessionID}`,
       ``,
       `## Snapshot`,
@@ -394,12 +437,12 @@
       }
     }
     dispatch('openvtext', {
-      title: backendSession?.title || sourceEntityTitle(sourceEntity) || 'Web Lens Import',
+      title,
       initialContent: lines.join('\n'),
-      seedPrompt: `Import Web Lens snapshot for ${currentUrl || backendSession?.current_url || 'web page'}`,
-      sourceUrl: currentUrl || backendSession?.current_url || '',
-      sourceContentId: sessionID,
-      appHint: 'web_lens',
+      seedPrompt: `Import Web Lens snapshot for ${sourceURL || 'web page'}`,
+      sourceUrl: sourceURL,
+      sourceContentId: contentItem?.content_id || '',
+      appHint: 'content',
       createdFrom: 'web_lens',
       toastMessage: 'Opened Web Lens snapshot in VText',
     });

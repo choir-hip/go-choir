@@ -562,7 +562,9 @@ test('Web Lens API calls preserve candidate desktop selector', async ({ desktopS
 test('Web Lens imports Obscura semantic snapshot into VText without iframe rendering', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const browserRequests = [];
+  const contentCreates = [];
   const sessionID = `web-lens-session-${Date.now()}`;
+  const contentID = `web-lens-content-${Date.now()}`;
 
   await page.route('**/api/browser/**', async (route) => {
     const url = new URL(route.request().url());
@@ -642,6 +644,28 @@ test('Web Lens imports Obscura semantic snapshot into VText without iframe rende
       body: JSON.stringify({ error: 'unexpected browser route' }),
     });
   });
+  await page.route('**/api/content/items', async (route) => {
+    const payload = JSON.parse(route.request().postData() || '{}');
+    contentCreates.push(payload);
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        content_id: contentID,
+        owner_id: 'test-owner',
+        source_type: payload.source_type,
+        media_type: payload.media_type,
+        app_hint: payload.app_hint,
+        title: payload.title,
+        source_url: payload.source_url,
+        canonical_url: payload.canonical_url,
+        text_content: payload.text_content,
+        metadata: payload.metadata,
+        provenance: payload.provenance,
+        content_hash: 'sha256:web-lens-fixture',
+      }),
+    });
+  });
 
   await page.locator('[data-desktop-icon-id="browser"]').dblclick();
   const webLens = page.locator('[data-browser-app]').last();
@@ -670,6 +694,18 @@ test('Web Lens imports Obscura semantic snapshot into VText without iframe rende
   await expect(vtext.locator('[data-vtext-editor-area]')).toContainText('Example Domain', {
     timeout: 20_000,
   });
+  await expect(vtext.locator('[data-vtext-editor-area]')).toContainText(`Content item: ${contentID}`, {
+    timeout: 20_000,
+  });
 
   expect(browserRequests.some((entry) => entry.includes('/api/browser/sessions'))).toBe(true);
+  expect(contentCreates).toHaveLength(1);
+  expect(contentCreates[0].source_type).toBe('text');
+  expect(contentCreates[0].media_type).toBe('text/markdown');
+  expect(contentCreates[0].app_hint).toBe('content');
+  expect(contentCreates[0].text_content).toContain('This domain is for use in illustrative examples.');
+  expect(contentCreates[0].metadata.reader_artifact_kind).toBe('web_lens_reader_markdown');
+  expect(contentCreates[0].metadata.browser_session_id).toBe(sessionID);
+  expect(contentCreates[0].provenance.publish_source_snapshot).toBe(true);
+  expect(contentCreates[0].provenance.browser_session_id).toBe(sessionID);
 });
