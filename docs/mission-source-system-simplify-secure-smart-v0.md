@@ -841,13 +841,13 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T12:46:10Z, behavior commit `d404e6ec` preserves
-durable VText source metadata across user-authored saves, including the
-browser/user-save parent of an app-agent revise. CI, FlakeHub, Node B deploy,
-staging health identity, and deployed product-path synthetic acceptance all
-passed. The real owner legal-proposal v89 remains a documented evidence ref;
-the next owner proof must verify the repaired path on a fresh legal-proposal
-transition and check the exact appendix table row/signature behavior.
+last checkpoint: 2026-06-06T12:50:44Z, deployed behavior commit `d404e6ec`
+preserves durable VText source metadata across user-authored saves, including
+the browser/user-save parent of an app-agent revise. CI, FlakeHub, Node B
+deploy, staging health identity, deployed product-path synthetic acceptance,
+and fresh owner-authenticated Comet proof all passed for the represented-source
+metadata class. The owner proof also confirmed a narrower remaining
+appendix-table materialization problem before any follow-up table fix.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -883,11 +883,16 @@ Behavior commits `5c61a6b8`, `465c599c`, and `93d9f819` progressively tighten
 VText local draft recovery: older-parent drafts are skipped, table-flattened
 same-head drafts are skipped, and any differing browser-local draft is skipped
 when a non-empty canonical revision exists.
-The current docs-only checkpoint records the owner bounded edit/revise proof
-and the newly confirmed post-revise source/structure problem before any
+Docs checkpoint `9e1216b0` records the owner bounded edit/revise proof and the
+newly confirmed post-revise source/structure problem before the metadata
 follow-up behavior fix. Behavior commit `d404e6ec` fixes the first confirmed
 root cause by carrying durable parent metadata such as `source_entities`
-forward into ordinary user revisions before app-agent revise.
+forward into ordinary user revisions before app-agent revise. Docs checkpoint
+`87ea1db8` records CI/deploy/synthetic staging proof for that fix. The current
+docs-only checkpoint records the fresh owner Comet proof: restoring source-rich
+v87 as v90, making a bounded prose edit that created v91, and app-agent revise
+to v92 preserved represented sources and source opening but still changed the
+appendix table from 49 to 50 rows.
 Existing unrelated untracked docs are preserved.
 
 what shipped: latest behavior commit
@@ -1279,9 +1284,15 @@ remaining error field:
   diagnosis still sees 7 sources/49 markers, but the Sources panel reports
   `0 represented sources` and cannot choose/open source entities for the
   latest revision. Behavior commit `d404e6ec` fixes the user-save metadata
-  carry-forward class for future revisions; a fresh owner proof must confirm
-  the real legal-proposal path now shows represented source entities after a
-  new bounded edit/revise.
+  carry-forward class for future revisions. Fresh owner Comet proof on
+  deployed `d404e6ec` restored source-rich v87 as v90, then created v91/v92
+  through bounded prose edit/revise; v92 shows 7 represented sources and opens
+  Qdrant as a durable Source Viewer reader artifact.
+- The table preservation problem is now narrowed: after restoring v87 as v90
+  with 49 appendix rows and signature `sha256:a80c30b628c7`, the bounded user
+  save v91 and app-agent v92 both materialized 50-row appendix tables outside
+  the edited prose region. This is documented as Problem 10 before any
+  follow-up structure fix.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1290,20 +1301,19 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: run a fresh owner-authenticated Comet bounded
-legal-proposal edit/revise after deployed commit `d404e6ec`. Verify the latest
-revision's Sources panel shows represented source entities, source opens still
-route to Source Viewer, and bounded diagnosis keeps the appendix table row
-count/signature stable. If source representation passes but row/signature still
-changes, document that narrower table-normalization problem before the next
-behavior fix.
+next executable probe: root-cause Problem 10 in the general VText
+structure-preservation path. Compare restore v90, user-save v91, and app-agent
+v92 materialization against the existing v70-v78 and v87-v89 evidence. Focus on
+why a browser-rendered table round trip gains an extra row even when the prose
+edit is above the appendix and source metadata is preserved.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from behavior commit
-`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` and this docs checkpoint by running
-a fresh owner Comet legal-proposal bounded edit/revise proof. Confirm source
-entity representation/opening after user-save metadata carry-forward, then
-separately confirm or document any remaining table row/signature drift.
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` and this docs checkpoint by
+root-causing Problem 10, the remaining table row/signature drift after
+source-rich restore plus bounded owner edit/revise. Preserve the proven
+source-entity carry-forward/opening behavior while repairing the general table
+materialization path.
 
 evidence artifact refs:
 
@@ -1815,6 +1825,72 @@ normalization. The row-count shift may be in Markdown table parser/export
 normalization between editor save and app-agent edit, while the represented
 source loss likely sits in revision metadata source-entity projection or
 frontend source-entity extraction after app-agent revisions.
+
+### Problem 10: Metadata-Bearing VText User Save Still Adds An Appendix Table Row
+
+problem: after behavior commit `d404e6ec` fixed durable source metadata
+carry-forward, a fresh owner-authenticated product-path proof preserved
+represented sources through restore, user save, and app-agent revise, but still
+changed the appendix table shape. The restored metadata-bearing source revision
+v90 had the same 49-row appendix signature as v87. A bounded prose-only browser
+edit created user revision v91 with 50 appendix rows, and the subsequent
+app-agent revision v92 also had 50 appendix rows. The changed table was far
+below the edited prose and was not intentionally edited.
+
+affected contract/invariant: a VText user save must not re-materialize an
+unrelated Markdown table differently simply because the editor serialized the
+document after a bounded prose edit elsewhere. App-agent revise must preserve
+the table shape it receives unless it explicitly edits that table. Source
+metadata preservation and table preservation are separate invariants; proving
+one must not mask failure of the other.
+
+evidence: on staging deployed commit
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff`, Computer Use in
+owner-authenticated Comet used the legal proposal Sources panel to inspect
+v88/v87. v88 still showed `0 represented sources`; v87 showed
+`7 represented sources` and source artifact controls. The product Restore
+button restored v87 as latest v90. v90 showed `7 represented sources` and the
+diagnosis row for v90 reported 1 table, 49 rows, 7 sources, hash
+`sha256:4e6f3f9888c7`, and table signature `sha256:a80c30b628c7` at
+`L269-L317`.
+
+A bounded owner edit was then made in the first prose section by cursor
+insertion near `A private legal cloud solves this.`. The insertion temporarily
+produced the small typo `I in productiont`, creating user revision v91 when
+the product Revise button was pressed. The app-agent run handle displayed
+`e17846d9-7...8c5333`; the trace/toast again showed app-agent id
+`f93cea62-f833-4dae-b414-8e44783d8cbe`, `edit_vtext`, received tool output,
+and completion. The app-agent corrected the prose back to
+`A private legal cloud solves this. It is...`, creating v92.
+
+After reload cleared the stale `Revising...` toolbar state, v92 loaded as
+`Primary draft Latest` with `7 represented sources`. The source panel opened
+the Qdrant source card as a separate durable Source Viewer window titled
+`Qdrant similarity search documentation`, with reader text, an `Open original`
+link, and Source evidence / Source entity / Provenance disclosures. This proves
+the source metadata/opening path for the repaired class while isolating the
+remaining structure bug.
+
+bounded diagnosis on v92 reported `v92 21 tables 70 source markers`. The
+revision rows showed v92 with 1 table, 50 rows, 7 sources, hash
+`sha256:f21ce9be51fb`, table signature `sha256:a86643578fed` at `L269-L318`;
+v91 with 1 table, 50 rows, 7 sources, hash `sha256:f241be40dcf5`, table
+signature `sha256:01178718c7ae` at `L269-L318`; and restored v90 with 1 table,
+49 rows, 7 sources, hash `sha256:4e6f3f9888c7`, table signature
+`sha256:a80c30b628c7` at `L269-L317`.
+
+first observed version/transition: staging owner Comet workflow from restored
+v90 to v91/v92 on June 6, 2026, after behavior commit
+`d404e6ecd4b16bfd4a907924c16846b82e3d26ff` was deployed and after v87 had been
+restored as latest to ensure the parent revision contained durable
+`source_entities`.
+
+suspected owner: VText rendered-editor serialization and backend
+structure-stabilization around Markdown table boundaries. The previous
+omitted-parent-table fix protects against table disappearance, but this proof
+suggests a separate materialization path can insert or preserve an extra
+delimiter/blank row when browser-rendered document state is converted back into
+Markdown for a user save.
 
 why local/API-only fix is insufficient: the failure was exposed by the real
 owner legal proposal, Comet session state, editor save, app-agent revise, and
