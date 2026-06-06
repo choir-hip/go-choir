@@ -153,6 +153,16 @@ test('publishes source-service source entities as expandable transclusions and c
   expect(exported.content_hash).toBeTruthy();
   expect(exported.filename).toMatch(/\.md$/);
   expect(exported.metadata.source_entities[0].source_entity_id).toBe('src-service-economy');
+  expect(exported.metadata.access_policy).toMatchObject({
+    route: 'public',
+    visibility: 'public',
+  });
+  expect(exported.metadata.export_policy).toMatchObject({
+    download_allowed: true,
+  });
+  expect(exported.metadata.retrieval.source_id).toBeTruthy();
+  expect(exported.metadata.retrieval.spans).toHaveLength(1);
+  expect(exported.metadata.retrieval.spans[0].id).toBeTruthy();
   expect(exported.metadata.transclusions[0].source_selector).toMatchObject({
     selector_kind: 'selector_set',
   });
@@ -462,6 +472,15 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
 
   const exported = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(publish.route_path)}&format=md`);
   expect(exported.metadata.source_entities[0].source_entity_id).toBe('src-public-url');
+  expect(exported.metadata.access_policy).toMatchObject({
+    route: 'public',
+    visibility: 'public',
+  });
+  expect(exported.metadata.export_policy).toMatchObject({
+    download_allowed: true,
+  });
+  expect(exported.metadata.retrieval.source_id).toBeTruthy();
+  expect(exported.metadata.retrieval.spans).toHaveLength(1);
   expect(exported.metadata.transclusions[0].snapshot_text).toBe(excerpt);
   expect(exported.metadata.transclusions[0].source_selector.evidence_state).toMatchObject({
     state: 'confirms',

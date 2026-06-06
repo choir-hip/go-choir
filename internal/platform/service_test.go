@@ -61,6 +61,24 @@ func decodeBase64(value string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(value)
 }
 
+type publicationExportMetadataEnvelope struct {
+	AccessPolicy           json.RawMessage           `json:"access_policy"`
+	ExportPolicy           json.RawMessage           `json:"export_policy"`
+	Retrieval              RetrievalBundle           `json:"retrieval"`
+	PrivateMaterialOmitted bool                      `json:"private_material_omitted"`
+	SourceEntities         []PublicationSourceEntity `json:"source_entities"`
+	Transclusions          []PublicationTransclusion `json:"transclusions"`
+}
+
+func decodePublicationExportMetadata(t *testing.T, raw json.RawMessage) publicationExportMetadataEnvelope {
+	t.Helper()
+	var out publicationExportMetadataEnvelope
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("decode export metadata: %v\n%s", err, string(raw))
+	}
+	return out
+}
+
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))
@@ -86,6 +104,13 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	}
 	if docxExport.MediaType != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || !strings.HasSuffix(docxExport.Filename, ".docx") {
 		t.Fatalf("docx metadata = %#v", docxExport)
+	}
+	docxMetadata := decodePublicationExportMetadata(t, docxExport.Metadata)
+	if !docxMetadata.PrivateMaterialOmitted || !strings.Contains(string(docxMetadata.AccessPolicy), `"visibility":"public"`) || !strings.Contains(string(docxMetadata.ExportPolicy), `"download_allowed":true`) {
+		t.Fatalf("docx export policy metadata = %#v access=%s export=%s", docxMetadata, string(docxMetadata.AccessPolicy), string(docxMetadata.ExportPolicy))
+	}
+	if docxMetadata.Retrieval.SourceID == "" || len(docxMetadata.Retrieval.Spans) != 1 || docxMetadata.Retrieval.Spans[0].ID == "" {
+		t.Fatalf("docx export retrieval metadata = %#v", docxMetadata.Retrieval)
 	}
 	docxBytes, err := decodeBase64(docxExport.ContentBase64)
 	if err != nil {
@@ -114,6 +139,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if !strings.Contains(parts["docProps/custom.xml"], resp.PublicationVersionID) || !strings.Contains(parts["docProps/custom.xml"], resp.ContentHash) {
 		t.Fatalf("docx custom properties missing public provenance: %s", parts["docProps/custom.xml"])
 	}
+	if !strings.Contains(parts["docProps/custom.xml"], `access_policy`) || !strings.Contains(parts["docProps/custom.xml"], `retrieval`) {
+		t.Fatalf("docx custom properties missing export metadata envelope: %s", parts["docProps/custom.xml"])
+	}
 
 	pdfExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "pdf")
 	if err != nil {
@@ -122,6 +150,10 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if pdfExport.Format != "pdf" || pdfExport.Content != "" || pdfExport.ContentBase64 == "" {
 		t.Fatalf("pdf export shape = %#v", pdfExport)
 	}
+	pdfMetadata := decodePublicationExportMetadata(t, pdfExport.Metadata)
+	if !pdfMetadata.PrivateMaterialOmitted || !strings.Contains(string(pdfMetadata.ExportPolicy), `"download_allowed":true`) || pdfMetadata.Retrieval.SourceID == "" {
+		t.Fatalf("pdf export metadata = %#v access=%s export=%s", pdfMetadata, string(pdfMetadata.AccessPolicy), string(pdfMetadata.ExportPolicy))
+	}
 	pdfBytes, err := decodeBase64(pdfExport.ContentBase64)
 	if err != nil {
 		t.Fatalf("decode pdf base64: %v", err)
@@ -129,6 +161,9 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	pdfText := string(pdfBytes)
 	if !strings.HasPrefix(pdfText, "%PDF-1.4") || !strings.Contains(pdfText, resp.PublicationVersionID) || !strings.Contains(pdfText, "This is the published projection.") || !strings.Contains(pdfText, "Last line must survive export.") {
 		t.Fatalf("pdf content/provenance missing: %.400s", pdfText)
+	}
+	if !strings.Contains(pdfText, `access_policy`) || !strings.Contains(pdfText, `retrieval`) {
+		t.Fatalf("pdf embedded metadata missing policy/retrieval envelope: %.400s", pdfText)
 	}
 }
 
@@ -522,15 +557,15 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if !strings.Contains(exported.Content, "This is the published projection.") || exported.ContentHash == "" {
 		t.Fatalf("export content/hash = %#v", exported)
 	}
-	var exportedMetadata struct {
-		SourceEntities []PublicationSourceEntity `json:"source_entities"`
-		Transclusions  []PublicationTransclusion `json:"transclusions"`
-	}
-	if err := json.Unmarshal(exported.Metadata, &exportedMetadata); err != nil {
-		t.Fatalf("decode export metadata: %v\n%s", err, string(exported.Metadata))
-	}
+	exportedMetadata := decodePublicationExportMetadata(t, exported.Metadata)
 	if len(exportedMetadata.SourceEntities) != 1 || len(exportedMetadata.Transclusions) != 1 {
 		t.Fatalf("export source metadata = %#v from %s", exportedMetadata, string(exported.Metadata))
+	}
+	if !strings.Contains(string(exportedMetadata.AccessPolicy), `"visibility":"public"`) || !strings.Contains(string(exportedMetadata.ExportPolicy), `"download_allowed":true`) {
+		t.Fatalf("export policy metadata access=%s export=%s", string(exportedMetadata.AccessPolicy), string(exportedMetadata.ExportPolicy))
+	}
+	if exportedMetadata.Retrieval.SourceID == "" || len(exportedMetadata.Retrieval.Spans) != 1 || exportedMetadata.Retrieval.Spans[0].ID == "" {
+		t.Fatalf("export retrieval metadata = %#v", exportedMetadata.Retrieval)
 	}
 	var exportedSelector struct {
 		EvidenceState map[string]any `json:"evidence_state"`

@@ -57,6 +57,9 @@ func publicationExportMetadata(bundle *PublicationBundle, format string) json.Ra
 		"generated_at":             time.Now().UTC().Format(time.RFC3339Nano),
 		"provenance_scope":         "public_publication_version_only",
 		"private_material_omitted": true,
+		"access_policy":            json.RawMessage(firstNonEmpty(string(bundle.Policy.Access), "{}")),
+		"export_policy":            json.RawMessage(firstNonEmpty(string(bundle.Policy.Export), "{}")),
+		"retrieval":                bundle.Retrieval,
 		"source_entities":          bundle.SourceEntities,
 		"transclusions":            bundle.Transclusions,
 	})
