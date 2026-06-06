@@ -534,6 +534,22 @@ frontend/src/lib/VTextPublicationResult.svelte   283 lines
 local verification:
   npm --prefix frontend run build
   result: passed with no Svelte unused-selector warnings.
+
+commit:
+  d4de8609f350a2ed3136bf96b25e6c3400fbcd17
+
+CI/deploy:
+  GitHub Actions CI 27074365126 passed.
+  FlakeHub publish 27074365139 passed.
+  Node B deploy job 79909160215 passed.
+  /health reported proxy and sandbox deployed_commit
+  d4de8609f350a2ed3136bf96b25e6c3400fbcd17, deployed_at
+  2026-06-06T21:29:33Z.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
 ```
 
 ### Performance Checks
