@@ -6292,3 +6292,34 @@ next simplification axis:
 - Extract a source-surface launcher/helper next, then decide whether diagnostic
   JSON repair should move behind a developer/debug affordance rather than the
   owner-facing source panel.
+
+## 2026-06-06 Simplification Pass: Source Surface Launcher Helper
+
+status: local_verified_pending_deploy
+
+change:
+
+- Extracted source-entity launch payload construction from
+  `VTextEditor.svelte` into `frontend/src/lib/vtext-source-launcher.ts`.
+- The editor still owns the actual `launchapp` dispatch and source-click event
+  handling, but no longer owns the app routing payload shape for source
+  windows.
+- This keeps the source launch path pure and testable without changing source
+  entities, canonical VText writes, publication routing, or Browser/Content
+  source-window behavior.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployment proof still needed:
+
+- Commit and push the launcher helper extraction, wait for CI and Node B deploy,
+  confirm staging identity, then repeat deployed source repair/source-flow proof.

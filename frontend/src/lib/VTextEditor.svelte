@@ -38,11 +38,11 @@
   import { previewVTextDocument } from './public-preview-data';
   import { buildSourceReviewPayload } from './vtext-source-review.js';
   import VTextSourcePanel from './VTextSourcePanel.svelte';
+  import { sourceEntityLaunchPayload } from './vtext-source-launcher';
   import {
     mediaRefToSourceEntity,
     publicationBundleSourceEntities as publicationBundleSourceEntitiesFromRenderer,
     sourceEntityID,
-    sourceEntityOpenAppID,
     selectorTextQuote,
     sourceEntityTargetURL,
     sourceEntityTitle,
@@ -2021,31 +2021,8 @@
   }
 
   function handleSourceEntityOpen(entity) {
-    if (!entity) return;
-    const appId = sourceEntityOpenAppID(entity);
-    const sourceUrl = sourceEntityTargetURL(entity);
-    const contentId = entity?.target?.content_id || '';
-    const title = sourceEntityTitle(entity);
-    dispatch('launchapp', {
-      appId,
-      appName: title || appId,
-      icon: '',
-      appContext: {
-        windowTitle: title,
-        title,
-        sourceUrl,
-        contentId,
-        content_id: contentId,
-        mediaType: entity?.kind === 'youtube_video' ? 'video/youtube' : '',
-        appHint: appId,
-        sourceEntity: entity,
-        sourceEntityId: sourceEntityID(entity),
-        sourceServiceItemId: entity?.target?.item_id || '',
-        publishedRoutePath: entity?.publication_route_path || '',
-        publishedGuest: !!entity?.publication_route_path,
-        allowMultiple: true,
-      },
-    });
+    const payload = sourceEntityLaunchPayload(entity);
+    if (payload) dispatch('launchapp', payload);
   }
 
   function handleSourceOpenButton(button) {
