@@ -841,29 +841,33 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T10:52:10Z, first documentation checkpoint before
-behavior-changing code.
+last checkpoint: 2026-06-06T11:08:00Z, first behavior loop landed and
+Comet owner-authenticated staging capability verified.
 
-current artifact state: no behavior-changing code has been edited in this run.
-The mission input file is untracked in the worktree and is being treated as the
-operator-provided mission record. Existing unrelated untracked docs are
-preserved.
+current artifact state: documentation checkpoint commit
+`bf7e52df` recorded the source-system audit and first problem records before
+behavior changes. Behavior commit `068b6b5f` added runtime source fetch policy
+and selector-set publication projection. Test commit `61b89e93` added broader
+partial table structure-preservation coverage. Existing unrelated untracked docs
+are preserved.
 
-what shipped: nothing yet.
+what shipped: local commits only; nothing pushed or deployed yet.
 
 what was proven:
 
 - Computer Use can see and control Comet on macOS. Comet is installed, running,
   and frontmost as `/Applications/Comet.app/` with bundle id
   `ai.perplexity.comet`.
-- The current Comet tab is on staging at `choir.news` and the Computer Use
-  accessibility tree exposes the Choir UI, a VText window titled
+- The current Comet session on staging is owner-authenticated:
+  `https://choir.news/auth/session` visibly returned
+  `{"authenticated":true,"user":{"id":"5bd6de97-3b58-408c-bf89-c42c81b083de","email":"yusefnathanson@me.com","created_at":"2026-05-26T08:58:19Z"}}`.
+- The Comet staging UI exposes the Choir UI, a VText window titled
   `choir_private_legal_cloud_proposal.vtext`, source citation buttons, an open
   Source Viewer window, and screenshot capture.
 - The visible staging document is already the legal cloud proposal as a `.vtext`
   titled `choir_private_legal_cloud_proposal.vtext`; this proves navigable
   product state in Comet, not yet the requested owner-authenticated identity.
-- Source-system code inventory confirms the current path spans
+- Source-system code inventory confirmed the current path spans
   `internal/runtime/content.go`, `internal/runtime/vtext.go`,
   `internal/runtime/vtext_media_sources.go`, `internal/platform/service.go`,
   `internal/platform/source_metadata.go`, `internal/sourceapi/types.go`,
@@ -871,16 +875,25 @@ what was proven:
   `frontend/src/lib/vtext-source-renderer.ts`,
   `frontend/src/lib/vtext-source-actions.ts`,
   `frontend/src/lib/vtext-source-launcher.ts`, and the VText source tests.
+- Focused local tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestValidateSourceFetchURL|TestSourceFetchHostResolution|TestSourceFetchRedirectPolicy'`,
+  `nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadataPreservesSelectorSet|TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion|TestPublishVTextCreatesImmutablePublicRecords'`,
+  and
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization|TestVTextOpenMarkdownFile|TestVTextMarkdownTableRowParser'`.
 
 unproven or partial claims:
 
-- Owner identity for `yusefnathanson@me.com` has not yet been proven visually in
-  Comet. The Settings click did not open an account surface in the captured
-  state. A later proof must use a visible Settings/account surface or a
-  product-authenticated session endpoint and must not infer identity merely from
-  document visibility.
-- No current code fix, local test, CI run, deploy identity, or staging
-  acceptance proof has been produced yet.
+- Exact v70-v78 revision comparison for the legal proposal is not yet complete.
+  Comet can load the authenticated revisions API for
+  `f93cea62-f833-4dae-b414-8e44783d8cbe`, but the response contains full
+  revision content and is too bulky for reliable accessibility-tree extraction.
+  Comet exposes a Chromium AppleScript tab API, but JavaScript from Apple Events
+  is disabled, producing: "Executing JavaScript through AppleScript is turned
+  off." A bounded product diagnosis/export endpoint or enabling
+  `View > Developer > Allow JavaScript from Apple Events` would allow structured
+  extraction.
+- No CI run, deploy identity, or staging acceptance proof has been produced yet
+  for this run's commits.
 
 belief-state changes:
 
@@ -890,20 +903,27 @@ belief-state changes:
 - Source Viewer is present and currently renders a cleaned reader artifact for
   an open source window in Comet; however, the opening and reader snapshot
   contract is still split across frontend and backend helpers.
+- URL source acquisition is now locally policy-checked for literal forbidden
+  hosts, redirect targets, and dial-time DNS/IP resolution in the runtime import
+  path. This is not yet a full Source Service broker.
+- Publication now preserves multi-selector entities as a typed selector set in
+  transclusion source-selector JSON while retaining the existing single-selector
+  shape for compatibility.
 
 remaining error field:
 
-- URL fetch policy is not yet SSRF-safe.
+- URL fetch policy is locally improved but not yet proven on staging and not yet
+  converged into Source Service.
 - Source entity normalization and opening policy remain duplicated.
-- Publication currently preserves source entity JSON but constructs
-  transclusion records from one selector instead of the selector set.
+- Publication selector-set projection is locally fixed and tested; frontend and
+  export consumers still need broader selector-rich proof.
 - Published source windows depend on frontend reconstruction of publication
   records and reader snapshots.
 - Source evidence states exist in several ad hoc forms and still include
   missing/gap-oriented UI paths instead of one typed evidence-state contract.
-- Table structure preservation has a helper and some tests, but the v70-v78
-  root-cause comparison and partial edit/save/revise coverage are still
-  incomplete.
+- Table structure preservation now has broader partial-context tests, but the
+  v70-v78 staging root-cause comparison is still blocked on structured
+  extraction from the authenticated staging revision history.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -912,19 +932,23 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: add focused tests that reproduce the current URL import
-SSRF-policy gap and publication multi-selector loss, then implement the smallest
-shared policy/normalization path that makes those tests pass.
+next executable probe: either enable a bounded structured extraction route for
+the legal proposal v70-v78 comparison, or continue local convergence by
+introducing shared `SourceOpenPlan` / source entity normalization tests and
+moving frontend source opening away from renderer heuristics.
 
 suggested resume goal string: continue
-`docs/mission-source-system-simplify-secure-smart-v0.md` from the first
-documentation checkpoint by adding failing tests for URL source policy and
-selector-preserving publication, then implement the shared policy/contract path
-without document-specific fixes.
+`docs/mission-source-system-simplify-secure-smart-v0.md` from commits
+`bf7e52df`, `068b6b5f`, and `61b89e93` by extracting or otherwise proving the
+legal proposal v70-v78 table transition, then converging `SourceOpenPlan` and
+source entity normalization without document-specific fixes.
 
 evidence artifact refs:
 
 - Computer Use app inventory: Comet running as `ai.perplexity.comet`.
+- Comet owner identity proof:
+  `https://choir.news/auth/session` returned authenticated user
+  `yusefnathanson@me.com`.
 - Computer Use Comet state: staging URL
   `choir.news/pub/vtext/on-this-open-legal-cloud-proposal-source-backed-vtext-document-repair-the-existing-prose-only-pub51a33d8a5`,
   visible VText title `choir_private_legal_cloud_proposal.vtext`, visible
@@ -933,6 +957,10 @@ evidence artifact refs:
   `rg -l "import-url|source_entities|open_surface|Source Viewer|Web Lens|content_items|ContentItem|sourceapi|internal/sources|transclusion" internal cmd frontend`,
   targeted reads of runtime, platform, frontend source renderer/launcher,
   content viewer, and markdown table helper files.
+- Comet structured extraction blocker:
+  `osascript -e 'tell application "Comet" to execute active tab of front window javascript "document.body.innerText"'`
+  failed because JavaScript from Apple Events is disabled.
+- Behavior/test commits: `068b6b5f`, `61b89e93`.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
