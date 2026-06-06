@@ -4834,6 +4834,85 @@ contract. It does not change staging behavior and does not replace staging as
 the acceptance environment for vmctl, live workers, provider credentials,
 promotion, rollback, or Choir-in-Choir behavior.
 
+### Problem 31: Local Harness Changes Trigger Full Staging Deploy And Early Identity Stamp
+
+Status: `documented_before_fix`.
+
+problem: a local-only harness change to `start-services.sh` triggered the
+conservative full staging deploy path, including host OS, frontend, ordinary
+guest image, Playwright guest image, vmctl restart, and active VM refresh. The
+deploy-impact classifier treats unknown top-level deployed paths as full
+deploys, and `start-services.sh` currently falls into that unknown bucket.
+
+affected contract/invariant: staging deploys should be impact-classified by
+the actual deployed artifact surface. Local developer harness files should not
+force host/guest image deployment unless they are included in deployed host or
+guest artifacts. Deploy identity evidence should mean the deployed runtime is
+actually serving the candidate, not merely that a remote checkout has reset and
+written `deploy.env`.
+
+evidence:
+
+```text
+commit:
+  9a86044a244e9e0f41afd2162cd0cb277cbdbe0f
+
+deploy-impact local reproduction:
+  README.md -> ignored (top-level markdown)
+  start-services.sh -> unknown deployed path: conservative host + both guest images
+  docs/mission-source-system-simplify-secure-smart-v0.md -> ignored (docs/workflow/test artifact)
+
+classification result:
+  deploy_needed=true
+  deploy_host=true
+  deploy_frontend=true
+  deploy_host_service=false
+  deploy_ordinary_guest=true
+  deploy_playwright_guest=true
+  deploy_host_os=true
+  deploy_vmctl_restart=true
+  deploy_active_vm_refresh=true
+  host_services=
+
+CI run:
+  GitHub Actions CI 27068591429
+  Go/runtime/frontend checks passed.
+  Deploy to Staging job 79893752150 remained in progress in step
+  "Deploy to staging" after more than five minutes.
+
+staging health during in-progress deploy:
+  https://choir.news/health reported proxy and upstream
+  deployed_commit=9a86044a244e9e0f41afd2162cd0cb277cbdbe0f and
+  deployed_at=2026-06-06T17:09:32Z while the deploy job was still in progress.
+
+FlakeHub side run:
+  FlakeHub run 27068591428 failed because Determinate/FlakeHub login/fetch
+  requests timed out against flakehub.com; this appears external/network and is
+  separate from the deploy-impact classification problem.
+```
+
+first observed version/transition: resumed mission local harness fix
+`9a86044a` after docs checkpoint `cf61a1f3`.
+
+suspected owner: deploy impact classifier and deploy identity stamping order in
+`.github/workflows/ci.yml`.
+
+why local/UI-only fix is insufficient: a local script-only change should not
+consume a full staging deploy cycle or refresh live interactive computers. Also,
+acceptance evidence that reads `/health` can overclaim deployment if the commit
+is stamped before the remote script finishes building, installing, restarting,
+refreshing, and probing.
+
+planned proof:
+
+- classify `start-services.sh` as a local harness path that does not require
+  staging deploy;
+- add deploy-impact classifier regression coverage for local harness paths;
+- move or supplement deployment identity so final health identity is recorded
+  only after successful install/restart/health probes, or expose a separate
+  `deploy_in_progress`/`target_commit` distinction;
+- rerun classifier proof and CI for the deploy-impact change.
+
 ## Suggested `/goal`
 
 ```text
