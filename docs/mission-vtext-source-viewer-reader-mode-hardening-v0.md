@@ -52,6 +52,11 @@ what was proven before this checkpoint:
 
 new evidence:
 
+- Computer Use was re-checked on 2026-06-06. The plugin exposes callable
+  `get_app_state`, `click`, `type_text`, `scroll`, and related Mac UI actions,
+  and `/Applications/Comet.app/` is running. The next authenticated staging UI
+  proof should therefore use Comet first, not the browser/API fallback, unless
+  a specific action fails and that failure is recorded.
 - Owner screenshot
   `/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_FgmWYm/Screenshot 2026-06-05 at 23.49.38.png`
   shows an ABA Formal Opinion 512 source window with `Source evidence`,
@@ -212,6 +217,24 @@ Likely mechanism:
 - Existing tests cover full table preservation and collapse recovery, but do
   not appear to cover a malformed or delimiter-damaged final row after a long
   table.
+
+Empirical renderer probe on 2026-06-06, using the real
+`renderMarkdownBlocks` module through esbuild:
+
+- A strict table renders as one `table` with all rows.
+- If only the final row is missing its trailing `|`, the prior rows remain in
+  the table and that final row renders as a paragraph beginning with `|`.
+- If a middle row is missing its trailing `|`, the table terminates early and
+  later valid-looking rows also render as paragraphs.
+- Trailing spaces after a valid trailing `|` are fine because the renderer
+  trims the line first.
+- Rows without side pipes, even if GitHub-flavored Markdown would accept them,
+  render as ordinary paragraph text.
+- A row with an escaped pipe currently splits into an extra cell, so pipe
+  escaping is another table-structure fidelity gap.
+- A row with an empty final cell renders as prose because the table parser
+  accepts it, but the fallback table validity path drops empty cells when
+  deciding whether the block is a valid table.
 
 Direction: repair this as a general formatting-consistency problem. The system
 should normalize table-shaped rows adjacent to known tables, preserve trailing
