@@ -2477,8 +2477,10 @@ func rebaseUserDraftContent(baseContent, headContent, userContent, staleParentID
 }
 
 type markdownTableBlock struct {
-	Text  string
-	Cells []string
+	Text      string
+	Cells     []string
+	StartLine int
+	EndLine   int
 }
 
 func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (string, bool) {
@@ -2497,11 +2499,16 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 			continue
 		}
 		next, ok := replaceCollapsedMarkdownTable(out, table)
-		if !ok {
+		if ok {
+			out = next
+			changed = true
 			continue
 		}
-		out = next
-		changed = true
+		next, ok = restoreOmittedParentMarkdownTable(parentContent, out, table)
+		if ok {
+			out = next
+			changed = true
+		}
 	}
 	next, normalized := markdownstructure.NormalizeTableShapedRows(out)
 	if normalized {
@@ -2545,11 +2552,100 @@ func extractMarkdownTableBlocks(content string) []markdownTableBlock {
 			}
 		}
 		blocks = append(blocks, markdownTableBlock{
-			Text:  strings.Join(tableLines, "\n"),
-			Cells: cells,
+			Text:      strings.Join(tableLines, "\n"),
+			Cells:     cells,
+			StartLine: start,
+			EndLine:   i - 1,
 		})
 	}
 	return blocks
+}
+
+func restoreOmittedParentMarkdownTable(parentContent, userContent string, table markdownTableBlock) (string, bool) {
+	if strings.Contains(userContent, table.Text) || comparableMarkdownBlockProjection(parentWithoutMarkdownTable(parentContent, table)) == comparableMarkdownBlockProjection(userContent) {
+		return userContent, false
+	}
+	parentLines := strings.Split(strings.ReplaceAll(parentContent, "\r\n", "\n"), "\n")
+	userLines := strings.Split(strings.ReplaceAll(userContent, "\r\n", "\n"), "\n")
+	beforeAnchor := nearestNonEmptyLine(parentLines, table.StartLine-1, -1)
+	afterAnchor := nearestNonEmptyLine(parentLines, table.EndLine+1, 1)
+	insertAt := -1
+	if afterAnchor != "" {
+		if idx := indexLine(userLines, afterAnchor); idx >= 0 {
+			insertAt = idx
+		}
+	}
+	if insertAt < 0 && beforeAnchor != "" {
+		if idx := indexLine(userLines, beforeAnchor); idx >= 0 {
+			insertAt = idx + 1
+		}
+	}
+	if insertAt < 0 {
+		return userContent, false
+	}
+	tableLines := strings.Split(table.Text, "\n")
+	out := make([]string, 0, len(userLines)+len(tableLines)+2)
+	out = append(out, userLines[:insertAt]...)
+	if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
+		out = append(out, "")
+	}
+	out = append(out, tableLines...)
+	if insertAt < len(userLines) && strings.TrimSpace(userLines[insertAt]) != "" {
+		out = append(out, "")
+	}
+	out = append(out, userLines[insertAt:]...)
+	return strings.Join(out, "\n"), true
+}
+
+func parentWithoutMarkdownTable(parentContent string, table markdownTableBlock) string {
+	lines := strings.Split(strings.ReplaceAll(parentContent, "\r\n", "\n"), "\n")
+	if table.StartLine < 0 || table.EndLine < table.StartLine || table.EndLine >= len(lines) {
+		return parentContent
+	}
+	out := make([]string, 0, len(lines)-(table.EndLine-table.StartLine+1))
+	out = append(out, lines[:table.StartLine]...)
+	out = append(out, lines[table.EndLine+1:]...)
+	return strings.Join(out, "\n")
+}
+
+func nearestNonEmptyLine(lines []string, start, step int) string {
+	for i := start; i >= 0 && i < len(lines); i += step {
+		if text := strings.TrimSpace(lines[i]); text != "" {
+			return lines[i]
+		}
+	}
+	return ""
+}
+
+func indexLine(lines []string, target string) int {
+	for i, line := range lines {
+		if line == target {
+			return i
+		}
+	}
+	return -1
+}
+
+func comparableMarkdownBlockProjection(content string) string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(lines))
+	previousBlank := true
+	for _, line := range lines {
+		text := strings.TrimSpace(line)
+		if text == "" {
+			if !previousBlank {
+				out = append(out, "")
+			}
+			previousBlank = true
+			continue
+		}
+		out = append(out, text)
+		previousBlank = false
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return strings.Join(out, "\n")
 }
 
 func replaceCollapsedMarkdownTable(content string, table markdownTableBlock) (string, bool) {

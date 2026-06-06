@@ -3694,6 +3694,17 @@ func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testi
 			},
 			want: []string{"| Agent | Multi-step autonomous worker. |", "| Vector database | Stores embeddings for retrieval. |"},
 		},
+		{
+			name: "unrelated edit preserves omitted appendix table",
+			userLines: []string{
+				"# Appendix",
+				"",
+				"Intro paragraph with a small owner edit.",
+				"",
+				"---",
+			},
+			want: []string{"Intro paragraph with a small owner edit.", "| Vector database | Stores embeddings for retrieval. |", "\n---"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3707,6 +3718,37 @@ func TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts(t *testi
 				t.Fatalf("stabilized content retained collapsed table artifact:\n%s", stabilized)
 			}
 		})
+	}
+}
+
+func TestVTextMarkdownStructureStabilizationAllowsExplicitTableDeletion(t *testing.T) {
+	parentContent := strings.Join([]string{
+		"# Appendix",
+		"",
+		"Intro paragraph.",
+		"",
+		"| Term | Definition |",
+		"| --- | --- |",
+		"| Agent | Multi-step worker. |",
+		"| Work product | Durable output. |",
+		"| Vector database | Stores embeddings for retrieval. |",
+		"",
+		"---",
+	}, "\n")
+	userContent := strings.Join([]string{
+		"# Appendix",
+		"",
+		"Intro paragraph.",
+		"",
+		"---",
+	}, "\n")
+
+	stabilized, changed := stabilizeVTextUserMarkdownStructures(parentContent, userContent)
+	if changed {
+		t.Fatalf("stabilization changed explicit table deletion:\n%s", stabilized)
+	}
+	if strings.Contains(stabilized, "| Term | Definition |") {
+		t.Fatalf("stabilization restored explicitly deleted table:\n%s", stabilized)
 	}
 }
 
