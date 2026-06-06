@@ -6323,3 +6323,55 @@ deployment proof still needed:
 
 - Commit and push the launcher helper extraction, wait for CI and Node B deploy,
   confirm staging identity, then repeat deployed source repair/source-flow proof.
+
+## 2026-06-06 Deployed Proof: Source Surface Launcher Helper
+
+status: deployed_verified
+
+commit:
+
+- `693e089cf0f2b013a7391c94fba1d242682a0f5e` (`refactor: extract vtext
+  source launcher`) was pushed to `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions CI run `27048602937` completed successfully.
+- The CI run included successful frontend build, Go runtime shards, Go
+  non-runtime tests, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27048602940` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `693e089cf0f2b013a7391c94fba1d242682a0f5e`, deployed at
+  `2026-06-06T01:22:59Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use click actions were available and used against Comet.
+- Comet remained owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The legal-cloud publication showed the expanded ABA Formal Opinion 512
+  journal note beside article text.
+- Clicking the publication-side `Open source` control opened another ABA Formal
+  Opinion 512 source window, proving the extracted source-launcher payload still
+  routes source entities to the expected inspection surface.
+
+belief-state update:
+
+- Source panel view ownership and source launch payload ownership are now split
+  out of the editor without changing deployed behavior.
+- `VTextEditor.svelte` still owns the source repair/import/write functions and
+  diagnostic JSON affordance. Those remain the highest-value simplification
+  targets, but they are riskier because they touch canonical write paths.
