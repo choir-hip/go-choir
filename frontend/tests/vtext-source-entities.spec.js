@@ -369,7 +369,8 @@ test('published source readers prefer publication snapshots over loaded content 
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   const viewer = sourceWindow.locator('[data-content-viewer][data-source-reader-mode="true"]');
   await expect(viewer).toBeVisible({ timeout: 10000 });
-  await expect(viewer.locator('[data-content-evidence]')).toContainText('SHA-256');
+  await expect(viewer.locator('[data-content-evidence]')).toContainText('Reference');
+  await expect(viewer.locator('[data-content-evidence]')).not.toContainText('SHA-256');
   const reader = viewer.locator('[data-content-reader-markdown]');
   await expect(reader.locator('h2')).toContainText('Publication reader snapshot');
   await expect(reader).toContainText('publication-carried reader snapshot must remain');

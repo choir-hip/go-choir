@@ -209,6 +209,30 @@ guest/public proof problem checkpoint:
   local publish endpoint returned `502 {"error":"failed to publish vtext"}`.
   That is recorded as a local harness/server limitation for this slice, not as
   deployed guest proof.
+- Deployed guest proof after `26d94b46` exposed a second public-source issue:
+  after the first guest source-window interaction, the unauthenticated page
+  displayed the auth overlay and intercepted clicks on later public source
+  markers such as OVH. Root-cause hypothesis before code: even when a published
+  source entity carries a reader snapshot, `ContentViewer` still calls
+  `/api/content/items/{content_id}` through `fetchWithRenewal`. Public
+  publication source windows should not need an authenticated content-item fetch
+  when the publication already carries the source reader snapshot. The general
+  repair is to skip private content-item loading for published source readers
+  that have a publication reader snapshot, while preserving authenticated/live
+  content-item loading when no publication snapshot is available.
+- Follow-up local fix after this documentation checkpoint: `ContentViewer`
+  skips target content-item loading when the window is a published source
+  reader and the source entity already carries a reader snapshot. The
+  publication snapshot is therefore self-contained for guest readers and cannot
+  trigger auth renewal while a public source is opened.
+- Regression coverage updated so the published-source fixture asserts the
+  source window shows the publication snapshot and reference metadata, does not
+  render the mutable target content-item body, does not fall back to selector
+  text, and does not require content-item SHA metadata from a private fetch.
+- Local verification after the follow-up fix:
+  - `pnpm --dir frontend exec playwright test
+    tests/vtext-source-entities.spec.js` passed all 8 tests.
+  - `pnpm --dir frontend build` passed.
 
 current artifact state:
 
