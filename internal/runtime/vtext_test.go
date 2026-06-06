@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -3618,7 +3619,7 @@ func TestVTextMarkdownStructureStabilizationRepairsMalformedTableTailRow(t *test
 }
 
 func TestVTextMarkdownTableRowParserHandlesEscapedPipes(t *testing.T) {
-	cells := markdownTableRowCells(`| Term \| Alias | Definition with \| symbol |`)
+	cells := markdownstructure.TableRowCells(`| Term \| Alias | Definition with \| symbol |`)
 	if len(cells) != 2 {
 		t.Fatalf("cells = %#v, want 2 cells", cells)
 	}

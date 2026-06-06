@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 )
 
 const (
@@ -768,6 +769,9 @@ func formatPublicationExportContent(bundle *PublicationBundle, format string) st
 	}
 	content := bundle.Artifact.Content
 	switch format {
+	case "md":
+		normalized, _ := markdownstructure.NormalizeTableShapedRows(content)
+		return normalized
 	case "html":
 		title := html.EscapeString(firstNonEmpty(bundle.Publication.Title, "Published VText"))
 		body := strings.ReplaceAll(html.EscapeString(content), "\n", "<br>\n")

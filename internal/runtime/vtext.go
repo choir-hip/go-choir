@@ -45,6 +45,7 @@ import (
 	diffmatchpatch "github.com/sergi/go-diff/diffmatchpatch"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -57,7 +58,6 @@ var (
 	vtextSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 	vtextInlineSourceRefRE     = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)`)
 	vtextMergePreviewCommentRE = regexp.MustCompile(`(?is)\n*\s*<!--\s*VText merge preview provenance\b.*?-->\s*`)
-	markdownTableSeparatorRE   = regexp.MustCompile(`^:?-{3,}:?$`)
 )
 
 // ----- Request/Response types -----
@@ -2339,7 +2339,7 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 	}
 	userTables := extractMarkdownTableBlocks(userContent)
 	if len(userTables) >= len(parentTables) {
-		return normalizeMarkdownTableShapedRows(userContent)
+		return markdownstructure.NormalizeTableShapedRows(userContent)
 	}
 	out := userContent
 	changed := false
@@ -2354,7 +2354,7 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 		out = next
 		changed = true
 	}
-	next, normalized := normalizeMarkdownTableShapedRows(out)
+	next, normalized := markdownstructure.NormalizeTableShapedRows(out)
 	if normalized {
 		out = next
 		changed = true
@@ -2362,66 +2362,30 @@ func stabilizeVTextUserMarkdownStructures(parentContent, userContent string) (st
 	return out, changed
 }
 
-func normalizeMarkdownTableShapedRows(content string) (string, bool) {
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	changed := false
-	inTable := false
-	tableHasSeparator := false
-	for i, line := range lines {
-		strictCells := markdownTableRowCells(line)
-		if strictCells != nil {
-			inTable = true
-			if isMarkdownTableSeparatorCells(strictCells) {
-				tableHasSeparator = true
-			}
-			continue
-		}
-		if strings.TrimSpace(line) == "" {
-			inTable = false
-			tableHasSeparator = false
-			continue
-		}
-		if !inTable || !tableHasSeparator {
-			continue
-		}
-		if markdownTableShapedRowCells(line) == nil {
-			inTable = false
-			tableHasSeparator = false
-			continue
-		}
-		lines[i] = strings.TrimRight(line, " \t") + " |"
-		changed = true
-	}
-	if !changed {
-		return content, false
-	}
-	return strings.Join(lines, "\n"), true
-}
-
 func extractMarkdownTableBlocks(content string) []markdownTableBlock {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	var blocks []markdownTableBlock
 	for i := 0; i < len(lines); {
-		if markdownTableRowCells(lines[i]) == nil {
+		if markdownstructure.TableRowCells(lines[i]) == nil {
 			i++
 			continue
 		}
 		start := i
-		for i < len(lines) && markdownTableRowCells(lines[i]) != nil {
+		for i < len(lines) && markdownstructure.TableRowCells(lines[i]) != nil {
 			i++
 		}
 		tableLines := lines[start:i]
 		if len(tableLines) < 3 {
 			continue
 		}
-		separator := markdownTableRowCells(tableLines[1])
-		if !isMarkdownTableSeparatorCells(separator) {
+		separator := markdownstructure.TableRowCells(tableLines[1])
+		if !markdownstructure.IsTableSeparatorCells(separator) {
 			continue
 		}
 		var cells []string
 		for _, line := range tableLines {
-			rowCells := markdownTableRowCells(line)
-			if isMarkdownTableSeparatorCells(rowCells) {
+			rowCells := markdownstructure.TableRowCells(line)
+			if markdownstructure.IsTableSeparatorCells(rowCells) {
 				continue
 			}
 			for _, cell := range rowCells {
@@ -2437,76 +2401,6 @@ func extractMarkdownTableBlocks(content string) []markdownTableBlock {
 		})
 	}
 	return blocks
-}
-
-func markdownTableRowCells(line string) []string {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "|") || !strings.HasSuffix(trimmed, "|") {
-		return nil
-	}
-	parts := splitMarkdownTableCells(strings.Trim(trimmed, "|"))
-	if len(parts) < 2 {
-		return nil
-	}
-	cells := make([]string, 0, len(parts))
-	for _, part := range parts {
-		cells = append(cells, strings.TrimSpace(strings.ReplaceAll(part, `\|`, "|")))
-	}
-	return cells
-}
-
-func markdownTableShapedRowCells(line string) []string {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "|") || strings.HasSuffix(trimmed, "|") {
-		return nil
-	}
-	parts := splitMarkdownTableCells(strings.TrimPrefix(trimmed, "|"))
-	if len(parts) < 2 {
-		return nil
-	}
-	cells := make([]string, 0, len(parts))
-	for _, part := range parts {
-		cells = append(cells, strings.TrimSpace(strings.ReplaceAll(part, `\|`, "|")))
-	}
-	return cells
-}
-
-func splitMarkdownTableCells(value string) []string {
-	var cells []string
-	var cell strings.Builder
-	escaped := false
-	for _, r := range value {
-		if escaped {
-			cell.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			cell.WriteRune(r)
-			escaped = true
-			continue
-		}
-		if r == '|' {
-			cells = append(cells, cell.String())
-			cell.Reset()
-			continue
-		}
-		cell.WriteRune(r)
-	}
-	cells = append(cells, cell.String())
-	return cells
-}
-
-func isMarkdownTableSeparatorCells(cells []string) bool {
-	if len(cells) == 0 {
-		return false
-	}
-	for _, cell := range cells {
-		if !markdownTableSeparatorRE.MatchString(strings.TrimSpace(cell)) {
-			return false
-		}
-	}
-	return true
 }
 
 func replaceCollapsedMarkdownTable(content string, table markdownTableBlock) (string, bool) {

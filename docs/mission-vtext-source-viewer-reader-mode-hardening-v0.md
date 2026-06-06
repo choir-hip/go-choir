@@ -88,6 +88,25 @@ final review artifact checkpoint:
   selector-centered excerpts, explicit source-reader authority typing, and
   structured VText table blocks.
 
+export completion-audit problem checkpoint:
+
+- Before marking the goal complete, a deployed owner-publication Markdown export
+  check was run against
+  `/api/platform/publications/export?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6&format=md`.
+- The export returned `format: md`, filename
+  `choir-private-legal-cloud-proposal-vtext-pub270a62fb6.md`, a content hash,
+  the proposal title, source marker/source text, and no source-window UI labels
+  such as `Open source` or `Close`.
+- The same export still rendered the final Appendix glossary row as malformed
+  Markdown: `| **Work product** | Durable, reviewable output ... chat responses.`
+  followed by a blank line, without the trailing `|`. The rendered reader table
+  is repaired, but the publication Markdown export path is not yet preserving
+  the final row delimiter for the actual owner document.
+- This contradicts the mission invariant that Markdown export remains a faithful
+  projection of canonical VText/table structure. Do not mark this mission
+  complete until the export path is repaired and the deployed owner export
+  check passes.
+
 post-fix adversarial review checkpoint:
 
 - Cognitive transform - Depth Extraction: the source viewer is not a generic
@@ -1010,3 +1029,80 @@ Mission is complete only when:
   the wrong owner for citation source readers.
 - Visual proof can miss dynamic text scaling issues unless tested across
   constrained and wide windows.
+
+## 2026-06-06 Export Completion-Audit Problem Checkpoint
+
+Status: `documented_before_fix`.
+
+The deployed owner publication at
+`/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` rendered the
+appendix glossary table correctly after the table-structure repair, but the
+public Markdown export still emitted the final glossary row as a malformed
+partial table row:
+
+```text
+| **Vector search** | ... |
+
+| **Work product** | Durable, reviewable output ...
+```
+
+The export proof was a direct call to
+`/api/platform/publications/export?route=/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6&format=md`.
+It confirmed title, source markers, and absence of source UI labels, but failed
+the final-row table assertion because the exported `Work product` row lacked
+the closing `|`.
+
+Root-cause belief before code change: the browser renderer and VText editor
+path were now lenient enough to render a table-shaped row, but the Markdown
+export path still returned immutable publication artifact bytes verbatim. This
+left old/publication-carried malformed rows visible in exported Markdown even
+when the reader UI appeared fixed. The fix must therefore repair the Markdown
+export projection generally while leaving canonical publication records
+immutable.
+
+## 2026-06-06 Export Fix Evidence
+
+Status: `local_fix_ready_for_landing`.
+
+Partial Markdown renderer probe before fixing:
+
+```text
+strict row: hasTable=true, hasWorkProductCell=true
+missingTailPipe row: hasTable=true, hasWorkProductCell=true
+missingTailPipeThenRule: hasTable=true, hasWorkProductCell=true
+```
+
+This confirmed that UI rendering can pass while exported Markdown remains
+structurally invalid for downstream Markdown consumers.
+
+Code path repaired:
+
+- Added `internal/markdownstructure.NormalizeTableShapedRows` as the shared Go
+  structure normalizer for rows that remain inside a real Markdown table but
+  lost the final delimiter.
+- Replaced the runtime-local normalization copy in VText revision
+  stabilization with the shared helper.
+- Applied the same helper to `md` publication exports only, so legacy
+  malformed publication bytes export as valid Markdown without mutating the
+  immutable stored publication artifact.
+
+Regression coverage:
+
+- `TestNormalizeTableShapedRowsRepairsFinalRowMissingDelimiter`
+- `TestNormalizeTableShapedRowsIgnoresOrdinaryPipedParagraph`
+- `TestTableRowCellsHandlesEscapedPipes`
+- `TestPublicationMarkdownExportNormalizesMalformedTableTailRows`
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/markdownstructure
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextUserRevisionRepairsMalformedFinalMarkdownTableRow|TestVTextMarkdownTableRowParserHandlesEscapedPipes'
+nix develop -c go test ./internal/platform -run 'TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes'
+nix develop -c go test ./internal/markdownstructure ./internal/platform
+pnpm --dir frontend exec playwright test tests/vtext-markdown-lineage.spec.js -g "Imported Markdown advances from v0 source artifact to canonical .vtext with Markdown export"
+```
+
+Residual risk before staging: this proves the export projection and import
+lineage locally, but the actual owner publication export still needs deployed
+Node B proof after commit, push, CI, and staging deploy.
