@@ -6228,3 +6228,67 @@ deployment proof still needed:
 - Commit and push the extraction, wait for CI and Node B deploy, confirm staging
   identity, then repeat deployed source-panel/source-flow proof on
   `https://choir.news`.
+
+## 2026-06-06 Deployed Proof: Source Panel Extraction
+
+status: deployed_verified
+
+commit:
+
+- `e3238cec517277e80c0412923b8b4c9f6b8960af` (`refactor: extract vtext
+  source panel`) was pushed to `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions CI run `27048463996` completed successfully.
+- The CI run included successful frontend build, Go runtime shards, Go
+  non-runtime tests, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27048464015` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `e3238cec517277e80c0412923b8b4c9f6b8960af`, deployed at
+  `2026-06-06T01:17:01Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=frontend/playwright/.auth/choir-news.storage.meta.json pnpm
+  --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=frontend/playwright/.auth/choir-news.storage.meta.json pnpm
+  --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use was available, including click actions, and Comet was used for
+  authenticated staging UI QA.
+- Comet was on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  under the owner-authenticated account.
+- The legal-cloud VText publication loaded as `My version of
+  choir_private_legal_cloud_proposal.vtext`.
+- The expanded ABA Formal Opinion 512 source appeared as a journal note beside
+  article text, with concise source content and `Open source` / `Close`
+  controls.
+- `Open source` had opened the ABA Formal Opinion 512 source window, which
+  rendered reader/source content and retained the metadata accordions as
+  secondary inspection controls.
+
+belief-state update:
+
+- The first simplification pass preserved the source panel repair path and the
+  Pretext source-flow publication path on staging.
+- The remaining source-workflow risk is no longer that all panel markup lives in
+  `VTextEditor.svelte`; it is that the source workflow logic, source-window
+  launch logic, manual source review semantics, and diagnostic JSON repair are
+  still owned by the large editor surface.
+
+next simplification axis:
+
+- Extract a source-surface launcher/helper next, then decide whether diagnostic
+  JSON repair should move behind a developer/debug affordance rather than the
+  owner-facing source panel.
