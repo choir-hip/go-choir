@@ -18,8 +18,9 @@ status: checkpoint_incomplete
 last checkpoint:
 
 - Docs checkpoint pending after behavior commit
-  `1ba4764681831371c7c9a9aea27fe711e0c02e63` records deployed proof for
-  no-source-needed source review.
+  `22042971a920e5c14fd45b44f1851c7de035db4e` records deployed proof that
+  imported HTML sources with readable text now persist as reader-mode Markdown
+  content artifacts, not browser-identity artifacts.
 
 current artifact state:
 
@@ -41,6 +42,9 @@ what shipped:
   lives with the Pretext source-flow surface.
 - Source review now supports explicit no-source-needed marker omission with a
   recorded reason, without creating fake source entities.
+- Imported HTML sources that produce readable text now persist as
+  `text/markdown` content artifacts with `app_hint: content`, while preserving
+  original HTML media/provenance metadata and publication snapshot policy.
 
 what was proven:
 
@@ -48,15 +52,30 @@ what was proven:
   `1ba4764681831371c7c9a9aea27fe711e0c02e63`.
 - Node B `/health` reported proxy and sandbox deployed at that SHA on
   `2026-06-06T03:04:22Z`.
+- CI run `27051123896` and FlakeHub run `27051123873` succeeded for
+  `22042971a920e5c14fd45b44f1851c7de035db4e`.
+- Node B `/health` reported proxy and sandbox deployed at that SHA on
+  `2026-06-06T03:19:42Z`.
 - Comet staging proof opened the deployed legal-cloud route, expanded the ABA
   Formal Opinion source marker into a minimal right-side journal note with
   proposal prose wrapped beside it, and opened the reader-mode source window.
+- Comet state after `22042971` still showed owner-authenticated staging on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`,
+  with `My version of choir_private_legal_cloud_proposal.vtext`, source
+  markers in the article, and reader-mode source artifact windows available.
 - Deployed Playwright geometry proof passed for the source-flow journal layout.
 - Public Markdown export remained available with 38,449 content bytes, compact
   `source:` markers,
   no `missing source` prose, and `private_material_omitted: true`.
 - Deployed Playwright source-review proof passed for both source-backed marker
   repair and no-source-needed marker omission.
+- Deployed Playwright content-substrate proof passed against `choir.news` and
+  verified imported `https://example.com/` HTML is now returned as
+  `media_type: text/markdown`, `app_hint: content`, with
+  `original_media_type` and `reader_artifact_kind: cleaned_reader_markdown`.
+- Deployed Playwright publication proof passed against `choir.news` and
+  verified public content-item sources still publish cleaned reader snapshots
+  that preserve original media/provenance metadata for source windows.
 
 unproven or partial claims:
 
@@ -84,7 +103,10 @@ remaining error field:
   `internal/runtime/vtext.go` without changing the source graph contract.
 - Reduce remaining generic card/pill layering outside the Pretext journal note
   and implement expanded source wrapping through Pretext line-flow, not card
-  stacking.
+  stacking. Pretext's mission-critical role is the magazine/academic-journal
+  layout: article text should continue in readable columns or routed line
+  ranges alongside the source note, with the source presented as content rather
+  than metadata chrome.
 
 highest-impact remaining uncertainty:
 
@@ -114,8 +136,8 @@ evidence artifact refs:
 rollback refs:
 
 - Last deployed behavior-changing commit:
-  `1ba47646`.
-- Last docs checkpoint: pending.
+  `22042971`.
+- Last docs checkpoint: pending for `22042971`.
 
 ## Goal String
 
@@ -7651,3 +7673,130 @@ next repair:
 - Add focused tests that HTML imports produce reader-artifact identity, source
   attachment still works, and publication snapshots continue carrying
   `original_media_type` plus warning/status provenance.
+
+## 2026-06-06 Repair: Imported HTML Sources Persist As Reader Artifacts
+
+status: deployed_verified_checkpoint_incomplete
+
+root cause:
+
+- URL import had two identities for the same artifact. The payload could be a
+  cleaned reader extraction, but durable `ContentItem.media_type` and
+  `app_hint` still described a browser/live-HTML object.
+- Publication enrichment already understood cleaned reader Markdown snapshots,
+  which meant public source windows had a stronger artifact contract than the
+  owner-side import and source-attachment path.
+- Manual source attachment tried to request `app_hint: content`, but
+  `normalizeAppHint` did not accept that value and silently downgraded the
+  artifact to `files`.
+
+change:
+
+- `internal/runtime/content.go` now stores successfully extracted HTML source
+  imports as `media_type: text/markdown` and `app_hint: content`.
+- The import metadata preserves the source identity and audit trail:
+  `original_media_type`, `http_content_type`, `http_status`,
+  `retrieval_strategy`, `reader_artifact_kind: cleaned_reader_markdown`,
+  `raw_content_hash`, canonical URL, source URL, warnings, and query context.
+- `content` is now a first-class app hint for durable reader/source artifacts.
+- Legacy reusable imported URL content is refreshed when it has old
+  `text/html`/`browser` identity despite readable text, so repeated imports can
+  converge to the reader-artifact contract without a document-specific fix.
+- Publication snapshot behavior remains policy-preserving: public snapshots can
+  declare Markdown reader content while retaining original media/provenance
+  metadata.
+
+local proof:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run
+  'TestContent'` -> passed.
+- `pnpm --dir frontend run build` -> passed.
+- With the local service stack attached:
+  `GO_CHOIR_RUN_CONTENT_SUBSTRATE=1 pnpm --dir frontend exec playwright test
+  frontend/tests/content-substrate-routing.spec.js --project=chromium
+  --timeout=180000` -> passed.
+- Local publication proof for
+  `frontend/tests/vtext-source-service-publication.spec.js` still hit the
+  known local `/api/platform/vtext/publications` 502 limitation. Staging remains
+  the acceptance environment for publication behavior.
+
+CI and deploy:
+
+- Problem checkpoints were committed before behavior:
+  `856b97ac` (`docs: document html source reader identity gap`) and
+  `36e6a083` (`docs: note source content app hint downgrade`).
+- Behavior commit `22042971a920e5c14fd45b44f1851c7de035db4e`
+  (`fix: store imported html sources as reader artifacts`) was pushed to
+  `origin/main`.
+- CI run `27051123896` passed, including frontend build, Go vet/build,
+  non-runtime Go tests, runtime shards, integration-tagged smoke, and Node B
+  deploy.
+- FlakeHub publish run `27051123873` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `22042971a920e5c14fd45b44f1851c7de035db4e`, deployed at
+  `2026-06-06T03:19:42Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news PLAYWRIGHT_BASE_URL=https://choir.news
+  GO_CHOIR_RUN_CONTENT_SUBSTRATE=1
+  CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/content-substrate-routing.spec.js --project=chromium
+  --timeout=180000` -> passed.
+- The deployed content-substrate proof imported `https://example.com/` through
+  the product path and verified the returned artifact is
+  `media_type: text/markdown`, `app_hint: content`, with
+  `metadata.original_media_type` and
+  `metadata.reader_artifact_kind: cleaned_reader_markdown`.
+- `BASE_URL=https://choir.news
+  CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes public
+  content-item sources with cleaned reader snapshots" --project=chromium
+  --timeout=180000` -> passed.
+- The deployed publication proof verified public/authorized content-item
+  sources still render cleaned reader snapshots and keep original
+  media/provenance metadata available to source windows.
+
+Comet owner-account state:
+
+- Computer Use is available again in this session, including `get_app_state`
+  and click/action tools. No click mutation was needed for this checkpoint.
+- Comet is running as `ai.perplexity.comet` and remained owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The visible owner route is
+  `My version of choir_private_legal_cloud_proposal.vtext`, with proposal text
+  and source markers in article flow. Reader-mode source artifact windows for
+  ABA Model Rule 1.6 and ABA Formal Opinion 512 are open and show content-first
+  summaries with source evidence/provenance behind disclosure.
+- A temporary publication proof window also showed a cleaned reader snapshot
+  fallback for the Hetzner source probe, which confirms the reader-snapshot path
+  is visible in Comet when live iframe rendering is not the right primary
+  source view.
+
+belief-state update:
+
+- Source artifacts should be named by the durable thing Choir can preserve and
+  publish. If an HTML import yields cleaned reader Markdown, the canonical
+  artifact is a reader Markdown source, with original HTML and live Web Lens as
+  provenance/fallback.
+- This supports the user's clarified UI direction: source windows and expanded
+  notes should feel like academic/journal evidence, not embedded browser chrome
+  or metadata-heavy cards.
+
+remaining error field:
+
+- This repair does not yet complete source acquisition quality. Arbitrary web
+  captures still need stronger cleaning into Markdown, confidence/warning
+  classification, and iframe/Web Lens fallback only when reader cleanup fails or
+  live inspection is explicitly useful.
+- The expanded source UI still has too much card/pill layering. The next UI
+  pass should use Pretext for its real value: magazine/journal wrapping where
+  surrounding article prose flows beside compact source content instead of
+  stacking under or around nested cards.
+- The source review panel is still too operator-grade. The next product pass
+  should review claims and sources in typed outcomes, then keep visible article
+  markers as source transclusion points only when they improve the proposal.
