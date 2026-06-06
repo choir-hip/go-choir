@@ -53,6 +53,20 @@
   import { renderMarkdownBlocks } from './vtext-markdown-renderer';
   import { serializeEditorMarkdown } from './vtext-markdown-serializer';
   import { clearSourceJournalFlows, mountSourceJournalFlow } from './vtext-source-flow';
+  import {
+    draftStorageKey as buildDraftStorageKey,
+    documentCurrentVersionNumber as computeDocumentCurrentVersionNumber,
+    explicitPublishAccessPolicy,
+    explicitPublishExportPolicy,
+    markdownTableBlockCount,
+    nextVersionNumber as computeNextVersionNumber,
+    publicURLForPublishResult as derivePublicURLForPublishResult,
+    revisionVersionNumber,
+    shortHash,
+    sortRevisionsChronologically,
+    truncateText,
+    versionLabelForRevision,
+  } from './vtext-editor-state';
   import './vtext-source-flow.css';
 
   export let currentUser = null;
@@ -368,9 +382,8 @@
   }
 
   function draftStorageKey(docId = currentDoc?.doc_id) {
-    if (!docId) return '';
     const owner = currentUser?.id || currentUser?.email || 'guest';
-    return `choir:vtext:draft:${owner}:${docId}`;
+    return buildDraftStorageKey(owner, docId || '');
   }
 
   function persistLocalDraft(content, parentRevisionId = currentRevision?.revision_id || '') {
@@ -408,23 +421,6 @@
     } catch (_err) {
       return null;
     }
-  }
-
-  function markdownTableBlockCount(content = '') {
-    const lines = String(content || '').split(/\r?\n/);
-    let count = 0;
-    for (let i = 0; i < lines.length - 1; i += 1) {
-      const header = lines[i] || '';
-      const separator = lines[i + 1] || '';
-      if (!header.includes('|') || !separator.includes('|')) continue;
-      if (!/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(separator)) continue;
-      count += 1;
-      i += 1;
-      while (i + 1 < lines.length && (lines[i + 1] || '').includes('|')) {
-        i += 1;
-      }
-    }
-    return count;
   }
 
   function restoreLocalDraftIfNewer() {
@@ -505,86 +501,12 @@
     return typeof sourcePath === 'string' && sourcePath.toLowerCase().endsWith('.vtext');
   }
 
-  function sortRevisionsChronologically(items) {
-    const byId = new Map();
-    for (const item of items || []) {
-      if (item?.revision_id) {
-        byId.set(item.revision_id, item);
-      }
-    }
-
-    const fallbackCompare = (left, right) => {
-      const leftTime = new Date(left?.created_at || 0).getTime();
-      const rightTime = new Date(right?.created_at || 0).getTime();
-      if (leftTime !== rightTime) return leftTime - rightTime;
-      return String(left?.revision_id || '').localeCompare(String(right?.revision_id || ''));
-    };
-
-    const childrenByParent = new Map();
-    const roots = [];
-    for (const item of byId.values()) {
-      const parentId = item.parent_revision_id || '';
-      if (parentId && byId.has(parentId)) {
-        const children = childrenByParent.get(parentId) || [];
-        children.push(item);
-        childrenByParent.set(parentId, children);
-      } else {
-        roots.push(item);
-      }
-    }
-
-    for (const children of childrenByParent.values()) {
-      children.sort(fallbackCompare);
-    }
-    roots.sort(fallbackCompare);
-
-    const ordered = [];
-    const visited = new Set();
-    function visit(item) {
-      if (!item?.revision_id || visited.has(item.revision_id)) return;
-      visited.add(item.revision_id);
-      ordered.push(item);
-      for (const child of childrenByParent.get(item.revision_id) || []) {
-        visit(child);
-      }
-    }
-
-    for (const root of roots) {
-      visit(root);
-    }
-
-    const leftovers = [...byId.values()]
-      .filter((item) => !visited.has(item.revision_id))
-      .sort(fallbackCompare);
-    for (const item of leftovers) {
-      visit(item);
-    }
-
-    return ordered;
-  }
-
-  function revisionVersionNumber(revision, fallbackIndex = -1) {
-    const value = Number(revision?.version_number);
-    if (Number.isFinite(value) && value >= 0) return value;
-    return Math.max(0, Number(fallbackIndex) || 0);
-  }
-
-  function versionLabelForRevision(revision, fallbackIndex = -1) {
-    return `v${revisionVersionNumber(revision, fallbackIndex)}`;
-  }
-
   function documentCurrentVersionNumber(doc = currentDoc) {
-    const fromDoc = Number(doc?.current_version_number);
-    if (Number.isFinite(fromDoc) && fromDoc >= 0) return fromDoc;
-    const maxKnown = revisions.reduce((max, rev, index) => Math.max(max, revisionVersionNumber(rev, index)), -1);
-    if (maxKnown >= 0) return maxKnown;
-    const revisionCount = Number(doc?.revision_count);
-    if (Number.isFinite(revisionCount) && revisionCount > 0) return revisionCount - 1;
-    return 0;
+    return computeDocumentCurrentVersionNumber(doc, revisions);
   }
 
   function nextVersionNumber() {
-    return documentCurrentVersionNumber() + 1;
+    return computeNextVersionNumber(currentDoc, revisions);
   }
 
   function buildRevisionMetadata() {
@@ -610,28 +532,15 @@
   }
 
   function publicURLForPublishResult(result = publishResult) {
-    const direct = String(result?.public_url || '').trim();
-    if (direct) return direct;
-    const routePath = String(result?.route_path || '').trim();
-    if (!routePath) return '';
-    if (/^https?:\/\//.test(routePath)) return routePath;
-    if (typeof window === 'undefined' || !window.location) return routePath;
-    return `${window.location.origin}${routePath.startsWith('/') ? routePath : `/${routePath}`}`;
+    return derivePublicURLForPublishResult(result, typeof window === 'undefined' ? '' : window.location?.origin || '');
   }
 
   function buildExplicitPublishAccessPolicy() {
-    return {
-      visibility: 'public',
-      route: 'public',
-    };
+    return explicitPublishAccessPolicy();
   }
 
   function buildExplicitPublishExportPolicy() {
-    return {
-      copy_allowed: true,
-      download_allowed: true,
-      formats: ['txt', 'md', 'html', 'docx', 'pdf'],
-    };
+    return explicitPublishExportPolicy();
   }
 
   function openPublishedURL(result = publishResult) {
@@ -651,18 +560,6 @@
     } catch (_err) {
       return false;
     }
-  }
-
-  function truncateText(value, max = 360) {
-    const text = String(value || '').trim();
-    if (text.length <= max) return text;
-    return `${text.slice(0, max - 1).trimEnd()}…`;
-  }
-
-  function shortHash(value) {
-    const text = String(value || '');
-    if (text.length <= 18) return text;
-    return `${text.slice(0, 10)}…${text.slice(-6)}`;
   }
 
   function resetCompareMergeState({ keepEditor = true } = {}) {

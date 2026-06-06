@@ -1505,3 +1505,55 @@ staging proof:
   a loop_id/doc_id, then called deployed /cancel and received HTTP 200 with a
   resumable cancelled/no_pending_revision state.
 ```
+
+## Loop 8 Frontend VText State Helper Extraction Target
+
+Status: `documented_before_code`.
+
+Next frontend simplification target: extract pure VText editor state helpers
+from `frontend/src/lib/VTextEditor.svelte` into a TypeScript helper module.
+This boundary owns deterministic helper logic that does not require Svelte
+component state or DOM access: local draft storage key construction, Markdown
+table block counting for stale-draft protection, revision ordering,
+version-label computation, current/next version number fallback logic, explicit
+publish access/export policy construction, public URL derivation from publish
+responses, text truncation, and short hash formatting.
+
+This is a behavior-preserving extraction. It must not change editor rendering,
+autosave semantics, toolbar labels, publish payloads, version navigation,
+Source Viewer/Web Lens behavior, or publication/export policy. The editor
+component should keep side-effect orchestration; the helper module should own
+only pure calculations.
+
+acceptance:
+
+- `VTextEditor.svelte` imports these helpers instead of defining duplicate
+  local implementations;
+- helper function names make the shared VText state contract explicit enough
+  for reuse by future toolbar/publication/source modules;
+- frontend build passes;
+- at least one focused VText browser proof still exercises version navigation,
+  publish policy payload construction, or stale draft/table protection;
+- no source/publication security or export behavior is changed.
+
+local extraction evidence:
+
+```text
+files:
+  frontend/src/lib/VTextEditor.svelte       2794 lines
+  frontend/src/lib/vtext-editor-state.ts     140 lines
+
+change:
+  Extracted deterministic editor-state helpers for draft storage keys,
+  Markdown table counting, revision ordering, version labels/current-version
+  fallback, publish policy payloads, public URL derivation, text truncation,
+  and short hashes. The Svelte component still owns side effects, DOM handling,
+  API calls, autosave scheduling, and app dispatch.
+
+local proof:
+  git diff --check
+  result: passed
+
+  npm --prefix frontend run build
+  result: passed
+```
