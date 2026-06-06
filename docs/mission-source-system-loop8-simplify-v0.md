@@ -51,8 +51,10 @@ safely.
 
 - Public publication policy/storage/enforcement is deployed through
   `aa5902c42f65e834590e54a3b2617ce2819c8bd5`.
-- The persistent publication-policy banner was removed, but the replacement
-  publish menu still needs a passing deployed interaction proof.
+- VText publish chrome stabilization is deployed through
+  `9fe7a2a4956909b21c672016996d00400f7f4421`; focused staging Playwright
+  passed after the active-window test helper fix in
+  `2769fea8177433bba634b75ae354a2e5f8eb5136`.
 - VText chrome has newly observed layout regressions:
   - version-label width and publish-button wrapping can change toolbar height;
   - the left draft-state chip says `Primary draft` for both latest and older
@@ -62,9 +64,12 @@ safely.
     intercept toolbar clicks after opening/creating a document.
 - Published-result chrome still risks stealing reading space after publish and
   should be treated as part of the same content-forward UI stabilization pass.
-- Rich exports are currently container-valid but document-invalid: DOCX, HTML,
-  and PDF leak raw Markdown markers and do not embed a consistent source
-  manifest.
+- Rich export first correctness is deployed through
+  `e7fefc83c50e4e4d264721d02b5ce44f9b2ca6dc`: HTML, DOCX, and PDF now render
+  from a shared `PublicationDocument`/source-manifest spine with semantic
+  rich-format output and embedded manifest proof. Remaining export work is
+  higher-fidelity PDF layout, DOCX footnote/hyperlink polish, visual artifact
+  inspection, and future profile customization.
 - Core files such as `frontend/src/lib/VTextEditor.svelte` and VText/backend
   source files are too large for confident future changes.
 
@@ -259,7 +264,7 @@ Acceptance:
 
 ### Problem L8-1: VText Publish Menu Still Has Hit-Test Debt
 
-Status: `documented_pending_fix`.
+Status: `fixed_staging_proven`.
 
 problem: after replacing the persistent publication policy banner with a
 publish menu, staging Playwright showed two hit-test failures: first the editor
@@ -300,9 +305,32 @@ acceptance:
   header;
 - the focused staging Playwright proof passes without force-clicking.
 
+fix/evidence:
+
+```text
+commits:
+  308cdddab186e25834b473dacf3ea69992309711
+    simplified the publish confirmation menu.
+  9fe7a2a4956909b21c672016996d00400f7f4421
+    stabilized toolbar/publish/result chrome.
+  2769fea8177433bba634b75ae354a2e5f8eb5136
+    scoped the VText history test to the active window.
+
+CI/deploy:
+  GitHub Actions CI 27072453680 passed.
+  Node B deploy job 79904081697 passed.
+  /health reported proxy and sandbox deployed_commit
+  9fe7a2a4956909b21c672016996d00400f7f4421.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+```
+
 ### Problem L8-2: VText Toolbar Layout Changes Across Version Labels
 
-Status: `documented_pending_fix`.
+Status: `fixed_staging_proven`.
 
 problem: changing between versions with different label widths can change the
 toolbar height. The screenshots show latest `v97` fitting in one toolbar height
@@ -329,9 +357,25 @@ acceptance:
   dimensions;
 - text does not overflow or wrap inside toolbar buttons on supported widths.
 
+fix/evidence:
+
+```text
+commit:
+  9fe7a2a4956909b21c672016996d00400f7f4421
+
+test coverage:
+  tests/vtext-authoring-history.spec.js now asserts latest -> historical
+  navigation changes the label while preserving toolbar height.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+```
+
 ### Problem L8-3: VText Draft-State Label Does Not Reflect Revision State
 
-Status: `documented_pending_fix`.
+Status: `fixed_staging_proven`.
 
 problem: the left state chip always says `Primary draft`, including when the
 editor is viewing an older revision. Latest and historical states should be
@@ -343,9 +387,25 @@ acceptance:
 - historical revision shows `Historical` or equivalent;
 - label changes do not alter toolbar dimensions.
 
+fix/evidence:
+
+```text
+commit:
+  9fe7a2a4956909b21c672016996d00400f7f4421
+
+behavior:
+  latest revision label renders as "Latest"; historical revision label renders
+  as "Historical"; both use reserved toolbar dimensions.
+
+staging proof:
+  PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  tests/vtext-authoring-history.spec.js
+  result: 2 passed.
+```
+
 ### Problem L8-4: Rich Publication Exports Leak Markdown Into DOCX/HTML/PDF
 
-Status: `documented_pending_fix`.
+Status: `first_correctness_staging_proven`.
 
 problem: published VText downloads for DOCX, HTML, and PDF are valid file
 containers but not correct formatted documents for their formats. HTML and PDF
@@ -386,6 +446,57 @@ acceptance:
 - existing metadata, source snapshot, access/export policy, and retrieval
   envelopes remain present;
 - add tests that fail on literal Markdown markers in DOCX/HTML/PDF exports.
+
+fix/evidence:
+
+```text
+commit:
+  e7fefc83c50e4e4d264721d02b5ce44f9b2ca6dc
+
+implementation:
+  internal/platform/publication_document.go adds a shared
+  PublicationDocument/source-manifest spine.
+  internal/platform/export_formats.go renders HTML/DOCX/PDF from that spine
+  instead of per-format raw Markdown copying.
+  legacy markdownBlocks parser path was removed.
+
+local proof:
+  nix develop -c go test ./internal/platform
+  result: ok
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: ok
+
+CI/deploy:
+  GitHub Actions CI 27072850941 passed.
+  FlakeHub run 27072850942 passed.
+  Node B deploy job 79905108418 passed.
+  /health reported proxy and sandbox deployed_commit
+  e7fefc83c50e4e4d264721d02b5ce44f9b2ca6dc.
+
+staging product-path proof:
+  temporary Playwright proof used authenticated product APIs to create a VText
+  document with source metadata, publish it publicly, and export html/docx/pdf.
+  Assertions verified semantic HTML, DOCX WordprocessingML runs/table/customXml
+  source manifest, PDF visible text/source appendix/XMP manifest, and no raw
+  Markdown source/bold syntax in the rendered rich outputs.
+  Command:
+    PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+    tests/rich-export-proof.tmp.spec.js
+  Result:
+    1 passed
+  The temporary proof spec was deleted after the run to preserve worktree
+  hygiene.
+```
+
+remaining risks:
+
+- PDF is still a simple generated PDF renderer rather than a typographically
+  complete professional layout engine.
+- DOCX uses source appendix/custom XML and styled source markers; footnotes,
+  endnotes, and hyperlink relationships remain profile-level polish.
+- Firm-specific export profiles are designed but not implemented.
+- Visual/manual inspection of downloaded real proposal artifacts still remains
+  for final Loop 8 acceptance.
 
 ## Suggested Goal String
 
