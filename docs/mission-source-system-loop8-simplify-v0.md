@@ -1575,3 +1575,72 @@ staging proof:
   across latest/historical labels, and publish menu policy payload construction
   against the shipped frontend bundle.
 ```
+
+### Problem 48: Rich Export Source Manifest Drops URL Targets For Nested Source Entities
+
+status: `documented_before_fix`.
+
+problem: the rich-export source manifest only extracts source URLs from
+top-level entity fields such as `url`, `source_url`, or `href`. Normalized
+publication source entities for URL-backed sources can carry the URL inside the
+structured `target` object instead. When the manifest drops that URL, DOCX
+cannot emit a native external hyperlink relationship for the visible source
+reference or Sources appendix, even though the source is authorized and
+URL-backed.
+
+evidence:
+
+```text
+nix develop -c go test ./internal/platform -run
+'^TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes$' -count=1 -v
+result: failed after adding DOCX hyperlink/provenance assertions
+
+observed word/document.xml:
+  visible source reference and Sources appendix contained "Export source proof"
+  and "[1]", but no <w:hyperlink> elements.
+
+observed source metadata fixture:
+  source target:
+    {"target_kind":"url","url":"https://example.com/export-proof"}
+
+root cause:
+  sourceEntityDisplayFields reads top-level URL fields from entity.Entity but
+  does not inspect entity.Target.
+```
+
+classification: `contract drift` between publication source entity
+normalization and rich export rendering.
+
+acceptance:
+
+- `PublicationDocument` source manifests recover URL targets from the normalized
+  source entity target object when no top-level URL is present;
+- DOCX export creates external hyperlink relationships for URL-backed source
+  references without exposing internal source IDs in visible body text;
+- HTML/PDF/source manifest behavior still preserves embedded source metadata;
+- platform export tests cover the nested-target URL path.
+
+fix/evidence:
+
+```text
+change:
+  PublicationDocument source manifest extraction now reads nested source
+  target URL fields and nested display reader-artifact state before renderers
+  consume the manifest. DOCX export builds deterministic document
+  relationships for HTTP(S) source/link URLs, renders source labels as native
+  w:hyperlink runs when a URL is available, and includes reader-meaningful
+  source appendix details such as evidence state and reader artifact state.
+
+local proof:
+  gofmt -w internal/platform/export_docx.go \
+    internal/platform/publication_document.go internal/platform/service_test.go
+  git diff --check
+  result: passed
+
+  nix develop -c go test ./internal/platform -run
+  '^TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes$' -count=1 -v
+  result: passed
+
+  nix develop -c go test ./internal/platform ./internal/sourcecontract
+  result: passed
+```

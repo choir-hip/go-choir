@@ -295,6 +295,12 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	if !strings.Contains(parts["word/document.xml"], "<w:b/>") || !strings.Contains(parts["word/document.xml"], "Export source proof") || !strings.Contains(parts["word/document.xml"], "[1]") {
 		t.Fatalf("docx document missing format-native emphasis/source marker: %s", parts["word/document.xml"])
 	}
+	if !strings.Contains(parts["word/document.xml"], "<w:hyperlink") || !strings.Contains(parts["word/document.xml"], "confirms") || !strings.Contains(parts["word/document.xml"], "snapshot_ready") {
+		t.Fatalf("docx document missing native source hyperlink/provenance: %s", parts["word/document.xml"])
+	}
+	if !strings.Contains(parts["word/_rels/document.xml.rels"], `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"`) || !strings.Contains(parts["word/_rels/document.xml.rels"], `Target="https://example.com/export-proof"`) || !strings.Contains(parts["word/_rels/document.xml.rels"], `TargetMode="External"`) {
+		t.Fatalf("docx relationships missing external source hyperlink: %s", parts["word/_rels/document.xml.rels"])
+	}
 	if !strings.Contains(parts["word/styles.xml"], "default-professional") && !strings.Contains(parts["word/styles.xml"], "Heading1") {
 		t.Fatalf("docx styles missing default professional style definitions: %s", parts["word/styles.xml"])
 	}

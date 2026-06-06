@@ -145,13 +145,41 @@ func sourceEntityDisplayFields(entity PublicationSourceEntity) (title, url, read
 			break
 		}
 	}
+	if url == "" {
+		for _, key := range []string{"url", "source_url", "href"} {
+			if value := strings.TrimSpace(stringField(nestedObject(raw, "target"), key)); value != "" {
+				url = value
+				break
+			}
+		}
+	}
 	for _, key := range []string{"reader_artifact_state", "reader_state", "artifact_state"} {
 		if value := strings.TrimSpace(stringField(raw, key)); value != "" {
 			readerState = value
 			break
 		}
 	}
+	if readerState == "" {
+		for _, key := range []string{"reader_artifact_state", "reader_state", "artifact_state"} {
+			if value := strings.TrimSpace(stringField(nestedObject(raw, "display"), key)); value != "" {
+				readerState = value
+				break
+			}
+		}
+	}
 	return title, url, readerState
+}
+
+func nestedObject(raw map[string]any, key string) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	value, ok := raw[key]
+	if !ok {
+		return nil
+	}
+	nested, _ := value.(map[string]any)
+	return nested
 }
 
 func stringField(raw map[string]any, key string) string {
