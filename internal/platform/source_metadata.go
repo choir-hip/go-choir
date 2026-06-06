@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
 type publicationSourceMetadata struct {
@@ -228,26 +230,7 @@ func publicationSourceEvidenceState(entity map[string]any) map[string]any {
 }
 
 func normalizePublicationEvidenceState(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "candidate", "available", "confirms", "refutes", "qualifies", "no_source_needed", "stale", "blocked_by_access", "unavailable":
-		return strings.ToLower(strings.TrimSpace(value))
-	case "confirming", "confirmed", "represented", "owner_supplied":
-		return "confirms"
-	case "refuting", "refuted":
-		return "refutes"
-	case "qualifying", "qualified":
-		return "qualifies"
-	case "blocked", "blocked_access", "access_blocked":
-		return "blocked_by_access"
-	case "not_needed", "no-source-needed", "no_source":
-		return "no_source_needed"
-	case "pending", "needs_source", "source_needed":
-		return "candidate"
-	case "error", "failed", "fetch_failed":
-		return "unavailable"
-	default:
-		return ""
-	}
+	return sourcecontract.NormalizeEvidenceState(value)
 }
 
 func normalizePublicationDisplayPolicy(raw string, display map[string]any, selector map[string]any) string {

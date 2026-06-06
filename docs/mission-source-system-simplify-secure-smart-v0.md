@@ -2807,6 +2807,47 @@ states and platform publication projection of legacy aliases. This is still a
 convergence step, not a single shared source schema package across all language
 boundaries.
 
+### 2026-06-06 Shared Backend Source Evidence Contract
+
+Status: `local_correctness_passed_pending_ci_deploy`.
+
+Implementation:
+
+- Added `internal/sourcecontract` as a shared backend source contract package
+  for typed evidence-state constants and normalization.
+- `internal/runtime/vtext.go` now normalizes VText source repair evidence
+  through the shared package instead of a local switch.
+- `internal/runtime/vtext_media_sources.go` now uses shared evidence-state
+  constants and candidate-state normalization when merging source entities.
+- `internal/platform/source_metadata.go` now projects publication selector
+  evidence through the same shared normalizer.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/sourcecontract -count=1
+result: passed
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates|TestMigratedSourceGapsCanBeRepairedAsCanonicalVTextRevision|TestVTextSourceGapRepairNoSourceNeeded' -count=1
+result: passed
+
+nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadata(NormalizesLegacyEvidenceAliases|PreservesSelectorSet|DefaultsQuotedExcerptToEmbeddedTransclusion)' -count=1
+result: passed
+```
+
+What this proves locally:
+
+- runtime and platform no longer carry separate Go evidence-state switch
+  statements;
+- legacy aliases and canonical states are normalized through one backend
+  contract;
+- VText source repair and publication selector evidence paths still pass their
+  focused tests.
+
+Residual risk: this closes the backend evidence-state implementation drift, but
+it is not yet a generated/shared frontend contract and does not yet cover
+ReaderArtifact, selector, or open-plan structs.
+
 ## Suggested `/goal`
 
 ```text

@@ -47,6 +47,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -882,34 +883,18 @@ func markdownLineageCitationResolutions(global, local []vtextCitationMarkerResol
 }
 
 func normalizeVTextEvidenceState(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch normalized {
-	case "candidate", "available", "confirms", "refutes", "qualifies", "no_source_needed", "stale", "blocked_by_access", "unavailable":
-		return normalized
-	case "confirming", "confirmed", "represented", "owner_supplied":
-		return "confirms"
-	case "refuting", "refuted":
-		return "refutes"
-	case "qualifying", "qualified":
-		return "qualifies"
-	case "blocked", "blocked_access", "access_blocked":
-		return "blocked_by_access"
-	case "not_needed", "no-source-needed", "no_source":
-		return "no_source_needed"
-	default:
-		return ""
-	}
+	return sourcecontract.NormalizeEvidenceState(value)
 }
 
 func vtextEvidenceStateForCitationResolution(action, relation string) string {
 	relationState := normalizeVTextEvidenceState(relation)
-	if relationState == "confirms" || relationState == "refutes" || relationState == "qualifies" {
+	if sourcecontract.IsRelationalEvidenceState(relationState) {
 		return relationState
 	}
 	if normalizeVTextCitationResolutionAction(action, "") == "no_source_needed" {
-		return "no_source_needed"
+		return sourcecontract.EvidenceStateNoSourceNeeded
 	}
-	return "confirms"
+	return sourcecontract.EvidenceStateConfirms
 }
 
 func vtextSourceEvidenceStateRecord(state, targetID, reason string) map[string]any {
@@ -947,14 +932,14 @@ func normalizeVTextSourceRepairEvidence(entities []vtextSourceEntity, resolution
 	for i := range out {
 		entityID := strings.TrimSpace(out[i].EntityID)
 		relation := normalizeVTextEvidenceState(out[i].Evidence.Relation)
-		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
+		if !sourcecontract.IsRelationalEvidenceState(relation) {
 			relation = normalizeVTextEvidenceState(out[i].Evidence.State)
 		}
-		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
+		if !sourcecontract.IsRelationalEvidenceState(relation) {
 			relation = stateByEntityID[entityID]
 		}
-		if relation != "confirms" && relation != "refutes" && relation != "qualifies" {
-			relation = "confirms"
+		if !sourcecontract.IsRelationalEvidenceState(relation) {
+			relation = sourcecontract.EvidenceStateConfirms
 		}
 		out[i].Evidence.Relation = relation
 		out[i].Evidence.State = relation
