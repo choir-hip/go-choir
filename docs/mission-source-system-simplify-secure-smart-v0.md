@@ -2030,6 +2030,67 @@ forbidden configured and second-stage URLs, preserve fetch records with an
 error state, and add focused tests for loopback source URLs plus GDELT
 second-stage loopback URLs.
 
+### 2026-06-06 Source-Cycle Fetch Policy Fix Evidence
+
+Status: `deployed_with_local_behavior_proof_and_staging_identity`.
+
+Repair:
+
+- Commit `fd75bb80d1ed3d6a342008463d7b6d940af1d580` adds a source-cycle
+  fetch policy helper in `internal/sources`.
+- RSS, Telegram, and GDELT constructors now use a policy HTTP client that
+  disables proxy use, validates resolved dial targets, and rejects forbidden
+  redirect targets.
+- RSS, Telegram, and GDELT validate configured source URLs before request
+  creation.
+- GDELT validates the second-stage GKG URL parsed from `lastupdate.txt` before
+  creating the request.
+- Focused tests cover forbidden configured URLs, forbidden redirect targets,
+  forbidden resolved addresses, and GDELT second-stage loopback rejection while
+  preserving explicit `httptest` allowances for local fixtures.
+
+Local verification:
+
+```text
+nix develop -c go test ./internal/sources
+nix develop -c go test ./internal/cycle ./cmd/sourcecycled
+```
+
+Landing evidence:
+
+```text
+Fix commit: fd75bb80d1ed3d6a342008463d7b6d940af1d580
+Problem checkpoint commit: 9e20db83
+CI run: 27063118076
+FlakeHub publish run: 27063118088
+Node B deploy job: 79879309866
+Health proxy deployed_commit: fd75bb80d1ed3d6a342008463d7b6d940af1d580
+Health sandbox deployed_commit: fd75bb80d1ed3d6a342008463d7b6d940af1d580
+Health deployed_at: 2026-06-06T13:08:06Z
+```
+
+Staging proof boundary:
+
+- `sourcecycled` is deployed as a Node B service and exposes
+  `/internal/source-service/*` on the service/API boundary.
+- Public unauthenticated probes to `/api/source/health`,
+  `/api/source-service/health`, and `/internal/source/health` returned 401/403.
+- There is intentionally no public product endpoint that asks sourcecycled to
+  poll an arbitrary attacker URL, so staging cannot safely replay the SSRF
+  rejection transition through a user-facing URL.
+- The deployed acceptance for this scoped repair is therefore: focused local
+  adapter tests, full CI, FlakeHub, Node B deploy success, and staging health
+  identity for the fixed commit. A future source-service admin/control surface
+  should expose policy-safe health and fetch-record inspection so verifier
+  agents can observe blocked fetch evidence without internal route bypass.
+
+Residual risk: this repairs source-cycle adapter SSRF policy but leaves a
+follow-up architecture debt: runtime URL import and source-cycle acquisition now
+have parallel policy implementations. The longer-term contract wants a single
+shared source acquisition policy module used by runtime URL import, source
+service adapters, Web Lens import, publication source snapshots, and future
+connectors.
+
 ## Suggested `/goal`
 
 ```text
