@@ -7031,3 +7031,102 @@ next action:
 
 - Repair the publication regression to open the visible source action from the
   journal note when present, with inline popover as fallback.
+
+## 2026-06-06 Deployment Evidence: Published Reader Article Semantics
+
+status: deployed_verified_checkpoint_incomplete
+
+commits:
+
+- `2e4b4dca` (`docs: document published reader textbox leakage`) documented
+  the deployed Comet evidence that a published legal-cloud VText was exposed
+  as a document-wide text entry area whose value included source controls.
+- `d439a8e1` (`docs: document local publication verifier gap`) documented
+  the local `POST /api/platform/vtext/publications` `502` before relying on
+  staging for publication semantics.
+- `f7f7145fa909e6e75d56b74eaa2011ceaaac9abf`
+  (`fix: expose published vtext as article`) split the published/read-only
+  surface from the authoring textbox surface.
+- `2bb9e108` (`docs: document publication source action verifier drift`)
+  documented that the deployed publication verifier still looked for the old
+  hidden inline source action.
+- `5030fa1111bea5cdab49bf32641da40e846c58c7`
+  (`test: use journal source action in publication proof`) repaired the
+  verifier to open the visible source action from the journal note when that
+  surface is mounted.
+
+CI and deploy:
+
+- CI run `27049894112` for `f7f7145f` passed: frontend build, Go vet/build,
+  runtime shards, non-runtime tests, integration smoke, and Node B deploy.
+- FlakeHub publish run `27049894097` for `f7f7145f` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `f7f7145fa909e6e75d56b74eaa2011ceaaac9abf`, deployed at
+  `2026-06-06T02:21:01Z`.
+- CI run `27049965094` for test-only commit `5030fa11` passed.
+- FlakeHub publish run `27049965093` for test-only commit `5030fa11` passed.
+- Staging remained correctly deployed at behavior commit `f7f7145f` after the
+  verifier-only commit.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-agent-revision.spec.js -g "prompt button submits"
+  --project=chromium --timeout=120000` -> passed.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- The local full publication proof remains blocked by the documented local
+  platform publication `502`; staging is the authoritative publication proof.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-service-publication.spec.js -g "publishes
+  source-service source entities" --project=chromium --timeout=120000`
+  -> passed.
+- The proof created a publication through
+  `POST /api/platform/vtext/publications`, verified `Copy text`/download text
+  output does not include source-control labels such as `Open source` or
+  `Close`, verified the published reader surface is an `article` with
+  `contenteditable="false"`, and opened the visible journal-note source action.
+
+deployed Comet owner proof:
+
+- Computer Use was available and used against Comet (`ai.perplexity.comet`);
+  click actions were available.
+- Comet was owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- After reload, Computer Use reported the owner legal-cloud publication window
+  as `My version of choir_private_legal_cloud_proposal.vtext`.
+- The document body was exposed as `container Published VText document`, not
+  as a document-wide `text entry area`.
+- The only `text entry area` in the observed Comet accessibility tree was the
+  command prompt, not the published VText document.
+- The publication still showed inline citation buttons and open source windows
+  for the ABA Formal Opinion 512 and ABA Model Rule 1.6 sources, proving the
+  article split did not remove source transclusion/window behavior.
+
+belief-state update:
+
+- Published/read-only VText now has the correct high-level article semantics
+  on staging while authoring remains an editable textbox.
+- This does not complete the user's Pretext requirement. The point of Pretext
+  in this mission is still magazine/academic-journal wrapping: article prose
+  should route in columns or line bands around the source note, with the source
+  note acting as content rather than layered card/pill chrome.
+- The next source-flow pass should use Pretext at the article/source
+  composition boundary. A visually smaller card or an accessibility role split
+  is not enough if the surrounding article text does not wrap beside the
+  source note in a journal-like flow.
+
+next action:
+
+- Continue the Pretext source-flow axis: reduce remaining layered
+  card/pill/rounded-rectangle source chrome, move the expanded note toward a
+  content-first marginal/source-note treatment, and prove line/column wrapping
+  around the note on the deployed legal-cloud publication.
