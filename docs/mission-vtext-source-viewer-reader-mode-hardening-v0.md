@@ -1208,3 +1208,27 @@ Stopping impact: mission cannot be complete until the runtime-bearing Nix
 service package vendor closures are updated, Node B deploy succeeds, staging
 reports the accepted SHA, and the owner-publication Markdown export proof passes
 against the deployed service.
+
+## 2026-06-06 Runtime Nix Vendor Closure Fix Evidence
+
+Status: `node_b_temp_build_passed`.
+
+Repair made after the documentation checkpoint:
+
+- Updated the Nix `vendorHash` for `gateway` and `sandbox` from the stale
+  runtime dependency closure to
+  `sha256-2uExDYKXWdF4NyIMX6NVVXcuXRoTm+/S/CxuwPExXiI=`, matching the
+  sourcecycled closure that already included the runtime browser dependency
+  graph.
+
+Node B temporary-clone verification:
+
+```text
+git checkout 44de82dcebb05cd1c86c2cc8ddd1d8bf73e7788f
+replace gateway/sandbox stale vendor hashes with sha256-2uExDYKXWdF4NyIMX6NVVXcuXRoTm+/S/CxuwPExXiI=
+nix build .#packages.x86_64-linux.sandbox .#packages.x86_64-linux.gateway --no-link
+```
+
+Result: both temporary package builds completed successfully on Node B. The
+remaining proof is the normal push-triggered CI deploy and staging acceptance
+checks.
