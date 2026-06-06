@@ -3536,6 +3536,64 @@ open from inline transclusion to Source Viewer. It does not by itself prove
 guest publication opens for the same proposal, every source kind, or the final
 publication/export metadata packet.
 
+Owner legal-proposal publication/export/guest source-open proof on
+2026-06-06:
+
+- A short same-origin Comet bookmarklet first confirmed the owner session still
+  reported `authenticated: true` for `yusefnathanson@me.com`, user id
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`.
+- The owner-authenticated Comet tab then published the current legal proposal
+  document id `f93cea62-f833-4dae-b414-8e44783d8cbe` through the product
+  endpoint `POST /api/platform/vtext/publications` with slug
+  `legal-proposal-source-proof-1780766508614`.
+- Publish returned HTTP `201`, publication id
+  `pub-878ee08d-2085-4291-b747-eda7ef704693`, publication version
+  `pubver-e782e93b-5867-4e17-b921-c7f4d2619d11`, route
+  `/pub/vtext/legal-proposal-source-proof-1780766508614-pub878ee08d2`,
+  retrieval source `source-f43d8a65-ccc4-4865-901a-268c1ce31e6b`,
+  retrieval span `span-35e90c40-5267-4b27-8a04-c852685f13cf`, citation
+  `cite-d823a476-9e00-423f-b26a-6584bb49d1c9`, consent
+  `consent-2fadded5-cc60-41dd-93da-5da182593795`, review
+  `review-d2b36a60-8785-4281-8bf0-b2c2fbf27185`, and rollback
+  `rollback-a3a4e807-3ef9-46b6-9209-c206168a9ad2`.
+- Public resolve for the route returned active publication state, source
+  revision hash
+  `926080ae5e4ddb90e6c40f35264e2ab01883a711df928b4751febac490287432`,
+  content/projection hash
+  `f21ce9be51fb6f54358faf5f929515fe59b92367644c5328cfabf0bbc062a974`,
+  `7` publication source entities, `7` transclusions, public access policy,
+  and export formats `txt`, `md`, `html`, `docx`, and `pdf`.
+- The resolved source entities covered URL-backed and content-item legal
+  proposal sources, including `src_gdpr_article_32`, `src_aba_formal_op_512`,
+  `src_nixos_rollback`, `src_aba_rule_16`, `src_ovh_private_cloud`,
+  `src_hetzner_datacenters`, and `src_qdrant_search`. Each exposed
+  `open_surface: source`, a publication-reader reader snapshot, and
+  `reader_snapshot_ready`.
+- Markdown publication export returned filename
+  `legal-proposal-source-proof-1780766508614-pub878ee08d2.md`, preserved the
+  proposal title and Appendix A content, included `7` source entities and `7`
+  transclusions in canonical metadata, and carried access policy, export
+  policy, retrieval source, and retrieval span metadata.
+- Signed-out Playwright guest proof opened the public route, found `8` rendered
+  source refs, expanded `src_aba_formal_op_512`, clicked `Open source`, and
+  observed a `data-content-viewer` Source Viewer window in reader mode with the
+  ABA source text. It observed `0` `data-browser-app` windows.
+- Durable evidence artifacts:
+  - `docs/evidence/source-system-2026-06-06/legal-proposal-publication-guest-reader-20260606T1722Z.png`
+  - `docs/evidence/source-system-2026-06-06/legal-proposal-publication-guest-source-viewer-20260606T1722Z.png`
+  - `docs/evidence/source-system-2026-06-06/legal-proposal-publication-guest-source-viewer-20260606T1722Z.trace.zip`
+- Staging health during this proof reported proxy/upstream
+  `deployed_commit=9a86044a244e9e0f41afd2162cd0cb277cbdbe0f`,
+  `deployed_at=2026-06-06T17:09:32Z`, `status=ok`, and `vmctl_status=ok`.
+  Later docs/classifier commit `eaf14f3d` intentionally did not deploy.
+
+Residual risk: this proves real legal-proposal publication/export metadata and
+one guest Source Viewer source-open path across URL-backed and content-item
+source records. It does not prove a fresh owner bounded edit after publication,
+does not test every rendered citation marker, and does not close the platform's
+current limitation that publication policy defaults to public route/public
+visibility unless revision metadata overrides it.
+
 ### Problem 14: Open-Surface Aliases Can Defeat Explicit Web Lens Routing
 
 Status: `accepted_on_staging_for_open_surface_aliases`.
@@ -4923,6 +4981,16 @@ classifier fix and proof:
   `start-services.sh -> ignored (local developer service harness)`.
 - Control proof for `internal/runtime/content.go` still returns
   `deploy_needed=true` with `host_services=gateway,sandbox`.
+- Behavior/docs commit
+  `eaf14f3d2b36feb175088ff7d064ef5562f7ace0` was pushed to `origin/main`.
+  GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27068825236` completed
+  successfully. The deploy-impact detector succeeded, all Go gates passed,
+  `Build Frontend` was skipped, and `Deploy to Staging (Node B)` was skipped.
+- Staging health after the classifier commit still reported the previous
+  deployed behavior commit
+  `9a86044a244e9e0f41afd2162cd0cb277cbdbe0f`, confirming the local harness
+  classifier fix did not promote a staging deploy.
 
 remaining error field: the local harness deploy-impact overclassification is
 fixed. The early deploy identity stamping concern remains open: `/health`
