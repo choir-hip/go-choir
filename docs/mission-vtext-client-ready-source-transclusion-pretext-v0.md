@@ -18,9 +18,9 @@ status: checkpoint_incomplete
 last checkpoint:
 
 - This mission-doc checkpoint records deployed proof for behavior commit
-  `c996f88b4f45431a5374fa46ddbfc6448c90b444`: constrained text-source expansion
-  now uses a stacked Pretext journal flow instead of falling back to the old
-  expanded source-card/popover path.
+  `8b6202bbf73025cd5f7031976b7d11facd0d295e`: text-source citation refs are
+  explicitly scoped to the journal-flow expansion surface, while old expanded
+  source-card styling is scoped to media previews.
 
 current artifact state:
 
@@ -48,6 +48,9 @@ what shipped:
 - Text-source expansion now has two explicit journal-flow modes:
   `side-note` when Pretext can route article lines beside the note, and
   `stacked` when a constrained measure cannot support a side column.
+- Source refs now declare `data-source-expansion-surface="journal"` or
+  `media`, and the old inline-grid expanded-card CSS applies only to media
+  preview sources.
 
 what was proven:
 
@@ -93,6 +96,15 @@ what was proven:
   `My version of choir_private_legal_cloud_proposal.vtext`, the full proposal
   heading, source markers in article flow, and reader-mode source windows
   available.
+- CI run `27051553068` and FlakeHub run `27051553067` succeeded for
+  `8b6202bbf73025cd5f7031976b7d11facd0d295e`.
+- Node B `/health` reported proxy and sandbox deployed at that SHA on
+  `2026-06-06T03:40:13Z`.
+- Deployed Playwright proof passed against `choir.news` for media-preview
+  expansion plus both journal text-source paths. It verified YouTube/media
+  source refs carry `data-source-expansion-surface="media"` and text source
+  refs carry `journal` while still mounting `side-note` and `stacked` journal
+  flows.
 
 unproven or partial claims:
 
@@ -120,27 +132,27 @@ remaining error field:
   `internal/runtime/vtext.go` without changing the source graph contract.
 - Continue reducing generic card/pill layering in inactive fallback surfaces,
   source facts, and owner repair controls. The active text-source expansion path
-  is now journal-flow rather than card fallback, but media previews and repair
-  panels still need a separate simplification pass.
+  is now journal-flow rather than card fallback, and the old expanded-card CSS
+  is scoped to media preview sources.
 
 highest-impact remaining uncertainty:
 
-- Whether the source-flow surface can now be simplified enough to remove the
-  remaining old expanded-card CSS safely, without breaking media previews,
-  keyboard accessibility, or source-open affordances.
+- Whether media previews should remain inline expanded cards or move to a
+  separate journal/media note model without losing the expected video/image
+  preview behavior.
 
 next executable probe:
 
-- Continue source realism by simplifying the remaining source surfaces:
-  prune old expanded-card CSS where text-source journal flow has replaced it,
-  keep media previews explicitly scoped, convert failed or noisy web captures
-  into cleaned Markdown reader artifacts before iframe fallback, and keep
-  citation/source review claim-based rather than JSON/operator-based.
+- Continue source realism by improving source acquisition and review:
+  convert failed or noisy web captures into cleaned Markdown reader artifacts
+  before iframe fallback, decide whether media previews need a separate
+  journal/media note model, and keep citation/source review claim-based rather
+  than JSON/operator-based.
 
 suggested resume goal string:
 
 ```text
-/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint c996f88b. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-layout/source-acquisition/source-window problem. Next simplify the remaining old source-card/media fallback surfaces and improve cleaned Markdown reader artifacts while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
+/goal Continue docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md from checkpoint 8b6202bb. Keep Pretext as the magazine/journal line-flow mechanism for article prose around minimal source notes. Before code, document any newly found source-layout/source-acquisition/source-window problem. Next improve cleaned Markdown reader artifact acquisition and typed claim/source review while preserving canonical VText, source transclusions, source publication policy, Markdown export, CI, Node B deploy, and Comet staging proof.
 ```
 
 evidence artifact refs:
@@ -151,9 +163,9 @@ evidence artifact refs:
 rollback refs:
 
 - Last deployed behavior-changing commit:
-  `c996f88b`.
+  `8b6202bb`.
 - Last docs checkpoint:
-  this mission-doc revision for `c996f88b`.
+  this mission-doc revision for `8b6202bb`.
 
 ## Goal String
 
@@ -7974,3 +7986,106 @@ remaining error field:
 - The source acquisition path still needs stronger arbitrary URL cleanup into
   Markdown reader artifacts and typed claim/source review beyond operator-grade
   repair controls.
+
+## 2026-06-06 Repair: Expanded Source Card CSS Is Scoped To Media Previews
+
+status: deployed_verified_checkpoint_incomplete
+
+root cause:
+
+- After stacked journal flow landed, text-source citations had a reliable
+  journal expansion path, but the old expanded-card CSS selectors were still
+  generic: `.vtext-source-ref[data-expanded="true"]`.
+- Media sources still need the old inline expanded preview path for now because
+  YouTube/image source refs render inline preview media inside the transclusion
+  body and `mountSourceJournalFlow` intentionally rejects refs containing
+  iframe/image previews.
+- Without an explicit expansion-surface contract, future cleanup could either
+  break media previews or accidentally reactivate the old source card for text
+  citations.
+
+change:
+
+- `vtext-source-renderer.ts` now marks source refs with
+  `data-source-expansion-surface="media"` when the source has an inline media
+  preview and `journal` otherwise.
+- `VTextEditor.svelte` now scopes the old inline-grid expanded-card and static
+  popover CSS to
+  `.vtext-source-ref[data-source-expansion-surface="media"][data-expanded="true"]`.
+- Text source refs therefore use the journal-flow path (`side-note` or
+  `stacked`) rather than inheriting old card styling.
+
+local proof:
+
+- `pnpm --dir frontend run build` -> passed.
+- With the local service stack attached:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js --project=chromium
+  --timeout=180000` -> first run passed the source/media assertions but hit a
+  local autosave timing miss in
+  `VText autosave roundtrips rendered markdown tables without flattening cells`.
+- Immediate rerun of the failed table test:
+  `pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText autosave roundtrips
+  rendered markdown tables without flattening cells" --project=chromium
+  --timeout=180000` -> passed.
+- The source/media assertions that cover this change passed locally: YouTube
+  refs carry `data-source-expansion-surface="media"` and text refs carry
+  `journal` while the wide and stacked journal flows still mount.
+
+CI and deploy:
+
+- Behavior commit `8b6202bbf73025cd5f7031976b7d11facd0d295e`
+  (`fix: scope expanded source cards to media previews`) was pushed to
+  `origin/main`.
+- CI run `27051553068` passed: frontend build, Go vet/build, non-runtime Go
+  tests, runtime shards, integration-tagged smoke, and Node B deploy.
+- FlakeHub publish run `27051553067` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `8b6202bbf73025cd5f7031976b7d11facd0d295e`, deployed at
+  `2026-06-06T03:40:13Z`.
+
+deployed proof:
+
+- `BASE_URL=https://choir.news PLAYWRIGHT_BASE_URL=https://choir.news
+  CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText (renders source
+  entities as expandable sources and opens owning media surface|lays out
+  expanded text sources as noncanonical journal flow|uses stacked journal flow
+  instead of old source card when side routing is unavailable)"
+  --project=chromium --timeout=180000` -> passed.
+- The deployed verifier proved the media path still opens a YouTube source and
+  carries `data-source-expansion-surface="media"`.
+- The deployed verifier also proved both text-source journal paths carry
+  `data-source-expansion-surface="journal"` and still mount the `side-note` and
+  `stacked` source-flow modes.
+
+Comet owner-account state:
+
+- Computer Use remained available and Comet stayed owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  after the `8b6202bb` deploy.
+- The Comet state still showed the legal-cloud proposal as
+  `My version of choir_private_legal_cloud_proposal.vtext`, with the proposal
+  heading, source markers in article flow, and reader-mode source windows for
+  ABA Model Rule 1.6 and ABA Formal Opinion 512.
+
+belief-state update:
+
+- Ordinary text citations no longer share the old expanded-card CSS contract.
+  The card path is explicitly a media preview path until a later documented
+  repair replaces it with a media-specific journal surface.
+- This reduces the active UI vocabulary while preserving expected video/image
+  preview behavior.
+
+remaining error field:
+
+- Media previews still use the old expanded-card DOM/CSS and need a future
+  product decision: keep them as inline media previews, or create a distinct
+  magazine/journal media-note surface.
+- Source window lifecycle remains noisy when many source windows are opened in
+  the owner desktop.
+- The larger mission still needs source acquisition cleanup and typed
+  claim/source review before the client-ready proposal is complete.
