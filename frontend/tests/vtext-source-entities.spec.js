@@ -2,6 +2,7 @@ import { test, expect } from './helpers/fixtures.js';
 import {
   mediaRefToSourceEntity,
   normalizeSourceEvidenceState,
+  sourceOpenPlan,
   sourceEntityInlineExcerptText,
   sourceEntityOpenPlan,
   sourceEvidenceState,
@@ -103,6 +104,23 @@ test('source open plans normalize Web Lens and Source Viewer aliases', () => {
     openSurface: 'source',
     mode: 'source_reader',
     readerMode: true,
+  });
+  expect(sourceOpenPlan({ targetKind: 'source_service_item' })).toMatchObject({
+    appId: 'content',
+    openSurface: 'source',
+    mode: 'source_reader',
+    readerMode: true,
+  });
+  expect(sourceOpenPlan({ requestedOpenSurface: 'browser', hasURL: true })).toMatchObject({
+    appId: 'browser',
+    openSurface: 'web_lens',
+    mode: 'live_original',
+    liveOriginal: true,
+  });
+  expect(sourceOpenPlan({ targetKind: 'publication_version' })).toMatchObject({
+    appId: 'vtext',
+    openSurface: 'vtext',
+    mode: 'published_vtext',
   });
   expect(sourceEntityOpenPlan({ ...urlSource, kind: 'youtube_video', display: { open_surface: 'video' } })).toMatchObject({
     appId: 'video',

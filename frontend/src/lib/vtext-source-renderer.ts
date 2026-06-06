@@ -2,12 +2,14 @@ import { youtubeEmbedURL } from './media-utils.js';
 import {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
+  sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';
 
 export {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
+  sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';
 
@@ -204,28 +206,12 @@ function sourceEntityRequestedOpenSurface(entity: any): string {
 
 export function sourceEntityOpenPlan(entity: any): any {
   const record = sourceEntityRecord(entity);
-  const targetKind = sourceEntityTargetKind(entity);
-  const requested = sourceEntityRequestedOpenSurface(entity);
-  const kind = String(entity?.kind || record?.kind || '').trim().toLowerCase();
-  const hasURL = !!sourceEntityTargetURL(entity);
-  const durableReaderTarget = targetKind === 'content_item' || targetKind === 'source_service_item' || hasURL;
-
-  if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
-    return { appId: 'vtext', openSurface: requested || 'vtext', mode: 'published_vtext', liveOriginal: false, readerMode: false };
-  }
-  if (requested === 'web_lens') {
-    return { appId: 'browser', openSurface: requested, mode: 'live_original', liveOriginal: true, readerMode: false };
-  }
-  if (requested === 'video' || kind === 'youtube_video') {
-    return { appId: 'video', openSurface: requested || 'video', mode: 'media', liveOriginal: false, readerMode: false };
-  }
-  if (requested === 'source' || durableReaderTarget) {
-    return { appId: 'content', openSurface: requested || 'source', mode: 'source_reader', liveOriginal: false, readerMode: true };
-  }
-  if (requested) {
-    return { appId: requested, openSurface: requested, mode: requested, liveOriginal: false, readerMode: false };
-  }
-  return { appId: 'content', openSurface: 'source', mode: 'source_reader', liveOriginal: false, readerMode: true };
+  return sourceOpenPlan({
+    requestedOpenSurface: sourceEntityRequestedOpenSurface(entity),
+    targetKind: sourceEntityTargetKind(entity),
+    sourceKind: entity?.kind || record?.kind || '',
+    hasURL: !!sourceEntityTargetURL(entity),
+  });
 }
 
 export function sourceEntityOpenAppID(entity: any): string {

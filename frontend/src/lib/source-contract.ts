@@ -18,6 +18,21 @@ export const SOURCE_OPEN_SURFACES = {
   image: 'image',
 } as const;
 
+export type SourceOpenPlanInput = {
+  requestedOpenSurface?: unknown;
+  targetKind?: unknown;
+  sourceKind?: unknown;
+  hasURL?: boolean;
+};
+
+export type SourceOpenPlan = {
+  appId: string;
+  openSurface: string;
+  mode: string;
+  liveOriginal: boolean;
+  readerMode: boolean;
+};
+
 export function normalizeSourceEvidenceState(value: unknown): string {
   const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   switch (normalized) {
@@ -121,4 +136,64 @@ export function normalizeSourceOpenSurface(value: unknown): string {
     default:
       return normalized;
   }
+}
+
+export function sourceOpenPlan(input: SourceOpenPlanInput = {}): SourceOpenPlan {
+  const requested = normalizeSourceOpenSurface(input.requestedOpenSurface);
+  const targetKind = String(input.targetKind || '').trim().toLowerCase();
+  const sourceKind = String(input.sourceKind || '').trim().toLowerCase();
+  const durableReaderTarget = targetKind === 'content_item' || targetKind === 'source_service_item' || !!input.hasURL;
+
+  if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
+    return {
+      appId: 'vtext',
+      openSurface: requested || SOURCE_OPEN_SURFACES.vtext,
+      mode: 'published_vtext',
+      liveOriginal: false,
+      readerMode: false,
+    };
+  }
+  if (requested === SOURCE_OPEN_SURFACES.webLens) {
+    return {
+      appId: 'browser',
+      openSurface: requested,
+      mode: 'live_original',
+      liveOriginal: true,
+      readerMode: false,
+    };
+  }
+  if (requested === SOURCE_OPEN_SURFACES.video || sourceKind === 'youtube_video') {
+    return {
+      appId: 'video',
+      openSurface: requested || SOURCE_OPEN_SURFACES.video,
+      mode: 'media',
+      liveOriginal: false,
+      readerMode: false,
+    };
+  }
+  if (requested === SOURCE_OPEN_SURFACES.source || durableReaderTarget) {
+    return {
+      appId: 'content',
+      openSurface: requested || SOURCE_OPEN_SURFACES.source,
+      mode: 'source_reader',
+      liveOriginal: false,
+      readerMode: true,
+    };
+  }
+  if (requested) {
+    return {
+      appId: requested,
+      openSurface: requested,
+      mode: requested,
+      liveOriginal: false,
+      readerMode: false,
+    };
+  }
+  return {
+    appId: 'content',
+    openSurface: SOURCE_OPEN_SURFACES.source,
+    mode: 'source_reader',
+    liveOriginal: false,
+    readerMode: true,
+  };
 }
