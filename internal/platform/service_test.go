@@ -218,6 +218,63 @@ func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusi
 	}
 }
 
+func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-selector-set",
+			"kind":      "source_service_item",
+			"label":     "Multi selector source",
+			"target": map[string]any{
+				"target_kind": "source_service_item",
+				"item_id":     "source-item-selector-set",
+			},
+			"selectors": []map[string]any{
+				{
+					"selector_kind": "text_quote",
+					"text_quote":    "The quoted passage remains the inline snapshot.",
+					"content_hash":  "hash-quoted-passage",
+				},
+				{
+					"selector_kind": "table_range",
+					"table_id":      "appendix-a",
+					"start_row":     3,
+					"end_row":       7,
+				},
+				{
+					"selector_kind": "page_range",
+					"start_page":    12,
+					"end_page":      13,
+				},
+			},
+		}},
+	})
+
+	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	if err != nil {
+		t.Fatalf("buildPublicationSourceMetadata: %v", err)
+	}
+	if len(got.Transclusions) != 1 {
+		t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
+	}
+	transclusion := got.Transclusions[0]
+	if transclusion.SnapshotText != "The quoted passage remains the inline snapshot." {
+		t.Fatalf("snapshot text = %q", transclusion.SnapshotText)
+	}
+	var selectorSet struct {
+		SelectorKind string           `json:"selector_kind"`
+		Selectors    []map[string]any `json:"selectors"`
+	}
+	if err := json.Unmarshal(transclusion.SourceSelector, &selectorSet); err != nil {
+		t.Fatalf("decode source selector: %v", err)
+	}
+	if selectorSet.SelectorKind != "selector_set" || len(selectorSet.Selectors) != 3 {
+		t.Fatalf("selector set = %#v from %s", selectorSet, string(transclusion.SourceSelector))
+	}
+	if selectorSet.Selectors[1]["selector_kind"] != "table_range" || selectorSet.Selectors[2]["selector_kind"] != "page_range" {
+		t.Fatalf("selector set lost non-quote selectors: %#v", selectorSet.Selectors)
+	}
+}
+
 func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")

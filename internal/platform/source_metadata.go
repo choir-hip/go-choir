@@ -135,7 +135,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 			firstSelector = selectorMap
 		}
 	}
-	sourceSelector, err := json.Marshal(firstSelector)
+	sourceSelector, err := marshalPublicationSourceSelector(selectors, firstSelector)
 	if err != nil {
 		return entity, transclusion, false, fmt.Errorf("marshal source selector: %w", err)
 	}
@@ -176,6 +176,17 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		EntityJSON:         raw,
 	}
 	return entity, transclusion, true, nil
+}
+
+func marshalPublicationSourceSelector(selectors []any, firstSelector map[string]any) (json.RawMessage, error) {
+	if len(selectors) <= 1 {
+		return json.Marshal(firstSelector)
+	}
+	selectorSet := map[string]any{
+		"selector_kind": "selector_set",
+		"selectors":     selectors,
+	}
+	return json.Marshal(selectorSet)
 }
 
 func normalizePublicationDisplayPolicy(raw string, display map[string]any, selector map[string]any) string {
