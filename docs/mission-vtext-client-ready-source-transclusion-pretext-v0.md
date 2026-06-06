@@ -7130,3 +7130,53 @@ next action:
   card/pill/rounded-rectangle source chrome, move the expanded note toward a
   content-first marginal/source-note treatment, and prove line/column wrapping
   around the note on the deployed legal-cloud publication.
+
+## 2026-06-06 Owner Route Proof: Pretext Magazine/Journal Wrapping
+
+status: deployed_verified_checkpoint_incomplete
+
+claim:
+
+- The purpose of Pretext in the source UI is wrapping and magazine/journal
+  article composition: source notes should occupy a side measure while article
+  prose routes beside them, instead of expanding as a full-width stack of
+  rounded cards/pills that interrupts the article.
+
+deployed owner proof:
+
+- Browser/Playwright opened the owner-authenticated publication route
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`
+  against staging at deployed behavior commit `f7f7145f`.
+- It clicked the first source marker in the actual legal-cloud publication and
+  measured the mounted `[data-vtext-source-flow]` region.
+- The published reader was an `ARTICLE` with `contenteditable="false"`.
+- The source-flow region materialized `10` Pretext lines, with `7` routed as
+  lines beside the source note.
+- The side-column clearance check passed: every line marked
+  `[data-vtext-source-flow-line-beside-note]` ended before the note column.
+- The note width was `340px` inside an `1147px` flow width.
+- The note contained the content-first source title/excerpt and the minimal
+  `Open source` / `Close` actions.
+- No `.vtext-source-facts`, `source available`, or `public source` metadata
+  pills were present inside the source-flow note.
+- A visual screenshot of the proof showed the first proposal paragraph flowing
+  beside the right-side ABA Formal Opinion 512 source note, with later
+  paragraphs returning to the full article measure.
+
+interpretation:
+
+- The current deployed owner route does satisfy the core Pretext wrapping
+  requirement for the first legal-cloud source marker.
+- This is not a final design claim. The remaining visual work is to keep the
+  note content-first across more source types and viewport sizes, reduce
+  remaining app/window/taskbar clutter from repeated source opens, and ensure
+  future source-acquisition repairs feed clean reader Markdown into the same
+  journal flow rather than falling back to iframe/browser chrome.
+
+next action:
+
+- Move to the next realism axis: source acquisition and source-window quality.
+  When iframe/Web Lens source pages fail or include cookie banners, navigation,
+  and location selectors, the system should create a cleaned Markdown reader
+  snapshot with provenance and render that snapshot by default, with iframe as
+  fallback rather than the primary reader experience.
