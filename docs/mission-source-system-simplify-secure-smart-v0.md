@@ -1906,6 +1906,83 @@ source entities, diagnosis row counts/signatures remain stable, Source Viewer
 opens still work, and publication/export metadata includes the preserved source
 records.
 
+### 2026-06-06 Restore Table-Tail Fix Evidence
+
+Status: `accepted_on_staging_for_restore_transition`.
+
+Root-cause correction: the v90-to-v91 row-count shift was not a new browser row
+invention in the first instance. The restored v90 head was created by
+`HandleVTextRestoreRevision`, which copied the historical source revision bytes
+directly and bypassed the same Markdown table-shaped-row normalization used by
+ordinary user revision creation. Because the restored historical content still
+contained the known blank-separated malformed final `Work product` table row,
+the following browser save materialized the already-rendered table tail into a
+strict canonical row. The durable invariant should be enforced earlier: the
+first restored primary revision must already be canonical, so the next bounded
+edit/revise transition does not carry the apparent row-count drift.
+
+Repair:
+
+- Commit `af8870448df7adc0072e3ce133b2124bf913010b` normalizes table-shaped
+  rows in `HandleVTextRestoreRevision` before creating the restored revision.
+- If normalization changes restored content, the revision metadata records
+  `vtext_structure_stabilized=true` and
+  `vtext_structure_stabilized_reason=normalized_restored_markdown_table_rows`.
+- The restore path still merges metadata from the source revision first, so
+  durable `source_entities` survive the normalized restore.
+
+Local verification:
+
+```text
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextRestoreRevisionNormalizesMalformedTableTailRows|TestVTextUserSaveAndAgentRevisePreserveSourcesAndTableShape|TestVTextMarkdownStructureStabilizationHandlesPartialTableContexts'
+```
+
+Landing evidence:
+
+```text
+Fix commit: af8870448df7adc0072e3ce133b2124bf913010b
+CI run: 27062928319
+FlakeHub publish run: 27062928316
+Node B deploy job: 79878807642
+Health proxy deployed_commit: af8870448df7adc0072e3ce133b2124bf913010b
+Health sandbox deployed_commit: af8870448df7adc0072e3ce133b2124bf913010b
+Health deployed_at: 2026-06-06T12:59:26Z
+```
+
+Deployed synthetic product-path restore proof used real staging passkey
+registration and authenticated public VText APIs, not test-only or internal
+routes. It created a fixture VText document, created a historical source
+revision with a blank-separated malformed table tail plus `source_entities`,
+advanced the head, restored the historical revision through
+`POST /api/vtext/documents/{id}/restore`, and checked the restored head through
+`/api/vtext/documents/{id}/diagnosis?limit=10&include_content=false`.
+
+Accepted evidence:
+
+```text
+registered_email: restore-acceptance-1780750925040-zz7zau@example.com
+doc_id: 5a579f01-69b5-4a4f-a9b2-e7d9cbb3673e
+source_revision_id: 5e192e94-799e-4da2-b5ee-1e7bcb0f1ec8
+current_revision_id_before_restore: 18601ba8-5e82-48e1-a944-93337b914c04
+restored_revision_id: 81260b65-f50d-4839-a9fb-01b8268ce65f
+restored_version_number: 2
+restored_has_rejoined_tail: true
+restored_metadata_source: restore_historical_revision
+restored_structure_stabilized: true
+restored_structure_reason: normalized_restored_markdown_table_rows
+restored_source_entities: [src-restore-1780750925279]
+restored table_count: 1
+restored table_row_count: 5
+restored table signature: sha256:5b39e295297731ee5408571bad5034ebe562a2ecdabb99f36da712624e237911
+result: passed
+```
+
+Residual risk: this proves the restore transition that created the noncanonical
+head in the owner workflow. It does not replace the broader remaining mission
+acceptance for a fresh owner Comet bounded edit/revise on the legal proposal,
+guest source-open proof, publication/export metadata proof, and adversarial
+source-system review.
+
 ## Suggested `/goal`
 
 ```text
