@@ -12,14 +12,18 @@ Operating method: `docs/missiongradient-method.md`.
 
 The source-system mission reached useful correctness and staging proof across
 VText, publication metadata, public source access, and visibility enforcement,
-but the implementation and UI surface have accumulated complexity. Loop 8 is a
-quality mission: stabilize the newly exposed VText/source UI bugs, remove dead
-or weak paths, and design/refactor toward smaller reusable contracts without
-changing source/publication security semantics or degrading performance.
+but the implementation, UI surface, and export path have accumulated
+complexity. Loop 8 is a quality mission: stabilize the newly exposed
+VText/source UI bugs, make published VText exports professional
+format-native documents with embedded source provenance, remove dead or weak
+paths, and design/refactor toward smaller reusable contracts without changing
+source/publication security semantics or degrading performance.
 
 Do not treat this as a cosmetic pass. The real artifact is a simpler,
-staging-proven source/VText/publication system whose behavior is easier to
-verify and whose core files are easier to change safely.
+staging-proven source/VText/publication system whose visible UI and downloaded
+documents are professional, whose source provenance survives across formats,
+whose behavior is easier to verify, and whose core files are easier to change
+safely.
 
 ## Hard Invariants
 
@@ -38,6 +42,10 @@ verify and whose core files are easier to change safely.
 - Do not accept a refactor that adds measurable product-path latency without a
   named reason and benchmark evidence.
 - Staging remains the acceptance environment for behavior changes.
+- Rich exports must be rendered from structured VText/publication semantics,
+  not by copying Markdown into DOCX/HTML/PDF containers.
+- Exported source provenance must be visible enough for a reader and embedded
+  enough for machine recovery.
 
 ## Current Belief State
 
@@ -52,11 +60,63 @@ verify and whose core files are easier to change safely.
   - changing version labels must not alter toolbar dimensions;
   - the recent-document panel can remain in the pointer-event layer and
     intercept toolbar clicks after opening/creating a document.
+- Published-result chrome still risks stealing reading space after publish and
+  should be treated as part of the same content-forward UI stabilization pass.
+- Rich exports are currently container-valid but document-invalid: DOCX, HTML,
+  and PDF leak raw Markdown markers and do not embed a consistent source
+  manifest.
 - Core files such as `frontend/src/lib/VTextEditor.svelte` and VText/backend
   source files are too large for confident future changes.
 
-Highest-impact uncertainty: which large-file paths are true shared contracts
-versus incidental mission accretion that can be safely removed or extracted.
+Highest-impact uncertainty: what canonical document/source representation can
+drive VText rendering, publication export, source metadata preservation, and
+future firm-specific document styles without creating another parallel system.
+
+## Cognitive Transform Pass
+
+Current uncertainty or obstacle: Loop 8 could collapse into local cleanup
+patches if it optimizes file size or UI nits directly. The export failure shows
+the deeper object is not "clean up VText"; it is "make VText a durable document
+system whose source-rich documents survive authoring, publication, and external
+professional formats."
+
+Selected transforms:
+
+1. Audience-level translation: a lawyer/client judges the artifact by the
+   downloaded memo and visible provenance, not by the platform metadata API.
+2. Depth extraction: export is not format conversion; it is projection of the
+   canonical VText/source graph into another professional document grammar.
+3. Artifact-biology: the system should grow around one document/source spine,
+   not around separate UI, export, and publication organisms that drift apart.
+4. Verifier inversion: acceptance must inspect Word/PDF/browser artifacts and
+   embedded manifests, not merely assert that the API returned a `.docx` ZIP or
+   a `%PDF` header.
+
+Route-changing insights:
+
+- The first major refactor target should be a canonical
+  `PublicationDocument`/source-manifest representation, not only splitting
+  `VTextEditor.svelte`.
+- Rich export is a design driver for modularity: HTML, DOCX, PDF, VText
+  renderer, Source Viewer, and publication metadata should consume the same
+  source contract.
+- UI stabilization remains urgent, but it is bounded pre-work; the larger
+  simplification payoff comes from removing Markdown-as-interchange shortcuts.
+- Performance is not the limiting factor. The limiting factor is semantic
+  drift: source metadata, selectors, and citation markers must not fork across
+  renderers.
+
+Changed plan:
+
+- implementation: stabilize VText chrome first, then build the structured
+  export/document spine before large extraction;
+- verifier/evidence: combine API checks with visual/download inspection and
+  embedded metadata extraction for DOCX/HTML/PDF;
+- scope: include rich export and source embedding as Loop 8 core work, not a
+  follow-up;
+- stopping condition: do not call Loop 8 complete until VText UI, rich exports,
+  source metadata embedding, and simplification/refactor evidence all pass on
+  staging.
 
 ## Loop 8 Subphases
 
@@ -93,6 +153,8 @@ Known initial targets:
 - historical state label reads `Historical` or equivalent;
 - label changes do not resize the toolbar;
 - no fake pill controls for noninteractive policy facts.
+- published-result header/actions do not permanently obscure the document or
+  collide with download controls.
 
 Acceptance:
 
@@ -101,7 +163,35 @@ Acceptance:
   historical versions with different version-number widths;
 - publish payload still includes explicit access/export policy.
 
-### 8C. Dead/Weak Path Prune
+### 8C. Rich Export Spine
+
+Design and implement structured rich exports before broad refactoring.
+
+Targets:
+
+- `PublicationDocument` AST from the immutable publication bundle;
+- shared source manifest used by HTML, DOCX, PDF, Markdown, VText rendering,
+  Source Viewer, and publication metadata;
+- HTML renderer with semantic headings, paragraphs, lists, tables, links,
+  source markers, source appendix, JSON-LD, and embedded manifest;
+- DOCX renderer with WordprocessingML styles/runs/tables, footnotes/endnotes
+  or source appendix, hyperlinks where allowed, custom XML source manifest, and
+  custom properties;
+- PDF renderer with formatted layout, visible citations/source appendix, XMP
+  metadata, and optional associated-file JSON manifest for archival profiles;
+- export profiles for future firm-specific style, headings, citation placement,
+  headers/footers, and metadata policy.
+
+Acceptance:
+
+- no raw Markdown markers leak into DOCX/HTML/PDF output body;
+- source references are visible in each rich format;
+- a normalized source manifest is embedded in every rich format;
+- downloaded DOCX/PDF/HTML are visually inspected and have extraction tests;
+- publication export metadata, access policy, source snapshots, selectors, and
+  retrieval spans are preserved.
+
+### 8D. Dead/Weak Path Prune
 
 Search for unused, duplicated, or shortcut paths introduced during the source
 mission.
@@ -122,7 +212,7 @@ Acceptance:
 - local and CI checks pass;
 - behavior-changing deletions get staging proof when they affect product paths.
 
-### 8D. Modularity And Contract Design
+### 8E. Modularity And Contract Design
 
 Design the refactor before large extraction.
 
@@ -143,9 +233,9 @@ Acceptance:
 - define performance constraints and any benchmark/profiling checks;
 - choose extraction order that keeps diffs reviewable and staging-verifiable.
 
-### 8E. Incremental Refactor Execution
+### 8F. Incremental Refactor Execution
 
-Extract modules only after 8D has a documented design.
+Extract modules only after 8E has a documented design.
 
 Acceptance:
 
@@ -154,7 +244,7 @@ Acceptance:
 - file size and responsibility boundaries improve measurably;
 - no performance regression is observed in build output or product-path checks.
 
-### 8F. Final Hard Review
+### 8G. Final Hard Review
 
 Run adversarial/cognitive review after first correctness and refactor passes.
 
@@ -300,5 +390,5 @@ acceptance:
 ## Suggested Goal String
 
 ```text
-/goal Run docs/mission-source-system-loop8-simplify-v0.md as a Codex-operated MissionGradient mission. Preserve docs/source-external-data-publication.md as the requirements contract and docs/missiongradient-method.md as the operating method. Treat docs/mission-source-system-simplify-secure-smart-v0.md as the parent evidence ledger, not the active checklist. First document all newly confirmed VText/source/publication UI and behavior problems before behavior-changing code. Stabilize VText chrome and publish-menu interactions on staging, including stable toolbar dimensions across version labels and correct latest/historical state labels. Then run Loop 8 simplification in subphases: bug inventory, bounded UI stabilization, dead/weak path pruning, modularity/refactor design with performance constraints, incremental extraction, and adversarial hard review. Audit large core files including frontend/src/lib/VTextEditor.svelte and backend VText/source/publication files for dead code, duplicate contracts, shortcut paths, and refactor seams. Refactor only with shared contracts, focused tests, no source/publication security regressions, no measurable performance cost, CI, Node B deploy identity, staging Playwright/API proof, rollback refs, and residual risks. Produce an updated hard mission report in docs and PDF in iCloud Drive before claiming completion.
+/goal Run docs/mission-source-system-loop8-simplify-v0.md as a Codex-operated MissionGradient mission. Preserve docs/source-external-data-publication.md as the requirements contract and docs/missiongradient-method.md as the operating method. Treat docs/mission-source-system-simplify-secure-smart-v0.md as the parent evidence ledger, not the active checklist. First document all newly confirmed VText/source/publication UI, export, and behavior problems before behavior-changing code. Stabilize VText chrome and publish/published-result interactions on staging, including stable toolbar dimensions across version labels, correct latest/historical state labels, non-overlapping publish/download controls, and content-forward reading space. Then make rich publication export a core Loop 8 artifact: design and implement a canonical PublicationDocument/source-manifest spine that renders professional format-native HTML, DOCX, and PDF from VText/publication semantics rather than raw Markdown; preserve visible citations/source appendices and embedded source metadata in every rich format; support future firm-specific export profiles for headings, typography, citation placement, headers/footers, and metadata policy. After rich export correctness, run Loop 8 simplification in subphases: bug inventory, bounded UI stabilization, rich export spine, dead/weak path pruning, modularity/refactor design with performance constraints, incremental extraction, and adversarial hard review. Audit large core files including frontend/src/lib/VTextEditor.svelte, internal/runtime/vtext.go, and backend VText/source/publication files for dead code, duplicate contracts, shortcut paths, and refactor boundaries. Refactor only through shared contracts, focused tests, no source/publication security regressions, no measurable performance cost, CI, Node B deploy identity, staging Playwright/API proof, visual/download inspection of DOCX/PDF/HTML, rollback refs, and residual risks. Produce an updated hard mission report in docs and PDF in iCloud Drive before claiming completion.
 ```
