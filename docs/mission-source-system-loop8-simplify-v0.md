@@ -253,6 +253,50 @@ acceptance:
 - historical revision shows `Historical` or equivalent;
 - label changes do not alter toolbar dimensions.
 
+### Problem L8-4: Rich Publication Exports Leak Markdown Into DOCX/HTML/PDF
+
+Status: `documented_pending_fix`.
+
+problem: published VText downloads for DOCX, HTML, and PDF are valid file
+containers but not correct formatted documents for their formats. HTML and PDF
+show raw Markdown headings, front matter delimiters, bold markers, and source
+link syntax. DOCX uses some heading paragraph styles, but still leaves inline
+Markdown bold/link syntax as literal text. These exports should be
+format-native documents, not Markdown copied into different containers.
+
+evidence:
+
+```text
+user files:
+  /Users/wiz/Downloads/choir-private-legal-cloud-proposal-vtext-pubc66d4bdf0.docx
+  /Users/wiz/Downloads/choir-private-legal-cloud-proposal-vtext-pubc66d4bdf0.html
+  /Users/wiz/Downloads/choir-private-legal-cloud-proposal-vtext-pubc66d4bdf0.pdf
+
+user screenshots:
+  /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_xaiJ55/Screenshot 2026-06-06 at 15.38.14.png
+  /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_VBXF0u/Screenshot 2026-06-06 at 15.38.25.png
+  /var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_pN38V3/Screenshot 2026-06-06 at 15.38.35.png
+
+local inspection:
+  DOCX word/document.xml contains literal "**private legal cloud**" and
+  "(source:src_aba_formal_op_512)".
+  HTML contains escaped "# Proposal", "## The Problem...", raw
+  "**private legal cloud**", and markdown source-link syntax inside a single
+  paragraph with <br>.
+```
+
+acceptance:
+
+- HTML export renders headings, paragraphs, emphasis, lists, tables, and source
+  references as HTML elements rather than escaped Markdown text;
+- DOCX export converts inline emphasis and source links to Word runs/hyperlinks
+  or acceptable styled text, without literal Markdown markers;
+- PDF export renders a publication-quality document from formatted blocks, not
+  raw Markdown lines;
+- existing metadata, source snapshot, access/export policy, and retrieval
+  envelopes remain present;
+- add tests that fail on literal Markdown markers in DOCX/HTML/PDF exports.
+
 ## Suggested Goal String
 
 ```text
