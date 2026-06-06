@@ -1,0 +1,70 @@
+{
+  "evidence_states": [
+    { "raw": "pending", "want": "candidate" },
+    { "raw": "represented", "want": "confirms" },
+    { "raw": "confirmed", "want": "confirms" },
+    { "raw": "refuting", "want": "refutes" },
+    { "raw": "qualifying", "want": "qualifies" },
+    { "raw": "no-source-needed", "want": "no_source_needed" },
+    { "raw": "access blocked", "want": "blocked_by_access" },
+    { "raw": "fetch_failed", "want": "unavailable" },
+    { "raw": "reader_snapshot_ready", "want": "" }
+  ],
+  "reader_artifact_states": [
+    { "raw": "reader_snapshot_ready", "want": "reader_snapshot_ready" },
+    { "raw": "snapshot-ready", "want": "reader_snapshot_ready" },
+    { "raw": "publication blocked", "want": "not_publication_safe" },
+    { "raw": "bounded excerpt", "want": "bounded_excerpt_only" },
+    { "raw": "source_import_failed", "want": "import_failed" },
+    { "raw": "confirms", "want": "" }
+  ],
+  "selector_kinds": [
+    { "raw": "", "want": "whole_resource" },
+    { "raw": "text quote", "want": "text_quote" },
+    { "raw": "page-range", "want": "page_range" },
+    { "raw": "timestamp", "want": "timestamp_range" },
+    { "raw": "transcript segments", "want": "transcript_segment" },
+    { "raw": "table-range", "want": "table_range" },
+    { "raw": "table cell", "want": "table_cell" },
+    { "raw": "data release vintage", "want": "data_vintage" },
+    { "raw": "selector-set", "want": "selector_set" }
+  ],
+  "open_surfaces": [
+    { "raw": "", "want": "" },
+    { "raw": "source-viewer", "want": "source" },
+    { "raw": "content", "want": "source" },
+    { "raw": "web-lens", "want": "web_lens" },
+    { "raw": "browser", "want": "web_lens" },
+    { "raw": "live original", "want": "web_lens" },
+    { "raw": "publication-version", "want": "vtext" },
+    { "raw": "youtube_video", "want": "video" },
+    { "raw": "image", "want": "image" }
+  ],
+  "frontend_open_plans": [
+    {
+      "name": "url durable source defaults source viewer",
+      "input": { "targetKind": "url", "sourceKind": "web_source", "hasURL": true },
+      "want": { "appId": "content", "openSurface": "source", "mode": "source_reader", "liveOriginal": false, "readerMode": true }
+    },
+    {
+      "name": "explicit web lens opens live original",
+      "input": { "requestedOpenSurface": "web-lens", "targetKind": "url", "hasURL": true },
+      "want": { "appId": "browser", "openSurface": "web_lens", "mode": "live_original", "liveOriginal": true, "readerMode": false }
+    },
+    {
+      "name": "source service item defaults source viewer",
+      "input": { "targetKind": "source_service_item", "sourceKind": "source_service_item" },
+      "want": { "appId": "content", "openSurface": "source", "mode": "source_reader", "liveOriginal": false, "readerMode": true }
+    },
+    {
+      "name": "published vtext opens vtext",
+      "input": { "targetKind": "publication_version" },
+      "want": { "appId": "vtext", "openSurface": "vtext", "mode": "published_vtext", "liveOriginal": false, "readerMode": false }
+    },
+    {
+      "name": "youtube source opens video",
+      "input": { "sourceKind": "youtube_video", "targetKind": "content_item" },
+      "want": { "appId": "video", "openSurface": "video", "mode": "media", "liveOriginal": false, "readerMode": false }
+    }
+  ]
+}

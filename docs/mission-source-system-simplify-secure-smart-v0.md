@@ -5285,6 +5285,29 @@ Go/TypeScript source contracts, broader source-service fixture coverage,
 future non-public publication semantics, direct proof-script auth limitations,
 desktop screenshot capture, and the deploy identity stamp distinction.
 
+## Shared source-contract matrix checkpoint
+
+Status: `contract_matrix_added`.
+
+To reduce the hard review's manual Go/TypeScript contract-mirroring risk, this
+checkpoint adds one shared fixture matrix at
+`internal/sourcecontract/testdata/source_contract_matrix.json`. The Go
+`internal/sourcecontract` tests and the frontend
+`frontend/tests/vtext-source-entities.spec.js` tests now consume the same
+fixture for source evidence states, reader artifact states, selector kinds,
+open-surface aliases, and frontend open-plan expectations.
+
+Verification:
+
+- `nix develop -c go test ./internal/sourcecontract -count=1` passed.
+- `npm --prefix frontend run e2e -- tests/vtext-source-entities.spec.js -g 'frontend source contract stays aligned with shared matrix|source evidence states normalize|source open plans normalize'` passed.
+
+remaining error field: this does not yet generate Go and TypeScript constants
+from one schema, and it does not exhaustively cover every future source-service
+or connector record. It converts the highest-risk mirrored constants into one
+cross-runtime verifier matrix and leaves schema generation as a future
+architecture simplification rather than a correctness blocker.
+
 ## Suggested `/goal`
 
 ```text

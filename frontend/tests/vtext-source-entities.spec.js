@@ -1,4 +1,6 @@
 import { test, expect } from './helpers/fixtures.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   mediaRefToSourceEntity,
   normalizeReaderArtifactState,
@@ -15,6 +17,28 @@ import {
   sourceEvidenceStateLabel,
 } from '../src/lib/vtext-source-renderer.ts';
 import { buildSourceReviewPayload } from '../src/lib/vtext-source-review.js';
+
+const sourceContractMatrix = JSON.parse(readFileSync(fileURLToPath(
+  new URL('../../internal/sourcecontract/testdata/source_contract_matrix.json', import.meta.url),
+), 'utf8'));
+
+test('frontend source contract stays aligned with shared matrix', () => {
+  for (const item of sourceContractMatrix.evidence_states) {
+    expect(normalizeSourceEvidenceState(item.raw), `evidence state ${item.raw}`).toBe(item.want);
+  }
+  for (const item of sourceContractMatrix.reader_artifact_states) {
+    expect(normalizeReaderArtifactState(item.raw), `reader artifact state ${item.raw}`).toBe(item.want);
+  }
+  for (const item of sourceContractMatrix.selector_kinds) {
+    expect(normalizeSourceSelectorKind(item.raw), `selector kind ${item.raw}`).toBe(item.want);
+  }
+  for (const item of sourceContractMatrix.open_surfaces) {
+    expect(sourceOpenPlan({ requestedOpenSurface: item.raw }).openSurface, `open surface ${item.raw}`).toBe(item.want || 'source');
+  }
+  for (const item of sourceContractMatrix.frontend_open_plans) {
+    expect(sourceOpenPlan(item.input), item.name).toMatchObject(item.want);
+  }
+});
 
 test('source review URL repairs default to Source Viewer open surface', () => {
   const payload = buildSourceReviewPayload({
