@@ -354,7 +354,7 @@ func TestVTextDerivesContentItemSourceEntitiesFromResearcherRefs(t *testing.T) {
 	if entity.Kind != "content_item" ||
 		entity.Target.TargetKind != "content_item" ||
 		entity.Target.ContentID != "content-cloud-audit" ||
-		entity.Display.OpenSurface != "content" ||
+		entity.Display.OpenSurface != "source" ||
 		entity.Evidence.ResearchState != "represented" ||
 		entity.Selectors[0].SelectorKind != "text_quote" ||
 		entity.Selectors[0].ContentHash != "sha256-cloud-audit" ||

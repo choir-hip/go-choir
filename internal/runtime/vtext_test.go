@@ -6726,7 +6726,7 @@ func TestVTextAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *test
 	if entity.Kind != "content_item" ||
 		entity.Target.ContentID != item.ContentID ||
 		entity.Target.CanonicalURL != item.CanonicalURL ||
-		entity.Display.OpenSurface != "content" ||
+		entity.Display.OpenSurface != "source" ||
 		entity.Evidence.ResearchState != "represented" ||
 		len(entity.Selectors) != 1 ||
 		entity.Selectors[0].SelectorKind != "text_quote" ||

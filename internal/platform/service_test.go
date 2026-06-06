@@ -343,6 +343,50 @@ func TestBuildPublicationSourceMetadataNormalizesLegacyEvidenceAliases(t *testin
 	}
 }
 
+func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-open-surface",
+			"kind":      "web_source",
+			"target": map[string]any{
+				"target_kind": "content_item",
+				"content_id":  "content-open-surface",
+			},
+			"selectors": []map[string]any{{
+				"selector_kind": "whole_resource",
+				"content_hash":  "hash-open-surface",
+			}},
+			"display": map[string]any{
+				"inline_mode":  "collapsed_citation",
+				"open_surface": "content",
+			},
+		}},
+	})
+
+	got, err := buildPublicationSourceMetadata(PublishVTextRequest{Metadata: metadata})
+	if err != nil {
+		t.Fatalf("buildPublicationSourceMetadata: %v", err)
+	}
+	if len(got.SourceEntities) != 1 {
+		t.Fatalf("source entities len = %d, want 1: %#v", len(got.SourceEntities), got.SourceEntities)
+	}
+	entity := got.SourceEntities[0]
+	if entity.OpenSurface != "source" {
+		t.Fatalf("open surface = %q, want source", entity.OpenSurface)
+	}
+	var raw struct {
+		Display struct {
+			OpenSurface string `json:"open_surface"`
+		} `json:"display"`
+	}
+	if err := json.Unmarshal(entity.EntityJSON, &raw); err != nil {
+		t.Fatalf("decode entity json: %v", err)
+	}
+	if raw.Display.OpenSurface != "source" {
+		t.Fatalf("entity json open surface = %q, want source from %s", raw.Display.OpenSurface, string(entity.EntityJSON))
+	}
+}
+
 func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")

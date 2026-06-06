@@ -394,7 +394,7 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) vtextSourceE
 		Display: vtextSourceEntityDisplay{
 			InlineMode:       "collapsed_citation",
 			ExpandedMode:     "source_card",
-			OpenSurface:      "source",
+			OpenSurface:      sourcecontract.OpenSurfaceSource,
 			DefaultCollapsed: true,
 		},
 		Evidence: vtextSourceEntityEvidence{
@@ -433,7 +433,7 @@ func contentItemRefToSourceEntity(item types.ContentItem, contextText string) vt
 		Display: vtextSourceEntityDisplay{
 			InlineMode:       "collapsed_citation",
 			ExpandedMode:     "source_card",
-			OpenSurface:      "content",
+			OpenSurface:      sourcecontract.OpenSurfaceSource,
 			DefaultCollapsed: true,
 		},
 		Evidence: vtextSourceEntityEvidence{
@@ -652,15 +652,15 @@ func sourceEntityExpandedMode(kind string) string {
 
 func sourceEntityOpenSurface(kind string, ref vtextMediaSourceRef) string {
 	if ref.AppHint != "" {
-		return ref.AppHint
+		return sourcecontract.NormalizeOpenSurface(ref.AppHint)
 	}
 	switch kind {
 	case "youtube_video":
-		return "video"
+		return sourcecontract.OpenSurfaceVideo
 	case "image":
-		return "image"
+		return sourcecontract.OpenSurfaceImage
 	default:
-		return "content"
+		return sourcecontract.OpenSurfaceSource
 	}
 }
 

@@ -4070,8 +4070,8 @@ func (h *APIHandler) applyVTextSourceArtifactAttachments(ctx context.Context, ow
 		if entity.Label == "" {
 			entity.Label = firstNonEmpty(item.Title, entity.Target.CanonicalURL, item.SourceURL, "Source "+item.ContentID)
 		}
-		if entity.Display.OpenSurface == "" || entity.Display.OpenSurface == "source" {
-			entity.Display.OpenSurface = "content"
+		if entity.Display.OpenSurface == "" || sourcecontract.IsSourceReaderOpenSurface(entity.Display.OpenSurface) {
+			entity.Display.OpenSurface = sourcecontract.OpenSurfaceSource
 		}
 		if len(entity.Selectors) == 0 {
 			entity.Selectors = []vtextSourceEntitySelector{{SelectorKind: "whole_resource"}}

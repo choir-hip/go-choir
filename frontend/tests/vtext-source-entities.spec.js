@@ -76,6 +76,7 @@ test('source open plans normalize Web Lens and Source Viewer aliases', () => {
   for (const open_surface of ['web-lens', 'web_lens', 'live-original', 'live_original']) {
     expect(sourceEntityOpenPlan({ ...urlSource, display: { open_surface } })).toMatchObject({
       appId: 'browser',
+      openSurface: 'web_lens',
       mode: 'live_original',
       liveOriginal: true,
       readerMode: false,
@@ -85,6 +86,7 @@ test('source open plans normalize Web Lens and Source Viewer aliases', () => {
   for (const open_surface of ['source-viewer', 'source_viewer', 'reader', 'content', 'source']) {
     expect(sourceEntityOpenPlan({ ...urlSource, display: { open_surface } })).toMatchObject({
       appId: 'content',
+      openSurface: 'source',
       mode: 'source_reader',
       liveOriginal: false,
       readerMode: true,
@@ -93,6 +95,7 @@ test('source open plans normalize Web Lens and Source Viewer aliases', () => {
 
   expect(sourceEntityOpenPlan(urlSource)).toMatchObject({
     appId: 'content',
+    openSurface: 'source',
     mode: 'source_reader',
     readerMode: true,
   });

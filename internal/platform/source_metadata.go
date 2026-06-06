@@ -147,6 +147,15 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		"source_entity_id": entityID,
 	})
 	displayPolicy := normalizePublicationDisplayPolicy(firstString(m, "display_policy", "inline_mode"), display, firstSelector)
+	openSurface := sourcecontract.NormalizeOpenSurface(firstString(display, "open_surface"))
+	if openSurface != "" {
+		if display == nil {
+			display = map[string]any{}
+		}
+		display["open_surface"] = openSurface
+		m["display"] = display
+		raw = mustJSONRaw(m)
+	}
 	targetKind := firstNonEmpty(firstString(target, "target_kind"), firstString(m, "target_kind"))
 	targetID := firstNonEmpty(
 		firstString(target, "item_id"),
@@ -165,7 +174,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		TargetKind:     targetKind,
 		TargetID:       targetID,
 		DisplayPolicy:  displayPolicy,
-		OpenSurface:    firstString(display, "open_surface"),
+		OpenSurface:    openSurface,
 		EntityJSON:     raw,
 	}
 	transclusion = publicationTransclusionInput{

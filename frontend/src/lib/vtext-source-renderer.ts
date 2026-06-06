@@ -264,17 +264,22 @@ export function normalizeSourceOpenSurface(value: unknown): string {
     case 'live':
     case 'original':
     case 'live_original':
-      return normalized === 'weblens' ? 'web_lens' : normalized;
+      return 'web_lens';
     case 'source_viewer':
     case 'source_reader':
     case 'reader':
     case 'content':
     case 'source':
-      return normalized === 'source_viewer' || normalized === 'source_reader' || normalized === 'reader'
-        ? 'source'
-        : normalized;
+      return 'source';
+    case 'published_vtext':
+    case 'publication_version':
+    case 'published_vtext_span':
+    case 'vtext':
+      return 'vtext';
     case 'video':
       return 'video';
+    case 'image':
+      return 'image';
     default:
       return normalized;
   }
@@ -296,13 +301,13 @@ export function sourceEntityOpenPlan(entity: any): any {
   if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
     return { appId: 'vtext', openSurface: requested || 'vtext', mode: 'published_vtext', liveOriginal: false, readerMode: false };
   }
-  if (requested === 'browser' || requested === 'web' || requested === 'web_lens' || requested === 'live' || requested === 'original' || requested === 'live_original') {
+  if (requested === 'web_lens') {
     return { appId: 'browser', openSurface: requested, mode: 'live_original', liveOriginal: true, readerMode: false };
   }
   if (requested === 'video' || kind === 'youtube_video') {
     return { appId: 'video', openSurface: requested || 'video', mode: 'media', liveOriginal: false, readerMode: false };
   }
-  if (requested === 'source' || requested === 'content' || durableReaderTarget) {
+  if (requested === 'source' || durableReaderTarget) {
     return { appId: 'content', openSurface: requested || 'source', mode: 'source_reader', liveOriginal: false, readerMode: true };
   }
   if (requested) {
@@ -376,7 +381,7 @@ export function mediaRefToSourceEntity(ref: any): any | null {
     display: {
       inline_mode: kind === 'youtube' || kind === 'image' ? 'embedded_preview' : 'collapsed_citation',
       expanded_mode: kind === 'youtube' ? 'media_player' : 'source_card',
-      open_surface: ref?.app_hint || (kind === 'youtube' ? 'video' : kind),
+      open_surface: normalizeSourceOpenSurface(ref?.app_hint || (kind === 'youtube' ? 'video' : kind)),
       default_collapsed: true,
     },
     evidence: {
