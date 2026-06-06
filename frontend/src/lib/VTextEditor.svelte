@@ -96,6 +96,8 @@
   let publishedProposal = null;
   let publishedActionPending = false;
   let publishResult = null;
+  let publishPolicyAcknowledged = false;
+  let publishPolicyAcknowledgedFor = '';
   let cancelPending = false;
   let compareResult = null;
   let compareError = '';
@@ -706,6 +708,26 @@
     if (/^https?:\/\//.test(routePath)) return routePath;
     if (typeof window === 'undefined' || !window.location) return routePath;
     return `${window.location.origin}${routePath.startsWith('/') ? routePath : `/${routePath}`}`;
+  }
+
+  function buildExplicitPublishAccessPolicy() {
+    return {
+      visibility: 'public',
+      route: 'public',
+    };
+  }
+
+  function buildExplicitPublishExportPolicy() {
+    return {
+      copy_allowed: true,
+      download_allowed: true,
+      formats: ['txt', 'md', 'html', 'docx', 'pdf'],
+    };
+  }
+
+  function handlePublishPolicyAcknowledgement(event) {
+    publishPolicyAcknowledged = !!event.currentTarget.checked;
+    publishPolicyAcknowledgedFor = publishPolicyAcknowledged ? publishPolicyKey : '';
   }
 
   function openPublishedURL(result = publishResult) {
@@ -1450,6 +1472,11 @@
       dispatch('authrequired', { kind: 'publish_vtext', appId: 'vtext', appName: 'VText', title: currentDoc.title });
       return;
     }
+    if (!publishPolicyReady) {
+      error = 'Approve the public publication policy before publishing.';
+      saveStatus = 'Publish policy required';
+      return;
+    }
     publishedActionPending = true;
     error = '';
     publishResult = null;
@@ -1461,7 +1488,11 @@
       saveStatus = `Publishing ${versionLabel}...`;
       publishResult = await publishVText(currentDoc.doc_id, {
         revisionId: revision.revision_id,
+        accessPolicy: buildExplicitPublishAccessPolicy(),
+        exportPolicy: buildExplicitPublishExportPolicy(),
       });
+      publishPolicyAcknowledged = false;
+      publishPolicyAcknowledgedFor = '';
       const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
       const opened = openPublishedURL(publishResult);
       if (opened) {
@@ -2176,6 +2207,12 @@
   $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published VText document' : 'VText document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
+  $: publishPolicyKey = `${currentDoc?.doc_id || ''}:${currentRevision?.revision_id || ''}:${versionLabel}`;
+  $: publishPolicyReady = publishPolicyAcknowledged && publishPolicyAcknowledgedFor === publishPolicyKey;
+  $: if (publishPolicyAcknowledged && publishPolicyAcknowledgedFor !== publishPolicyKey) {
+    publishPolicyAcknowledged = false;
+    publishPolicyAcknowledgedFor = '';
+  }
   $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
@@ -2414,7 +2451,7 @@
               class="secondary-action"
               data-vtext-publish
               on:click={handlePublishCurrent}
-              disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc}
+              disabled={loading || submitting || agentPending || !!mergePreview || publishedActionPending || !currentDoc || !publishPolicyReady}
             >
               {publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}
             </button>
@@ -2422,6 +2459,29 @@
         {/if}
       </div>
     </div>
+
+    {#if !isPublishedMode && currentDoc}
+      <section class="publication-panel publication-policy" data-vtext-publish-policy>
+        <div class="publication-heading">
+          <p class="eyebrow">Publication policy</p>
+          <div class="publication-policy-summary" data-vtext-publish-policy-summary>
+            <span>Public route</span>
+            <span>Source snapshots</span>
+            <span>Copy and downloads: txt, md, html, docx, pdf</span>
+          </div>
+        </div>
+        <label class="publication-policy-confirm">
+          <input
+            type="checkbox"
+            checked={publishPolicyReady}
+            on:change={handlePublishPolicyAcknowledgement}
+            data-vtext-publish-public-confirm
+            disabled={loading || submitting || agentPending || publishedActionPending || !!mergePreview}
+          />
+          <span>I approve publishing this revision to a public route.</span>
+        </label>
+      </section>
+    {/if}
 
     {#if agentPending}
       <div
@@ -3374,6 +3434,49 @@
     border-bottom-color: var(--choir-status-success);
   }
 
+  .publication-policy {
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, auto);
+    background: var(--choir-surface-pane);
+  }
+
+  .publication-policy-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .publication-policy-summary span {
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    padding: 0.24rem 0.48rem;
+    color: var(--choir-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .publication-policy-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.44rem;
+    min-width: 0;
+    color: var(--choir-text-primary);
+    font-size: 0.74rem;
+    font-weight: 720;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+
+  .publication-policy-confirm input {
+    flex: 0 0 auto;
+  }
+
+  .publication-policy-confirm span {
+    min-width: 0;
+  }
+
   .public-link {
     display: inline-block;
     max-width: min(34rem, 100%);
@@ -3628,6 +3731,10 @@
       grid-template-columns: minmax(0, 1fr);
       gap: 0.5rem;
       padding: 0.62rem 0.7rem;
+    }
+
+    .publication-policy-confirm {
+      justify-content: flex-start;
     }
 
     .publication-heading h2 {

@@ -31,3 +31,49 @@ test('vtext uses the document surface as the window and exposes version navigati
   await expect(prev).toBeEnabled();
   await expect(next).toBeDisabled();
 });
+
+test('vtext publish requires explicit public policy acknowledgement and forwards policy', async ({ desktopSession }) => {
+  const { page, baseURL } = desktopSession;
+  await openVText(page);
+
+  const editor = page.locator('[data-vtext-editor-area]');
+  await editor.fill('Publish policy fixture.\n\nThis revision should publish only after explicit owner approval.');
+
+  const policyPanel = page.locator('[data-vtext-publish-policy]');
+  const publishButton = page.locator('[data-vtext-publish]');
+  await expect(policyPanel).toBeVisible();
+  await expect(policyPanel.locator('[data-vtext-publish-policy-summary]')).toContainText('Public route');
+  await expect(publishButton).toBeDisabled();
+
+  let publishPayload = null;
+  await page.route('**/api/platform/vtext/publications', async (route) => {
+    publishPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        publication_id: 'pub-policy-fixture',
+        publication_version_id: 'pubver-policy-fixture',
+        route_path: '/pub/vtext/policy-fixture',
+        public_url: `${baseURL}/pub/vtext/policy-fixture`,
+      }),
+    });
+  });
+
+  await page.locator('[data-vtext-publish-public-confirm]').check();
+  await expect(publishButton).toBeEnabled();
+  await publishButton.click();
+
+  await expect(page.locator('[data-vtext-publish-result]')).toBeVisible({ timeout: 10000 });
+  expect(publishPayload).toMatchObject({
+    access_policy: {
+      visibility: 'public',
+      route: 'public',
+    },
+    export_policy: {
+      copy_allowed: true,
+      download_allowed: true,
+      formats: ['txt', 'md', 'html', 'docx', 'pdf'],
+    },
+  });
+});
