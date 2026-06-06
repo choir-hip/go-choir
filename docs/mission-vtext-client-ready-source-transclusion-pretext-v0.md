@@ -6470,7 +6470,7 @@ belief-state update:
 
 ## 2026-06-06 Simplification Pass: Hide Owner-Facing Diagnostic JSON
 
-status: local_verified_pending_deploy
+status: deployed_verified
 
 documented problem:
 
@@ -6508,11 +6508,50 @@ local proof:
   frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
   source-gap repair" --project=chromium --timeout=120000`.
 
-deployment proof still needed:
+commit:
 
-- Commit and push the diagnostic-affordance simplification, wait for CI and
-  Node B deploy, confirm staging identity, then repeat deployed source-panel
-  and Pretext source-flow proofs.
+- `be1e751d29e18b14591da067bd89813482b884fb`
+  (`fix: hide source repair diagnostics by default`) was pushed to
+  `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions CI run `27048958718` completed successfully.
+- The CI run included successful frontend build, Go runtime shards, Go
+  non-runtime tests, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27048958730` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `be1e751d29e18b14591da067bd89813482b884fb`, deployed at
+  `2026-06-06T01:38:16Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-markdown-lineage.spec.js -g "VText Sources panel applies
+  source-gap repair" --project=chromium --timeout=120000` -> passed.
+- That deployed source-panel proof asserts the normal owner source panel has no
+  `[data-vtext-source-repair-payload]` node, while manual source review still
+  repairs a citation gap and opens the repaired source window.
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=/Users/wiz/go-choir/frontend/playwright/.auth/choir-news.storage.meta.json
+  pnpm --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+
+deployed Comet owner proof:
+
+- Computer Use was available in Comet, and click actions worked.
+- Comet remained owner-authenticated on
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The legal-cloud publication showed the expanded ABA Formal Opinion 512 source
+  note beside article prose, using the journal/magazine source-flow surface
+  rather than a top-bunched source list.
+- Clicking the publication-side `Open source` control with Computer Use opened
+  another ABA Formal Opinion 512 source window containing the reader-mode source
+  artifact and provenance disclosure controls.
 
 belief-state update:
 
