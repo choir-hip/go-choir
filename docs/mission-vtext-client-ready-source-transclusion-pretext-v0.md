@@ -5934,3 +5934,111 @@ deployment proof still needed:
   identity, then create or refresh a source-backed publication that imports a
   noisy HTML source and prove the published source window opens the cleaned
   reader text rather than cookie/nav scaffolding.
+
+## 2026-06-06 Deployed Proof: Structured Reader Cleanup
+
+status: deployed_verified
+
+commit:
+
+- `f20fde26d23741ee970a69b1cf91157e1d94d10e` (`fix: clean imported html
+  reader snapshots`) was pushed to `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions run `27047720916` completed successfully, including the Go
+  gates/runtime shards and Node B deploy.
+- FlakeHub run `27047720928` completed successfully.
+- `https://choir.news/health` reported:
+  - `commit`: `f20fde26d23741ee970a69b1cf91157e1d94d10e`
+  - `deployed_commit`: `f20fde26d23741ee970a69b1cf91157e1d94d10e`
+  - `upstream_commit`: `f20fde26d23741ee970a69b1cf91157e1d94d10e`
+  - `deployed_at`: `2026-06-06T00:48:27Z`
+
+deployed API/product proof:
+
+- An authenticated staging import of
+  `https://www.hetzner.com/unternehmen/rechenzentrum/?choir_reader_probe=1780707022350`
+  through `/api/content/import-url` produced content item
+  `0e3a5a5f-3f61-4e1d-bd66-2efabb70ea68`.
+- The imported reader text was 8239 characters and began with useful article
+  content:
+  `Datacenter Regardless of which Hetzner product you choose...`
+- The proof checked for common chrome terms including cookie, consent, location
+  selector, login, and product-menu text; `noise_hits` was empty.
+- A full VText publication proof imported
+  `https://www.hetzner.com/unternehmen/rechenzentrum/?choir_reader_publication_probe=1780707096724`,
+  created VText document `7c226776-7d1a-4a6a-8af6-ffb2ee99cf6b`, published
+  `/pub/vtext/reader-cleanup-proof-1780707096724-pub758ee8db8`, and verified:
+  - publication metadata carried the full cleaned reader snapshot;
+  - authenticated published reader opened a `Source reader snapshot` window;
+  - unauthenticated guest published reader opened the same cleaned reader
+    snapshot;
+  - no iframe fallback was used while the publication-carried reader snapshot
+    was available.
+
+deployed Comet owner proof:
+
+- Computer Use was available and used against Comet.
+- Comet was navigated as the owner-authenticated browser to
+  `https://choir.news/pub/vtext/reader-cleanup-proof-1780707096724-pub758ee8db8`.
+- The published VText showed the source marker for
+  `Hetzner datacenter cleaned reader proof`.
+- Clicking the marker expanded the article-side source note and displayed
+  cleaned source excerpt text beginning `Regardless of which Hetzner product you
+  choose`.
+- Clicking `Open source` opened a source window titled
+  `Hetzner datacenter cleaned reader proof`.
+- The source window defaulted to `Source reader snapshot`, showed `Open in
+  VText`, and rendered the cleaned reader text beginning
+  `Datacenter Regardless of which Hetzner product you choose - our
+  high-performance web hosting...`.
+- The Comet source window did not display cookie-banner/location-selector/site
+  navigation chrome and did not need iframe/Web Lens rendering for this proof.
+
+residual risk:
+
+- The structured cleanup is generic and improves noisy HTML imports, but it is
+  still a heuristic reader extractor. It should be hardened with more real
+  sources and should mark low-confidence snapshots explicitly when article/main
+  extraction remains poor.
+- Some legal-cloud sources are curated artifacts rather than full-text
+  extraction. That can be acceptable when the artifact is intentionally concise,
+  but the system still needs clearer source-kind/status language so users can
+  distinguish full reader snapshots from bounded source summaries.
+
+## 2026-06-06 Clarification: Pretext Means Wrapping, Not Cards
+
+status: problem_recorded_before_next_ui_fix
+
+new user clarification:
+
+- The point of Pretext is the wrapping and magazine/journal UI.
+- Source UI should not be many nested cards, pills, and rounded rectangles.
+- Expanded source content should allow adjacent article columns/lines to wrap
+  around it, with source content presented as evidence in the reading flow
+  rather than as app metadata.
+
+belief update:
+
+- The current source-flow path is directionally correct because it uses Pretext
+  line routing and a single active journal note, but the remaining acceptance
+  bar is stricter: Pretext must own the article/source composition boundary.
+- A UI that merely places a source note beside or inside the prose is not enough
+  if the surrounding article text does not wrap in a magazine/journal manner.
+- The source note should be visually minimal and content-forward. Metadata
+  should be hidden, collapsed, or moved to the source window unless it directly
+  helps the reader evaluate the cited claim.
+
+next implementation target:
+
+- Keep VText canonical and keep the current noncanonical Pretext projection
+  boundary.
+- Improve the Pretext source-flow component so expanded evidence is laid out as
+  journal-style source matter with surrounding prose routed beside it.
+- Prune any dead or duplicate card/popover paths that compete with the Pretext
+  source-flow path after the staging-proven behavior is preserved by tests.
+- Add/strengthen verifier assertions that inspect real layout evidence:
+  visible journal note, Pretext-routed line nodes, no cloned hidden-owner action
+  targeting, no nested popover/card inside the flow, and text continuing beside
+  the source note when viewport width allows it.
