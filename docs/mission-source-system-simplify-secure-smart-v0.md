@@ -841,9 +841,9 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:30:00Z, publication/export source evidence
-metadata loop landed, deployed to staging, and focused staging acceptance
-passed.
+last checkpoint: 2026-06-06T11:41:00Z, bounded VText diagnosis structure
+summaries landed, deployed to staging, and focused product-path staging
+acceptance passed.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
@@ -858,11 +858,15 @@ commit `c3295ae7` has been pushed and deployed to staging. Docs commit
 commit `a2ee6dd9` adds typed source evidence-state records to VText source gaps
 and source repairs. Behavior commit `cf5bf9b7` carries normalized source
 evidence state into publication transclusion source selectors and includes
-public source entities/transclusions in canonical export metadata.
+public source entities/transclusions in canonical export metadata. Docs commit
+`bef6ed34` recorded the VText diagnosis structure-evidence gap before code.
+Behavior commit `c7f43961` adds bounded VText revision structure summaries to
+the owner-authenticated diagnosis route and supports `include_content=false`
+for no-body verifier extraction.
 Existing unrelated untracked docs are preserved.
 
 what shipped: behavior commit
-`cf5bf9b70d5d9f5c3b3764811f12715db08b422f` was pushed to `origin/main` and
+`c7f439616105564810b82dabe4873b079cfd2343` was pushed to `origin/main` and
 deployed to staging. A later docs-only checkpoint may not appear in Node B
 health because docs-only changes intentionally do not trigger deploy.
 
@@ -956,11 +960,33 @@ what was proven:
   product-path proof but unreliable for bounded structured JSON extraction
   without app-surface instrumentation, JavaScript execution permission, or a
   product diagnosis/export affordance.
+- VText diagnosis structure local checks passed:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextDiagnosis'`.
+- GitHub Actions CI run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061255509`
+  completed successfully for `c7f43961`, including runtime shards,
+  non-runtime tests, vet/build, and the Node B staging deploy job.
+- FlakeHub publish run
+  `https://github.com/choir-hip/go-choir/actions/runs/27061255486`
+  completed successfully.
+- Staging health at `https://choir.news/health` reported proxy and upstream
+  commit/deployed_commit
+  `c7f439616105564810b82dabe4873b079cfd2343` with deployed_at
+  `2026-06-06T11:39:22Z`.
+- Deployed product-path diagnosis structure probe passed against
+  `https://choir.news`: authenticated Playwright created VText document
+  `9fa8de89-3ea8-4e35-95aa-8f115d853223`, created revision
+  `147d79f7-5406-4a0a-b5e3-0b4968d7977a`, fetched
+  `/api/vtext/documents/{id}/diagnosis?limit=10&include_content=false`, and
+  verified `revision_count: 0`, no body text leak, `table_count: 1`,
+  `table_row_count: 3`, `source_marker_count: 1`, and non-empty content/table
+  hashes.
 
 unproven or partial claims:
 
-- Exact v70-v78 revision comparison for the legal proposal is not yet complete.
-  Comet can load the authenticated revisions API for
+- Exact v70-v78 revision comparison for the legal proposal is not yet complete,
+  but the blocking extraction affordance now exists on staging for newly proven
+  product-path documents. Comet can load the authenticated revisions API for
   `f93cea62-f833-4dae-b414-8e44783d8cbe`, but the response contains full
   revision content and is too bulky for reliable accessibility-tree extraction.
   Comet exposes a Chromium AppleScript tab API, but JavaScript from Apple Events
@@ -972,9 +998,9 @@ unproven or partial claims:
   `View > Developer > Allow JavaScript from Apple Events` would allow
   structured extraction.
 - CI, deploy identity, and focused staging acceptance proof have been produced
-  for the source-open, evidence-state/source-gap, and publication/export source
-  metadata slices. The broader mission proofs requested by the goal remain
-  incomplete.
+  for the source-open, evidence-state/source-gap, publication/export source
+  metadata, and bounded diagnosis-structure slices. The broader mission proofs
+  requested by the goal remain incomplete.
 
 belief-state changes:
 
@@ -1001,6 +1027,9 @@ belief-state changes:
 - Publication transclusions now carry normalized `evidence_state` inside their
   `source_selector` JSON, and canonical publication export metadata now includes
   the public `source_entities` and `transclusions` records.
+- VText diagnosis now has a bounded structure mode that can compare revision
+  identity, content hashes, heading/source-marker counts, and compact table
+  signatures without returning full private revision bodies.
 
 remaining error field:
 
@@ -1017,9 +1046,10 @@ remaining error field:
   repairs, publication transclusion selectors, and export metadata. Researcher
   updates, Source Service records, stale/blocked/unavailable product flows, and
   shared frontend/backend schema convergence remain incomplete.
-- Table structure preservation now has broader partial-context tests, but the
-  v70-v78 staging root-cause comparison is still blocked on structured
-  extraction from the authenticated staging revision history.
+- Table structure preservation now has broader partial-context tests and a
+  deployed bounded diagnosis extraction route; the actual owner legal proposal
+  v70-v78 comparison still needs to be run through that route or an
+  owner-authenticated app-surface probe.
 
 highest-impact remaining uncertainty: whether to introduce the shared source
 contract package first and route all callers through it, or to land the SSRF
@@ -1028,17 +1058,19 @@ documented safety risk makes the URL fetch policy the first behavior-changing
 fix, with shared contract types designed in the same pass so the fix does not
 create another isolated policy path.
 
-next executable probe: enable a bounded structured extraction route for the
-legal proposal v70-v78 comparison, or continue evidence-state convergence by
-routing researcher and Source Service records through the same typed source
-evidence contract.
+next executable probe: use the deployed bounded diagnosis structure route, via
+an authenticated product/app-surface path, to extract and compare the legal
+proposal v70-v78 table signatures for
+`f93cea62-f833-4dae-b414-8e44783d8cbe`; then repair the general
+structure-preservation path if the comparison identifies a remaining transition
+not covered by current tests.
 
 suggested resume goal string: continue
 `docs/mission-source-system-simplify-secure-smart-v0.md` from commits
-`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, `a2ee6dd9`, and `cf5bf9b7`
-by extracting or otherwise proving the legal proposal v70-v78 table transition,
-then converging source entity/evidence normalization without document-specific
-fixes.
+`bf7e52df`, `068b6b5f`, `61b89e93`, `c3295ae7`, `a2ee6dd9`, `cf5bf9b7`, and
+`c7f43961` by running bounded diagnosis extraction on the owner legal proposal
+history, proving the v70-v78 table transition, then converging source
+entity/evidence normalization without document-specific fixes.
 
 evidence artifact refs:
 
@@ -1074,6 +1106,11 @@ evidence artifact refs:
   staging health deployed commit
   `cf5bf9b70d5d9f5c3b3764811f12715db08b422f`, deployed Playwright proof for
   source-service transclusion and export metadata evidence state.
+- VText diagnosis structure slice: docs commit `bef6ed34`, behavior commit
+  `c7f43961`, GitHub Actions run `27061255509`, FlakeHub publish run
+  `27061255486`, staging health deployed commit
+  `c7f439616105564810b82dabe4873b079cfd2343`, deployed Playwright/Node
+  product-path proof for no-content revision structure summaries.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.
