@@ -25,6 +25,21 @@ export const READER_ARTIFACT_STATES = {
   importFailed: 'import_failed',
 } as const;
 
+export const SOURCE_SELECTOR_KINDS = {
+  wholeResource: 'whole_resource',
+  textQuote: 'text_quote',
+  textPosition: 'text_position',
+  paragraphHeading: 'paragraph_heading',
+  byteRange: 'byte_range',
+  pageRange: 'page_range',
+  timestampRange: 'timestamp_range',
+  transcriptSegment: 'transcript_segment',
+  tableRange: 'table_range',
+  tableCell: 'table_cell',
+  dataVintage: 'data_vintage',
+  selectorSet: 'selector_set',
+} as const;
+
 export type SourceOpenPlanInput = {
   requestedOpenSurface?: unknown;
   targetKind?: unknown;
@@ -148,6 +163,91 @@ export function readerArtifactStateLabel(value: unknown): string {
     default:
       return '';
   }
+}
+
+export function normalizeSourceSelectorKind(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  switch (normalized) {
+    case '':
+    case SOURCE_SELECTOR_KINDS.wholeResource:
+    case 'whole':
+    case 'resource':
+    case 'whole_document':
+    case 'whole_source':
+      return SOURCE_SELECTOR_KINDS.wholeResource;
+    case SOURCE_SELECTOR_KINDS.textQuote:
+    case 'quote':
+    case 'quoted_text':
+      return SOURCE_SELECTOR_KINDS.textQuote;
+    case SOURCE_SELECTOR_KINDS.textPosition:
+    case 'text_range':
+    case 'char_range':
+    case 'character_range':
+      return SOURCE_SELECTOR_KINDS.textPosition;
+    case SOURCE_SELECTOR_KINDS.paragraphHeading:
+    case 'paragraph':
+    case 'heading':
+    case 'heading_range':
+    case 'paragraph_range':
+      return SOURCE_SELECTOR_KINDS.paragraphHeading;
+    case SOURCE_SELECTOR_KINDS.byteRange:
+    case 'bytes':
+      return SOURCE_SELECTOR_KINDS.byteRange;
+    case SOURCE_SELECTOR_KINDS.pageRange:
+    case 'pages':
+      return SOURCE_SELECTOR_KINDS.pageRange;
+    case SOURCE_SELECTOR_KINDS.timestampRange:
+    case 'timestamp':
+    case 'time_range':
+    case 'media_range':
+      return SOURCE_SELECTOR_KINDS.timestampRange;
+    case SOURCE_SELECTOR_KINDS.transcriptSegment:
+    case 'transcript':
+    case 'segment':
+    case 'transcript_segments':
+      return SOURCE_SELECTOR_KINDS.transcriptSegment;
+    case SOURCE_SELECTOR_KINDS.tableRange:
+    case 'table':
+    case 'table_rows':
+    case 'row_range':
+      return SOURCE_SELECTOR_KINDS.tableRange;
+    case SOURCE_SELECTOR_KINDS.tableCell:
+    case 'cell':
+    case 'table_cells':
+      return SOURCE_SELECTOR_KINDS.tableCell;
+    case SOURCE_SELECTOR_KINDS.dataVintage:
+    case 'vintage':
+    case 'data_release_vintage':
+      return SOURCE_SELECTOR_KINDS.dataVintage;
+    case SOURCE_SELECTOR_KINDS.selectorSet:
+    case 'selectors':
+      return SOURCE_SELECTOR_KINDS.selectorSet;
+    default:
+      return normalized;
+  }
+}
+
+export function normalizeSourceSelector(selector: any): any | null {
+  if (!selector || typeof selector !== 'object') return null;
+  return {
+    ...selector,
+    selector_kind: normalizeSourceSelectorKind(selector.selector_kind),
+  };
+}
+
+export function sourceSelectorList(value: any): any[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((selector) => sourceSelectorList(selector));
+  }
+  if (typeof value !== 'object') return [];
+  const selector = normalizeSourceSelector(value);
+  if (!selector) return [];
+  if (selector.selector_kind === SOURCE_SELECTOR_KINDS.selectorSet) {
+    const selectors = Array.isArray(selector.selectors) ? selector.selectors : [];
+    return selectors.flatMap((nested) => sourceSelectorList(nested));
+  }
+  return [selector];
 }
 
 export function normalizeSourceOpenSurface(value: unknown): string {

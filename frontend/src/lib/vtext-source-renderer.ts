@@ -3,7 +3,9 @@ import {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
   normalizeReaderArtifactState,
+  normalizeSourceSelectorKind,
   readerArtifactStateLabel,
+  sourceSelectorList,
   sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';
@@ -12,7 +14,9 @@ export {
   normalizeSourceEvidenceState,
   normalizeSourceOpenSurface,
   normalizeReaderArtifactState,
+  normalizeSourceSelectorKind,
   readerArtifactStateLabel,
+  sourceSelectorList,
   sourceOpenPlan,
   sourceEvidenceStateLabel,
 } from './source-contract.js';
@@ -54,9 +58,11 @@ export function sourceEntityTransclusion(entity: any): any | null {
 
 export function selectorTextQuote(entity: any): string {
   const record = sourceEntityRecord(entity);
+  const transclusion = sourceEntityTransclusion(entity);
   const selectors = [
-    ...(Array.isArray(entity?.selectors) ? entity.selectors : []),
-    ...(Array.isArray(record?.selectors) ? record.selectors : []),
+    ...sourceSelectorList(entity?.selectors),
+    ...sourceSelectorList(record?.selectors),
+    ...sourceSelectorList(transclusion?.source_selector),
   ];
   for (const selector of selectors) {
     const text = String(selector?.text_quote || '').trim();

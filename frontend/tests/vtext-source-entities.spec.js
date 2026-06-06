@@ -2,11 +2,15 @@ import { test, expect } from './helpers/fixtures.js';
 import {
   mediaRefToSourceEntity,
   normalizeReaderArtifactState,
+  normalizeSourceSelectorKind,
   normalizeSourceEvidenceState,
   readerArtifactStateLabel,
+  sourceSelectorList,
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
   sourceEntityOpenPlan,
+  publicationSourceEntityToLocal,
+  selectorTextQuote,
   sourceEvidenceState,
   sourceEvidenceStateLabel,
 } from '../src/lib/vtext-source-renderer.ts';
@@ -71,6 +75,161 @@ test('source evidence states normalize to typed reader labels', () => {
 
   const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
   expect(mediaEntity?.evidence?.state).toBe('candidate');
+});
+
+test('source selectors normalize and flatten selector sets', () => {
+  expect(normalizeSourceSelectorKind('text quote')).toBe('text_quote');
+  expect(normalizeSourceSelectorKind('table-range')).toBe('table_range');
+  expect(normalizeSourceSelectorKind('page range')).toBe('page_range');
+  expect(normalizeSourceSelectorKind('')).toBe('whole_resource');
+
+  const selectors = sourceSelectorList({
+    selector_kind: 'selector-set',
+    selectors: [
+      {
+        selector_kind: 'text quote',
+        text_quote: 'Publication selector-set quote.',
+      },
+      {
+        selector_kind: 'table-range',
+        table_id: 'appendix-a',
+      },
+    ],
+  });
+  expect(selectors).toHaveLength(2);
+  expect(selectors[0]).toMatchObject({
+    selector_kind: 'text_quote',
+    text_quote: 'Publication selector-set quote.',
+  });
+  expect(selectors[1]).toMatchObject({
+    selector_kind: 'table_range',
+    table_id: 'appendix-a',
+  });
+});
+
+test('published source entity quote falls back to transclusion source selector set', () => {
+  const entity = publicationSourceEntityToLocal({
+    source_entity_id: 'src-published-selector-set',
+    kind: 'source_service_item',
+    target_kind: 'source_service_item',
+    target_id: 'source-item-selector-set',
+    display_policy: 'collapsed_citation',
+    entity: {
+      entity_id: 'src-published-selector-set',
+      kind: 'source_service_item',
+      label: 'Published selector set source',
+      target: {
+        target_kind: 'source_service_item',
+        item_id: 'source-item-selector-set',
+      },
+    },
+  }, {
+    bundle: {
+      route: { path: '/pub/vtext/selector-set-source' },
+      transclusions: [{
+        source_entity_id: 'src-published-selector-set',
+        source_selector: {
+          selector_kind: 'selector_set',
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: 'Selector-set quote survives publication reconstruction.',
+            },
+            {
+              selector_kind: 'page_range',
+              start_page: 3,
+              end_page: 4,
+            },
+          ],
+        },
+      }],
+    },
+  });
+
+  expect(selectorTextQuote(entity)).toBe('Selector-set quote survives publication reconstruction.');
+  expect(sourceEntityInlineExcerptText(entity)).toBe('Selector-set quote survives publication reconstruction.');
+});
+
+test('Source Viewer renders publication transclusion selector-set quote without flat selectors', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+
+  const quote = 'Publication transclusion selector-set quote renders in Source Viewer.';
+  await page.evaluate(async ({ selectorQuote }) => {
+    const sourceEntity = {
+      entity_id: 'src-transclusion-selector-set',
+      kind: 'source_service_item',
+      label: 'Selector-set publication source',
+      target: {
+        target_kind: 'source_service_item',
+        item_id: 'source-item-transclusion-selector-set',
+      },
+      transclusion: {
+        source_entity_id: 'src-transclusion-selector-set',
+        source_selector: {
+          selector_kind: 'selector_set',
+          selectors: [
+            {
+              selector_kind: 'text_quote',
+              text_quote: selectorQuote,
+            },
+            {
+              selector_kind: 'page_range',
+              start_page: 9,
+              end_page: 10,
+            },
+          ],
+        },
+      },
+      provenance: {
+        rights_scope: 'publication_reader',
+        created_by: 'browser-test',
+      },
+    };
+    const stateRes = await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        windows: [{
+          window_id: 'source-viewer-transclusion-selector-set',
+          app_id: 'content',
+          title: 'Selector-set publication source',
+          geometry: { x: 80, y: 80, width: 820, height: 620 },
+          mode: 'normal',
+          z_index: 20,
+          app_context: {
+            windowTitle: 'Selector-set publication source',
+            title: 'Selector-set publication source',
+            mediaType: 'text/markdown',
+            appHint: 'content',
+            sourceEntity,
+            sourceEntityId: sourceEntity.entity_id,
+            publishedRoutePath: '/pub/vtext/transclusion-selector-set-fixture',
+            publishedGuest: true,
+          },
+        }],
+        active_window_id: 'source-viewer-transclusion-selector-set',
+      }),
+    });
+    if (!stateRes.ok) throw new Error(`desktop state save failed: ${stateRes.status}`);
+  }, { selectorQuote: quote });
+
+  await page.reload();
+  const viewer = page.locator('[data-window][data-window-id="source-viewer-transclusion-selector-set"] [data-content-viewer]');
+  await expect(viewer).toBeVisible({ timeout: 10000 });
+  await expect(viewer).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(viewer.locator('[data-content-reader-markdown]')).toContainText(quote);
+  await expect(viewer.locator('[data-content-reader-markdown]')).not.toContainText('source-item-transclusion-selector-set');
 });
 
 test('source open plans normalize Web Lens and Source Viewer aliases', () => {
