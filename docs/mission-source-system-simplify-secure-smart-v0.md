@@ -3890,7 +3890,7 @@ ReaderArtifact/SourceSelector/OpenPlan structs.
 
 ### Problem 24: Frontend Source Open-Plan Resolution Still Lives In The Renderer
 
-Status: `documented_before_fix`.
+Status: `fixed_and_accepted_on_staging`.
 
 problem: `frontend/src/lib/source-contract.ts` now owns source evidence and
 open-surface normalization, but the actual Source Viewer/Web Lens/media/VText
