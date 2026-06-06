@@ -6085,3 +6085,64 @@ deployment proof still needed:
   source marker expands to a single Pretext journal note, article text routes
   beside it, no cloned popover/card/facts appear inside the note, and `Open
   source` still opens the reader snapshot source window.
+
+## 2026-06-06 Deployed Proof: Simplified Pretext Journal Note
+
+status: deployed_verified
+
+commit:
+
+- `e2603c1c0a7d8eef0dff82787fa3d95b1ab4197a` (`fix: simplify pretext source
+  journal notes`) was pushed to `origin/main`.
+
+CI and deploy:
+
+- GitHub Actions CI run `27047989903` completed successfully.
+- The CI run included successful frontend build, Go non-runtime tests, runtime
+  shards, Go vet/build, integration smoke, and Node B staging deploy.
+- FlakeHub publish run `27047989896` completed successfully.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `e2603c1c0a7d8eef0dff82787fa3d95b1ab4197a`, deployed at
+  `2026-06-06T00:58:46Z`.
+
+deployed automated proof:
+
+- `BASE_URL=https://choir.news CHOIR_AUTH_STATE=frontend/playwright/.auth/choir-news.storage.json
+  CHOIR_AUTH_META=frontend/playwright/.auth/choir-news.storage.meta.json pnpm
+  --dir frontend exec playwright test
+  frontend/tests/vtext-source-entities.spec.js -g "VText lays out expanded text
+  sources as noncanonical journal flow" --project=chromium --timeout=120000`
+  -> passed.
+- The deployed test asserted the Pretext flow exists, source-note geometry routes
+  article lines beside the note, hidden original paragraphs are replaced by the
+  noncanonical flow projection, no cloned popover appears inside the note,
+  source facts are absent from the note, nested citations remain functional, and
+  `Open source` still opens the source window.
+
+deployed Comet owner proof:
+
+- Computer Use was available and used against Comet.
+- Comet was navigated as the owner-authenticated browser to
+  `https://choir.news/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6`.
+- The actual legal-cloud VText publication loaded under the owner account.
+- Clicking the first source marker expanded a single right-side Pretext journal
+  note for `ABA Formal Opinion 512: Generative Artificial Intelligence Tools`.
+- The journal note showed the title, concise claim excerpt, `Open source`, and
+  `Close`.
+- Article text continued to the left of the source note and then below it; no
+  nested popover/card/facts block appeared inside the article-side source note.
+- Clicking `Open source` opened the ABA Formal Opinion source window, preserving
+  the source action after the note stopped cloning the old popover DOM.
+
+residual risk:
+
+- The article-side source note is now much closer to the magazine/journal
+  direction, but source windows still use the existing Web Lens/content window
+  chrome with visible `Source evidence`, `Source entity`, and `Provenance`
+  accordions. That is acceptable as an inspection surface for this slice, but it
+  remains a design pass: source windows should lead with cleaned source content
+  and keep metadata secondary.
+- The collapsed hover popover still exists as fallback/hover affordance. The
+  expanded path is Pretext journal flow, but a later simplification pass should
+  decide whether the hover popover can also be reduced or replaced without
+  harming keyboard/accessibility behavior.
