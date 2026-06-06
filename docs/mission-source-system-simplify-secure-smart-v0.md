@@ -2312,6 +2312,41 @@ runtime URL import and source-service fetch adapters, but it still does not
 encode robots/TOS/rate policy, canonical source snapshot creation, or future
 connector-specific acquisition policy.
 
+deployed evidence:
+
+```text
+behavior commit:
+  3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44
+
+GitHub Actions:
+  CI run 27065234996: completed success
+    Deploy to Staging (Node B): completed success at 2026-06-06T14:49:48Z
+  FlakeHub run 27065235002: completed success
+
+staging /health:
+  proxy commit/deployed_commit:
+    3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44
+  sandbox upstream commit/deployed_commit:
+    3f48a1ad34af7945e4b5e764a9064a6c1c7c9c44
+  deployed_at:
+    2026-06-06T14:44:36Z
+```
+
+deployed product-path acceptance:
+
+```text
+Base URL: https://choir.news
+Auth path: temporary Playwright/WebAuthn staging user via public /auth routes
+Request: POST /api/content/import-url
+Body URL: http://127.0.0.1:8787/internal/source-service/health
+Result: 502
+Body: {"error":"source URL host is not allowed"}
+```
+
+The acceptance used a browser-created authenticated session and the public
+`/api/content/import-url` product route. It did not call
+`/internal/source-service/*` directly and did not seed success records.
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.
