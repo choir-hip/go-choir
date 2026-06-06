@@ -841,7 +841,75 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T17:00Z, deployed behavior commit
+latest resumption overlay: 2026-06-06T18:55Z. Mission remains
+`checkpoint_incomplete`; do not claim full completion from this checkpoint.
+Latest pushed checkpoint is docs commit
+`bd84bf1f4a58a391ba86c4d775eaa3d286d43fec`, accepting CI for verifier commit
+`8f7e1084426b64b4282c1f3146dd45adc50ac5fb`
+(`test: verify publication evidence state matrix`). That verifier adds a
+publication/export contract matrix for canonical source evidence states:
+`candidate`, `available`, `confirms`, `refutes`, `qualifies`,
+`no_source_needed`, `stale`, `blocked_by_access`, and `unavailable`, including
+relation preservation, `research_state`, and `uncertainty`. CI run
+`27070847728` and FlakeHub run `27070847733` passed for `8f7e1084`; the
+deploy-impact job reported `deploy_needed=false`, so no staging deploy was
+expected or required for that docs/test-only slice.
+
+latest deployed behavior state: Node B staging still serves deployed behavior
+commit `2af0dbb75e5def609988a09b1b96edf1c7bf9520`
+(`nix: include source contract schema assets`). CI run `27070479996`, FlakeHub
+run `27070480006`, and Node B deploy job `79898767522` succeeded for that
+commit. Staging `/health` reported proxy/upstream `deployed_commit`
+`2af0dbb75e5def609988a09b1b96edf1c7bf9520`. The generated source-contract
+schema behavior from `519c5e9560370d1dccb459f70eba04a544339ae5` is included in
+that deployed closure.
+
+latest staging/product proof: source-service/content-item/URL-backed
+publication source behavior was accepted on staging with
+`PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js`
+passing three tests. That proof covered source-service source entities as
+expandable transclusions and canonical exports, public content-item sources
+with cleaned snapshots, and public URL-backed sources with reader snapshots for
+guests. Owner Comet proof is separate: Computer Use observed Comet
+authenticated as `yusefnathanson@me.com` on staging with document
+`f93cea62-f833-4dae-b414-8e44783d8cbe`, version 96, revision
+`5a5532d8-0ff3-44d6-aeef-5ea6cbc08798`, seven `source_entities`, seven source
+markers, and the legal proposal appendix/table still present. One direct
+revision fetch in that proof path returned 401 and remains documented as a
+proof-path limitation, not as a product failure.
+
+latest artifact/report state: hard review report
+`docs/source-system-hard-mission-review-2026-06-06.md` and the iCloud PDF at
+`/Users/wiz/Library/Mobile Documents/com~apple~CloudDocs/Choir Mission Reports/source-system-hard-mission-review-2026-06-06.pdf`
+were refreshed after the evidence-state verifier checkpoint. Residual risks in
+that report remain authoritative: generated source-contract coverage is still
+narrower than a full IDL for every future producer/consumer shape; future
+Source Service and connector-like records need broader fixture coverage;
+non-public publication semantics remain intentionally unimplemented; direct
+proof scripts are not auth-renewal proof; desktop screenshot capture failed in
+this environment; and the latest verifier/docs checkpoint is not deployed
+because it changed only docs and tests.
+
+highest-impact remaining uncertainty: broaden the generated source-contract
+fixture/verifier matrix across source target kind, reader artifact state,
+selector kind, open surface, owner versus guest, and private versus public
+publication visibility. This is the next high-information probe because it
+attacks the remaining drift risk without weakening the behavior already proven
+on staging.
+
+next executable probe: add or extend a generated fixture/verifier matrix that
+proves publication/export and frontend reader behavior preserve the shared
+source contract across target-kind, reader-artifact, selector, open-surface,
+authorization, and visibility axes. Keep any newly found behavior problem
+documented here before behavior-changing code.
+
+rollback refs: latest deployed behavior rollback point is
+`2af0dbb75e5def609988a09b1b96edf1c7bf9520`; generated source-contract behavior
+rollback point is `519c5e9560370d1dccb459f70eba04a544339ae5`; latest
+verifier/docs checkpoint is `bd84bf1f4a58a391ba86c4d775eaa3d286d43fec`.
+
+historical checkpoint before later source-contract/schema/publication proof:
+2026-06-06T17:00Z, deployed behavior commit
 `213f0cbc465a63a4968819fa706880708bd57d7f` routes YouTube transcript
 acquisition through the shared source-fetch policy, including configured
 provider endpoints, InnerTube player requests, watch-page caption discovery, and
