@@ -284,7 +284,7 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: '# Source URL Routing Fixture\n\nThis claim opens a source URL [1](source:src-url-source-viewer).',
+        content: '# Source URL Routing Fixture\n\nThis claim opens a source URL [1](source:src-url-source-viewer).\n\nThis claim explicitly inspects the live original [2](source:src-url-web-lens).',
         author_kind: 'user',
         author_label: 'browser-test',
         metadata: {
@@ -323,6 +323,37 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
                 untrusted_source_text: true,
               },
             },
+            {
+              entity_id: 'src-url-web-lens',
+              kind: 'web_source',
+              label: 'Source URL explicit browser fixture',
+              target: {
+                target_kind: 'url',
+                url: sourceURL,
+                canonical_url: sourceURL,
+              },
+              selectors: [
+                {
+                  selector_kind: 'text_quote',
+                  text_quote: 'Explicit browser routing fixture.',
+                },
+              ],
+              display: {
+                inline_mode: 'embedded_excerpt',
+                expanded_mode: 'source_card',
+                open_surface: 'browser',
+                default_collapsed: true,
+              },
+              evidence: {
+                state: 'available',
+                research_state: 'confirmed',
+              },
+              provenance: {
+                created_by: 'browser-test',
+                rights_scope: 'public_url_snapshot',
+                untrusted_source_text: true,
+              },
+            },
           ],
         },
       }),
@@ -347,6 +378,13 @@ test('VText source URL opens Source Viewer unless browser is explicitly requeste
   await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
   await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Reader snapshot text proves Source Viewer opened');
   await expect(page.locator('[data-browser-app]')).toHaveCount(0);
+  await page.locator('[data-window-app-id="vtext"]').last().click({ position: { x: 24, y: 24 } });
+
+  const explicitBrowserCitation = rendered.locator('[data-vtext-source-ref][data-source-entity-id="src-url-web-lens"]').first();
+  await expect(explicitBrowserCitation).toBeVisible({ timeout: 10000 });
+  await explicitBrowserCitation.click();
+  await rendered.locator('[data-vtext-source-flow-note] [data-vtext-open-source][data-source-entity-id="src-url-web-lens"]').click();
+  await expect(page.locator('[data-browser-app]')).toHaveCount(1);
 });
 
 test('published source readers prefer publication snapshots over loaded content items', async ({ desktopSession }) => {

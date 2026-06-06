@@ -35,12 +35,15 @@
   $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true });
   $: hasReaderText = readerText.length > 0;
   $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);
+  $: sourceOpenPlan = appContext?.sourceOpenPlan || {};
+  $: allowLiveImport = !!appContext?.allowLiveImport || !!sourceOpenPlan.liveOriginal;
   $: sourceState = sourceEntity?.evidence?.state || sourceEntity?.reader_snapshot_status?.state || item?.provenance?.state || '';
 
   async function loadContentItem() {
     const contentId = appContext?.contentId || appContext?.content_id || '';
     if (item || (!contentId && !sourceUrl)) return;
     if (sourceEntityReaderSnapshot) return;
+    if (sourceEntity && !contentId && !allowLiveImport) return;
     loading = true;
     error = '';
     try {

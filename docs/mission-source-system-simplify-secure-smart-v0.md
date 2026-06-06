@@ -841,15 +841,18 @@ If only some loops land, status must be `checkpoint_incomplete`, not complete.
 
 status: checkpoint_incomplete
 
-last checkpoint: 2026-06-06T11:08:00Z, first behavior loop landed and
+last checkpoint: 2026-06-06T11:38:00Z, first behavior loops landed and
 Comet owner-authenticated staging capability verified.
 
 current artifact state: documentation checkpoint commit
 `bf7e52df` recorded the source-system audit and first problem records before
 behavior changes. Behavior commit `068b6b5f` added runtime source fetch policy
 and selector-set publication projection. Test commit `61b89e93` added broader
-partial table structure-preservation coverage. Existing unrelated untracked docs
-are preserved.
+partial table structure-preservation coverage. Test commit `98fb4d2c` kept
+comprehensive source import fixtures policy-aware after the SSRF guard started
+blocking loopback fixture servers. The current frontend slice adds an explicit
+source-open plan and pins Source Viewer/Web Lens routing behavior.
+Existing unrelated untracked docs are preserved.
 
 what shipped: local commits only; nothing pushed or deployed yet.
 
@@ -880,6 +883,10 @@ what was proven:
   `nix develop -c go test ./internal/platform -run 'TestBuildPublicationSourceMetadataPreservesSelectorSet|TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion|TestPublishVTextCreatesImmutablePublicRecords'`,
   and
   `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVTextMarkdownStructureStabilization|TestVTextOpenMarkdownFile|TestVTextMarkdownTableRowParser'`.
+- Additional local checks passed after the latest slices:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestContentImportURL'`,
+  `npm run build` in `frontend`, and
+  `npm run e2e -- vtext-source-entities.spec.js -g "VText source URL opens Source Viewer unless browser is explicitly requested"`.
 
 unproven or partial claims:
 
@@ -903,6 +910,11 @@ belief-state changes:
 - Source Viewer is present and currently renders a cleaned reader artifact for
   an open source window in Comet; however, the opening and reader snapshot
   contract is still split across frontend and backend helpers.
+- Frontend source opening now has a local `sourceEntityOpenPlan` resolver:
+  durable URL/content/source-service artifacts route to Source Viewer by
+  default, while explicit `browser`/`web_lens`/`live`/`original` surfaces route
+  to Web Lens. This is a frontend contract step, not yet a backend/shared
+  schema contract.
 - URL source acquisition is now locally policy-checked for literal forbidden
   hosts, redirect targets, and dial-time DNS/IP resolution in the runtime import
   path. This is not yet a full Source Service broker.
@@ -914,7 +926,8 @@ remaining error field:
 
 - URL fetch policy is locally improved but not yet proven on staging and not yet
   converged into Source Service.
-- Source entity normalization and opening policy remain duplicated.
+- Source entity normalization remains duplicated; source opening has a local
+  frontend plan but is not yet shared with runtime/platform/export contracts.
 - Publication selector-set projection is locally fixed and tested; frontend and
   export consumers still need broader selector-rich proof.
 - Published source windows depend on frontend reconstruction of publication
@@ -960,7 +973,9 @@ evidence artifact refs:
 - Comet structured extraction blocker:
   `osascript -e 'tell application "Comet" to execute active tab of front window javascript "document.body.innerText"'`
   failed because JavaScript from Apple Events is disabled.
-- Behavior/test commits: `068b6b5f`, `61b89e93`.
+- Behavior/test commits: `068b6b5f`, `61b89e93`, `98fb4d2c`.
+- Frontend source-open slice: `sourceEntityOpenPlan`, `ContentViewer`
+  live-import guard, and focused Playwright routing proof.
 
 rollback refs: current branch `main`, starting commit
 `1af0e8459b78fb31a18fee933a54f6f716a9b067`.

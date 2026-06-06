@@ -159,17 +159,39 @@ export function sourceEntityTargetKind(entity: any): string {
   ).trim();
 }
 
-export function sourceEntityOpenAppID(entity: any): string {
+function sourceEntityRequestedOpenSurface(entity: any): string {
+  const record = sourceEntityRecord(entity);
+  return String(entity?.display?.open_surface || record?.display?.open_surface || '').trim().toLowerCase();
+}
+
+export function sourceEntityOpenPlan(entity: any): any {
   const record = sourceEntityRecord(entity);
   const targetKind = sourceEntityTargetKind(entity);
-  const requested = String(entity?.display?.open_surface || record?.display?.open_surface || '').trim();
-  if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') return 'vtext';
-  if (requested === 'source' || requested === 'content') return 'content';
-  if (requested) return requested;
-  if ((entity?.kind || record?.kind) === 'youtube_video') return 'video';
-  if (targetKind === 'content_item' || targetKind === 'source_service_item') return 'content';
-  if (sourceEntityTargetURL(entity)) return 'browser';
-  return 'content';
+  const requested = sourceEntityRequestedOpenSurface(entity);
+  const kind = String(entity?.kind || record?.kind || '').trim().toLowerCase();
+  const hasURL = !!sourceEntityTargetURL(entity);
+  const durableReaderTarget = targetKind === 'content_item' || targetKind === 'source_service_item' || hasURL;
+
+  if (targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
+    return { appId: 'vtext', openSurface: requested || 'vtext', mode: 'published_vtext', liveOriginal: false, readerMode: false };
+  }
+  if (requested === 'browser' || requested === 'web' || requested === 'web_lens' || requested === 'live' || requested === 'original') {
+    return { appId: 'browser', openSurface: requested, mode: 'live_original', liveOriginal: true, readerMode: false };
+  }
+  if (requested === 'video' || kind === 'youtube_video') {
+    return { appId: 'video', openSurface: requested || 'video', mode: 'media', liveOriginal: false, readerMode: false };
+  }
+  if (requested === 'source' || requested === 'content' || durableReaderTarget) {
+    return { appId: 'content', openSurface: requested || 'source', mode: 'source_reader', liveOriginal: false, readerMode: true };
+  }
+  if (requested) {
+    return { appId: requested, openSurface: requested, mode: requested, liveOriginal: false, readerMode: false };
+  }
+  return { appId: 'content', openSurface: 'source', mode: 'source_reader', liveOriginal: false, readerMode: true };
+}
+
+export function sourceEntityOpenAppID(entity: any): string {
+  return sourceEntityOpenPlan(entity).appId;
 }
 
 export function matchingPublicationTransclusion(bundle: any, entityID = ''): any | null {
