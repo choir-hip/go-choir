@@ -1106,3 +1106,39 @@ pnpm --dir frontend exec playwright test tests/vtext-markdown-lineage.spec.js -g
 Residual risk before staging: this proves the export projection and import
 lineage locally, but the actual owner publication export still needs deployed
 Node B proof after commit, push, CI, and staging deploy.
+
+## 2026-06-06 Node B Deploy Packaging Problem Checkpoint
+
+Status: `documented_before_fix`.
+
+Commit `01137cede6576579956ff1cbd431e77acb034639` passed local focused tests,
+GitHub CI Go tests, runtime shards, and Go build, but the CI `Deploy to Staging
+(Node B)` job failed before staging could adopt the commit.
+
+Evidence:
+
+```text
+CI run: 27054007982
+Deploy job: 79854748232
+Failure phase: Nix build for Node B guest/sandbox image
+Primary error:
+internal/runtime/vtext.go:48:2: cannot find module providing package
+github.com/yusefmosiah/go-choir/internal/markdownstructure:
+import lookup disabled by -mod=vendor
+Secondary existing-package symptom:
+internal/runtime/browser.go:26:2: cannot find module providing package
+golang.org/x/net/html: import lookup disabled by -mod=vendor
+```
+
+Root-cause belief before code/packaging change: the repository CI build sees the
+new local package, but the Node B Nix derivation builds from a filtered source
+tree or vendored module surface that does not include the new
+`internal/markdownstructure` directory. This is a packaging/source inclusion
+problem, not a runtime behavior failure in the export code. The repair should
+make the deploy source closure include the shared structure package generally,
+or place the shared logic in an already-included package, without reverting to a
+glossary-specific export patch.
+
+Stopping impact: mission cannot be complete until a follow-up commit repairs the
+Node B build, deploys, confirms staging identity for the fixed SHA, and reruns
+the actual owner-publication Markdown export proof.
