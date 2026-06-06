@@ -475,14 +475,14 @@ func (s *Store) GetDocumentAlias(ctx context.Context, ownerID, sourcePath string
 	return docID, nil
 }
 
-// GetDocumentAliasSourcePath returns the most recently updated source path for
-// the given canonical document, scoped to the owner.
+// GetDocumentAliasSourcePath returns the canonical shortcut path for the given
+// document when one exists, otherwise the most recently updated source path.
 func (s *Store) GetDocumentAliasSourcePath(ctx context.Context, ownerID, docID string) (string, error) {
 	row := s.vtextHandle().QueryRowContext(ctx,
 		`SELECT source_path
 		   FROM vtext_document_aliases
 		  WHERE owner_id = ? AND doc_id = ?
-		  ORDER BY updated_at DESC
+		  ORDER BY CASE WHEN LOWER(source_path) LIKE '%.vtext' THEN 0 ELSE 1 END, updated_at DESC
 		  LIMIT 1`,
 		ownerID, docID,
 	)

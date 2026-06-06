@@ -2411,6 +2411,45 @@ remaining error field: this does not create or migrate the owner legal cloud
 proposal itself. It closes the generic text-like import metadata continuity
 needed before owner/legal-proposal migration proof can be trusted.
 
+implementation evidence, local:
+
+- `buildFileOpenVTextMetadata` now creates a text-like
+  `migration_manifest` for `text/markdown`, `text/plain`, and `text/html`
+  VText file-open projections;
+- `durableMetadataKeys` now carries `import_manifest` and
+  `migration_manifest` into user and appagent durable revisions unless the
+  caller supplies a stronger value;
+- `GetDocumentAliasSourcePath` now prefers a `.vtext` shortcut alias when one
+  exists, while exact original `.txt`/`.md` aliases still resolve to the same
+  canonical document;
+- backend coverage now proves `.txt -> .vtext -> v1` keeps import/migration
+  metadata, original alias, canonical alias, and Markdown export;
+- browser/API coverage now proves imported Markdown and imported plain text
+  both carry first-durable-revision metadata and export back to Markdown.
+
+focused verification:
+
+```text
+nix develop -c go test ./internal/store -run 'TestVTextDocumentAlias' -count=1
+ok github.com/yusefmosiah/go-choir/internal/store
+
+nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestVText(OpenFileResolvesCanonicalAlias|PlainTextImportCarriesMigrationMetadataToFirstDurableRevision|ImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable|AppagentEditCanonicalizesAliasedMarkdownTitle|OpenFilePreservesDocxAndPDFOriginalArtifacts|OpenFileImportsDocxAndPDFBytesFromFilesRoot)$' -count=1
+ok github.com/yusefmosiah/go-choir/internal/runtime
+
+CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh
+npm --prefix frontend run e2e -- tests/vtext-markdown-lineage.spec.js -g 'Imported (Markdown|plain text)'
+2 passed
+```
+
+deploy-impact classification before landing:
+
+```text
+host_services=gateway,sandbox
+internal/runtime/vtext.go -> gateway/sandbox service pointers
+internal/runtime/runtime.go -> gateway/sandbox service pointers
+internal/store/vtext.go -> gateway/sandbox shared runtime dependency
+```
+
 ### Problem 12: Owner URL Source Repairs Default To Web Lens
 
 Status: `documented_before_fix`.

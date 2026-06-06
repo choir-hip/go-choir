@@ -624,23 +624,52 @@ func buildFileOpenVTextMetadata(projection vtextFileImportProjection, original *
 			}
 		}
 	}
-	if ext == "md" || ext == "markdown" {
-		metadata["migration_manifest"] = map[string]any{
-			"source_path":           sourcePath,
-			"source_kind":           "markdown",
-			"original_content_hash": "sha256:" + hex.EncodeToString(sum[:]),
-			"projection_kind":       "vtext",
-			"migration_adapter":     "markdown_to_vtext_projection",
-			"migration_version":     1,
-			"version_lineage":       []map[string]any{},
-			"source_gap_policy":     "repairable_gap_no_invented_citations",
-		}
+	if migrationManifest := buildTextLikeFileOpenMigrationManifest(sourcePath, ext, mediaType, projectionHash); migrationManifest != nil {
+		metadata["migration_manifest"] = migrationManifest
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return json.RawMessage(`{"created_from":"file_open"}`)
 	}
 	return data
+}
+
+func buildTextLikeFileOpenMigrationManifest(sourcePath, ext, mediaType, projectionHash string) map[string]any {
+	mediaType = normalizeMediaType(mediaType)
+	var sourceKind, adapter, gapPolicy string
+	switch mediaType {
+	case "text/markdown":
+		sourceKind = "markdown"
+		adapter = "markdown_to_vtext_projection"
+		gapPolicy = "repairable_gap_no_invented_citations"
+	case "text/plain":
+		sourceKind = "text"
+		adapter = "plain_text_to_vtext_projection"
+		gapPolicy = "plain_text_no_implicit_citations"
+	case "text/html":
+		sourceKind = "html"
+		adapter = "html_text_to_vtext_projection"
+		gapPolicy = "html_text_no_implicit_citations"
+	default:
+		return nil
+	}
+	if ext == "md" || ext == "markdown" {
+		sourceKind = "markdown"
+	}
+	if projectionHash == "" {
+		projectionHash = "sha256:" + contentHash("")
+	}
+	return map[string]any{
+		"source_path":           sourcePath,
+		"source_kind":           sourceKind,
+		"source_media_type":     mediaType,
+		"original_content_hash": projectionHash,
+		"projection_kind":       "vtext",
+		"migration_adapter":     adapter,
+		"migration_version":     1,
+		"version_lineage":       []map[string]any{},
+		"source_gap_policy":     gapPolicy,
+	}
 }
 
 func buildMarkdownLineageRevisionMetadata(sourcePath string, version vtextMarkdownLineageVersion, content, contentID, contentHashValue, contentPath, contentSource string, index, count int, lineage []map[string]any, sourceEntities []vtextSourceEntity, resolutions []vtextCitationMarkerResolution) (json.RawMessage, error) {

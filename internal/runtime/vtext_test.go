@@ -3501,6 +3501,119 @@ func TestVTextOpenFileResolvesCanonicalAlias(t *testing.T) {
 	}
 }
 
+func TestVTextPlainTextImportCarriesMigrationMetadataToFirstDurableRevision(t *testing.T) {
+	h, s, _ := vtextAPISetupWithRuntime(t)
+	ctx := context.Background()
+
+	initialContent := strings.Join([]string{
+		"Plain text proposal",
+		"",
+		"Imported source text should become canonical VText.",
+	}, "\n")
+	openReq := vtextRequest(t, http.MethodPost, "/api/vtext/files/open", map[string]string{
+		"source_path":     "notes/plain-proposal.txt",
+		"title":           "plain-proposal.txt",
+		"initial_content": initialContent,
+	})
+	openW := httptest.NewRecorder()
+	h.HandleVTextRouter(openW, openReq)
+	if openW.Code != http.StatusCreated {
+		t.Fatalf("open text file: status = %d, want %d; body: %s", openW.Code, http.StatusCreated, openW.Body.String())
+	}
+	var opened vtextOpenFileResponse
+	if err := json.NewDecoder(openW.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode open text response: %v", err)
+	}
+	if opened.OriginalContentID == "" {
+		t.Fatalf("open text original_content_id is empty")
+	}
+
+	doc, err := s.GetDocument(ctx, opened.DocID, "user-1")
+	if err != nil {
+		t.Fatalf("GetDocument opened text: %v", err)
+	}
+	if doc.Title != "plain-proposal.vtext" {
+		t.Fatalf("opened document title = %q, want plain-proposal.vtext", doc.Title)
+	}
+	v0, err := s.GetRevision(ctx, opened.CurrentRevisionID, "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision v0: %v", err)
+	}
+	v0Meta := decodeRevisionMetadata(v0.Metadata)
+	v0ImportManifest, ok := v0Meta["import_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("v0 missing import_manifest: %#v", v0Meta)
+	}
+	if v0ImportManifest["source_media_type"] != "text/plain" || v0ImportManifest["projection_kind"] != "vtext" {
+		t.Fatalf("v0 import_manifest = %#v", v0ImportManifest)
+	}
+	v0MigrationManifest, ok := v0Meta["migration_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("v0 missing migration_manifest: %#v", v0Meta)
+	}
+	if v0MigrationManifest["source_kind"] != "text" ||
+		v0MigrationManifest["source_media_type"] != "text/plain" ||
+		v0MigrationManifest["migration_adapter"] != "plain_text_to_vtext_projection" ||
+		v0MigrationManifest["projection_kind"] != "vtext" {
+		t.Fatalf("v0 migration_manifest = %#v", v0MigrationManifest)
+	}
+
+	v1Content := initialContent + "\n\nFirst durable revision keeps import lineage."
+	revReq := vtextRequest(t, http.MethodPost, "/api/vtext/documents/"+opened.DocID+"/revisions", vtextCreateRevisionRequest{
+		Content:          v1Content,
+		ParentRevisionID: opened.CurrentRevisionID,
+		Metadata:         json.RawMessage(`{"created_from":"plain_text_v1_user_edit"}`),
+	})
+	revW := httptest.NewRecorder()
+	h.HandleVTextRevisions(revW, revReq)
+	if revW.Code != http.StatusCreated {
+		t.Fatalf("create text v1: status = %d, want %d; body: %s", revW.Code, http.StatusCreated, revW.Body.String())
+	}
+	var v1 vtextRevisionResponse
+	if err := json.NewDecoder(revW.Body).Decode(&v1); err != nil {
+		t.Fatalf("decode text v1: %v", err)
+	}
+	if v1.VersionNumber != 1 || v1.ParentRevisionID != opened.CurrentRevisionID {
+		t.Fatalf("v1 response = %#v", v1)
+	}
+	v1Meta := decodeRevisionMetadata(v1.Metadata)
+	if v1Meta["import_manifest"] == nil || v1Meta["migration_manifest"] == nil {
+		t.Fatalf("v1 did not carry import/migration metadata: %#v", v1Meta)
+	}
+	if v1Meta["canonical_vtext_source_path"] == nil {
+		t.Fatalf("v1 missing canonical_vtext_source_path: %#v", v1Meta)
+	}
+	v1MigrationManifest := v1Meta["migration_manifest"].(map[string]any)
+	if v1MigrationManifest["migration_adapter"] != "plain_text_to_vtext_projection" {
+		t.Fatalf("v1 migration_manifest = %#v", v1MigrationManifest)
+	}
+
+	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, "user-1", opened.DocID)
+	if err != nil {
+		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
+	}
+	if filepath.Ext(sourcePath) != ".vtext" {
+		t.Fatalf("latest alias source_path = %q, want .vtext", sourcePath)
+	}
+	if docID, err := s.GetDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt"); err != nil || docID != opened.DocID {
+		t.Fatalf("original text alias docID = %q, err = %v, want %q", docID, err, opened.DocID)
+	}
+
+	exportReq := vtextRequest(t, http.MethodGet, "/api/vtext/documents/"+opened.DocID+"/export?format=md", nil)
+	exportW := httptest.NewRecorder()
+	h.HandleVTextRouter(exportW, exportReq)
+	if exportW.Code != http.StatusOK {
+		t.Fatalf("export text as markdown: status = %d, want %d; body: %s", exportW.Code, http.StatusOK, exportW.Body.String())
+	}
+	var exported vtextDocumentExportResponse
+	if err := json.NewDecoder(exportW.Body).Decode(&exported); err != nil {
+		t.Fatalf("decode text export: %v", err)
+	}
+	if exported.Format != "md" || exported.Filename != "plain-proposal.md" || exported.Content != v1Content || exported.RevisionID != v1.RevisionID {
+		t.Fatalf("exported text response = %#v", exported)
+	}
+}
+
 func TestVTextImportedMarkdownRevisionUsesVTextProjectionAndPreservesCollapsedTable(t *testing.T) {
 	h, s, _ := vtextAPISetupWithRuntime(t)
 	ctx := context.Background()
@@ -5956,7 +6069,16 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 		Content:     "# Legacy Proposal\n\nImported Markdown body.",
-		CreatedAt:   now,
+		Metadata: buildFileOpenVTextMetadata(vtextFileImportProjection{
+			SourcePath:            "proposals/legacy-proposal.md",
+			MediaType:             "text/markdown",
+			ProjectionContent:     "# Legacy Proposal\n\nImported Markdown body.",
+			ProjectionContentHash: contentHash("# Legacy Proposal\n\nImported Markdown body."),
+			OriginalContentHash:   contentHash("# Legacy Proposal\n\nImported Markdown body."),
+			ImportAdapter:         "vtext_file_open_projection",
+			ImportAdapterVersion:  1,
+		}, nil),
+		CreatedAt: now,
 	}
 	if err := s.CreateRevision(ctx, base); err != nil {
 		t.Fatalf("create base revision: %v", err)
@@ -6024,6 +6146,13 @@ func TestVTextAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	canonicalPath, ok := meta["canonical_vtext_source_path"].(string)
 	if !ok || filepath.Ext(canonicalPath) != ".vtext" {
 		t.Fatalf("canonical_vtext_source_path = %#v, want .vtext", meta["canonical_vtext_source_path"])
+	}
+	if meta["import_manifest"] == nil || meta["migration_manifest"] == nil {
+		t.Fatalf("appagent v1 did not carry import/migration metadata: %#v", meta)
+	}
+	migrationManifest := meta["migration_manifest"].(map[string]any)
+	if migrationManifest["migration_adapter"] != "markdown_to_vtext_projection" {
+		t.Fatalf("appagent migration_manifest = %#v", migrationManifest)
 	}
 	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, doc.OwnerID, doc.DocID)
 	if err != nil {

@@ -167,6 +167,40 @@ func TestVTextDocumentAliasRoundTrip(t *testing.T) {
 	}
 }
 
+func TestVTextDocumentAliasSourcePathPrefersCanonicalShortcut(t *testing.T) {
+	s := vtextTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	doc := types.Document{
+		DocID:     "doc-canonical-alias",
+		OwnerID:   "user-1",
+		Title:     "Plain Proposal.vtext",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt", doc.DocID, now.Add(2*time.Second)); err != nil {
+		t.Fatalf("UpsertDocumentAlias original: %v", err)
+	}
+	if err := s.UpsertDocumentAlias(ctx, "user-1", "plain-proposal.vtext", doc.DocID, now.Add(time.Second)); err != nil {
+		t.Fatalf("UpsertDocumentAlias canonical: %v", err)
+	}
+
+	sourcePath, err := s.GetDocumentAliasSourcePath(ctx, "user-1", doc.DocID)
+	if err != nil {
+		t.Fatalf("GetDocumentAliasSourcePath: %v", err)
+	}
+	if sourcePath != "plain-proposal.vtext" {
+		t.Fatalf("source path = %q, want canonical shortcut", sourcePath)
+	}
+	if docID, err := s.GetDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt"); err != nil || docID != doc.DocID {
+		t.Fatalf("original alias docID = %q, err = %v, want %q", docID, err, doc.DocID)
+	}
+}
+
 func TestVTextDeleteDocument(t *testing.T) {
 	s := vtextTestStore(t)
 	ctx := context.Background()
