@@ -17,10 +17,10 @@ status: checkpoint_incomplete
 
 last checkpoint:
 
-- Docs checkpoint pending after behavior commit
-  `22042971a920e5c14fd45b44f1851c7de035db4e` records deployed proof that
-  imported HTML sources with readable text now persist as reader-mode Markdown
-  content artifacts, not browser-identity artifacts.
+- Docs checkpoint `0d3c934f3eea8056e6fe6e10a577add56f492a13` records deployed
+  proof for behavior commit `22042971a920e5c14fd45b44f1851c7de035db4e`: imported
+  HTML sources with readable text now persist as reader-mode Markdown content
+  artifacts, not browser-identity artifacts.
 
 current artifact state:
 
@@ -137,7 +137,8 @@ rollback refs:
 
 - Last deployed behavior-changing commit:
   `22042971`.
-- Last docs checkpoint: pending for `22042971`.
+- Last docs checkpoint:
+  `0d3c934f3eea8056e6fe6e10a577add56f492a13`.
 
 ## Goal String
 
