@@ -28,6 +28,48 @@ last checkpoint:
 - This document is a documentation-first checkpoint for newly observed source
   viewer failures. Do not write source-viewer code before this problem record.
 
+latest deployed repair checkpoint:
+
+- Table repair landed in behavior commit `7c5dec1c7ed52e7fc6bc352907e86b191dee36f0`.
+  The generic fix preserves malformed Markdown table tail rows through
+  renderer parsing and VText revision stabilization without naming glossary,
+  Appendix A, or `Work product`.
+- Source-reader repair landed in behavior commit
+  `518c5fccc211e557a927f46c76c83790c30d104e`. CI run `27052988898` passed,
+  FlakeHub publish workflow `27052988902` passed, and staging `/health`
+  reported deployed commit `518c5fccc211e557a927f46c76c83790c30d104e` at
+  `2026-06-06T04:50:11Z`.
+- Local verification before deploy: `pnpm --dir frontend exec playwright test
+  tests/vtext-source-entities.spec.js` passed all 7 source-entity tests, and
+  `pnpm --dir frontend build` passed.
+- Authenticated Comet proof on the owner publication
+  `/pub/vtext/choir-private-legal-cloud-proposal-vtext-pub270a62fb6` after
+  reload showed the deployed source-reader mode: no `FILES CONTENT` source
+  chrome, a quieter `Open original` source header, reader text first, and
+  `Source details` after the reader body.
+- Comet proof on the same owner publication showed the Appendix glossary
+  final `Work product` row inside the rendered table, followed separately by
+  `---` and `End of Proposal`.
+- Comet proof showed the ABA Formal Opinion 512 source marker expands into a
+  right-side journal note with multiple lines of source content while proposal
+  text wraps around it. Opening it produced a readable source window, and
+  expanding `Source evidence` displayed metadata below the reader body instead
+  of overlapping source prose.
+- Comet proof showed a second owner source, ABA Model Rule 1.6, also expands
+  inline as a side note and opens a readable source window with reader text,
+  reader-mode note, source citation, `Open original`, and collapsed source
+  details.
+- Source-window singleton behavior is repaired for windows opened under the
+  deployed keyed path: a repeated open of the same source did not increase the
+  window count. One stale pre-reload ABA source window remained after the app
+  reload because it had been opened before singleton keys existed; this is a
+  residual desktop-migration nuance, not proof that the new source-opening path
+  still duplicates.
+- Remaining limitation: the owner source snapshots are still concise
+  summaries. The renderer now uses more available inline space when richer
+  snapshot text exists, but improving real source depth requires the next
+  source-acquisition/cleaned-Markdown reader-mode slice.
+
 current artifact state:
 
 - The legal-cloud proposal is a canonical `.vtext` publication with source
