@@ -208,8 +208,18 @@
     };
     capabilityError = '';
     backendSession = null;
-    showingSnapshot = false;
-    clearBackendSnapshots();
+    if (initialSourceSnapshot) {
+      backendSnapshot = initialSourceSnapshot;
+      snapshotMode = 'source_entity';
+      backendHTML = '';
+      backendLinks = [];
+      backendScreenshotPNG = '';
+      backendWarnings = [];
+      showingSnapshot = true;
+    } else {
+      showingSnapshot = false;
+      clearBackendSnapshots();
+    }
   }
 
   async function loadBrowserCapabilities() {

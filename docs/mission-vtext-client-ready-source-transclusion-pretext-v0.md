@@ -5650,3 +5650,55 @@ intended repair:
 - Add a regression proving an unauthenticated/public BrowserApp source window
   shows `Source reader snapshot`, renders Markdown reader text, and does not
   create an iframe when a source snapshot exists.
+
+## 2026-06-06 Local Repair: Guest Source Snapshot Preservation
+
+status: local_verified_pending_deploy
+
+cognitive transforms applied:
+
+- Real object: the artifact is the published source-reading path, not a card.
+  That split the proof into local BrowserApp sanity and staging publication
+  proof rather than adding a test-only launcher.
+- Pretext ownership: Pretext is for magazine/journal line flow around compact
+  source notes. The full source artifact belongs in the opened reader window,
+  so this repair must not add another inline card layer.
+- Rights/rendering separation: guest mode means unauthenticated, not
+  unauthorized. If publication policy carried a source snapshot to the public
+  reader, BrowserApp must render that snapshot before falling back to iframe.
+- Homotopy/projection: a verifier that mounts arbitrary fake source cards would
+  not be the same object. The deployed publication E2E remains the real proof
+  because it exercises VText publication, source entity wrapping, guest
+  Desktop, and BrowserApp together.
+
+change:
+
+- `BrowserApp.svelte` now preserves `initialSourceSnapshot` when entering
+  guest mode. It sets `snapshotMode = source_entity`, keeps backend Web Lens
+  state empty, and renders the source snapshot as the default reader view.
+- If no source snapshot exists, guest mode keeps the old iframe-preview
+  fallback behavior.
+- `vtext-source-service-publication.spec.js` now opens the same published route
+  in a fresh unauthenticated browser context, expands the source citation,
+  opens the source window, and asserts `Source reader snapshot`, cleaned reader
+  text, and no iframe when a publication-carried snapshot exists.
+
+local evidence:
+
+- `pnpm --dir frontend build` passed and emitted `BrowserApp-B0x1R9S5.js`.
+- `pnpm --dir frontend exec playwright test
+  frontend/tests/browser-app.spec.js -g "browser app launches from floating
+  desktop icon|url input bar is visible" --project=chromium --timeout=90000`
+  passed: `2 passed (5.4s)`.
+- The publication E2E could not run locally because the current local service
+  harness does not start platformd on `127.0.0.1:8086`; proxy publication calls
+  returned `connect: connection refused`. This is a local harness limitation,
+  not proof about guest source-window behavior.
+
+deployed evidence still needed:
+
+- Push to `origin/main`, monitor CI and Node B deploy identity, then run the
+  updated publication E2E against `https://choir.news`.
+- Use Computer Use on Comet as primary staging proof that a public reader can
+  expand a source note and open the cleaned reader source window without iframe
+  dependence.

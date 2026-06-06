@@ -144,7 +144,7 @@ test('publishes source-service source entities as expandable transclusions and c
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(itemID);
 });
 
-test('publishes public content-item sources with cleaned reader snapshots', async ({ desktopSession }) => {
+test('publishes public content-item sources with cleaned reader snapshots', async ({ desktopSession, browser }) => {
   const { page, baseURL } = desktopSession;
   const stamp = Date.now();
   const title = `Public Source Snapshot Publication ${stamp}`;
@@ -248,4 +248,23 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   await expect(sourceWindow).toContainText('Source reader snapshot');
   await expect(sourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
   await expect(sourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
+
+  const guestContext = await browser.newContext();
+  try {
+    const guestPage = await guestContext.newPage();
+    await guestPage.goto(`${baseURL}${publish.route_path}`);
+    const guestReader = guestPage.locator('[data-vtext-published-reader]').last();
+    await expect(guestReader).toBeVisible({ timeout: 15_000 });
+    const guestCitation = guestReader.locator('[data-vtext-source-ref][data-source-entity-id="src-public-content"]').first();
+    await guestCitation.click();
+    await expect(guestCitation.locator('[data-vtext-inline-transclusion]')).toContainText(excerpt);
+    await guestCitation.locator('[data-vtext-open-source]').click();
+    const guestSourceWindow = guestPage.locator('[data-browser-app]').last();
+    await expect(guestSourceWindow).toBeVisible({ timeout: 10000 });
+    await expect(guestSourceWindow).toContainText('Source reader snapshot');
+    await expect(guestSourceWindow.locator('[data-browser-reader-markdown]')).toContainText('Full cleaned reader source detail');
+    await expect(guestSourceWindow.locator('[data-browser-iframe]')).toHaveCount(0);
+  } finally {
+    await guestContext.close();
+  }
 });
